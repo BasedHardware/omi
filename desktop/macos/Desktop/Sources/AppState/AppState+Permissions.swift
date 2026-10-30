@@ -38,6 +38,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   private let shellWindowProvider: () -> NSWindow?
   private let appKitOperations: AppKitAlertOperations
   private let revealMainWindow: () -> Void
+  private let isAppActive: () -> Bool
   private let canHostSheet: SheetHostChecker
   private var pendingAlerts: [PendingAlert] = []
   private var activeAlert: AlertRequest?
@@ -59,11 +60,13 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
         ShellSummon.summon()
       }
     },
+    isAppActive: @escaping () -> Bool = { NSApp.isActive },
     canHostSheet: @escaping SheetHostChecker = { $0.attachedSheet == nil }
   ) {
     self.shellWindowProvider = shellWindowProvider
     self.appKitOperations = appKitOperations ?? .live
     self.revealMainWindow = revealMainWindow
+    self.isAppActive = isAppActive
     self.canHostSheet = canHostSheet
     NotificationCenter.default.addObserver(
       self,
@@ -108,7 +111,18 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     }
     let pending = pendingAlerts[0]
     guard let window = shellWindowProvider() else {
-      revealMainWindowIfNeeded()
+      // Only summon the shell when Omi already holds the foreground. Warnings
+      // still reach here from work the owner never started:
+      // `MicrophoneCaptureAuthorizationPolicy.action(for:userInitiated:)`
+      // abandons an automatic start before the pre-capture permission alert,
+      // but the exhausted silent-mic watchdog's terminal alert and a failed
+      // automatic `startTranscription` both raise one afterwards. Revealing
+      // for those takes the screen away from whatever the owner is working in,
+      // for a failure they did not trigger. The alert keeps its place in the
+      // queue and `applicationDidBecomeActive` drains it when they come back.
+      if isAppActive() {
+        revealMainWindowIfNeeded()
+      }
       return
     }
     guard canHostSheet(window) else {
@@ -149,8 +163,11 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   /// summoned first. Mirrors `ShellSummon.toggleAction`: a visible but inactive
   /// shell is usually ordered in behind whatever the user is working in, so
   /// attaching a sheet to it would leave the warning invisible behind the
-  /// foreground application. Requiring the app to be active forces the reveal
-  /// path (`openMainAppWindow` / `ShellSummon.summon`) before presenting.
+  /// foreground application. Requiring the app to be active means an inactive
+  /// Omi has no presentable window: the alert then waits for the owner to come
+  /// back rather than pulling the app over their work, and the reveal path
+  /// (`openMainAppWindow` / `ShellSummon.summon`) runs only for an active Omi
+  /// whose shell is hidden or minimized.
   static func presentableShellWindow(_ window: NSWindow?, isActive: Bool) -> NSWindow? {
     guard isActive, let window, window.isVisible, !window.isMiniaturized else { return nil }
     return window

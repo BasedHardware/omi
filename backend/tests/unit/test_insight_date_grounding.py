@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from utils.llm.model_config import LUNA_MODEL
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -64,7 +65,10 @@ _byok.has_byok_keys = MagicMock(return_value=False)
 _gw = _mod("utils.llm.gateway_client")
 _gw.should_route_features_through_gateway = MagicMock(return_value=False)
 _mc = _mod("utils.llm.model_config")
-_mc.get_model_config = MagicMock(return_value=("gpt-5.6-luna", "openai"))
+_mc.get_model_config = MagicMock(return_value=(LUNA_MODEL, "openai"))
+_mc.uses_explicit_cache_and_chat_sanitizer = lambda model: bool(model) and (
+    str(model).startswith("gpt-5.6") or model == LUNA_MODEL
+)
 _pc = _mod("utils.llm.prompt_cache")
 _pc.EXPLICIT_CACHE_BREAKPOINT = {"mode": "explicit"}
 _pc.EXPLICIT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}

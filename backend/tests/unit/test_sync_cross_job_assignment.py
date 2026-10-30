@@ -16,6 +16,8 @@ import pytest
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.sync.assignment import assign_in_transaction, needs_fragment_review
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -60,6 +62,94 @@ def conversations(store):
     return [value for key, value in store.rows.items() if key[2] == 'conversations' and not value.get('deleted')]
 
 
+@pytest.mark.parametrize('has_live_candidate', [False, True])
+def test_late_upload_skips_tombstoned_live_overlap_without_absorbing_it(has_live_candidate):
+    store = StrictFirestore()
+    tombstoned, _, _ = intake(store, chunk('blocked', 1000))
+    store.rows[('users', 'u', 'deleted_conversations', 'blocked')] = {'deleted': True}
+    if has_live_candidate:
+        # Seed independently so the setup does not itself merge the windows.
+        live = {**deepcopy(tombstoned), 'id': 'live', 'started_at': chunk('live', 1060)['started_at']}
+        store.rows[('users', 'u', 'conversations', 'live')] = live
+    before = deepcopy(store.rows[('users', 'u', 'conversations', 'blocked')])
+    result, created, survivors = intake(
+        store,
+        chunk('late-upload', 1070, text='New speech belongs to the surviving conversation.'),
+        candidate_id='live' if has_live_candidate else 'blocked',
+    )
+    assert result['id'] == ('live' if has_live_candidate else 'late-upload')
+    assert created is not has_live_candidate
+    assert survivors
+    assert 'blocked' not in result['sync_merged_from']
+    assert store.rows[('users', 'u', 'conversations', 'blocked')] == before
+
+
+@pytest.mark.parametrize('explicit', [False, True])
+def test_tombstoned_but_live_anchor_or_explicit_target_cannot_accept_speech(explicit):
+    store = StrictFirestore()
+    intake(store, chunk('blocked', 1000))
+    store.rows[('users', 'u', 'deleted_conversations', 'blocked')] = {'deleted': True}
+    before = deepcopy(store.rows)
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('new' if explicit else 'blocked', 1060), target_id='blocked' if explicit else None)
+    assert store.rows == before
+
+
+@pytest.mark.parametrize('second_refusal', [False, True])
+def test_deleted_ancestry_replans_once_before_any_write(second_refusal):
+    store = StrictFirestore()
+    store.rows[('users', 'u')] = {'data_protection_level': 'standard'}
+    row, _, _ = intake(store, chunk('canonical', 1000))
+    store.rows[('users', 'u', 'conversations', 'canonical')]['sync_merged_from'] = ['deleted-source']
+    store.rows[('users', 'u', 'deleted_conversations', 'deleted-source')] = {'deleted': True}
+    if second_refusal:
+        store.rows[('users', 'u', 'conversations', 'second')] = {
+            **deepcopy(row),
+            'id': 'second',
+            'sync_merged_from': ['other-deleted-source'],
+        }
+        store.rows[('users', 'u', 'deleted_conversations', 'other-deleted-source')] = {'deleted': True}
+    before = deepcopy(store.rows)
+    transaction = store.transaction()
+    plans = []
+
+    def encode(planned):
+        plans.append(planned['id'])
+        assert_batch_write_allowed(
+            store, transaction, 'u', conversation_ids=[planned['id'], *planned['sync_merged_from']]
+        )
+        return deepcopy(planned)
+
+    def assign():
+        return assign_in_transaction(
+            transaction,
+            store.collection('users').document('u'),
+            chunk('new', 1060),
+            candidate_id='second' if second_refusal else 'canonical',
+            decode=deepcopy,
+            encode=encode,
+            invalidate=lambda payload: None,
+        )
+
+    assigned, created, survivors = assign()
+    assert created and survivors
+    assert assigned['id'] not in {'canonical', 'second'}
+    assert assigned['sync_merged_from'] == []
+    assert [part['text'] for part in assigned['transcript_segments']] == [
+        chunk('new', 1060)['transcript_segments'][0]['text']
+    ]
+    assert (
+        store.rows[('users', 'u', 'conversations', 'canonical')] == before[('users', 'u', 'conversations', 'canonical')]
+    )
+    if second_refusal:
+        assert (
+            store.rows[('users', 'u', 'conversations', 'second')] == before[('users', 'u', 'conversations', 'second')]
+        )
+    else:
+        assert assigned['id'] == 'new'
+    assert len(plans) == (3 if second_refusal else 2)
+
+
 @pytest.mark.parametrize('reverse', [False, True])
 def test_independent_chunk_speakers_survive_merge_and_retry(reverse):
     store = StrictFirestore()
@@ -77,6 +167,22 @@ def test_independent_chunk_speakers_survive_merge_and_retry(reverse):
     assert all(s['speaker'] == 'SPEAKER_00' for s in result['transcript_segments'])
 
 
+def test_legacy_sync_survivor_gains_audio_aligned_scope_without_renumbering():
+    store = StrictFirestore()
+    first = chunk('old', 1000)
+    first['transcript_segments'][0].update(id='old-segment', speaker='SPEAKER_04', speaker_id=4)
+    intake(store, first)
+    second = chunk('new', 1060)
+    second['transcript_segments'][0].update(id='new-segment', speaker='SPEAKER_00', speaker_id_scope='sync:new')
+
+    result, _, _ = intake(store, second)
+
+    old = next(s for s in result['transcript_segments'] if s['id'] == 'old-segment')
+    assert old['speaker_id'] == 4
+    assert old['speaker_id_scope'] == 'legacy-conversation:old:4'
+    assert {s['speaker_id'] for s in result['transcript_segments']} == {4, 5}
+
+
 def test_sync_appended_to_live_target_does_not_reuse_live_speaker_id():
     store = StrictFirestore()
     live = chunk('live', 1000)
@@ -86,6 +192,32 @@ def test_sync_appended_to_live_target_does_not_reuse_live_speaker_id():
     wal['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id_scope='sync:content')
     result, _, _ = intake(store, wal, target_id='live')
     assert [s['speaker_id'] for s in result['transcript_segments']] == [98, 100]
+
+
+def test_assignment_retains_each_source_track_receipt_when_chunks_coalesce():
+    store = StrictFirestore()
+    first = chunk('first', 1000)
+    second = chunk('second', 1060)
+    for item, root in ((first, 'root-a'), (second, 'root-b')):
+        item['capture_evidence'] = {
+            'version': 1,
+            'capability': 'source_position',
+            'coverage': 'mapped',
+            'receipts': [
+                {
+                    'segment_id': item['id'],
+                    'capture_root': root,
+                    'clock_epoch': 0,
+                    'source_start_frame': 0,
+                    'source_end_frame': 100,
+                }
+            ],
+        }
+    intake(store, first)
+    merged, _, _ = intake(store, second)
+    assert {r['capture_root'] for r in merged['capture_evidence']['receipts']} == {'root-a', 'root-b'}
+    retried, _, _ = intake(store, second)
+    assert len(retried['capture_evidence']['receipts']) == 2
 
 
 def test_two_jobs_with_stale_empty_lookup_converge():
@@ -117,7 +249,8 @@ def test_seventy_minutes_of_identical_narration_is_one_recording():
     assert rows[0]['discarded'] is False
 
 
-def test_reverse_order_retry_and_deleted_target():
+def test_reverse_order_retry_and_deleted_target(monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))
@@ -148,7 +281,7 @@ def test_filler_is_preserved_and_promoted_regardless_of_speakers(is_user, speake
     short['transcript_segments'][0].update(is_user=is_user, speaker_id=speaker_id)
     review, _, _ = intake(store, short)
     assert review['sync_relevance'] == 'review'
-    assert review['discarded'] is True
+    assert review['discarded'] is False
     assert review['transcript_segments'][0]['text'] == 'Mm-hmm. Ha ha ha.'
     promoted, created, _ = intake(store, chunk('meaningful', 1060, 'Please call the doctor tomorrow.'))
     assert not created and promoted['id'] == review['id']
@@ -171,7 +304,7 @@ def test_subsecond_meaningful_speech_is_kept(text):
     assert result['discarded'] is False
 
 
-def test_separated_fillers_are_hidden_without_deleting_transcript_or_audio():
+def test_separated_fillers_wait_for_finalization_without_losing_transcript_or_audio():
     store = StrictFirestore()
     short = chunk('filler', 1000, 'Mm-hmm.')
     short['transcript_segments'][0]['end'] = 0.24
@@ -179,7 +312,7 @@ def test_separated_fillers_are_hidden_without_deleting_transcript_or_audio():
     short['finished_at'] = datetime.fromtimestamp(1065.32, timezone.utc)
     short['audio_files'] = [{'id': 'retained-audio'}]
     result, _, _ = intake(store, short)
-    assert result['discarded'] is True
+    assert result['discarded'] is False
     assert len(result['transcript_segments']) == 2
     assert result['audio_files'] == short['audio_files']
     assert not result.get('deleted')
@@ -192,13 +325,20 @@ def test_separated_fillers_are_hidden_without_deleting_transcript_or_audio():
         {'starred': True},
         {'folder_user_set': True},
         {'has_photos': True},
-        {'visibility': 'public'},
         {'sync_relevance_user_kept': True},
     ],
 )
 def test_curated_filler_is_not_automatically_hidden(curation):
     short = chunk('filler', 1000, 'Mm-hmm.')
     short.update(curation)
+    result, _, _ = intake(StrictFirestore(), short)
+    assert result['discarded'] is False
+
+
+@pytest.mark.parametrize('metadata', [{'visibility': 'public'}, {'sync_live_target': True}])
+def test_published_or_finished_live_filler_is_not_curation(metadata):
+    short = chunk('filler', 1000, 'Mm-hmm.')
+    short.update(metadata)
     result, _, _ = intake(StrictFirestore(), short)
     assert result['discarded'] is False
 
@@ -214,7 +354,9 @@ def test_explicitly_restored_fragment_stays_kept_when_live_target_gets_more_fill
     assert result['sync_relevance_user_kept'] is True
 
 
-def test_real_process_segment_two_independent_job_responses(monkeypatch):
+@pytest.fixture
+def independent_job_pipeline():
+    """Load the isolated coordinator in setup; the CPU gate measures behavior only."""
     from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
     from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
     from models import conversation, conversation_enums, transcript_segment
@@ -238,64 +380,86 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
         pipeline = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
-        store = StrictFirestore()
-        barrier = threading.Barrier(2)
-        pipeline.get_syncing_file_temporal_signed_url = lambda path: path
-        pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
-        pipeline.get_prerecorded_service = lambda language: ('test', None, 'test')
-        pipeline.prerecorded = lambda *a, **kw: ([{}], 'en')
-        pipeline.postprocess_words = lambda *a: [
-            transcript_segment.TranscriptSegment(
-                text='This narrated chapter describes our history.',
-                start=0,
-                end=9.5,
-                speaker='SPEAKER_00',
-                is_user=False,
-            )
+        # The episodes intake attach is fail-open; the harness stand-in skips like
+        # a user whose app never called the episodes API, keeping the overlay's
+        # deferred service import out of this file's behavior timing budget.
+        pipeline.schedule_synced_intake_attach = lambda uid, cid, row: None
+        yield pipeline, transcript_segment, lifecycle
+
+
+def test_real_process_segment_two_independent_job_responses(independent_job_pipeline, monkeypatch):
+    # This case exercises the eager assignment/processing boundary; holds have their own consumer suite.
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+    pipeline, transcript_segment, lifecycle = independent_job_pipeline
+    store = StrictFirestore()
+    barrier = threading.Barrier(2)
+    pipeline.get_syncing_file_temporal_signed_url = lambda path: path
+    pipeline.get_prerecorded_service = lambda language: ('test', None, 'test')
+    pipeline.prerecorded = lambda *a, **kw: ([{}], 'en')
+    pipeline.postprocess_words = lambda *a: [
+        transcript_segment.TranscriptSegment(
+            text='This narrated chapter describes our history.',
+            start=0,
+            end=9.5,
+            speaker='SPEAKER_00',
+            is_user=False,
+        )
+    ]
+    pipeline.identify_speakers_for_segments = lambda *a, **kw: None
+    pipeline.get_timestamp_from_path = float
+    pipeline.get_wav_duration = lambda path: 60
+
+    def expose_failure(error, **kwargs):
+        raise error
+
+    pipeline.failure_from_exception = expose_failure
+
+    def stale_lookup(*args):
+        barrier.wait(timeout=5)
+        return None
+
+    pipeline.get_closest_conversation_to_timestamps = stale_lookup
+    lifecycle.ingest_sync_conversation = lambda uid, incoming, **kw: intake(store, incoming, **kw)
+    responses = [{'new_memories': set(), 'updated_memories': set()} for _ in range(2)]
+    errors = [[], []]
+    with ThreadPoolExecutor(2) as pool:
+        jobs = [
+            pool.submit(pipeline.process_segment, str(1000 + i * 60), 'u', responses[i], threading.Lock(), errors[i])
+            for i in range(2)
         ]
-        pipeline.identify_speakers_for_segments = lambda *a, **kw: None
-        pipeline.get_timestamp_from_path = float
-        pipeline.get_wav_duration = lambda path: 60
+        assert all(job.result(timeout=5) for job in jobs), errors
+    assert errors == [[], []]
+    assert len(conversations(store)) == 1
+    assert len(conversations(store)[0]['transcript_segments']) == 2
+    # Responses can name pre-bridge IDs; durable redirects converge to one row.
+    assert len(conversations(store)) == 1
 
-        def expose_failure(error, **kwargs):
-            raise error
+    pipeline.conversations_db.get_conversation = lambda *a: {
+        'status': 'completed',
+        'sync_relevance': 'review',
+        'transcript_segments': chunk('a', 1000, 'Mm-hmm')['transcript_segments'],
+    }
+    pipeline.process_conversation = MagicMock()
+    pipeline._reprocess_conversation_after_update('u', 'a', 'en')
+    pipeline.process_conversation.assert_called_once()  # Occasion-aware finalization owns the aggregate verdict.
 
-        pipeline.failure_from_exception = expose_failure
+    # Everything the rules cannot settle is assessed as a sync update, with
+    # the stored restore marker the wire model does not carry.
+    pipeline.conversations_db.get_conversation = lambda *a: {
+        'sync_relevance': 'keep',
+        'sync_relevance_user_kept': True,
+        'transcript_segments': chunk('a', 1000, 'Oh')['transcript_segments'],
+    }
+    pipeline.deserialize_conversation = MagicMock()
+    pipeline._reprocess_conversation_after_update('u', 'a', 'en')
+    kwargs = pipeline.process_conversation.call_args.kwargs
+    assert kwargs['trigger'] is pipeline.ProcessingTrigger.SYNC_UPDATE
+    assert kwargs['user_kept'] is True
 
-        def stale_lookup(*args):
-            barrier.wait(timeout=5)
-            return None
-
-        pipeline.get_closest_conversation_to_timestamps = stale_lookup
-        lifecycle.ingest_sync_conversation = lambda uid, incoming, **kw: intake(store, incoming, **kw)
-        responses = [{'new_memories': set(), 'updated_memories': set()} for _ in range(2)]
-        errors = [[], []]
-        with ThreadPoolExecutor(2) as pool:
-            jobs = [
-                pool.submit(
-                    pipeline.process_segment, str(1000 + i * 60), 'u', responses[i], threading.Lock(), errors[i]
-                )
-                for i in range(2)
-            ]
-            assert all(job.result(timeout=5) for job in jobs), errors
-        assert errors == [[], []]
-        assert len(conversations(store)) == 1
-        assert len(conversations(store)[0]['transcript_segments']) == 2
-        # Responses can name pre-bridge IDs; durable redirects converge to one row.
-        assert len(conversations(store)) == 1
-
-        pipeline.conversations_db.get_conversation = lambda *a: {
-            'sync_relevance': 'review',
-            'transcript_segments': chunk('a', 1000, 'Mm-hmm')['transcript_segments'],
-        }
-        pipeline.process_conversation = MagicMock()
-        pipeline._reprocess_conversation_after_update('u', 'a', 'en')
-        pipeline.process_conversation.assert_not_called()
-
-        pipeline._reprocess_conversation_after_update = MagicMock()
-        pipeline._reprocess_merged_conversations('u', {'_merged': {'new': 'en', 'old': 'en'}, 'new_memories': {'new'}})
-        calls = pipeline._reprocess_conversation_after_update.call_args_list
-        assert [tuple(call.args) for call in calls] == [('u', 'new', 'en'), ('u', 'old', 'en')]
+    pipeline._reprocess_conversation_after_update = MagicMock()
+    pipeline._reprocess_merged_conversations('u', {'_merged': {'new': 'en', 'old': 'en'}, 'new_memories': {'new'}})
+    calls = pipeline._reprocess_conversation_after_update.call_args_list
+    assert [tuple(call.args) for call in calls] == [('u', 'new', 'en'), ('u', 'old', 'en')]
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
@@ -345,9 +509,11 @@ def test_bridge_allocates_donor_clusters_without_colliding_with_survivor():
     }
     assert mapped['sync:a'] != mapped['sync:b']
     replay, _, _ = intake(store, b)
-    assert {
+    replay_mapped = {
         s.get('speaker_id_scope'): s['speaker_id'] for s in replay['transcript_segments'] if s.get('speaker_id_scope')
-    } == mapped
+    }
+    assert all(replay_mapped[key] == value for key, value in mapped.items())
+    assert replay_mapped['legacy-conversation:a:0'] == mapped['sync:a']
 
 
 def test_labeled_sync_row_receives_later_same_capture_chunk_without_becoming_a_donor():
@@ -408,3 +574,195 @@ def test_unlabeled_explicit_target_excludes_labeled_donor_extent(donor_start, ta
     assert result['started_at'] == chunk('expected', min(target_start, 1120))['started_at']
     assert result['finished_at'] == chunk('expected', max(target_start, 1120))['finished_at']
     assert store.rows[('users', 'u', 'conversations', 'donor')] == before
+
+
+def _smart_merge_pair(store):
+    """A live survivor 'p' that absorbed live 'n' (database/smart_merge.py), as stored."""
+    survivor = chunk('p', 1000, text='We should head out for dinner soon.')
+    survivor['transcript_segments'].append(
+        {'start': 600.0, 'end': 609.5, 'text': 'The pasta place is still open.', 'speaker_id': 1, 'is_user': False}
+    )
+    survivor['finished_at'] = datetime.fromtimestamp(1609.5, timezone.utc)
+    survivor['smart_merge'] = {'role': 'survivor', 'revision': 1, 'refreshed_revision': 1}
+    donor = chunk('n', 1600, text='The pasta place is still open.')
+    donor.update(
+        deleted=True,
+        discarded=True,
+        sync_merged_into='p',
+        sync_content_revision=1,
+        smart_merge={'role': 'donor', 'survivor_id': 'p'},
+    )
+    store.rows[('users', 'u', 'conversations', 'p')] = survivor
+    store.rows[('users', 'u', 'conversations', 'n')] = donor
+
+
+def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    from tests.unit.test_sync_lineage_dedupe_replay import prove
+
+    repeat = chunk('wal-repeat', 1600, text='The pasta place is still open.')
+    prove(repeat, store.rows[('users', 'u', 'conversations', 'p')])
+    result, created, survivors = intake(store, repeat, target_id='n')
+    assert result['id'] == 'p' and not created and len(survivors) == 1  # receipt-only proof drops nothing
+    assert result['sync_live_target'] is True
+    fresh = chunk('wal-new', 1620, text='Let us order the mushroom one.')
+    result, created, survivors = intake(store, fresh, target_id='n')
+    assert result['id'] == 'p' and not created and len(survivors) == 1
+    assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
+
+
+def test_repeated_late_repair_to_revisioned_smart_survivor_appends(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1
+    from tests.unit.test_sync_lineage_dedupe_replay import prove
+
+    first = chunk('wal-repeat-1', 1600, text='The pasta place is still open.')
+    second = chunk('wal-repeat-2', 1600, text='The pasta place is still open.')
+    prove(first, store.rows[('users', 'u', 'conversations', 'p')])
+    result, created, survivors = intake(store, first, target_id='n')
+    assert result['id'] == 'p' and not created and len(survivors) == 1
+    prove(second, store.rows[('users', 'u', 'conversations', 'p')])
+    result, created, survivors = intake(store, second, target_id='n')
+    assert result['id'] == 'p' and not created and len(survivors) == 1
+    assert result['sync_live_target'] is True
+
+
+def test_repair_audio_for_a_donor_whose_survivor_was_deleted_is_superseded():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'p')]['deleted'] = True
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('wal-late', 1620), target_id='n')
+
+
+def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'n')].pop('smart_merge')
+    store.rows[('users', 'u', 'conversations', 'p')].pop('smart_merge')
+    result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
+    assert created and result['id'] == 'wal-other'
+
+
+def _tombstone(store, conversation_id):
+    store.rows[('users', 'u', 'deleted_conversations', conversation_id)] = {'conversation_id': conversation_id}
+
+
+def test_reupload_never_recreates_a_hard_deleted_conversation_id():
+    store = StrictFirestore()
+    _tombstone(store, 'deleted')
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('deleted', 1000))
+    assert conversations(store) == []
+
+
+def test_hard_deleted_explicit_target_is_not_replaced_temporally():
+    store = StrictFirestore()
+    _tombstone(store, 'deleted-target')
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('wal', 1000), target_id='deleted-target')
+    assert conversations(store) == []
+
+
+def test_tombstone_of_another_id_still_creates_and_appends():
+    store = StrictFirestore()
+    _tombstone(store, 'unrelated')
+    first, created, _ = intake(store, chunk('first', 1000))
+    assert created and first['id'] == 'first'
+    second, created, _ = intake(store, chunk('second', 1012))
+    assert not created and second['id'] == 'first'
+
+
+def test_adapter_retires_sync_merge_donors_and_terminal_target(monkeypatch):
+    from database import conversations as db, conversation_quiet_checks as checks
+    from google.cloud import firestore
+
+    store = StrictFirestore()
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, '_delete_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    for cid, timestamp in [('a', 1000), ('b', 1240)]:
+        incoming = chunk(cid, timestamp)
+        incoming['data_protection_level'] = 'standard'
+        db.assign_sync_conversation('u', incoming, firestore_client=store)
+        store.rows[('conversation_finalization_jobs', checks.quiet_check_id('u', cid))] = {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 1,
+            'reconcile_after_at': incoming['finished_at'],
+        }
+    bridge = chunk('bridge', 1120)
+    bridge['data_protection_level'] = 'standard'
+    result, _, _ = db.assign_sync_conversation('u', bridge, firestore_client=store)
+    donor_ids = result['sync_merged_from']
+    assert donor_ids
+    for cid in [result['id'], *donor_ids]:
+        job = store.rows[('conversation_finalization_jobs', checks.quiet_check_id('u', cid))]
+        assert job['status'] == 'quiet_done'
+        assert job['reconcile_after_at'] is firestore.DELETE_FIELD
+
+
+def test_adapter_preserves_live_sync_target_quiet_check(monkeypatch):
+    from database import conversations as db, conversation_quiet_checks as checks
+
+    store = StrictFirestore()
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    live = chunk('live', 1000)
+    live.update(status='in_progress', data_protection_level='standard')
+    store.rows[('users', 'u', 'conversations', 'live')] = live
+    job_path = ('conversation_finalization_jobs', checks.quiet_check_id('u', 'live'))
+    store.rows[job_path] = {'kind': 'listen_quiet_check', 'status': 'waiting_quiet', 'dispatch_generation': 1}
+    incoming = chunk('sync', 1060)
+    incoming['data_protection_level'] = 'standard'
+    db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
+    assert store.rows[job_path]['status'] == 'waiting_quiet'
+
+
+@pytest.mark.parametrize('decided_by', ['model', 'jev', 'deterministic', 'rule'])
+@pytest.mark.parametrize('initial_text', ['Mm-hmm.', 'We agreed to meet on Friday.'])
+def test_meaningful_append_invalidates_automatic_discard_of_older_content(decided_by, initial_text):
+    from utils.conversations.fragment_visibility import is_relevance_discarded
+
+    store = StrictFirestore()
+    first = chunk('filler', 1000, initial_text)
+    initial, _, _ = intake(store, first)
+    stored = store.rows[('users', 'u', 'conversations', initial['id'])]
+    stored.update(
+        discarded=True,
+        relevance_decision=dict(
+            verdict='discard',
+            decided_by=decided_by,
+            reason='filler_only' if decided_by == 'rule' else 'model_discard',
+            arm='jev',
+        ),
+    )
+    revision = stored['sync_content_revision']
+    # A transport replay is not new content and must retain its assessed verdict.
+    replay, _, _ = intake(store, first)
+    if decided_by != 'rule':
+        assert replay['relevance_decision'] == stored['relevance_decision']
+        assert is_relevance_discarded(replay)
+    promoted, _, _ = intake(store, chunk('meaningful', 1060, 'Please call the doctor tomorrow.'))
+    assert promoted['sync_content_revision'] > revision
+    assert promoted['sync_relevance'] == 'keep' and not promoted['discarded']
+    assert promoted['relevance_decision'] is None
+    assert not is_relevance_discarded(promoted)
+
+
+def test_more_filler_does_not_invalidate_a_final_model_discard():
+    from utils.conversations.fragment_visibility import is_relevance_discarded
+
+    store = StrictFirestore()
+    initial, _, _ = intake(store, chunk('filler', 1000, 'Mm-hmm.'))
+    stored = store.rows[('users', 'u', 'conversations', initial['id'])]
+    decision = dict(verdict='discard', decided_by='model', reason='model_discard')
+    stored.update(discarded=True, relevance_decision=decision)
+    expanded, _, _ = intake(store, chunk('more', 1060, 'Hmm.'))
+    assert expanded['sync_relevance'] == 'review'
+    assert expanded['relevance_decision'] == decision
+    assert is_relevance_discarded(expanded)

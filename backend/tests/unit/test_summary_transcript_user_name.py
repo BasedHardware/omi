@@ -13,6 +13,7 @@ def test_conversation_transcript_for_llm_passes_configured_name(monkeypatch: pyt
         lambda uid, use_default=False: "Stephen",
     )
     conversation = MagicMock()
+    conversation.transcript_segments = []
     conversation.get_transcript.return_value = "Stephen: Hello.\n\nSpeaker 1: Hi."
     people = [MagicMock()]
 
@@ -23,13 +24,14 @@ def test_conversation_transcript_for_llm_passes_configured_name(monkeypatch: pyt
 
 
 def test_conversation_transcript_for_llm_forwards_missing_name(monkeypatch: pytest.MonkeyPatch):
-    """When no profile name exists, forward None so segments_as_string keeps its 'User' fallback."""
+    """When no profile name exists, forward None so segments_as_string keeps its 'You' fallback."""
     monkeypatch.setattr(
         "utils.conversations.transcript_for_llm.get_user_name",
         lambda uid, use_default=False: None,
     )
     conversation = MagicMock()
-    conversation.get_transcript.return_value = "User: Hello."
+    conversation.transcript_segments = []
+    conversation.get_transcript.return_value = "You: Hello."
 
     conversation_transcript_for_llm("uid-1", conversation, people=None, include_timestamps=True)
 

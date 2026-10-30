@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import Sentry
 
 /// Closed reason a presented notification left the screen. Auto-hide and explicit
 /// close must not share a single "dismissed" bucket — that made engagement
@@ -62,12 +61,8 @@ class AnalyticsManager {
   /// at the same production boundary as PostHog so tests can assert the real
   /// event payload without initializing analytics or exposing a mutable global.
   private var suggestionAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
-  private var insightAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
   /// Delivery callbacks can race (for example a floating-bar enqueue and a system-banner
   /// completion). Keep one terminal outcome per opaque advice delivery ID at this boundary.
-  private var recordedInsightDeliveryIDSet: Set<UUID> = []
-  private var recordedInsightDeliveryIDOrder: [UUID] = []
-  private static let maxRecordedInsightDeliveryIDs = 512
 
   func setSuggestionAssistantTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
@@ -81,19 +76,6 @@ class AnalyticsManager {
 
   /// Scoped observation of Advice delivery telemetry. Tests install a capture at the same
   /// production boundary as PostHog; production leaves it nil.
-  func setInsightAssistantTelemetryCaptureForTests(
-    _ capture: (@MainActor (String, [String: Any]) -> Void)?
-  ) {
-    if capture != nil {
-      recordedInsightDeliveryIDSet.removeAll()
-      recordedInsightDeliveryIDOrder.removeAll()
-    }
-    insightAssistantTelemetryCaptureForTests = capture
-  }
-
-  private func captureInsightAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
-    insightAssistantTelemetryCaptureForTests?(event, properties)
-  }
 
   /// Test observer for integration-connect telemetry. Mirrors the
   /// MemoryAssistant seam: nil in production; tests install a scoped capture
@@ -476,8 +458,8 @@ class AnalyticsManager {
     PostHogManager.shared.transcriptionStarted(attemptId: attemptId, mode: mode, intent: intent)
   }
 
-  func transcriptionStopped(wordCount: Int, attemptId: String? = nil) {
-    PostHogManager.shared.transcriptionStopped(wordCount: wordCount, attemptId: attemptId)
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil, reason: String? = nil) {
+    PostHogManager.shared.transcriptionStopped(wordCount: wordCount, attemptId: attemptId, reason: reason)
   }
 
   /// Terminal outcome of one armed ambient-capture attempt. Observes the
@@ -640,13 +622,7 @@ class AnalyticsManager {
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
   func screenCaptureBrokenDetected() {
     guard !Self.isDevBuild else { return }
-    let breadcrumb = Breadcrumb(level: .warning, category: "screen_capture")
-    breadcrumb.message = "Screen Capture Broken Detected"
-    SentrySDK.addBreadcrumb(breadcrumb)
-    SentrySDK.capture(message: "Screen Capture Broken Detected") { scope in
-      scope.setLevel(.warning)
-      scope.setTag(value: "screen_capture_broken", key: "diagnostic")
-    }
+    log("Analytics: Screen Capture Broken Detected")
   }
 
   /// Track when user clicks reset button or notification to reset screen capture
@@ -703,32 +679,9 @@ class AnalyticsManager {
 
     if hadPreviousSession && !lastCleanExit {
       log("Analytics: Previous session did not exit cleanly — reporting crash")
-      let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-      let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
-        area: "crash",
-        failureClass: "unknown",
-        phase: "startup")
-      defer {
-        if let attachmentURL {
-          try? FileManager.default.removeItem(at: attachmentURL)
-        }
-      }
-      SentrySDK.capture(message: "App Crash Detected") { scope in
-        scope.setLevel(.warning)
-        scope.setTag(value: "app_crash_detected", key: "diagnostic")
-        scope.setContext(
-          value: [
-            "app_version": version,
-            "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
-          ], key: "crash")
-        if let attachmentURL {
-          scope.addAttachment(
-            Attachment(
-              path: attachmentURL.path,
-              filename: "desktop-incident-diagnostics.json",
-              contentType: "application/json"))
-        }
-      }
+      log(
+        "Analytics: App Crash Detected; version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")"
+      )
     }
   }
 
@@ -768,14 +721,6 @@ class AnalyticsManager {
     if let timeToInteractiveMs {
       properties["time_to_interactive_ms"] = round(timeToInteractiveMs)
     }
-
-    // Also a Sentry breadcrumb so the numbers stay attached to a same-session
-    // crash report. Sentry is a per-issue view; it cannot answer "is startup
-    // getting slower across the fleet", which is why this is in PostHog too.
-    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
-    breadcrumb.message = "App Startup Timing"
-    breadcrumb.data = properties
-    SentrySDK.addBreadcrumb(breadcrumb)
 
     PostHogManager.shared.track("App Startup Timing", properties: properties)
   }
@@ -985,14 +930,6 @@ class AnalyticsManager {
     PostHogManager.shared.chatCleared()
   }
 
-  func chatSessionCreated() {
-    PostHogManager.shared.track("chat_session_created", properties: [:])
-  }
-
-  func chatSessionDeleted() {
-    PostHogManager.shared.track("chat_session_deleted", properties: [:])
-  }
-
   func messageRated(rating: Int, surface: String = "text") {
     let ratingString = rating == 1 ? "thumbs_up" : "thumbs_down"
     // `source` splits the admin thumbs-ratio chart: "text" = main-window
@@ -1000,22 +937,6 @@ class AnalyticsManager {
     // existed chart as the combined series only.
     PostHogManager.shared.track(
       "message_rated", properties: ["rating": ratingString, "source": surface])
-  }
-
-  func initialMessageGenerated(hasApp: Bool) {
-    PostHogManager.shared.track("initial_message_generated", properties: ["has_app": hasApp])
-  }
-
-  func sessionTitleGenerated() {
-    PostHogManager.shared.track("session_title_generated", properties: [:])
-  }
-
-  func chatStarredFilterToggled(enabled: Bool) {
-    PostHogManager.shared.track("chat_starred_filter_toggled", properties: ["enabled": enabled])
-  }
-
-  func sessionRenamed() {
-    PostHogManager.shared.track("session_renamed", properties: [:])
   }
 
   // MARK: - Claude Agent Events
@@ -1034,6 +955,7 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    ClientTelemetryShadow.captureFloatingVoice(event)
     questionAnswered(forChatEvent: event)
     if case .failed(_, _, let errorClass, _, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
@@ -1312,6 +1234,7 @@ class AnalyticsManager {
   }
 
   func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    guard outcome.emitsAnalytics else { return }
     let payload = SuggestionAssistantTelemetry.gateOutcomePayload(outcome)
     captureSuggestionAssistantTelemetryForTests(
       SuggestionAssistantTelemetry.gateOutcomeEventName,
@@ -1392,53 +1315,8 @@ class AnalyticsManager {
     PostHogManager.shared.suggestionAssistantDeliveryOutcome(outcome, identity: identity)
   }
 
-  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
-    let properties: [String: Any] = {
-      var value: [String: Any] = [:]
-      if let category = InsightAssistantTelemetry.boundedCategory(category) {
-        value["category"] = category
-      }
-      if let deliveryID {
-        value["delivery_id"] = deliveryID.uuidString
-      }
-      return value
-    }()
-    captureInsightAssistantTelemetryForTests("Advice Generated", properties: properties)
-    PostHogManager.shared.insightGenerated(category: category, deliveryID: deliveryID)
-  }
-
   /// Record one terminal outcome for a generated Advice item. The bounded recent-ID window
   /// absorbs racing presentation callbacks without allowing process-lifetime growth.
-  func insightAssistantDeliveryOutcome(
-    _ outcome: InsightAssistantTelemetry.Outcome,
-    reason: InsightAssistantTelemetry.Reason,
-    deliveryID: UUID,
-    surface: InsightAssistantTelemetry.Surface? = nil
-  ) {
-    guard recordedInsightDeliveryIDSet.insert(deliveryID).inserted else { return }
-    recordedInsightDeliveryIDOrder.append(deliveryID)
-    if recordedInsightDeliveryIDOrder.count > Self.maxRecordedInsightDeliveryIDs {
-      let evicted = recordedInsightDeliveryIDOrder.removeFirst()
-      recordedInsightDeliveryIDSet.remove(evicted)
-    }
-    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
-    let payload = InsightAssistantTelemetry.deliveryOutcomePayload(
-      outcome,
-      reason: reason,
-      identity: identity,
-      surface: surface
-    )
-    captureInsightAssistantTelemetryForTests(
-      InsightAssistantTelemetry.deliveryOutcomeEventName,
-      properties: payload
-    )
-    PostHogManager.shared.insightAssistantDeliveryOutcome(
-      outcome,
-      reason: reason,
-      deliveryID: deliveryID,
-      surface: surface
-    )
-  }
 
   // MARK: - Apps Events
 
@@ -1548,15 +1426,11 @@ class AnalyticsManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    attention: InterjectAttention? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["dismissal_kind"] = dismissalKind.rawValue
-      if let attention {
-        properties["attention"] = attention.rawValue
-      }
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
         properties: properties
@@ -1568,62 +1442,8 @@ class AnalyticsManager {
       assistantId: assistantId,
       surface: surface,
       dismissalKind: dismissalKind,
-      suggestionIdentity: suggestionIdentity,
-      attention: attention
-    )
-  }
-
-  func notificationHovered(
-    notificationId: String,
-    assistantId: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    if let suggestionIdentity {
-      captureSuggestionAssistantTelemetryForTests(
-        "Notification Hovered",
-        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
-      )
-    }
-    PostHogManager.shared.notificationHovered(
-      notificationId: notificationId,
-      assistantId: assistantId,
       suggestionIdentity: suggestionIdentity
     )
-  }
-
-  func suggestionFeedbackRecorded(
-    verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    provenance: InterjectFeedbackProvenance? = nil
-  ) {
-    if let suggestionIdentity {
-      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
-      properties["verb"] = verb
-      appendInterjectFeedbackProvenance(provenance, to: &properties)
-      captureSuggestionAssistantTelemetryForTests(
-        "Suggestion Feedback Recorded",
-        properties: properties
-      )
-    }
-    PostHogManager.shared.suggestionFeedbackRecorded(
-      verb: verb,
-      suggestionIdentity: suggestionIdentity,
-      provenance: provenance
-    )
-  }
-
-  private func appendInterjectFeedbackProvenance(
-    _ provenance: InterjectFeedbackProvenance?,
-    to properties: inout [String: Any]
-  ) {
-    guard let provenance else { return }
-    // Owner identity remains in the local owner fence and is never sent as an
-    // analytics property. The opaque delivery/candidate joins are enough to
-    // correlate the event with the bounded JIT receipt.
-    properties["feedback_lane"] = provenance.lane
-    properties["feedback_delivery_id"] = provenance.deliveryID
-    properties["feedback_candidate_id"] = provenance.candidateID
-    properties["feedback_account_generation"] = provenance.accountGeneration
   }
 
   func notificationWillPresent(notificationId: String, title: String) {
@@ -1792,4 +1612,93 @@ class AnalyticsManager {
     PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
   }
 
+  // MARK: - Subscription funnel
+  //
+  // Same wire names as mobile. `Upgrade Succeeded` stays property-less because
+  // that released registry id cannot gain properties; tier and interval are on
+  // `Upgrade Succeeded Attributed`, emitted with it.
+
+  func paywallOpened(source: String, currentPlan: String) {
+    PostHogManager.shared.track(
+      "Paywall Opened",
+      properties: SubscriptionFunnelWire.paywallProperties(source: source, currentPlan: currentPlan))
+  }
+
+  func upgradePlanSelected(plan: String, billingInterval: String, source: String) {
+    PostHogManager.shared.track(
+      "Upgrade Plan Selected",
+      properties: SubscriptionFunnelWire.planSelectedProperties(
+        plan: plan, billingInterval: billingInterval, source: source))
+  }
+
+  func upgradeSucceeded(plan: String, billingInterval: String) {
+    let properties = SubscriptionFunnelWire.upgradeSucceededProperties(plan: plan, billingInterval: billingInterval)
+    PostHogManager.shared.track("Upgrade Succeeded Attributed", properties: properties)
+    PostHogManager.shared.track("Upgrade Succeeded")
+  }
+
+  func upgradeCancelled() {
+    PostHogManager.shared.track("Upgrade Cancelled")
+  }
+
+}
+
+enum SubscriptionFunnelWire {
+  static func plan(_ raw: String?) -> String {
+    switch raw?.trimmingCharacters(in: .whitespacesAndNewlines) {
+    case "free":
+      return "basic"
+    case "pro":
+      return "unknown"
+    case "basic", "plus", "unlimited", "unlimited_v2", "operator", "architect", "unknown":
+      return (raw ?? "unknown").trimmingCharacters(in: .whitespacesAndNewlines)
+    default:
+      return "unknown"
+    }
+  }
+
+  static func interval(_ raw: String?) -> String {
+    switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "month", "monthly":
+      return "month"
+    case "year", "yearly", "annual":
+      return "year"
+    default:
+      return "unknown"
+    }
+  }
+
+  static func source(_ raw: String) -> String {
+    switch raw {
+    case "chat_quota_exceeded", "freemium_switch", "locked_conversation", "locked_memory", "chat_apps",
+      "usage_page", "transcription_settings", "unlimited_deeplink", "macos_billing", "macos_usage_limit",
+      "macos_chat_quota_banner", "windows_billing", "windows_usage_limit", "web_plans",
+      "macos_settings_view", "windows_settings_view", "unknown":
+      return raw
+    default:
+      return "unknown"
+    }
+  }
+
+  static func paywallProperties(source: String, currentPlan: String) -> [String: String] {
+    [
+      "source": self.source(source),
+      "current_plan": plan(currentPlan),
+    ]
+  }
+
+  static func planSelectedProperties(plan: String, billingInterval: String, source: String) -> [String: String] {
+    [
+      "plan": self.plan(plan),
+      "billing_interval": interval(billingInterval),
+      "source": self.source(source),
+    ]
+  }
+
+  static func upgradeSucceededProperties(plan: String, billingInterval: String) -> [String: String] {
+    [
+      "plan": self.plan(plan),
+      "billing_interval": interval(billingInterval),
+    ]
+  }
 }

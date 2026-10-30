@@ -1,0 +1,184 @@
+"""Queue-age autoscaling export. Refresh from a supervised worker, never import IO."""
+
+import logging
+
+from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
+
+from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
+from utils.batch_pipeline.contracts import Priority
+
+LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
+AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
+
+
+class QueueMetrics:
+    def __init__(
+        self,
+        registry: CollectorRegistry = REGISTRY,
+        *,
+        worker_release: str = 'unscoped',
+        namespace: str = 'unscoped',
+        capacity_sampling: bool = False,
+    ):
+        self.scope = (worker_release, namespace)
+        self.capacity_sampling = capacity_sampling
+        self.projection_age = Gauge(
+            'omi_batch_projection_obligation_oldest_age_seconds',
+            'Oldest unfinished committed projection age, including held content; alarm above 900s',
+            registry=registry,
+        )
+        self.projection_observed_at = Gauge(
+            'omi_batch_projection_obligation_observed_at_seconds',
+            'Last successful oldest projection obligation observation',
+            registry=registry,
+        )
+        self.oldest_age = Gauge(
+            'omi_batch_pipeline_oldest_age_seconds',
+            'Oldest admitted uncommitted item age',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.ready_age = Gauge(
+            'omi_batch_pipeline_ready_age_seconds',
+            'Oldest item ready for GPU capacity',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.retry_age = Gauge(
+            'omi_batch_pipeline_retry_age_seconds',
+            'Age since first compute failure; alert above 600 seconds',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.refreshed_at = Gauge(
+            'omi_batch_pipeline_metrics_refreshed_at_seconds',
+            'Last complete queue sample timestamp',
+            ['worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.ready_units = Gauge(
+            'omi_batch_pipeline_admissible_ready_units',
+            'Ready admitted units excluding held, parked, unmarked legacy and unevaluated refusals',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.capacity_refreshed_at = Gauge(
+            'omi_batch_pipeline_capacity_refreshed_at_seconds',
+            'Last complete three-priority admissible capacity count',
+            ['worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.owner_wait = Histogram(
+            'omi_batch_pipeline_owner_wait_seconds',
+            'Per-item admission to lease wait; no owner labels',
+            buckets=(1, 10, 30, 60, 300, 3600, 43200, 86400, 604800),
+            registry=registry,
+        )
+        self.events = Counter(
+            'omi_batch_pipeline_events_total',
+            'Worker transition receipts; jobs/s is rate of completed events',
+            ['event'],
+            registry=registry,
+        )
+
+        self.head_not_found = Counter(
+            'omi_batch_pipeline_head_not_found_total',
+            'Capture head or unique ready FIFO predecessor not found',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.head_budget_exhausted = Counter(
+            'omi_batch_pipeline_head_budget_exhausted_total',
+            'Owner head lookup budget exhausted in a pull transaction',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.predecessor_ready_age = Histogram(
+            'omi_batch_pipeline_predecessor_ready_age_seconds',
+            'Capture-order head ready age at scheduler visit',
+            ['priority', 'worker_release', 'namespace'],
+            buckets=(1, 10, 30, 60, 120, 300, 600, 900, 3600, 86400),
+            registry=registry,
+        )
+
+    def record_head(self, event: str, priority: Priority, *, age: float | None = None) -> None:
+        if event == 'ready_age' and age is not None:
+            self.predecessor_ready_age.labels(LABELS[priority], *self.scope).observe(age)
+        elif event == 'head_not_found':
+            self.head_not_found.labels(LABELS[priority], *self.scope).inc()
+        elif event == 'budget_exhausted':
+            self.head_budget_exhausted.labels(LABELS[priority], *self.scope).inc()
+        else:
+            raise ValueError('static head scheduling event required')
+
+    def refresh(self, store: Store, now: float) -> None:
+        # Collect every query before changing gauges. Failed refresh retains last
+        # values and does not advance freshness; adapters must reject stale data.
+        samples = []
+        for priority in Priority:
+            pending = store.oldest(int(priority), ready_only=False)
+            ready = store.oldest(int(priority), ready_only=True)
+            samples.append((priority, pending, ready, store.oldest_retry(int(priority))))
+        capacity = []
+        # Older injected stores may expose only the age contract. Their absent
+        # capacity clock stays never-observed, so no adapter can fabricate zero.
+        sampler = getattr(store, 'ready_for_capacity', None)
+        if self.capacity_sampling and callable(sampler):
+            try:
+                for priority in Priority:
+                    count = sampler(int(priority), now)
+                    if type(count) is not int or count < 0:
+                        raise ValueError('nonnegative integer capacity count required')
+                    capacity.append((priority, count))
+            except Exception as error:
+                # Freeze this independent scaling signal without failing an
+                # otherwise successful recovery/projection request. Publish no
+                # partial counts and never advance its freshness on failure.
+                capacity = []
+                logging.getLogger(__name__).warning(
+                    'event=batch_capacity_sample outcome=unavailable exception_type=%s', type(error).__name__
+                )
+        for priority, pending, ready, retry in samples:
+            self.oldest_age.labels(LABELS[priority], *self.scope).set(
+                max(0.0, now - pending) if pending is not None else 0
+            )
+            self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
+            self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
+        self.refreshed_at.labels(*self.scope).set(now)
+        if capacity:
+            for priority, count in capacity:
+                self.ready_units.labels(LABELS[priority], *self.scope).set(count)
+            self.capacity_refreshed_at.labels(*self.scope).set(now)
+        if isinstance(store, FirestoreStore):
+            self.refresh_projection(store, now)
+
+    def refresh_projection(self, store: FirestoreStore, now: float) -> None:
+        # Reuses the indexed discovery shape, one row, including durable holds.
+        # A failed query/read leaves freshness unchanged; never exports false zero.
+        ids, _ = store.projection_page(limit=1, states=PROJECTION_OBLIGATION_STATES)
+        age = 0.0
+        if ids:
+            row = store.client.collection(f'{store.namespace}_results').document(ids[0]).get().to_dict()
+            if row is None:  # concurrent privacy erase; retry next supervised tick
+                return
+            age = max(0.0, now - row['committed_at'])
+        self.projection_age.set(age)
+        self.projection_observed_at.set(now)
+
+    def record(self, event: str, *, wait_seconds: float | None = None) -> None:
+        if event not in {
+            'leased',
+            'completed',
+            'retry',
+            'lease_expired',
+            'dead',
+            'committed',
+            'quarantined',
+            'recovery_held',
+            'admission_policy_deferred',
+            'admission_unevaluated_deferred',
+        }:
+            raise ValueError('metric event must be a static worker transition')
+        self.events.labels(event).inc()
+        if event == 'leased' and wait_seconds is not None:
+            self.owner_wait.observe(max(0.0, wait_seconds))

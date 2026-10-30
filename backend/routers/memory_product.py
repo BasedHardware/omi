@@ -5,6 +5,7 @@ remains an importable alias. Registers ``/memory/*`` product paths.
 """
 
 from datetime import datetime, timezone
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,7 +19,6 @@ from models.memory_product import (
     VectorMemorySearchResponse,
 )
 from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH
-from utils.memory.belief_model import belief_model_enabled
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_product_memory_route,
@@ -35,6 +35,21 @@ from utils.memory.vector_search_service import (
 from utils.other import endpoints as auth
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _sanitize_search_error(exc: ValueError, context: str) -> HTTPException:
+    logger.warning(f"{context} rejected: {type(exc).__name__}")
+    message = str(exc)
+    if "limit" in message:
+        detail = "Invalid limit parameter"
+    elif "offset" in message:
+        detail = "Invalid offset parameter"
+    elif "as_of" in message:
+        detail = "Invalid as_of parameter"
+    else:
+        detail = "Invalid search parameters"
+    return HTTPException(status_code=400, detail=detail)
 
 
 def _current_time() -> datetime:
@@ -115,7 +130,7 @@ def search_product_memory(
     global_read_gate = _global_read_gate_observability(authz.global_gate)
     rollout_observability = authz.observability
     policy = authz.policy or _default_omi_chat_policy()
-    effective_view = (view or 'useful_now') if belief_model_enabled() else 'released'
+    effective_view = 'released'
     if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
         raise HTTPException(status_code=400, detail='as_of must be timezone-aware')
     try:
@@ -131,7 +146,7 @@ def search_product_memory(
             as_of=as_of if effective_view != 'released' else None,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _sanitize_search_error(exc, "Product memory search") from exc
 
     response['policy'] = _policy_payload(policy)
     response['global_read_gate'] = global_read_gate
@@ -187,7 +202,7 @@ def search_vector_memory(
             now=_current_time(),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _sanitize_search_error(exc, "Vector memory search") from exc
 
     response['policy'] = _policy_payload(policy)
     response['global_read_gate'] = global_read_gate
@@ -239,7 +254,7 @@ def search_archive_memory(
             offset=offset,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _sanitize_search_error(exc, "Archive memory search") from exc
 
     response['policy'] = _policy_payload(policy)
     response['global_read_gate'] = global_read_gate

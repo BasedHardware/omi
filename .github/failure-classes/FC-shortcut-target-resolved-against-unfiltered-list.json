@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-shortcut-target-resolved-against-unfiltered-list",
+  "violated_contract": "A list's keyboard shortcuts must act on the rows the view renders. When a search or filter narrows the rendered rows but the shortcut handler resolves the focus index, or the selection it acts on, against the unfiltered list, the highlighted row and the row a shortcut acts on diverge, and a destructive shortcut such as delete or complete reaches a row the user cannot see.",
+  "canonical_prevention": "Derive the visible rows once, in the component that owns the focus index, and render exactly those rows; resolve focus, navigation bounds and the selection a shortcut acts on against the same rows. Prove it with a hermetic test that narrows the list with a search, moves focus, fires a destructive shortcut and asserts it acted only on the highlighted visible row, plus a case where a selected row the search hides is left alone.",
+  "canonical_prevention_artifact": [
+    "web/app/src/components/tasks/__tests__/TaskHub.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/components/tasks/TaskHub.tsx",
+    "web/app/src/components/tasks/TaskListView.tsx",
+    "web/app/src/hooks/useTaskKeyboardShortcuts.ts"
+  ],
+  "status": "open"
+}

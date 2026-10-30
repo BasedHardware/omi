@@ -7,7 +7,8 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 env_file="$(mktemp)"
-trap 'rm -f "$env_file"' EXIT
+existing_file="$(mktemp)"
+trap 'rm -f "$env_file" "$existing_file"' EXIT
 
 manifest_args=()
 if [[ -n "${RUNTIME_ENV_MANIFEST:-}" ]]; then
@@ -19,9 +20,14 @@ if [[ ! "$config_map" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || [[ "${#config_map
   echo "ConfigMap name override is not a valid bounded Kubernetes name." >&2
   exit 1
 fi
-python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" "${manifest_args[@]}" --format env >"$env_file"
-
 namespace="${ENVIRONMENT}-omi-backend"
+# Standalone listener/pusher refreshes must not erase commercial references
+# installed by the full backend deploy. Missing maps are safe on first setup;
+# read/auth failures stop the mutation. Canary maps inherit the canonical map.
+kubectl -n "$namespace" get configmap "$manifest_config_map" --ignore-not-found -o json >"$existing_file"
+python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" "${manifest_args[@]}" \
+  --existing-config-map "$existing_file" --format env >"$env_file"
+
 key_count="$(wc -l <"$env_file" | tr -d ' ')"
 
 kubectl -n "$namespace" create configmap "$config_map" \

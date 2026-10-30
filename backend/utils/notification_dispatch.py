@@ -13,6 +13,7 @@ import logging
 from typing import Any, Awaitable, Callable, Mapping, Optional
 
 from models.notification_message import NotificationMessage
+from database.account_deletion_marker import account_deletion_blocks_user_work
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,12 @@ APP_NOTIFICATION_RATE_LIMIT_POLICY = 'integration-notification'
 
 
 class NotificationKind(str, Enum):
+    PROACTIVITY_V2 = 'proactivity_v2'
     APP_INTEGRATION = 'app_integration'
+    CAPTURE_RECOVERY = 'capture_recovery'
+    IMPORT_JOB = 'import_job'
+    ACTION_ITEM_REMINDER = 'action_item_reminder'
+    CONVERSATION_MERGE = 'conversation_merge'
 
 
 class NotificationPolicy(str, Enum):
@@ -105,11 +111,12 @@ class NotificationDispatchOutcome:
     status: NotificationDispatchStatus
     rate_limit: Optional[NotificationRateLimit] = None
     reason: Optional[str] = None
+    delivered: Optional[int] = None
 
 
 RateLimitReserve = Callable[[str, str, int, int], tuple[bool, int, int]]
-SyncDelivery = Callable[[str, str, str, Optional[dict[str, Any]]], None]
-AsyncDelivery = Callable[[str, str, str, Optional[dict[str, Any]]], Awaitable[None]]
+SyncDelivery = Callable[[str, str, str, Optional[dict[str, Any]]], Optional[int]]
+AsyncDelivery = Callable[[str, str, str, Optional[dict[str, Any]]], Awaitable[Optional[int]]]
 Clock = Callable[[], datetime]
 
 
@@ -124,17 +131,17 @@ def _default_reserve(key: str, policy: str, limit: int, window: int) -> tuple[bo
     return reserve_rate_limit(key, policy, limit, window)
 
 
-def _default_sync_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> None:
+def _default_sync_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> Optional[int]:
     # Keep the transport import lazy: intent and policy tests do not need Firebase.
-    from utils.notifications import send_notification
+    from utils.notifications import send_notification_result
 
-    send_notification(user_id, title, body, data)
+    return send_notification_result(user_id, title, body, data)
 
 
-async def _default_async_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> None:
+async def _default_async_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> Optional[int]:
     from utils.notifications import send_notification_async
 
-    await send_notification_async(user_id, title, body, data)
+    return await send_notification_async(user_id, title, body, data)
 
 
 class NotificationDispatcher:
@@ -147,11 +154,40 @@ class NotificationDispatcher:
         sync_delivery: SyncDelivery = _default_sync_delivery,
         async_delivery: AsyncDelivery = _default_async_delivery,
         clock: Clock = _utc_now,
+        deletion_blocks: Optional[Callable[[str], bool]] = None,
     ) -> None:
         self._reserve = reserve
         self._sync_delivery = sync_delivery
         self._async_delivery = async_delivery
         self._clock = clock
+        self._deletion_blocks = deletion_blocks or account_deletion_blocks_user_work
+
+    def _deletion_outcome(self, intent: NotificationIntent) -> Optional[NotificationDispatchOutcome]:
+        if self._deletion_blocks is None:
+            return None
+        try:
+            blocked = self._deletion_blocks(intent.user_id)
+        except Exception as error:
+            logger.error(
+                'notification suppressed uid=%s reason=deletion_authority_unavailable exception_type=%s',
+                intent.user_id,
+                type(error).__name__,
+            )
+            return NotificationDispatchOutcome(
+                NotificationDispatchStatus.SUPPRESSED,
+                reason='deletion_authority_unavailable',
+            )
+        if blocked:
+            logger.info(
+                'notification suppressed uid=%s kind=%s reason=account_pending_deletion',
+                intent.user_id,
+                intent.kind.value,
+            )
+            return NotificationDispatchOutcome(
+                NotificationDispatchStatus.SUPPRESSED,
+                reason='account_pending_deletion',
+            )
+        return None
 
     def _apply_policy(self, intent: NotificationIntent) -> Optional[NotificationDispatchOutcome]:
         if intent.policy == NotificationPolicy.DIRECT:
@@ -189,12 +225,15 @@ class NotificationDispatcher:
         )
 
     def dispatch(self, intent: NotificationIntent) -> NotificationDispatchOutcome:
+        deletion_outcome = self._deletion_outcome(intent)
+        if deletion_outcome is not None:
+            return deletion_outcome
         policy_outcome = self._apply_policy(intent)
         if policy_outcome and policy_outcome.status == NotificationDispatchStatus.SUPPRESSED:
             return policy_outcome
 
         try:
-            self._sync_delivery(intent.user_id, intent.title, intent.body, dict(intent.data))
+            delivered = self._sync_delivery(intent.user_id, intent.title, intent.body, dict(intent.data))
         except Exception:
             logger.exception(
                 'notification delivery failed uid=%s kind=%s source=%s',
@@ -217,15 +256,19 @@ class NotificationDispatcher:
         return NotificationDispatchOutcome(
             NotificationDispatchStatus.DISPATCHED,
             rate_limit=policy_outcome.rate_limit if policy_outcome else None,
+            delivered=delivered,
         )
 
     async def dispatch_async(self, intent: NotificationIntent) -> NotificationDispatchOutcome:
+        deletion_outcome = self._deletion_outcome(intent)
+        if deletion_outcome is not None:
+            return deletion_outcome
         policy_outcome = self._apply_policy(intent)
         if policy_outcome and policy_outcome.status == NotificationDispatchStatus.SUPPRESSED:
             return policy_outcome
 
         try:
-            await self._async_delivery(intent.user_id, intent.title, intent.body, dict(intent.data))
+            delivered = await self._async_delivery(intent.user_id, intent.title, intent.body, dict(intent.data))
         except Exception:
             logger.exception(
                 'notification delivery failed uid=%s kind=%s source=%s',
@@ -248,10 +291,11 @@ class NotificationDispatcher:
         return NotificationDispatchOutcome(
             NotificationDispatchStatus.DISPATCHED,
             rate_limit=policy_outcome.rate_limit if policy_outcome else None,
+            delivered=delivered,
         )
 
 
-_dispatcher = NotificationDispatcher()
+_dispatcher = NotificationDispatcher(deletion_blocks=account_deletion_blocks_user_work)
 
 
 def dispatch_notification(intent: NotificationIntent) -> NotificationDispatchOutcome:
@@ -260,3 +304,79 @@ def dispatch_notification(intent: NotificationIntent) -> NotificationDispatchOut
 
 async def dispatch_notification_async(intent: NotificationIntent) -> NotificationDispatchOutcome:
     return await _dispatcher.dispatch_async(intent)
+
+
+def _action_item_reminder_delivery(
+    user_id: str, title: str, body: str, data: Optional[dict[str, Any]]
+) -> Optional[int]:
+    # Preserve the existing silent background scheduling transport, not a visible alert.
+    from utils.notifications import send_action_item_data_message
+
+    assert data is not None
+    send_action_item_data_message(
+        user_id,
+        data['action_item_id'],
+        data['description'],
+        data['due_at'],
+        completed=bool(data.get('completed')),
+        status=data.get('status'),
+        deleted=bool(data.get('deleted')),
+    )
+    return None
+
+
+def dispatch_action_item_reminder(
+    *,
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    due_at: str,
+    completed: bool = False,
+    status: Optional[str] = None,
+    deleted: bool = False,
+) -> NotificationDispatchOutcome:
+    intent = NotificationIntent(
+        user_id=user_id,
+        title='',
+        body='',
+        source='action_item_refresh',
+        kind=NotificationKind.ACTION_ITEM_REMINDER,
+        data={
+            'action_item_id': action_item_id,
+            'description': description,
+            'due_at': due_at,
+            'completed': completed,
+            'status': status,
+            'deleted': deleted,
+        },
+    )
+    return NotificationDispatcher(
+        sync_delivery=_action_item_reminder_delivery,
+        deletion_blocks=account_deletion_blocks_user_work,
+    ).dispatch(intent)
+
+
+def _merge_completed_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> Optional[int]:
+    # Retain the existing data-only, high-priority background invalidation.
+    from utils.notifications import send_merge_completed_message
+
+    assert data is not None
+    send_merge_completed_message(user_id, data['merged_conversation_id'], data['removed_conversation_ids'])
+    return None
+
+
+def dispatch_merge_completed(
+    user_id: str, merged_conversation_id: str, removed_conversation_ids: list[str]
+) -> NotificationDispatchOutcome:
+    intent = NotificationIntent(
+        user_id=user_id,
+        title='',
+        body='',
+        source='conversation_merge',
+        kind=NotificationKind.CONVERSATION_MERGE,
+        data={'merged_conversation_id': merged_conversation_id, 'removed_conversation_ids': removed_conversation_ids},
+    )
+    return NotificationDispatcher(
+        sync_delivery=_merge_completed_delivery,
+        deletion_blocks=account_deletion_blocks_user_work,
+    ).dispatch(intent)

@@ -20,8 +20,6 @@ The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open 
   </Card>
 </CardGroup>
 
----
-
 ## How It Works
 
 ```mermaid
@@ -33,7 +31,7 @@ sequenceDiagram
     A->>M: tools/list (discover available tools)
     M-->>A: Tools allowed by the user's OAuth grant or MCP key
     A->>M: tools/call search_memories {query: "morning routine"}
-    M->>D: Semantic search via Pinecone
+    M->>D: Semantic search
     D-->>M: Ranked results
     M-->>A: Memories with relevance scores
 ```
@@ -45,9 +43,7 @@ and manually provisioned `omi_mcp_...` keys for compatible clients and local ser
 
 The same hosted MCP connection works across Claude, Claude Code, ChatGPT, Codex, and any compatible client. It exposes the user's Omi context as scoped tools: durable memories, conversations, people, action items, goals, chat history, daily summaries, and synced screen activity. The server's initialization instructions tell clients to retrieve task-specific evidence, confirm important claims against source records, and avoid writes unless the user clearly requested them.
 
-When the Omi macOS app connects Claude Code or Codex, it also installs a small `omi` skill in that client's personal skills directory. The skill contains routing guidance only—never credentials or user data—and Omi preserves an existing user-authored skill with the same name.
-
----
+When the Omi macOS app connects Claude Code or Codex, it also installs a small `omi` skill in that client's personal skills directory. The skill contains routing guidance only, never credentials or user data. Omi preserves an existing user-authored skill with the same name.
 
 ## Available Tools
 
@@ -55,12 +51,12 @@ When the Omi macOS app connects Claude Code or Codex, it also installs a small `
 |------|-------------|
 | `get_memories` | List memories with optional category filtering |
 | `search_memories` | Semantic search across memories |
-| `create_memory` | Create a new memory |
+| `create_memory`, `create_memories` | Create one memory, or up to 25 in a bounded batch |
 | `edit_memory` | Edit an existing memory |
 | `delete_memory` | Delete a memory |
 | `get_conversations` | List conversations with date/category filters |
 | `search_conversations` | Semantic search across conversations |
-| `get_conversation_by_id` | Get full conversation with transcript |
+| `get_conversation_by_id`, `get_conversations_by_ids` | Get full conversations with transcripts — one, or up to 20 in a bounded batch |
 | `get_user_profile` | Get Omi's cached high-level user summary |
 | `get_x_posts`, `search_x_posts` | Browse or search imported X posts and bookmarks |
 | `get_action_items`, `search_action_items` | Browse or search tasks |
@@ -68,12 +64,12 @@ When the Omi macOS app connects Claude Code or Codex, it also installs a small `
 | `get_goals` | Retrieve active or historical goals |
 | `get_chat_messages` | Retrieve recent Omi chat history |
 | `get_people` | Retrieve recognized people and speaker samples |
+| `rename_person` | Correct a recognized person's display name while retaining the old name as an alias |
+| `dismiss_person` | Soft-dismiss a false-positive person from normal People reads |
 | `get_screen_activity` | Retrieve or summarize synced screen activity |
 | `get_daily_summaries` | Retrieve Omi's daily summaries |
 
 See the [Tools Reference](/doc/developer/mcp/tools) for full parameter documentation.
-
----
 
 ## Comparison with Developer API
 

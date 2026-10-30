@@ -22,6 +22,11 @@ import { formatTime, formatDuration } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
+import { ActionItemsTab, NextStepsList } from './NoteActionItems';
+import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
+import { NoteInsights } from './NoteInsights';
+import { NoteParticipants } from './NoteParticipants';
+import { NoteSections } from './NoteSections';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
 import { ConversationActionsMenu } from './ConversationActionsMenu';
 import { EditableTitle } from './EditableTitle';
@@ -46,15 +51,18 @@ import {
   updateSegmentText,
   reprocessConversation,
 } from '@/lib/api';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import type {
   Conversation,
   AppResponse,
   TranscriptSegment,
   AudioFileUrlInfo,
   Geolocation,
+  NoteInsight,
   StructuredActionItem,
 } from '@/types/conversation';
+import { isFirstPartyNoteSelection, meetingTypeLabel } from '@/lib/meetingNotes';
+import { conversationDisplayTitle } from '@/lib/conversationTitle';
 import {
   selectConversationSummary,
   type SummarySection,
@@ -118,61 +126,19 @@ function calculateDuration(start: string | null, end: string | null): number {
   return Math.floor((endDate.getTime() - startDate.getTime()) / 1000);
 }
 
-/**
- * Action item component
- */
-function ActionItemRow({ item }: { item: StructuredActionItem }) {
-  return (
-    <div
-      className={cn(
-        'flex items-start gap-3 rounded-xl p-4',
-        'border border-bg-quaternary/50 bg-bg-tertiary',
-        item.completed && 'opacity-60',
-      )}
-    >
-      <div
-        className={cn(
-          'mt-0.5 h-5 w-5 flex-shrink-0 rounded-md border-2',
-          'flex items-center justify-center',
-          item.completed ? 'border-success bg-success' : 'border-text-quaternary',
-        )}
-      >
-        {item.completed && (
-          <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
-        )}
-      </div>
-      <div className="flex-1">
-        <span
-          className={cn(
-            'text-text-primary',
-            item.completed && 'text-text-tertiary line-through',
-          )}
-        >
-          {item.description}
-        </span>
-        {item.due_at && (
-          <p className="mt-1 text-xs text-text-quaternary">
-            Due: {new Date(item.due_at).toLocaleDateString()}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 const OVERVIEW_MARKDOWN_CLASS =
   'text-text-secondary leading-relaxed text-lg prose max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-headings:text-text-primary prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-strong:text-text-primary first:prose-headings:mt-0';
 
-function OverviewMarkdown({ overview }: { overview: string }) {
+function OverviewMarkdown({
+  overview,
+  transcriptIDs,
+}: {
+  overview: string;
+  transcriptIDs: string[];
+}) {
   return (
     <div className={OVERVIEW_MARKDOWN_CLASS}>
-      <ReactMarkdown>{overview}</ReactMarkdown>
+      <ReactMarkdown>{repairNoteCitations(overview, transcriptIDs).text}</ReactMarkdown>
     </div>
   );
 }
@@ -182,7 +148,11 @@ function OverviewMarkdown({ overview }: { overview: string }) {
  */
 interface SummaryTabProps {
   overview: string;
+  transcriptSegments?: TranscriptSegment[];
+  onOpenSource?: (id: string) => void;
   sections?: SummarySection[] | null;
+  insights?: NoteInsight[] | null;
+  actionItems?: StructuredActionItem[];
   category?: string;
   conversationId: string;
   appResults: AppResponse[];
@@ -193,7 +163,11 @@ interface SummaryTabProps {
 
 export function SummaryTab({
   overview,
+  transcriptSegments = [],
+  onOpenSource,
   sections,
+  insights,
+  actionItems,
   category,
   conversationId,
   appResults,
@@ -205,6 +179,10 @@ export function SummaryTab({
     structured: { overview, sections },
     apps_results: appResults,
   });
+  const transcriptIDs = transcriptSegments.flatMap((segment) =>
+    segment.id ? [segment.id] : [],
+  );
+  const isStructuredNote = isFirstPartyNoteSelection(summary.kind, sections);
   const secondaryAppResults = (appResults ?? []).filter(
     (result, index) => result.content?.trim() && index !== summary.resultIndex,
   );
@@ -265,7 +243,21 @@ export function SummaryTab({
                     </span>
                   </div>
                 )}
-                <OverviewMarkdown overview={summary.content} />
+                {isStructuredNote && (
+                  <NoteInsights insights={insights} transcriptIDs={transcriptIDs} />
+                )}
+                {isStructuredNote && sections ? (
+                  <NoteSections
+                    sections={sections}
+                    onOpenSource={onOpenSource}
+                    transcriptSegments={transcriptSegments}
+                  />
+                ) : (
+                  <OverviewMarkdown
+                    overview={summary.content}
+                    transcriptIDs={transcriptIDs}
+                  />
+                )}
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
                     <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -323,8 +315,23 @@ export function SummaryTab({
               </span>
             </div>
           )}
-          <OverviewMarkdown overview={summary.content} />
+          {isStructuredNote && (
+            <NoteInsights insights={insights} transcriptIDs={transcriptIDs} />
+          )}
+          {isStructuredNote && sections ? (
+            <NoteSections
+              sections={sections}
+              onOpenSource={onOpenSource}
+              transcriptSegments={transcriptSegments}
+            />
+          ) : (
+            <OverviewMarkdown overview={summary.content} transcriptIDs={transcriptIDs} />
+          )}
         </div>
+      )}
+
+      {isStructuredNote && actionItems && actionItems.length > 0 && (
+        <NextStepsList items={actionItems} transcriptIDs={transcriptIDs} />
       )}
 
       {/* App Summaries Section */}
@@ -362,39 +369,6 @@ export function SummaryTab({
             template.
           </p>
         )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Action items tab content
- */
-function ActionItemsTab({ items }: { items: StructuredActionItem[] }) {
-  const completedCount = items.filter((i) => i.completed).length;
-
-  return (
-    <div className="space-y-4">
-      {/* Progress indicator */}
-      <div className="flex items-center gap-3 rounded-lg bg-bg-tertiary/50 p-3">
-        <div className="flex-1">
-          <div className="h-2 overflow-hidden rounded-full bg-bg-quaternary">
-            <div
-              className="h-full bg-success transition-all duration-300"
-              style={{ width: `${(completedCount / items.length) * 100}%` }}
-            />
-          </div>
-        </div>
-        <span className="text-sm text-text-tertiary">
-          {completedCount}/{items.length} completed
-        </span>
-      </div>
-
-      {/* Action items list */}
-      <div className="space-y-3">
-        {items.map((item, index) => (
-          <ActionItemRow key={index} item={item} />
-        ))}
       </div>
     </div>
   );
@@ -444,6 +418,10 @@ export function ConversationDetailPanel({
   onConversationUpdate,
   onDelete,
 }: ConversationDetailPanelProps) {
+  const [sourceRequest, setSourceRequest] = useState<{
+    id: string;
+    request: number;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('summary');
   const [selectedSegment, setSelectedSegment] = useState<TranscriptSegment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
@@ -724,7 +702,7 @@ export function ConversationDetailPanel({
           await updateSegmentText(convId, task.segmentId, task.text);
           if (convIdRef.current === convId) {
             setTranscriptEdited(true);
-            MixpanelManager.track('Transcript Segment Edited', {
+            PostHogManager.track('Transcript Segment Edited', {
               conversation_id: convId,
               segment_id: task.segmentId,
             });
@@ -798,7 +776,7 @@ export function ConversationDetailPanel({
       if (convIdRef.current === convId) {
         onConversationUpdate?.(updated);
         setTranscriptEdited(false);
-        MixpanelManager.track('Conversation Reprocessed After Edit', {
+        PostHogManager.track('Conversation Reprocessed After Edit', {
           conversation_id: convId,
         });
       }
@@ -845,6 +823,13 @@ export function ConversationDetailPanel({
   const hasActionItems = actionItems.length > 0;
   const hasTranscript = transcript_segments && transcript_segments.length > 0;
   const summarySelection = selectConversationSummary(conversation);
+  const showNoteChrome = isFirstPartyNoteSelection(
+    summarySelection.kind,
+    structured.sections,
+  );
+  const noteMeetingLabel = showNoteChrome
+    ? meetingTypeLabel(structured.meeting_type)
+    : null;
 
   // Build tabs array based on available content
   const tabs: Tab[] = [
@@ -907,6 +892,7 @@ export function ConversationDetailPanel({
             <EditableTitle
               conversationId={conversationId}
               title={structured.title || 'Untitled Conversation'}
+              displayTitle={conversationDisplayTitle(conversation)}
               onTitleChange={handleTitleChange}
               className="mb-2 line-clamp-2 font-display text-xl font-semibold text-text-primary"
             />
@@ -931,6 +917,11 @@ export function ConversationDetailPanel({
                   <span>{formatDuration(duration)}</span>
                 </div>
               )}
+              {noteMeetingLabel && (
+                <div className="flex items-center gap-1.5">
+                  <span>{noteMeetingLabel}</span>
+                </div>
+              )}
               {conversation.starred && (
                 <div className="flex items-center gap-1.5 text-warning">
                   <Star className="h-4 w-4 fill-current" />
@@ -938,6 +929,9 @@ export function ConversationDetailPanel({
                 </div>
               )}
             </div>
+            {showNoteChrome && (
+              <NoteParticipants participants={structured.participants} />
+            )}
           </div>
 
           {/* Actions Menu */}
@@ -957,7 +951,7 @@ export function ConversationDetailPanel({
         <div className="flex-shrink-0 px-4 pt-4 lg:px-6 lg:pt-6">
           <ConversationScreenFrameBanner
             frame={screenFrames.frameSet.banner}
-            title={structured.title || 'Untitled Conversation'}
+            title={conversationDisplayTitle(conversation) || 'Untitled Conversation'}
             dateLabel={
               conversation.started_at ? formatDate(conversation.started_at) : undefined
             }
@@ -1013,8 +1007,18 @@ export function ConversationDetailPanel({
             {activeTab === 'summary' && summarySelection.kind !== 'empty' && (
               <>
                 <SummaryTab
+                  onOpenSource={(id) => {
+                    setActiveTab('transcript');
+                    setSourceRequest((previous) => ({
+                      id,
+                      request: (previous?.request ?? 0) + 1,
+                    }));
+                  }}
                   overview={structured.overview || ''}
+                  transcriptSegments={conversation.transcript_segments ?? []}
                   sections={structured.sections}
+                  insights={structured.insights}
+                  actionItems={actionItems}
                   category={structured.category}
                   conversationId={conversationId}
                   appResults={conversation.apps_results || []}
@@ -1034,7 +1038,12 @@ export function ConversationDetailPanel({
             )}
 
             {activeTab === 'actions' && hasActionItems && (
-              <ActionItemsTab items={actionItems} />
+              <ActionItemsTab
+                items={actionItems}
+                transcriptIDs={(transcript_segments ?? []).flatMap((segment) =>
+                  segment.id ? [segment.id] : [],
+                )}
+              />
             )}
 
             {activeTab === 'transcript' && hasTranscript && (
@@ -1126,6 +1135,7 @@ export function ConversationDetailPanel({
                     </div>
                   )}
                 <TranscriptView
+                  sourceRequest={sourceRequest}
                   segments={transcript_segments}
                   userName={userName}
                   conversationId={conversationId}

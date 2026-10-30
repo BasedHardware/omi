@@ -12,6 +12,17 @@ the next two through ``ListenPersistence.call``, which is ``run_blocking(db_exec
 These AST checks assert the offload stays in place for every one of them, including that the
 ``run_blocking`` call is awaited: a bare call would be a coroutine that never runs, so the
 gate would silently stop being enforced while still looking offloaded.
+
+A second wave (#15964) found six more plain-``def`` Redis calls reached through the backfill
+and fair-use metering helpers rather than through Firestore directly: acquiring/releasing the
+v1 backfill slot, reserving backfill speech, recording speech ms, reading rolling speech
+totals, and recording Deepgram usage ms. The v2 handler already offloads the backfill slot
+calls the same way; these checks extend the guard to the v1 handler's copies.
+
+A third wave offloads blocking file I/O, CPU-intensive audio decoding, and temporary file
+cleanups: retrieving uploaded file paths (shutil.copyfileobj disk writes), decoding Opus
+files to WAV (libopus frame decoding and wave writes), and _cleanup_files (synchronous
+unlinks across normal exit, budget exhaustion, and the finally block).
 """
 
 import ast
@@ -29,6 +40,15 @@ _BLOCKING_GATES = frozenset(
         "get_enforcement_stage",
         "is_dg_budget_exhausted",
         "record_usage",
+        "try_acquire_backfill_slot",
+        "release_backfill_slot",
+        "reserve_backfill_speech",
+        "record_speech_ms",
+        "get_rolling_speech_ms",
+        "record_dg_usage_ms",
+        "retrieve_file_paths",
+        "decode_files_to_wav",
+        "_cleanup_files",
     }
 )
 
@@ -95,3 +115,12 @@ class TestSyncLocalFilesOffload:
         assert offloaded["get_enforcement_stage"] == "db_executor"
         assert offloaded["is_dg_budget_exhausted"] == "db_executor"
         assert offloaded["record_usage"] == "db_executor"
+        assert offloaded["try_acquire_backfill_slot"] == "db_executor"
+        assert offloaded["release_backfill_slot"] == "db_executor"
+        assert offloaded["reserve_backfill_speech"] == "db_executor"
+        assert offloaded["record_speech_ms"] == "db_executor"
+        assert offloaded["get_rolling_speech_ms"] == "db_executor"
+        assert offloaded["record_dg_usage_ms"] == "db_executor"
+        assert offloaded["retrieve_file_paths"] == "sync_executor"
+        assert offloaded["decode_files_to_wav"] == "sync_executor"
+        assert offloaded["_cleanup_files"] == "sync_executor"

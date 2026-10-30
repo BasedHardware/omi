@@ -3,7 +3,6 @@ Tools for accessing Gmail messages.
 """
 
 import base64
-import traceback
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, cast
 
@@ -16,6 +15,15 @@ from utils.retrieval.tools.integration_base import (
     prepare_access,
     retry_on_auth_async,
 )
+from utils.model_text import (
+    DisplayClock,
+    UNTRUSTED_LEGEND,
+    count_header,
+    format_instant,
+    truncation_note,
+    untrusted_block,
+)
+from utils.user_clock import clock_for_config
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import (
@@ -97,7 +105,7 @@ async def get_gmail_messages(
     return messages
 
 
-def parse_gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
+def parse_gmail_message(message: Dict[str, Any], clock: Optional[DisplayClock] = None) -> Dict[str, Any]:
     """
     Parse a Gmail message object into a readable format.
 
@@ -150,10 +158,72 @@ def parse_gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
         'subject': header_dict.get('subject', '(No subject)'),
         'from': header_dict.get('from', 'Unknown'),
         'to': header_dict.get('to', 'Unknown'),
-        'date': date_parsed.isoformat() if date_parsed else date_str,
+        'date': (
+            format_instant(date_parsed, clock or DisplayClock.utc())
+            if date_parsed
+            else 'unknown time (email date could not be parsed)'
+        ),
         'snippet': message.get('snippet', ''),
         'body': body_text,
     }
+
+
+def _format_gmail_messages(
+    messages: List[Dict[str, Any]],
+    clock: DisplayClock,
+    *,
+    max_results: int,
+    query: Optional[str],
+    label: Optional[str],
+) -> str:
+    """Render Gmail search results with source text fenced and page caps explained."""
+    del query, label  # The result scope is already represented by the search that produced this page.
+    result = (
+        count_header(
+            "Gmail Messages",
+            shown=len(messages),
+            order="Gmail search order",
+            more_may_exist=len(messages) >= max_results,
+        )
+        + "\n\n"
+    )
+
+    for i, message in enumerate(messages, 1):
+        parsed = parse_gmail_message(message, clock)
+        result += f"{i}. Subject: {untrusted_block('Gmail subject', str(parsed['subject']))}\n"
+        result += f"   From: {untrusted_block('Gmail sender', str(parsed['from']))}\n"
+        result += f"   To: {untrusted_block('Gmail recipient', str(parsed['to']))}\n"
+        result += f"   Received: {parsed['date']}\n"
+        snippet = str(parsed['snippet'] or '')
+        if snippet:
+            preview = snippet[:200]
+            if len(snippet) > 200:
+                preview += '...'
+            result += f"   Preview: {untrusted_block('Gmail snippet', preview)}\n"
+            if len(snippet) > 200:
+                result += (
+                    "   "
+                    + truncation_note(
+                        shown=200,
+                        total=len(snippet),
+                        unit="email preview characters",
+                        how_to_get_more="Open or search for the full email body.",
+                    )
+                    + "\n"
+                )
+        result += "\n"
+
+    if len(messages) >= max_results:
+        result += "\n" + truncation_note(
+            shown=len(messages),
+            total=None,
+            cut=True,
+            unit="email messages",
+            how_to_get_more="Narrow the Gmail query or ask for another label to inspect additional messages.",
+        )
+    if messages:
+        result += "\n\n" + UNTRUSTED_LEGEND
+    return result.strip()
 
 
 @tool
@@ -198,31 +268,31 @@ async def get_gmail_messages_tool(
     Returns:
         Formatted list of emails with their details.
     """
-    uid, integration, access_token, access_err = await run_blocking(
-        db_executor,
-        prepare_access,
-        cast(Optional[Dict[str, Any]], config),
-        'google_calendar',
-        'Gmail',
-        'Gmail is not connected. Please connect your Google account from settings to view your emails.',
-        'Gmail access token not found. Please reconnect your Google account from settings.',
-        'Error checking Gmail connection',
-    )
-    if access_err:
-        return access_err
-    assert uid is not None
-    assert integration is not None
-    assert access_token is not None
-
-    # A Google grant created before Gmail was requested carries no Gmail scope; calling
-    # the Gmail API with it fails with an opaque 403, so ask for a reconnect instead.
-    if not google_integration_has_scope(integration, GMAIL_READONLY_SCOPE):
-        return (
-            'Gmail access has not been granted for this Google account. '
-            'Please reconnect Gmail from settings and approve email access.'
-        )
-
     try:
+        uid, integration, access_token, access_err = await run_blocking(
+            db_executor,
+            prepare_access,
+            cast(Optional[Dict[str, Any]], config),
+            'google_calendar',
+            'Gmail',
+            'Gmail is not connected. Please connect your Google account from settings to view your emails.',
+            'Gmail access token not found. Please reconnect your Google account from settings.',
+            'Error checking Gmail connection',
+        )
+        if access_err:
+            return access_err
+        if not uid or not integration or not access_token:
+            return 'Error checking Gmail connection'
+        clock = clock_for_config(config, uid)
+
+        # A Google grant created before Gmail was requested carries no Gmail scope; calling
+        # the Gmail API with it fails with an opaque 403, so ask for a reconnect instead.
+        if not google_integration_has_scope(integration, GMAIL_READONLY_SCOPE):
+            return (
+                'Gmail access has not been granted for this Google account. '
+                'Please reconnect Gmail from settings and approve email access.'
+            )
+
         max_results = ensure_capped(max_results, 50, "⚠️ get_gmail_messages_tool - max_results capped from {} to {}")
 
         # Build label_ids if label is provided
@@ -268,24 +338,7 @@ async def get_gmail_messages_tool(
             label_info = f" in {label}" if label else ""
             return f"No emails found{query_info}{label_info}."
 
-        # Format messages
-        result = f"Gmail Messages ({len(messages)} found):\n\n"
-
-        for i, message in enumerate(messages, 1):
-            parsed = parse_gmail_message(message)
-
-            result += f"{i}. {parsed['subject']}\n"
-            result += f"   From: {parsed['from']}\n"
-            result += f"   To: {parsed['to']}\n"
-            if parsed['date']:
-                result += f"   Date: {parsed['date']}\n"
-            if parsed['snippet']:
-                snippet = parsed['snippet'][:200] + '...' if len(parsed['snippet']) > 200 else parsed['snippet']
-                result += f"   Preview: {snippet}\n"
-            result += "\n"
-
-        return result.strip()
+        return _format_gmail_messages(messages, clock, max_results=max_results, query=query, label=label)
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}")
-        traceback.print_exc()
-        return f"Unexpected error fetching Gmail messages: {str(e)}"
+        logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while fetching Gmail messages. Please try again later."

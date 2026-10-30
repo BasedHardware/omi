@@ -135,7 +135,7 @@ struct BrowserKeywordListView: View {
         Image(systemName: "line.3.horizontal.decrease")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
-        TextField("Filter keywords...", text: $filterText)
+        TextField("Filter keywords…", text: $filterText)
           .textFieldStyle(.plain)
           .scaledFont(size: OmiType.caption)
         if !filterText.isEmpty {
@@ -181,7 +181,7 @@ struct BrowserKeywordListView: View {
 
       // Add new keyword
       HStack(spacing: OmiSpacing.sm) {
-        TextField("Add keyword...", text: $newKeyword)
+        TextField("Add keyword…", text: $newKeyword)
           .settingsTextInputStyle()
           .onSubmit { addKeyword() }
 

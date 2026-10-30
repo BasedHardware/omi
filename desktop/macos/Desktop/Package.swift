@@ -1,6 +1,30 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+// Required macos-26 CI has Swift 6.3 and lacks the iOS/macOS 27 App Intents
+// schemas. Signed Codemagic releases and the advisory lane use Swift 6.4,
+// where these sources and their tests must be compiled and metadata extracted.
+#if compiler(>=6.4)
+  let siriSourceExclusions: [String] = []
+  let siriTestExclusions: [String] = []
+#else
+  let siriSourceExclusions = [
+    "SiriIntegration/SiriDevProbe.swift",
+    "SiriIntegration/SiriDonations.swift",
+    "SiriIntegration/SiriEntities.swift",
+    "SiriIntegration/SiriIndexHooks.swift",
+    "SiriIntegration/SiriIndexLifecycle.swift",
+    "SiriIntegration/SiriIndexer.swift",
+    "SiriIntegration/SiriIntentService.swift",
+    "SiriIntegration/SiriIntents.swift",
+    "SiriIntegration/SiriMemoryStorageQueries.swift",
+    "SiriIntegration/SiriMemoryCacheWriter.swift",
+    "SiriIntegration/SiriNavigation.swift",
+    "SiriIntegration/SiriViewAnnotations.swift",
+  ]
+  let siriTestExclusions = ["SiriIntentServiceTests.swift"]
+#endif
+
 // Frameworks such as Sparkle are built into Products/<config>/, but a test bundle's
 // generated rpaths only cover PackageFrameworks/. Without this the bundle builds and
 // then fails to dlopen, which reads as an unrelated test failure.
@@ -20,7 +44,6 @@ let package = Package(
   dependencies: [
     .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "11.0.0"),
     .package(url: "https://github.com/PostHog/posthog-ios.git", from: "3.0.0"),
-    .package(url: "https://github.com/getsentry/sentry-cocoa.git", exact: "8.58.0"),
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.24.0"),
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
     .package(
@@ -84,7 +107,6 @@ let package = Package(
         .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "PostHog", package: "posthog-ios"),
-        .product(name: "Sentry", package: "sentry-cocoa"),
         .product(name: "GRDB", package: "GRDB.swift"),
         .product(name: "Sparkle", package: "Sparkle"),
         .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
@@ -101,15 +123,16 @@ let package = Package(
         "Bluetooth/ARCHITECTURE.md",
         "FloatingControlBar/ARCHITECTURE.md",
         "MainWindow/Pages/MemoryGraph/ARCHITECTURE.md",
-      ],
+      ] + siriSourceExclusions,
       resources: [
         .process("GoogleService-Info.plist"),
         // Bundles everything under Resources/ (incl. *_logo.png brand marks,
         // signin_bg.png, provider-native VoicePhrases/*.wav, Resources/Fonts/*.ttf —
         // Geist / Geist Mono — and
         // Resources/Fonts/*.otf — Open Runde, the glass display face — and
-        // Resources/Sounds/*.m4a, the generated onboarding cinematic audio, and
-        // Resources/three-doors.html, the onboarding ask-demo page).
+        // Resources/Sounds/*.m4a, the generated onboarding cinematic audio,
+        // Resources/three-doors.html, the onboarding ask-demo page, and
+        // Resources/ProductKnowledge/, the shipped desktop product guide).
         // NOTE: SwiftPM caches the resource manifest, so new files added to
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.
@@ -135,7 +158,7 @@ let package = Package(
         "OmiSupportTests",
         "OmiWALTests",
         "VoiceTurnDomainTests",
-      ],
+      ] + siriTestExclusions,
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ],

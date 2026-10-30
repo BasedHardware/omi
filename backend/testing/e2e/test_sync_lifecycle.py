@@ -157,7 +157,6 @@ def _patch_sync_pipeline(
     monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
     monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_pipeline, "get_syncing_file_temporal_signed_url", lambda path: path)
-    monkeypatch.setattr(sync_pipeline, "schedule_syncing_temporal_file_deletion", lambda path: None)
     monkeypatch.setattr(sync_pipeline, "prerecorded", fake_prerecorded)
     monkeypatch.setattr(sync_pipeline, "postprocess_words", fake_postprocess_words)
     monkeypatch.setattr("utils.conversations.lifecycle.ingest_sync_conversation", fake_ingest_sync_conversation)
@@ -167,7 +166,7 @@ def _patch_sync_pipeline(
     return pending_coroutines
 
 
-def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, monkeypatch):
+def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, monkeypatch, live_user):
     patch_fresh_sync_lane(monkeypatch)
     reprocessed = []
     pending_coroutines = _patch_sync_pipeline(
@@ -209,8 +208,99 @@ def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, mo
     assert reprocessed == ["sync-created-conversation"]
 
 
+@pytest.mark.parametrize('authority', ['live', 'pending', 'completed', 'missing_root', 'rootless_at_start'])
+def test_sync_finalize_usage_preserves_erasure_and_once_receipt(
+    client, auth_headers, monkeypatch, live_user, fake_firestore, authority
+):
+    from utils.metrics import OMI_FALLBACK_TOTAL
+    import utils.sync.pipeline as sync_pipeline
+
+    patch_fresh_sync_lane(monkeypatch)
+    pending = _patch_sync_pipeline(monkeypatch, transcript_text="Finalize usage boundary regression.", reprocessed=[])
+    real_record_usage = sync_pipeline.record_usage
+    attempts = []
+    reason = 'usage_root_missing' if authority in {'missing_root', 'rootless_at_start'} else 'usage_fence_blocked'
+    counter = OMI_FALLBACK_TOTAL.labels(
+        component='usage_publication', from_mode='publish', to_mode='skip', reason=reason, outcome='degraded'
+    )
+    before_count = counter._value.get()
+
+    def record_after_authority_change(*args, **kwargs):
+        # Reach the real usage/finalize boundary after ingestion has succeeded.
+        attempts.append((args, kwargs))
+        if authority == 'missing_root':
+            live_user.delete()
+        elif authority in {'pending', 'completed'}:
+            fake_firestore.collection('account_deletions').document(live_user.id).set({'wipe_status': authority})
+        return real_record_usage(*args, **kwargs)
+
+    monkeypatch.setattr(sync_pipeline, 'record_usage', record_after_authority_change)
+    assert live_user.get().exists
+    assert not fake_firestore.collection('account_deletions').document(live_user.id).get().exists
+    assert not fake_firestore.collection('legal_hold_deletion_gates').document(live_user.id).get().exists
+    # Each scenario is a different recording, including any durable capture
+    # evidence outside the user subtree that the session-scoped fake retains.
+    offset_seconds = 300 + 60 * ['live', 'pending', 'completed', 'missing_root', 'rootless_at_start'].index(authority)
+    if authority == 'rootless_at_start':
+        live_user.delete()
+        assert not live_user.get().exists
+    response = client.post(
+        '/v2/sync-local-files',
+        files=[('files', (_sync_filename(offset_seconds), b'fake-pcm-frame', 'application/octet-stream'))],
+        headers=auth_headers,
+    )
+    assert response.status_code == 202, response.text
+    _drain_background_coroutines(pending)
+    job_id = response.json()['job_id']
+    if authority in {'pending', 'completed'}:
+        from database.sync_jobs import get_sync_job
+
+        # Deletion correctly revokes HTTP polling as well as publication.
+        assert client.get(f'/v2/sync-local-files/{job_id}', headers=auth_headers).status_code == 403
+        job = get_sync_job(job_id)
+        assert job is not None
+    else:
+        job = _poll_sync_job(client, auth_headers, job_id)
+    assert len(attempts) == 1, job
+    args, kwargs = attempts[0]
+    assert kwargs['speech_seconds'] > 0
+    assert kwargs['idempotency_key']
+    receipt = live_user.collection('sync_content_ledger').document(kwargs['idempotency_key'])
+    hourly = list(live_user.collection('hourly_usage').stream())
+    monthly = list(live_user.collection('monthly_usage_totals').stream())
+
+    assert job['status'] == 'completed', job
+    assert job['successful_segments'] == 1
+    assert job['result']['new_memories'] == ['sync-created-conversation']
+    from database.conversations import get_conversation
+
+    conversation = get_conversation('123', 'sync-created-conversation')
+    assert conversation is not None
+    assert conversation['status'] == 'completed'
+    assert [segment['text'] for segment in conversation['transcript_segments']] == [
+        'Finalize usage boundary regression.'
+    ]
+    if authority == 'live':
+        assert counter._value.get() == before_count
+        assert receipt.get().to_dict()['usage_committed_at'] is not None
+        assert len(hourly) == len(monthly) == 1
+        source, total = hourly[0].to_dict(), monthly[0].to_dict()
+        for field in ('speech_seconds', 'transcription_seconds'):
+            assert source[field] == total['totals'][field] == kwargs[field]
+        real_record_usage(*args, **kwargs)
+        assert hourly[0].reference.get().to_dict() == source
+        assert monthly[0].reference.get().to_dict() == total
+    else:
+        assert counter._value.get() == before_count + 1
+        assert not hourly and not monthly
+        assert (receipt.get().to_dict() or {}).get('usage_committed_at') is None
+        assert live_user.get().exists is (authority not in {'missing_root', 'rootless_at_start'})
+
+
 @pytest.mark.parametrize('empty_target', [False, True])
-def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, auth_headers, monkeypatch, empty_target):
+def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(
+    client, auth_headers, monkeypatch, empty_target, live_user
+):
     patch_fresh_sync_lane(monkeypatch)
     import database.conversations as conversations_db
 

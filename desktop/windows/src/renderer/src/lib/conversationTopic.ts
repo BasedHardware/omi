@@ -9,14 +9,15 @@ import { omiApi } from './apiClient'
  * the backend's title will arrive later).
  */
 export async function generateConversationTopic(
-  transcript: string
+  transcript: string,
+  conversationLanguage?: string
 ): Promise<{ emoji: string; title: string } | null> {
   const text = transcript.trim()
   if (!text) return null
   try {
-    const res = await omiApi.post('/v1/conversations/topic', {
-      transcript: text.slice(0, 4000)
-    })
+    const body: { transcript: string; conversation_language?: string } = { transcript: text.slice(0, 4000) }
+    if (conversationLanguage) body.conversation_language = conversationLanguage
+    const res = await omiApi.post('/v1/conversations/topic', body)
     const data = res.data as { emoji?: unknown; title?: unknown }
     const emoji = typeof data.emoji === 'string' ? data.emoji.trim() : ''
     const title = typeof data.title === 'string' ? data.title.trim() : ''

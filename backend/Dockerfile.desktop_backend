@@ -17,8 +17,11 @@ FROM ${PYTHON_BASE_IMAGE}
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Patch OS packages in this layer (#7136). No extra apt packages in the final image.
-RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
+# Patch OS packages in this layer (#7136). Read-aloud TTS streams Gemini PCM
+# through FFmpeg so released desktop clients continue receiving audio/mpeg.
+RUN apt-get update && apt-get -y dist-upgrade \
+    && apt-get -y install --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .

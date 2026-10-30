@@ -17,8 +17,9 @@ from llm_gateway.gateway.schemas import ProviderRef
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
 from utils.llm.chat import RequiresContext
 from utils.llm.gateway_client import _chat_structured_payload  # type: ignore[reportPrivateUsage]  # test script accessing internal helper
+from utils.llm.model_config import LUNA_MODEL
 
-PROVIDER_REF = ProviderRef(provider='openai', model='gpt-5.6-luna')
+PROVIDER_REF = ProviderRef(provider='openai', model=LUNA_MODEL)
 SMOKE_FEATURES = (
     ('chat_extraction.requires_context', RequiresContext),
     ('conversation_structure.extract.shadow', ConversationStructureExtraction),

@@ -11,8 +11,16 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
+TEST_PATHS=(
+  scripts/dev-harness/tests
+  scripts/dev-harness/physical_capture_test.py
+  scripts/dev-harness/physical_capture_collect_test.py
+  scripts/dev-harness/physical_capture_fixtures/test_server.py
+  app/ios/test/audio_interruption_driver/test_driver.py
+)
+
 run_pytest() {
-  exec "$@" -m pytest scripts/dev-harness/tests -q
+  exec "$@" -m pytest "${TEST_PATHS[@]}" -q
 }
 
 for py in \
@@ -38,7 +46,7 @@ if command -v uv >/dev/null 2>&1; then
     --with 'google-auth==2.32.0' \
     --with 'posthog==3.5.2' \
     --with 'requests~=2.33.0' \
-    python -m pytest scripts/dev-harness/tests -q
+    python -m pytest "${TEST_PATHS[@]}" -q
 fi
 
 echo "dev-harness tests require pytest + python-dotenv + Google ADC + PostHog via a backend venv, python3, or uv; none available" >&2

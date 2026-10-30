@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-quota-reporting-enforcement-divergence",
+  "violated_contract": "A quota display and the operation it describes must use the same data plane and provider-specific entitlement. Treating any enrolled LLM key as unlimited while the operation only consumes one provider's key lets the meter promise access that the send gate correctly refuses.",
+  "canonical_prevention": "Share the operation's required-provider capability between quota reporting and enforcement, use the same customer store, and compare the real paths below and at the cap with provider, enrollment and request-validation variants. Keep settings copy scoped to the capabilities those keys actually fund.",
+  "canonical_prevention_artifact": [
+    "backend/tests/routers/test_users.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/users.py",
+    "backend/utils/subscription.py",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/"
+  ],
+  "status": "open"
+}

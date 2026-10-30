@@ -10,7 +10,8 @@ export function shareBaseUrl(
   if (!value.includes('://')) value = `https://${value}`
   try {
     const parsed = new URL(value)
-    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) return DEFAULT_SHARE_BASE
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname)
+      return DEFAULT_SHARE_BASE
   } catch {
     return DEFAULT_SHARE_BASE
   }
@@ -19,7 +20,19 @@ export function shareBaseUrl(
 
 export function conversationShareUrl(
   id: string,
-  raw?: string | undefined
+  raw?: string | undefined,
+  sid: string = newShareId()
 ): string {
-  return `${shareBaseUrl(raw)}/conversations/${id}`
+  const url = new URL(`${shareBaseUrl(raw)}/conversations/${id}`)
+  url.searchParams.set('sid', sid)
+  // The same Electron code also ships on Linux; avoid claiming those shares came from Windows.
+  if (typeof navigator === 'undefined' || !/linux/i.test(navigator.userAgent)) {
+    url.searchParams.set('s', 'win')
+  }
+  return url.toString()
+}
+
+/** Ephemeral link ID, independent of the sender and conversation. */
+export function newShareId(): string {
+  return crypto.randomUUID().replaceAll('-', '')
 }

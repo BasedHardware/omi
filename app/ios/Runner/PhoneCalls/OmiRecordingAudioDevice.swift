@@ -411,6 +411,7 @@ private func omiAudioPlayoutCallback(
 
     // Pull audio from Twilio
     let buf = UnsafeMutableAudioBufferListPointer(ioData)
+    guard !buf.isEmpty else { return noErr }
     if let data = buf[0].mData {
         let size = Int(inNumberFrames * UInt32(device.bytesPerFrame))
         AudioDeviceReadRenderData(context: context.deviceContext, data: data, sizeInBytes: size)

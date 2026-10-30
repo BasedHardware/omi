@@ -139,12 +139,19 @@ class TestEffectiveDesktopAccessTier:
         assert get_remaining_transcription_seconds('neo-uid', source='desktop') is None
         assert cleared_cache_keys == [
             'trial_paywall:expired:neo-uid:openrouter',
+            'trial_paywall:expired:neo-uid:openrouter:managed',
             'trial_paywall:expired:neo-uid:openai',
+            'trial_paywall:expired:neo-uid:openai:managed',
             'trial_paywall:expired:neo-uid:anthropic',
+            'trial_paywall:expired:neo-uid:anthropic:managed',
             'trial_paywall:expired:neo-uid:gemini',
+            'trial_paywall:expired:neo-uid:gemini:managed',
             'trial_paywall:expired:neo-uid:deepgram',
+            'trial_paywall:expired:neo-uid:deepgram:managed',
             'trial_paywall:expired:neo-uid:deepgram:strict',
+            'trial_paywall:expired:neo-uid:deepgram:strict:managed',
             'trial_paywall:expired:neo-uid',
+            'trial_paywall:expired:neo-uid:managed',
         ]
 
 
@@ -212,13 +219,13 @@ class TestWebhookBuilderPopulatesPeriodStart:
     Verified by reading the source so we don't have to wire the full Stripe SDK."""
 
     def test_builder_reads_current_period_start_active_path(self):
-        with open('routers/payment.py', encoding='utf-8') as f:
+        with open('utils/subscription_state_machine.py', encoding='utf-8') as f:
             src = f.read()
-        # Both the inactive-downgrade Subscription(...) and the active
-        # Subscription(...) constructors must pass current_period_start.
-        assert (
-            src.count("current_period_start=stripe_sub.get('current_period_start')") >= 2
-        ), "_build_subscription_from_stripe_object must set current_period_start on both branches"
+        # One shared projector assignment covers both active and inactive snapshots.
+        assert "current_period_start=obj.get('current_period_start')" in src
+        with open('routers/payment.py', encoding='utf-8') as f:
+            adapter = f.read()
+        assert adapter.count('project_subscription(stripe_sub,') >= 2
 
     def test_reconcile_paths_set_current_period_start(self):
         with open('utils/subscription.py', encoding='utf-8') as f:

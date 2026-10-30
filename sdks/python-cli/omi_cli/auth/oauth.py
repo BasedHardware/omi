@@ -32,7 +32,7 @@ import threading
 import time
 import urllib.parse
 import webbrowser
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 import httpx
 
@@ -178,16 +178,22 @@ def login_with_browser(
         )
 
     custom_token = _exchange_code_for_custom_token(api_base, code, redirect_uri, code_verifier)
-    id_token, _refresh_token, _expires_in = _firebase_signin_with_custom_token(custom_token)
+    id_token, refresh_token, expires_in = _firebase_signin_with_custom_token(custom_token)
 
-    # Every /v1/dev/* endpoint the CLI actually uses authenticates with a
-    # *developer API key*, not a Firebase ID token — so storing the Firebase
-    # token directly would 401 ("Invalid API Key") on the very first call.
-    # The Firebase session DOES authenticate POST /v1/dev/keys, so use it once
-    # to mint a long-lived dev key and store that. Browser OAuth is, in effect,
-    # just a friendlier way to obtain a key without visiting the dashboard.
+    # Store the OAuth session so `omi chat` works — its gate is
+    # auth_method == "oauth". The /v1/dev/* endpoints authenticate with a
+    # *developer API key* (the Firebase ID token would 401 there), so the
+    # session is also used once to mint a long-lived dev key kept in
+    # profile.api_key for those calls.
     raw_key = _exchange_firebase_token_for_dev_key(api_base, id_token)
-    return store_api_key(profile_name, raw_key, api_base=api_base)
+    return store_oauth_tokens(
+        profile_name,
+        id_token=id_token,
+        refresh_token=refresh_token,
+        expires_at=time.time() + expires_in - _REFRESH_MARGIN_SECONDS,
+        api_key=raw_key,
+        api_base=api_base,
+    )
 
 
 # --- Refresh ---------------------------------------------------------------
@@ -244,6 +250,9 @@ def refresh_id_token(profile_name: str) -> str:
             refresh_token=new_refresh_token,
             expires_at=expires_at,
             api_base=profile.api_base,
+            # Preserve the minted dev key — a rotation that rewrites the
+            # record without it silently drops it on the first refresh.
+            api_key=profile.api_key,
         )
     else:
         update_oauth_id_token(
@@ -298,10 +307,14 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
         try:
             listing = client.get(f"{base}{_DEV_KEYS_PATH}", headers=headers)
             if listing.status_code == 200:
+                # A 200 does not guarantee a JSON list: a proxy or a degraded
+                # gateway can answer with HTML or a scalar. Parsing and shape
+                # failures belong with the transport failures below, or this
+                # block stops being best-effort and fails the whole login.
                 for key in listing.json():
                     if isinstance(key, dict) and key.get("name") == key_name and key.get("id"):
                         client.delete(f"{base}{_DEV_KEYS_PATH}/{key['id']}", headers=headers)
-        except httpx.HTTPError:
+        except (httpx.HTTPError, ValueError, TypeError):
             pass
 
         resp = client.post(
@@ -319,7 +332,15 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
             ),
         )
 
-    raw_key = resp.json().get("key")
+    # The mint response is only useful if it is a JSON object carrying `key`.
+    # A 2xx that is not JSON, or is JSON of another shape, is the same failure
+    # to the caller as a missing field, so report it the same way instead of
+    # raising ValueError/AttributeError past this function's error contract.
+    try:
+        body = resp.json()
+    except ValueError:
+        body = None
+    raw_key = body.get("key") if isinstance(body, Mapping) else None
     if not raw_key:
         raise AuthError(
             message="Key-mint response was missing the API key",

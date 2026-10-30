@@ -66,14 +66,13 @@ def test_eligible_merge_target_predicate():
 
 
 @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
-@patch('utils.sync.pipeline.schedule_syncing_temporal_file_deletion')
 @patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
 @patch('utils.sync.pipeline.postprocess_words')
 @patch('utils.sync.pipeline.conversations_db.get_conversation', return_value={'id': 'deleted', 'deleted': True})
 @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=123)
 @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', side_effect=RuntimeError("FALLBACK_TAKEN"))
 def test_sync_target_attach_preserves_identity_and_excludes_deleted(
-    mock_closest, mock_timestamp, mock_get_conv, mock_postprocess, mock_prerecorded, mock_schedule, mock_signed_url
+    mock_closest, mock_timestamp, mock_get_conv, mock_postprocess, mock_prerecorded, mock_signed_url
 ):
     """The transaction now owns deletion/absence, not a lossy preflight fallback.
 
@@ -93,7 +92,9 @@ def test_sync_target_attach_preserves_identity_and_excludes_deleted(
     with patch('utils.sync.pipeline.get_wav_duration', return_value=60), patch(
         'utils.conversations.lifecycle.ingest_sync_conversation',
         side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
-    ), patch('utils.sync.pipeline.identify_speakers_for_segments'):
+    ), patch('utils.sync.pipeline.identify_speakers_for_segments'), patch(
+        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+    ):
         result = process_segment('seg_123.wav', 'u', response, MagicMock(), errors, target_conversation_id='deleted')
     assert result and errors == []
     mock_closest.assert_not_called()

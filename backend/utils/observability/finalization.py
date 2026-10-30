@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import hashlib
 from enum import Enum
 
 from fastapi import HTTPException
@@ -11,12 +12,22 @@ from prometheus_client import Counter
 
 logger = logging.getLogger(__name__)
 
+RECORD_REGISTER_REFUSED = Counter(
+    'omi_record_register_refused_total', 'Batch recording registration refused during conversation finalization'
+)
+
+
+def finalization_diagnostic_id(value: str) -> str:
+    """Stable correlation key for logs, without exposing a stored identifier."""
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()[:16]
+
 
 class FinalizationFailureReason(str, Enum):
     """Closed, low-cardinality reasons safe for metrics and logs."""
 
     memory_fence = 'memory_fence'
     memory_config = 'memory_config'
+    byok_provider = 'byok_provider'
     provider = 'provider'
     stale = 'stale'
     processing = 'processing'
@@ -78,6 +89,12 @@ def classify_finalization_failure(error: BaseException) -> FinalizationFailureRe
             return FinalizationFailureReason.memory_fence
         if error.status_code == 503 and detail in _MEMORY_CONFIG_DETAILS:
             return FinalizationFailureReason.memory_config
+        # The composition boundary already classified this failure as the
+        # user's own provider account state (detail code byok_*). Dashboards
+        # and alerts must be able to exclude it from server-fault counts.
+        detail_code = detail.get('code') if isinstance(detail, dict) else None
+        if isinstance(detail_code, str) and detail_code.startswith('byok_'):
+            return FinalizationFailureReason.byok_provider
 
     if (
         type(error).__name__ == 'ConversationFinalizationError'
@@ -110,5 +127,6 @@ __all__ = [
     'FINALIZATION_FAILURES_TOTAL',
     'FinalizationFailureReason',
     'classify_finalization_failure',
+    'finalization_diagnostic_id',
     'record_finalization_failure',
 ]

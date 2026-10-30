@@ -14,8 +14,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import database.feedback as feedback_db
 from models.feedback import (
     FeedbackEvent,
+    FeedbackReport,
     FeedbackSurface,
     FeedbackTargetKind,
 )
@@ -596,3 +598,57 @@ def test_one_oversized_window_still_yields_an_entry(fake_db, monkeypatch):
 
     assert len(report.entries) == 1
     assert report.truncated is False
+
+
+def _write_report(fake_db, date):
+    report = FeedbackReport(date=date, generated_at=RATED_AT, total_negative=0)
+    feedback_db.save_report(report)
+    return report
+
+
+def _document_id_descending(dates, limit):
+    """What the previous __name__-descending query returned for the same rows."""
+
+    return sorted(dates, reverse=True)[:limit]
+
+
+def test_list_report_dates_returns_newest_first_across_months_and_years(fake_db):
+    dates = ['2025-11-30', '2026-01-31', '2025-12-01', '2026-02-01', '2026-01-01']
+    for date in dates:
+        _write_report(fake_db, date)
+
+    for limit in (1, 30, len(dates) + 10):
+        assert feedback_db.list_report_dates(limit) == _document_id_descending(dates, limit)
+
+
+def test_list_report_dates_honors_the_limit(fake_db):
+    dates = ['2026-03-01', '2026-03-03', '2026-03-02']
+    for date in dates:
+        _write_report(fake_db, date)
+
+    for limit in (1, 2, 99):
+        assert feedback_db.list_report_dates(limit) == _document_id_descending(dates, limit)
+
+
+def test_list_report_dates_empty_collection_returns_empty(fake_db):
+    assert feedback_db.list_report_dates(30) == []
+
+
+def test_save_report_overwrites_and_stores_date_equal_to_document_id(fake_db):
+    _write_report(fake_db, '2026-04-05')
+    _write_report(fake_db, '2026-04-05')
+
+    docs = fake_db.collection('feedback_reports')._docs
+    assert list(docs) == ['2026-04-05']
+    assert docs['2026-04-05']['date'] == '2026-04-05'
+    assert feedback_db.list_report_dates(30) == ['2026-04-05']
+
+
+def test_save_report_persists_date_field_matching_document_id_for_every_write(fake_db):
+    dates = ['2026-05-02', '2026-05-01', '2026-05-03']
+    for date in dates:
+        _write_report(fake_db, date)
+
+    docs = fake_db.collection('feedback_reports')._docs
+    for date in dates:
+        assert docs[date]['date'] == date

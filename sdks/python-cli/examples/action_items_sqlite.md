@@ -27,6 +27,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS action_items (
     id TEXT PRIMARY KEY,
@@ -42,6 +44,31 @@ CREATE INDEX IF NOT EXISTS action_items_completed ON action_items (completed);
 CREATE INDEX IF NOT EXISTS action_items_created_at ON action_items (created_at);
 CREATE INDEX IF NOT EXISTS action_items_conversation_id ON action_items (conversation_id);
 """
+
+
+def validate_db_path(db_path: str) -> None:
+    """Raise ValueError if *db_path* is unsafe or points at a non-SQLite file.
+
+    Rules enforced:
+    - The path must not contain '..' components (prevents directory traversal).
+    - If the file already exists it must be a valid SQLite database (magic-byte
+      check), so we never silently corrupt an unrelated file.
+    """
+    p = Path(db_path)
+    if ".." in p.parts:
+        raise ValueError(
+            f"Output path {db_path!r} contains '..'; refusing to write outside the intended directory."
+        )
+    if p.exists():
+        try:
+            with p.open("rb") as fh:
+                header = fh.read(len(_SQLITE_MAGIC))
+        except OSError as exc:
+            raise ValueError(f"Cannot read existing file {db_path!r}") from exc
+        if header != _SQLITE_MAGIC:
+            raise ValueError(
+                f"{db_path!r} already exists but is not a SQLite database; refusing to overwrite it."
+            )
 
 
 def text(value):
@@ -66,6 +93,9 @@ def utc_stamp(value):
     return parsed.strftime("%Y-%m-%d %H:%M:%S")
 
 
+DONE_WORDS = {"true", "1", "yes", "done", "completed"}
+
+
 def boolean_to_int(value):
     """Normalize completed status to integer 0 or 1 for SQLite."""
     if isinstance(value, bool):
@@ -73,7 +103,7 @@ def boolean_to_int(value):
     if isinstance(value, (int, float)):
         return 1 if value else 0
     if isinstance(value, str):
-        return 1 if value.strip().lower() in ("true", "1", "yes") else 0
+        return 1 if value.strip().lower() in DONE_WORDS else 0
     return 0
 
 
@@ -81,12 +111,16 @@ def rows_from(source):
     content = Path(source).read_bytes().decode("utf-8-sig")
     items = json.loads(content)
     if isinstance(items, dict):
-        items = (
-            items.get("action_items")
-            or items.get("items")
-            or items.get("data")
-            or [items]
-        )
+        # An empty list is falsy, so an `or` chain would mistake
+        # {"action_items": []} for an absent key and treat the wrapper
+        # itself as an action item. Match the first key that actually
+        # holds a list, in documented wrapper precedence order.
+        for key in ("action_items", "items", "data"):
+            if isinstance(items.get(key), list):
+                items = items[key]
+                break
+        else:
+            items = [items]
     if not isinstance(items, list):
         raise ValueError(f"{source}: expected a JSON array or object containing action items")
     rows = []
@@ -112,6 +146,7 @@ def rows_from(source):
 
 def load(database, sources):
     """Load action items from one or more JSON exports into a SQLite database."""
+    validate_db_path(database)
     # Parse every file before opening the database, so a bad export changes nothing.
     rows = [row for source in sources for row in rows_from(source)]
     connection = sqlite3.connect(database)
@@ -166,7 +201,9 @@ python -m sqlite3 tasks.sqlite "SELECT description, completed FROM action_items 
 `created_at`, `updated_at`, and `due_at` are stored as UTC `YYYY-MM-DD HH:MM:SS` text,
 so they sort chronologically and work with SQLite's `date()`, `datetime()`, and
 `strftime()`. `completed` is stored as `0` or `1` with an index for fast status filtering.
-Every original object is preserved verbatim in `raw_json` for `json_extract`. The loader
-validates every input file before writing, applies each run as a single transaction, and
-replaces rows that share an `id`, so loading the same page twice leaves exactly one row per
-action item.
+Every original object is preserved verbatim in `raw_json` for `json_extract`. The output path
+must not contain `..` (preventing directory traversal), and an existing non-SQLite file is
+never overwritten. The loader validates every input file before writing, applies each run as
+a single transaction, and replaces rows that share an `id`, so loading the same page twice
+leaves exactly one row per action item. A recognised wrapper (`action_items`, `items`, or `data`)
+holding an empty list imports zero rows, so empty export pages import cleanly alongside populated ones.

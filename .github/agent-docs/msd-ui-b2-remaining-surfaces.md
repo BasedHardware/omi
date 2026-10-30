@@ -43,9 +43,11 @@ declared in `controls[]` as B1’s schema stands.
 ## 1. home
 
 **Owners:** `app/lib/pages/home/home_content.dart` (`HomeContentPage`, catalog
-widget), `app/lib/widgets/bottom_nav_bar.dart` (tab row), shell
+widget), historical bottom-tab row (current replacement:
+`app/lib/pages/home/widgets/home_tab_switcher.dart`), shell
 `app/lib/pages/home/page.dart` (**hot**). `main.dart` not required for tab
-addressability.
+addressability. The bottom-bar findings below describe the original snapshot,
+not the replacement's current tab layout.
 
 **Reach:** IndexedStack tab 0 of `HomePage` (`_ensurePageInitialized` case 0).
 Route row today: `kind: tab, tab: 0`, fixture `identity-empty`, `auth:

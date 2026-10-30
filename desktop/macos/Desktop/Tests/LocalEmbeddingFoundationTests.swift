@@ -153,6 +153,8 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
       killSwitches: LocalEmbeddingKillSwitches(isDisabled: true, forcedEngineRaw: nil), record: { _, _ in })
     let result = try await ScreenHistorySearchRoute.search(
       runtime: runtime,
+      policy: ScreenEmbeddingPolicy(
+        plan: .operator, status: .active, localRoute: .disabled, killSwitches: runtime.killSwitches),
       local: { _ in
         XCTFail("disabled route called local search")
         return "local"
@@ -166,6 +168,8 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
       killSwitches: LocalEmbeddingKillSwitches(isDisabled: true, forcedEngineRaw: nil), record: { _, _ in })
     let dependencies = ChatToolExecutor.SemanticSearchDependencies(
       runtime: runtime,
+      policy: ScreenEmbeddingPolicy(
+        plan: .operator, status: .active, localRoute: .disabled, killSwitches: runtime.killSwitches),
       legacySearch: { query, start, end, app, topK in
         XCTAssertEqual(query, "budget")
         XCTAssertEqual(app, "Editor")
@@ -186,6 +190,27 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
     XCTAssertTrue(result.contains("Editor - Plan (screenshot_id: 1, similarity: 0.75)"))
     XCTAssertTrue(result.contains("Content: budget review"))
     XCTAssertFalse(result.contains("hybrid"))
+  }
+
+  func testChatSemanticSearchFailureReturnsErrorPrefixedResult() async {
+    let runtime = LocalEmbeddingRuntime(
+      engines: [],
+      killSwitches: LocalEmbeddingKillSwitches(isDisabled: true, forcedEngineRaw: nil), record: { _, _ in })
+    let dependencies = ChatToolExecutor.SemanticSearchDependencies(
+      runtime: runtime,
+      policy: ScreenEmbeddingPolicy(
+        plan: .operator, status: .active, localRoute: .disabled, killSwitches: runtime.killSwitches),
+      legacySearch: { _, _, _, _, _ in throw URLError(.notConnectedToInternet) },
+      screenshot: { _ in
+        XCTFail("a failed search must not load screenshots")
+        return nil
+      })
+    let result = await ChatToolExecutor.executeSemanticSearch(
+      ["query": "budget"], runID: nil, attemptID: nil, expectedOwnerID: nil, dependencies: dependencies)
+    // The local agent API (search_screen_history) reports a tool failure only for an "Error:" result;
+    // any other text is returned to agents and the omi CLI as a successful search.
+    XCTAssertTrue(result.hasPrefix("Error: "), result)
+    XCTAssertTrue(result.contains("call get_work_context"), result)
   }
 
   func testSelectedLocalQueryFailureUsesKeywordsWithoutLegacyCall() async throws {

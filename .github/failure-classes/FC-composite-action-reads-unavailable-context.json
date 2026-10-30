@@ -5,7 +5,7 @@
   "canonical_prevention": "Pass the value into the composite action as an input and read `vars`/`secrets` only in the calling workflow, where those contexts exist. Guard it with a test that scans every composite action's `${{ }}` expressions for `vars.` and `secrets.` references, and prove that test red against the defective revision rather than only green against the fix.",
   "canonical_prevention_artifact": [
     ".github/actions/deploy-backend-stack/action.yml",
-    "backend/tests/unit/test_free_tier_basic_gates.py"
+    "backend/tests/unit/test_composite_action_context_contract.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

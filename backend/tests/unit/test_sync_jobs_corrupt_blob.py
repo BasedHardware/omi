@@ -9,7 +9,14 @@ poll / update path. Both now return None (unknown job) on unparseable data, matc
 sibling fenced paths and the fail-open contract.
 """
 
+import pytest
+
 import database.sync_jobs as sync_jobs
+
+
+@pytest.fixture(autouse=True)
+def _prod_sync_stage(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
 
 
 class _FakeRedis:

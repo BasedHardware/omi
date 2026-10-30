@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed: the Memories section of a Yesterday or Past N days daily recap no longer lists today's newest memories — it now only shows memories from the requested day."
+  ]
+}

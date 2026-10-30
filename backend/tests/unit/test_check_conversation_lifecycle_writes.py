@@ -91,6 +91,15 @@ def test_tripwire_rejects_assignment_discard_without_redirect_fields():
     assert 'raw lifecycle fields' in errors[0]
 
 
+def test_smart_merge_tombstone_writer_is_explicitly_inventoried():
+    path = 'backend/database/smart_merge.py'
+    approved = 'def absorb_conversation():\n    transaction.update(donor_ref, donor_update)\n'
+    assert violations(approved, path) == []
+    assert any('smart-merge tombstone writer' in error for error in violations('', path))
+    changed = 'def absorb_conversation():\n    transaction.update(donor_ref, payload)\n'
+    assert any('smart-merge tombstone writer' in error for error in violations(changed, path))
+
+
 def test_transcript_inventory_rejects_a_fourth_snapshot_writer():
     source = "def new_writer(conversation_data):\n    transaction.set(ref, conversation_data, merge=True)\n"
     assert 'lacks current receipt policy' in violations(source, 'backend/database/conversations.py')[0]
@@ -105,3 +114,13 @@ def test_transcript_inventory_requires_overlay_on_both_processors():
             '    _reapply_current_manual_assignments(uid, conversation_data, current)\n    transaction.set',
         )
         assert not violations(guarded, 'backend/database/conversations.py')
+
+
+def test_stuck_noise_storage_is_callable_only_through_lifecycle():
+    for method in ('close_noise', 'restore_noise'):
+        source = f'stuck_backfill_db.{method}(uid, conversation_id)\n'
+        assert violations(source, 'backend/utils/conversations/lifecycle.py') == []
+        assert 'direct lifecycle database call' in violations(source, 'backend/services/operator.py')[0]
+    raw = "ref = user.collection('conversations').document(cid)\ntransaction.update(ref, {'status': 'completed'})\n"
+    assert violations(raw, 'backend/database/stuck_backfill.py') == []
+    assert violations(raw, 'backend/database/other_backfill.py')

@@ -66,13 +66,12 @@ final class ConversationSummaryCompositionTests: XCTestCase {
     XCTAssertFalse(rendered.contains("Blank heading must stay hidden"))
     XCTAssertFalse(rendered.contains("##"))
 
-    // Drive the production source Button through a real event pair. The label sits directly
-    // below this section's prose; target its text, beyond the icon-to-text gap of a plain button.
-    let firstProse = try XCTUnwrap(
-      descendants(NSTextView.self, from: host).first { $0.string.contains("First detail.") })
-    let proseFrame = firstProse.convert(firstProse.bounds, to: host)
-    let point = NSPoint(x: proseFrame.minX + 45, y: host.isFlipped ? proseFrame.maxY + 12 : proseFrame.minY - 12)
-    let location = host.convert(point, to: nil)
+    // Drive the section's actual focusable sources control through a real event pair.
+    let sourceButton = try XCTUnwrap(
+      descendants(NSView.self, from: host).first {
+        String(describing: type(of: $0)) == "_FocusRingView"
+      })
+    let location = sourceButton.convert(NSPoint(x: sourceButton.bounds.midX, y: sourceButton.bounds.midY), to: nil)
     let down = try XCTUnwrap(
       NSEvent.mouseEvent(
         with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
@@ -122,6 +121,46 @@ final class ConversationSummaryCompositionTests: XCTestCase {
     let rendered = descendants(NSTextView.self, from: host).map(\.string).joined(separator: "\n")
     XCTAssertEqual(rendered.components(separatedBy: "App-only result.").count - 1, 1)
     XCTAssertFalse(rendered.contains("First detail."))
+  }
+
+  /// #19829: on a conversation with no summary yet (deferred placeholder, or any newly captured
+  /// conversation before its first summary lands), the "Summarize with an app" picker used to be
+  /// unreachable because its host section only mounted when `selection.content` was non-empty.
+  /// The picker button renders as plain SwiftUI `Text`, which never becomes a discrete
+  /// `NSTextView`/`NSTextField` the way `OmiMarkdown`'s deliberate AppKit prose does, so this
+  /// verifies the button's presence by its `_FocusRingView` — the one focusable-control marker
+  /// AppKit attaches to a hosted SwiftUI `Button` regardless of how its label is drawn.
+  func testDetailViewExposesSummarizePickerWhenConversationHasNoSummaryYet() throws {
+    let conversation = makeConversation(overview: "", sections: [])
+    XCTAssertEqual(ConversationSummarySelection.primarySummary(for: conversation).kind, .empty)
+
+    let host = NSHostingView(
+      rootView: ConversationDetailView(conversation: conversation, onBack: {})
+        .frame(width: 900, height: 700)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 900, height: 700)
+    let window = NSWindow(
+      contentRect: host.frame,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    window.contentView = host
+    NonintrusiveTestWindow.orderIn(window)
+    defer {
+      window.orderOut(nil)
+      window.contentView = nil
+    }
+    host.layoutSubtreeIfNeeded()
+
+    // The summary pane is the one `_NSGraphicsView` in this tree (the page header's back/edit/
+    // delete controls live outside it) — scope the search there so a header control can never
+    // be mistaken for the "Summarize with an app" picker.
+    let summaryPane = try XCTUnwrap(
+      descendants(NSView.self, from: host).first { String(describing: type(of: $0)) == "_NSGraphicsView" })
+    XCTAssertTrue(
+      descendants(NSView.self, from: summaryPane).contains { String(describing: type(of: $0)) == "_FocusRingView" },
+      "the \"Summarize with an app\" picker button must stay reachable even with no summary yet")
   }
 
   func testSecondaryAppCardsRenderDocumentBlocksForShortAndTruncatedOutput() throws {

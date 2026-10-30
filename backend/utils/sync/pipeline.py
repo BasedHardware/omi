@@ -7,6 +7,15 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
+from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
+
+from utils.conversations.silent_redrive import is_silent_redrive
+from utils.observability.sync_phases import sync_phase, sync_attempt
+from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
+from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
+
 import asyncio
 import contextlib
 import hashlib
@@ -14,21 +23,45 @@ import io
 import logging
 import os
 import shutil
+from utils.other.owned_paths import owned_scratch_path
 import threading
 import time
-import wave
 import uuid
 from collections import deque
+from functools import partial
 from datetime import datetime, timezone
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
+from google.api_core import exceptions as google_exceptions
+from database._client import (
+    get_firestore_client,
+    FIRESTORE_DOCUMENT_KINDS,
+    firestore_document_kind,
+    is_document_size_limit_error,
+    is_expired_transaction_error,
+)
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
+from utils.sync import cap_recovery_provider
+from utils.sync.staging_custody import add_staging_derivatives, cleanup_sync_staging, make_staging_custody_receipt
+from utils.sync import conversation_turn as conversation_turn_lease
+
 from database import conversations as conversations_db
+from database.summary_processing import claim_from_snapshot
+from utils.conversations.summary_delivery import (
+    repair_fenced,
+    refusal as summary_repair_refusal,
+    REPAIR_CONTEXT,
+    PROCESS_CONTEXT,
+    SummaryRepairSuperseded,
+    present as summary_output_present,
+)
 from database import users as users_db
+from database.auth import get_user_name
 from database.conversations import get_closest_conversation_to_timestamps
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
@@ -40,7 +73,6 @@ from database.sync_jobs import (
     add_processed_segment_if_run_owner,
     delete_sync_job_run_lock_epoch,
     fenced_finalize_sync_job,
-    fenced_finalize_sync_job_from_durable_ledger,
     fenced_mark_job_failed,
     fenced_mark_job_processing,
     fenced_update_sync_job,
@@ -57,24 +89,37 @@ from database.sync_jobs import (
 )
 from database.sync_ledger import (
     add_processed_sync_segment_id,
-    bind_sync_content_run_token,
     checkpoint_sync_content_partial_result,
     get_processed_sync_segment_ids,
     get_sync_content_partial_result,
-    is_valid_completed_sync_content_result,
     mark_sync_content_completed,
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
+from utils.stt.transcript_admission import admit_segments
+from config.rollout_cohorts import warm_rollout_cohorts
+from utils.capture_evidence import bounded_envelope, unknown_envelope
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
 from models.geolocation import Geolocation
 from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
+from utils.dream_vocabulary import keyterms
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
+from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.fragment_visibility import is_user_curated
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
+from config.occasion_relevance import enabled as occasion_relevance_enabled
+from utils.sync import processing_hold
+from utils.enrichment.smart_refresh import settle_survivor
+from utils.conversations.sync_hold_completion import complete_explicit
+from utils.conversations.smart_merge_policy import refresh_owed
+from utils.enrichment.admission import ConversationAbsorbed
+from utils.conversations.relevance import sync_intake_decision
+from utils.episodes.finalize import schedule_after_finalization, schedule_synced_intake_attach
 from utils.executors import (
     db_executor,
     postprocess_executor,
@@ -103,16 +148,30 @@ from utils.other.storage import (
     download_syncing_temporal_file,
     enqueue_conversation_artifact_build,
     get_syncing_file_temporal_signed_url,
+    link_archive_captures,
     precache_conversation_audio,
-    schedule_syncing_temporal_file_deletion,
     upload_audio_chunk,
     upload_syncing_temporal_file,
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
+from config.transcription_final_pass import sync_enabled_for
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
-from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
+from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
+from utils.stt.voiceprints import usable_person_voiceprint
+from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
+from utils.stt_cap_dispatch import sync_allowed, funded_allowance, CapAllowanceDenied
+from utils.observability.stt_cap_dispatch import DispatchPath
+from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
+from utils.stt.pre_recorded import (
+    get_prerecorded_service,
+    modulate_prerecorded_from_bytes,
+    postprocess_words,
+    prerecorded,
+)
+from utils.sync import empty_recovery, empty_success_guard, minimal_redrive
+from utils.sync.empty_recovery_intent import dispatch_once as dispatch_empty_recovery_once
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
@@ -129,29 +188,105 @@ from utils.stt.speaker_match import mean_embedding, select_speaker_match
 from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD, clock_run_from_path, segment_name_prefix
+from utils.sync.capture_clock import (
+    CaptureTimeWindowError,
+    SyncCaptureTimeRejected,
+    capture_clock_offset,
+    capture_time_rejection,
+    clamp_capture_time,
+)
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.recording_intent import user_selected_recording
+from utils.sync.input_limits import (
+    MAX_BACKFILL_FILES,
+    MAX_BACKFILL_RAW_BYTES,
+    validate_backfill_paths,
+    BackfillInputLimitExceeded,
+    BackfillStoragePressure,
+    raise_sync_storage_pressure,
+)
 from utils.sync.capture import chunk_identity
+from utils.sync.recording_session_target import resolve_recording_session_sync_target
+from utils.capture.sync_coverage import (
+    apply_sync_coverage as apply_sync_wal_audio_coverage,
+    record_sync,
+    annotate_identity,
+    covering_target,
+    legacy_audio_trim,
+)
+from utils.sync.word_timing import first_word_offset, shift_to_vad_file_clock
+from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
+from config.sync_safety_wal import sync_safety_wal_enabled
+from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
+from config.sync_lineage import sync_lineage_resolve_active_for
+from utils.sync import recording_lineage as sync_recording_lineage
+from utils.sync.ledger_completion import (  # noqa: F401  (re-exported seam)
+    SyncJobRunLeaseLost,
+    _require_run_owner,
+    bind_or_converge_sync_ledger_completion,
+)
+from utils.sync.recording_lineage import (
+    ambiguous_binding_pending,
+    fallback_segment_targets,
+    lineage_resolution_requested,
+    plan_segment_targets,
+    merge_lineage_partial_results,
+    restore_lineage_enrichment_intent,
+    lineage_partial_result,
+)
 from utils.sync.bridge import finish_sync_segment
-from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+from utils.sync.assignment_errors import (
+    SyncAssignmentConflict,
+    SyncAssignmentConflictReason as Conflict,
+    SyncAssignmentSuperseded,
+    bounded_sync_assignment_subtype,
+)
+from utils.sync.failure_reason import SYNC_INTERNAL_ERROR_CODES, job_failure_reason, outcome_label
+from utils.sync.failure_reason import sync_failure_error_code
+from config.sync_telemetry import SyncFailureReason
+from utils.sync.failure_reason import persistence_failure_fingerprint as _persistence_failure_fingerprint
+from utils.sync.failure_reason import sync_failure_reason as _sync_failure_reason
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
+from utils.sync.intake_completion import (
+    acknowledge_processed_segment,
+    apply_capture_evidence_dark_write,
+    complete_sync_intake,
+    record_capture_evidence_metric,
+)
 from utils.sync.lanes import SyncLane
+from utils.sync.telemetry import bounded_correlation_ref as _bounded_correlation_ref
+from utils.sync.telemetry import bounded_exception_class, finalize_exception_site, value_error_reason
 from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
+from utils.sync.telemetry import bounded_sync_language as _bounded_retry_language
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
-from utils.sync.merge_audio import store_partial_merge_survivor_audio
-from utils.sync.assignment import needs_fragment_review
+from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
+from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
+from utils.sync.size_telemetry import size_fields, with_size_attribution
+from utils.sync.merge_audio import store_partial_merge_survivor_audio, store_intake_audio, store_sync_audio_chunk
+from utils.sync.assignment import fragment_rule
+from utils.sync.speaker_identity import PersonEmbeddingsCache, SpeakerIdentityDependencies, USER_SELF_PERSON_ID
+from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
+from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
+from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
+from utils.journey_metrics_contract import resolve_client_kind
+from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
+from utils.metrics import OMI_SYNC_CAPTURE_TIME_TOTAL
+from utils.observability.reasons import ReasonFamily, SyncCaptureTimeReason, reason_label
+from utils.observability.journeys import record_client_journey_accepted, record_client_journey_terminal
 
 logger = logging.getLogger(__name__)
 
-MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 
 # Valid terminal segment results — a transcript, or audio with no speech. All else is a failure.
 _NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
 _PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
 _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
+_LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 _SYNC_FAILURE_REASON_CODES = {
     'backfill_capacity',
     'backfill_paced',
@@ -159,6 +294,7 @@ _SYNC_FAILURE_REASON_CODES = {
     'stt_empty_unexpected',
     'stt_invalid_input',
     'stt_provider_configuration_error',
+    'stt_provider_budget_exhausted',
     'stt_timeout',
     'stt_upstream_error',
     'sync_backfill_dispatch_unavailable',
@@ -167,11 +303,49 @@ _SYNC_FAILURE_REASON_CODES = {
     'sync_dispatch_staging_failed',
     'sync_decode_failed',
     'sync_invalid_audio',
+    'sync_persistence_failed',
     'sync_staged_audio_expired',
     'sync_transcription_budget_exhausted',
     'sync_vad_failed',
     'sync_worker_stale',
-}
+} | SYNC_INTERNAL_ERROR_CODES
+
+
+def _whole_job_persistence_fingerprint(
+    failed_segments: int, total_segments: int, fingerprints: list[str]
+) -> str | None:
+    # One classified failure earns the batch a strike toward the bounded pause,
+    # so a healthy or transient sibling cannot keep a mixed batch retrying paid
+    # work forever. Sibling checkpoints stay; the batch need not fail entirely.
+    if failed_segments > 0 and fingerprints:
+        return fingerprints[0] if len(set(fingerprints)) == 1 else 'persistence:mixed'
+    return None
+
+
+def _firestore_error_class(error: BaseException) -> str:
+    if isinstance(error, FirestoreContentionExhausted):
+        # The bounded retry budget's own terminal token, not the last provider
+        # error it chained from: attempt and deadline exhaustion are different
+        # operational signals (the token carries no ids).
+        return 'deadline_exhausted' if getattr(error, 'reason', '') == 'deadline_exhausted' else 'contention'
+    if is_document_size_limit_error(error):
+        return 'document_size_limit'
+    if is_expired_transaction_error(error):
+        return 'expired_transaction'
+    if isinstance(error, google_exceptions.InvalidArgument):
+        return 'invalid_argument_other'
+    return bounded_exception_class(error) if isinstance(error, google_exceptions.GoogleAPICallError) else 'none'
+
+
+def _firestore_doc_kind(error: BaseException) -> str:
+    """Which document a Firestore rejection named, as one bounded token; never the path or ids.
+
+    The sync assignment boundary may refine ``conversation`` to ``donor``.
+    """
+    stamped = getattr(error, 'sync_firestore_doc_kind', None)
+    if isinstance(stamped, str) and stamped in FIRESTORE_DOCUMENT_KINDS:
+        return stamped
+    return firestore_document_kind(error)
 
 
 async def _resolve_fair_use_soft_cap_plan(uid: str):
@@ -199,6 +373,12 @@ def _bounded_sync_failure_reason(reason: str | None) -> str:
     return reason if reason in _SYNC_FAILURE_REASON_CODES else 'other'
 
 
+def _sync_assignment_failure_subtype(error: object) -> str:
+    if isinstance(error, SyncAssignmentConflict):
+        return bounded_sync_assignment_subtype(error.subtype)
+    return 'none'
+
+
 def _record_sync_segment_outcome(
     outcome: TranscriptionOutcome,
     *,
@@ -208,6 +388,9 @@ def _record_sync_segment_outcome(
     retryable: bool,
     job_id: str | None = None,
     segment_key: str | None = None,
+    phase: str | None = None,
+    exception: BaseException | str | None = None,
+    attempt_ref: str | None = None,
 ) -> None:
     """Emit one fixed-shape event without audio, transcript, or user identity."""
     if isinstance(job_id, str) and isinstance(segment_key, str):
@@ -220,14 +403,21 @@ def _record_sync_segment_outcome(
             # completing. A later retry may duplicate this metric, but not the
             # customer-visible transcription result.
             logger.warning('event=sync_transcription_metric outcome=dedupe_failed kind=segment')
-    log = logger.info if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
+    log = logger.debug if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
+    reason = _sync_failure_reason(None if outcome in _NON_ERROR_SEGMENT_OUTCOMES else phase, exception)
     log(
-        'event=sync_transcription_segment outcome=%s provider=%s model=%s lane=%s retryable=%s',
-        outcome.value,
+        'event=sync_transcription_segment outcome=%s provider=%s model=%s lane=%s retryable=%s '
+        'phase=%s exception_type=%s job_ref=%s attempt_ref=%s%s',
+        outcome_label(outcome.value, reason),
         bounded_provider(provider),
         _bounded_sync_model(model),
         _bounded_sync_lane(lane),
         str(retryable).lower(),
+        'none' if phase is None and outcome in _NON_ERROR_SEGMENT_OUTCOMES else _bounded_sync_phase(phase or 'unknown'),
+        bounded_exception_class(exception),
+        _bounded_correlation_ref(job_id),
+        _bounded_correlation_ref(attempt_ref),
+        '' if reason is SyncFailureReason.NONE else f' failure_reason={reason.value}',
     )
     try:
         record_sync_transcription_outcome(
@@ -236,6 +426,7 @@ def _record_sync_segment_outcome(
             model=model,
             lane=lane,
             outcome=outcome,
+            failure_reason=reason,
         )
     except Exception:
         logger.warning('event=sync_transcription_metric outcome=emit_failed kind=segment')
@@ -251,7 +442,18 @@ def _record_sync_segment_failure(
     record_metric: bool = True,
     job_id: str | None = None,
     segment_key: str | None = None,
+    phase: str | None = None,
+    exception: BaseException | str | None = None,
+    attempt_ref: str | None = None,
 ) -> None:
+    if job_id and failure.outcome.value in empty_success_guard.PROVIDER_CLASS_OUTCOMES:
+        # Durable per-job provider-failure evidence for the empty-success guard:
+        # survives Cloud Tasks redelivery onto another instance. Best effort —
+        # the failure recording itself must never depend on the marker.
+        try:
+            try_mark_once(job_id, empty_success_guard.PRIOR_PROVIDER_FAILURE_TAG)
+        except Exception:
+            logger.warning('event=sync_transcription_metric outcome=marker_failed kind=prior_provider_failure')
     if record_metric:
         _record_sync_segment_outcome(
             failure.outcome,
@@ -261,6 +463,9 @@ def _record_sync_segment_failure(
             retryable=failure.retryable,
             job_id=job_id,
             segment_key=segment_key,
+            phase=phase,
+            exception=exception,
+            attempt_ref=attempt_ref,
         )
     with lock:
         errors.append(failure.error_code)
@@ -272,6 +477,9 @@ def _record_empty_segment_as_silence(
     model: str,
     lane: str,
     deferred_outcome: dict | None,
+    job_id: str | None = None,
+    segment_key: str | None = None,
+    attempt_ref: str | None = None,
 ) -> None:
     """Record a speech-free segment as a valid empty result, not a failure.
 
@@ -293,6 +501,9 @@ def _record_empty_segment_as_silence(
             model=model,
             lane=lane,
             retryable=False,
+            job_id=job_id,
+            segment_key=segment_key,
+            attempt_ref=attempt_ref,
         )
 
 
@@ -303,6 +514,9 @@ def _set_deferred_segment_outcome(
     provider: str,
     model: str,
     retryable: bool,
+    phase: str | None = None,
+    exception_type: str | None = None,
+    failure_subtype: str | None = None,
 ) -> None:
     """Keep v2 outcome data local until its durable checkpoint commits."""
     if deferred_outcome is not None:
@@ -312,6 +526,12 @@ def _set_deferred_segment_outcome(
             model=model,
             retryable=retryable,
         )
+        if phase is not None:
+            deferred_outcome['phase'] = phase
+        if exception_type is not None:
+            deferred_outcome['exception_type'] = exception_type
+        if failure_subtype is not None:
+            deferred_outcome['failure_subtype'] = bounded_sync_assignment_subtype(failure_subtype)
 
 
 def _deferred_segment_labels(
@@ -321,23 +541,35 @@ def _deferred_segment_labels(
     fallback_provider: str,
     fallback_model: str,
     fallback_retryable: bool,
-) -> tuple[TranscriptionOutcome, str, str, bool]:
+    fallback_phase: str,
+    fallback_exception_type: str,
+    fallback_failure_subtype: str = 'none',
+) -> tuple[TranscriptionOutcome, str, str, bool, str, str, str]:
     """Read locally deferred values without widening telemetry labels."""
     outcome = deferred_outcome.get('outcome')
     provider = deferred_outcome.get('provider')
     model = deferred_outcome.get('model')
     retryable = deferred_outcome.get('retryable')
+    phase = deferred_outcome.get('phase')
+    exception_type = deferred_outcome.get('exception_type')
+    failure_subtype = deferred_outcome.get('failure_subtype')
     return (
         outcome if isinstance(outcome, TranscriptionOutcome) else fallback_outcome,
         provider if isinstance(provider, str) else fallback_provider,
         model if isinstance(model, str) else fallback_model,
         retryable if isinstance(retryable, bool) else fallback_retryable,
+        phase if isinstance(phase, str) else fallback_phase,
+        exception_type if isinstance(exception_type, str) else fallback_exception_type,
+        bounded_sync_assignment_subtype(failure_subtype or fallback_failure_subtype),
     )
 
 
 _SYNC_ERROR_CODE_OUTCOMES = {
     'stt_provider_configuration_error': TranscriptionOutcome.CONFIG_ERROR,
     'stt_timeout': TranscriptionOutcome.TIMEOUT,
+    # Budget outranks the generic upstream error so a job that hit an
+    # out-of-credits provider keeps the actionable outcome at rollup.
+    'stt_provider_budget_exhausted': TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED,
     'stt_upstream_error': TranscriptionOutcome.UPSTREAM_ERROR,
     'stt_empty_unexpected': TranscriptionOutcome.EMPTY_UNEXPECTED,
     'stt_invalid_input': TranscriptionOutcome.INVALID_INPUT,
@@ -361,6 +593,7 @@ def _record_sync_job_outcome(
     model: str,
     lane: str,
     job_id: str | None = None,
+    failure_reason: SyncFailureReason = SyncFailureReason.NONE,
 ) -> None:
     if isinstance(job_id, str):
         try:
@@ -375,6 +608,7 @@ def _record_sync_job_outcome(
             model=model,
             lane=lane,
             outcome=outcome,
+            failure_reason=failure_reason,
         )
     except Exception:
         logger.warning('event=sync_transcription_metric outcome=emit_failed kind=job')
@@ -387,6 +621,7 @@ async def _record_sync_job_outcome_async(
     model: str,
     lane: str,
     job_id: str | None = None,
+    failure_reason: SyncFailureReason = SyncFailureReason.NONE,
 ) -> None:
     """Keep Redis-backed job metric dedupe off the pipeline coordinator loop."""
     try:
@@ -398,6 +633,7 @@ async def _record_sync_job_outcome_async(
             model=model,
             lane=lane,
             job_id=job_id,
+            failure_reason=failure_reason,
         )
     except Exception:
         # Telemetry must not turn a durably finalized transcription into a
@@ -414,6 +650,9 @@ async def _record_sync_segment_failure_async(
     errors: list,
     job_id: str | None = None,
     segment_key: str | None = None,
+    phase: str | None = None,
+    exception: BaseException | str | None = None,
+    attempt_ref: str | None = None,
 ) -> None:
     """Record a coordinator-observed segment failure without blocking the loop."""
     try:
@@ -427,6 +666,9 @@ async def _record_sync_segment_failure_async(
             retryable=failure.retryable,
             job_id=job_id,
             segment_key=segment_key,
+            phase=phase,
+            exception=exception,
+            attempt_ref=attempt_ref,
         )
     except Exception:
         # Preserve the retryable failure even when best-effort metric delivery
@@ -436,31 +678,10 @@ async def _record_sync_segment_failure_async(
         errors.append(failure.error_code)
 
 
-class SyncJobRunLeaseLost(RuntimeError):
-    """A worker tried to write after its run token stopped owning the job."""
-
-
-class SyncConversationPersistenceFenced(RuntimeError):
-    """Conversation lifecycle rejected this worker's stale processing result."""
-
-
-def _require_current_conversation_persistence(persisted: bool) -> None:
-    """Turn a lifecycle fence into the worker's terminal supersession signal."""
-    if not persisted:
-        raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
-
-
 def _raise_sync_terminal_result(result: object) -> None:
     """Preserve lifecycle fences across ``asyncio.gather`` exception fan-in."""
     if isinstance(result, SyncConversationPersistenceFenced):
         raise result
-
-
-def _require_run_owner(mutation: FencedSyncJobMutation, *, job_id: str) -> Dict | None:
-    """Turn a non-applied Redis CAS result into the worker's stop signal."""
-    if mutation.applied:
-        return mutation.job
-    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={mutation.outcome.value}')
 
 
 def _update_sync_job_for_run(job_id: str, run_lock_token: str | None, updates: Dict) -> Dict | None:
@@ -493,13 +714,40 @@ def _mark_job_processing_for_run(job_id: str, run_lock_token: str | None) -> Dic
     return _require_run_owner(fenced_mark_job_processing(job_id, run_lock_token), job_id=job_id)
 
 
-def _finalize_sync_job_for_run(job_id: str, run_lock_token: str | None, result: Dict) -> Dict | None:
+def _finalize_sync_job_for_run(
+    job_id: str,
+    run_lock_token: str | None,
+    result: Dict,
+    *,
+    attempt_ref: str | None = None,
+    failure_phase: str | None = None,
+    failure_class: str | None = None,
+    failure_subtype: str | None = None,
+) -> Dict | None:
     if run_lock_token is None:
-        finalized = finalize_sync_job(job_id, result)
+        finalized = finalize_sync_job(
+            job_id,
+            result,
+            attempt_ref=attempt_ref,
+            failure_phase=failure_phase,
+            failure_class=failure_class,
+            failure_subtype=failure_subtype,
+        )
         if finalized is None:
             raise SyncJobRunLeaseLost(f'sync job legacy state is no longer mutable: job={job_id}')
         return finalized
-    return _require_run_owner(fenced_finalize_sync_job(job_id, run_lock_token, result), job_id=job_id)
+    return _require_run_owner(
+        fenced_finalize_sync_job(
+            job_id,
+            run_lock_token,
+            result,
+            attempt_ref=attempt_ref,
+            failure_phase=failure_phase,
+            failure_class=failure_class,
+            failure_subtype=failure_subtype,
+        ),
+        job_id=job_id,
+    )
 
 
 def _mark_job_failed_for_run(
@@ -532,44 +780,6 @@ def _add_processed_segment_for_run(job_id: str, run_lock_token: str | None, segm
         add_processed_segment(job_id, segment_path)
         return
     _require_run_owner(add_processed_segment_if_run_owner(job_id, run_lock_token, segment_path), job_id=job_id)
-
-
-def bind_or_converge_sync_ledger_completion(
-    *,
-    job_id: str,
-    uid: str,
-    content_id: str | None,
-    run_lock_token: str | None,
-) -> Dict | None:
-    """Bind a live lease to the durable ledger or converge a proven completion.
-
-    This synchronous DB-boundary helper is shared by Cloud Tasks, inline work,
-    and stale polling. A higher epoch displaces an old owner before any decode,
-    provider, ledger mutation, or stale failure can occur. A valid completion
-    that landed just before lease replacement becomes the current Redis result
-    through the caller's *current* fenced token rather than being overwritten
-    as a failure.
-    """
-    if not content_id or run_lock_token is None:
-        return None
-
-    binding = bind_sync_content_run_token(
-        uid,
-        content_id,
-        job_id,
-        run_lock_token,
-        get_sync_job_run_lock_epoch(run_lock_token),
-    )
-    if binding.bound:
-        return None
-    if not binding.completed or not is_valid_completed_sync_content_result(binding.result):
-        raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
-
-    finalized = _require_run_owner(
-        fenced_finalize_sync_job_from_durable_ledger(job_id, run_lock_token, binding.result), job_id=job_id
-    )
-    delete_sync_job_run_lock_epoch(job_id)
-    return finalized
 
 
 async def finalize_sync_job_superseded(
@@ -620,6 +830,13 @@ async def _finalize_sync_job_failure(
     reason_code: str | None = None,
     retry_after: int | None = None,
     run_lock_token: str | None = None,
+    attempt_ref: str | None = None,
+    failure_phase: str | None = None,
+    failure_class: str | None = None,
+    failure_subtype: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
+    failure_reason: SyncFailureReason = SyncFailureReason.NONE,
 ) -> None:
     """Offload the atomic failure publication boundary to the DB executor."""
     finalized = await run_blocking(
@@ -636,6 +853,13 @@ async def _finalize_sync_job_failure(
         reason_code=reason_code,
         retry_after=retry_after,
         run_lock_token=run_lock_token,
+        attempt_ref=attempt_ref,
+        failure_phase=failure_phase,
+        failure_class=failure_class,
+        failure_subtype=failure_subtype,
+        failure_key=failure_key,
+        failure_fingerprint=failure_fingerprint,
+        failure_reason=failure_reason,
     )
     if finalized is None:
         # The epoch-fenced path lost its lease; the compatibility path saw an
@@ -657,6 +881,13 @@ def finalize_sync_job_failure_now(
     reason_code: str | None = None,
     retry_after: int | None = None,
     run_lock_token: str | None = None,
+    attempt_ref: str | None = None,
+    failure_phase: str | None = None,
+    failure_class: str | None = None,
+    failure_subtype: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
+    failure_reason: SyncFailureReason = SyncFailureReason.NONE,
 ) -> Optional[Dict]:
     """Publish one truthful failure and then make its retry claim available.
 
@@ -664,6 +895,10 @@ def finalize_sync_job_failure_now(
     reaper. A run-token owner fences the Redis terminal transition first; only
     that winning owner may release the durable retry claim afterward.
     """
+    if failure_reason is not SyncFailureReason.NONE and error_code in {'stt_upstream_error', 'stt_timeout'}:
+        # A task-mode failure reaches here through sync_failure_from_exception; keep its
+        # internal cause instead of publishing a vendor error code.
+        error_code = sync_failure_error_code(failure_reason, failure_phase or 'finalize')
     if run_lock_token is None:
         finalized = mark_job_failed(
             job_id,
@@ -685,56 +920,58 @@ def finalize_sync_job_failure_now(
     if finalized is None:
         return None
     if content_id:
+        failure_kwargs = {'failure_key': failure_key} if failure_key else {}
+        if failure_fingerprint:
+            failure_kwargs['failure_fingerprint'] = failure_fingerprint
         if run_lock_token is None:
             # The pre-cutover protocol has no epoch binding. Keep all ledger
             # operations tokenless while legacy revisions may still exist.
-            release_sync_content_claim(uid, content_id, job_id)
+            release_sync_content_claim(uid, content_id, job_id, **failure_kwargs)
         else:
             # The fenced Redis terminal transition already succeeded. A lease
             # can expire between that CAS and Firestore release, so use the
             # deliberately retired-job transaction rather than treating this
             # as a live write.
-            release_sync_content_claim_after_job_retired(uid, content_id, job_id)
+            release_sync_content_claim_after_job_retired(uid, content_id, job_id, **failure_kwargs)
     if run_lock_token is not None:
         delete_sync_job_run_lock_epoch(job_id)
     logger.error(
-        'event=sync_transcription_job outcome=%s status=failed provider=%s model=%s lane=%s reason_code=%s',
-        outcome.value,
+        'event=sync_transcription_job outcome=%s status=failed provider=%s model=%s lane=%s reason_code=%s '
+        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s failure_reason=%s',
+        outcome_label(outcome.value, failure_reason),
         bounded_provider(provider),
         _bounded_sync_model(model),
         _bounded_sync_lane(lane),
         _bounded_sync_failure_reason(reason_code or error_code),
+        _bounded_correlation_ref(job_id),
+        _bounded_correlation_ref(attempt_ref),
+        _bounded_sync_phase(failure_phase),
+        bounded_exception_class(failure_class),
+        bounded_sync_assignment_subtype(failure_subtype),
+        SyncFailureReason(failure_reason).value,
     )
-    _record_sync_job_outcome(outcome, provider=provider, model=model, lane=lane, job_id=job_id)
+    _record_sync_job_outcome(
+        outcome, provider=provider, model=model, lane=lane, job_id=job_id, failure_reason=failure_reason
+    )
     return finalized
 
 
 def _merge_and_cap_vad_segments(voice_segments: list) -> list:
-    merged = []
-    for segment in voice_segments:
-        if (
-            merged
-            and (segment['start'] - merged[-1]['end']) < 120
-            and (segment['end'] - merged[-1]['start']) <= MAX_VAD_SEGMENT_SECONDS
-        ):
-            merged[-1]['end'] = segment['end']
-        else:
-            merged.append(dict(segment))
+    from utils.sync.vad_segments import merge_and_cap_vad_segments
 
-    segments = []
-    for segment in merged:
-        if segment['end'] - segment['start'] <= MAX_VAD_SEGMENT_SECONDS:
-            segments.append(segment)
-        else:
-            chunk_start = segment['start']
-            while chunk_start < segment['end']:
-                chunk_end = min(chunk_start + MAX_VAD_SEGMENT_SECONDS, segment['end'])
-                segments.append({'start': chunk_start, 'end': chunk_end})
-                chunk_start = chunk_end
-    return segments
+    return merge_and_cap_vad_segments(voice_segments, MAX_VAD_SEGMENT_SECONDS)
 
 
-def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
+@sync_phase('decode_vad')
+def retrieve_vad_segments(
+    path: str,
+    segmented_paths: set,
+    errors: list = None,
+    source_frame_map: dict | None = None,
+    segment_source_maps: dict | None = None,
+    segment_source_lock: threading.Lock | None = None,
+    keep_short: bool = False,
+):
     try:
         start_timestamp = get_timestamp_from_path(path)
         voice_segments = vad_is_empty(path, return_segments=True, cache=True)
@@ -749,32 +986,58 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
         raise  # Re-raise to ensure thread failure is visible
 
     segments = _merge_and_cap_vad_segments(voice_segments)
-    logger.info('event=sync_vad outcome=success segment_count=%d', len(segments))
+    logger.debug('event=sync_vad outcome=success segment_count=%d', len(segments))
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
+    # An estimated-clock run follows the audio into every derived segment.
+    clock_prefix = segment_name_prefix(path)
 
     try:
         for i, segment in enumerate(segments):
-            if (segment['end'] - segment['start']) < 1:
+            if (
+                segment['end'] - segment['start'] < 1
+                and not keep_short
+                and not (source_frame_map or {}).get('coverage_trimmed')
+            ):
                 continue
             segment_timestamp = start_timestamp + segment['start']
-            segment_path = f'{path_dir}/{segment_timestamp}.wav'
+            # Two distinct source files can independently compute the same absolute
+            # timestamp (capture_start + vad_offset). Reserve the path under the lock
+            # before export so a concurrent worker never silently overwrites it.
+            with segment_source_lock or contextlib.nullcontext():
+                segment_path = f'{path_dir}/{clock_prefix}{segment_timestamp}.wav'
+                dup = 0
+                while segment_path in segmented_paths:
+                    dup += 1
+                    segment_path = f'{path_dir}/dup{dup}_{clock_prefix}{segment_timestamp}.wav'
+                segmented_paths.add(segment_path)
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
-            segment_aseg.export(segment_path, format='wav')
-            segmented_paths.add(segment_path)
+            try:
+                segment_aseg.export(segment_path, format='wav')
+            except OSError as error:
+                raise_sync_storage_pressure(error)
+                raise
+            if segment_source_maps is not None:
+                # Pydub's millisecond slice starts at this original WAV sample.
+                # The derivative STT clock resets to zero; retain its bridge.
+                with segment_source_lock or contextlib.nullcontext():
+                    if segment_path in segment_source_maps:
+                        segment_source_maps[segment_path] = None
+                    elif source_frame_map is not None:
+                        first = (
+                            int(aseg.frame_count(ms=segment['start'] * 1000))
+                            if source_frame_map.get('live_source_slice')
+                            else int(segment['start'] * aseg.frame_rate)
+                        )
+                        segment_source_maps[segment_path] = (source_frame_map, first)
+                    else:
+                        segment_source_maps[segment_path] = None
             # Explicitly delete segment to free memory immediately
             del segment_aseg
     finally:
         # Explicitly delete main audio to free memory
         del aseg
-
-
-def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> None:
-    """Load the webhook surface only in the post-processing worker that uses it."""
-    from utils.webhooks import conversation_created_webhook
-
-    asyncio.run(conversation_created_webhook(uid, conversation))
 
 
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
@@ -785,30 +1048,201 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     """
     # Fetch the updated conversation with all segments
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    context = PROCESS_CONTEXT.get()
+    if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
+        if context is not None:
+            canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+            # The outbox transfers custody atomically before acknowledging this donor.
+            context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
+            return
+        conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        if conversation_data:
+            conversation_id = conversation_data['id']
     if not conversation_data or conversation_data.get('deleted'):
-        logger.warning(f'Conversation {conversation_id} not found for reprocessing')
+        if context is not None:
+            if conversation_data and conversation_data.get('deleted'):
+                context['discarded'] = True  # A real deletion is terminal, never regenerated.
+            else:
+                context['defer_reason'] = 'conversation_missing'
+        logger.info('event=sync_reprocess_callback outcome=unavailable')
         return
 
-    # Recoverable filler-only review skips enrichment; meaningful speech stays kept.
-    # Re-evaluate the entire current transcript so later content promotes it.
-    if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(
-        conversation_data.get('transcript_segments', [])
-    ):
+    if repair_fenced(conversation_data):
+        raise SummaryRepairSuperseded(
+            'summary repair ownership changed',
+            retry_revision=(
+                conversation_data.get('sync_content_revision')
+                if summary_repair_refusal(conversation_data) is None
+                else None
+            ),
+        )
+    if conversation_data.get('sync_live_target') and conversation_data.get('status') == 'in_progress':
+        # Live finalization owns the open row. SYNC_UPDATE would mark it
+        # completed while the socket is still adding speech, after which the
+        # finalizer skips processing that later content.
+        if context is not None:
+            context['defer_reason'] = 'open_live_target'
         return
+
+    if context is not None and (context.get('sync_hold') or processing_hold.FIELD in conversation_data):
+        context['sync_hold'] = True
+        # Rollback bypasses admission, but still settles stored hold metadata
+        # after success so lazy effects do not remain fenced indefinitely.
+        outcome, due = (
+            processing_hold.admission(conversation_data, context, now=time.time())
+            if processing_hold.enabled_for(context)
+            else ('ready', None)
+        )
+        processing_hold.record(outcome)
+        context['hold_outcome'] = outcome
+        if due is not None:
+            context.update(defer_reason=outcome, defer_until=due)
+            return
+        if outcome in {'unchanged', 'late_cap', 'immaterial'}:
+            if (conversation_data.get('smart_merge') or {}).get('role') == 'survivor' and refresh_owed(
+                conversation_data
+            ):
+                settle_survivor(uid, conversation_id, owner=context['owner'], skip_processing=True)
+            if not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), None
+            ):
+                raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+            context['hold_skipped'] = True
+            return
+        context['hold_snapshot'] = processing_hold.content_snapshot(conversation_data)
+
+    # Intake already discarded a rule-settled fragment; skip the processing
+    # spend. Everything else goes through the relevance step (SYNC_UPDATE),
+    # which reassesses the whole merged transcript, so later speech promotes it.
+    segments = conversation_data.get('transcript_segments', [])
+    status = getattr(conversation_data.get('status'), 'value', conversation_data.get('status'))
+    if (
+        status == 'completed'
+        and not occasion_relevance_enabled()
+        and conversation_data.get('sync_relevance') == 'review'
+        and not is_user_curated(conversation_data)
+    ):
+        verdict, rule = fragment_rule(segments)
+        if verdict == 'discard':
+            outcome = lifecycle_service.rule_discard_outcome(
+                uid,
+                conversation_id,
+                sync_intake_decision(rule),
+                expected_sync_content_revision=conversation_data.get('sync_content_revision'),
+            )
+            if outcome == 'discarded':
+                record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
+            if outcome in ('discarded', 'already_discarded'):
+                # The read predicate derives `discarded` for review rows, so only
+                # the write's outcome can tell a stored discard from a refused one.
+                context = PROCESS_CONTEXT.get()
+                if context is not None:
+                    context['discarded'] = True
+            return
+
+    if PROCESS_CONTEXT.get() is not None and not claim_from_snapshot(
+        get_firestore_client(), uid, conversation_id, conversation_data
+    ):
+        raise SyncConversationPersistenceFenced('summary processing snapshot changed')
+
+    if (
+        context is not None
+        and context.get('sync_hold')
+        and (conversation_data.get('smart_merge') or {}).get('role') == 'survivor'
+        and refresh_owed(conversation_data)
+    ):
+        # Preserve the smart-merge refresh lease/checkpoints and its vector work.
+        settle_survivor(uid, conversation_id, owner=context['owner'])
+        if context.get('hold_budget_denied_at_max'):
+            if not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), None
+            ):
+                raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+            context['hold_skipped'] = True
+            return
+        refreshed = conversations_db.get_conversation(uid, conversation_id)
+        if (
+            refreshed
+            and (refreshed.get('discarded') or summary_output_present(refreshed.get('structured')))
+            and context.get('hold_snapshot') is not None
+            and not conversations_db.complete_sync_processing_hold(
+                uid,
+                conversation_id,
+                conversation_data.get('sync_content_revision'),
+                context['hold_snapshot'] if summary_output_present(refreshed.get('structured')) else None,
+            )
+        ):
+            raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+        return deserialize_conversation(refreshed) if refreshed else None
 
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
+    if language == _LINEAGE_RETRY_LANGUAGE:
+        language = conversation.language or 'en'
 
+    silent_redrive = is_silent_redrive(conversation_data)
     was_discarded = conversation.discarded
-    processed_conversation = process_conversation(
-        uid=uid,
-        language_code=language or 'en',
-        conversation=conversation,
-        force_process=True,
-        is_reprocess=True,
-        bypass_jit_first_open=True,
-        persistence_observer=_require_current_conversation_persistence,
+    prior_decision = conversation_data.get('relevance_decision')
+    # process_conversation persists relevance_decision.trigger == 'sync_update'.
+    # Intake only writes 'sync_intake' (or nothing). A later WAL segment re-enters
+    # this function; that stored trigger is the already-processed signal.
+    already_sync_processed = (
+        isinstance(prior_decision, dict) and prior_decision.get('trigger') == ProcessingTrigger.SYNC_UPDATE.value
     )
+    # Visible rows must not accept again. A prior discard is not a visible
+    # finalization, so discarded -> visible still accepts once.
+    already_visible_finalized = already_sync_processed and not was_discarded
+    started = time.monotonic()
+    try:
+        processed_conversation = process_conversation(
+            uid=uid,
+            language_code=language or 'en',
+            conversation=conversation,
+            trigger=ProcessingTrigger.SYNC_UPDATE,
+            defer_derived_effects=silent_redrive,
+            user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
+            persistence_observer=_require_current_conversation_persistence,
+            # Deserialize drops relevance_decision. The raw row still has it:
+            # sync_update means a previous enrichment, sync_intake or absence does not.
+            prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
+        )
+    except ConversationAbsorbed as absorbed:
+        if context is not None:
+            context['redirect_to'] = absorbed.canonical_id
+            return
+        canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        return deserialize_conversation(canonical) if canonical else None
+
+    if context is not None and context.get('hold_budget_denied_at_max'):
+        if not conversations_db.complete_sync_processing_hold(
+            uid, conversation_id, conversation_data.get('sync_content_revision'), None
+        ):
+            raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+        context['hold_skipped'] = True
+        return None
+
+    if (
+        context is not None
+        and context.get('hold_snapshot') is not None
+        and (processed_conversation.discarded or summary_output_present(processed_conversation.structured))
+        and not conversations_db.complete_sync_processing_hold(
+            uid,
+            conversation_id,
+            conversation_data.get('sync_content_revision'),
+            context['hold_snapshot'] if summary_output_present(processed_conversation.structured) else None,
+        )
+    ):
+        raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+    elapsed = time.monotonic() - started
+    # Persistence is guaranteed here: a fenced write raises before return.
+    # client_platform is the Conversation field set at sync intake; None -> unknown.
+    client_kind = resolve_client_kind(x_app_platform=getattr(conversation, 'client_platform', None), user_agent=None)
+    if processed_conversation.discarded:
+        if not already_sync_processed:
+            record_client_journey_terminal('conversation_finalization', client_kind, 'cancelled', elapsed)
+    elif not already_visible_finalized:
+        record_client_journey_accepted('conversation_finalization', client_kind)
+        record_client_journey_terminal('conversation_finalization', client_kind, 'success', elapsed)
 
     # Limitless uploads commonly begin as a short discarded fragment and only
     # become a real conversation after later WAL segments are merged. The
@@ -816,44 +1250,46 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # reprocess path deliberately suppresses webhooks. Emit exactly at the
     # discarded -> visible transition so pendant conversations reach developer
     # integrations without duplicating events on ordinary later reprocessing.
-    if conversation.source == ConversationSource.limitless and was_discarded and not processed_conversation.discarded:
+    if (
+        not silent_redrive
+        and conversation.source == ConversationSource.limitless
+        and was_discarded
+        and not processed_conversation.discarded
+    ):
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
+    # Episodes: the WAL row joins the live episode covering it, so Home folds it under the
+    # live row instead of a second capture's fragment. Off this lane, fail-open; a later
+    # WAL append re-runs it and is a no-op once joined.
+    schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
+
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
+    return processed_conversation
 
 
-USER_SELF_PERSON_ID = 'user'
+def _speaker_identity_dependencies() -> SpeakerIdentityDependencies:
+    return SpeakerIdentityDependencies(
+        users_db=users_db,
+        get_user_name=get_user_name,
+        usable_person_voiceprint=usable_person_voiceprint,
+        speaker_embedding_configured=speaker_embedding_configured,
+        collect_speaker_audio=collect_speaker_audio,
+        extract_embedding_from_bytes=extract_embedding_from_bytes,
+        mean_embedding=mean_embedding,
+        compare_embeddings=compare_embeddings,
+        select_speaker_match=select_speaker_match,
+        detect_speaker_from_text=detect_speaker_from_text,
+        process_speaker_assigned_segments=process_speaker_assigned_segments,
+        speaker_decisions=SYNC_SPEAKER_DECISIONS,
+        logger=logger,
+    )
 
 
 def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
-    """Build a cache of person embeddings for speaker identification.
-
-    Loads the user's own speaker embedding and all people with stored embeddings.
-    Returns dict mapping person_id -> {embedding: np.ndarray, name: str}.
-    """
-    cache: Dict[str, dict] = {}
-
-    # Load user's own speaker embedding
-    embedding_list = users_db.get_user_speaker_embedding(uid)
-    if embedding_list:
-        user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
-        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': 'User'}
-
-    # Load all people with speaker embeddings
-    people = users_db.get_people(uid)
-    for person in people or []:
-        emb = person.get('speaker_embedding')
-        # Only load embedding if person has speech samples — contacts without
-        # samples may have stale embeddings from a pre-v3 model (#6238)
-        if emb and person.get('speech_samples') and person.get('speech_samples_version', 1) >= 3:
-            cache[person['id']] = {
-                'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
-                'name': person['name'],
-            }
-
-    return cache
+    return _build_person_embeddings_cache(uid, dependencies=_speaker_identity_dependencies())
 
 
+@sync_phase('gcs')
 def _download_audio_bytes(url: str) -> Optional[bytes]:
     """Download audio from a signed URL. Returns WAV bytes or None on failure."""
     try:
@@ -865,170 +1301,25 @@ def _download_audio_bytes(url: str) -> Optional[bytes]:
         return None
 
 
+@sync_phase('speaker_id')
 def identify_speakers_for_segments(
     transcript_segments: List['TranscriptSegment'],
     audio_bytes: Optional[bytes],
     person_embeddings_cache: Dict[str, dict],
     uid: str,
     language: Optional[str] = None,
+    *,
+    owner_reserved: bool = False,
 ) -> None:
-    """Identify speakers in transcript segments using voice embeddings and text detection.
-
-    Modifies segments in-place by assigning person_id and is_user fields.
-
-    Steps:
-    1. Voice embedding matching (requires audio_bytes, a non-empty cache, and
-       HOSTED_SPEAKER_EMBEDDING_API_URL):
-       For each speaker, pool distinct audio into bounded clips, average their
-       embeddings, and match against person_embeddings_cache.
-    2. Text-based detection ("I am X") runs independently for all unmatched speakers.
-    3. Apply assignments via process_speaker_assigned_segments.
-    """
-    speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
-    segment_person_assignment_map: Dict[str, str] = {}
-    voice_assignments: list[tuple[TranscriptSegment, str]] = []
-
-    # Group all available evidence by diarized speaker.
-    speaker_segments: Dict[int, List[TranscriptSegment]] = {}
-    for seg in transcript_segments:
-        sid = seg.speaker_id if seg.speaker_id is not None else 0
-        speaker_segments.setdefault(sid, []).append(seg)
-
-    # Voice embedding matching (only when audio and cached embeddings are available)
-    # Track matched person_ids so each person is only assigned to one speaker
-    # (diarization tells us speakers are distinct — no person can be two speakers).
-    matched_person_ids: set = set()
-
-    if audio_bytes and person_embeddings_cache and speaker_embedding_configured():
-        # Preserve existing longest-segment priority for one-person/one-speaker dedup.
-        # Pooling changes evidence, not the order in which identities are reserved.
-        # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
-        # If diarization fragments one person across speaker IDs, only the best match wins.
-        sorted_speakers = sorted(
-            speaker_segments.items(),
-            key=lambda kv: max(s.end - s.start for s in kv[1]),
-            reverse=True,
-        )
-
-        for speaker_id, segments in sorted_speakers:
-            best_seg = max(segments, key=lambda s: s.end - s.start)
-            seg_duration = best_seg.end - best_seg.start
-
-            try:
-                evidence = collect_speaker_audio(audio_bytes, [(seg.start, seg.end) for seg in segments])
-            except (ValueError, EOFError, wave.Error):
-                evidence = None
-            embeddings = []
-            evidence_seconds = 0.0
-            failed_clips = 0
-            for clip_wav, seconds in evidence.clips if evidence is not None else []:
-                try:
-                    embeddings.append(extract_embedding_from_bytes(clip_wav, "sync_speaker.wav"))
-                    evidence_seconds += seconds
-                except Exception as error:
-                    failed_clips += 1
-                    logger.info(
-                        'Speaker ID: embedding failed speaker=%s type=%s uid=%s', speaker_id, type(error).__name__, uid
-                    )
-            if not embeddings:
-                outcome = (
-                    'audio_error'
-                    if evidence is None
-                    else 'embedding_error' if failed_clips else 'insufficient_evidence'
-                )
-                SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
-                logger.info(
-                    'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
-                    'best=None best_distance=inf runner_up_distance=inf accepted=False '
-                    'segments=%d clips=0 evidence_seconds=0 available_seconds=%.3f '
-                    'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
-                    uid,
-                    speaker_id,
-                    seg_duration,
-                    len(segments),
-                    evidence.available_seconds if evidence is not None else 0.0,
-                    failed_clips,
-                    outcome,
-                )
-                continue
-            query_embedding = mean_embedding(embeddings) if len(embeddings) > 1 else embeddings[0]
-
-            # Keep assigned candidates in the ambiguity comparison. Removing the
-            # owner after a first match must not make a similar household voice
-            # look unambiguous; apply one-person/one-speaker dedup only afterward.
-            distances = {
-                person_id: compare_embeddings(query_embedding, data['embedding'])
-                for person_id, data in person_embeddings_cache.items()
-            }
-            decision = select_speaker_match(distances)
-            accepted = decision.person_id is not None and decision.person_id not in matched_person_ids
-            outcome = 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
-            SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
-            logger.info(
-                'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
-                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s '
-                'segments=%d clips=%d evidence_seconds=%.3f available_seconds=%.3f '
-                'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
-                uid,
-                speaker_id,
-                seg_duration,
-                decision.best_id,
-                decision.best_distance,
-                decision.runner_up_distance,
-                accepted,
-                len(segments),
-                len(embeddings),
-                evidence_seconds,
-                evidence.available_seconds if evidence is not None else 0.0,
-                failed_clips,
-                outcome,
-            )
-            if accepted and decision.person_id is not None:
-                person_id = decision.person_id
-                speaker_to_person_map[speaker_id] = (person_id, person_embeddings_cache[person_id]['name'])
-                segment_person_assignment_map[best_seg.id] = person_id
-                matched_person_ids.add(person_id)
-                voice_assignments.extend(
-                    (segment, person_id) for segment in segments if not segment.is_user and not segment.person_id
-                )
-
-    # Text-based detection runs independently for all unmatched speakers.
-    # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
-    # For speaker_id <= 0 (undiarized): only assign per-segment (avoid mapping all speaker_id=0
-    # segments to one person when diarization is inactive).
-    for speaker_id, segments in speaker_segments.items():
-        if speaker_id in speaker_to_person_map:
-            continue
-        for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text, language=language)
-            if detected_name:
-                person = users_db.get_person_by_name(uid, detected_name)
-                if person:
-                    # Per-segment assignment always applies
-                    segment_person_assignment_map[seg.id] = person['id']
-                    # Update speaker map only when diarization is active
-                    if speaker_id > 0:
-                        speaker_to_person_map[speaker_id] = (person['id'], person['name'])
-                    logger.info(
-                        f'Speaker ID (sync): text detection speaker {speaker_id} -> '
-                        f'{person["id"]} via "{detected_name}" uid={uid}'
-                    )
-                    if speaker_id > 0:
-                        break  # One match per diarized speaker is enough
-
-    # Apply all assignments to segments
-    if speaker_to_person_map or segment_person_assignment_map:
-        process_speaker_assigned_segments(
-            transcript_segments,
-            segment_person_assignment_map,
-            speaker_to_person_map,
-        )
-
-    # The assignment helper preserves pre-existing labels. Only mark labels this
-    # voice decision actually supplied, never an existing manual/provider label.
-    for segment, person_id in voice_assignments:
-        if (person_id == USER_SELF_PERSON_ID and segment.is_user) or segment.person_id == person_id:
-            segment.speaker_match_source = 'sync_embedding'
+    _identify_speakers_for_segments(
+        transcript_segments,
+        audio_bytes,
+        person_embeddings_cache,
+        uid,
+        language,
+        owner_reserved=owner_reserved,
+        dependencies=_speaker_identity_dependencies(),
+    )
 
 
 ORDERED_ASSIGNMENT_WAIT_SECONDS = 600
@@ -1069,7 +1360,157 @@ class _OrderedTurnstile:
             self._cond.notify_all()
 
 
-def process_segment(
+def _recover_empty_segment(
+    path: str,
+    uid: str,
+    provider: str,
+    lane: str,
+    job_id: str | None,
+    attempt_ref: str | None,
+    cap_dispatch_lane: str = 'sync',
+) -> tuple[list[TranscriptSegment], str, float] | None:
+    def observe_inspection(duration: float | None, spans: list[dict] | None):
+        logger.info(
+            'event=sync_empty_strict_vad outcome=%s lane=%s provider=%s segment_ref=%s '
+            'duration_seconds=%.3f vad_spans=%d speech_seconds=%.3f',
+            'inspection_error' if spans is None else ('speech' if spans else 'silence'),
+            _bounded_sync_lane(lane),
+            bounded_provider(provider),
+            compute_sync_segment_id(uid, path),
+            duration or 0,
+            len(spans or []),
+            sum(span['end'] - span['start'] for span in spans or []),
+        )
+
+    def authorize_recovery():
+        if provider != 'parakeet':
+            # Positive VAD after multilingual double-empty is unresolved;
+            # buying the same call again is not independent recovery.
+            raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
+        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(
+            uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.MULTILINGUAL
+        ):
+            raise CapAllowanceDenied()
+
+    def multilingual_once(audio: bytes, **kwargs: Any):
+        def dispatch():
+            response = modulate_prerecorded_from_bytes(audio, **kwargs)
+            if cap_enabled(uid, cap_dispatch_lane):
+                allowance = funded_allowance(uid, lane=cap_dispatch_lane)
+                record_cap_audio(
+                    'sync',
+                    'accepted',
+                    'modulate',
+                    (len(audio) - 44) / 32000,
+                    allowance.reason == 'plan_allowance_exhausted',
+                )
+            return response
+
+        try:
+            return dispatch_empty_recovery_once(uid, compute_sync_segment_id(uid, path), dispatch)
+        except (ValueError, TypeError):
+            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate') from None
+        except Exception as error:
+            raise failure_from_exception(error, provider='modulate') from None
+
+    words, recovered_language, duration, spans = empty_recovery.recover(
+        path, transcribe=multilingual_once, authorize=authorize_recovery, observe=observe_inspection
+    )
+    logger.info(
+        'event=sync_empty_recovery outcome=%s lane=%s duration_seconds=%.3f '
+        'vad_spans=%d speech_seconds=%.3f job_ref=%s attempt_ref=%s',
+        'speech' if spans else 'silence',
+        _bounded_sync_lane(lane),
+        duration,
+        len(spans),
+        sum(span['end'] - span['start'] for span in spans),
+        _bounded_correlation_ref(job_id),
+        _bounded_correlation_ref(attempt_ref),
+    )
+    if not spans:
+        return None
+    transcript_segments = postprocess_words(words, 0)
+    if not transcript_segments:
+        raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate')
+    if sync_safety_wal_enabled():
+        for segment in transcript_segments:
+            segment.stt_provider = 'velma-2'
+    record_fallback(
+        component='sync_dispatch',
+        from_mode=provider,
+        to_mode='modulate',
+        reason='empty_streak',
+        outcome='recovered',
+        log=logger,
+    )
+    return transcript_segments, recovered_language, first_word_offset(words)
+
+
+def _assign_segment_speakers(
+    uid: str,
+    audio_bytes: bytes | None,
+    words: Any,
+    transcript_segments: list[TranscriptSegment],
+    person_embeddings_cache: dict | None,
+    *,
+    timestamp: float,
+    speech_offset: float,
+    segment_end_timestamp: float,
+    speaker_scope: Optional[str],
+    owner_reserved: bool,
+    model: str,
+    language: Any,
+    sync_lane: str,
+) -> tuple[list[TranscriptSegment], float]:
+    """Run the sync final pass or speaker identification; failures keep the input segments."""
+    try:
+        final_segments = None
+        if sync_enabled_for(uid) and audio_bytes is not None:
+            from utils.conversations.final_pass_sync import run_sync_final_pass
+
+            final_pass_started = time.monotonic()
+            final_segments, final_outcome = run_sync_final_pass(
+                uid,
+                audio_bytes,
+                words,
+                transcript_segments,
+                person_embeddings_cache or {},
+                scope=speaker_scope or f'sync:{timestamp}',
+                owner_reserved=owner_reserved,
+            )
+            logger.info(
+                'event=sync_final_pass outcome=%s uid_hash=%s lane=%s duration_seconds=%.3f',
+                final_outcome['outcome'],
+                hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+                _bounded_sync_lane(sync_lane),
+                time.monotonic() - final_pass_started,
+            )
+        if final_segments and sync_enabled_for(uid):
+            transcript_segments = final_segments
+            for segment in transcript_segments:
+                segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
+                segment.stt_provider = model
+            segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
+        else:
+            identify_speakers_for_segments(
+                transcript_segments,
+                audio_bytes if person_embeddings_cache else None,
+                person_embeddings_cache if person_embeddings_cache is not None else PersonEmbeddingsCache(False),
+                uid,
+                language=language,
+                owner_reserved=owner_reserved,
+            )
+    except Exception as e:
+        logger.warning(
+            'event=sync_speaker_id outcome=failed exception_type=%s uid_hash=%s',
+            _bounded_exception_type(e),
+            hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+        )
+    return transcript_segments, segment_end_timestamp
+
+
+@with_size_attribution
+def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pipeline sits at Pyright's analyzer complexity ceiling
     path: str,
     uid: str,
     response: dict,
@@ -1079,117 +1520,347 @@ def process_segment(
     is_locked: bool = False,
     transcription_prefs: dict = None,
     person_embeddings_cache: dict = None,
-    target_conversation_id: str = None,
+    target_conversation_id: Optional[str] = None,
     turnstile: Optional[_OrderedTurnstile] = None,
     private_cloud_sync_enabled: bool = False,
-    data_protection_level: str = None,
+    data_protection_level: Optional[str] = None,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
     geolocation: Optional[Geolocation] = None,
     speaker_scope: Optional[str] = None,
+    job_id: str | None = None,
+    segment_key: str | None = None,
+    attempt_ref: str | None = None,
+    source_position_map: tuple[dict, int] | None = None,
+    lineage_binding: Optional[str] = None,
+    lineage_eligible: bool = False,
+    cap_recovery: bool = False,
+    cap_content_id: str | None = None,
+    cap_recovery_service: tuple[str, str | None, str] | None = None,
+    cap_recovery_checkpoint: dict | None = None,
+    cap_dispatch_lane: str = 'sync',
+    redrive_mode: str | None = None,
+    recording_session_id: str | None = None,
+    capture_time_offset: float = 0.0,
 ):
+    if cap_dispatch_lane not in LANES:
+        raise ValueError('unknown cap dispatch lane')
+
+    def cap_enforced() -> bool:
+        return (recovery_admission_enabled if cap_recovery else cap_enabled)(uid, cap_dispatch_lane)
+
+    if cap_recovery and not cap_enforced():
+        return False
+    cap_context = {
+        'source': getattr(source, 'value', source),
+        'target_conversation_id': target_conversation_id,
+        'private_cloud_sync_enabled': private_cloud_sync_enabled,
+        'data_protection_level': data_protection_level,
+        'client_device_id': client_device_id,
+        'client_platform': client_platform,
+        'geolocation': geolocation,
+        'source_position_map': source_position_map,
+        'recording_session_id': recording_session_id,
+        'lineage_binding': lineage_binding,
+        'sync_lane': sync_lane,
+        'origin': cap_dispatch_lane,
+        'content_id': cap_content_id,
+        'job_id': job_id,
+    }
     conversation_id = None
+    incoming: dict | None = None
+    conversation_turns: list[conversation_turn_lease.ConversationTurn | None] = []
     provider = 'unknown'
     model = 'unknown'
+    phase = 'provider_select'
+    if cap_enforced() and cap_recovery and deferred_outcome is not None:
+        deferred_outcome['provider_called'] = False
+
+    def hold_for_cap() -> bool:
+        if not cap_recovery:
+            from utils.sync.cap_hold import defer_segment
+
+            defer_segment(uid, path, cap_context, response, lock)
+        if deferred_outcome is not None:
+            deferred_outcome['cap_held'] = True
+        return False
+
     try:
+        if ambiguous_binding_pending(uid, lineage_binding):
+            phase = 'persistence'
+            raise SyncAssignmentConflict('sync lineage ambiguous', subtype=Conflict.LINEAGE_OWNERSHIP_AMBIGUOUS)
+        if cap_enforced():
+            if not sync_allowed(uid, lane=cap_dispatch_lane):
+                return hold_for_cap()
+            # Queue-time locks do not survive execution-time authorization.
+            is_locked = False
         url = get_syncing_file_temporal_signed_url(path)
-        schedule_syncing_temporal_file_deletion(path)
+        # A signed URL is not a success receipt. Staging survives provider
+        # failure/retry; the coordinator cleans only after durable completion.
 
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}
         user_vocab = [w for w in dict.fromkeys(prefs.get('vocabulary', [])) if w != "Omi"]
-        vocabulary = ["Omi"] + user_vocab[:99]
+        vocabulary = asyncio.run(keyterms(uid, ["Omi"] + user_vocab[:99]))
         user_language = prefs.get('language', '') or ''
         single_language_mode = prefs.get('single_language_mode', False)
 
         req_language = user_language if (single_language_mode and user_language) else 'multi'
-        provider, _, model = get_prerecorded_service(req_language)
+        recovery_dispatch = {}
+        if cap_enforced() and cap_recovery and cap_recovery_service is not None:
+            # The durable pre-dispatch intent owns this provider/model. Pin
+            # actual serving too, rather than reselecting after the checkpoint.
+            provider, _, model = cap_recovery_service
+            recovery_dispatch['selected_service'] = cap_recovery_service
+        else:
+            from utils.stt.batch_language import resolve_file
+            from config.prerecorded_language import language_class, language_guard_enabled
+
+            provider, _, model = minimal_redrive.select_service(
+                redrive_mode,
+                req_language,
+                recovery_dispatch,
+                lambda language: resolve_file(
+                    language,
+                    path,
+                    selector=get_prerecorded_service,
+                    before_probe=lambda: not cap_enforced()
+                    or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
+                    cohort_key=uid,
+                ),
+            )
+            if (
+                redrive_mode != minimal_redrive.MINIMAL
+                and language_guard_enabled()
+                and language_class(req_language) == 'unknown'
+            ):
+                # Pin this segment's detected selection into the call as well as
+                # its spend/outcome accounting; the URL client must not probe twice.
+                recovery_dispatch['selected_service'] = (provider, req_language, model)
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
         use_return_language = not (single_language_mode and user_language)
-        words, detected_language = prerecorded(
-            url,
-            speakers_count=3,
-            attempts=0,
-            return_language=True,
-            language=req_language,
-            keywords=vocabulary if vocabulary else None,
-        )
-        language = user_language if (single_language_mode and user_language) else detected_language
-        if not words:
-            # A provider that returns without error and produces no words is
-            # reporting that the audio holds no transcribable speech. VAD
-            # admitting the segment is not evidence to the contrary — it
-            # over-reports on noise — so this is the same valid empty result as
-            # VAD finding nothing, not a failure to retry. Counting it as a
-            # failed segment finalized the whole job failed, and the client
-            # re-uploaded the same noise on every pass until it gave up and
-            # showed the recording as permanently failed.
-            _record_empty_segment_as_silence(
-                provider=provider,
-                model=model,
-                lane=sync_lane,
-                deferred_outcome=deferred_outcome,
-            )
-            return False
-        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
-        if not transcript_segments:
-            # Words survived the provider but nothing survived post-processing:
-            # again no transcribable speech, valid and empty rather than failed.
-            _record_empty_segment_as_silence(
-                provider=provider,
-                model=model,
-                lane=sync_lane,
-                deferred_outcome=deferred_outcome,
-            )
-            return False
 
-        # Download the segment audio once — used for speaker ID and/or to persist the
-        # conversation's audio as a private-cloud chunk (realtime parity, below).
-        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
-        try:
-            identify_speakers_for_segments(
-                transcript_segments,
-                audio_bytes if person_embeddings_cache else None,
-                person_embeddings_cache or {},
+        # Retain the bounded confirmation retry. With strict recovery enabled,
+        # recognizer emptiness cannot by itself authorize silence.
+        def _log_empty_retry(outcome: str, words: int = 0, raw_empty: bool = False) -> None:
+            logger.info(
+                'event=sync_transcription_empty_retry outcome=%s provider=%s model=%s lane=%s '
+                'raw_empty=%s words=%s detected_language=%s job_ref=%s attempt_ref=%s',
+                outcome,
+                bounded_provider(provider),
+                _bounded_sync_model(model),
+                _bounded_sync_lane(sync_lane),
+                str(bool(raw_empty)).lower(),
+                min(int(words), 100000),
+                (
+                    _bounded_retry_language(detected_language)
+                    if outcome != 'started'
+                    else _bounded_retry_language(req_language)
+                ),
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+            )
+
+        empty_retried = False
+        recovered_via_retry = False
+        transcript_segments: List[TranscriptSegment] = []
+        speech_offset = 0.0
+        while True:
+            phase = 'provider_call'
+            if (
+                cap_recovery
+                and not cap_enforced()
+                or cap_enforced()
+                and not sync_allowed(
+                    uid,
+                    provider=provider,
+                    lane=cap_dispatch_lane,
+                    path=DispatchPath.EMPTY_RETRY if empty_retried else DispatchPath.SYNC_SEGMENT,
+                )
+            ):
+                return hold_for_cap()
+            if cap_enforced() and cap_recovery and deferred_outcome is not None:
+                # Explicit request-boundary signal survives later cap denial,
+                # parse/ingest errors, and the bounded empty-result retry.
+                deferred_outcome['provider_called'] = True
+            words, detected_language = cap_recovery_provider.transcribe(
                 uid,
-                language=language,
+                cap_recovery_checkpoint if cap_enforced() and cap_recovery else None,
+                prerecorded,
+                url,
+                speakers_count=3,
+                attempts=0,
+                return_language=True,
+                language=req_language,
+                keywords=vocabulary if vocabulary else None,
+                **recovery_dispatch,
             )
-        except Exception as e:
-            logger.warning(
-                'event=sync_speaker_id outcome=failed exception_type=%s',
-                _bounded_exception_type(e),
-            )
-        finally:
-            # Keep audio_bytes for chunk storage when private cloud sync is on; free it now otherwise.
-            if audio_bytes is not None and not private_cloud_sync_enabled:
-                audio_bytes = None
+            if cap_enforced():
+                allowance = funded_allowance(uid, lane=cap_dispatch_lane)
+                record_cap_audio(
+                    'sync', 'accepted', provider, get_wav_duration(path), allowance.reason == 'plan_allowance_exhausted'
+                )
+            language = user_language if (single_language_mode and user_language) else detected_language
+            phase = 'parse'
+            transcript_segments = postprocess_words(words, 0) if words else []
+            speech_offset = first_word_offset(words)
+            if sync_safety_wal_enabled():
+                for segment in transcript_segments:
+                    segment.stt_provider = model
+            if transcript_segments:
+                if empty_retried:
+                    _log_empty_retry('recovered', words=len(words or []), raw_empty=not words)
+                    recovered_via_retry = True
+                break
+            if cap_enforced() and cap_recovery and cap_recovery_checkpoint is not None:
+                # A held piece gets at most two persisted application dispatch
+                # attempts. Reconciliation owns the second, not this local retry.
+                if deferred_outcome is not None:
+                    deferred_outcome['recovery_ambiguous'] = True
+                return False
+            if empty_retried:
+                _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
+                if minimal_redrive.paid_recovery_enabled(redrive_mode):
+                    phase = 'provider_call'
+                    recovered = _recover_empty_segment(
+                        path, uid, provider, sync_lane, job_id, attempt_ref, cap_dispatch_lane
+                    )
+                    if recovered is not None:
+                        transcript_segments, recovered_language, speech_offset = recovered
+                        provider, model = 'modulate', 'velma-2'
+                        language = user_language if (single_language_mode and user_language) else recovered_language
+                        recovered_via_retry = True
+                        break
+                held, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
+                if held:
+                    # Speech-positive audio that a degraded provider chain returned
+                    # empty stays retryable; completing it as silence is the
+                    # provider-failure-ends-as-success class (2026-10-23 soak).
+                    raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
+                _record_empty_segment_as_silence(
+                    provider=provider,
+                    model=model,
+                    lane=sync_lane,
+                    deferred_outcome=deferred_outcome,
+                    job_id=job_id,
+                    segment_key=segment_key,
+                    attempt_ref=attempt_ref,
+                )
+                return False
+            empty_retried = True
+            _log_empty_retry('started', words=len(words or []), raw_empty=not words)
 
-        # Chronological scheduling reduces bridge work; the transaction remains
-        # correct when independent jobs or a timed-out worker arrive out of order.
+        # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
+        transcript_segments = admit_segments(uid, transcript_segments, origin='sync')
+        if not transcript_segments:
+            held_after_admission, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
+            if held_after_admission:
+                # Admission discarded every word on speech-positive audio after a
+                # degraded chain; completing as silence hides the same loss.
+                raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
+            _record_empty_segment_as_silence(
+                provider=provider,
+                model=model,
+                lane=sync_lane,
+                deferred_outcome=deferred_outcome,
+                job_id=job_id,
+                segment_key=segment_key,
+                attempt_ref=attempt_ref,
+            )
+            return False
+        phase = 'assignment'
         if turnstile and not turnstile.wait_turn(path):
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
-        # The content identity survives job-directory changes and retry. Direct
-        # legacy callers retain a capture-time scope, never one shared by all WALs.
+        clock_run = clock_run_from_path(path)
+        # Legacy callers retain a capture-time scope, never one shared by all WALs.
         for segment in transcript_segments:
             segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
-        segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
-        # Target eligibility (including live stubs and tombstones) is resolved
-        # inside the same transaction as temporal assignment.
+        # Lines are timed from the first word, speech_offset seconds into this file.
+        segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
+        # Server-clock views of the same two instants: every comparison against
+        # server-clock rows (attach-first fallback, closest conversation) uses
+        # the one request-wide offset, while chunk identity and lineage below
+        # keep the raw capture-clock timestamp so retry anchors stay stable.
+        server_timestamp = timestamp - capture_time_offset
+        server_segment_end_timestamp = segment_end_timestamp - capture_time_offset
+        # Minimal redrive attaches first; lineage-bound segments keep their plan.
+        target_conversation_id = minimal_redrive.segment_target(
+            redrive_mode,
+            target_conversation_id,
+            lineage_binding,
+            uid,
+            server_timestamp,
+            server_segment_end_timestamp,
+            source,
+            client_device_id,
+            is_locked,
+            clock_run,
+        )
+        target_conversation_id = target_conversation_id or covering_target(
+            uid, source_position_map, path, device_id=client_device_id, recording_session_id=recording_session_id
+        )
         closest_memory = (
             None
             if target_conversation_id
-            else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+            else get_closest_conversation_to_timestamps(uid, server_timestamp, server_segment_end_timestamp)
         )
-        started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
+        owner_reserved = False
+        if candidate_id:
+            try:
+                owner_reserved = manual_owner_reserved(conversations_db.get_manual_speaker_receipt(uid, candidate_id))
+            except Exception as error:
+                # A receipt read failure cannot authorize an automatic owner.
+                owner_reserved = True
+                logger.warning('event=sync_speaker_receipt outcome=failed exception_type=%s', type(error).__name__)
+
+        # Download once for matching and optional private-cloud chunk storage.
+        phase = 'download'
+        audio_bytes = (
+            _download_audio_bytes(url)
+            if (person_embeddings_cache or private_cloud_sync_enabled or sync_enabled_for(uid))
+            else None
+        )
+        try:
+            transcript_segments, segment_end_timestamp = _assign_segment_speakers(
+                uid,
+                audio_bytes,
+                words,
+                transcript_segments,
+                person_embeddings_cache,
+                timestamp=timestamp,
+                speech_offset=speech_offset,
+                segment_end_timestamp=segment_end_timestamp,
+                speaker_scope=speaker_scope,
+                owner_reserved=owner_reserved,
+                model=model,
+                language=language,
+                sync_lane=sync_lane,
+            )
+        finally:
+            if audio_bytes is not None and not private_cloud_sync_enabled:
+                audio_bytes = None
+        shift_to_vad_file_clock(transcript_segments, speech_offset)
+        # Stored times move onto the server clock as a pair: the same
+        # request-wide offset subtracts from both ends, so duration is
+        # preserved and finish <= server now; one captured `now` backstops
+        # both clamps. Identity/lineage math above keeps the raw filename
+        # timestamp so retry anchors stay stable.
+        stored_now = time.time()
+        started_at = datetime.fromtimestamp(
+            clamp_capture_time(timestamp - capture_time_offset, now=stored_now), tz=timezone.utc
+        )
         create_memory = CreateConversation(
             started_at=started_at,
-            finished_at=datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc),
+            finished_at=datetime.fromtimestamp(
+                clamp_capture_time(segment_end_timestamp - capture_time_offset, now=stored_now), tz=timezone.utc
+            ),
             transcript_segments=transcript_segments,
             source=source,
             language=language,
@@ -1200,12 +1871,34 @@ def process_segment(
             geolocation=geolocation,
         )
         incoming = Conversation(
-            id=chunk_identity(uid, source, client_device_id, is_locked, timestamp),
+            id=chunk_identity(
+                uid,
+                source,
+                client_device_id,
+                is_locked,
+                timestamp,
+                **(
+                    {'capture_partition': cap_recovery_checkpoint['capture_partition']}
+                    if cap_recovery_checkpoint and cap_recovery_checkpoint.get('capture_partition')
+                    else {}
+                ),
+                **({'clock_run': clock_run} if clock_run else {}),
+            ),
             created_at=started_at,
-            structured=build_deterministic_minimum_structured(create_memory),
+            structured=build_deterministic_minimum_structured(create_memory, uid=uid),
             **create_memory.model_dump(),
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
+        if clock_run:
+            incoming[SYNC_CLOCK_RUN_FIELD] = clock_run
+        apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
+        annotate_identity(incoming, client_device_id, recording_session_id)
+        if lineage_binding is not None and target_conversation_id:
+            incoming['_sync_lineage_binding'] = lineage_binding
+        if lineage_eligible:
+            incoming['_sync_lineage_eligible'] = True
+        phase = 'persistence'
+        conversation_turns.append(conversation_turn_lease.acquire(uid, candidate_id, sync_lane))
         from utils.conversations.lifecycle import ingest_sync_conversation
 
         assigned, created, survivors = ingest_sync_conversation(
@@ -1213,48 +1906,99 @@ def process_segment(
             incoming,
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
+            **(
+                {'recovery_checkpoint': cap_recovery_checkpoint}
+                if cap_enforced() and cap_recovery and cap_recovery_checkpoint is not None
+                else {}
+            ),
         )
-        conversation_id = assigned['id']
-        with lock:
-            response['new_memories' if created else 'updated_memories'].add(conversation_id)
-            if assigned['sync_relevance'] == 'keep':
-                response.setdefault('_merged', {})[conversation_id] = language
-        if private_cloud_sync_enabled and survivors:
-            if len(survivors) == len(transcript_segments):
-                _store_sync_audio_chunk(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
-            else:
-                store_partial_merge_survivor_audio(
-                    uid=uid,
-                    conversation_id=conversation_id,
-                    file_timestamp=timestamp,
-                    audio_bytes=audio_bytes,
-                    data_protection_level=data_protection_level,
-                    survivors=survivors,
+        incoming.pop('_sync_lineage_eligible', None)
+        if assigned['id'] != candidate_id:
+            # Assignment redirected; hold the conversation the bridge will finalize into too.
+            conversation_turns.append(conversation_turn_lease.acquire(uid, assigned['id'], sync_lane))
+        if sync_safety_wal_enabled() and assigned.get('sync_live_target'):
+            removed = len(transcript_segments) - len(survivors)
+            SEGMENTS_DEDUPED.labels(reason='live_overlap').inc(removed)
+            if removed and audio_bytes and private_cloud_sync_enabled:
+                AUDIO_BYTES_NOT_STORED.labels(reason='transcript_overlap').inc(
+                    suppressed_pcm_bytes(audio_bytes, survivors)
                 )
-        finish_sync_segment(
+        if recovered_via_retry:
+            # The 'recovered' event fires at the provider boundary; this one
+            # confirms the recovered segment actually persisted. Measured
+            # durable recovery is the input a gate/kill decision needs — do
+            # not price the retry from 'recovered' alone.
+            logger.info(
+                'event=sync_transcription_empty_retry outcome=durable_recovered provider=%s model=%s lane=%s '
+                'segments=%s job_ref=%s attempt_ref=%s',
+                bounded_provider(provider),
+                _bounded_sync_model(model),
+                _bounded_sync_lane(sync_lane),
+                len(transcript_segments),
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+            )
+        record_capture_evidence_metric(incoming)
+        record_sync(
             uid,
+            incoming,
             assigned,
-            response,
-            lock,
-            language,
-            audio_source_id=conversation_id if private_cloud_sync_enabled and survivors else None,
+            source_position_map,
+            path,
+            device_id=client_device_id,
+            recording_session_id=recording_session_id,
+            survivors=survivors,
         )
-        _set_deferred_segment_outcome(
-            deferred_outcome,
-            outcome=TranscriptionOutcome.SUCCESS,
-            provider=provider,
-            model=model,
-            retryable=False,
-        )
-        if deferred_outcome is None:
-            _record_sync_segment_outcome(
-                TranscriptionOutcome.SUCCESS,
+
+        def mark_finalize():
+            nonlocal phase
+            phase = 'finalize'
+
+        conversation_id = assigned['id']
+        complete_sync_intake(
+            uid=uid,
+            assigned=assigned,
+            created=created,
+            survivors=survivors,
+            response=response,
+            lock=lock,
+            language=language,
+            audio_enabled=bool(private_cloud_sync_enabled and survivors),
+            store_audio=partial(
+                _store_intake_audio,
+                uid,
+                timestamp,
+                audio_bytes,
+                data_protection_level,
+                survivors,
+                len(transcript_segments),
+                private_cloud_sync_enabled,
+                # Retained audio persists its server-clock playback start (the
+                # stored pair's basis, including its clamp to now) beside the
+                # raw capture-clock chunk key, so conversation playback wall
+                # offsets stay truthful for skewed captures.
+                playback_start=clamp_capture_time(timestamp - capture_time_offset),
+                playback_clock_offset=capture_time_offset,
+            ),
+            finish=finish_sync_segment,
+            mark_finalize=mark_finalize,
+            attach_episode=schedule_synced_intake_attach,
+            acknowledge=partial(
+                acknowledge_processed_segment,
+                deferred_outcome,
                 provider=provider,
                 model=model,
                 lane=sync_lane,
-                retryable=False,
-            )
+                job_id=job_id,
+                segment_key=segment_key,
+                attempt_ref=attempt_ref,
+                set_outcome=_set_deferred_segment_outcome,
+                record_outcome=_record_sync_segment_outcome,
+            ),
+        )
         return True
+    except CapAllowanceDenied:
+        return hold_for_cap()
     except SyncAssignmentSuperseded:
         # Acknowledge user authority without failing the WAL or dropping siblings.
         # False excludes this segment from content usage; the zero-error job still
@@ -1264,24 +2008,67 @@ def process_segment(
                 response['new_memories'].discard(conversation_id)
                 response['updated_memories'].discard(conversation_id)
                 response.get('_merged', {}).pop(conversation_id, None)
-        logger.info('event=sync_assignment outcome=superseded')
+        logger.debug('event=sync_assignment outcome=superseded')
         _set_deferred_segment_outcome(
             deferred_outcome, outcome=TranscriptionOutcome.SUCCESS, provider=provider, model=model, retryable=False
         )
         return False
-    except SyncConversationPersistenceFenced:
+    except (SyncConversationPersistenceFenced, minimal_redrive.ProviderUnavailable):
         raise
     except Exception as e:
         if is_destructive_operation_in_progress(e):
             raise
-        failure = failure_from_exception(e, provider=provider)
+        if phase == 'persistence':
+            # Preserve a bounded code-defined subtype for incident diagnosis;
+            # never log exception text, document IDs, paths, or transcript.
+            logger.error(
+                'event=sync_persistence_exception exception_type=%s firestore_error=%s firestore_doc_kind=%s '
+                'value_error_reason=%s %s',
+                _bounded_exception_type(e),
+                _firestore_error_class(e),
+                _firestore_doc_kind(e),
+                value_error_reason(e),
+                getattr(e, 'sync_size_fields', size_fields(incoming))
+                + (' outcome=rejected' if is_document_size_limit_error(e) else ''),
+            )
+        if phase == 'finalize':
+            logger.error(
+                'event=sync_finalize_exception exception_type=%s site=%s firestore_error=%s value_error_reason=%s',
+                _bounded_exception_type(e),
+                finalize_exception_site(e),
+                _firestore_error_class(e),
+                value_error_reason(e),
+            )
+        fingerprint = _persistence_failure_fingerprint(e, phase, sync_lane)
+        if phase in ('persistence', 'finalize'):
+            failure = TranscriptionFailure(
+                TranscriptionOutcome.UPSTREAM_ERROR,
+                provider=None,
+                retryable=fingerprint is None,
+            )
+            failure.error_code = sync_failure_error_code(_sync_failure_reason(phase, e), phase)
+            model = 'unknown'
+        else:
+            failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
             deferred_outcome,
             outcome=failure.outcome,
             provider=failure.provider,
             model=model,
             retryable=failure.retryable,
+            phase=phase,
+            exception_type=bounded_exception_class(e),
+            failure_subtype=_sync_assignment_failure_subtype(e),
         )
+        if deferred_outcome is not None and fingerprint:
+            deferred_outcome['repeat_failure_key'] = 'persistent_persistence'
+            deferred_outcome['repeat_failure_fingerprint'] = fingerprint
+        elif (
+            deferred_outcome is not None
+            and phase in ('provider_call', 'parse')
+            and failure.outcome == TranscriptionOutcome.INVALID_INPUT
+        ):
+            deferred_outcome['provider_invalid_input'] = True
         _record_sync_segment_failure(
             failure,
             model=model,
@@ -1289,14 +2076,27 @@ def process_segment(
             lock=lock,
             errors=errors,
             record_metric=deferred_outcome is None,
+            job_id=job_id,
+            segment_key=segment_key,
+            phase=phase,
+            exception=e,
+            attempt_ref=attempt_ref,
         )
         return False
     finally:
+        for turn in conversation_turns:
+            conversation_turn_lease.release(turn)
         if turnstile:
             turnstile.complete(path)
 
 
-def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optional[Callable[[], None]] = None):
+def _reprocess_merged_conversations(
+    uid: str,
+    response: dict,
+    on_fenced: Optional[Callable[[], None]] = None,
+    *,
+    user_selected: bool = False,
+):
     """Regenerate summary/structured data for conversations that gained segments this batch.
 
     The merge path in process_segment only appends transcript segments; without this the
@@ -1304,11 +2104,45 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
     per conversation: a replaced/reopened conversation must not block siblings in the
     same batch.
     """
+    from config.sync_reprocess import coalesce_enabled
+
+    from config.demand_processing import enabled as demand_enabled
+
+    hold = processing_hold.scheduling_enabled()
+    coalescing = (hold or coalesce_enabled() or demand_enabled(uid)) and not user_selected
     merged = response.pop('_merged', {})
+    if coalescing:
+        # Partial-result IDs survive a crash after append/checkpoint but before
+        # this outbox mark, even when lineage enrichment recovery is disabled.
+        # Re-enroll that durable debt; exact-input dedupe handles completed
+        # replays without depending on a transient per-attempt _merged map.
+        recovered = set(response.get('new_memories') or []) | set(response.get('updated_memories') or [])
+        recovered -= set(response.get(_RESPONSE_FENCED_CONVERSATION_IDS) or [])
+        for conversation_id in recovered:
+            merged.setdefault(conversation_id, _LINEAGE_RETRY_LANGUAGE)
+    if user_selected:
+        # Rule-discard intake does not enroll enrichment. Process Now is an
+        # explicit keep choice, so include those retained rows too. Apply it
+        # only after all chunks have joined: curating each chunk during intake
+        # would prevent later chunks from merging into the same recording.
+        for conversation_id in response.get('new_memories', set()) | response.get('updated_memories', set()):
+            merged.setdefault(conversation_id, _LINEAGE_RETRY_LANGUAGE)
     fenced_ids = set()
     for conversation_id, language in merged.items():
         try:
-            _reprocess_conversation_after_update(uid, conversation_id, language)
+            if user_selected and not lifecycle_service.restore_discarded(uid, conversation_id):
+                raise SyncConversationPersistenceFenced('selected recording no longer exists')
+            if coalescing:
+                from utils.sync.reprocess import mark
+
+                mark(uid, conversation_id, language, sync_hold=hold)
+            else:
+                processed = _reprocess_conversation_after_update(uid, conversation_id, language)
+                if user_selected:
+                    complete_explicit(uid, processed, ProcessingTrigger.BACKLOG_CHOICE)
+                    from utils.conversations.demand_processing import promote_conversation_effects
+
+                    promote_conversation_effects(uid, conversation_id)
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
@@ -1318,7 +2152,7 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
-            if is_destructive_operation_in_progress(e):
+            if coalescing or user_selected or is_destructive_operation_in_progress(e):
                 raise
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
     # A task-mode worker whose every conversation was superseded by a newer
@@ -1343,11 +2177,7 @@ async def _checkpoint_fenced_conversations_for_run(
     active_run_lock_epoch: int | None,
 ):
     """Persist a fence tombstone before the losing worker can finalize audio."""
-    partial = {
-        'new_memories': sorted(response['new_memories']),
-        'updated_memories': sorted(response['updated_memories']),
-        _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(response[_RESPONSE_FENCED_CONVERSATION_IDS]),
-    }
+    partial = lineage_partial_result(response, sync_lineage_resolve_active_for(uid))
     if content_id:
         checkpointed = await run_blocking(
             db_executor,
@@ -1380,27 +2210,57 @@ def _wav_bytes_to_pcm16_16k(audio_bytes: Optional[bytes]) -> Optional[bytes]:
     return seg.raw_data
 
 
+def _store_intake_audio(
+    uid: str,
+    timestamp: float,
+    audio_bytes: Optional[bytes],
+    data_protection_level: str,
+    survivors: list,
+    transcript_segment_count: int,
+    private_cloud_sync_enabled: bool,
+    conversation_id: str,
+    *,
+    playback_start: Optional[float] = None,
+    playback_clock_offset: float = 0.0,
+) -> None:
+    store_intake_audio(
+        uid,
+        timestamp,
+        audio_bytes,
+        data_protection_level,
+        survivors,
+        transcript_segment_count,
+        private_cloud_sync_enabled,
+        conversation_id,
+        playback_start=playback_start,
+        playback_clock_offset=playback_clock_offset,
+        store_full=_store_sync_audio_chunk,
+        store_partial=store_partial_merge_survivor_audio,
+    )
+
+
 def _store_sync_audio_chunk(
     uid: str,
     conversation_id: str,
     timestamp: float,
     audio_bytes: Optional[bytes],
     data_protection_level: Optional[str],
+    playback_start: Optional[float] = None,
 ):
-    """Persist a sync segment's audio as a private-cloud chunk, identical in format and
-    naming to the realtime path (chunks/{uid}/{conversation_id}/{ts}.opus[.enc]), so the
-    conversation plays through the existing audio player. Best-effort — audio storage must
-    never fail transcription."""
-    try:
-        pcm = _wav_bytes_to_pcm16_16k(audio_bytes)
-        if not pcm:
-            return
-        upload_audio_chunk(pcm, uid, conversation_id, float(timestamp), data_protection_level)
-        del pcm
-    except Exception as e:
-        logger.warning(f'sync: failed to store audio chunk for {conversation_id}@{timestamp}: {e}')
+    """Reuse stable private-cloud chunk naming; audio storage remains best-effort."""
+    store_sync_audio_chunk(
+        uid,
+        conversation_id,
+        timestamp,
+        audio_bytes,
+        data_protection_level,
+        playback_start=playback_start,
+        decode_audio=_wav_bytes_to_pcm16_16k,
+        upload_audio=upload_audio_chunk,
+    )
 
 
+@sync_phase('firestore')
 def _finalize_sync_audio_files(uid: str, response: dict):
     """After all segments are assigned, build audio_files from the uploaded chunks and
     persist them on each conversation — exactly as the realtime flush does — then warm the
@@ -1436,6 +2296,26 @@ def _cleanup_files(file_paths: Iterable[str]):
             logger.error('event=sync_cleanup outcome=failed exception_type=%s', type(e).__name__)
 
 
+def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds: float = 0.0) -> None:
+    """Count one capture-time admission disposition; log only the notable ones.
+
+    Plain acceptances are counter-only (per-file volume); skew and rejections
+    get a log line so the readback can count and sample both sides.
+    """
+    try:
+        OMI_SYNC_CAPTURE_TIME_TOTAL.labels(
+            outcome=reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason)
+        ).inc()
+    except Exception:
+        pass
+    if outcome != SyncCaptureTimeReason.ACCEPTED:
+        logger.info(
+            'event=sync_capture_time outcome=%s ahead_seconds=%.1f',
+            reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason),
+            ahead_seconds,
+        )
+
+
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
     directory = f'syncing/{uid}/{job_id}/'
@@ -1444,19 +2324,32 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     for file in files:
         filename = file.filename
         if not filename:
-            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
-        if not filename.endswith('.bin'):
-            raise HTTPException(status_code=400, detail='Invalid sync file format')
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Missing sync filename'})
+        if '/' in filename or '\\' in filename or not filename.endswith('.bin'):
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         if '_' not in filename:
-            raise HTTPException(status_code=400, detail='Invalid sync file format')
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         try:
             timestamp = get_timestamp_from_path(filename)
+        except CaptureTimeWindowError as error:
+            _record_capture_time_admission(error.capture_time_reason)
+            raise SyncCaptureTimeRejected() from error
         except ValueError:
-            raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
+            _record_capture_time_admission(SyncCaptureTimeReason.REJECTED_MALFORMED)
+            raise SyncCaptureTimeRejected()
 
         time_val = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        if time_val > datetime.now(timezone.utc) or time_val < datetime(2024, 1, 1, tzinfo=timezone.utc):
-            raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
+        now = datetime.now(timezone.utc)
+        ahead_seconds = (time_val - now).total_seconds()
+        rejection = capture_time_rejection(time_val, now=now)
+        if rejection is not None:
+            # Defense in depth: the shared parser already enforces this window.
+            _record_capture_time_admission(rejection, ahead_seconds=ahead_seconds)
+            raise SyncCaptureTimeRejected()
+        _record_capture_time_admission(
+            SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW if ahead_seconds > 0 else SyncCaptureTimeReason.ACCEPTED,
+            ahead_seconds=max(0.0, ahead_seconds),
+        )
 
         path = f"{directory}{filename}"
         try:
@@ -1596,15 +2489,31 @@ async def _record_restricted_sync_dg_usage(
             raise
 
 
-async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[list[str], int]:
+async def _run_sync_vad_phase(
+    wav_paths: list,
+    segmented_paths: set,
+    source_frame_maps: dict | None = None,
+    segment_source_maps: dict | None = None,
+) -> tuple[list[str], int]:
     """Finish all mutating VAD work before the coordinator advances or cleans up."""
     phase_started = time.monotonic()
     vad_errors: list[str] = []
+    segment_source_lock = threading.Lock()
 
     def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
-            retrieve_vad_segments(path, segmented_paths, local_errors)
+            if segment_source_maps is not None:
+                retrieve_vad_segments(
+                    path,
+                    segmented_paths,
+                    local_errors,
+                    source_frame_map=(source_frame_maps or {}).get(path),
+                    segment_source_maps=segment_source_maps,
+                    segment_source_lock=segment_source_lock,
+                )
+            else:
+                retrieve_vad_segments(path, segmented_paths, local_errors)
         except Exception as error:
             if not local_errors:
                 local_errors.append(_bounded_exception_type(error))
@@ -1627,6 +2536,34 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     return vad_errors, vad_ms
 
 
+async def _resolve_safety_wal_target(
+    uid: str,
+    stamped_target: Optional[str],
+    recording_session_id: Optional[str],
+    source: ConversationSource,
+    client_device_id: Optional[str],
+    should_lock: bool,
+    audio_start_seconds: Optional[float],
+    audio_end_seconds: Optional[float],
+) -> Optional[str]:
+    """Use server recording proof over the phone's possibly stale local stamp."""
+    if not recording_session_id or audio_start_seconds is None or audio_end_seconds is None:
+        return stamped_target
+    return await run_blocking(
+        db_executor,
+        resolve_recording_session_sync_target,
+        uid,
+        recording_session_id,
+        source,
+        client_device_id,
+        bool(should_lock),
+        audio_start_seconds,
+        audio_end_seconds,
+    )
+
+
+@sync_attempt
+@sync_snapshot_resolve_job
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -1645,6 +2582,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     inline_run_lock_token: Optional[str] = None,
     content_run_bound: bool = False,
     ledger_fence_active: bool = True,
+    capture_evidence_claims: dict[str, dict] | None = None,
+    recording_session_id: Optional[str] = None,
+    audio_start_seconds: Optional[float] = None,
+    audio_end_seconds: Optional[float] = None,
+    raw_capture_paths: Optional[list[str]] = None,
+    redrive_mode: Optional[str] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -1662,6 +2605,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     coordinator itself holds zero thread pool slots — only leaf operations use
     threads, and only for their actual duration.
     """
+    # OIDC tasks and delayed inline work do not share an HTTP auth cache warmup.
+    # Await fresh membership before choosing an irreversible whole-batch path.
+    await warm_rollout_cohorts(uid)
+    if cap_enabled(uid, 'sync'):
+        # A hold is pending processing, not a locked transcript partition.
+        should_lock = False
+    selected_recording = user_selected_recording(raw_paths)
     # Enrich raw sync geolocation (address / place id) once per job before any
     # conversation is created. This is the single enrichment point covering both
     # the inline and Cloud Tasks dispatch branches; it runs before the
@@ -1669,9 +2619,35 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
+    # Recording-id uploads bind each VAD segment to its rollover generation after
+    # VAD (recording_lineage.py). With SYNC_LINEAGE_RESOLVE_ENABLED off, or a uid outside
+    # its allowlist, the whole batch resolves here as before: a unique match replaces the
+    # stamp, a miss drops it. Old clients without this proof retain their stamp either way.
+    use_lineage = lineage_resolution_requested(
+        uid,
+        recording_session_id,
+        audio_start_seconds,
+        audio_end_seconds,
+        job_id=job_id,
+        capture_evidence_claims=capture_evidence_claims,
+        filenames=[os.path.basename(path) for path in raw_paths],
+    )
+    if not use_lineage:
+        target_conversation_id = await _resolve_safety_wal_target(
+            uid,
+            target_conversation_id,
+            recording_session_id,
+            source,
+            client_device_id,
+            should_lock,
+            audio_start_seconds,
+            audio_end_seconds,
+        )
 
     sync_provider = 'unknown'
     sync_model = 'unknown'
+    attempt_ref = _new_attempt_ref()
+    job_phase = 'unknown'
     job_outcome_recorded = False
     preserve_retry_material = False
     # Both dispatch modes own a Redis token for every worker-driven job write.
@@ -1712,7 +2688,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     async with concurrency_gate:
         set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
+        safety_coverage_paths = set()
+        coverage_suppressed_all = False
         wav_paths = []
+        decoded_frames: dict[str, list[int]] = {}
+        source_frame_maps: dict[str, dict] = {}
+        segment_source_maps: dict[str, tuple[dict, int] | None] = {}
         stage_timings = {}
         pipeline_start = time.monotonic()
         try:
@@ -1747,12 +2728,27 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             await run_blocking(db_executor, _mark_job_processing_for_run, job_id, active_run_lock_token)
 
             # --- Phase 1: Decode ---
+            raw_staging_custody = None
+            if content_id and raw_capture_paths:
+                try:
+                    raw_staging_custody = await run_blocking(
+                        storage_executor, make_staging_custody_receipt, uid, raw_paths, raw_capture_paths
+                    )
+                except Exception as error:
+                    logger.warning(
+                        'event=sync_staging_cleanup outcome=retained exception_type=%s',
+                        _bounded_exception_type(error),
+                    )
+            job_phase = 'decode'
             await run_blocking(
                 db_executor, _update_sync_job_for_run, job_id, active_run_lock_token, {'stage': 'decoding'}
             )
             t0 = time.monotonic()
             try:
-                wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
+                if capture_evidence_claims:
+                    wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths, decoded_frames)
+                else:
+                    wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
             except asyncio.CancelledError:
                 # Cancellation detaches only the asyncio Future; the decoder
                 # leaf may still be reading these inputs in its executor. Keep
@@ -1760,7 +2756,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 # expires rather than racing a destructive cleanup against it.
                 preserve_retry_material = True
                 raise
-            except HTTPException:
+            except BackfillStoragePressure:
+                raise
+            except HTTPException as e:
                 await _finalize_sync_job_failure(
                     job_id=job_id,
                     uid=uid,
@@ -1771,6 +2769,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     model=sync_model,
                     lane=sync_lane,
                     run_lock_token=active_run_lock_token,
+                    attempt_ref=attempt_ref,
+                    failure_phase='decode',
+                    failure_class=bounded_exception_class(e),
+                    failure_key='invalid_audio',
                 )
                 return
             except Exception as e:
@@ -1788,6 +2790,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     model=sync_model,
                     lane=sync_lane,
                     run_lock_token=active_run_lock_token,
+                    attempt_ref=attempt_ref,
+                    failure_phase='decode',
+                    failure_class=bounded_exception_class(e),
                 )
                 return
             finally:
@@ -1814,15 +2819,159 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     model='unknown',
                     lane=sync_lane,
                     run_lock_token=active_run_lock_token,
+                    attempt_ref=attempt_ref,
+                    failure_phase='decode',
+                    failure_key='invalid_audio',
                 )
                 return
+            try:
+                wav_paths, source_frame_maps, coverage_suppressed_all = await apply_sync_wal_audio_coverage(
+                    uid,
+                    source,
+                    should_lock,
+                    client_device_id,
+                    recording_session_id,
+                    capture_evidence_claims,
+                    wav_paths,
+                    decoded_frames,
+                    cleanup_paths=safety_coverage_paths,
+                    run_blocking=run_blocking,
+                    db_executor=db_executor,
+                    storage_executor=storage_executor,
+                    cleanup_files=_cleanup_files,
+                )
+            except asyncio.CancelledError:
+                preserve_retry_material = True
+                raise
+            if use_lineage:
+                if len(source_frame_maps) != len(wav_paths):
+                    sync_recording_lineage.emit_s1_mapping_refusal(len(source_frame_maps), len(wav_paths))
+                    use_lineage = False
+                    target_conversation_id = await _resolve_safety_wal_target(
+                        uid,
+                        target_conversation_id,
+                        recording_session_id,
+                        source,
+                        client_device_id,
+                        should_lock,
+                        audio_start_seconds,
+                        audio_end_seconds,
+                    )
+            # refactor: superseded by utils.capture.coverage when CAPTURE_COVERAGE_MODE=serve
+            if sync_safety_wal_enabled() and legacy_audio_trim(uid):
+                coverage_inputs = list(wav_paths)
+                safety_coverage_paths.update(coverage_inputs)
+                wav_paths, safety_generated = await apply_safety_wal_coverage(
+                    uid,
+                    wav_paths,
+                    target_conversation_id,
+                    run_blocking=run_blocking,
+                    db_executor=db_executor,
+                    storage_executor=storage_executor,
+                    job_ref=_bounded_correlation_ref(job_id),
+                    protected_paths=source_frame_maps,
+                    capture_partition={
+                        'source': source,
+                        'client_device_id': client_device_id,
+                        'is_locked': should_lock,
+                    },
+                )
+                safety_coverage_paths.update(safety_generated)
+                # Only the pre-existing committed S1 proof can suppress all.
+                # The envelope stage retains margins and may never acknowledge
+                # an unexpected empty plan as a successfully recovered WAL.
+                if coverage_inputs and not wav_paths:
+                    wav_paths = coverage_inputs
+                    record_fallback(
+                        component='sync_dispatch',
+                        from_mode='none',
+                        to_mode='none',
+                        reason='policy',
+                        outcome='degraded',
+                    )
+            cap_held = False
+            cap_hold_receipts: dict = {}
+            if cap_enabled(uid, 'sync'):
+                from utils.sync.cap_hold import hold_capture_if_exhausted
 
+                cap_held = await hold_capture_if_exhausted(
+                    uid,
+                    wav_paths,
+                    source,
+                    receipts=cap_hold_receipts,
+                    dispatch_path=DispatchPath.SYNC_V2,
+                    source_frame_maps=source_frame_maps,
+                    target_conversation_id=target_conversation_id,
+                    client_device_id=client_device_id,
+                    client_platform=client_platform,
+                    geolocation=geolocation,
+                    recording_session_id=recording_session_id,
+                    sync_lane=sync_lane,
+                    content_id=content_id,
+                    job_id=job_id,
+                )
+            if cap_held:
+                await run_blocking(storage_executor, _cleanup_files, wav_paths)
+                wav_paths = []
             # --- Phase 2: VAD ---
-            await run_blocking(db_executor, _update_sync_job_for_run, job_id, active_run_lock_token, {'stage': 'vad'})
-            vad_errors, vad_ms = await _run_sync_vad_phase(wav_paths, segmented_paths)
+            job_phase = 'vad'
+            await run_blocking(
+                db_executor,
+                _update_sync_job_for_run,
+                job_id,
+                active_run_lock_token,
+                {
+                    'stage': 'vad',
+                    **(
+                        {
+                            'capture_evidence': (
+                                bounded_envelope(
+                                    {
+                                        'version': 1,
+                                        'capability': 'source_position' if source_frame_maps else 'unknown',
+                                        'coverage': (
+                                            'incomplete'
+                                            if (
+                                                len(source_frame_maps) != len(wav_paths)
+                                                or any(mapping['incomplete'] for mapping in source_frame_maps.values())
+                                            )
+                                            else 'mapped'
+                                        ),
+                                        'origin': 'sync_pre_vad',
+                                        'runs': [
+                                            {
+                                                'capture_root': mapping['claim']['capture_root'],
+                                                'clock_epoch': mapping['claim']['clock_epoch'],
+                                                'source_frame_start': mapping['claim']['source_frame_start'],
+                                                'source_frame_end': mapping['claim']['source_frame_start']
+                                                + len(mapping['offsets'])
+                                                - 1,
+                                                'decoded_sample_end': mapping['offsets'][-1],
+                                                'rate_hz': mapping['claim']['rate_hz'],
+                                                'incomplete': mapping['incomplete'],
+                                            }
+                                            for mapping in source_frame_maps.values()
+                                        ],
+                                    }
+                                )
+                                if source_frame_maps
+                                else unknown_envelope('missing_source_position', origin='sync_pre_vad')
+                            )
+                        }
+                    ),
+                },
+            )
+            if source_frame_maps:
+                vad_errors, vad_ms = await _run_sync_vad_phase(
+                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps
+                )
+            else:
+                vad_errors, vad_ms = await _run_sync_vad_phase(wav_paths, segmented_paths)
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
 
+            if 'BackfillStoragePressure' in vad_errors:
+                raise BackfillStoragePressure('sync temporary storage full')
             if vad_errors:
                 await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
                 segmented_paths = set()
@@ -1840,10 +2989,14 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     model=sync_model,
                     lane=sync_lane,
                     run_lock_token=active_run_lock_token,
+                    attempt_ref=attempt_ref,
+                    failure_phase='vad',
+                    failure_class=bounded_exception_class(vad_errors[0]),
                 )
                 return
 
             # --- Phase 3: Speech metrics & fair-use ---
+            job_phase = 'usage'
             total_speech_seconds = await run_blocking(
                 sync_executor, lambda: sum(get_wav_duration(p) for p in segmented_paths)
             )
@@ -1859,27 +3012,41 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             )
 
             if total_segments == 0:
+                empty_outcome = (
+                    TranscriptionOutcome.SUCCESS
+                    if coverage_suppressed_all or cap_held
+                    else TranscriptionOutcome.EXPECTED_SILENCE
+                )
                 empty_result = {
                     'new_memories': [],
                     'updated_memories': [],
                     'failed_segments': 0,
                     'total_segments': 0,
                     'errors': [],
-                    'outcome': TranscriptionOutcome.EXPECTED_SILENCE.value,
+                    'outcome': empty_outcome.value,
                     'provider': 'unknown',
                     'model': 'unknown',
                     'lane': sync_lane,
+                    **({'held_audio': True} if cap_held else {}),
                 }
                 if content_id:
+                    ledger_writer = mark_sync_content_completed
+                    ledger_extra = {}
+                    if cap_held:
+                        from database.sync_cap_holds import mark_content_held
+
+                        ledger_writer = mark_content_held
+                        ledger_extra = {'hold_ids': list(cap_hold_receipts)}
                     completed_ledger = await run_blocking(
                         db_executor,
-                        mark_sync_content_completed,
+                        ledger_writer,
                         uid,
                         content_id,
                         job_id,
                         empty_result,
                         run_token=active_run_lock_token,
                         run_epoch=active_run_lock_epoch,
+                        **ledger_extra,
                     )
                     if not completed_ledger:
                         raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
@@ -1889,11 +3056,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     job_id,
                     active_run_lock_token,
                     empty_result,
+                    attempt_ref=attempt_ref,
                 )
                 if ledger_fence_active:
                     await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
                 await _record_sync_job_outcome_async(
-                    TranscriptionOutcome.EXPECTED_SILENCE,
+                    empty_outcome,
                     provider='unknown',
                     model='unknown',
                     lane=sync_lane,
@@ -1928,6 +3096,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         reason_code=reservation.reason,
                         retry_after=reservation.retry_after,
                         run_lock_token=active_run_lock_token,
+                        attempt_ref=attempt_ref,
+                        failure_phase='usage',
                     )
                     return
 
@@ -2000,6 +3170,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                                 model=sync_model,
                                 lane=sync_lane,
                                 run_lock_token=active_run_lock_token,
+                                attempt_ref=attempt_ref,
+                                failure_phase='usage',
                             )
                             return
                 except Exception as e:
@@ -2011,12 +3183,17 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             is_locked = should_lock
 
             # --- Phase 4: Fetch prefs & embeddings ---
+            job_phase = 'provider_select'
             transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
             user_language = transcription_prefs.get('language', '') or ''
             req_language = (
                 user_language if transcription_prefs.get('single_language_mode', False) and user_language else 'multi'
             )
-            sync_provider, _, sync_model = get_prerecorded_service(req_language)
+            sync_provider, _, sync_model = (
+                minimal_redrive.parakeet_service(req_language)
+                if redrive_mode == minimal_redrive.MINIMAL
+                else get_prerecorded_service(req_language)
+            )
             await run_blocking(
                 db_executor,
                 _update_sync_job_for_run,
@@ -2028,13 +3205,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 },
             )
             # Mirror realtime: store conversation audio only when private cloud sync is on.
-            (
-                private_cloud_sync_enabled,
-                data_protection_level,
-                person_embeddings_cache,
-            ) = await _load_sync_segment_context(uid)
+            private_cloud_sync_enabled, data_protection_level, person_embeddings_cache = (
+                await _load_sync_segment_context(uid)
+            )
 
             # --- Phase 5: Process segments (STT + LLM) ---
+            job_phase = 'persistence'
             await run_blocking(
                 db_executor, _update_sync_job_for_run, job_id, active_run_lock_token, {'stage': 'stt_llm'}
             )
@@ -2043,41 +3219,33 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             partial_result = (current_job or {}).get('partial_result') or {}
             if content_id:
                 durable_partial = await run_blocking(db_executor, get_sync_content_partial_result, uid, content_id)
-                partial_result = {
-                    'new_memories': sorted(
-                        set(partial_result.get('new_memories') or []) | set(durable_partial.get('new_memories') or [])
-                    ),
-                    'updated_memories': sorted(
-                        set(partial_result.get('updated_memories') or [])
-                        | set(durable_partial.get('updated_memories') or [])
-                    ),
-                    _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
-                        set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
-                        | set(durable_partial.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
-                    ),
-                }
+                partial_result = merge_lineage_partial_results(partial_result, durable_partial)
             fenced_conversation_ids = set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
             response = {
                 'updated_memories': set(partial_result.get('updated_memories') or []) - fenced_conversation_ids,
                 'new_memories': set(partial_result.get('new_memories') or []) - fenced_conversation_ids,
                 _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
+            restore_lineage_enrichment_intent(response, partial_result, use_lineage, _LINEAGE_RETRY_LANGUAGE)
             segment_errors = []
             # Segments that yielded a transcript, distinct from failed and
             # speech-free ones: only transcribed audio is billed, so a silent
             # job records no usage though it is not a failure.
             content_segment_count = [0]
             segment_lock = threading.Lock()
+            provider_selections = set()
+            first_segment_failure: list = []
+            persistence_failure_fingerprints: list[str] = []
+            provider_invalid_failures = [0]
 
             # Segments that fully landed in a prior Cloud Tasks attempt are skipped
             already_processed = set()
             if task_mode:
                 already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
-                if already_processed:
-                    logger.info(
-                        'event=sync_transcription_retry outcome=deduplicated segment_count=%d',
-                        len(already_processed),
-                    )
+            if already_processed:
+                logger.debug(
+                    'event=sync_transcription_retry outcome=deduplicated segment_count=%d', len(already_processed)
+                )
 
             durable_processed_segment_ids: set[str] = set()
             segment_ids_by_path: dict[str, str] = {}
@@ -2086,17 +3254,59 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     db_executor, get_processed_sync_segment_ids, uid, content_id
                 )
                 segment_ids_by_path = {
-                    path: await run_blocking(sync_executor, compute_sync_segment_id, uid, path)
-                    for path in segmented_paths
+                    p: await run_blocking(sync_executor, compute_sync_segment_id, uid, p) for p in segmented_paths
                 }
+
+            # One server-clock offset per request, computed once after
+            # segmentation: the furthest segment end (VAD names carry the
+            # source capture clock) minus server now. Every temporal
+            # comparison and stored pair in process_segment shifts by it, and
+            # the lineage planner below receives it for its comparison spans
+            # and query bounds; chunk identity and lineage keys keep raw
+            # capture-clock times.
+            request_capture_offset = await run_blocking(
+                sync_executor,
+                lambda: capture_clock_offset(
+                    max(get_timestamp_from_path(path) + get_wav_duration(path) for path in segmented_paths)
+                ),
+            )
 
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
             # conversation assignment is serialized oldest-first so adjacent chunks merge
             # instead of racing into separate conversations (#6551, #5747).
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
+            segment_targets: dict = {}
+            segment_binding_reasons: dict = {}
+            if use_lineage and segment_list:
+                try:
+                    segment_targets = await run_blocking(
+                        db_executor,
+                        plan_segment_targets,
+                        segment_list,
+                        get_timestamp_from_path,
+                        get_wav_duration,
+                        uid,
+                        str(recording_session_id),
+                        target_conversation_id,
+                        source,
+                        client_device_id,
+                        is_locked,
+                        job_id,
+                        segment_binding_reasons,
+                        capture_time_offset=request_capture_offset,
+                        **({'segment_source_maps': segment_source_maps} if segment_source_maps else {}),
+                    )
+                except Exception:
+                    # Span construction and the executor call are also part of
+                    # planning. Keep the stamp if either fails, then ingest
+                    # siblings normally under the existing persistence fences.
+                    segment_targets = fallback_segment_targets(
+                        segment_list, target_conversation_id, job_id=job_id, binding_reasons=segment_binding_reasons
+                    )
 
             def _process_one_segment(path: str):
+                segment_target = segment_targets.get(path, target_conversation_id)
                 segment_id = segment_ids_by_path.get(path)
                 if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
                     # Release the assignment slot — later segments wait on it
@@ -2113,7 +3323,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     is_locked,
                     transcription_prefs,
                     person_embeddings_cache,
-                    target_conversation_id,
+                    segment_target,
                     assignment_turnstile,
                     speaker_scope=f'sync:{segment_id or compute_sync_segment_id(uid, path)}',
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
@@ -2123,20 +3333,34 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     sync_lane=sync_lane,
                     deferred_outcome=deferred_outcome,
                     geolocation=geolocation,
+                    job_id=job_id,
+                    segment_key=segment_id or path,
+                    attempt_ref=attempt_ref,
+                    source_position_map=segment_source_maps.get(path),
+                    recording_session_id=recording_session_id,
+                    **(
+                        {'lineage_binding': segment_binding_reasons.get(path), 'lineage_eligible': True}
+                        if use_lineage
+                        else {}
+                    ),
+                    **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
+                    **({'redrive_mode': redrive_mode} if redrive_mode else {}),
+                    capture_time_offset=request_capture_offset,
                 )
+                if deferred_outcome.get('provider'):
+                    with segment_lock:
+                        provider_selections.add(
+                            (deferred_outcome['provider'], deferred_outcome.get('model', 'unknown'))
+                        )
+                if deferred_outcome.get('cap_held'):
+                    return  # Durable policy hold, not success/silence/provider failure.
                 if ok:
                     # Persist result contributions before the processed marker.
                     # Therefore any skipped segment on a retry has its visible
                     # conversation IDs available for response hydration.
                     with segment_lock:
                         content_segment_count[0] += 1
-                        partial = {
-                            'new_memories': sorted(response['new_memories']),
-                            'updated_memories': sorted(response['updated_memories']),
-                            _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
-                                response[_RESPONSE_FENCED_CONVERSATION_IDS]
-                            ),
-                        }
+                        partial = lineage_partial_result(response, sync_lineage_resolve_active_for(uid))
                         _update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})
                         if content_id:
                             checkpointed = checkpoint_sync_content_partial_result(
@@ -2149,9 +3373,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                             )
                             if not checkpointed:
                                 raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
-                if ok and task_mode:
+                silence_confirmed = (
+                    ok is False and deferred_outcome.get('outcome') == TranscriptionOutcome.EXPECTED_SILENCE
+                )
+                if (ok or silence_confirmed) and task_mode:
                     _add_processed_segment_for_run(job_id, active_run_lock_token, path)
-                if ok and content_id and segment_id:
+                if (ok or silence_confirmed) and content_id and segment_id:
                     marked_segment = add_processed_sync_segment_id(
                         uid,
                         content_id,
@@ -2164,12 +3391,22 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
                 metric_key = segment_id or path
                 if ok:
-                    outcome, outcome_provider, outcome_model, retryable = _deferred_segment_labels(
+                    (
+                        outcome,
+                        outcome_provider,
+                        outcome_model,
+                        retryable,
+                        outcome_phase,
+                        outcome_exc,
+                        outcome_subtype,
+                    ) = _deferred_segment_labels(
                         deferred_outcome,
                         fallback_outcome=TranscriptionOutcome.SUCCESS,
                         fallback_provider=sync_provider,
                         fallback_model=sync_model,
                         fallback_retryable=False,
+                        fallback_phase='none',
+                        fallback_exception_type='none',
                     )
                     _record_sync_segment_outcome(
                         outcome,
@@ -2179,15 +3416,41 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         retryable=retryable,
                         job_id=job_id,
                         segment_key=metric_key,
+                        phase=outcome_phase,
+                        exception=outcome_exc,
+                        attempt_ref=attempt_ref,
                     )
                 elif ok is False:
-                    outcome, outcome_provider, outcome_model, retryable = _deferred_segment_labels(
+                    if deferred_outcome.get('repeat_failure_key') == 'persistent_persistence':
+                        with segment_lock:
+                            persistence_failure_fingerprints.append(deferred_outcome['repeat_failure_fingerprint'])
+                    elif deferred_outcome.get('provider_invalid_input'):
+                        with segment_lock:
+                            provider_invalid_failures[0] += 1
+                    (
+                        outcome,
+                        outcome_provider,
+                        outcome_model,
+                        retryable,
+                        outcome_phase,
+                        outcome_exc,
+                        outcome_subtype,
+                    ) = _deferred_segment_labels(
                         deferred_outcome,
                         fallback_outcome=TranscriptionOutcome.UPSTREAM_ERROR,
                         fallback_provider=sync_provider,
                         fallback_model=sync_model,
                         fallback_retryable=True,
+                        fallback_phase='unknown',
+                        fallback_exception_type='OtherException',
                     )
+                    if outcome in _NON_ERROR_SEGMENT_OUTCOMES:
+                        outcome_phase = 'none'
+                        outcome_exc = 'none'
+                    else:
+                        with segment_lock:
+                            if not first_segment_failure:
+                                first_segment_failure.append((outcome_phase, outcome_exc, outcome_subtype))
                     _record_sync_segment_outcome(
                         outcome,
                         provider=outcome_provider,
@@ -2196,6 +3459,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         retryable=retryable,
                         job_id=job_id,
                         segment_key=metric_key,
+                        phase=outcome_phase,
+                        exception=outcome_exc,
+                        attempt_ref=attempt_ref,
                     )
 
             chunk_size = 5
@@ -2208,21 +3474,32 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 seg_tasks = [run_blocking(sync_executor, _process_one_segment, path) for path in chunk]
                 seg_results = await asyncio.gather(*seg_tasks, return_exceptions=True)
                 for path, r in zip(chunk, seg_results):
-                    if isinstance(r, SyncJobRunLeaseLost):
+                    if isinstance(r, (SyncJobRunLeaseLost, minimal_redrive.ProviderUnavailable)):
                         raise r
                     # A lifecycle fence has a semantic terminal outcome at the
                     # task boundary; never reduce it to a retryable segment error.
                     _raise_sync_terminal_result(r)
                     if isinstance(r, Exception):
-                        failure = failure_from_exception(r, provider=sync_provider)
+                        failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=None)
+                        failure.error_code = sync_failure_error_code(
+                            _sync_failure_reason('persistence', r), 'persistence'
+                        )
+                        with segment_lock:
+                            if not first_segment_failure:
+                                first_segment_failure.append(
+                                    ('persistence', bounded_exception_class(r), _sync_assignment_failure_subtype(r))
+                                )
                         await _record_sync_segment_failure_async(
                             failure,
-                            model=sync_model,
+                            model='unknown',
                             lane=sync_lane,
                             lock=segment_lock,
                             errors=segment_errors,
                             job_id=job_id,
                             segment_key=segment_ids_by_path.get(path) or path,
+                            phase='persistence',
+                            exception=r,
+                            attempt_ref=attempt_ref,
                         )
                 try:
                     await run_blocking(
@@ -2237,51 +3514,72 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 except Exception:
                     pass
 
+            if provider_selections:
+                # Audio LID can choose different providers for sibling segments.
+                # Attribute uniform jobs to their actual provider; mixed jobs
+                # stay unknown rather than falsely billing the provisional one.
+                sync_provider, sync_model = (
+                    next(iter(provider_selections)) if len(provider_selections) == 1 else ('unknown', 'unknown')
+                )
             coordinator_loop = asyncio.get_running_loop()
+            job_phase = 'postprocess'
 
             def _checkpoint_fenced_conversations():
                 # This callback runs in sync_executor. Waiting here keeps the fence
                 # durable before audio finalization, while the coordinator loop stays
                 # available to dispatch the writes through db_executor.
-                asyncio.run_coroutine_threadsafe(
-                    _checkpoint_fenced_conversations_for_run(
-                        uid,
-                        response,
-                        content_id,
-                        job_id,
-                        active_run_lock_token,
-                        active_run_lock_epoch,
-                    ),
-                    coordinator_loop,
-                ).result()
+                checkpoint_coro = _checkpoint_fenced_conversations_for_run(
+                    uid, response, content_id, job_id, active_run_lock_token, active_run_lock_epoch
+                )
+                asyncio.run_coroutine_threadsafe(checkpoint_coro, coordinator_loop).result()
 
-            await run_blocking(
-                sync_executor,
-                _reprocess_merged_conversations,
-                uid,
-                response,
-                on_fenced=_checkpoint_fenced_conversations,
-            )
+            if redrive_mode == minimal_redrive.MINIMAL:
+                await run_blocking(sync_executor, minimal_redrive.finalize, uid, response)
+            else:
+                await run_blocking(
+                    sync_executor,
+                    _reprocess_merged_conversations,
+                    uid,
+                    response,
+                    on_fenced=_checkpoint_fenced_conversations,
+                    **({'user_selected': True} if selected_recording else {}),
+                )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced
             # conversations play exactly like realtime ones. Gated on the user's setting.
             if private_cloud_sync_enabled:
                 await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
+            if raw_capture_paths:
+                await run_blocking(
+                    storage_executor,
+                    link_archive_captures,
+                    uid,
+                    raw_capture_paths,
+                    sorted(set(response['new_memories']) | set(response['updated_memories'])),
+                )
+            schedule_person_voice_learning_retries(uid, response, _RESPONSE_FENCED_CONVERSATION_IDS)
 
             stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)
 
             # Record DG usage after processing.
+            job_phase = 'usage'
+            cap_holds = response.get('_cap_holds', {}) if cap_enabled(uid, 'sync') else {}
+            cap_held_seconds = sum(item['seconds'] for item in cap_holds.values())
             await _record_restricted_sync_dg_usage(
                 enabled=fair_use_restrict_dg,
                 uid=uid,
                 job_id=job_id,
                 content_id=content_id,
-                total_speech_seconds=total_speech_seconds,
+                total_speech_seconds=(
+                    max(0, total_speech_seconds - cap_held_seconds) if cap_holds else total_speech_seconds
+                ),
             )
 
             # Build result
             failed_segments = len(segment_errors)
             successful_segments = total_segments - failed_segments
+            if cap_holds:
+                successful_segments -= len(cap_holds)
             job_outcome = _job_transcription_outcome(segment_errors)
             result = {
                 'new_memories': sorted(response['new_memories']),
@@ -2295,6 +3593,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             if content_segment_count[0] > 0:
                 try:
                     usage_seconds = int(total_speech_seconds)
+                    if cap_holds:
+                        usage_seconds = int(max(0, total_speech_seconds - cap_held_seconds))
                     should_record_usage = bool(content_id) or await run_blocking(
                         db_executor, try_mark_once, job_id, 'usage'
                     )
@@ -2306,6 +3606,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                             transcription_seconds=usage_seconds,
                             speech_seconds=usage_seconds,
                             idempotency_key=content_id,
+                            usage_metadata={"funding": "omi", "provider": sync_provider, "source": "sync_v2"},
                         )
                 except Exception as e:
                     logger.error(
@@ -2314,8 +3615,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     )
                     if content_id:
                         raise
-
             stage_timings['total_ms'] = int((time.monotonic() - pipeline_start) * 1000)
+            job_phase = 'finalize'
+            failure_phase, failure_class, failure_subtype = (
+                first_segment_failure[0] if first_segment_failure else ('none', 'none', 'none')
+            )
+            job_provider = 'unknown' if failure_phase in ('persistence', 'finalize') else sync_provider
+            job_model = 'unknown' if failure_phase in ('persistence', 'finalize') else sync_model
             final_result = {
                 'new_memories': result['new_memories'],
                 'updated_memories': result['updated_memories'],
@@ -2324,22 +3630,61 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'errors': segment_errors[:10] if segment_errors else [],
                 'stage_timings': stage_timings,
                 'outcome': job_outcome.value,
-                'provider': bounded_provider(sync_provider),
-                'model': _bounded_sync_model(sync_model),
+                'provider': bounded_provider(job_provider),
+                'model': _bounded_sync_model(job_model),
                 'lane': sync_lane,
+                **({'held_audio': True} if cap_holds else {}),
+                **({'redrive_mode': redrive_mode} if redrive_mode else {}),
             }
+            repeat_failure_fingerprint = _whole_job_persistence_fingerprint(
+                failed_segments, total_segments, persistence_failure_fingerprints
+            )
+            repeat_failure_key = 'persistent_persistence' if repeat_failure_fingerprint else None
+            if repeat_failure_key:
+                # A polling cleanup or duplicate task may release the retired
+                # claim before this worker. Carry the strike through Redis.
+                final_result['repeat_failure_key'] = repeat_failure_key
+                final_result['repeat_failure_fingerprint'] = repeat_failure_fingerprint
+            if failed_segments == total_segments == provider_invalid_failures[0] and failed_segments > 0:
+                final_result['reason_code'] = 'stt_invalid_input'
+            custody = None
             if content_id and failed_segments == 0:
+                if not cap_holds:
+                    try:
+                        custody = await run_blocking(
+                            storage_executor,
+                            add_staging_derivatives,
+                            uid,
+                            raw_staging_custody,
+                            segmented_paths,
+                        )
+                    except Exception as error:
+                        # Cleanup is optional; failing its proof retains bytes.
+                        logger.warning(
+                            'event=sync_staging_cleanup outcome=retained exception_type=%s',
+                            _bounded_exception_type(error),
+                        )
                 # The durable content ledger proves every successful segment
                 # before the WAL-visible completed status is published.
+                ledger_writer = mark_sync_content_completed
+                ledger_extra = {}
+                if custody:
+                    ledger_extra['staging_custody'] = custody
+                if cap_holds:
+                    from database.sync_cap_holds import mark_content_held
+
+                    ledger_writer = mark_content_held
+                    ledger_extra = {'hold_ids': list(cap_holds)}
                 completed_ledger = await run_blocking(
                     db_executor,
-                    mark_sync_content_completed,
+                    ledger_writer,
                     uid,
                     content_id,
                     job_id,
                     final_result,
                     run_token=active_run_lock_token,
                     run_epoch=active_run_lock_epoch,
+                    **ledger_extra,
                 )
                 if not completed_ledger:
                     raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
@@ -2352,8 +3697,19 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 job_id,
                 active_run_lock_token,
                 final_result,
+                attempt_ref=attempt_ref,
+                failure_phase=failure_phase,
+                failure_class=failure_class,
+                failure_subtype=failure_subtype,
             )
+            if content_id and failed_segments == 0 and custody:
+                await _delete_staged_blobs_async(list(segmented_paths), uid=uid, content_id=content_id, job_id=job_id)
             if content_id and failed_segments > 0:
+                failure_kwargs = (
+                    {'failure_key': repeat_failure_key, 'failure_fingerprint': repeat_failure_fingerprint}
+                    if repeat_failure_key
+                    else {}
+                )
                 if ledger_fence_active:
                     await run_blocking(
                         db_executor,
@@ -2361,30 +3717,42 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         uid,
                         content_id,
                         job_id,
+                        **failure_kwargs,
                     )
                 else:
-                    await run_blocking(db_executor, release_sync_content_claim, uid, content_id, job_id)
+                    await run_blocking(
+                        db_executor, release_sync_content_claim, uid, content_id, job_id, **failure_kwargs
+                    )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
+            job_reason = job_failure_reason(segment_errors, failure_phase, failure_class)
             await _record_sync_job_outcome_async(
                 job_outcome,
-                provider=sync_provider,
-                model=sync_model,
+                provider=job_provider,
+                model=job_model,
                 lane=sync_lane,
                 job_id=job_id,
+                failure_reason=job_reason,
             )
             job_outcome_recorded = True
 
             logger.info(
                 'event=sync_transcription_job outcome=%s status=finalized provider=%s model=%s '
-                'lane=%s successful_segments=%d total_segments=%d total_ms=%d',
-                job_outcome.value,
-                bounded_provider(sync_provider),
-                _bounded_sync_model(sync_model),
+                'lane=%s successful_segments=%d total_segments=%d total_ms=%d '
+                'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s failure_reason=%s',
+                outcome_label(job_outcome.value, job_reason),
+                bounded_provider(job_provider),
+                _bounded_sync_model(job_model),
                 _bounded_sync_lane(sync_lane),
                 successful_segments,
                 total_segments,
                 stage_timings['total_ms'],
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+                failure_phase,
+                failure_class,
+                failure_subtype,
+                job_reason.value,
             )
         except asyncio.CancelledError:
             # Never release the lock, claim, or local files under an executor
@@ -2402,14 +3770,25 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             raise
         except Exception as e:
             failure = failure_from_exception(e, provider=sync_provider)
+            failure_class = bounded_exception_class(e)
+            failure_subtype = _sync_assignment_failure_subtype(e)
+            job_reason = _sync_failure_reason(job_phase, e)
             logger.error(
-                'event=sync_transcription_job outcome=%s status=%s provider=%s model=%s ' 'lane=%s exception_type=%s',
-                failure.outcome.value,
+                'event=sync_transcription_job outcome=%s status=%s provider=%s model=%s '
+                'lane=%s exception_type=%s job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s '
+                'failure_subtype=%s failure_reason=%s',
+                outcome_label(failure.outcome.value, job_reason),
                 'retrying' if task_mode else 'failed',
                 failure.provider,
                 _bounded_sync_model(sync_model),
                 _bounded_sync_lane(sync_lane),
                 _bounded_exception_type(e),
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+                job_phase,
+                failure_class,
+                failure_subtype,
+                job_reason.value,
             )
             # Cloud Tasks owns retry/final-attempt state outside this function.
             # Counting a retry here as a terminal job would corrupt the
@@ -2422,8 +3801,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     model=sync_model,
                     lane=sync_lane,
                     job_id=job_id,
+                    failure_reason=job_reason,
                 )
             if task_mode:
+                # The handler reclassifies from the exception; carry the internal cause along.
+                setattr(e, 'sync_failure_reason', job_reason)
+                setattr(e, 'sync_failure_phase', job_phase)
                 # Let the handler decide: queued-reset + Cloud Tasks retry, or
                 # final-attempt consume. Marking failed here would be terminal.
                 raise
@@ -2438,6 +3821,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     model=sync_model,
                     lane=sync_lane,
                     run_lock_token=active_run_lock_token,
+                    attempt_ref=attempt_ref,
+                    failure_phase=job_phase,
+                    failure_class=failure_class,
+                    failure_subtype=failure_subtype,
+                    failure_reason=job_reason,
                 )
             except SyncJobRunLeaseLost:
                 preserve_retry_material = True
@@ -2467,11 +3855,15 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             set_byok_keys({})
             set_byok_uid(None)
             if not preserve_retry_material:
+                if safety_coverage_paths:
+                    await run_blocking(storage_executor, _cleanup_files, list(safety_coverage_paths))
                 await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
                 await run_blocking(storage_executor, _cleanup_files, wav_paths)
                 try:
-                    if job_dir and os.path.isdir(job_dir):
-                        await run_blocking(storage_executor, shutil.rmtree, job_dir, True)
+                    if job_dir:
+                        safe_job_dir = owned_scratch_path(job_dir)
+                        if os.path.isdir(safe_job_dir):
+                            await run_blocking(storage_executor, shutil.rmtree, safe_job_dir, True)
                 except Exception as e:
                     logger.error(
                         'event=sync_cleanup outcome=failed exception_type=%s',
@@ -2498,21 +3890,48 @@ def _stage_files_to_gcs(paths: list):
         upload_syncing_temporal_file(p)
 
 
-def _delete_staged_blobs(blob_paths: list):
-    for p in blob_paths:
-        try:
-            delete_syncing_temporal_file(p)
-        except Exception as e:
-            logger.warning('event=sync_unstage outcome=failed exception_type=%s', type(e).__name__)
+def _delete_staged_blobs(blob_paths: list[str], **custody: Any) -> int:
+    try:
+        return cleanup_sync_staging(blob_paths, **custody)
+    except Exception as e:
+        logger.warning('event=sync_unstage outcome=retained exception_type=%s', type(e).__name__)
+        return 0
 
 
-async def _delete_staged_blobs_async(blob_paths: list):
-    await run_blocking(storage_executor, _delete_staged_blobs, blob_paths)
+async def _delete_staged_blobs_async(blob_paths: list[str], **custody: Any) -> int:
+    return await run_blocking(storage_executor, _delete_staged_blobs, blob_paths, **custody)
 
 
-def _download_staged_files(blob_paths: list) -> bool:
-    """Download staged blobs back to their local paths. False if any is gone."""
-    for p in blob_paths:
-        if not download_syncing_temporal_file(p):
-            return False
-    return True
+def _download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:
+    """Bound backfill downloads and expansion before any decode allocation."""
+    if bounded_backfill and len(blob_paths) > MAX_BACKFILL_FILES:
+        raise BackfillInputLimitExceeded('backfill staged file count exceeded')
+    remaining = MAX_BACKFILL_RAW_BYTES
+    try:
+        for p in blob_paths:
+            if bounded_backfill:
+                found = download_syncing_temporal_file(p, max_bytes=remaining)
+                if found:
+                    remaining -= os.path.getsize(p)
+            else:
+                found = download_syncing_temporal_file(p)
+            if not found:
+                return False
+        if bounded_backfill:
+            validate_backfill_paths(blob_paths)
+        return True
+    except (BackfillInputLimitExceeded, BackfillStoragePressure):
+        _cleanup_files(blob_paths)
+        raise
+
+
+def finalize_recovered_sync_segment(uid: str, response: dict, private: bool) -> None:
+    """Use the same enrichment/audio finalization as ordinary sync intake."""
+    _reprocess_merged_conversations(uid, response)
+    if private:
+        _finalize_sync_audio_files(uid, response)
+
+
+def cleanup_recovered_sync_files(paths: list[str]) -> None:
+    """Coverage replay borrows the ordinary sync cleanup boundary."""
+    _cleanup_files(paths)

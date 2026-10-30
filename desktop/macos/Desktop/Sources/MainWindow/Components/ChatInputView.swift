@@ -69,7 +69,7 @@ struct ChatInputView: View {
   var onStop: (() -> Void)? = nil
   let isSending: Bool
   var isStopping: Bool = false
-  var placeholder: String = "Type a message..."
+  var placeholder: String = "Type a message…"
   @Binding var mode: ChatMode
   /// Optional text to pre-fill the input (e.g. task context). Consumed on change.
   var pendingText: Binding<String>?
@@ -283,7 +283,7 @@ struct ChatInputView: View {
     panel.allowedContentTypes = [
       .image, .jpeg, .png, .gif, .heic, .heif, .webP, .tiff, .bmp,
       .pdf, .plainText, .json, .commaSeparatedText, .html,
-      .text, .content,
+      .text, .content, .movie,
     ]
     if panel.runModal() == .OK {
       let remaining = max(0, kMaxChatAttachments - currentAttachments.count)

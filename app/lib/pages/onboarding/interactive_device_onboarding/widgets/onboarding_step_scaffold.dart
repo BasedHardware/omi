@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
+
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -28,10 +30,10 @@ class OnboardingProgressDots extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
             color: isActive
-                ? Colors.white
+                ? OmiColors.textPrimary
                 : isCompleted
-                    ? Colors.white.withValues(alpha: 0.5)
-                    : Colors.white.withValues(alpha: 0.2),
+                    ? OmiColors.textPrimary.withValues(alpha: 0.5)
+                    : OmiColors.textPrimary.withValues(alpha: 0.2),
           ),
         );
       }),
@@ -62,14 +64,14 @@ class OnboardingStepScaffold extends StatelessWidget {
           const SizedBox(height: 24),
           Text(
             title,
-            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+            style: TextStyle(color: OmiColors.textPrimary, fontSize: 28, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           if (subtitle.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
               subtitle,
-              style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 16, height: 1.4),
+              style: TextStyle(color: OmiColors.textSecondary, fontSize: 16, height: 1.4),
               textAlign: TextAlign.center,
             ),
           ],
@@ -96,8 +98,8 @@ class OnboardingContinueButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
+          backgroundColor: OmiColors.accent,
+          foregroundColor: OmiColors.onAccent,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           elevation: 0,
         ),

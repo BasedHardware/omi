@@ -90,7 +90,7 @@ final class ConversationDisplayStateTests: XCTestCase {
       segments: [segment("plenty of words to look recoverable normally")]
     )
     XCTAssertEqual(conv.displayState, .locked)
-    XCTAssertEqual(conv.displayTitle, "Locked")
+    XCTAssertEqual(conv.displayTitle, "Saved and waiting")
     XCTAssertFalse(conv.canReprocess, "Reprocess shouldn't be offered while locked")
   }
 
@@ -137,6 +137,26 @@ final class ConversationDisplayStateTests: XCTestCase {
     XCTAssertEqual(conv.displayState, .awaitingFirstOpen)
     XCTAssertEqual(conv.displayTitle, "We talked about the budget for the offsite")
     XCTAssertFalse(conv.canReprocess)
+  }
+
+  func test_legacyTitleDebrisIsRepairedForDisplayOnly() {
+    let s01234 = TranscriptSegment(
+      id: "s01234", text: "Hi", speaker: "SPEAKER_00", isUser: false, personId: nil, start: 0, end: 1)
+    let conv = makeConversation(title: "Kickoff [s01234]", status: .completed, segments: [s01234])
+    XCTAssertEqual(conv.displayState, .titled("Kickoff"))
+    XCTAssertEqual(conv.displayTitle, "Kickoff")
+    // Rename starts from the stored title.
+    XCTAssertEqual(conv.title, "Kickoff [s01234]")
+  }
+
+  func test_ordinaryBracketedTitleWordsAreKept() {
+    XCTAssertEqual(makeConversation(title: "Project [Q3]").displayState, .titled("Project [Q3]"))
+    XCTAssertEqual(makeConversation(title: "Notes [v2] [s01234]").displayState, .titled("Notes [v2]"))
+  }
+
+  func test_titleOfOnlyDebrisReadsAsUntitled() {
+    let conv = makeConversation(title: "Speaker_00 [s01234]", status: .completed)
+    XCTAssertEqual(conv.displayState, .untitledEmpty)
   }
 
   func test_deferredFlagIgnored_onceCompleted() {
@@ -207,5 +227,38 @@ final class ConversationDisplayStateTests: XCTestCase {
     )
     XCTAssertEqual(conv.displayState, .untitledRecoverable)
     XCTAssertTrue(conv.canReprocess)
+  }
+
+  func test_untitledRecoverable_neverShowsSettlingDerivedLine() {
+    let conv = makeConversation(
+      status: .completed,
+      segments: [segment("hello this is a longer transcript please title me")]
+    )
+    XCTAssertEqual(conv.displayState, .untitledRecoverable)
+    XCTAssertFalse(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: conv.displayState, isSettling: true),
+      "A first-run untitled row must not claim memories and tasks are landing"
+    )
+  }
+
+  func test_titled_showsSettlingDerivedLineDuringGrace() {
+    let conv = makeConversation(title: "Morning standup")
+    XCTAssertTrue(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: conv.displayState, isSettling: true)
+    )
+  }
+
+  func test_untitledRecoverableBadgeCopy_isTrueOnFirstRun() {
+    XCTAssertEqual(ConversationProcessingProgress.untitledRecoverableBadgeText, "Title didn't generate")
+    XCTAssertEqual(
+      ConversationProcessingProgress.untitledRecoverableBadgeHelp,
+      "The transcript was saved, but Omi couldn't write a title. Try Reprocess."
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.untitledRecoverableBadgeText.localizedCaseInsensitiveContains("needs reprocess")
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.untitledRecoverableBadgeHelp.localizedCaseInsensitiveContains("needs reprocess")
+    )
   }
 }

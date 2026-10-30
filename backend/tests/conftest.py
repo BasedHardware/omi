@@ -17,24 +17,38 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 # Product tests exercise the normal universal write-enabled deployment. Tests
-# for the global incident fence override this explicitly to ``off``/``shadow``.
-os.environ.setdefault('MEMORY_MODE', 'read')
+# for the global incident fence override this explicitly to ``off``.
+os.environ.setdefault('MEMORY_ENABLED', 'on')
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.
 os.environ.setdefault('OPENAI_API_KEY', 'fake-key-for-hermetic-tests')
 os.environ.setdefault('PERPLEXITY_API_KEY', 'fake-key-for-hermetic-tests')
+# The gateway readiness check requires the managed systemone provider key.
+os.environ.setdefault('OPENROUTER_API_KEY', 'fake-key-for-hermetic-tests')
 
 # Some unit tests exercise token counting. Stub tiktoken before any test
 # triggers an encoding lookup, avoiding a download in hermetic CI.
 if 'tiktoken' not in sys.modules:
     _tiktoken_stub = ModuleType('tiktoken')
-    _tiktoken_stub.encoding_for_model = lambda model: type('Encoding', (), {'encode': lambda self, text: list(text)})()
+    _Encoding = type('Encoding', (), {'encode': lambda self, text: list(text)})
+    _Encoding.encode_ordinary = _Encoding.encode  # Match tiktoken's token-counting API without downloads.
+    _tiktoken_stub.encoding_for_model = lambda model: _Encoding()
     sys.modules['tiktoken'] = _tiktoken_stub
 
-from testing.hermetic_network import block_outbound_network
+from testing.hermetic_network import block_local_redis, block_outbound_network
+
+
+@pytest.fixture
+def luna_model() -> str:
+    """Canonical Luna model id. Backend tests use this instead of a versioned literal."""
+    from utils.llm.model_config import LUNA_MODEL
+
+    return LUNA_MODEL
+
 
 _network_guard = None
+_redis_guard = None
 _test_file_durations = defaultdict(float)
 _test_item_durations = defaultdict(float)
 _test_item_cpu = defaultdict(float)
@@ -46,6 +60,12 @@ _UNIT_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'routers',
 )
 _FAST_UNIT_ALLOWLIST = BACKEND_DIR / 'tests' / 'fast_unit_duration_allowlist.txt'
+_ACCOUNT_DELETION_AUTHORITY_TESTS = {
+    'tests/unit/test_account_deletion_auth_fence.py',
+    'tests/unit/test_conversation_quiet_finalization.py',
+    'tests/unit/test_firestore_read_site_attribution.py',
+    'tests/unit/test_fsr_s4_caches.py',
+}
 
 
 def _env_enabled(name, default='1'):
@@ -75,6 +95,39 @@ def _read_duration_allowlist():
     return entries
 
 
+def _stub_unrelated_account_deletion_reads(item):
+    """Keep unrelated unit tests hermetic while worker fences default to active users.
+
+    The production predicate intentionally fails closed when its data-plane marker
+    cannot be read. Most tests exercise unrelated worker behavior with fake UIDs,
+    so they must not accidentally reach Firestore. Fence and marker-reader tests use
+    explicit status fakes and are left untouched.
+    """
+    test_file = _backend_relative(item.path)
+    if not _is_unit_test_path(item.path) or test_file in _ACCOUNT_DELETION_AUTHORITY_TESTS:
+        return []
+
+    originals = []
+    seen = set()
+    for module in tuple(sys.modules.values()):
+        namespace = getattr(module, '__dict__', None)
+        if namespace is None:
+            continue
+        predicate = namespace.get('account_deletion_blocks_user_work')
+        if getattr(predicate, '__module__', None) != 'database.account_deletion_marker':
+            continue
+        function_globals = getattr(predicate, '__globals__', None)
+        if function_globals is None or id(function_globals) in seen:
+            continue
+        status_reader = function_globals.get('get_user_deletion_wipe_status')
+        if not callable(status_reader):
+            continue
+        seen.add(id(function_globals))
+        originals.append((function_globals, status_reader))
+        function_globals['get_user_deletion_wipe_status'] = lambda _uid, **_kwargs: None
+    return originals
+
+
 def pytest_sessionstart(session):
     global _network_guard
     _network_guard = block_outbound_network()
@@ -89,6 +142,16 @@ def pytest_collection_finish(session):
             test_file = _backend_relative(item.path)
             if test_file is not None:
                 _collected_unit_files.add(test_file)
+    # Unit roots are hermetic by contract (CI runs them with no Redis at all),
+    # so a session that collects only unit-root files must not reach a Redis
+    # that happens to listen on the developer machine: rate-limited routes
+    # would consume real ``rl:*`` quota for fixed test uids, and that state
+    # persists across runs for the policy window. Sessions that also collect
+    # integration/e2e files keep real service access.
+    global _redis_guard
+    if session.items and all(_is_unit_test_path(item.path) for item in session.items):
+        _redis_guard = block_local_redis()
+        _redis_guard.__enter__()
 
 
 def pytest_runtest_logreport(report):
@@ -114,8 +177,13 @@ def pytest_runtest_call(item):
     runs charge once to the first test — is not misattributed as a per-test regression. The
     advisory timing summary still reports wall-clock for visibility.
     """
+    originals = _stub_unrelated_account_deletion_reads(item)
     start = time.process_time()
-    yield
+    try:
+        yield
+    finally:
+        for function_globals, status_reader in originals:
+            function_globals['get_user_deletion_wipe_status'] = status_reader
     if _is_unit_test_path(item.path):
         _test_item_cpu[item.nodeid] += time.process_time() - start
 
@@ -138,7 +206,7 @@ def _report_failed_files(terminalreporter, offenders):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    global _network_guard
+    global _network_guard, _redis_guard
     failures = _enforce_fast_unit_duration_guard(session)
     # Under xdist the guard runs inside a worker, and a worker's ``session.exitstatus``
     # is discarded by the controller -- the run's status comes from test outcomes alone.
@@ -158,6 +226,9 @@ def pytest_sessionfinish(session, exitstatus):
             terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
             _report_failed_files(terminalreporter, _xdist_duration_failures)
         session.exitstatus = 1
+    if _redis_guard is not None:
+        _redis_guard.__exit__(None, None, None)
+        _redis_guard = None
     if _network_guard is not None:
         _network_guard.__exit__(None, None, None)
         _network_guard = None

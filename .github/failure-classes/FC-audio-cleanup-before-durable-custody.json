@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "FC-audio-cleanup-before-durable-custody",
+  "violated_contract": "Routine cleanup must not destroy staging audio merely because a URL timer elapsed or a processing attempt became terminal. A successful durable projection and surviving byte-bound original archive must authorize source cleanup; malformed receipts and incident preservation windows must retain artifacts without blocking unrelated cleanup. Explicit privacy erasure overrides routine preservation.",
+  "canonical_prevention": "Store the original-byte/archive binding beside the lease-fenced completed content ledger. Route legacy staging cleanup through one receipt verifier, compare staging checksums and pin deletion generations. Apply one fail-closed capture-window policy before batch cleanup, park and flag malformed or held receipts so later independent artifacts progress, and keep privacy purge outside the hold.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_staging_custody.py",
+    "backend/tests/unit/test_batch_cleanup_custody.py",
+    "backend/tests/unit/test_batch_pipeline_privacy.py",
+    "backend/tests/integration/test_batch_pipeline_deletion_firestore.py",
+    "backend/tests/unit/test_audio_cleanup_custody.py",
+    "backend/tests/unit/test_sync_staging_lifecycle_guard.py",
+    "backend/tests/unit/test_account_deletion_operational_holds.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/staging_custody.py",
+    "backend/utils/batch_pipeline/retention.py",
+    "backend/database/batch_pipeline_purge.py",
+    "backend/database/batch_pipeline_privacy_queries.py",
+    "backend/utils/audio_cleanup_custody.py",
+    "backend/scripts/check_sync_staging_lifecycle.py"
+  ],
+  "status": "open"
+}

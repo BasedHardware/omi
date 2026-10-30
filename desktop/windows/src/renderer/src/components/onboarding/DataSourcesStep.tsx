@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { StepScaffold } from './StepScaffold'
 import { ConnectorBrandMark } from '../home/hub/connections/ConnectorBrandMark'
 import { useMemories } from '../../hooks/useMemories'
-import { useGoogleConnection } from '../../hooks/useGoogleConnection'
 import { auth } from '../../lib/firebase'
 import { toast } from '../../lib/toast'
 import { toastImportTally } from '../../lib/importToast'
@@ -24,7 +23,7 @@ import { getImportedCounts, setImportedCount } from '../../lib/onboardingImportC
 // Onboarding "Data sources" step — the Windows port of macOS's
 // OnboardingDataSourcesStepView. A curated, fixed-order list (NOT the connectors
 // marketplace) letting the user seed their second brain with more context before
-// finishing: Calendar + Email over the existing OAuth connectors, the already-run
+// finishing: Calendar over the existing OAuth connector, the already-run
 // local-file index, and paste-import of a ChatGPT / Claude memory log.
 //
 // Windows diverges from Mac in ONE deliberate way: Mac auto-runs background
@@ -59,7 +58,6 @@ export function DataSourcesStep({
     >
       <div className="w-full divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]">
         <CalendarRow />
-        <EmailRow />
         <LocalFilesRow />
         <MemoryLogRow source="chatgpt" />
         <MemoryLogRow source="claude" />
@@ -223,48 +221,6 @@ function CalendarRow(): React.JSX.Element {
         ) : (
           <Pill tone="primary" onClick={connect} disabled={connecting}>
             {connecting ? 'Waiting…' : 'Connect'}
-          </Pill>
-        )
-      }
-    />
-  )
-}
-
-// --- Email / Gmail (client-side loopback OAuth, reused from useGoogleConnection) --
-
-function EmailRow(): React.JSX.Element {
-  const { googleEnabled, status, connect, disconnect, busy } = useGoogleConnection()
-
-  if (!googleEnabled) {
-    return (
-      <Row
-        brand="gmail"
-        title="Email"
-        status="Import email history and follow-ups."
-        action={<span className="text-xs text-white/40">Requires setup</span>}
-      />
-    )
-  }
-
-  return (
-    <Row
-      brand="gmail"
-      title="Email"
-      status={
-        status.connected
-          ? status.email
-            ? `Connected as ${status.email}`
-            : 'Connected'
-          : 'Import email history and follow-ups.'
-      }
-      action={
-        status.connected ? (
-          <Pill tone="ghost" onClick={disconnect} disabled={busy}>
-            Disconnect
-          </Pill>
-        ) : (
-          <Pill tone="primary" onClick={connect} disabled={busy}>
-            {busy ? 'Connecting…' : 'Connect'}
           </Pill>
         )
       }

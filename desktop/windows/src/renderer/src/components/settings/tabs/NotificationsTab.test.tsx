@@ -91,7 +91,7 @@ describe('NotificationsTab', () => {
     expect(screen.getByText('Focus notifications')).toBeTruthy()
     expect(screen.getByText('Extract memories from your screen')).toBeTruthy()
     expect(screen.getByText('Focus glow')).toBeTruthy()
-    expect(screen.getByText('Proactive insights')).toBeTruthy()
+    expect(screen.queryByText('Proactive insights')).toBeNull()
   })
 
   it('shows the "off" hint and the level caption at frequency 0', async () => {

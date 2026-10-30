@@ -188,3 +188,83 @@ def test_parakeet_server_eof_does_not_send_finalize():
         assert fake_ws.closed is True
 
     asyncio.run(_test())
+
+
+def test_parakeet_cancellation_stops_audio_before_finalize_and_drains_transcript():
+    async def scenario():
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(b"initial audio")
+        initial_sent = asyncio.Event()
+        finalized = asyncio.Event()
+
+        class FinalizingWebSocket(FakeWebSocket):
+            async def send(self, chunk):
+                await super().send(chunk)
+                if chunk == "finalize":
+                    queue.put_nowait(b"audio arriving during drain")
+                    await asyncio.sleep(0)
+                    finalized.set()
+                else:
+                    initial_sent.set()
+
+            async def __anext__(self):
+                await finalized.wait()
+                return await super().__anext__()
+
+        ws = FinalizingWebSocket(messages=[json.dumps({"text": "final words"})])
+        transcripts = []
+        with patch("websockets.connect", return_value=ws):
+            transcriber = ParakeetTranscriber("https://test.parakeet.example")
+            task = asyncio.create_task(transcriber.run(queue, transcripts.append))
+            await asyncio.wait_for(initial_sent.wait(), timeout=1)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, timeout=1)
+
+        assert ws.sent_chunks == [b"initial audio", "finalize"]
+        assert queue.get_nowait() == b"audio arriving during drain"
+        assert transcripts == ["final words"]
+        assert ws.closed
+
+    asyncio.run(scenario())
+
+
+def test_parakeet_cancellation_joins_pending_audio_send_before_finalize():
+    async def scenario():
+        sending = asyncio.Event()
+        finalized = asyncio.Event()
+        order = []
+
+        class BlockedSendWebSocket(FakeWebSocket):
+            async def send(self, chunk):
+                if chunk == "finalize":
+                    order.append("finalize")
+                    finalized.set()
+                    await super().send(chunk)
+                else:
+                    sending.set()
+                    try:
+                        await asyncio.Event().wait()
+                    finally:
+                        order.append("audio sender stopped")
+
+            async def __anext__(self):
+                await finalized.wait()
+                return await super().__anext__()
+
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(b"pending audio")
+        ws = BlockedSendWebSocket()
+        with patch("websockets.connect", return_value=ws):
+            task = asyncio.create_task(
+                ParakeetTranscriber("https://test.parakeet.example").run(queue)
+            )
+            await asyncio.wait_for(sending.wait(), timeout=1)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, timeout=1)
+
+        assert order == ["audio sender stopped", "finalize"]
+        assert ws.closed
+
+    asyncio.run(scenario())

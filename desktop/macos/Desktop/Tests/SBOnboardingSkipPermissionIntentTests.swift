@@ -46,9 +46,17 @@ final class SBOnboardingSkipPermissionIntentTests: XCTestCase {
   private let appState = AppState()
 
   private func makeModel() -> SBOnboardingModel {
+    // These tests exercise onboarding's persisted intent, not the app-wide
+    // observer that starts capture when that intent changes. Remove it from
+    // this fixture so allowing the mic cannot reach real TCC/CoreAudio APIs.
+    if let observer = appState.audioRecordingModeObserver {
+      NotificationCenter.default.removeObserver(observer)
+      appState.audioRecordingModeObserver = nil
+    }
+
     // The model holds `appState` unowned, so the test must keep the AppState
     // alive for the model's whole lifetime.
-    SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    return SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
   }
 
   // MARK: - Microphone skip

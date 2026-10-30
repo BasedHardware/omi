@@ -35,8 +35,6 @@ Once connected, try these prompts with your AI assistant:
   </Accordion>
 </AccordionGroup>
 
----
-
 ## Integration Examples
 
 <CardGroup cols={3}>
@@ -51,8 +49,6 @@ Once connected, try these prompts with your AI assistant:
   </Card>
 </CardGroup>
 
----
-
 ## Python SDK Example
 
 This programmatic example uses the manual MCP-key fallback because the adapter receives
@@ -64,23 +60,26 @@ import asyncio
 import os
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langgraph.prebuilt import create_react_agent
+from langchain_openai import ChatOpenAI
 
 async def main():
-    async with MultiServerMCPClient({
+    # Current langchain-mcp-adapters API: the client is not a context manager —
+    # construct it and await get_tools().
+    client = MultiServerMCPClient({
         "omi": {
-            "url": "https://api.omi.me/v1/mcp/sse",
+            "url": "https://api.omi.me/v1/mcp",
             "transport": "streamable_http",
             "headers": {"Authorization": f"Bearer {os.environ['OMI_MCP_API_KEY']}"},
         }
-    }) as client:
-        tools = client.get_tools()
+    })
+    tools = await client.get_tools()
 
-        # Search memories
-        result = await client.call_tool("omi", "search_memories", {
-            "query": "morning routine",
-            "limit": 5,
-        })
-        print(result)
+    agent = create_react_agent(ChatOpenAI(model="gpt-4o-mini"), tools)
+    response = await agent.ainvoke({
+        "messages": "Search my memories for anything about my morning routine"
+    })
+    print(response["messages"][-1].content)
 
 
 if __name__ == "__main__":

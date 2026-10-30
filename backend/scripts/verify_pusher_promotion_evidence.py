@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import functools
 import hashlib
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +25,14 @@ SHA_RE = re.compile(r"^[a-f0-9]{40}$")
 SCHEMA_VERSION = 2
 RECEIPT_SCHEMA_VERSION = 1
 ROOT = Path(__file__).resolve().parents[2]
+# The composed runtime env registry carries every service's flags, so hashing
+# its bytes made any unrelated flag ruling invalidate every dev qualification.
+# The contract binds only the Pusher projection of it (see
+# pusher_runtime_env_projection); the YAML sources compose into this file and
+# CI keeps it in sync with them.
+RUNTIME_ENV_MANIFEST = ROOT / "backend/deploy/runtime_env.yaml"
+RUNTIME_ENV_ENVIRONMENTS = ("dev", "prod")
+RUNTIME_ENV_SCALAR_KEYS = ("gcp_project", "compute_project", "data_plane_project", "runtime_gcp_project", "region")
 CONTRACT_FILES = (
     ROOT / "backend/scripts/pusher_release_receipt.py",
     ROOT / "backend/scripts/pusher_semantic_probe.py",
@@ -31,10 +42,6 @@ CONTRACT_FILES = (
     ROOT / "backend/scripts/runtime_env_validation/manifest.py",
     ROOT / "backend/scripts/validate-backend-runtime-env.py",
     ROOT / "backend/config/memory_rollout.py",
-    ROOT / "backend/deploy/runtime_env/_base.yaml",
-    ROOT / "backend/deploy/runtime_env/dev.overlay.yaml",
-    ROOT / "backend/deploy/runtime_env/prod.overlay.yaml",
-    ROOT / "backend/deploy/runtime_env.yaml",
     ROOT / "backend/scripts/verify_pusher_promotion_evidence.py",
     ROOT / "backend/testing/release_fixtures/transcription-release-probe.json",
     ROOT / "backend/testing/release_fixtures/transcription-release-probe.wav",
@@ -62,9 +69,50 @@ def canonical_sha256(value: Any) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-def contract_fingerprint() -> str:
+def pusher_runtime_env_projection(manifest_path: Path = RUNTIME_ENV_MANIFEST) -> dict[str, Any]:
+    """Return the slice of the composed runtime env that Pusher deploys with.
+
+    That is the Pusher service block plus the shared backend ConfigMap, which
+    the prod job writes before Helm and the Pusher pod envFroms wholesale.
+    """
+
+    import yaml  # Lazy: the workflow installs PyYAML before it runs this verifier.
+
+    loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+    manifest = yaml.load(manifest_path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506 - safe loader
+    environments = manifest.get("environments") if isinstance(manifest, dict) else None
+    if not isinstance(environments, dict):
+        raise EvidenceError(f"{manifest_path}: missing environments mapping")
+    projection: dict[str, Any] = {"schema_version": manifest.get("schema_version")}
+    for name in RUNTIME_ENV_ENVIRONMENTS:
+        environment = environments.get(name)
+        gke = environment.get("gke") if isinstance(environment, dict) else None
+        if not isinstance(gke, dict) or not isinstance(gke.get("pusher"), dict):
+            raise EvidenceError(f"{manifest_path}: environments.{name}.gke.pusher is missing")
+        if not isinstance(gke.get("config_map"), dict):
+            raise EvidenceError(f"{manifest_path}: environments.{name}.gke.config_map is missing")
+        projection[name] = {
+            "pusher": gke["pusher"],
+            "config_map": gke["config_map"],
+            **{key: environment.get(key) for key in RUNTIME_ENV_SCALAR_KEYS},
+        }
+    return projection
+
+
+@functools.lru_cache(maxsize=4)
+def _pusher_runtime_env_sha256(manifest_path: Path) -> str:
+    # Cached as an immutable digest: the registry is large and validate() runs per phase.
+    return canonical_sha256(pusher_runtime_env_projection(manifest_path))
+
+
+def contract_fingerprint(manifest_path: Path = RUNTIME_ENV_MANIFEST) -> str:
     return canonical_sha256(
-        {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in CONTRACT_FILES}
+        {
+            "files": {
+                str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in CONTRACT_FILES
+            },
+            "pusher_runtime_env": _pusher_runtime_env_sha256(manifest_path),
+        }
     )
 
 
@@ -101,8 +149,21 @@ def _validate_semantic_probe(probe: Any, *, source_sha: Any, digest: Any, deploy
         "consumer_readback",
         "live_segment_window",
     }
-    if set(probe) != expected_fields:
+    if not expected_fields <= set(probe) or set(probe) - expected_fields - {"word_counts"}:
         errors.append("semantic probe evidence has an unexpected schema")
+    if "word_counts" in probe:
+        word_counts = probe["word_counts"]
+        if (
+            not isinstance(word_counts, dict)
+            or set(word_counts) != {"live", "expected"}
+            or any(
+                not isinstance(word_counts.get(key), int)
+                or isinstance(word_counts.get(key), bool)
+                or word_counts[key] < 1
+                for key in ("live", "expected")
+            )
+        ):
+            errors.append("semantic probe word_counts must contain positive live and expected integers")
     if probe.get("schema_version") != 1:
         errors.append("semantic probe evidence must use schema_version=1")
     if probe.get("synthetic_uid_class") != "firebase_release_probe":
@@ -211,20 +272,36 @@ def _validate_canary(
     )
     identity = canary.get("deployment_identity") if isinstance(canary.get("deployment_identity"), dict) else {}
     listener_identity = identity.get("listener") if isinstance(identity.get("listener"), dict) else {}
+    pusher_pods = pusher_identity.get("pods")
     if (
         canary_deployment_receipt.get("environment") != "prod"
+        or canary_deployment_receipt.get("run_id") != expected_canary_run_id
         or canary_deployment_receipt.get("source_sha") != source_sha
         or canary_image.get("digest") != digest
         or identity.get("pusher") != pusher_identity
+        or pusher_identity.get("namespace") != "prod-omi-backend"
         or pusher_identity.get("replicas") != 1
         or pusher_identity.get("ready_replicas") != 1
-        or not str(pusher_identity.get("deployment_name", "")).startswith("prod-omi-pusher-canary-")
+        or pusher_identity.get("deployment_name") != f"prod-omi-pusher-canary-{expected_canary_run_id}"
+        or not isinstance(pusher_pods, list)
+        or len(pusher_pods) != 1
+        or any(
+            not isinstance(pod, dict)
+            or set(pod) != {"name", "uid", "image_id"}
+            or not isinstance(pod.get("name"), str)
+            or not pod["name"]
+            or not isinstance(pod.get("uid"), str)
+            or not pod["uid"]
+            or not isinstance(pod.get("image_id"), str)
+            or not pod["image_id"].endswith(f"@{digest}")
+            for pod in pusher_pods
+        )
     ):
         errors.append("production canary does not prove one exact isolated candidate Pusher pod")
     if (
         listener_identity.get("ordinary_service_selector_excluded") is not True
         or listener_identity.get("pusher_url_class") != "isolated_cluster_service"
-        or not str(listener_identity.get("deployment_name", "")).startswith("prod-omi-listener-canary-")
+        or listener_identity.get("deployment_name") != f"prod-omi-listener-canary-{expected_canary_run_id}"
         or not isinstance(listener_identity.get("runtime_image"), str)
         or "@sha256:" not in listener_identity["runtime_image"]
         or not listener_identity.get("deployment_uid")
@@ -303,7 +380,7 @@ def _validate_canary(
     if canary_run.get("status") == "completed" and canary_run.get("conclusion") != "success":
         errors.append("production canary receipt run did not complete successfully")
     if canary_run.get("head_sha") != source_sha:
-        errors.append("production canary receipt run source does not match the qualified source")
+        errors.append("production canary receipt run source does not match the checked-out production source")
     return errors
 
 
@@ -338,7 +415,7 @@ def _validate_final_deployment(
     image = final_receipt.get("image") if isinstance(final_receipt.get("image"), dict) else {}
     identity = final_receipt.get("live_identity") if isinstance(final_receipt.get("live_identity"), dict) else {}
     if final_receipt.get("environment") != "prod" or final_receipt.get("source_sha") != source_sha:
-        errors.append("final deployment receipt does not match the qualified production source")
+        errors.append("final deployment receipt does not match the checked-out production source")
     if image != {"repository": repository, "digest": digest}:
         errors.append("final deployment receipt does not match the exact promoted image")
     if final_receipt.get("run_id") != run_id:
@@ -366,6 +443,69 @@ def _validate_final_deployment(
     return errors
 
 
+def _verify_qualified_source_closure(
+    qualified_sha: str,
+    checked_out_sha: str,
+    checkout_repository: Path,
+    image_repository: Any = "",
+) -> list[str]:
+    closure_script = ROOT / "backend/scripts/verify_pusher_source_closure.py"
+    command = [sys.executable, str(closure_script)]
+    # Plan B B3: a qualification naming the backend-pusher role image compares
+    # that image's closure (Dockerfile.roles pusher target), not the fat one.
+    if isinstance(image_repository, str) and image_repository:
+        command += ["--image-repository", image_repository]
+    try:
+        closure = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return [f"could not derive the Pusher source closure: {exc}"]
+    if closure.returncode != 0:
+        return [f"could not derive the Pusher source closure (exit {closure.returncode})"]
+    paths = closure.stdout.split()
+    if not paths:
+        return ["Pusher source closure derivation returned no paths"]
+    try:
+        ancestry = subprocess.run(
+            ["git", "-C", str(checkout_repository), "merge-base", "--is-ancestor", qualified_sha, checked_out_sha],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return [f"could not check qualified source ancestry in the production checkout: {exc}"]
+    if ancestry.returncode == 1:
+        return [
+            f"qualified development source {qualified_sha} is not an ancestor of the checked-out "
+            f"production source {checked_out_sha}"
+        ]
+    if ancestry.returncode != 0:
+        return [
+            f"could not check qualified source ancestry in the production checkout (git exit {ancestry.returncode})"
+        ]
+    try:
+        diff = subprocess.run(
+            ["git", "-C", str(checkout_repository), "diff", "--quiet", qualified_sha, checked_out_sha, "--", *paths],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return [f"could not compare the Pusher source closure: {exc}"]
+    if diff.returncode == 1:
+        return [
+            f"Pusher image source or chart changed between qualified source {qualified_sha} and checked-out "
+            f"production source {checked_out_sha}; run a new development qualification"
+        ]
+    if diff.returncode != 0:
+        return [f"could not compare the Pusher source closure (git exit {diff.returncode})"]
+    return []
+
+
 def validate(
     evidence: dict[str, Any],
     deployment_receipt: dict[str, Any],
@@ -374,21 +514,28 @@ def validate(
     run: dict[str, Any],
     *,
     expected_digest: str,
-    expected_repository: str,
+    expected_repository: str | tuple[str, ...] | list[str],
     expected_workflow_id: int,
     expected_run_id: int,
     expected_canary_workflow_id: int,
     expected_canary_run_id: int,
+    expected_canary_source_sha: str = "",
     canary_deployment_receipt: dict[str, Any] | None = None,
     canary_semantic_evidence: dict[str, Any] | None = None,
     final_deployment_receipt: dict[str, Any] | None = None,
     expected_final_repository: str = "",
     require_canary: bool = True,
     require_final: bool = False,
+    checkout_repository: Path = ROOT,
 ) -> list[str]:
     """Return every missing immutable-promotion proof without exposing secrets."""
 
     errors: list[str] = []
+    # Plan B B3: the development qualification may name the fat ``pusher`` image
+    # or its ``backend-pusher`` role image; the receipt must name the same one.
+    admitted_repositories = (
+        (expected_repository,) if isinstance(expected_repository, str) else tuple(expected_repository)
+    )
     expected_fields = {
         "schema_version",
         "qualification_status",
@@ -425,8 +572,9 @@ def validate(
     if not DIGEST_RE.fullmatch(expected_digest):
         errors.append("requested production digest must be an exact sha256 digest")
 
-    if evidence.get("image_repository") != expected_repository:
-        errors.append("qualification evidence repository does not match the development Pusher registry")
+    qualified_repository = evidence.get("image_repository")
+    if qualified_repository not in admitted_repositories:
+        errors.append("qualification evidence repository is not an admitted development Pusher registry")
     if evidence.get("run_id") != expected_run_id:
         errors.append("qualification evidence run_id does not match the selected workflow run")
 
@@ -465,7 +613,7 @@ def validate(
     if deployment_receipt.get("environment") != "development":
         errors.append("deployment receipt must describe development")
     receipt_image = deployment_receipt.get("image") if isinstance(deployment_receipt.get("image"), dict) else {}
-    if receipt_image != {"repository": expected_repository, "digest": expected_digest}:
+    if receipt_image != {"repository": qualified_repository, "digest": expected_digest}:
         errors.append("deployment receipt image does not match the exact qualified candidate")
     if deployment_receipt.get("source_sha") != source_sha or deployment_receipt.get("run_id") != expected_run_id:
         errors.append("deployment receipt source or run does not match qualification evidence")
@@ -517,7 +665,11 @@ def validate(
         ):
             errors.append("deployment receipt does not prove a fully ready live candidate identity")
     if evidence.get("contract_sha256") != contract_fingerprint():
-        errors.append("qualification evidence contract does not match the current promotion contract")
+        errors.append(
+            "qualification evidence contract does not match the current promotion contract; "
+            "a promotion script, workflow, or the Pusher runtime env changed since the dev qualification, "
+            "so select a dev qualification run from the current main"
+        )
     errors.extend(
         _validate_semantic_probe(
             evidence.get("semantic_probe"),
@@ -526,6 +678,10 @@ def validate(
             deployment_receipt_sha256=receipt_sha256,
         )
     )
+    if (require_canary or require_final) and (
+        not isinstance(expected_canary_source_sha, str) or not SHA_RE.fullmatch(expected_canary_source_sha)
+    ):
+        errors.append("expected canary source must be a full lowercase SHA naming the checked-out production source")
     if require_canary:
         errors.extend(
             _validate_canary(
@@ -533,7 +689,7 @@ def validate(
                 canary_semantic_evidence or {},
                 canary_run,
                 canary_deployment_receipt or {},
-                source_sha=source_sha,
+                source_sha=expected_canary_source_sha,
                 digest=digest,
                 qualification_deployment_receipt_sha256=receipt_sha256,
                 expected_canary_workflow_id=expected_canary_workflow_id,
@@ -545,10 +701,26 @@ def validate(
             _validate_final_deployment(
                 final_deployment_receipt,
                 canary_deployment_receipt or {},
-                source_sha=source_sha,
+                source_sha=expected_canary_source_sha,
                 digest=digest,
                 repository=expected_final_repository,
                 run_id=expected_canary_run_id,
+            )
+        )
+    if (
+        (require_canary or require_final)
+        and isinstance(source_sha, str)
+        and SHA_RE.fullmatch(source_sha)
+        and isinstance(expected_canary_source_sha, str)
+        and SHA_RE.fullmatch(expected_canary_source_sha)
+        and source_sha != expected_canary_source_sha
+    ):
+        errors.extend(
+            _verify_qualified_source_closure(
+                source_sha,
+                expected_canary_source_sha,
+                checkout_repository,
+                image_repository=evidence.get("image_repository"),
             )
         )
     return errors
@@ -567,11 +739,16 @@ def main() -> int:
     parser.add_argument("--expected-final-repository", default="")
     parser.add_argument("--run-json", type=Path, required=True)
     parser.add_argument("--expected-digest", required=True)
-    parser.add_argument("--expected-repository", required=True)
+    parser.add_argument(
+        "--expected-repository",
+        required=True,
+        help="admitted development registries, comma-separated (pusher, backend-pusher)",
+    )
     parser.add_argument("--expected-workflow-id", type=int, required=True)
     parser.add_argument("--expected-run-id", type=int, required=True)
     parser.add_argument("--expected-canary-workflow-id", type=int, default=0)
     parser.add_argument("--expected-canary-run-id", type=int, default=0)
+    parser.add_argument("--expected-canary-source-sha", default="")
     args = parser.parse_args()
 
     try:
@@ -582,11 +759,12 @@ def main() -> int:
             load_json(args.canary_run_json) if args.canary_run_json else {},
             load_json(args.run_json),
             expected_digest=args.expected_digest,
-            expected_repository=args.expected_repository,
+            expected_repository=tuple(item for item in args.expected_repository.split(",") if item),
             expected_workflow_id=args.expected_workflow_id,
             expected_run_id=args.expected_run_id,
             expected_canary_workflow_id=args.expected_canary_workflow_id,
             expected_canary_run_id=args.expected_canary_run_id,
+            expected_canary_source_sha=args.expected_canary_source_sha,
             canary_deployment_receipt=(
                 load_json(args.canary_deployment_receipt) if args.canary_deployment_receipt else None
             ),

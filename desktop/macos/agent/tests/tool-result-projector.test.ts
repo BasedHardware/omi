@@ -38,7 +38,7 @@ describe("manifest-owned tool result projection", () => {
     }
   });
 
-  it("ranks purpose matches first only when the flag-controlled input is enabled", () => {
+  it("keeps original item order even when a purpose is supplied", () => {
     const raw = JSON.stringify({ sections: [{
       name: "conversations",
       total: 2,
@@ -48,23 +48,6 @@ describe("manifest-owned tool result projection", () => {
       toolName: "get_conversations",
       result: raw,
       purpose: "interesting person Ada",
-      purposeRankingEnabled: true,
-      maxBytes: 300,
-    });
-    expect(result.text.indexOf("Ada Lovelace")).toBeLessThan(result.text.indexOf("routine planning"));
-  });
-
-  it("keeps manifest priority order when the contract does not opt into purpose ranking", () => {
-    const raw = JSON.stringify({ sections: [{
-      name: "results",
-      total: 2,
-      items: ["routine planning", "Met Ada Lovelace at the compiler meetup"],
-    }] });
-    const result = projectToolResultPayload({
-      toolName: "capture_screen",
-      result: raw,
-      purpose: "interesting person Ada",
-      purposeRankingEnabled: true,
       maxBytes: 300,
     });
     expect(result.text.indexOf("routine planning")).toBeLessThan(result.text.indexOf("Ada Lovelace"));

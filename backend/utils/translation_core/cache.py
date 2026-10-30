@@ -3,17 +3,40 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import hashlib
 from collections import OrderedDict
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Callable, Protocol, cast
 
 import redis
-from redis.exceptions import RedisError
+from redis.exceptions import OutOfMemoryError, RedisError
 
 from config.translation import TranslationProfile
 from utils.translation_core.metrics import TranslationMetrics
+from utils.llm.model_config import LUNA_MODEL
+
+logger = logging.getLogger(__name__)
+
+
+def _record_write_skipped(exc: RedisError) -> None:
+    reason = 'capacity_full' if isinstance(exc, OutOfMemoryError) else 'other'
+    logger.warning('translation cache write skipped reason=%s', reason)
+    try:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='other',
+            from_mode='cache_write',
+            to_mode='skip',
+            reason=reason,
+            outcome='degraded',
+            log=logger,
+        )
+    except Exception:
+        pass
 
 
 @dataclass(frozen=True)
@@ -89,7 +112,8 @@ class RedisTranslationStore:
                 encoded,
                 ex=ttl_seconds,
             )
-        except RedisError:
+        except RedisError as exc:
+            _record_write_skipped(exc)
             return None
 
     def is_negative(self, fingerprint: str, target_language: str) -> bool:
@@ -111,7 +135,8 @@ class RedisTranslationStore:
                 '1',
                 ex=ttl_seconds,
             )
-        except RedisError:
+        except RedisError as exc:
+            _record_write_skipped(exc)
             return None
 
     def _get_configured_client(self) -> Any | None:
@@ -235,3 +260,23 @@ def _negative_key(fingerprint: str, target_language: str) -> str:
 
 def _memory_key(fingerprint: str, target_language: str) -> str:
     return f'{fingerprint}:{target_language}'
+
+
+def viewed_cache_fingerprint(
+    text_fingerprint: str, source_language: str, target_language: str, mode: str, policy_version: str
+) -> str:
+    """Partition both LRU and Redis without changing legacy key construction."""
+    identity = json.dumps(
+        [
+            'viewed',
+            policy_version,
+            LUNA_MODEL,
+            'prompt-v1',
+            source_language.strip().lower() or 'detect-v1',
+            target_language.strip().lower(),
+            mode,
+            text_fingerprint,
+        ],
+        separators=(',', ':'),
+    )
+    return 'viewed-v1-' + hashlib.sha256(identity.encode('utf-8')).hexdigest()

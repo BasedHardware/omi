@@ -214,6 +214,23 @@ enum MemoryBankConnector {
 
     let codexHome = home.appendingPathComponent(".codex", isDirectory: true)
     try FileManager.default.createDirectory(at: codexHome, withIntermediateDirectories: true, attributes: nil)
+    let config = codexHome.appendingPathComponent("config.toml")
+    // In-memory rollback point (never logged — it holds the key material).
+    // An existing-but-unreadable file fails closed here, before any mutation.
+    let snapshot = try codexConfigSnapshot(at: config)
+    // `codex mcp add` refuses an existing server name, so an owned entry must be
+    // removed first; a remove failure must not be followed by a blind add.
+    if snapshot.hasOmiEntry {
+      do {
+        _ = try runProcess(
+          executable: cliPath,
+          arguments: ["mcp", "remove", "omi-memory"],
+          environment: processEnvironment(extra: ["CODEX_HOME": codexHome.path]))
+      } catch {
+        throw ConnectError.invalidConfig(
+          "Codex refused to remove the existing Omi entry: \(sanitizeCommandError(error.localizedDescription))")
+      }
+    }
     do {
       _ = try runProcess(
         executable: cliPath,
@@ -224,8 +241,16 @@ enum MemoryBankConnector {
         ],
         environment: processEnvironment(extra: ["CODEX_HOME": codexHome.path]))
     } catch {
+      let addMessage = sanitizeCommandError(error.localizedDescription)
+      do {
+        try restoreCodexConfig(snapshot, at: config)
+      } catch {
+        throw ConnectError.invalidConfig(
+          "Codex rejected the connection update (\(addMessage)), and restoring the previous config failed: \(sanitizeCommandError(error.localizedDescription))"
+        )
+      }
       throw ConnectError.invalidConfig(
-        "Codex rejected the connection update: \(sanitizeCommandError(error.localizedDescription))")
+        "Codex rejected the connection update: \(addMessage)")
     }
 
     guard MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: key) else {
@@ -233,6 +258,68 @@ enum MemoryBankConnector {
         "Codex was updated, but Omi could not verify the connection.")
     }
     return "Codex is now connected."
+  }
+
+  private struct CodexConfigSnapshot {
+    /// Original config.toml bytes (nil when the file didn't exist) — held only
+    /// in memory, never written to a backup file or logged.
+    let data: Data?
+    let posixPermissions: NSNumber?
+    /// Whether the file declared an owned `[mcp_servers.omi-memory]` table —
+    /// decides whether `codex mcp remove` must run before `add`.
+    let hasOmiEntry: Bool
+  }
+
+  private static func codexConfigSnapshot(at url: URL) throws -> CodexConfigSnapshot {
+    let fm = FileManager.default
+    var isDirectory: ObjCBool = false
+    // fileExists misses a broken symlink; checking the link itself keeps an
+    // unreadable-but-present path from being misclassified as absent.
+    let isSymlink = (try? fm.destinationOfSymbolicLink(atPath: url.path)) != nil
+    let exists = fm.fileExists(atPath: url.path, isDirectory: &isDirectory) || isSymlink
+    let data: Data?
+    if exists {
+      guard let read = try? Data(contentsOf: url) else {
+        throw ConnectError.invalidConfig(
+          "Codex config exists but could not be read: \(displayPath(for: url)). Fix it, then try again.")
+      }
+      data = read
+    } else {
+      data = nil
+    }
+    let mode = (try? fm.attributesOfItem(atPath: url.path))?[.posixPermissions] as? NSNumber
+    return CodexConfigSnapshot(
+      data: data,
+      posixPermissions: mode,
+      hasOmiEntry: data.map(codexConfigContainsOmiEntry) ?? false)
+  }
+
+  private static func codexConfigContainsOmiEntry(_ data: Data) -> Bool {
+    guard let content = String(data: data, encoding: .utf8) else { return false }
+    for rawLine in content.components(separatedBy: .newlines) {
+      let line = rawLine.trimmingCharacters(in: .whitespaces)
+      guard !line.hasPrefix("#") else { continue }
+      if line.range(
+        of: #"^\[mcp_servers\.(omi-memory|"omi-memory"|'omi-memory')\]"#,
+        options: .regularExpression) != nil
+      {
+        return true
+      }
+    }
+    return false
+  }
+
+  private static func restoreCodexConfig(_ snapshot: CodexConfigSnapshot, at url: URL) throws {
+    let fm = FileManager.default
+    if let data = snapshot.data {
+      let target = url.resolvingSymlinksInPath()
+      try data.write(to: target, options: [.atomic])
+      if let mode = snapshot.posixPermissions {
+        try fm.setAttributes([.posixPermissions: mode], ofItemAtPath: target.path)
+      }
+    } else if fm.fileExists(atPath: url.path) {
+      try fm.removeItem(at: url)
+    }
   }
 
   // MARK: - OpenClaw (mcp.servers + workspace SOUL.md)

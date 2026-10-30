@@ -49,8 +49,6 @@ unavailable.
 `code` is the stable programmatic signal. `reason` provides a diagnostic for the current server-side gate and
 must not be treated as a key or scope error.
 
----
-
 ## Get Memories
 
 <Card title="GET /v1/dev/user/memories" icon="download" color="#22c55e" horizontal>
@@ -191,6 +189,18 @@ memory does not exist (or cannot be represented in the current shape).
     | `visibility` | string | No | `public` or `private` (default: `private`) |
     | `tags` | array | No | List of tags |
   </Accordion>
+  <Accordion title="Duplicates and retries" icon="rotate" defaultOpen={true}>
+    A memory is identified by its text. Sending text the user already has returns that memory unchanged, with the same `id`, so a create is safe to retry without any extra header.
+
+    | Request | Result |
+    |---------|--------|
+    | Text the user does not have yet | A new memory |
+    | Text the user already has | `200` with the existing memory; nothing new is stored |
+    | Same text with different `category`, `visibility`, or `tags` | `200` with the existing memory as stored; the new fields are **not** applied |
+    | Same text after the memory was deleted | A new memory with a new `id` |
+
+    Matching ignores leading and trailing whitespace and is case-sensitive. To change a memory you already created, use [Update Memory](#update-memory) with its `id`.
+  </Accordion>
 </AccordionGroup>
 
 <Tabs>
@@ -263,8 +273,6 @@ memory does not exist (or cannot be represented in the current shape).
   ```
 </Accordion>
 
----
-
 ## Create Memories (Batch)
 
 <Card title="POST /v1/dev/user/memories/batch" icon="layer-group" color="#3b82f6" horizontal>
@@ -278,6 +286,8 @@ memory does not exist (or cannot be represented in the current shape).
     | `memories` | array | **Yes** | List of memory objects (max 25) |
 
     Each memory object accepts the same fields as the single create endpoint.
+
+    Items follow the same duplicate rule: text the user already has returns the existing memory at that position, so retrying a batch never stores anything twice. `created_count` is the number of memories returned, including existing ones.
   </Accordion>
 </AccordionGroup>
 
@@ -351,8 +361,6 @@ memory does not exist (or cannot be represented in the current shape).
   }
   ```
 </Accordion>
-
----
 
 ## Update Memory
 
@@ -443,8 +451,6 @@ memory does not exist (or cannot be represented in the current shape).
   ```
 </Accordion>
 
----
-
 ## Delete Memory
 
 <Card title="DELETE /v1/dev/user/memories/{memory_id}" icon="trash" color="#ef4444" horizontal>
@@ -508,20 +514,16 @@ memory does not exist (or cannot be represented in the current shape).
 This action is permanent. Deleted memories cannot be recovered.
 </Warning>
 
----
-
 ## What Are Memories?
 
 <Info>
-**Memories are timeless facts about the user** — preferences, relationships, personal details, and notable insights. They are NOT for notes, tasks, or time-sensitive information.
+**Memories are timeless facts about the user.** They cover preferences, relationships, personal details, and notable insights. They are NOT for notes, tasks, or time-sensitive information.
 
 - **Good memories**: "User is vegetarian", "User's sister Sarah lives in Portland", "User prefers async communication"
 - **Bad memories**: "Meeting on March 15th", "Call dentist tomorrow" (these are action items or conversations)
 
-For notes, meeting summaries, or imported text content, use the [Conversations API](/doc/developer/api/conversations) instead — it automatically extracts memories and action items.
+For notes, meeting summaries, or imported text content, use the [Conversations API](/doc/developer/api/conversations) instead. It automatically extracts memories and action items.
 </Info>
-
----
 
 ## Use Case: Store User Preferences
 
@@ -583,8 +585,6 @@ Import known facts and preferences about the user:
   </Tab>
 </Tabs>
 
----
-
 ## Memory Categories Explained
 
 <CardGroup cols={2}>
@@ -592,6 +592,28 @@ Import known facts and preferences about the user:
     Useful context for the AI: preferences, work details, relationships, logistical info. Example: "User prefers dark mode"
   </Card>
   <Card title="interesting" icon="star" color="#f59e0b">
-    Shareable, notable facts — things the user would excitedly tell someone at dinner. Example: "User climbed Mount Kilimanjaro"
+    Shareable, notable facts: things the user would excitedly tell someone at dinner. Example: "User climbed Mount Kilimanjaro"
   </Card>
 </CardGroup>
+
+## Pagination and search coverage
+
+List responses remain arrays. `limit` is clamped to **1–1000**. Read
+`X-Omi-Effective-Limit`, `X-Omi-Has-More`, and `X-Omi-Next-Offset` for continuation.
+`X-Omi-List-Truncated: true` signals that the read budget ran out. An empty
+truncated page cannot guarantee progress; narrow the category filter or reduce
+the page size. Unknown list parameters are ignored and counted in `X-Omi-Ignored-Query-Params`, except `query`, which returns 400; use the search route.
+
+`GET /v1/dev/user/memories/search?query=budget&limit=10` returns
+`{memories, effective_limit, search_coverage, message}` using the same eligible
+memory search as MCP. Limit is 1–20. It requires `memories:read`, the persisted
+app/key memory grant, and account readiness. Empty indexed results do not prove
+absence: inspect the memory list for unindexed content. Eligibility and privacy
+rules apply to both paths; archive is excluded by default.
+
+The existing `/v1/dev/user/memories/vector/search` remains available and reports
+`effective_limit` (at most 20) plus coverage and an empty-result message.
+
+The compatibility list has a 5000-item `offset + limit` window. Requests beyond
+it return 413. A full page ending exactly at that boundary reports truncated
+coverage without a next offset; it cannot certify that the account ends there.

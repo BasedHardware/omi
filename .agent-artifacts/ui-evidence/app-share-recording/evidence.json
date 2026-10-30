@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-recording-share-row.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync: a recording opened to its files, with Share Recording at the top (visual audit scenario conversations-offline-sync-recording-files)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

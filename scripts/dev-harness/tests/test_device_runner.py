@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
+from typing import Sequence
 
 import pytest
 
@@ -36,8 +38,35 @@ class FakeRunner:
         joined = " ".join(command)
         for needle, response in self.responses.items():
             if needle in joined:
+                if "--json-output" in command and response[0] == 0:
+                    Path(command[command.index("--json-output") + 1]).write_text(response[1])
+                    return 0, "human-readable output is deliberately ignored"
                 return response
+        if "--json-output" in command:
+            Path(command[command.index("--json-output") + 1]).write_text(ios_inventory())
         return 0, ""
+
+
+def ios_inventory(*devices: dict) -> str:
+    return json.dumps({"result": {"devices": list(devices)}})
+
+
+def ios_device(udid="00008110-000123456789ABCD", *, modern=False, **hardware):
+    groups = {
+        "hardwareProperties": {
+            "udid": udid,
+            "platform": "iOS",
+            "reality": "physical",
+            "deviceType": "iPhone",
+            "marketingName": "iPhone 15 Pro Max",
+            **hardware,
+        },
+        "deviceProperties": {"name": "Test Mac phone", "bootState": "booted"},
+        "connectionProperties": {"pairingState": "paired", "transportType": "wired", "tunnelState": "disconnected"},
+    }
+    if modern:
+        return {"properties": dict(zip(("hardware", "state", "connection"), groups.values()))}
+    return groups
 
 
 def _register_and_lease(env: dict, platform: str = "android", device_id: str = "TESTPHONE01") -> dict:
@@ -79,25 +108,40 @@ class TestDoctor:
         assert report["checks"][0]["status"] == "ready"
 
     def test_ios_no_device_is_operator_action(self, tmp_path: Path, env: dict) -> None:
-        runner = FakeRunner({"list devices": (0, "No devices found.")})
+        runner = FakeRunner({"list devices": (0, ios_inventory())})
         report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(runner), env=env)
         check = report["checks"][0]
         assert check["status"] == "operator-action-needed"
         assert "Developer Mode" in check["remedy"]
 
-    def test_ios_dashed_separator_row_is_not_a_device(self, tmp_path: Path, env: dict) -> None:
-        runner = FakeRunner(
-            {
-                "list devices": (
-                    0,
-                    "Name           Hostname   Identifier                                    State               Model\n"
-                    "----------------------------   --------   -------------------------------------------   ------------------\n"
-                    "David's iPhone 15                         00008130-00060D893AE8001C (UDID)              available (paired)\n",
-                )
-            }
-        )
+    @pytest.mark.parametrize("modern", [False, True])
+    def test_ios_only_physical_paired_phones_and_table_names_do_not_matter(self, env: dict, modern: bool) -> None:
+        phone = ios_device(modern=modern)
+        simulator = ios_device("SIMULATED-1234", modern=modern, reality="simulated")
+        watch = ios_device("WATCH-1234", modern=modern, platform="watchOS", deviceType="appleWatch")
+        mac = ios_device("MAC-1234", modern=modern, platform="macOS", deviceType="mac")
+        unknown = ios_device("UNKNOWN-1234", modern=modern, reality=None)
+        runner = FakeRunner({"list devices": (0, ios_inventory(watch, simulator, phone, mac, unknown))})
         report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(runner), env=env)
-        assert [c["check"] for c in report["checks"]] == ["ios.device.00008130-00060D893AE8001C"]
+        assert [c["check"] for c in report["checks"]] == ["ios.device.00008110-000123456789ABCD"]
+        assert "--json-output" in runner.commands[0]
+
+    @pytest.mark.parametrize(
+        "payload", ["not json", "{}", '{"result":{"devices":{}}}', '{"result":{"devices":[null]}}']
+    )
+    def test_ios_malformed_inventory_is_tooling_failure_not_no_devices(self, env: dict, payload: str) -> None:
+        runner = FakeRunner({"list devices": (0, payload)})
+        report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(runner), env=env)
+        assert report["checks"][0]["check"] == "ios.tooling"
+        assert report["checks"][0]["status"] == "agent-remediable"
+
+    def test_ios_unpaired_or_shutdown_devices_are_not_candidates(self) -> None:
+        unpaired = ios_device()
+        unpaired["connectionProperties"]["pairingState"] = "unpaired"
+        shutdown = ios_device("SHUTDOWN-1234")
+        shutdown["deviceProperties"]["bootState"] = "shutdown"
+        runner = FakeRunner({"list devices": (0, ios_inventory(unpaired, shutdown))})
+        assert dr.IosTooling(runner).connected() == []
 
     def test_missing_adb_binary_is_agent_remediable_not_a_traceback(self, tmp_path: Path, env: dict) -> None:
         """A runner that raises FileNotFoundError (raw subprocess) must not
@@ -125,6 +169,152 @@ class TestDoctor:
         ios = next(c for c in report["checks"] if c["check"] == "ios.tooling")
         assert ios["status"] == "agent-remediable"
         assert "xcrun" in ios["detail"] or "devicectl" in ios["detail"]
+
+    def test_pending_xcode_first_launch_is_operator_action_not_agent_remediable(self, env: dict) -> None:
+        """Privileged install/license work is an operator action per contract.
+
+        The CLI default runner diagnoses a pending Xcode first launch inside an
+        xcrun timeout with the shared marker; device_doctor must classify that
+        as operator-action-needed, not the blanket agent-remediable remedy.
+        """
+
+        def hung(_command: Sequence[str]) -> tuple[int, str]:
+            raise dr.DeviceRunnerError(
+                "devicectl list devices timed out after 180s. "
+                f"{dr.XCODE_FIRST_LAUNCH_PENDING_MARKER}; completing it requires"
+                " admin rights (operator action)."
+            )
+
+        report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(hung), env=env)
+        ios = report["checks"][0]
+        assert ios["check"] == "ios.tooling"
+        assert ios["status"] == "operator-action-needed"
+        assert "sudo xcodebuild -runFirstLaunch" in ios["remedy"]
+
+    def test_real_xcrun_timeout_diagnosis_flows_through_doctor_as_operator_action(
+        self, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: the runner's actual timeout diagnosis drives the doctor.
+
+        An xcrun hang whose first-launch probe reports pending produces the
+        shared marker via ms._default_device_runner; IosTooling surfaces it as
+        a DeviceRunnerError; device_doctor must classify it as
+        operator-action-needed. This pins the wording coupling between the two
+        modules: editing the diagnosis or the marker fails here.
+        """
+
+        class Probe:
+            returncode = 1  # first launch pending
+
+        def run(command: Sequence[str], **_kwargs: object):
+            if command[0] == "xcrun":
+                raise subprocess.TimeoutExpired(cmd=list(command), timeout=25)
+            if command[0] == "xcodebuild":
+                return Probe()
+            raise AssertionError(f"unexpected command: {command}")
+
+        monkeypatch.setattr(ms.subprocess, "run", run)
+        report = dr.device_doctor(
+            REPO_ROOT,
+            ios=dr.IosTooling(ms._default_device_runner),
+            env=env,
+        )
+        ios = report["checks"][0]
+        assert ios["check"] == "ios.tooling"
+        assert ios["status"] == "operator-action-needed"
+        assert dr.XCODE_FIRST_LAUNCH_PENDING_MARKER in ios["detail"]
+        assert "sudo xcodebuild -runFirstLaunch" in ios["remedy"]
+
+    def test_real_xcrun_timeout_with_first_launch_complete_keeps_timeout_remedy(
+        self, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: a completed first launch must not yield install-Xcode.
+
+        Xcode was just probed successfully, so the doctor JSON must carry the
+        timeout-specific retry/restart step instead of telling consumers to
+        install Xcode (Codex P2 on the f487873 doctor wiring).
+        """
+
+        class Probe:
+            returncode = 0  # first launch complete
+
+        def run(command: Sequence[str], **_kwargs: object):
+            if command[0] == "xcrun":
+                raise subprocess.TimeoutExpired(cmd=list(command), timeout=25)
+            if command[0] == "xcodebuild":
+                return Probe()
+            raise AssertionError(f"unexpected command: {command}")
+
+        monkeypatch.setattr(ms.subprocess, "run", run)
+        report = dr.device_doctor(
+            REPO_ROOT,
+            ios=dr.IosTooling(ms._default_device_runner),
+            env=env,
+        )
+        ios = report["checks"][0]
+        assert ios["check"] == "ios.tooling"
+        assert ios["status"] == "agent-remediable"
+        assert dr.XCODE_FIRST_LAUNCH_COMPLETE_MARKER in ios["detail"]
+        assert "install Xcode" not in ios["remedy"]
+        assert "retry" in ios["remedy"]
+
+    def test_real_xcrun_timeout_with_hung_probe_keeps_timeout_remedy(
+        self, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: the status probe itself hanging is tooling evidence.
+
+        xcodebuild started and hung, so the doctor JSON must carry the
+        retry/restart remedy — never a fresh Xcode install (Codex P2 on
+        d190f49's probe-unknown fallthrough).
+        """
+
+        def run(command: Sequence[str], **_kwargs: object):
+            if command[0] == "xcrun":
+                raise subprocess.TimeoutExpired(cmd=list(command), timeout=25)
+            if command[0] == "xcodebuild":
+                raise subprocess.TimeoutExpired(cmd=list(command), timeout=10)
+            raise AssertionError(f"unexpected command: {command}")
+
+        monkeypatch.setattr(ms.subprocess, "run", run)
+        report = dr.device_doctor(
+            REPO_ROOT,
+            ios=dr.IosTooling(ms._default_device_runner),
+            env=env,
+        )
+        ios = report["checks"][0]
+        assert ios["check"] == "ios.tooling"
+        assert ios["status"] == "agent-remediable"
+        assert dr.XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER in ios["detail"]
+        assert "install Xcode" not in ios["remedy"]
+        assert "retry" in ios["remedy"]
+
+    def test_real_adb_timeout_keeps_server_remedy_not_reinstall(
+        self, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: an adb discovery timeout must not yield install advice.
+
+        adb is installed and running; the doctor JSON must carry the
+        server/USB retry step instead of reinstalling platform-tools
+        (Codex P2 on the f487873 Android remedy).
+        """
+
+        def run(command: Sequence[str], **_kwargs: object):
+            if command[0] == "adb":
+                raise subprocess.TimeoutExpired(cmd=list(command), timeout=25)
+            raise AssertionError(f"unexpected command: {command}")
+
+        monkeypatch.setattr(ms.subprocess, "run", run)
+        report = dr.device_doctor(
+            REPO_ROOT,
+            android=dr.AndroidTooling(ms._default_device_runner),
+            env=env,
+        )
+        android = report["checks"][0]
+        assert android["check"] == "android.tooling"
+        assert android["status"] == "agent-remediable"
+        assert dr.ADB_TIMEOUT_MARKER in android["detail"]
+        assert "install Android SDK platform-tools" not in android["remedy"]
+        assert "adb kill-server" in android["remedy"]
 
 
 class TestRun:
@@ -275,7 +465,7 @@ class TestRun:
         session = _running_session(env, platform="ios-simulator")
         artifact = tmp_path / "Runner.dev.ipa"
         artifact.write_bytes(b"fake ipa")
-        runner = FakeRunner({"list devices": (0, f"{udid} iPhone 16 Pro\n")})
+        runner = FakeRunner({"list devices": (0, ios_inventory(ios_device(udid)))})
         receipt = dr.run(
             REPO_ROOT,
             session["session_id"],

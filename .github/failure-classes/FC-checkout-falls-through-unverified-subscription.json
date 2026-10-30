@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-checkout-falls-through-unverified-subscription",
+  "violated_contract": "Fresh recurring checkout must not create a second subscription when a stored Stripe subscription is still nonterminal or its state cannot be verified, even if local entitlement projection says Free or the root customer ID is missing.",
+  "canonical_prevention": "Keep fresh-checkout admission at the existing reactivation boundary. Verify the raw stored recurring-subscription ID before creating a session; only confirmed terminal or definitively missing subscriptions can fall through. Preserve same-plan reactivation, block other nonterminal states, and fail closed on provider or persistence errors. One-time grants are not recurring subscriptions.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_checkout_first_subscription.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/payment.py",
+    "backend/tests/unit/test_checkout_first_subscription.py"
+  ],
+  "status": "open"
+}

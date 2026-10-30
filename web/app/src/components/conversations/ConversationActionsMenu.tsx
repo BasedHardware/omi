@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { deleteConversation, reprocessConversation } from '@/lib/api';
 import type { Conversation, TranscriptSegment } from '@/types/conversation';
 import type { Person } from '@/types/user';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { selectConversationSummary } from '@/lib/conversationSummarySelection';
 
 interface ConversationActionsMenuProps {
@@ -116,7 +116,7 @@ export function ConversationActionsMenu({
     setIsDeleting(true);
     try {
       await deleteConversation(conversation.id);
-      MixpanelManager.track('Conversation Deleted', {
+      PostHogManager.track('Conversation Deleted', {
         conversation_id: conversation.id,
       });
       setIsOpen(false);

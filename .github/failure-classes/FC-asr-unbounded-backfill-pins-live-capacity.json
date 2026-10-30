@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-asr-unbounded-backfill-pins-live-capacity",
+  "violated_contract": "Queued live ASR must win dispatch over historical work; long backfill must yield at bounded GPU quanta, and capacity must follow demand rather than unnormalized recording-length latency.",
+  "canonical_prevention": "Enforce <=120-second backfill GPU inputs at the shared scheduler, singleton dispatch with live priority, independent queue-age telemetry and opt-in demand scaling. Preserve complete audio coverage and absolute timestamps.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_parakeet_bounded_audio.py",
+    "backend/tests/unit/test_parakeet_batch_engine.py",
+    "backend/tests/unit/test_parakeet_helm_contract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/parakeet/", "backend/charts/parakeet/"],
+  "status": "open"
+}

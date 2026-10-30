@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-missing-job-confirmation-not-durable",
+  "violated_contract": "A client that requires repeated observations before acting on a missing server job must keep those observations across process restarts and must not let unconfirmed dead handles monopolize a shared poll budget. Otherwise a large dead backlog is re-polled from scratch in every process, never confirmed, and fresh uploads behind it are never polled.",
+  "canonical_prevention": "Persist first-missing observations with bounded retention so any later process can confirm them, admit confirmable handles first, and interleave recent uploads with older handles so neither class starves the other. Exercise restart confirmation and a lexically earlier dead backlog ahead of fresh uploads.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/sync_job_poller_backlog_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/sync_job_poller.dart",
+    "app/lib/services/wals/local_wal_sync.dart"
+  ],
+  "status": "open"
+}

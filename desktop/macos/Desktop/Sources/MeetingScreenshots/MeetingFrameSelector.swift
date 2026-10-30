@@ -24,6 +24,111 @@
 import Foundation
 import GRDB
 
+/// The wall-clock interval in which a conversation is known to contain transcript content.
+///
+/// `started_at...finished_at` is a capture lifecycle envelope, not a content interval: legacy
+/// listen conversations can retain an early socket origin across a rollover. Transcript offsets
+/// are only projected onto that origin when the origin is independently trustworthy (desktop
+/// `/from-segments`, audio-timeline v2) or when the projection agrees with `finished_at`.
+///
+/// The server recomputes this window (`routers/screen_frames.py` `_trusted_content_window`) and
+/// stamps its fingerprint on the adjudicated set. The two must agree to the millisecond, or a note
+/// opened after finalization re-selects and re-uploads a set the server already judged. So the
+/// arithmetic here follows the server's exactly: microsecond origin, offsets rounded to whole
+/// microseconds half-to-even (`timedelta(seconds=)`), and milliseconds rounded half-to-even
+/// (`round(dt.timestamp() * 1000)`). The tolerance is the server's too.
+struct MeetingScreenshotSelectionWindow: Equatable, Sendable {
+  static let policy = "meeting-content-v1"
+  /// `LEGACY_CONTENT_WINDOW_TOLERANCE_SECONDS`. A looser client bound trusts windows the server
+  /// does not, and the server then stamps its legacy fingerprint, which never matches.
+  static let legacyConsistencyTolerance: TimeInterval = 30
+
+  let start: Date
+  let end: Date
+  /// The server's own fingerprint, verbatim, when the window was read from it rather than derived.
+  private var serverFingerprint: String?
+
+  init(start: Date, end: Date) {
+    self.start = start
+    self.end = end
+  }
+
+  /// The window the server reports as `trusted_selection_fingerprint`. Its milliseconds are
+  /// rounded, so selection runs 1 ms inside them: a frame that rounding placed on the boundary
+  /// could fall a fraction of a millisecond outside the server's exact window, and one frame
+  /// outside rejects the whole adjudication request. The fingerprint itself is kept verbatim.
+  init?(serverFingerprint: String) {
+    let parts = serverFingerprint.split(separator: ":")
+    guard parts.count == 3, parts[0] == Self.policy, let startMs = Int64(parts[1]), let endMs = Int64(parts[2]),
+      endMs - startMs > 2
+    else { return nil }
+    start = Date(timeIntervalSince1970: Double(startMs + 1) / 1_000)
+    end = Date(timeIntervalSince1970: Double(endMs - 1) / 1_000)
+    self.serverFingerprint = serverFingerprint
+  }
+
+  var fingerprint: String {
+    serverFingerprint ?? "\(Self.policy):\(Self.serverMilliseconds(start)):\(Self.serverMilliseconds(end))"
+  }
+
+  /// `round(datetime.timestamp() * 1000)` for a microsecond-precise instant.
+  static func serverMilliseconds(_ date: Date) -> Int64 {
+    let microseconds = (date.timeIntervalSince1970 * 1_000_000).rounded()
+    return Int64((microseconds / 1_000_000 * 1_000).rounded(.toNearestOrEven))
+  }
+
+  /// `timedelta(seconds=value)` in whole microseconds.
+  static func serverMicroseconds(offset value: Double) -> Int64 {
+    let whole = value.rounded(.towardZero)
+    return Int64(whole) * 1_000_000 + Int64(((value - whole) * 1_000_000).rounded(.toNearestOrEven))
+  }
+
+  func contains(_ date: Date) -> Bool { date >= start && date <= end }
+
+  static func resolve(_ conversation: ServerConversation) -> Self? {
+    // List projections may omit transcript_segments entirely. Wait for the detail response rather
+    // than mistaking an incomplete projection for an empty or differently bounded transcript.
+    guard conversation.transcriptSegmentsIncluded else { return nil }
+    let spans = conversation.transcriptSegments.compactMap { segment -> (Double, Double)? in
+      guard !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+      return (segment.start, segment.end)
+    }
+    return resolve(
+      startedAt: conversation.startedAt,
+      finishedAt: conversation.finishedAt,
+      segmentSpans: spans,
+      hasTrustedOrigin: conversation.createdFromSegments || conversation.audioTimelineVersion == 2)
+  }
+
+  /// Pure policy entry point used by regression tests without constructing a complete conversation.
+  static func resolve(
+    startedAt: Date?,
+    finishedAt: Date?,
+    segmentSpans: [(Double, Double)],
+    hasTrustedOrigin: Bool
+  ) -> Self? {
+    guard let startedAt else { return nil }
+    let valid = segmentSpans.filter {
+      $0.0.isFinite && $0.1.isFinite && $0.0 >= 0 && $0.1 > $0.0
+    }
+    guard let firstOffset = valid.map(\.0).min(), let lastOffset = valid.map(\.1).max() else {
+      return nil
+    }
+
+    let originMicroseconds = Int64((startedAt.timeIntervalSince1970 * 1_000_000).rounded())
+    let start = Date(
+      timeIntervalSince1970: Double(originMicroseconds + serverMicroseconds(offset: firstOffset)) / 1_000_000)
+    let end = Date(
+      timeIntervalSince1970: Double(originMicroseconds + serverMicroseconds(offset: lastOffset)) / 1_000_000)
+    if !hasTrustedOrigin {
+      guard let finishedAt,
+        abs(end.timeIntervalSince(finishedAt)) <= legacyConsistencyTolerance
+      else { return nil }
+    }
+    return Self(start: start, end: end)
+  }
+}
+
 // MARK: - Candidate
 
 /// One frame that survived the deterministic filter. Deliberately the same seven columns
@@ -108,18 +213,31 @@ enum MeetingFrameSelector {
   /// Kept equal here so nothing is silently trimmed a second time at the upload boundary.
   static let candidateCeiling = MeetingFrameJudge.maxCandidatesPerRequest
 
+  /// The drop reason for frames in Rewind's active chunk. Unlike every other drop it is temporary:
+  /// the chunk seals within about a minute, and those frames are usually the end of the meeting.
+  static let activeChunkDropReason = "chunk still being written"
+
   struct Outcome: Sendable {
     var candidates: [MeetingFrameCandidate] = []
     var framesInWindow = 0
     /// Why frames were dropped, for the diagnostics surface. A gate nobody can see the workings of
     /// is a gate nobody can debug when it silently returns nothing.
     var drops: [String: Int] = [:]
+    /// The local Rewind store could not be read (no pool yet, or the query failed). Distinct from
+    /// an empty result: "found nothing" may be stamped as final, "could not look" never is.
+    var localReadFailed = false
+
+    static let unavailable: Outcome = {
+      var outcome = Outcome()
+      outcome.localReadFailed = true
+      return outcome
+    }()
   }
 
   /// Every frame captured inside a conversation's window, narrowed to a bounded candidate set.
   static func selectCandidates(from start: Date, to end: Date) async -> Outcome {
     guard end > start else { return Outcome() }
-    guard let pool = await SpineScreenIndex.poolWhenReady() else { return Outcome() }
+    guard let pool = await SpineScreenIndex.poolWhenReady() else { return .unavailable }
 
     // A frame in the chunk still being written has no moov atom yet and cannot be decoded.
     let unfinalizedChunk = await VideoChunkEncoder.shared.currentChunkPath
@@ -139,7 +257,7 @@ enum MeetingFrameSelector {
           arguments: [start, end])
       }
     } catch {
-      return Outcome()
+      return .unavailable
     }
 
     let frames = rows.compactMap { row -> MeetingFrameCandidate? in
@@ -161,6 +279,10 @@ enum MeetingFrameSelector {
       to: end,
       unfinalizedChunk: unfinalizedChunk,
       perceptualHash: { await MeetingFrameSimilarity.perceptualHash(of: $0) })
+  }
+
+  static func selectCandidates(in window: MeetingScreenshotSelectionWindow) async -> Outcome {
+    await selectCandidates(from: window.start, to: window.end)
   }
 
   /// The production filtering policy over already-read frames. Keeping the time boundary here as
@@ -191,7 +313,7 @@ enum MeetingFrameSelector {
         continue
       }
       if let chunk = frame.videoChunkPath, let unfinalizedChunk, chunk == unfinalizedChunk {
-        outcome.drops["chunk still being written", default: 0] += 1
+        outcome.drops[activeChunkDropReason, default: 0] += 1
         continue
       }
       kept.append(frame)

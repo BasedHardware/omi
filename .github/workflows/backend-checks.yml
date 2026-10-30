@@ -1,14 +1,37 @@
 name: Backend Checks
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: main
   pull_request:
     branches: main
 
 concurrency:
-  group: backend-checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: backend-checks-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  # A newer PR push supersedes that PR's older run. A newer main push must not
+  # cancel the running one: with cancel-in-progress false GitHub replaces only
+  # the pending run in the group, so the running SHA finishes and the newest
+  # pending SHA runs next — main always gets a complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
+  # from github.com intermittently stop receiving data for 7-10 minutes before
+  # the connection resets (Backend Hermetic E2E run 39435458398 spent 498 s in
+  # "Checkout code" and hit its 10-minute cap). With these set, git aborts any
+  # transfer that stays under 1 KB/s for 60 s, and actions/checkout retries the
+  # fetch (its built-in 3 attempts); a healthy depth-1 fetch takes ~20 s.
+  # Applies to every git network call in the workflow, including script steps.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   changes:
@@ -16,11 +39,12 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
-      has_backend_runtime_env: ${{ steps.changes.outputs.has_backend_runtime_env }}
+      has_backend_runtime_env: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_backend_runtime_env) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
 
       - name: Detect changed paths
@@ -36,6 +60,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up Python

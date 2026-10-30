@@ -1,0 +1,7 @@
+{
+  "version": "0.12.497",
+  "date": "2026-10-17",
+  "changes": [
+    "Fixed stray citation brackets, parentheses and separators in older notes and app summaries while preserving transcript sources and code examples"
+  ]
+}

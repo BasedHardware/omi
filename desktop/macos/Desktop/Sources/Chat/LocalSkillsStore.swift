@@ -27,6 +27,11 @@ enum LocalSkillsStore {
   /// `~/.omi` — also handed to pi as its agent dir, which looks for `<dir>/skills`.
   static var rootURL: URL {
     rootURLOverride
+      ?? LocalExtensionQAStorage.root(
+        enabled: ProcessInfo.processInfo.environment["OMI_EXTENSION_QA_ISOLATION"] == "1",
+        isNonProduction: AppBuild.isNonProduction,
+        bundleIdentifier: AppBuild.bundleIdentifier,
+        temporaryDirectory: FileManager.default.temporaryDirectory)
       ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".omi", isDirectory: true)
   }
 

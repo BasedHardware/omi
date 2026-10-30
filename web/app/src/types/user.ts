@@ -137,10 +137,12 @@ export function planDisplayName(plan: PlanIdentity): string {
   switch (plan.id) {
     case 'basic':
       return 'Free';
+    case 'operator':
+      return 'Operator';
     case 'unlimited':
       return 'Neo';
     case 'unlimited_v2':
-      return 'Unlimited';
+      return 'Omi Pro';
     default:
       return plan.id.charAt(0).toUpperCase() + plan.id.slice(1);
   }
@@ -214,6 +216,9 @@ export interface UserSubscription {
   plan_identity?: PlanIdentity;
   status: string;
   is_unlimited: boolean;
+  // Server-resolved legacy monthly allowance; zero means no transcription cap.
+  transcription_seconds_used?: number;
+  transcription_seconds_limit?: number;
   current_period_end?: number;
   stripe_subscription_id?: string;
   cancel_at_period_end?: boolean;
@@ -270,6 +275,14 @@ export interface UpgradeSubscriptionResponse {
   scheduled_start?: number;
 }
 
+export interface RedeemCodeResponse {
+  status: string;
+  percent_off?: number | null;
+  amount_off?: number | null;
+  currency?: string | null;
+  applies_at?: number | null;
+}
+
 export interface Person {
   id: string;
   name: string;
@@ -306,6 +319,8 @@ export const API_KEY_SCOPES = [
   { id: 'memories:write', label: 'Memories', type: 'write' },
   { id: 'action_items:read', label: 'Action Items', type: 'read' },
   { id: 'action_items:write', label: 'Action Items', type: 'write' },
+  { id: 'goals:read', label: 'Goals', type: 'read' },
+  { id: 'goals:write', label: 'Goals', type: 'write' },
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]['id'];

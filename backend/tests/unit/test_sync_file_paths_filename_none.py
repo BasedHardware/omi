@@ -130,7 +130,7 @@ def test_retrieve_file_paths_v2_bad_extension_still_400(tmp_path, monkeypatch):
         mod._retrieve_file_paths_v2([upload], 'u1', 'job-1')
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == 'Invalid sync file format'
+    assert exc_info.value.detail == {'code': 'invalid_file', 'message': 'Invalid sync file format'}
     assert upload.filename not in exc_info.value.detail
 
 

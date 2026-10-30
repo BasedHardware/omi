@@ -1,0 +1,121 @@
+{
+  "id": "sample-shared-note",
+  "created_at": "2025-03-04T15:20:00.000Z",
+  "started_at": "2025-03-04T14:30:00.000Z",
+  "finished_at": "2025-03-04T15:17:00.000Z",
+  "source": "omi",
+  "language": "en",
+  "structured": {
+    "title": "Launch readiness review",
+    "overview": "- Launch date confirmed for March 18.\n- Pricing page copy approved.\n- Support macros need a refresh.",
+    "emoji": "memo",
+    "category": "work",
+    "meeting_type": "team_sync",
+    "sections": [
+      {
+        "heading": "Key takeaways",
+        "body_markdown": "- Launch date confirmed for **March 18**.\n- Pricing page copy approved with minor edits.\n- Support macros need a refresh before launch.",
+        "kind": "main",
+        "source_segment_ids": ["seg-1", "seg-2"]
+      },
+      {
+        "heading": "Decisions",
+        "body_markdown": "- Ship the new onboarding checklist in v2.4.\n- Defer the mobile share-sheet redesign.",
+        "kind": "main",
+        "source_segment_ids": ["seg-3"]
+      },
+      {
+        "heading": "Discussion notes",
+        "body_markdown": "Priya walked through the funnel metrics:\n- Activation is up 4% week over week.\n- Drop-off concentrates on the permissions step.",
+        "kind": "main",
+        "source_segment_ids": ["seg-4", "seg-5"]
+      },
+      {
+        "heading": "Risks",
+        "body_markdown": "- Badge assets still need legal review.\n- Localization freeze starts Friday.",
+        "kind": "main",
+        "source_segment_ids": ["seg-6"]
+      },
+      {
+        "heading": "Side notes",
+        "body_markdown": "- Revisit contributor badges after launch.\n- Quarterly public roadmap note.",
+        "kind": "side_notes",
+        "source_segment_ids": ["seg-7"]
+      }
+    ],
+    "participants": [
+      {
+        "name": "Priya Raman",
+        "email": null,
+        "organization": "Omi",
+        "role": "Product lead",
+        "is_ai_agent": false,
+        "source": "roster"
+      },
+      {
+        "name": "Marco Ruiz",
+        "email": null,
+        "organization": null,
+        "role": "Engineering",
+        "is_ai_agent": false,
+        "source": "roster"
+      },
+      {
+        "name": null,
+        "email": null,
+        "organization": "Northwind Labs",
+        "role": null,
+        "is_ai_agent": false,
+        "source": "transcript"
+      },
+      {
+        "name": "Boardy",
+        "email": null,
+        "organization": "Omi",
+        "role": "Meeting assistant",
+        "is_ai_agent": true,
+        "source": "transcript"
+      }
+    ],
+    "action_items": [
+      {
+        "completed": false,
+        "description": "Send the updated launch brief to the team",
+        "owner_name": "Priya Raman",
+        "context": "From the readiness review",
+        "due_at": "2025-03-06T17:00:00.000Z"
+      },
+      {
+        "completed": true,
+        "description": "Confirm pricing page copy",
+        "owner_name": "Marco Ruiz",
+        "context": null,
+        "due_at": null
+      },
+      {
+        "completed": false,
+        "description": "Refresh support macros",
+        "owner_name": null,
+        "context": null,
+        "due_at": null
+      }
+    ],
+    "events": [
+      {
+        "created": false,
+        "title": "Launch go/no-go checkpoint",
+        "description": "Final readiness pass before the March 18 launch.",
+        "start": "2025-03-14T15:00:00.000Z",
+        "duration": 30
+      }
+    ]
+  },
+  "transcript_segments": [],
+  "geolocation": null,
+  "photos": [],
+  "apps_results": [],
+  "external_data": null,
+  "postprocessing": { "status": "completed", "model": "chatgpt" },
+  "discarded": false,
+  "deleted": false
+}

@@ -25,6 +25,7 @@ _mock_is_speech = False
 _mock_vad_prob = None  # When set, overrides _mock_is_speech for exact probability control
 
 import numpy as np
+import utils.stt.vad_gate as vad_gate_module
 
 from utils.metrics import OMI_VAD_GATE_AUDIO_SECONDS_TOTAL, OMI_VAD_GATE_SESSIONS_TOTAL
 
@@ -412,6 +413,20 @@ class TestVADStreamingGate:
         _set_vad_speech(True)
         out = gate.process_audio(chunk, time.time())
         assert out.audio_to_send == chunk
+
+    def test_mixed_vad_windows_are_reported_partial(self):
+        gate = self._make_gate(mode='shadow')
+        decisions = iter((0.9, 0.1))
+
+        def score(_window, state, context):
+            return next(decisions), state, context
+
+        with patch.object(vad_gate_module, 'run_vad_window', side_effect=score):
+            gate.process_audio(_make_pcm(64), time.time(), start_sample=0)
+
+        assert gate.classify_capture_speech(0, 1024) == 'partial'
+        # Chunk granularity cannot prove that either half is all speech.
+        assert gate.classify_capture_speech(512, 1024) == 'partial'
 
     def test_metrics(self):
         """Gate should track speech/silence/finalize counts."""
@@ -1127,6 +1142,22 @@ class TestActivateMode:
         # NOT 75s (which would happen if mapper cursor wasn't synced)
         assert remapped < 50.0, f"Remapped {remapped} is over-shifted (cursor sync bug)"
         assert remapped > 35.0, f"Remapped {remapped} is too early"
+
+
+class TestVadSecondsCounter:
+    def test_sub_window_call_still_counts_inference_seconds(self, monkeypatch):
+        from utils.observability.listen_loop import VAD_INFERENCE_SECONDS_TOTAL, VAD_WINDOWS_TOTAL
+
+        monkeypatch.delenv('LISTEN_LOOP_METRICS_ENABLED', raising=False)
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+
+        def total(metric):
+            return next(s.value for f in metric.collect() for s in f.samples if s.name.endswith('_total'))
+
+        seconds, windows = total(VAD_INFERENCE_SECONDS_TOTAL), total(VAD_WINDOWS_TOTAL)
+        gate._run_vad(_make_pcm(10))  # 160 samples < one 512-sample window
+        assert total(VAD_WINDOWS_TOTAL) == windows
+        assert total(VAD_INFERENCE_SECONDS_TOTAL) > seconds
 
 
 class TestCostMetrics:

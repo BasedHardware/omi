@@ -83,7 +83,6 @@ KEYS = [
     # Common desktop settings that make throwaway bundles feel like Omi Dev.
     "fontScale",
     "glassTransparency",
-    "multiChatEnabled",
     "conversationsCompactView",
     "chatBridgeMode",
     "realtimeOmniProvider",

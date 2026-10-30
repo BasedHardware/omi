@@ -42,6 +42,19 @@ def test_parser_still_raises_on_a_reply_with_no_decision():
         _parser().parse('I am not sure about this conversation.')
 
 
+@pytest.mark.parametrize(
+    'text',
+    [
+        'do_not_discard = True',  # bare suffix of another key, not the `discard` key itself
+        '{"reason": "the transcript quotes discard = True"}',  # quoted mention inside prose
+        'discard = True discard = False',  # conflicting bare decisions
+    ],
+)
+def test_parser_raises_on_text_that_only_mentions_discard(text):
+    with pytest.raises(OutputParserException):
+        _parser().parse(text)
+
+
 def test_should_discard_conversation_honors_python_boolean_reply(monkeypatch):
     fake_llm = FakeMessagesListChatModel(responses=[AIMessage(content='{"discard": True}')])
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: fake_llm)

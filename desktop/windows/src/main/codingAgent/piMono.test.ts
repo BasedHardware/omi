@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'child_process'
+import { app } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PiMonoAdapter,
@@ -932,6 +933,47 @@ describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
       await adapter.stop()
     } finally {
       delete process.env.OMI_BYOK_OPENAI
+    }
+  })
+
+  it('gates OMI_YOLO_MODE reinjection on unpackaged builds only', async () => {
+    const stubApp = app as { isPackaged: boolean }
+    const wasPackaged = stubApp.isPackaged
+    const prevYolo = process.env.OMI_YOLO_MODE
+    process.env.OMI_YOLO_MODE = '1'
+    try {
+      stubApp.isPackaged = true
+      const packaged = new PiMonoAdapter(
+        { authToken: 'firebase-id-token-xyz' },
+        { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+      )
+      await packaged.start()
+      let [, , options] = vi.mocked(spawn).mock.calls[0] as [
+        string,
+        string[],
+        { env: Record<string, string> }
+      ]
+      expect(options.env.OMI_YOLO_MODE).toBeUndefined()
+      await packaged.stop()
+
+      stubApp.isPackaged = false
+      vi.mocked(spawn).mockClear()
+      const unpackaged = new PiMonoAdapter(
+        { authToken: 'firebase-id-token-xyz' },
+        { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+      )
+      await unpackaged.start()
+      ;[, , options] = vi.mocked(spawn).mock.calls[0] as [
+        string,
+        string[],
+        { env: Record<string, string> }
+      ]
+      expect(options.env.OMI_YOLO_MODE).toBe('1')
+      await unpackaged.stop()
+    } finally {
+      stubApp.isPackaged = wasPackaged
+      if (prevYolo === undefined) delete process.env.OMI_YOLO_MODE
+      else process.env.OMI_YOLO_MODE = prevYolo
     }
   })
 })

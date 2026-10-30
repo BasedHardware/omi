@@ -25,7 +25,7 @@ extension RewindPage {
 
         if isTogglingMonitoring {
           ProgressView()
-            .scaleEffect(0.5)
+            .controlSize(.small)
         }
       }
     }

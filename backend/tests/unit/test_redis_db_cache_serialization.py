@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
+import json
+import logging
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -52,7 +55,11 @@ def test_money_made_json_round_trip(fake_redis: _FakeRedis) -> None:
 
 
 def test_reviews_json_round_trip(fake_redis: _FakeRedis) -> None:
-    redis_db.set_app_review_cache("app-1", "uid-a", {"rating": 5, "text": "great"})
+    # set_app_review_cache is a Lua script (see test_app_review_cache_race_live.py
+    # for its atomicity under concurrent writers) bound to the real Redis client at
+    # import time, so it can't run against this monkeypatched fake -- seed the store
+    # directly to exercise the read side instead.
+    fake_redis._store["plugins:app-1:reviews"] = json.dumps({"uid-a": {"rating": 5, "text": "great"}})
     assert redis_db.get_specific_user_review("app-1", "uid-a") == {"rating": 5, "text": "great"}
     assert redis_db.get_app_reviews("app-1") == {"uid-a": {"rating": 5, "text": "great"}}
 
@@ -99,8 +106,8 @@ def test_geolocation_legacy_literal_round_trip(fake_redis: _FakeRedis) -> None:
 
 
 def test_apps_reviews_batch_round_trip(fake_redis: _FakeRedis) -> None:
-    redis_db.set_app_review_cache("app-a", "uid-1", {"rating": 3})
-    redis_db.set_app_review_cache("app-b", "uid-2", {"rating": 5})
+    fake_redis._store["plugins:app-a:reviews"] = json.dumps({"uid-1": {"rating": 3}})
+    fake_redis._store["plugins:app-b:reviews"] = json.dumps({"uid-2": {"rating": 5}})
     reviews = redis_db.get_apps_reviews(["app-a", "app-b", "app-missing"])
     assert reviews == {
         "app-a": {"uid-1": {"rating": 3}},
@@ -132,9 +139,21 @@ def test_set_generic_cache_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
     assert redis_db.get_generic_cache("apps:marketplace") == {"ok": True}
 
 
-def test_set_generic_cache_without_ttl_omits_ex(fake_redis: _FakeRedis) -> None:
-    redis_db.set_generic_cache("apps:no-ttl", {"ok": True})
-    assert fake_redis.set_calls[0]['ex'] is None
+def test_set_generic_cache_requires_ttl(fake_redis: _FakeRedis, caplog) -> None:
+    # Hard contract: the immortal no-TTL branch was removed. The def must
+    # declare ttl as a required parameter (no default), an omitted-ttl call
+    # must not write, and the failure must be loud (the decorator logs the
+    # TypeError it converts to None — never silent success). The runtime symbol
+    # is the decorator wrapper, so the source contract is asserted on the file.
+    module_file = inspect.getsourcefile(redis_db)
+    assert module_file is not None
+    module_src = open(module_file).read()
+    assert 'def set_generic_cache(path: str, data: object, ttl: int) -> None:' in module_src
+    assert "r.set(f'cache:{key}', payload)" not in module_src  # immortal branch gone
+    with caplog.at_level(logging.ERROR):
+        assert redis_db.set_generic_cache("apps:no-ttl", {"ok": True}) is None
+    assert any('missing 1 required positional argument' in rec.getMessage() for rec in caplog.records)
+    assert fake_redis.set_calls == []
     assert fake_redis.expire_calls == []
 
 

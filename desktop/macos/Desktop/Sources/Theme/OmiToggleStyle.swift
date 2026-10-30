@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The app's switch: a white knob on a tinted track when on, on a neutral track when off.
+/// The app's switch: a white knob on an ink track when on, on a grey track when off.
 ///
 /// This is the shape a macOS switch has always had, and it is now the shape this one has too. The
 /// dark-palette version inverted it — a **white** track when on with a near-black knob — which was
@@ -17,6 +17,13 @@ import SwiftUI
 /// graphical object you must see to read the control's state. `systemGray` puts it at 3.28:1. The
 /// knob is the part that says *which way the switch is thrown*, so it is not allowed to be a
 /// low-contrast detail carried by its drop shadow alone.
+///
+/// The on track is `Ink.primary`, not `Ink.accent`. A blue on-state was the loudest colour in
+/// Settings, which a page of switches turned into a column of blue; the rest of the glass states
+/// selection in neutral ink, and `Ink.accent` is reserved for the one actionable link on a surface.
+/// On the light glass (`InkGlass.appearance` pins `.aqua`) the ink is near-black, so the white knob
+/// reads at far above 3:1, and ink against `systemGray` keeps on and off distinct by luminance
+/// rather than by hue.
 package struct OmiToggleStyle: ToggleStyle {
   private let width: CGFloat = 36
   private let height: CGFloat = 20
@@ -32,7 +39,7 @@ package struct OmiToggleStyle: ToggleStyle {
   /// `nonisolated` for the same reason `InkButtonStyle.minHeight` is: `ToggleStyle` is `@MainActor`,
   /// and these are values a caller may want to read rather than draw with.
   nonisolated package static func trackFill(isOn: Bool) -> Color {
-    isOn ? Ink.accent : Color(nsColor: .systemGray)
+    isOn ? Ink.primary : Color(nsColor: .systemGray)
   }
 
   /// The knob, in both states. White is not decoration here — it is what makes the track's state

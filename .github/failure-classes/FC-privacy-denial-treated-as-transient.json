@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-privacy-denial-treated-as-transient",
+  "violated_contract": "A denied durable-completion proof must not turn a legacy sync status handle into an indefinitely retryable HTTP 503. Privacy denials must preserve the legacy status and local audio custody; only failed reads remain retryable.",
+  "canonical_prevention": "Separate typed privacy denials from fence-read errors at the reconciliation boundary, retain the pre-reconciliation status path, and verify every real fence reason against flag-off responses and the actual client WAL policy using shared test vectors.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_completed_status.py",
+    "app/test/unit/sync_status_privacy_contract_test.dart",
+    "backend/tests/fixtures/sync_status_privacy_cases.json"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/completed_status.py",
+    "backend/routers/sync.py",
+    "backend/database/batch_pipeline_privacy.py"
+  ],
+  "status": "open"
+}

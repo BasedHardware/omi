@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-independent-owner-voice-accepts",
+  "violated_contract": "Distinct diarized voices must not independently claim the one enrolled owner identity. With only an owner print, a margin against enrolled prints is vacuous: production distances 0.631 and 0.645 both passed 0.65 and marked two voices as the owner on 2026-09-26.",
+  "canonical_prevention": "Arbitrate owner claims across all evidenced voices before assigning or merging identities, using the existing margin against the next voice as well as the existing enrolled-print policy. Re-arbitrate live evidence and withdraw earlier automatic labels on every affected segment. Persist contention as ambiguous with an unidentified legacy projection; manual receipts remain authoritative.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/speaker_match.py",
+    "backend/tests/unit/test_speaker_match.py",
+    "backend/tests/unit/test_conversation_speakers.py",
+    "backend/tests/unit/test_sync_speaker_evidence.py",
+    "backend/tests/unit/test_conversation_speaker_resolution_stage.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/speakers.py",
+    "backend/utils/stt/conversation_speakers.py",
+    "backend/utils/sync/speaker_identity.py"
+  ],
+  "status": "open"
+}

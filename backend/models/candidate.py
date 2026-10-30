@@ -33,6 +33,22 @@ class CandidateStatus(str, Enum):
     expired = 'expired'
 
 
+class SummaryTaskReference(BaseModel):
+    """The summary row the reader explicitly chose, not a client-authored task."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    conversation_id: StableId
+    action_item_index: int = Field(ge=0)
+    expected_description: str = Field(min_length=1, max_length=4096)
+
+
+class CandidateAcceptanceRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    summary_item: Optional[SummaryTaskReference] = None
+
+
 class WorkstreamProposal(BaseModel):
     model_config = ConfigDict(extra='forbid')
 

@@ -20,7 +20,6 @@ export type {
   AppResult,
   AudioFile,
   AudioFileUrlInfo,
-  Conversation,
   ConversationPhoto,
   ConversationScreenFrame,
   ConversationScreenFrameSet,
@@ -31,7 +30,6 @@ export type {
   NormalizedRect,
   ScreenFrameGround,
   ScreenFrameSharingUpdateRequest,
-  Structured,
 } from '@/lib/omiApi.generated';
 
 /**
@@ -67,6 +65,8 @@ import type {
   ActionItemResponse,
   AppResult,
   Conversation as GeneratedConversation,
+  Section as GeneratedSection,
+  Structured as GeneratedStructured,
 } from '@/lib/omiApi.generated';
 import type { ActionItem as GeneratedActionItem } from '@/lib/omiApi.generated';
 import type {
@@ -94,6 +94,49 @@ export type ActionItem = ActionItemResponse;
 
 /** Keep the generated structured ActionItem shape reachable for documentation. */
 export type StructuredActionItem = GeneratedActionItem;
+
+export type MeetingType =
+  | 'interview'
+  | 'intro'
+  | 'sales'
+  | 'customer'
+  | 'one_on_one'
+  | 'team_sync'
+  | 'planning'
+  | 'demo'
+  | 'social'
+  | 'other';
+
+export interface NoteParticipant {
+  name?: string | null;
+  email?: string | null;
+  organization?: string | null;
+  role?: string | null;
+  is_ai_agent?: boolean | null;
+  source?: 'roster' | 'transcript' | null;
+}
+
+export type NoteInsightKind = 'prior_meeting' | 'goal' | 'memory' | 'person';
+
+export interface NoteInsight {
+  text?: string | null;
+  kind?: NoteInsightKind | null;
+}
+
+export type ConversationSection = GeneratedSection & {
+  kind?: 'main' | 'side_notes' | null;
+};
+
+export type Structured = Omit<GeneratedStructured, 'sections'> & {
+  sections?: ConversationSection[];
+  participants?: NoteParticipant[] | null;
+  meeting_type?: MeetingType | null;
+  insights?: NoteInsight[] | null;
+};
+
+export type Conversation = Omit<GeneratedConversation, 'structured'> & {
+  structured: Structured;
+};
 
 /**
  * Transcript segment as consumed by the renderer. The generated
@@ -156,7 +199,11 @@ export interface GroupedConversations {
 // the shape the app renders. They are NOT backend schema authority.
 
 export type KnowledgeGraphNodeType =
-  'person' | 'place' | 'organization' | 'thing' | 'concept';
+  | 'person'
+  | 'place'
+  | 'organization'
+  | 'thing'
+  | 'concept';
 
 export interface KnowledgeGraphNode {
   id: string;

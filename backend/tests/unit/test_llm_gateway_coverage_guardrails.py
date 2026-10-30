@@ -13,7 +13,7 @@ import pytest
 
 from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
 from llm_gateway.gateway.schemas import Surface
-from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
+from utils.llm.model_config import LUNA_MODEL, get_all_configured_features, get_route_options, get_model, get_provider
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = BACKEND_DIR / 'docs' / 'llm' / 'model_endpoint_inventory.yaml'
@@ -57,6 +57,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'PERPLEXITY_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'OPENROUTER_API_KEY'),
     DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
@@ -70,6 +71,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
+    DirectUse('utils/tts.py', 'GEMINI_API_KEY'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),
     DirectUse('utils/other/chat_file.py', 'AsyncOpenAI'),
     DirectUse('utils/other/chat_file.py', 'openai.chat.completions'),
@@ -83,7 +85,6 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
 INVENTORIED_DIRECT_EXCEPTION_FILES = {
-    'routers/desktop_proactivity.py',
     'routers/omni_relay.py',
 }
 
@@ -99,16 +100,21 @@ _RESOLVER_DEFINITION_FILE = 'utils/llm/model_config.py'
 # clients._so_gemini: iterates the active profile.
 # judge.py: model_feature defaults to the pinned screen_frame_judge key.
 # managed_compute.py: pass-through of authorize_managed_compute's feature into get_provider.
+# llm_input_dedupe.py: checkpoint identity follows the actual notes / L1 extractor route.
 KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
     {
         ('utils/llm/persona.py', 'get_llm', 'feature'),
         ('llm_gateway/gateway/config_loader.py', 'get_model', 'feature'),
         ('llm_gateway/gateway/config_loader.py', 'get_provider', 'feature'),
         ('utils/llm/clients.py', '_get_model_config', 'feature'),
-        ('utils/memory/belief_backfill.py', 'get_llm', 'BELIEF_BACKFILL_LLM_FEATURE'),
         ('utils/llm/clients.py', '_get_model_config', 'f'),
         ('utils/screen_frames/judge.py', 'get_llm', 'model_feature'),
         ('utils/managed_compute.py', 'get_provider', 'feature'),
+        (
+            'utils/conversations/llm_input_dedupe.py',
+            'get_route_ref',
+            "'conv_structure' if feature == 'notes' else 'memory_l1'",
+        ),
     }
 )
 _FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tests'}
@@ -245,7 +251,7 @@ def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
     overrides = load_generated_route_overrides()
 
     assert overrides['persona_chat'].primary.model == 'gpt-5-nano'
-    assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
+    assert overrides['persona_chat_premium'].primary.model == LUNA_MODEL
 
 
 def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
@@ -254,7 +260,7 @@ def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
     File chat ran unpinned with a 2048-token output cap, and the provider
     default can spend a capped completion budget on hidden reasoning before
     any answer text — the truncation failure desktop proactivity hit on its
-    direct path. Every OpenAI GPT-5 lane must name its effort explicitly.
+    direct path.     Every OpenAI GPT-5 lane, and gpt-x-luna, must name its effort explicitly.
     """
     overrides = load_generated_route_overrides()
 
@@ -262,7 +268,7 @@ def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
         override = overrides.get(feature)
         model = override.primary.model if override is not None else get_model(feature)
         provider = override.primary.provider if override is not None else get_provider(feature)
-        if provider != 'openai' or not model.startswith('gpt-5'):
+        if provider != 'openai' or not (model.startswith('gpt-5') or model == LUNA_MODEL):
             continue
         options = get_route_options(feature, model, provider)
         if override is not None:
@@ -273,8 +279,6 @@ def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
 def test_only_background_flex_routes_allow_the_documented_flex_timeout():
     config = load_gateway_config(prod_mode=True)
 
-    assert config.route_artifacts['route.memory_conflict.model_config.001'].timeouts.request_ms == 120_000
-    assert config.route_artifacts['route.memory_conflict_flex.model_config.001'].timeouts.request_ms == 900_000
     assert config.route_artifacts['route.memory_l2_flex.model_config.001'].timeouts.request_ms == 900_000
     assert config.route_artifacts['route.x_memory_extraction_flex.model_config.001'].timeouts.request_ms == 900_000
 
@@ -541,7 +545,6 @@ def test_direct_exception_files_follow_their_declared_gateway_policy():
 
     assert all(len(policies) == 1 for policies in policies_by_file.values())
     policy_by_file = {rel_path: next(iter(policies)) for rel_path, policies in policies_by_file.items()}
-    assert policy_by_file['routers/desktop_proactivity.py'] == 'acknowledged'
     assert policy_by_file['routers/omni_relay.py'] == 'blocked'
 
     for rel_path, policy in policy_by_file.items():
@@ -732,6 +735,12 @@ def test_resolver_feature_literals_are_configured_and_dynamic_sites_are_reviewed
         unknown_literals
     )
     assert dynamic_sites == KNOWN_DYNAMIC_FEATURE_SITES
+
+
+def test_dedupe_checkpoint_route_choices_are_configured():
+    # The reviewed conditional above is a dynamic site to the AST scanner;
+    # both possible literal routes must still be configured, without fallback.
+    assert {'conv_structure', 'memory_l1'} <= get_all_configured_features()
 
 
 def test_file_chat_completions_hop_the_gateway_in_feature_mode():

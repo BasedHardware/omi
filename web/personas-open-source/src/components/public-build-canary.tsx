@@ -11,7 +11,7 @@ const inputs = [
   process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-  process.env.NEXT_PUBLIC_MIXPANEL_TOKEN,
+  process.env.NEXT_PUBLIC_POSTHOG_KEY,
   process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES,
 ];
 

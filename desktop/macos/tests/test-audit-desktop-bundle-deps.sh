@@ -19,10 +19,11 @@ fakebin="$tmpdir/bin"
 app_bundle="$tmpdir/Omi Test.app"
 main_binary="$app_bundle/Contents/MacOS/Omi Computer"
 node_bin="$app_bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+ffmpeg_bin="$app_bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/ffmpeg"
 framework="$app_bundle/Contents/Frameworks/libexample.dylib"
 mkdir -p "$fakebin" "$(dirname "$main_binary")" "$(dirname "$node_bin")" "$(dirname "$framework")"
-touch "$main_binary" "$node_bin" "$framework"
-chmod +x "$main_binary" "$node_bin"
+touch "$main_binary" "$node_bin" "$ffmpeg_bin" "$framework"
+chmod +x "$main_binary" "$node_bin" "$ffmpeg_bin"
 
 cat > "$fakebin/file" <<'EOF'
 #!/usr/bin/env bash
@@ -52,5 +53,13 @@ output="$(PATH="$fakebin:$PATH" "$MACOS_DIR/scripts/audit-desktop-bundle-deps.sh
 if ! grep -q "Desktop bundle dependency audit passed" <<< "$output"; then
   fail "audit did not complete successfully with an empty rpath list"
 fi
+
+rm "$ffmpeg_bin"
+if PATH="$fakebin:$PATH" "$MACOS_DIR/scripts/audit-desktop-bundle-deps.sh" "$app_bundle" \
+  >"$tmpdir/missing-ffmpeg.out" 2>&1; then
+  fail "audit accepted a bundle without ffmpeg"
+fi
+grep -q "bundled ffmpeg is missing" "$tmpdir/missing-ffmpeg.out" \
+  || fail "missing ffmpeg diagnostic was not explicit"
 
 echo "audit-desktop-bundle-deps tests passed"

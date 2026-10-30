@@ -203,10 +203,10 @@ final class ChatTurnStateFailureTests: XCTestCase {
 
   /// The failed-turn fallback appends the reconstructed notice unconditionally,
   /// so the only thing keeping it out of a transcript the reader has moved on
-  /// from is the revocation `selectSession` now performs: bumping
-  /// `sendGeneration` makes `ChatQueryResultAuthority` reject the dead turn
-  /// before its catch block ever reaches the fallback.
-  func testSessionSwitchMidFlightRejectsTheAbandonedTurnsLateResult() async {
+  /// from is the revocation `selectApp` performs: bumping `sendGeneration`
+  /// makes `ChatQueryResultAuthority` reject the dead turn before its catch
+  /// block ever reaches the fallback.
+  func testAppSwitchMidFlightRejectsTheAbandonedTurnsLateResult() async {
     let provider = ChatProvider()
     provider.messages = [
       ChatMessage(id: "u1", clientTurnId: "t1", text: "session A question", sender: .user),
@@ -215,11 +215,11 @@ final class ChatTurnStateFailureTests: XCTestCase {
     provider.isSending = true
     let abandonedGeneration = provider.sendGeneration
 
-    await provider.selectSession(ChatSession(id: "session-b", title: "Session B"))
+    await provider.selectApp("app-b")
 
     XCTAssertFalse(
       provider.isSending,
-      "Switching session must revoke the in-flight turn, not leave the composer latched busy"
+      "Switching app must revoke the in-flight turn, not leave the composer latched busy"
     )
     XCTAssertNotEqual(
       provider.sendGeneration, abandonedGeneration,
@@ -231,11 +231,11 @@ final class ChatTurnStateFailureTests: XCTestCase {
         turnGeneration: abandonedGeneration,
         turnAcceptsResult: true
       ),
-      "Session B must not accept session A's late failure notice"
+      "App B's chat must not accept app A's late failure notice"
     )
     XCTAssertFalse(
       provider.messages.contains { $0.id == "a1" },
-      "Session A's rows must not survive into session B's transcript"
+      "App A's rows must not survive into app B's transcript"
     )
   }
 

@@ -172,7 +172,9 @@ def test_todoist_provider_401_marks_integration_disconnected(client, auth_header
     assert response.json()["error"] == "Todoist API error: 401"
     stored = _get_todoist_integration(client, auth_headers)
     assert stored["connected"] is False
-    assert stored["access_token"] == "expired-todoist-token"
+    # The typed status projection is non-secret: the token value must never
+    # round-trip through the status API, even after a provider auth failure.
+    assert "access_token" not in stored
 
 
 def test_todoist_timeout_returns_failure_without_real_network(client, auth_headers, monkeypatch):
@@ -196,5 +198,5 @@ def test_todoist_timeout_returns_failure_without_real_network(client, auth_heade
     assert response.json() == {
         "success": False,
         "external_task_id": None,
-        "error": "deterministic Todoist timeout",
+        "error": "Failed to create task due to an internal error",
     }

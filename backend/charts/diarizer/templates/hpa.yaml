@@ -17,6 +17,15 @@ spec:
     {{- toYaml .Values.autoscaling.behavior | nindent 4 }}
   {{- end }}
   metrics:
+    {{- if .Values.autoscaling.queueDepthAverageValue }}
+    - type: Pods
+      pods:
+        metric:
+          name: omi_diarization_v2_queue_depth
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.autoscaling.queueDepthAverageValue | quote }}
+    {{- end }}
     {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
     - type: Resource
       resource:

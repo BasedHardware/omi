@@ -1,19 +1,13 @@
-"""Shared admission policy for explicit canonical-ledger history reads."""
-
-from datetime import datetime, timezone
+"""Admission policy for the retained canonical-ledger history API."""
 
 from models.memories import MemoryDB
 from models.product_memory import (
-    MemoryAccessPolicy,
     LedgerWriteReason,
     MemoryItem,
     MemoryItemStatus,
-    MemoryLayer,
     ProcessingState,
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
-    is_archive_access_eligible,
-    is_default_access_eligible,
 )
 
 # Keep this policy module dependency-free from the knowledge-ledger writer.  The
@@ -50,48 +44,3 @@ def is_ledger_history_item(item: MemoryItem, row: MemoryDB) -> bool:
         or row.invalid_at is not None
         or row.superseded_by is not None
     )
-
-
-def is_temporal_history_access_eligible(
-    item: MemoryItem,
-    policy: MemoryAccessPolicy,
-    *,
-    now: datetime | None = None,
-    include_archive: bool = False,
-) -> bool:
-    """Apply the shared read fences for an explicit temporal history query.
-
-    History can inspect retained active and superseded versions, but it does
-    not weaken the normal privacy, processing, source, visibility, consumer,
-    or tier checks.  A superseded item is copied as an active read candidate
-    only for evaluating those shared checks; the canonical object is never
-    mutated and its lifecycle status remains available to the caller.
-    """
-
-    clock = now or datetime.now(timezone.utc)
-    if item.status not in {MemoryItemStatus.active, MemoryItemStatus.superseded}:
-        return False
-    if item.processing_state != ProcessingState.processed:
-        return False
-    promotion = item.promotion or {}
-    if promotion.get('is_locked') is True:
-        return False
-    if item.source_state in {SourceState.tombstoned, SourceState.purged}:
-        return False
-    if set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
-        return False
-    if item.tier == MemoryLayer.archive:
-        return (
-            include_archive
-            and is_archive_access_eligible(
-                item.model_copy(update={'status': MemoryItemStatus.active}),
-                policy,
-                now=clock,
-            ).allowed
-        )
-    if item.tier not in {MemoryLayer.short_term, MemoryLayer.long_term}:
-        return False
-    candidate = item
-    if item.status == MemoryItemStatus.superseded:
-        candidate = item.model_copy(update={'status': MemoryItemStatus.active})
-    return is_default_access_eligible(candidate, policy, now=clock).allowed

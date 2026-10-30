@@ -16,7 +16,7 @@ import ast
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-CHAT_ROUTER = BACKEND_DIR / "routers" / "chat.py"
+CHAT_ROUTER = BACKEND_DIR / "utils" / "chat_turn.py"
 
 _GENERATOR = "generate_stream"
 _EMITTER = "emit_done_frame"

@@ -66,4 +66,23 @@ void main() {
       expect(adapter.events, hasLength(3));
     });
   }
+
+  test('recent bad experience emits only the closed suppression decision', () async {
+    final adapter = RecordingAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    final service = AppReviewService.forTesting(
+      storage: await SharedPreferences.getInstance(),
+      clock: () => now,
+      platform: 'ios',
+      appVersion: '1.0',
+    );
+    await service.recordBadExperience(AppReviewBadExperience.negativeChatRating);
+    await service.requestReview(moment: AppReviewMoment.conversationRead, isStillAppropriate: () => true);
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.single.$1, 'App Review Opportunity');
+    expect(adapter.events.single.$2['decision'], 'recent_bad_experience');
+    expect(adapter.events.single.$2.keys, containsAll(<String>['moment', 'decision']));
+    expect(adapter.events.single.$2.containsKey('reason'), isFalse);
+  });
 }

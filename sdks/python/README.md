@@ -3,6 +3,8 @@
 
 A pip-installable Python SDK for connecting to Omi wearable devices over Bluetooth, decoding Opus-encoded audio, and transcribing it in real time using Deepgram.
 
+Deepgram transcription requires `websockets` 14.0 or newer. The SDK's dependency declarations enforce this minimum for its authenticated WebSocket handshake.
+
 <CardGroup cols={3}>
   <Card title="Bluetooth Connection" icon="bluetooth">
     Connect to any Omi device
@@ -88,7 +90,35 @@ A pip-installable Python SDK for connecting to Omi wearable devices over Bluetoo
 </Steps>
 
 
+## Deepgram language selection
+
+The Deepgram engine defaults to `en-US`. Set `language` to a language supported
+by your chosen Deepgram model when transcribing other languages:
+
+```python
+from omi.stt import create_transcriber
+
+transcriber = create_transcriber("deepgram", api_key=DEEPGRAM_API_KEY, language="es")
+await transcriber.run(audio_queue, on_transcript=handle_transcript)
+```
+
+The `omi.transcribe.transcribe` function also forwards `language="es"` through
+its engine options. This selects a transcription language; it does not translate
+audio or enable automatic language detection. See Deepgram's
+[model and language support](https://developers.deepgram.com/docs/models-languages-overview).
+
 ## Development
+
+### Stopping Deepgram transcription
+
+Cancel and await the task running the transcriber to stop it. The SDK stops
+sending PCM, sends Deepgram's `CloseStream`, and keeps receiving final transcripts
+until the server closes or the receive timeout expires. `drain_timeout` bounds
+both the terminal send and the receive wait (default: five seconds per phase).
+Callbacks can therefore run while cancellation is being awaited. Set
+`drain_timeout=0` on `create_transcriber("deepgram", ...)` to skip waiting for final
+results; the terminal send still has a five-second timeout. A server EOF or
+connection error follows the reconnect path; it does not send `CloseStream`.
 
 ### Local Development Setup
 
@@ -106,6 +136,10 @@ pip install -e .
 # Install dev dependencies
 pip install -e ".[dev]"
 ```
+
+Run the SDK's hardware-free regression suite with `bash test.sh`. It uses the
+repository's `uv` environment manager to test the minimum supported `websockets`
+version and is also selected by the shared local/CI check manifest.
 
 
 ## License

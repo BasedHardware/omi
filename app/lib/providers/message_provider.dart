@@ -1,3 +1,5 @@
+import 'package:omi/models/voice_question_result.dart';
+import 'package:omi/models/plan_storefront.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -9,6 +11,7 @@ import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
@@ -16,45 +19,176 @@ import 'package:uuid/uuid.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/streaming_error.dart';
+import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/chat_video_sampler.dart';
+import 'package:omi/services/voice_playback/chat_reply_read_aloud.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/gen/apps_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/chat_history_state.dart';
+import 'package:omi/backend/http/api/chat_sessions.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
+typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
+  String text, {
+  String? appId,
+  List<String>? filesId,
+  ChatPageContext? context,
+  String? chatSessionId,
+});
+typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files,
+    {String? language, Future<void>? abort});
+typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
-class MessageProvider extends ChangeNotifier {
-  MessageProvider({ChatFilesUploader? filesUploader}) : _filesUploader = filesUploader ?? uploadFilesServer;
+class _ChatTelemetryAttempt {
+  _ChatTelemetryAttempt(this.attempt);
+
+  final ProductAttempt attempt;
+  ProductOutcome? outcome;
+  ProductFailure failure = ProductFailure.none;
+  bool firstResultVisible = false;
+  Timer? timeout;
+
+  void dispose() => timeout?.cancel();
+}
+
+typedef ChatAppsLoader = Future<ApiResult<wire.GeneratedAppSearchResponse>> Function({int offset, int limit});
+
+/// What to send again when the reader taps Try Again on a failed reply.
+class _FailedReply {
+  const _FailedReply({this.text, this.context, this.fileIds = const [], this.failure = ChatStreamFailureClass.unknown});
+
+  /// The user's message as it was sent (with any quoted context). Null when the reply cannot be
+  /// retried from here (a voice message: its audio is gone).
+  final String? text;
+  final ChatPageContext? context;
+  final List<String> fileIds;
+
+  final ChatStreamFailureClass failure;
+
+  bool get canRetry => text != null;
+}
+
+class MessageProvider extends ChangeNotifier with ChatHistoryState {
+  MessageProvider({
+    ChatFilesUploader? filesUploader,
+    ChatSessionsApi? sessionsApi,
+    VoiceReplyStreamer? voiceReplyStreamer,
+    VoiceAudioFileSaver? voiceAudioFileSaver,
+    Duration voiceReplyTimeout = const Duration(seconds: 60),
+    ChatReplyReadAloud? readAloud,
+  })  : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
+        _filesUploader = filesUploader ?? uploadFilesServer,
+        _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
+        _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
+        _voiceReplyTimeout = voiceReplyTimeout,
+        _readAloud = readAloud ?? ChatReplyReadAloud.instance;
+
+  @override
+  final ChatSessionsApi chatSessionsApi;
+  @override
+  bool get chatMutationInProgress => sendingMessage || showTypingIndicator || _voiceSendInFlight || isUploadingFiles;
+  @override
+  void resetChatDraft() {
+    _readAloud.revoke();
+    _failedReplies.clear();
+    clearSelectedFiles();
+    clearUploadedFiles();
+  }
 
   final ChatFilesUploader _filesUploader;
+  final VoiceReplyStreamer _voiceReplyStreamer;
+  final VoiceAudioFileSaver _voiceAudioFileSaver;
+  final Duration _voiceReplyTimeout;
+  final ChatReplyReadAloud _readAloud;
 
+  ChatReplyReadAloud get readAloud => _readAloud;
+
+  /// Test seam — replaces [sendMessageStreamServer] for typed messages.
+  @visibleForTesting
+  ChatReplyStreamer? replyStreamOverride;
+  final Map<String, _ChatTelemetryAttempt> _chatTelemetryAttempts = {};
+
+  @override
   AppProvider? appProvider;
-  List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
 
-  bool isLoadingMessages = false;
-  bool hasCachedMessages = false;
-  bool isClearingChat = false;
   bool showTypingIndicator = false;
   bool sendingMessage = false;
+
+  /// Set while a typed reply streams; completing it stops that reply.
+  Completer<void>? _replyCancel;
+  ProductOutcome _replyStopOutcome = ProductOutcome.cancelled;
+  Completer<void>? _replyDone;
+
+  /// True while a typed reply can be stopped (Stop, or a new message that replaces it).
+  bool get canStopReply => _replyCancel != null && !_replyCancel!.isCompleted;
+
+  /// Stops the typed reply in progress and completes once that turn has wound down.
+  /// Text already streamed stays on screen; an empty placeholder is removed.
+  /// [superseded] marks a stop caused by the user sending a new message.
+  Future<void> stopReply({bool superseded = false}) {
+    final cancel = _replyCancel;
+    final done = _replyDone;
+    if (cancel == null || done == null) return Future.value();
+    if (!cancel.isCompleted) {
+      _replyStopOutcome = superseded ? ProductOutcome.superseded : ProductOutcome.cancelled;
+      cancel.complete();
+    }
+    return done.future;
+  }
+
   double aiStreamProgress = 1.0;
   bool agentThinkingAfterText = false;
-
-  String firstTimeLoadingText = '';
 
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
 
+  ApiProblem? chatAppsProblem;
+
+  @visibleForTesting
+  ChatAppsLoader? chatAppsLoaderOverride;
+
   // Chat quota exceeded — set transiently when backend returns 402
   bool _chatQuotaExceeded = false;
   bool get isChatQuotaExceeded => _chatQuotaExceeded;
+  ChatAtCap? _chatAtCap;
+  ChatAtCap? get chatAtCap => _chatAtCap?.active == true ? _chatAtCap : null;
+  void applyChatAtCap(ChatAtCap? state) {
+    _chatAtCap = state;
+    notifyListeners();
+  }
+
+  // Replies that failed (network or server error), keyed by the placeholder message object —
+  // placeholders share the id '0000', so the id cannot tell two failures apart.
+  final Map<ServerMessage, _FailedReply> _failedReplies = Map.identity();
+
+  /// Whether [message] is an AI reply that failed. The chat shows a localized error with Try Again
+  /// in its place instead of the raw server text.
+  bool isReplyFailed(ServerMessage message) => _failedReplies.containsKey(message);
+
+  /// Whether a failed [message] can be sent again (typed messages can; voice messages cannot).
+  bool canRetryReply(ServerMessage message) => _failedReplies[message]?.canRetry ?? false;
+
+  ChatStreamFailureClass? replyFailure(ServerMessage message) => _failedReplies[message]?.failure;
+
+  void _markReplyFailed(ServerMessage message, _FailedReply reply) {
+    message.text = '';
+    _failedReplies[message] = reply;
+  }
 
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
@@ -65,6 +199,67 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  App? _selectedChatApp() {
+    final id = appProvider?.selectedChatAppId;
+    if (id != null) {
+      for (final app in chatApps) {
+        if (app.id == id) return app;
+      }
+    }
+    return appProvider?.getSelectedApp();
+  }
+
+  void _registerChatTelemetryAttempt(String messageId, ProductAttempt attempt) {
+    _chatTelemetryAttempts[messageId]?.dispose();
+    final state = _ChatTelemetryAttempt(attempt);
+    _chatTelemetryAttempts[messageId] = state;
+    state.timeout = Timer(const Duration(seconds: 30), () {
+      if (state.outcome == null || !state.attempt.isComplete) {
+        state.attempt.complete(ProductOutcome.unobserved);
+      }
+      state.dispose();
+      _chatTelemetryAttempts.removeWhere((_, candidate) => identical(candidate, state));
+    });
+  }
+
+  void _transferChatTelemetryAttempt(String oldMessageId, String newMessageId) {
+    if (oldMessageId == newMessageId) return;
+    final state = _chatTelemetryAttempts.remove(oldMessageId);
+    if (state == null) return;
+    _chatTelemetryAttempts[newMessageId]?.dispose();
+    _chatTelemetryAttempts[newMessageId] = state;
+  }
+
+  void _finishChatTelemetryAttempt(
+    String messageId,
+    ProductOutcome outcome, {
+    ProductFailure failure = ProductFailure.none,
+  }) {
+    final state = _chatTelemetryAttempts[messageId];
+    if (state == null) return;
+    state.outcome = outcome;
+    state.failure = failure;
+    if (outcome != ProductOutcome.success || state.firstResultVisible) {
+      state.attempt.complete(outcome, failure: failure);
+      state.dispose();
+      _chatTelemetryAttempts.remove(messageId);
+    }
+  }
+
+  /// Called by the AI message widget after its content has been laid out.
+  /// Transport completion alone never counts as a first visible answer.
+  void markChatResultVisible(String messageId) {
+    final state = _chatTelemetryAttempts[messageId];
+    if (state == null || state.firstResultVisible || state.attempt.isComplete) return;
+    state.firstResultVisible = true;
+    state.attempt.firstResult();
+    if (state.outcome != null) {
+      state.attempt.complete(state.outcome!, failure: state.failure);
+      state.dispose();
+      _chatTelemetryAttempts.remove(messageId);
+    }
   }
 
   void setChatApps(List<App> apps) {
@@ -84,12 +279,37 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await retrieveAppsSearch(installedApps: true, limit: 50);
-
-      chatApps = result.apps.where((app) => app.worksWithChat()).toList();
+      final loader = chatAppsLoaderOverride ?? retrieveInstalledChatApps;
+      final apps = <App>[];
+      const limit = 100;
+      var offset = 0;
+      while (true) {
+        final result = await loader(offset: offset, limit: limit);
+        if (result is ApiFailure<wire.GeneratedAppSearchResponse>) {
+          chatAppsProblem = result.problem;
+          Logger.warning(
+            'mobile_chat_failure class=${result.problem.kind} stage=chatAppsFetch status=${result.problem.statusCode}',
+          );
+          return;
+        }
+        final page = (result as ApiSuccess<wire.GeneratedAppSearchResponse>).data;
+        apps.addAll(
+          (page.data ?? const <wire.GeneratedAppCatalogItem>[])
+              .map(App.fromGeneratedCatalogItem)
+              .where((app) => !app.deleted),
+        );
+        if (!page.pagination.hasNext) break;
+        offset += limit;
+      }
+      chatApps = apps.where((app) => app.worksWithChat()).toList();
+      chatAppsProblem = null;
     } catch (e) {
       Logger.debug('Error fetching chat apps: $e');
-      chatApps = [];
+      chatAppsProblem = ApiProblem(
+        e is TimeoutException || e is SocketException || e is http.ClientException
+            ? ApiProblemKind.transport
+            : ApiProblemKind.server,
+      );
     } finally {
       isLoadingChatApps = false;
       notifyListeners();
@@ -130,6 +350,8 @@ class MessageProvider extends ChangeNotifier {
       String ext = p.extension(file.path).toLowerCase().replaceAll('.', '');
       if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'tiff', 'tif'].contains(ext)) {
         typesToAdd.add('image');
+      } else if (isChatVideo(file.path)) {
+        typesToAdd.add('video');
       } else {
         typesToAdd.add('file');
       }
@@ -153,13 +375,14 @@ class MessageProvider extends ChangeNotifier {
     }
   }
 
-  bool isFileUploading(String id) {
-    return uploadingFiles[id] ?? false;
+  /// The poster frame of a picked video once its upload has finished, else null.
+  File? videoPosterFor(File selected) {
+    final path = _uploadedBySelection[selected]?.localPreviewPath;
+    return path == null ? null : File(path);
   }
 
-  void setHasCachedMessages(bool value) {
-    hasCachedMessages = value;
-    notifyListeners();
+  bool isFileUploading(String id) {
+    return uploadingFiles[id] ?? false;
   }
 
   void setSendingMessage(bool value) {
@@ -169,16 +392,6 @@ class MessageProvider extends ChangeNotifier {
 
   void setShowTypingIndicator(bool value) {
     showTypingIndicator = value;
-    notifyListeners();
-  }
-
-  void setClearingChat(bool value) {
-    isClearingChat = value;
-    notifyListeners();
-  }
-
-  void setLoadingMessages(bool value) {
-    isLoadingMessages = value;
     notifyListeners();
   }
 
@@ -218,14 +431,15 @@ class MessageProvider extends ChangeNotifier {
     try {
       List<File> files = [];
 
+      // Photos and videos: a video is sampled on device and read as stills plus its audio.
       List res = [];
       if (4 - selectedFiles.length == 1) {
-        var image = await ImagePicker().pickImage(source: ImageSource.gallery);
-        if (image != null) {
-          res = [image];
+        var media = await ImagePicker().pickMedia();
+        if (media != null) {
+          res = [media];
         }
       } else {
-        res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+        res = await ImagePicker().pickMultipleMedia(limit: 4 - selectedFiles.length);
       }
 
       for (var r in res) {
@@ -234,7 +448,7 @@ class MessageProvider extends ChangeNotifier {
 
       if (files.isNotEmpty) {
         selectedFiles.addAll(files);
-        selectedFileTypes.addAll(files.map((e) => 'image'));
+        selectedFileTypes.addAll(files.map((e) => isChatVideo(e.path) ? 'video' : 'image'));
         await uploadFiles(files, appProvider?.selectedChatAppId);
       }
       notifyListeners();
@@ -266,8 +480,22 @@ class MessageProvider extends ChangeNotifier {
       var res = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowMultiple: true,
-        allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp'],
-        dialogTitle: 'Select files',
+        allowedExtensions: [
+          'jpeg',
+          'md',
+          'pdf',
+          'gif',
+          'doc',
+          'png',
+          'pptx',
+          'txt',
+          'xlsx',
+          'webp',
+          'mp4',
+          'mov',
+          'm4v'
+        ],
+        dialogTitle: l10n?.chooseFile ?? 'Select files',
         withData: false,
         withReadStream: false,
       );
@@ -282,7 +510,7 @@ class MessageProvider extends ChangeNotifier {
 
         if (files.isNotEmpty) {
           selectedFiles.addAll(files);
-          selectedFileTypes.addAll(files.map((e) => 'file'));
+          selectedFileTypes.addAll(files.map((e) => isChatVideo(e.path) ? 'video' : 'file'));
           await uploadFiles(files, appProvider?.selectedChatAppId);
         }
         notifyListeners();
@@ -319,6 +547,9 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _chatAtCap = null;
+    _chatQuotaExceeded = false;
+    _readAloud.revoke();
     messages = [];
     chatApps = [];
     selectedFiles = [];
@@ -368,74 +599,14 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future refreshMessages({bool dropdownSelected = false}) async {
-    setLoadingMessages(true);
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-    }
-    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
-    if (messages.isEmpty) {
-      messages = List<ServerMessage>.from(SharedPreferencesUtil().cachedMessages);
-    } else {
-      SharedPreferencesUtil().cachedMessages = messages;
-      setHasCachedMessages(true);
-    }
-    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    setLoadingMessages(false);
-    notifyListeners();
-  }
-
-  void setMessagesFromCache() {
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-      messages = List<ServerMessage>.from(SharedPreferencesUtil().cachedMessages);
-      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    }
-    notifyListeners();
-  }
-
-  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
-    final l10n = globalNavigatorKey.currentContext?.l10n;
-    if (!hasCachedMessages) {
-      firstTimeLoadingText = l10n?.msgReadingMemories ?? 'Reading your memories...';
-      notifyListeners();
-    }
-    setLoadingMessages(true);
-    var mes = await getMessagesServer(appId: appProvider?.selectedChatAppId, dropdownSelected: dropdownSelected);
-    if (!hasCachedMessages) {
-      firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories...';
-      notifyListeners();
-    }
-    messages = List<ServerMessage>.from(mes);
-    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    setLoadingMessages(false);
-    notifyListeners();
-    return messages;
-  }
-
   Future<bool> setMessageNps(ServerMessage message, int value, {String? reason}) async {
     if (!await setMessageResponseRating(message.id, value, reason: reason)) return false;
+    if (value == -1) unawaited(AppReviewService().recordBadExperience(AppReviewBadExperience.negativeChatRating));
     message.askForNps = false;
     // Update local message rating so it persists when scrolling
     message.rating = value == 0 ? null : value;
     notifyListeners();
     return true;
-  }
-
-  Future clearChat() async {
-    setClearingChat(true);
-    try {
-      var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
-      messages = List<ServerMessage>.from(mes);
-      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    } catch (e) {
-      Logger.debug('Failed to clear chat: $e');
-      final l10n = globalNavigatorKey.currentContext?.l10n;
-      AppSnackbar.showSnackbarError(l10n?.somethingWentWrong ?? 'Something went wrong! Please try again later.');
-    } finally {
-      setClearingChat(false);
-    }
-    notifyListeners();
   }
 
   void addMessageLocally(String messageText) {
@@ -444,11 +615,18 @@ class MessageProvider extends ChangeNotifier {
     if (appId == 'no_selected') {
       appId = null;
     }
-    // Use local file paths as thumbnails so images display immediately
+    // Show local previews so attachments display immediately. Pair each upload with the
+    // file it came from: uploads finish out of order. A video gets its poster frame, never
+    // the clip itself, which an image decoder cannot read.
+    final sourceByUpload = Map<MessageFile, File>.identity();
+    _uploadedBySelection.forEach((source, uploaded) => sourceByUpload[uploaded] = source);
     List<MessageFile> localFiles = List.from(uploadedFiles);
-    for (int i = 0; i < localFiles.length && i < selectedFiles.length; i++) {
-      if (localFiles[i].mimeTypeToFileType() == 'image') {
-        localFiles[i].thumbnail = selectedFiles[i].path;
+    for (final file in localFiles) {
+      if (file.isVideo) {
+        if (file.localPreviewPath != null) file.thumbnail = file.localPreviewPath;
+      } else if (file.mimeTypeToFileType() == 'image') {
+        final source = sourceByUpload[file];
+        if (source != null && !isChatVideo(source.path)) file.thumbnail = source.path;
       }
     }
     var message = ServerMessage(
@@ -471,6 +649,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void addMessage(ServerMessage message) {
+    if (message.isAutomaticChatEntry) return;
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }
@@ -480,50 +659,134 @@ class MessageProvider extends ChangeNotifier {
 
   bool _voiceSendInFlight = false;
 
-  Future sendVoiceMessageStreamToServer(
+  void _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason reason) {
+    Logger.warning('Pendant voice question dropped: ${reason.wireName}');
+    const TypedEvents().emit(PendantVoiceQuestionDropped(reason: reason));
+  }
+
+  // A total response deadline: think/data heartbeats cannot keep a tutorial
+  // question pending forever. The deadline aborts the HTTP request and settles at
+  // once: it never waits for upstream cleanup, which can be stalled on body I/O,
+  // and nothing the request produces afterwards is read.
+  Stream<ServerMessageChunk> _voiceReplyWithDeadline(File file) async* {
+    final abort = Completer<void>();
+    final iterator = StreamIterator(_voiceReplyStreamer([file], abort: abort.future));
+    final deadline = Completer<bool>();
+    final timer = Timer(_voiceReplyTimeout, () {
+      if (!abort.isCompleted) abort.complete();
+      deadline.completeError(TimeoutException('Voice reply deadline'));
+    });
+    try {
+      while (await Future.any([iterator.moveNext(), deadline.future])) {
+        yield iterator.current;
+      }
+    } finally {
+      timer.cancel();
+      if (!abort.isCompleted) abort.complete();
+      unawaited(iterator.cancel().catchError((Object _) {}));
+    }
+  }
+
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> audioBytes, {
     Function? onFirstChunkRecived,
+    Future<void> Function()? onNoSpeech,
     BleAudioCodec? codec,
     bool playResponseAudio = false,
   }) async {
+    if (chatAtCap != null) return const VoiceQuestionResult.failed(VoiceQuestionFailure.quota);
     // Re-entry guard so a duplicated end-of-session signal from the device
     // button can't kick off two parallel voice replies.
-    if (_voiceSendInFlight) return;
-    if (audioBytes.isEmpty) return;
+    if (_voiceSendInFlight || sendingMessage || showTypingIndicator) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.sendInFlight);
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.busy);
+    }
+    if (audioBytes.isEmpty) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.noSpeech);
+    }
     _voiceSendInFlight = true;
-    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
-    var file = await FileUtils.saveAudioBytesToTempFile(
-      audioBytes,
-      DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
-      codec?.getFrameSize() ?? 160,
-    );
-
+    _readAloud.newQuery();
+    final readAloudGeneration = _readAloud.generation;
+    var readAloudDelivered = false;
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
       currentAppId = null;
     }
+    // Pendant voice addresses the server-current main conversation: the voice endpoint carries no
+    // app or session, so the backend saves the question and answer to the main Omi chat. Its
+    // playback may continue while Past chats or an app's thread (Mentor included) is open, but its
+    // transient reply must never become a row in that other thread.
+    final voiceMessages =
+        chatSessionId == null && !isFreshChat && (currentAppId ?? '').isEmpty ? messages : <ServerMessage>[];
+    final visibleVoice = identical(voiceMessages, messages);
+    final chatAttempt = ProductTelemetry.instance.start(ProductJourney.chatVoice, surface: ProductSurface.chat);
+    var chatAttemptCompleted = false;
+    late String responseMessageId;
+    void completeChat(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
+      if (chatAttemptCompleted) return;
+      chatAttemptCompleted = true;
+      _finishChatTelemetryAttempt(responseMessageId, outcome, failure: failure);
+    }
+
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
+    late final File file;
+    try {
+      file = await _voiceAudioFileSaver(
+        audioBytes,
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
+        codec?.getFrameSize() ?? 160,
+      ).timeout(_voiceReplyTimeout);
+    } catch (_) {
+      _voiceSendInFlight = false;
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.audioSaveFailed);
+      chatAttempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
+    }
+
     String chatTargetId = currentAppId ?? 'omi';
-    bool isPersonaChat = false;
+    // The voice endpoint has no app field and the backend voice pipeline runs
+    // without an app persona (`app = None`), so a voice turn never uses the
+    // selected app's persona even when one is picked. Reporting it as persona
+    // chat would overcount; only the typed path honors the selection today.
+    const bool isPersonaChat = false;
 
     PlatformManager.instance.analytics.chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 
-    setShowTypingIndicator(true);
+    if (visibleVoice) setShowTypingIndicator(true);
     var message = ServerMessage.empty();
-    messages.add(message);
-    var aiIndex = messages.length - 1;
+    voiceMessages.add(message);
+    var aiIndex = voiceMessages.length - 1;
+    responseMessageId = message.id;
+    _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
 
     // Voice response playback is triggered only from the Omi device-button
     // path (capture_provider). The chat-screen mic input does not pass
     // playResponseAudio=true.
-    final String playbackMessageId = message.id;
-    if (playResponseAudio) {
-      await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
+    // Placeholder chat rows share an id. Playback cancellation must name this
+    // request so delayed cleanup cannot stop a later question's response.
+    final playbackMessageId = 'pendant:${const Uuid().v4()}';
+    var playbackAuthorized = playResponseAudio;
+    void stopPlayback(VoiceReplyPlaybackInterruptSource source) {
+      playbackAuthorized = false;
+      if (!playResponseAudio) return;
+      // Audio cleanup is best effort, not tutorial completion authority. A
+      // stalled native stop must not hold Processing or the voice busy guard.
+      unawaited(OmiVoicePlaybackService.instance
+          .interruptResponse(messageId: playbackMessageId, source: source)
+          .catchError((Object error) => Logger.warning('Voice reply cleanup failed: ${error.runtimeType}')));
     }
 
+    String? question;
     try {
+      if (playResponseAudio) {
+        await OmiVoicePlaybackService.instance
+            .beginResponse(messageId: playbackMessageId, canBegin: () => playbackAuthorized)
+            .timeout(_voiceReplyTimeout);
+      }
       bool firstChunkRecieved = false;
-      await for (var chunk in sendVoiceMessageStreamServer([file])) {
+      await for (var chunk in _voiceReplyWithDeadline(file)) {
         if (!firstChunkRecieved &&
             [
               MessageChunkType.message,
@@ -543,6 +806,12 @@ class MessageProvider extends ChangeNotifier {
           continue;
         }
 
+        if (chunk.type == MessageChunkType.memory) {
+          message.memoryAction = chunk.text;
+          notifyListeners();
+          continue;
+        }
+
         if (chunk.type == MessageChunkType.data) {
           message.text += chunk.text;
           if (playResponseAudio) {
@@ -557,63 +826,103 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.done) {
+          chunk.message!.memoryAction = message.memoryAction;
           message = chunk.message!;
-          messages[aiIndex] = message;
+          voiceMessages[aiIndex] = message;
+          _transferChatTelemetryAttempt(responseMessageId, message.id);
+          _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
+          chatAttemptCompleted = true;
           if (playResponseAudio) {
             OmiVoicePlaybackService.instance.updateStreamingResponse(
               messageId: playbackMessageId,
               fullText: message.text,
               isFinal: true,
             );
+          } else if (!readAloudDelivered) {
+            readAloudDelivered = true;
+            unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
           }
           notifyListeners();
-          continue;
+          return message.text.trim().isEmpty
+              ? const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable)
+              : VoiceQuestionResult.answered(message.text, question: question);
         }
 
         if (chunk.type == MessageChunkType.message) {
-          messages.insert(aiIndex, chunk.message!);
+          if (chunk.message?.sender == MessageSender.human) question = chunk.message!.text;
+          voiceMessages.insert(aiIndex, chunk.message!);
           aiIndex++;
           notifyListeners();
           continue;
         }
 
         if (chunk.type == MessageChunkType.error) {
-          if (_tryParseQuotaError(chunk.text)) {
+          if (chunk.errorCode == 'no_speech') {
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text = l10n?.voiceQuestionNoSpeech ?? "Didn't catch that — try again";
+            stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
+            if (onNoSpeech != null) await onNoSpeech();
+            completeChat(ProductOutcome.empty);
+            notifyListeners();
+            return const VoiceQuestionResult.failed(VoiceQuestionFailure.noSpeech);
+          }
+          if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
+            _chatQuotaExceeded = true;
+            final l10n = globalNavigatorKey.currentContext?.l10n;
+            message.text = chatAtCap?.title ??
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
-            if (playResponseAudio) {
-              await OmiVoicePlaybackService.instance.interrupt();
-            }
+            stopPlayback(VoiceReplyPlaybackInterruptSource.quotaError);
             notifyListeners();
             setShowTypingIndicator(false);
-            return;
+            _logChatFailure(ChatStreamFailureClass.quota, stage: 'voice_stream');
+            completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
+            return const VoiceQuestionResult.failed(VoiceQuestionFailure.quota);
           }
-          message.text = chunk.text;
+          final failure = _chunkFailureClass(chunk);
+          _logChatFailure(failure, stage: 'voice_stream');
+          _markReplyFailed(message, _FailedReply(failure: failure));
+          stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
+          completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
           notifyListeners();
-          continue;
+          return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
         }
       }
     } catch (e) {
-      message.text = ServerMessageChunk.failedMessage().text;
-      if (playResponseAudio) {
-        await OmiVoicePlaybackService.instance.interrupt();
-      }
+      final failure = classifyChatStreamFailure(e);
+      _logChatFailure(failure.kind, stage: 'voice_transport', status: failure.statusCode);
+      _markReplyFailed(message, _FailedReply(failure: failure.kind));
+      stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
+      completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
       notifyListeners();
     } finally {
       _voiceSendInFlight = false;
+      setShowTypingIndicator(false);
     }
 
-    setShowTypingIndicator(false);
+    if (!chatAttemptCompleted) {
+      stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
+      completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
+    }
+    return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
   }
 
-  Future sendMessageStreamToServer(String text, {ChatPageContext? context}) async {
+  Future sendMessageStreamToServer(String text, {ChatPageContext? context}) => _streamReply(text, context: context);
+
+  /// Streams the reply to [text]. [retryFileIds] resends a failed message's attachments without
+  /// touching the files currently selected in the composer (see [retryFailedReply]).
+  Future<void> _streamReply(String text, {ChatPageContext? context, List<String>? retryFileIds}) async {
+    if (chatAtCap != null) return;
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
+    beginChatTurn();
+    _readAloud.newQuery();
+    final readAloudGeneration = _readAloud.generation;
+    var readAloudDelivered = false;
     // If Omi was still speaking a prior voice reply, stop it — the user's
     // typed message takes precedence.
     if (OmiVoicePlaybackService.instance.isSpeaking) {
-      await OmiVoicePlaybackService.instance.interrupt();
+      await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.userTyped);
     }
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
@@ -622,7 +931,7 @@ class MessageProvider extends ChangeNotifier {
     }
 
     String chatTargetId = currentAppId ?? 'omi';
-    bool isPersonaChat = false;
+    bool isPersonaChat = _selectedChatApp()?.hasCapability('persona') ?? false;
 
     PlatformManager.instance.analytics.chatMessageSent(
       message: text,
@@ -634,13 +943,30 @@ class MessageProvider extends ChangeNotifier {
     );
     _isNextMessageFromVoice = false;
 
+    final chatAttempt = ProductTelemetry.instance.start(ProductJourney.chatText, surface: ProductSurface.chat);
+    var chatAttemptCompleted = false;
+    late String responseMessageId;
+    void completeChat(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
+      if (chatAttemptCompleted) return;
+      chatAttemptCompleted = true;
+      _finishChatTelemetryAttempt(responseMessageId, outcome, failure: failure);
+    }
+
+    final cancel = Completer<void>();
+    final done = Completer<void>();
+    _replyCancel = cancel;
+    _replyDone = done;
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
     final aiIndex = messages.length - 1;
+    responseMessageId = message.id;
+    _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
-    List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
-    clearSelectedFiles();
-    clearUploadedFiles();
+    final List<String> fileIds = retryFileIds ?? uploadedFiles.map((e) => e.id).toList();
+    if (retryFileIds == null) {
+      clearSelectedFiles();
+      clearUploadedFiles();
+    }
     String textBuffer = '';
     Timer? timer;
 
@@ -655,64 +981,179 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds, context: context)) {
-        if (chunk.type == MessageChunkType.think) {
-          flushBuffer();
-          message.thinkings.add(chunk.text);
-          if (message.text.isNotEmpty) {
-            agentThinkingAfterText = true;
-          }
-          notifyListeners();
-          continue;
-        }
-
-        if (chunk.type == MessageChunkType.data) {
-          if (agentThinkingAfterText) {
-            agentThinkingAfterText = false;
-            notifyListeners();
-          }
-          textBuffer += chunk.text;
-          timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+      await prepareChatSession();
+      final override = replyStreamOverride;
+      final replies = override != null
+          ? override(text, appId: currentAppId, filesId: fileIds, context: context, chatSessionId: chatSessionId)
+          : sendMessageStreamServer(
+              text,
+              appId: currentAppId,
+              filesId: fileIds,
+              context: context,
+              chatSessionId: chatSessionId,
+              cancelSignal: cancel.future,
+            );
+      final iterator = StreamIterator(replies);
+      final stopped = cancel.future.then((_) => false);
+      try {
+        // Race each chunk against Stop so a reply that is still thinking stops at once.
+        while (await Future.any([iterator.moveNext(), stopped])) {
+          final chunk = iterator.current;
+          // A chunk that arrived alongside Stop (even an error) does not undo the stop.
+          if (cancel.isCompleted) break;
+          if (chunk.type == MessageChunkType.think) {
             flushBuffer();
-          });
-          continue;
-        }
+            message.thinkings.add(chunk.text);
+            if (message.text.isNotEmpty) {
+              agentThinkingAfterText = true;
+            }
+            notifyListeners();
+            continue;
+          }
 
-        timer?.cancel();
-        timer = null;
-        flushBuffer();
+          if (chunk.type == MessageChunkType.memory) {
+            message.memoryAction = chunk.text;
+            notifyListeners();
+            continue;
+          }
 
-        if (chunk.type == MessageChunkType.done) {
-          message = chunk.message!;
-          messages[aiIndex] = message;
-          notifyListeners();
-          continue;
-        }
+          if (chunk.type == MessageChunkType.data) {
+            if (agentThinkingAfterText) {
+              agentThinkingAfterText = false;
+              notifyListeners();
+            }
+            textBuffer += chunk.text;
+            timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+              flushBuffer();
+            });
+            continue;
+          }
 
-        if (chunk.type == MessageChunkType.error) {
-          if (_tryParseQuotaError(chunk.text)) {
-            // Keep the user's message visible; replace AI placeholder with quota message
-            final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
-                "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+          timer?.cancel();
+          timer = null;
+          flushBuffer();
+
+          if (chunk.type == MessageChunkType.done) {
+            chunk.message!.memoryAction = message.memoryAction;
+            message = chunk.message!;
+            messages[aiIndex] = message;
+            _transferChatTelemetryAttempt(responseMessageId, message.id);
+            _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
+            nameChatSession();
+            chatAttemptCompleted = true;
+            if (!readAloudDelivered) {
+              readAloudDelivered = true;
+              unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
+            }
             notifyListeners();
             return;
           }
-          message.text = chunk.text;
-          notifyListeners();
-          continue;
+
+          if (chunk.type == MessageChunkType.error) {
+            if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
+              // Keep the user's message visible; replace AI placeholder with quota message
+              _chatQuotaExceeded = true;
+              final l10n = globalNavigatorKey.currentContext?.l10n;
+              message.text = chatAtCap?.title ??
+                  l10n?.chatQuotaExceededReply ??
+                  "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+              _logChatFailure(ChatStreamFailureClass.quota, stage: 'stream');
+              completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
+              notifyListeners();
+              return;
+            }
+            final failure = _chunkFailureClass(chunk);
+            _logChatFailure(failure, stage: 'stream');
+            _markReplyFailed(message, _FailedReply(text: text, context: context, fileIds: fileIds, failure: failure));
+            completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
+            notifyListeners();
+            return;
+          }
         }
+      } finally {
+        unawaited(iterator.cancel().catchError((_) {}));
       }
     } catch (e) {
-      message.text = ServerMessageChunk.failedMessage().text;
-      notifyListeners();
+      // After Stop the abort surfaces as a transport error; it is the stop, not a failure.
+      if (!cancel.isCompleted) {
+        final failure = classifyChatStreamFailure(e);
+        _logChatFailure(failure.kind, stage: 'transport', status: failure.statusCode);
+        _markReplyFailed(message, _FailedReply(text: text, context: context, fileIds: fileIds, failure: failure.kind));
+        completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
+        notifyListeners();
+      }
     } finally {
       timer?.cancel();
       flushBuffer();
+      if (cancel.isCompleted && !chatAttemptCompleted) {
+        // Stopped: keep what was already shown, drop an empty placeholder.
+        if (message.text.trim().isEmpty) messages.remove(message);
+        message.thinkings.clear();
+        agentThinkingAfterText = false;
+        completeChat(_replyStopOutcome);
+      }
+      if (identical(_replyCancel, cancel)) {
+        _replyCancel = null;
+        _replyDone = null;
+      }
       aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
       setSendingMessage(false);
+      if (!done.isCompleted) done.complete();
     }
+    if (!chatAttemptCompleted) {
+      _logChatFailure(ChatStreamFailureClass.server, stage: 'eof');
+      if (message.text.isEmpty) {
+        _markReplyFailed(message,
+            _FailedReply(text: text, context: context, fileIds: fileIds, failure: ChatStreamFailureClass.server));
+        notifyListeners();
+      }
+      completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
+    }
+  }
+
+  ChatStreamFailureClass _chunkFailureClass(ServerMessageChunk chunk) => switch (chunk.errorCode) {
+        'offline' => ChatStreamFailureClass.offline,
+        'server_error' => ChatStreamFailureClass.server,
+        'timeout' => ChatStreamFailureClass.timeout,
+        'quota_exceeded' => ChatStreamFailureClass.quota,
+        'not_signed_in' => ChatStreamFailureClass.notSignedIn,
+        _ => ChatStreamFailureClass.server,
+      };
+
+  ProductFailure _productFailureFor(ChatStreamFailureClass failure) => switch (failure) {
+        ChatStreamFailureClass.offline => ProductFailure.network,
+        ChatStreamFailureClass.server => ProductFailure.server,
+        ChatStreamFailureClass.timeout => ProductFailure.timeout,
+        ChatStreamFailureClass.quota => ProductFailure.quota,
+        ChatStreamFailureClass.notSignedIn => ProductFailure.unauthorized,
+        ChatStreamFailureClass.unknown => ProductFailure.unknown,
+      };
+
+  void _logChatFailure(ChatStreamFailureClass failure, {required String stage, int? status}) {
+    Logger.warning('mobile_chat_failure class=${failure.name} stage=$stage status=$status');
+  }
+
+  /// Sends the user message behind the failed reply [message] again: the failed reply is removed
+  /// and a new one streams in its place. No-op unless [canRetryReply]. The caller owns
+  /// [sendingMessage] the same way it does for a normal send.
+  Future<void> retryFailedReply(ServerMessage message) async {
+    // A paused chat sends nothing, so removing the failed reply here would lose its Try Again and
+    // leave the composer the caller locked; keep both until the pause ends.
+    if (chatAtCap != null) {
+      setSendingMessage(false);
+      return;
+    }
+    final failed = _failedReplies.remove(message);
+    if (failed == null || !failed.canRetry) {
+      // The failure was cleared (a refresh) between build and tap: nothing to resend, so release the
+      // composer the caller locked.
+      setSendingMessage(false);
+      return;
+    }
+    messages.removeWhere((m) => identical(m, message));
+    notifyListeners();
+    await _streamReply(failed.text!, context: failed.context, retryFileIds: failed.fileIds);
   }
 
   bool _tryParseQuotaError(String errorText) {
@@ -721,6 +1162,12 @@ class MessageProvider extends ChangeNotifier {
       if (json is! Map) return false;
       // FastAPI wraps HTTPException detail in {"detail": {...}}
       var detail = json['detail'] is Map ? json['detail'] as Map<String, dynamic> : json;
+      if (detail['chat_at_cap'] is Map) {
+        _chatAtCap = ChatAtCap.fromJson(Map<String, dynamic>.from(detail['chat_at_cap'] as Map));
+        _chatQuotaExceeded = true;
+        notifyListeners();
+        return true;
+      }
       if (detail['error'] == 'quota_exceeded') {
         detail['allowed'] = false;
         _chatQuotaExceeded = true;
@@ -746,5 +1193,16 @@ class MessageProvider extends ChangeNotifier {
 
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
+  }
+
+  @override
+  void dispose() {
+    _readAloud.revoke();
+    for (final state in _chatTelemetryAttempts.values) {
+      state.dispose();
+      if (!state.attempt.isComplete) state.attempt.complete(ProductOutcome.unobserved);
+    }
+    _chatTelemetryAttempts.clear();
+    super.dispose();
   }
 }

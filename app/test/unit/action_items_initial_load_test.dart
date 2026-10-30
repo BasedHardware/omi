@@ -14,7 +14,8 @@ void main() {
     final firstResponse = Completer<ActionItemsResponse>();
     var requests = 0;
     final provider = ActionItemsProvider(
-      getActionItems: ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) {
+      getActionItems: (
+          {limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) {
         requests++;
         return firstResponse.future;
       },
@@ -38,7 +39,8 @@ void main() {
     final firstResponse = Completer<ActionItemsResponse?>();
     var requests = 0;
     final provider = ActionItemsProvider(
-      getActionItems: ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) {
+      getActionItems: (
+          {limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) {
         requests++;
         return requests == 1
             ? firstResponse.future
@@ -52,6 +54,25 @@ void main() {
     await provider.ensureLoaded(showShimmer: true);
 
     expect(requests, 2);
+    provider.dispose();
+  });
+
+  test('a fetch from a cleared owner cannot repopulate tasks or Siri', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    final response = Completer<ActionItemsResponse>();
+    final provider = ActionItemsProvider(
+      getActionItems: (
+              {limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) =>
+          response.future,
+    );
+    final pending = provider.ensureLoaded();
+    provider.clearUserData();
+    response.complete(const ActionItemsResponse(actionItems: [
+      ActionItemWithMetadata(id: 'old-owner-task', description: 'Private', completed: false),
+    ], hasMore: false));
+    await pending;
+    expect(provider.actionItems, isEmpty);
     provider.dispose();
   });
 }

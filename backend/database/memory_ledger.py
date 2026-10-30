@@ -8,10 +8,15 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from database import _client as _client_mod
-from database import projection_repair
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
-from database.legal_holds import assert_no_destructive_operation_transaction
+from database.legal_holds import (
+    LegalHoldAuthorityUnavailable,
+    assert_no_destructive_operation_transaction,
+    assert_destructive_gate_still_ours,
+    assert_destructive_operation_transaction,
+    current_destructive_operation_token,
+)
 from database.memory_collections import MemoryCollections
 from models.memories import confidence_fields_for_evidence
 from models.memory_state_head import (
@@ -88,6 +93,48 @@ def _mutation_memory_ids(mutations: List[Dict[str, Any]]) -> set[str]:
     return ids
 
 
+def _legacy_commit_fences_need_exact_reads(
+    *,
+    transaction: Any,
+    database: Any,
+    collections: MemoryCollections,
+) -> bool:
+    """Cheap transactional probes that pre-screen the per-memory privacy fences.
+
+    The fences below only fire on a tombstoned override, a tombstoned item, or
+    an unreadable document. Most users have no ``memory_historical_overrides``
+    document and no tombstoned item at all, so two limit-1 existence queries
+    replace the two phantom per-memory lookups that dominated Firestore
+    NOT_FOUND read volume (cost card C015): an empty query bills a single read
+    instead of one NOT_FOUND lookup per mutation id.
+
+    Returns True — run the exact per-memory reads — when either probe matches,
+    so every fence outcome is unchanged for users with suppression history.
+    A probe this backend cannot run (test fakes, partial SDK surfaces)
+    conservatively returns True.
+    """
+    probes = (
+        collections.memory_historical_overrides,
+        (collections.memory_items, 'tombstoned'),
+    )
+    for entry in probes:
+        path, status = entry if isinstance(entry, tuple) else (entry, None)
+        try:
+            # Function-level import: stubbed test environments replace
+            # google.cloud.firestore_v1 wholesale; the ImportError (like any
+            # probe failure) conservatively selects the exact reads below.
+            from google.cloud.firestore_v1 import FieldFilter  # type: ignore[reportMissingImports]
+
+            query = database.collection(path).limit(1)
+            if status is not None:
+                query = query.where(filter=FieldFilter('status', '==', status))
+            if any(getattr(doc, 'exists', False) for doc in transaction.get(query)):
+                return True
+        except Exception:
+            return True
+    return False
+
+
 def _assert_legacy_commit_privacy_fences(
     *,
     transaction: Any,
@@ -112,6 +159,12 @@ def _assert_legacy_commit_privacy_fences(
     if len(memory_ids) > 200:
         raise LegacyCommitPrivacyFence('legacy memory commit identity inventory is too large')
     collections = MemoryCollections(uid=uid)
+    if not _legacy_commit_fences_need_exact_reads(
+        transaction=transaction,
+        database=database,
+        collections=collections,
+    ):
+        return
     for memory_id in memory_ids:
         item_snapshot = _document(database, f'{collections.memory_items}/{memory_id}').get(transaction=transaction)
         item_exists = getattr(item_snapshot, 'exists', False)
@@ -272,6 +325,8 @@ def purge_canonical_privacy_history_for_memories(
     *,
     firestore_client: Any = None,
     preserve_source_replacement_receipts: bool = False,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
 ) -> Dict[str, List[str]]:
     """Remove pre-delete canonical history whose IDs or payload encode content.
 
@@ -296,6 +351,8 @@ def purge_canonical_privacy_history_for_memories(
         if not isinstance(payload, dict):
             continue
         if _value_references_memory_id(payload, target_ids):
+            if revalidate_gate:
+                assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
             document.reference.delete()
             deleted_operation_ids.add(str(document.id))
     if deleted_operation_ids:
@@ -307,6 +364,8 @@ def purge_canonical_privacy_history_for_memories(
         if not isinstance(payload, dict):
             continue
         if payload.get('operation_id') in deleted_operation_ids or _value_references_memory_id(payload, target_ids):
+            if revalidate_gate:
+                assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
             document.reference.delete()
             removed_commits.append(str(document.id))
     if removed_commits:
@@ -318,6 +377,8 @@ def purge_canonical_privacy_history_for_memories(
         if isinstance(payload, dict) and (
             payload.get('operation_id') in deleted_operation_ids or _value_references_memory_id(payload, target_ids)
         ):
+            if revalidate_gate:
+                assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
             document.reference.delete()
             removed_outbox.append(str(document.id))
     if removed_outbox:
@@ -328,6 +389,8 @@ def purge_canonical_privacy_history_for_memories(
         for document in _iter_collection_documents(user_ref.collection(collection_name)):
             payload = document.to_dict()
             if isinstance(payload, dict) and _value_references_memory_id(payload, target_ids):
+                if revalidate_gate:
+                    assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
                 document.reference.delete()
                 removed_ids.append(str(document.id))
         if removed_ids:
@@ -340,6 +403,8 @@ def purge_canonical_privacy_history_for_memories(
         planned = payload.get('planned_by_trigger')
         if not isinstance(planned, dict) or not target_ids.intersection(planned):
             continue
+        if revalidate_gate:
+            assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
         document.reference.update(
             {'planned_by_trigger': {key: value for key, value in planned.items() if key not in target_ids}}
         )
@@ -349,6 +414,8 @@ def purge_canonical_privacy_history_for_memories(
             uid,
             list(target_ids),
             firestore_client=database,
+            revalidate_gate=revalidate_gate,
+            gate_kind=gate_kind,
         )
         if removed_replacements:
             removed['memory_source_replacements'] = removed_replacements
@@ -360,6 +427,8 @@ def purge_source_replacement_receipts_for_memories(
     memory_ids: List[str],
     *,
     firestore_client: Any = None,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
 ) -> List[str]:
     target_ids = {memory_id for memory_id in memory_ids if memory_id}
     if not target_ids:
@@ -370,6 +439,8 @@ def purge_source_replacement_receipts_for_memories(
     for document in _iter_collection_documents(collection):
         payload = document.to_dict()
         if isinstance(payload, dict) and _value_references_memory_id(payload, target_ids):
+            if revalidate_gate:
+                assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
             document.reference.delete()
             removed.append(str(document.id))
     return sorted(removed)
@@ -381,6 +452,9 @@ def _finalize_canonical_privacy_tombstones_transaction(
     database: Any,
     collections: MemoryCollections,
     target_ids: List[str],
+    *,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
 ) -> None:
     """Atomically remove one already-bounded tombstoned lineage.
 
@@ -390,6 +464,25 @@ def _finalize_canonical_privacy_tombstones_transaction(
     leaves every content-free tombstone in place so any lineage member can
     reconstruct the complete cleanup set on the next request.
     """
+
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(collections.uid, gate_kind, firestore_client=database)
+        try:
+            gate_token = current_destructive_operation_token(collections.uid, kind=gate_kind)
+        except LegalHoldAuthorityUnavailable:
+            # No gate is active in this context (legacy/test seams and callers
+            # that never claimed the lock). The takeover abort above is the
+            # only available signal; without a held token there is nothing to
+            # fence the transaction against, so proceed without it.
+            gate_token = None
+        if gate_token is not None:
+            assert_destructive_operation_transaction(
+                transaction,
+                database,
+                uid=collections.uid,
+                kind=gate_kind,
+                token=gate_token,
+            )
 
     item_refs: List[Any] = []
     evidence_refs: Dict[str, Any] = {}
@@ -435,6 +528,8 @@ def finalize_canonical_privacy_tombstones(
     *,
     firestore_client: Any = None,
     preserve_source_replacement_receipts: bool = False,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
 ) -> None:
     """Remove deterministic IDs after every derived provider is scrubbed.
 
@@ -451,6 +546,8 @@ def finalize_canonical_privacy_tombstones(
     purge_canonical_privacy_history_for_memories(
         uid,
         target_ids,
+        revalidate_gate=revalidate_gate,
+        gate_kind=gate_kind,
         firestore_client=database,
         preserve_source_replacement_receipts=preserve_source_replacement_receipts,
     )
@@ -460,6 +557,8 @@ def finalize_canonical_privacy_tombstones(
         database,
         collections,
         target_ids,
+        revalidate_gate=revalidate_gate,
+        gate_kind=gate_kind,
     )
 
 
@@ -596,8 +695,6 @@ def append_commit(
         ),
         operation_name="memory_ledger_append",
     )
-    if result.get('applied'):
-        projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 
@@ -626,8 +723,6 @@ def append_commit_with_builder(
         ),
         operation_name="memory_ledger_append_with_builder",
     )
-    if result.get('applied'):
-        projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 

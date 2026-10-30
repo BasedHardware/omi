@@ -1,0 +1,3 @@
+{
+  "change": "Sync attention is honest: recordings the server refused for an invalid date are repaired or dropped quietly instead of piling up as Failed rows, On the Way rows show each recording's length, the reason it needs attention and Retry/Delete actions, Heard today counts today's speech including a running episode, the On Device card names audio queued on the phone, and a brief upload pause no longer says the servers are busy"
+}

@@ -13,7 +13,8 @@ final class MemoryExportRowLayoutTests: XCTestCase {
       lastExportedAt: nil,
       detailText: nil,
       isConfigured: false,
-      hasConnection: false)
+      hasConnection: false,
+      needsUpdate: false)
     let row = MemoryExportRow(
       destination: .claude,
       titleOverride: "Claude / Claude Code",

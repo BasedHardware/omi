@@ -70,13 +70,15 @@ _utils_sub = types.ModuleType('utils.subscription')
 setattr(_utils_sub, 'get_default_basic_subscription', MagicMock())
 _install_stub('utils.subscription', _utils_sub)
 
-# database.users is imported against the stubs above, so record its prior
+# The deletion modules are imported against the stubs above, so record their prior
 # sys.modules entry now; the autouse fixture below restores/removes it so the
 # half-stubbed module does not leak into other unit-test modules.
-if 'database.users' not in _STUB_PRIORS:
-    _STUB_PRIORS['database.users'] = sys.modules.get('database.users')
+for _module_name in ('database.account_deletion_grace', 'database.users'):
+    if _module_name not in _STUB_PRIORS:
+        _STUB_PRIORS[_module_name] = sys.modules.get(_module_name)
 
 from database import users as users_db  # noqa: E402
+from database import account_deletion_grace as deletion_grace_db  # noqa: E402
 
 # Restore all stubbed sys.modules entries IMMEDIATELY after capturing the
 # users_db reference. pytest imports/collects later test modules before any
@@ -90,8 +92,10 @@ for _name, _prior in _STUB_PRIORS.items():
     else:
         sys.modules[_name] = _prior
 _db_pkg = sys.modules.get('database')
-if _db_pkg is not None and hasattr(_db_pkg, 'users'):
-    delattr(_db_pkg, 'users')
+if _db_pkg is not None:
+    for _attribute in ('users', 'account_deletion_grace'):
+        if hasattr(_db_pkg, _attribute):
+            delattr(_db_pkg, _attribute)
 
 
 def _make_snapshot(data):
@@ -115,7 +119,7 @@ def _make_txn():
     return txn
 
 
-def _run_claim(data, stale_after=timedelta(minutes=10), running_stale_after=timedelta(minutes=30)):
+def _run_claim(data, stale_after=timedelta(minutes=10), running_stale_after=users_db.DELETION_WIPE_RUNNING_STALE_AFTER):
     """Run the claim transaction with given doc data, return (result, updates).
 
     The @transactional decorator wraps the raw function in a _Transactional
@@ -133,6 +137,39 @@ def _run_claim(data, stale_after=timedelta(minutes=10), running_stale_after=time
 
     result = raw_fn(txn, FakeDocRef(), stale_after, running_stale_after)
     return result, txn._updates
+
+
+def _run_task_claim(data):
+    txn = _make_txn()
+    snapshot = _make_snapshot(data)
+    doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
+    return raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER), txn._updates
+
+
+def _run_restore(data):
+    txn = _make_txn()
+    snapshot = _make_snapshot(data)
+    doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = getattr(
+        deletion_grace_db._restore_user_deletion_txn,
+        'to_wrap',
+        deletion_grace_db._restore_user_deletion_txn,
+    )
+    return raw_fn(txn, doc_ref), txn._updates
+
+
+def _run_mark_grace(data, due_at):
+    txn = _make_txn()
+    snapshot = _make_snapshot(data)
+    doc_ref = types.SimpleNamespace(id='uid1', get=lambda transaction=None: snapshot)
+    raw_fn = getattr(
+        deletion_grace_db._mark_user_deletion_grace_intent_txn,
+        'to_wrap',
+        deletion_grace_db._mark_user_deletion_grace_intent_txn,
+    )
+    result = raw_fn(txn, doc_ref, 'new-job', due_at)
+    return result, txn._sets, txn._updates
 
 
 def _run_mark_billing_failed(data):
@@ -273,8 +310,8 @@ def test_mark_billing_failed_allows_pre_wipe_states():
     assert kwargs == {'merge': True}
 
 
-def test_mark_billing_failed_does_not_clobber_actionable_or_terminal_wipes():
-    for status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+def test_mark_billing_failed_does_not_clobber_terminal_wipes():
+    for status in ('cancelled', 'completed'):
         result, sets = _run_mark_billing_failed({'uid': 'uid1', 'wipe_status': status})
         assert result is False
         assert sets == []
@@ -342,7 +379,7 @@ def test_claim_txn_skips_fresh_retrying_claim():
 
 def test_claim_txn_skips_queued_retrying_claim():
     """A retrying claim that is stale for ``stale_after`` (10 min) but fresh
-    for ``running_stale_after`` (30 min) is NOT re-claimed.
+    for ``running_stale_after`` (45 min) is NOT re-claimed.
 
     This is the review fix: a queued-but-not-yet-running retrying claim
     should not be re-enqueued by the periodic reconciler.
@@ -351,7 +388,7 @@ def test_claim_txn_skips_queued_retrying_claim():
     data = {
         'uid': 'uid1',
         'wipe_status': 'retrying',
-        'wipe_claimed_at': now - timedelta(minutes=15),  # stale for 10 min, fresh for 30 min
+        'wipe_claimed_at': now - timedelta(minutes=15),  # stale for 10 min, fresh for 45 min
     }
     result, updates = _run_claim(data)
     assert result is None
@@ -359,7 +396,7 @@ def test_claim_txn_skips_queued_retrying_claim():
 
 
 def test_claim_txn_reclaims_stale_retrying_claim():
-    """A retrying claim older than ``running_stale_after`` (30 min) is re-claimed.
+    """A retrying claim older than ``running_stale_after`` (45 min) is re-claimed.
 
     The longer window is used because a retrying wipe was just claimed and
     enqueued; if the executor backlog is full the future may sit queued
@@ -369,13 +406,119 @@ def test_claim_txn_reclaims_stale_retrying_claim():
     data = {
         'uid': 'uid1',
         'wipe_status': 'retrying',
-        'wipe_claimed_at': now - timedelta(minutes=45),  # stale: 45min > 30min running_stale_after
+        'wipe_claimed_at': now - timedelta(minutes=46),  # stale: 46min > 45min running_stale_after
     }
     result, updates = _run_claim(data)
     assert result == 'uid1'
     # Only updates wipe_claimed_at (doesn't re-set wipe_status, already retrying)
     assert 'wipe_status' not in updates[0][1]
     assert 'wipe_claimed_at' in updates[0][1]
+
+
+def test_grace_wipe_cannot_be_reconciled_before_its_deadline_or_action_receipt():
+    now = datetime.now(timezone.utc)
+    for data in (
+        {
+            'uid': 'uid1',
+            'wipe_status': 'pending_deletion',
+            'wipe_due_at': now + timedelta(seconds=1),
+            'grace_actions_complete': True,
+        },
+        {
+            'uid': 'uid1',
+            'wipe_status': 'pending_deletion',
+            'wipe_due_at': now - timedelta(seconds=1),
+            'grace_actions_complete': False,
+        },
+    ):
+        result, updates = _run_claim(data)
+        assert result is None
+        assert updates == []
+
+
+def test_grace_intent_persists_due_time_and_starts_fenced():
+    due_at = datetime.now(timezone.utc) + timedelta(days=14)
+    result, sets, updates = _run_mark_grace(None, due_at)
+
+    assert result['wipe_job_id'] == 'new-job'
+    assert result['mode'] == 'created'
+    assert sets[0][1]['wipe_status'] == 'pending_deletion'
+    assert sets[0][1]['wipe_due_at'] == due_at
+    assert sets[0][1]['grace_actions_complete'] is False
+    assert updates == []
+
+
+def test_repeated_grace_intent_preserves_the_original_deadline():
+    original_due_at = datetime.now(timezone.utc) + timedelta(days=7)
+    result, sets, updates = _run_mark_grace(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'pending_deletion',
+            'wipe_job_id': 'existing-job',
+            'wipe_due_at': original_due_at,
+            'grace_actions_complete': True,
+        },
+        original_due_at + timedelta(days=14),
+    )
+
+    assert result == {
+        'wipe_job_id': 'existing-job',
+        'dispatch_claimed': False,
+        'mode': 'joined',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': original_due_at,
+    }
+    assert sets == []
+    assert updates == []
+
+
+def test_grace_wipe_becomes_reconcilable_only_after_deadline_and_immediate_actions():
+    data = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) - timedelta(seconds=1),
+        'grace_actions_complete': True,
+    }
+    result, updates = _run_claim(data)
+    assert result == 'uid1'
+    assert updates[0][1]['wipe_status'] == 'retrying'
+
+
+def test_cloud_task_wipe_claim_rechecks_grace_deadline():
+    future = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1),
+        'grace_actions_complete': True,
+    }
+    result, updates = _run_task_claim(future)
+    assert result == 'not_actionable'
+    assert updates == []
+
+    due = {
+        **future,
+        'wipe_due_at': datetime.now(timezone.utc) - timedelta(seconds=1),
+    }
+    result, updates = _run_task_claim(due)
+    assert result == 'claimed'
+    assert updates[0][1]['wipe_status'] == 'retrying'
+
+
+def test_restore_and_due_wipe_race_has_one_transactional_winner():
+    future = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1),
+        'grace_actions_complete': True,
+    }
+    result, updates = _run_restore(future)
+    assert result == 'restored'
+    assert updates[0][1]['wipe_status'] == 'cancelled'
+
+    expired = {**future, 'wipe_due_at': datetime.now(timezone.utc) - timedelta(seconds=1)}
+    result, updates = _run_restore(expired)
+    assert result == 'window_expired'
+    assert updates == []
 
 
 def test_claim_txn_returns_none_for_missing_doc():
@@ -407,7 +550,7 @@ def test_claim_txn_skips_fresh_running_marker():
 
     This is the core fix for the review concern: a slow but live wipe should
     not be duplicate-claimed just because it has been running for a while.
-    The ``running`` stale window (default 30 min) is much longer than the
+    The ``running`` stale window (default 45 min) is much longer than the
     ``pending`` stale window (10 min).
     """
     now = datetime.now(timezone.utc)
@@ -430,7 +573,7 @@ def test_claim_txn_claims_stale_running_marker():
     data = {
         'uid': 'uid1',
         'wipe_status': 'running',
-        'wipe_running_at': now - timedelta(minutes=45),  # 45 min: stale even for running window
+        'wipe_running_at': now - timedelta(minutes=46),  # 46 min: stale even for running window
     }
     result, updates = _run_claim(data)
     assert result == 'uid1'
@@ -440,14 +583,14 @@ def test_claim_txn_claims_stale_running_marker():
 def test_claim_txn_skips_running_marker_near_stale_boundary():
     """A ``running`` marker just under the stale boundary is NOT claimed.
 
-    Uses 29 min to avoid sub-second timing flakiness with the default
-    30 min ``running_stale_after``.
+    Uses 44 min to avoid sub-second timing flakiness with the default
+    45 min ``running_stale_after``.
     """
     now = datetime.now(timezone.utc)
     data = {
         'uid': 'uid1',
         'wipe_status': 'running',
-        'wipe_running_at': now - timedelta(minutes=29),  # 29 min: just under 30 min boundary
+        'wipe_running_at': now - timedelta(minutes=44),  # 44 min: just under 45 min boundary
     }
     result, updates = _run_claim(data)
     assert result is None
@@ -528,6 +671,44 @@ def test_get_pending_deletion_wipes_finds_stale_after_fresh_window():
     assert 'fresh2' not in uids
 
 
+def test_get_pending_deletion_wipes_selects_incomplete_grace_and_due_completed_markers():
+    now = datetime.now(timezone.utc)
+    docs_by_status = {
+        'failed': [],
+        'billing_failed': [],
+        'pending_deletion': [
+            {
+                'uid': 'due',
+                'wipe_status': 'pending_deletion',
+                'wipe_due_at': now - timedelta(seconds=1),
+                'grace_actions_complete': True,
+            },
+            {
+                'uid': 'early',
+                'wipe_status': 'pending_deletion',
+                'wipe_due_at': now + timedelta(days=1),
+                'grace_actions_complete': True,
+            },
+            {
+                'uid': 'unfinished',
+                'wipe_status': 'pending_deletion',
+                'wipe_due_at': now - timedelta(seconds=1),
+                'grace_actions_complete': False,
+            },
+        ],
+        'pending': [],
+        'running': [],
+        'deleting_auth': [],
+        'retrying': [],
+    }
+    fake_collection = _FakeCollection(docs_by_status)
+
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: fake_collection):
+        result = users_db.get_pending_deletion_wipes(limit=100)
+
+    assert [row['uid'] for row in result] == ['due', 'unfinished']
+
+
 def test_get_pending_deletion_wipes_respects_limit_with_over_fetch():
     """The limit is still honoured even when over-fetching: only ``limit``
     actionable records are returned (failed first, then stale pending)."""
@@ -560,7 +741,7 @@ def test_get_pending_deletion_wipes_respects_limit_with_over_fetch():
 def test_get_pending_deletion_wipes_includes_stale_running():
     """Stale ``running`` records (worker crashed mid-execution) are recovered.
 
-    A ``running`` marker older than ``running_stale_after`` (default 6 hours)
+    A ``running`` marker older than ``running_stale_after`` (default 45 minutes)
     is included so the reconciler can re-enqueue a wipe whose worker died.
     """
     now = datetime.now(timezone.utc)
@@ -572,7 +753,7 @@ def test_get_pending_deletion_wipes_includes_stale_running():
             # Fresh running — worker is live, should NOT be recovered.
             {'uid': 'live1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=12)},
             # Stale running — worker probably crashed, SHOULD be recovered.
-            {'uid': 'crashed1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(hours=7)},
+            {'uid': 'crashed1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=46)},
         ],
         'retrying': [],
     }
@@ -587,3 +768,76 @@ def test_get_pending_deletion_wipes_includes_stale_running():
     uids = [r['uid'] for r in result]
     assert 'crashed1' in uids, 'stale running record must be recovered'
     assert 'live1' not in uids, 'fresh running record must not be recovered'
+
+
+def test_mark_billing_failed_allows_started_wipe_before_auth_deletion():
+    for status in ('pending', 'retrying', 'running', 'failed'):
+        result, sets = _run_mark_billing_failed({'uid': 'uid1', 'wipe_status': status})
+        assert result is True
+        assert sets[0][1]['wipe_status'] == 'billing_failed'
+
+
+def test_mark_billing_failed_never_restores_access_after_auth_deletion():
+    for status in ('running', 'failed'):
+        result, sets = _run_mark_billing_failed(
+            {'uid': 'uid1', 'wipe_status': status, 'wipe_auth_deleted_at': datetime.now(timezone.utc)}
+        )
+        assert result is False
+        assert sets == []
+
+
+def test_reconcile_query_and_claim_recover_only_already_gone_billing_failures():
+    errors = [
+        'stripe cancel returned no subscription',
+        'No such subscription: sub_123',
+        'resource_missing',
+        'A canceled subscription can only update its cancellation_details and metadata.',
+        'already canceled',
+        'subscription is incomplete_expired',
+        'Stripe timeout',
+        'Stripe rate limit 429',
+        'Stripe server error 503',
+    ]
+    docs = [{'uid': str(i), 'wipe_status': 'billing_failed', 'billing_error': error} for i, error in enumerate(errors)]
+    with patch.object(
+        users_db, 'account_deletion_collection', lambda **_kwargs: _FakeCollection({'billing_failed': docs})
+    ):
+        result = users_db.get_pending_deletion_wipes()
+    assert [row['uid'] for row in result] == [str(i) for i in range(6)]
+    for i, data in enumerate(docs):
+        claimed, updates = _run_claim(data)
+        assert claimed == (str(i) if i < 6 else None)
+        if i < 6:
+            assert updates[0][1]['wipe_status'] == 'retrying'
+        else:
+            assert updates == []
+
+
+def test_task_delivery_can_retry_transient_billing_failure():
+    txn = _make_txn()
+    snapshot = _make_snapshot({'uid': 'uid1', 'wipe_status': 'billing_failed', 'billing_error': 'Stripe timeout'})
+    doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
+    assert raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER) == 'claimed'
+    assert txn._updates[0][1]['wipe_status'] == 'retrying'
+
+
+def test_heartbeat_keeps_running_wipe_unclaimable_without_resurrecting_other_states():
+    assert users_db.DELETION_WIPE_RUNNING_STALE_AFTER == timedelta(minutes=45)
+    raw_fn = getattr(users_db._heartbeat_user_deletion_wipe_txn, 'to_wrap', users_db._heartbeat_user_deletion_wipe_txn)
+    for status in ('running', 'billing_failed', 'failed', 'completed', 'retrying'):
+        data = {
+            'uid': 'uid1',
+            'wipe_status': status,
+            'wipe_running_at': datetime.now(timezone.utc) - timedelta(minutes=46),
+        }
+        txn = _make_txn()
+        snapshot = _make_snapshot(data)
+        doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+        raw_fn(txn, doc_ref)
+        if status == 'running':
+            assert len(txn._updates) == 1
+            data.update(txn._updates[0][1])
+            assert _run_claim(data)[0] is None
+        else:
+            assert txn._updates == []

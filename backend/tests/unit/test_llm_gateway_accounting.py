@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime, timezone
 import hashlib
 import json
 from typing import Any
@@ -10,7 +11,8 @@ from google.cloud import firestore
 import pytest
 
 from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, USER_DAYS_COLLECTION, record_llm_gateway_attempt
-from llm_gateway.gateway import accounting_sink
+from llm_gateway.gateway import accounting, accounting_sink
+from utils.llm.model_config import LUNA_MODEL
 from llm_gateway.gateway.accounting import (
     AccountingContext,
     AttemptTrace,
@@ -19,13 +21,13 @@ from llm_gateway.gateway.accounting import (
     ProviderResponseMetadata,
     ProviderUsage,
     anthropic_usage_from_response,
-    aggregate_accounting_events,
     build_accounting_event,
     cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
+    estimated_provider_cost_micro_usd,
     image_usage,
-    jit_gateway_receipt_for_trace,
     openai_usage_from_response,
+    rate_card_for,
     vertex_usage_from_response,
 )
 
@@ -108,7 +110,7 @@ def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
     metadata = openai_usage_from_response(
         {
             'id': 'chatcmpl-flex',
-            'model': 'gpt-5.6-luna',
+            'model': LUNA_MODEL,
             'service_tier': 'flex',
             'usage': {'prompt_tokens': 1_000_000, 'completion_tokens': 1_000_000},
         }
@@ -116,8 +118,8 @@ def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-5.6-luna',
-        route_artifact_id='route.memory_conflict_flex.model_config.001',
+        configured_model=LUNA_MODEL,
+        route_artifact_id='route.x_memory_extraction_flex.model_config.001',
         fallback_reason=None,
         retry_ordinal=0,
         outcome='success',
@@ -126,9 +128,9 @@ def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
     )
     context = AccountingContext.create(
         request_id='request-flex',
-        caller='memory-maintenance-job',
+        caller='x-sync-job',
         user_uid=None,
-        feature='memory_conflict',
+        feature='x_memory_extraction',
         api_surface='openai.chat_completions',
         payer='omi',
     )
@@ -137,8 +139,8 @@ def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
 
     assert event.traffic_type == 'flex'
     # 1M input + 1M output puts this over the 272K long-context boundary:
-    # (1M * $0.40 + 1M * $1.80) halved for Flex = $1.10.
-    assert event.estimated_cost_micro_usd == 1_100_000
+    # (1M * $0.20 + 1M * $0.90) halved for Flex = $0.55.
+    assert event.estimated_cost_micro_usd == 550_000
     assert event.cost_basis == 'flex_batch_token_rates_excludes_cache_storage'
 
 
@@ -162,7 +164,7 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-5.6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.conv_action_items.model_config.001',
         fallback_reason=None,
         retry_ordinal=1,
@@ -173,10 +175,10 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     event = build_accounting_event(_context(), attempt)
 
     assert event.cache_write_tokens == 400_000
-    # Long-context tier: 400K * $0.40 + 200K * $0.04 + 1M * $1.80
-    # + 400K * $0.50 = $2.168.
-    assert event.estimated_cost_micro_usd == 2_168_000
-    assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-30'
+    # Long-context tier: 400K * $0.20 + 200K * $0.02 + 1M * $0.90
+    # + 400K * $0.25 = $1.084.
+    assert event.estimated_cost_micro_usd == 1_084_000
+    assert event.rate_card_id == f'openai.{LUNA_MODEL}.2026-09-22'
 
 
 def test_openai_receipt_normalizes_cached_and_cache_write_tokens_once() -> None:
@@ -202,58 +204,11 @@ def test_openai_receipt_normalizes_cached_and_cache_write_tokens_once() -> None:
     assert usage.uncached_input_tokens == 50
 
 
-def test_jit_aggregate_includes_retries_and_stops_on_unknown_cost() -> None:
-    context = AccountingContext.create(
-        request_id='request-jit-run',
-        caller='jit-proactivity',
-        user_uid='user-123',
-        feature='jit_proactivity',
-        api_surface='openai_chat_completions',
-        payer='omi',
-        jit_run_id='jit-run-opaque-1',
-        jit_contract_version='jit-cloud-qa-v1',
-    )
-    trace = AttemptTrace()
-    priced_attempt = trace.record(
-        provider='openai',
-        configured_model='gpt-5.4-nano',
-        route_artifact_id='route.jit.nano.001',
-        fallback_reason=None,
-        retry_ordinal=0,
-        outcome='success',
-        error_class='none',
-        metadata=ProviderResponseMetadata(
-            usage=ProviderUsage(prompt_tokens=100, uncached_input_tokens=80, cached_input_tokens=20, output_tokens=8)
-        ),
-    )
-    retry_without_receipt = trace.record(
-        provider='openai',
-        configured_model='gpt-5.4-nano',
-        route_artifact_id='route.jit.nano.001',
-        fallback_reason='provider_timeout',
-        retry_ordinal=1,
-        outcome='error',
-        error_class='timeout',
-    )
-
-    aggregate = aggregate_accounting_events(
-        [build_accounting_event(context, priced_attempt), build_accounting_event(context, retry_without_receipt)]
-    )
-
-    assert aggregate is not None
-    assert aggregate.attempt_count == 2
-    assert aggregate.normalized_uncached_input_tokens == 80
-    assert aggregate.cached_input_tokens == 20
-    assert aggregate.cost_status == CostStatus.INDETERMINATE
-    assert aggregate.estimated_cost_micro_usd is None
-    assert not aggregate.cost_is_known
-
-
 def test_cache_write_only_miss_reports_negative_net_cache_savings() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-5.6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.test.001',
         fallback_reason=None,
         retry_ordinal=0,
@@ -271,17 +226,17 @@ def test_cache_write_only_miss_reports_negative_net_cache_savings() -> None:
     event = build_accounting_event(_context(), attempt)
 
     # 1M of write tokens is past the 272K boundary, so the long-context rates
-    # apply: a write costs $0.50/M while the ordinary input counterfactual
-    # costs $0.40/M, a $0.10/M net loss until this entry is reused.
-    assert event.estimated_cost_micro_usd == 500_000
-    assert event.estimated_cache_savings_micro_usd == -100_000
+    # apply: a write costs $0.25/M while the ordinary input counterfactual
+    # costs $0.20/M, a $0.05/M net loss until this entry is reused.
+    assert event.estimated_cost_micro_usd == 250_000
+    assert event.estimated_cache_savings_micro_usd == -50_000
 
 
 def test_cache_write_and_read_report_net_cache_savings() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-5.6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.test.001',
         fallback_reason=None,
         retry_ordinal=0,
@@ -302,18 +257,18 @@ def test_cache_write_and_read_report_net_cache_savings() -> None:
     event = build_accounting_event(_context(), attempt)
 
     # 2M of input context is past the 272K boundary, so this prices at the
-    # long-context tier throughout. Counterfactual input bill: 2M * $0.40 =
-    # $0.80. Actual input bill is 1M * $0.04 + 1M * $0.50 = $0.54, for $0.26
-    # net savings. Output adds 1M * $1.80.
-    assert event.estimated_cost_micro_usd == 2_340_000
-    assert event.estimated_cache_savings_micro_usd == 260_000
+    # long-context tier throughout. Counterfactual input bill: 2M * $0.20 =
+    # $0.40. Actual input bill is 1M * $0.02 + 1M * $0.25 = $0.27, for $0.13
+    # net savings. Output adds 1M * $0.90.
+    assert event.estimated_cost_micro_usd == 1_170_000
+    assert event.estimated_cache_savings_micro_usd == 130_000
 
 
 def test_flex_halves_complete_net_cache_savings_and_total_cost() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-5.6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.test.001',
         fallback_reason=None,
         retry_ordinal=0,
@@ -334,8 +289,8 @@ def test_flex_halves_complete_net_cache_savings_and_total_cost() -> None:
     event = build_accounting_event(_context(), attempt)
 
     # Exactly half of the long-context figures in the test above.
-    assert event.estimated_cost_micro_usd == 1_170_000
-    assert event.estimated_cache_savings_micro_usd == 130_000
+    assert event.estimated_cost_micro_usd == 585_000
+    assert event.estimated_cache_savings_micro_usd == 65_000
 
 
 def test_empty_usage_object_is_unreported_not_a_zero_cost_completion() -> None:
@@ -376,46 +331,6 @@ def test_openai_reasoning_tokens_are_an_output_subset_not_double_charged() -> No
     assert usage.output_tokens_include_reasoning is True
     assert usage.billable_output_tokens == 100
     assert usage.total_tokens == 110
-
-
-def test_jit_aggregate_and_receipt_preserve_reasoning_tokens() -> None:
-    context = AccountingContext.create(
-        request_id='request-reasoning-jit',
-        caller='jit-proactivity',
-        user_uid='user-123',
-        feature='jit_proactivity',
-        api_surface='openai_chat_completions',
-        payer='omi',
-        jit_run_id='jit-reasoning-run',
-        jit_contract_version='jit-cloud-qa-v1',
-    )
-    trace = AttemptTrace()
-    trace.record(
-        provider='openai',
-        configured_model='gpt-5.6-luna',
-        route_artifact_id='route.jit.001',
-        fallback_reason=None,
-        retry_ordinal=1,
-        outcome='success',
-        error_class='none',
-        metadata=ProviderResponseMetadata(
-            usage=ProviderUsage(
-                prompt_tokens=10,
-                uncached_input_tokens=10,
-                output_tokens=100,
-                reasoning_tokens=40,
-                output_tokens_include_reasoning=True,
-            )
-        ),
-    )
-
-    receipt = jit_gateway_receipt_for_trace(context, trace)
-
-    assert receipt is not None
-    assert receipt.aggregate.output_tokens == 100
-    assert receipt.aggregate.reasoning_tokens == 40
-    assert receipt.as_dict()['aggregate']['reasoning_tokens'] == 40
-    assert receipt.as_dict()['attempts'][0]['reasoning_tokens'] == 40
 
 
 def test_vertex_and_anthropic_usage_preserve_provider_cache_fields() -> None:
@@ -762,6 +677,50 @@ def test_user_day_rollup_survives_an_unencodable_uid() -> None:
     assert USER_DAYS_COLLECTION not in client.collections
 
 
+def test_anonymous_attempts_keep_the_ledger_row_but_skip_the_single_hot_rollup(monkeypatch) -> None:
+    monkeypatch.delenv('LLM_GATEWAY_ANONYMOUS_ROLLUP_SKIP', raising=False)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    for ordinal, uid in enumerate([None, '', '   '], start=1):
+        event = {
+            'attempt_id': f'invocation-1:{ordinal}',
+            'date': '2026-09-14',
+            'provider': 'openrouter',
+            'user_uid': uid,
+            'feature': 'jev_conversation_relevance',
+            'payer': 'omi',
+            'cost_status': 'estimated',
+            'estimated_cost_micro_usd': 10,
+        }
+        assert record_llm_gateway_attempt(event, firestore_client=client)
+
+    # The attempts collection still carries the canonical anonymous record.
+    assert len(client.collections[ATTEMPTS_COLLECTION]) == 3
+    assert USER_DAYS_COLLECTION not in client.collections
+
+    attributed = {
+        'attempt_id': 'invocation-2:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+    }
+    assert record_llm_gateway_attempt(attributed, firestore_client=client)
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    assert list(client.collections[USER_DAYS_COLLECTION]) == [f'2026-09-14_{uid_hash}']
+
+
+@pytest.mark.parametrize('value', ['off', 'false', '0', 'no', 'disabled', ' OFF '])
+def test_anonymous_rollup_kill_switch_restores_the_legacy_document(monkeypatch, value: str) -> None:
+    monkeypatch.setenv('LLM_GATEWAY_ANONYMOUS_ROLLUP_SKIP', value)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {'attempt_id': 'invocation-1:1', 'date': '2026-09-14', 'provider': 'openai', 'user_uid': None}
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    rollup = client.collections[USER_DAYS_COLLECTION]['2026-09-14_anonymous']
+    assert rollup['attempts'] == 1
+    assert rollup['uid_hash'] == 'anonymous'
+
+
 def test_user_day_rollup_pins_every_feature_bucket_the_ledger_puller_uses() -> None:
     client = _FakeFirestoreClient(subscription_plan='pro')
     features = ['chat', 'persona_gen', 'translation', 'memory_embeddings', 'screen_summary', '']
@@ -919,11 +878,9 @@ class _FakeDocument:
     def set(self, data: dict[str, Any], merge: bool = False) -> None:
         current = self._collection.documents.get(self._document_id, {})
         stored = dict(current) if merge else {}
-        for key, value in data.items():
-            if isinstance(value, firestore.Increment):
-                stored[key] = current.get(key, 0) + value.value
-            else:
-                stored[key] = value
+        from tests.unit.fixtures.shadow_usage_firestore import merge as merge_fields
+
+        merge_fields(stored, data)
         self._collection.documents[self._document_id] = stored
 
     def get(self, _fields: list[str]) -> _FakeSnapshot:
@@ -957,7 +914,7 @@ def test_long_context_threshold_is_pinned_and_exclusive() -> None:
     def _priced_cost(prompt_tokens: int) -> int | None:
         attempt = trace.record(
             provider='openai',
-            configured_model='gpt-5.6-luna',
+            configured_model=LUNA_MODEL,
             route_artifact_id='route.test.001',
             fallback_reason=None,
             retry_ordinal=1,
@@ -977,11 +934,11 @@ def test_long_context_threshold_is_pinned_and_exclusive() -> None:
     at_boundary = _priced_cost(272_000)
     past_boundary = _priced_cost(272_001)
 
-    # 272,000 * $0.20/M short rate = $54,400 micro-USD.
-    assert at_boundary == 54_400
-    # 272,001 * $0.40/M long rate, rounded = $108,800 micro-USD (rounds down
-    # from 108800.4).
-    assert past_boundary == 108_800
+    # 272,000 * $0.10/M short rate = $27,200 micro-USD.
+    assert at_boundary == 27_200
+    # 272,001 * $0.20/M long rate, rounded = $54,400 micro-USD (rounds from
+    # 54400.2).
+    assert past_boundary == 54_400
 
 
 def test_model_with_no_long_context_tier_ignores_token_count() -> None:
@@ -1032,7 +989,7 @@ def test_short_context_luna_request_uses_short_context_rates() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-5.6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.conv_action_items.model_config.001',
         fallback_reason=None,
         retry_ordinal=1,
@@ -1042,10 +999,10 @@ def test_short_context_luna_request_uses_short_context_rates() -> None:
     )
     event = build_accounting_event(_context(), attempt)
 
-    # Short-context rates: 60K uncached @ $0.20/M + 30K cached @ $0.02/M +
-    # 100K output @ $1.20/M + 60K cache-write @ $0.25/M = $147,600 micro-USD.
-    assert event.estimated_cost_micro_usd == 147_600
-    assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-30'
+    # Short-context rates: 60K uncached @ $0.10/M + 30K cached @ $0.01/M +
+    # 100K output @ $0.60/M + 60K cache-write @ $0.125/M = $73,800 micro-USD.
+    assert event.estimated_cost_micro_usd == 73_800
+    assert event.rate_card_id == f'openai.{LUNA_MODEL}.2026-09-22'
 
 
 def _platform_attempt() -> Any:
@@ -1085,3 +1042,146 @@ def test_unknown_app_platform_is_persisted_as_unattributed() -> None:
 
     assert event.app_platform is None
     assert event.as_dict()['app_platform'] is None
+
+
+def test_vertex_2_5_flash_card_is_the_standard_tier() -> None:
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+    card = rate_card_for('gemini', 'gemini-2.5-flash', at=date(2026, 10, 18))
+    assert card is not None
+    assert card.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+    assert card.effective_from == date(2026, 10, 18)
+    assert (
+        card.input_micro_usd_per_million,
+        card.cached_input_micro_usd_per_million,
+        card.output_micro_usd_per_million,
+        card.cache_write_micro_usd_per_million,
+        card.cache_storage_micro_usd_per_million_token_hours,
+    ) == (300000, 30000, 2500000, 300000, 1000000)
+
+
+@pytest.mark.parametrize(
+    'at, expected_card_id, expected_input_micro',
+    [
+        (date(2026, 10, 17), 'vertex.gemini-2.5-flash.2026-10-15', 540000),
+        (date(2026, 10, 18), 'vertex.gemini-2.5-flash.2026-10-18', 300000),
+    ],
+)
+def test_vertex_2_5_flash_card_boundary(at: date, expected_card_id: str, expected_input_micro: int) -> None:
+    card = rate_card_for('gemini', 'gemini-2.5-flash', at=at)
+    assert card is not None
+    assert card.rate_card_id == expected_card_id
+    assert card.input_micro_usd_per_million == expected_input_micro
+
+
+def test_vertex_2_5_flash_ledger_keeps_recorded_card_identity_across_reprice(monkeypatch) -> None:
+    """A ledger attempt prices under the card in effect at write time, and the
+    stored event keeps that card's identity forever."""
+
+    class FrozenDateTime(datetime):
+        _now = datetime(2026, 10, 17, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls._now.astimezone(tz) if tz else cls._now.replace(tzinfo=None)
+
+    monkeypatch.setattr(accounting, 'datetime', FrozenDateTime)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    trace = AttemptTrace()
+
+    def _record_one() -> Any:
+        attempt = trace.record(
+            provider='gemini',
+            configured_model='gemini-2.5-flash',
+            route_artifact_id='route.test.001',
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='success',
+            error_class='none',
+            metadata=ProviderResponseMetadata(
+                traffic_type='ON_DEMAND',
+                usage=ProviderUsage(
+                    prompt_tokens=1_000_000,
+                    uncached_input_tokens=1_000_000,
+                    output_tokens=1_000_000,
+                    total_tokens=2_000_000,
+                ),
+            ),
+        )
+        event = build_accounting_event(_context(), attempt)
+        assert record_llm_gateway_attempt(event.as_dict(), firestore_client=client)
+        return event
+
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+    old_event = _record_one()
+    assert old_event.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    # 1M uncached input at $0.54 + 1M output at $4.50 (Priority tier).
+    assert old_event.estimated_cost_micro_usd == 5_040_000
+    stored_old = dict(client.collections[ATTEMPTS_COLLECTION]['invocation-1:1'])
+
+    FrozenDateTime._now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+    new_event = _record_one()
+    assert new_event.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+    # 1M uncached input at $0.30 + 1M output at $2.50 (Standard tier).
+    assert new_event.estimated_cost_micro_usd == 2_800_000
+    current = rate_card_for('gemini', 'gemini-2.5-flash')
+    assert current is not None
+    assert current.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+
+    historical = rate_card_for(
+        stored_old['provider'],
+        stored_old['configured_model'],
+        at=date(2026, 10, 18),
+        rate_card_id=stored_old['rate_card_id'],
+    )
+    assert historical is not None
+    assert historical.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    assert (
+        historical.input_micro_usd_per_million,
+        historical.cached_input_micro_usd_per_million,
+        historical.output_micro_usd_per_million,
+        historical.cache_write_micro_usd_per_million,
+        historical.cache_storage_micro_usd_per_million_token_hours,
+    ) == (540000, 54000, 4500000, 540000, 1000000)
+
+    stored_after_new_write = client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']
+    assert stored_after_new_write == stored_old
+    assert stored_after_new_write['rate_card_id'] == 'vertex.gemini-2.5-flash.2026-10-15'
+
+
+def test_vertex_2_5_flash_unknown_or_foreign_card_id_never_falls_through() -> None:
+    """A recorded card ID is authoritative: unknown IDs, or an ID that belongs
+    to a different model, return None rather than repricing at the current
+    Standard card."""
+    assert rate_card_for('gemini', 'gemini-2.5-flash', rate_card_id='vertex.gemini-2.5-flash.2099-01-01') is None
+    assert rate_card_for('gemini', 'gemini-3.8-flash', rate_card_id='vertex.gemini-2.5-flash.2026-10-15') is None
+    pinned = rate_card_for(
+        'gemini', 'gemini-2.5-flash', at=date(2030, 1, 1), rate_card_id='vertex.gemini-2.5-flash.2026-10-15'
+    )
+    assert pinned is not None
+    assert pinned.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    assert pinned.input_micro_usd_per_million == 540000
+
+
+@pytest.mark.parametrize(
+    'usage, expected_micro_usd',
+    [
+        # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+        # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+        (ProviderUsage(prompt_tokens=1_000_000, uncached_input_tokens=1_000_000), 300000),
+        (ProviderUsage(prompt_tokens=1_000_000, cached_input_tokens=1_000_000), 30000),
+        (ProviderUsage(output_tokens=1_000_000), 2500000),
+        (ProviderUsage(prompt_tokens=1_000_000, cache_write_tokens=1_000_000), 300000),
+    ],
+    ids=['uncached-input', 'cached-input', 'output', 'cache-write'],
+)
+def test_vertex_2_5_flash_one_million_token_estimates(usage: ProviderUsage, expected_micro_usd: int) -> None:
+    status, cost = estimated_provider_cost_micro_usd(
+        payer='omi',
+        provider='gemini',
+        model='gemini-2.5-flash',
+        metadata=ProviderResponseMetadata(usage=usage),
+    )
+    assert status == CostStatus.ESTIMATED
+    assert cost == expected_micro_usd

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "fixture_filename": "parakeet-canary-pt.wav",
+  "sha256": "c1176081d3ae91ffabae503cfc34177c296f4c9537e5ec9618cb379e6343fba5",
+  "expected_transcript": "Hoje está um dia bonito. Vamos conversar sobre música e viagens amanhã.",
+  "language": "pt",
+  "source": {
+    "type": "synthetic",
+    "voice": "macOS Luciana pt_BR",
+    "derivation": "Generated offline with say, then converted with FFmpeg to mono 16 kHz PCM16 WAV. No user audio."
+  }
+}

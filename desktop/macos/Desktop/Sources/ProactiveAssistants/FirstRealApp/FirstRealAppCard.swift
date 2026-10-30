@@ -47,21 +47,14 @@ struct FirstRealAppCard: View {
     }
     .buttonStyle(.plain)
     .overlay(alignment: .topTrailing) {
-      Button {
-        FirstRealAppCardCoordinator.shared.handleCardDismissed()
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-      } label: {
-        Image(systemName: "xmark")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(.white.opacity(0.62))
-          .frame(width: 18, height: 18)
-          .background(Color.white.opacity(0.08))
-          .clipShape(Circle())
-      }
-      .buttonStyle(.plain)
+      DismissButton(
+        action: {
+          FirstRealAppCardCoordinator.shared.handleCardDismissed()
+          FloatingControlBarManager.shared.dismissCurrentNotification()
+        }, accessibilityLabel: "Dismiss", size: .compact
+      )
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
-      .accessibilityLabel("Dismiss")
     }
   }
 }

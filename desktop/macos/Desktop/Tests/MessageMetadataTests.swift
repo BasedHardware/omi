@@ -57,7 +57,7 @@ final class MessageMetadataTests: XCTestCase {
     // Full System Prompt, XML prompt-count parsers, or untrusted token/cost usage. The Model row
     // returned in #12331-follow-up by Nik's direction, but ONLY bound to `modelsSummary` — the
     // response-OBSERVED served identities (chunk.model from the provider stream; verified live:
-    // the managed gateway lane serves and reports "gpt-5.6-luna") — never the request alias that
+    // the managed gateway lane serves and reports "gpt-6-luna") — never the request alias that
     // #11521 removed as dishonest.
     let popover = try String(contentsOfFile: popoverSourcePath(), encoding: .utf8)
     XCTAssertFalse(popover.contains("Full System Prompt"))
@@ -169,10 +169,10 @@ final class MessageMetadataTests: XCTestCase {
 @MainActor
 final class MessageMetadataModelAttributionTests: XCTestCase {
   func testModelsSummaryJoinsObservedIdentities() {
-    XCTAssertEqual(MessageMetadata(modelsUsed: ["gpt-5.6-luna"]).modelsSummary, "gpt-5.6-luna")
+    XCTAssertEqual(MessageMetadata(modelsUsed: ["gpt-6-luna"]).modelsSummary, "gpt-6-luna")
     XCTAssertEqual(
-      MessageMetadata(modelsUsed: ["gpt-5.6-luna", "claude-sonnet-4-6"]).modelsSummary,
-      "gpt-5.6-luna, claude-sonnet-4-6")
+      MessageMetadata(modelsUsed: ["gpt-6-luna", "claude-sonnet-4-6"]).modelsSummary,
+      "gpt-6-luna, claude-sonnet-4-6")
     XCTAssertEqual(MessageMetadata().modelsSummary, "")
     XCTAssertEqual(
       MessageMetadata(providerTargets: ["openai-codex"]).providersSummary,

@@ -156,8 +156,9 @@ if pytz_stubbed:
 # Use _stub_module which only creates if not already loaded
 database_mod = _stub_module("database")
 if not hasattr(database_mod, '__path__'):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(BACKEND_DIR / "database")]
 for submodule in [
+    "auth",
     "redis_db",
     "memories",
     "conversations",
@@ -175,6 +176,7 @@ for submodule in [
     "goals",
     "knowledge_graph",
     "daily_summaries",
+    "screen_activity",
     "mem_db",
     "notifications",
 ]:
@@ -182,6 +184,7 @@ for submodule in [
     setattr(database_mod, submodule, mod)
 
 # Set needed attributes on db stubs
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="User")
 # utils.conversations.location (imported by external_integrations for daily-summary
 # address fill) does `from database.redis_db import r`; the stub must provide it.
 sys.modules["database.redis_db"].r = MagicMock()
@@ -206,6 +209,7 @@ sys.modules["database.action_items"].get_action_items = MagicMock(return_value=[
 sys.modules["database.daily_summaries"].create_daily_summary = MagicMock(return_value="summary-1")
 sys.modules["database.notifications"].get_user_time_zone = MagicMock(return_value="UTC")
 sys.modules["database.notifications"].get_token_only = MagicMock(return_value=None)
+sys.modules["database._client"].db = MagicMock()
 
 # --- Don't stub models — it's a real package on disk ---
 # Only add missing attributes if the real modules can't be loaded
@@ -216,6 +220,33 @@ if not hasattr(llms_mod, '__path__'):
     llms_mod.__path__ = []
 _stub_module("utils.llms.memory")
 sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=("TestUser", "some memories"))
+
+
+# --- Stub utils.memory.memory_service.MemoryService (canonical memory read path) ---
+class _StubMemoryRecord:
+    def __init__(self, content, is_locked=False):
+        self.content = content
+        self.is_locked = is_locked
+
+    def dict(self):
+        return {'content': self.content, 'is_locked': self.is_locked}
+
+
+class _StubMemoryService:
+    records = []
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def read(self, uid, *, limit=100, offset=0, **kwargs):
+        return list(_StubMemoryService.records)
+
+
+memory_pkg_mod = _stub_module("utils.memory")
+if not hasattr(memory_pkg_mod, '__path__'):
+    memory_pkg_mod.__path__ = []
+memory_service_mod = _stub_module("utils.memory.memory_service")
+memory_service_mod.MemoryService = _StubMemoryService
 
 # --- Import real usage_tracker ---
 _restore_usage_tracker_import_path()
@@ -321,7 +352,7 @@ class TestGoalsTracking:
 
         mock_llm_mini.invoke = capturing_invoke
         # Provide memories so suggest_goal doesn't return early with default
-        sys.modules["database.memories"].get_memories = MagicMock(return_value=[{'content': 'User is learning Python'}])
+        _StubMemoryService.records = [_StubMemoryRecord('User is learning Python')]
         try:
             from utils.llm.goals import suggest_goal
 
@@ -330,6 +361,7 @@ class TestGoalsTracking:
             assert captured_ctx.get('uid') == "test-uid-123"
         finally:
             mock_llm_mini.invoke = original_invoke
+            _StubMemoryService.records = []
 
     def test_get_goal_advice_sets_context(self):
         """Verify get_goal_advice sets the usage context during LLM call."""
@@ -443,7 +475,7 @@ class TestExternalIntegrationsTracking:
         count = source.count("with track_usage(uid, Features.DAILY_SUMMARY):")
         assert count == 2, f"Expected 2 track_usage(DAILY_SUMMARY) wrappers, found {count}"
 
-    def test_get_conversation_summary_sets_context(self):
+    def test_get_conversation_summary_sets_context(self, monkeypatch):
         """Verify get_conversation_summary sets context during LLM call."""
         captured_ctx = {}
         original_invoke = mock_llm_mini.invoke
@@ -457,9 +489,13 @@ class TestExternalIntegrationsTracking:
 
         mock_llm_mini.invoke = capturing_invoke
         try:
-            from utils.llm.external_integrations import get_conversation_summary
+            from utils.llm import external_integrations
 
-            get_conversation_summary("test-uid-summary", [])
+            monkeypatch.setattr(external_integrations, 'conversations_to_string', lambda *a, **k: 'history')
+            # Empty input now returns before paid generation. Supply an eligible
+            # recording so this test continues to exercise the usage scope.
+            conversation = types.SimpleNamespace(content_kind='conversation', get_person_ids=lambda: [])
+            external_integrations.get_conversation_summary("test-uid-summary", [conversation])
             assert captured_ctx.get('feature') == Features.DAILY_SUMMARY
             assert captured_ctx.get('uid') == "test-uid-summary"
         finally:

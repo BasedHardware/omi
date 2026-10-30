@@ -1,0 +1,136 @@
+# Role images (backend target architecture, plan B §B1): one Dockerfile, one
+# SHA, one target per deployable role. Build from the repository root:
+#
+#   docker build -f backend/Dockerfile.roles --target api \
+#     --build-arg OMI_RELEASE_SHA="$(git rev-parse HEAD)" .
+#
+# B2: .github/workflows/role_images.yml builds and probes every target; the
+# gcp_backend.yml build-only train publishes them. Services still ship
+# backend/Dockerfile or backend/pusher/Dockerfile until a deploy opts in through
+# service_images (backend/docs/runbooks/role-image-cutover.md). The
+# role -> image -> service map lives in backend/runtime_images.json ("roles").
+#
+# Layer sharing: api, workers, realtime and gateway all build FROM `app`, so
+# they share every filesystem layer (OS packages, runtime venv, app source)
+# and differ only in OMI_ROLE, CMD and the release stamp. A train pushes those
+# layers once. pusher shares `os-base` and carries its own slimmer lock.
+#
+# Keep the release stamp (ARG OMI_RELEASE_SHA) last in each target so a new
+# SHA invalidates metadata only, never the dependency or source layers.
+
+ARG PYTHON_BASE_IMAGE=gcr.io/based-hardware-dev/python:3.11-slim-forky
+ARG UV_VERSION=0.11.13
+
+FROM ${PYTHON_BASE_IMAGE} AS builder
+
+ARG UV_VERSION
+
+RUN python -m venv /opt/venv
+RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Build locked source distributions such as webrtcvad.
+RUN apt-get update && apt-get install -y \
+    git \
+    gcc \
+    g++ \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/venv
+
+# One venv stage per role lockfile.
+FROM builder AS venv-runtime
+COPY backend/pylock.runtime.toml /tmp/pylock.runtime.toml
+RUN uv pip sync /tmp/pylock.runtime.toml --python /opt/venv/bin/python --compile-bytecode
+
+FROM builder AS venv-pusher
+COPY backend/pusher/pylock.toml /tmp/pylock.toml
+RUN uv pip sync /tmp/pylock.toml --python /opt/venv/bin/python --compile-bytecode
+
+# Shared OS layer for every CPU role.
+FROM ${PYTHON_BASE_IMAGE} AS os-base
+
+WORKDIR /app
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Patch OS packages in this layer before installing runtime deps (#7136).
+RUN apt-get update && apt-get -y dist-upgrade \
+    && apt-get -y install --no-install-recommends ffmpeg curl libjemalloc2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 omi \
+    && useradd --system --uid 10001 --gid omi --no-create-home omi
+
+# jemalloc eliminates glibc malloc fragmentation that causes RSS to grow linearly
+# under high-churn bytearray allocations from WebSocket audio streams (#6938)
+ENV LD_PRELOAD=libjemalloc.so.2
+
+# Full backend runtime: the same venv and source surface as backend/Dockerfile.
+FROM os-base AS app
+
+COPY --from=venv-runtime /opt/venv /opt/venv
+COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
+COPY backend/ .
+
+# Precompile first-party bytecode and hand /app to the runtime user, in one
+# layer so the .pyc files are not duplicated (see backend/Dockerfile).
+RUN python -m compileall -q -j 0 -x '(^|/)tests/' /app && chown -R omi:omi /app
+USER omi
+EXPOSE 8080
+
+FROM app AS api
+ENV OMI_ROLE=api
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop", "--timeout-graceful-shutdown", "60"]
+ARG OMI_RELEASE_SHA=unknown
+ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}
+LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}
+
+FROM app AS workers
+ENV OMI_ROLE=workers
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop", "--timeout-graceful-shutdown", "60"]
+ARG OMI_RELEASE_SHA=unknown
+ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}
+LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}
+
+FROM app AS realtime
+ENV OMI_ROLE=realtime
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop", "--timeout-graceful-shutdown", "60"]
+ARG OMI_RELEASE_SHA=unknown
+ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}
+LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}
+
+FROM app AS gateway
+ENV OMI_ROLE=gateway
+CMD ["uvicorn", "llm_gateway.main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]
+ARG OMI_RELEASE_SHA=unknown
+ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}
+LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}
+
+# Realtime pusher: the pusher lock and the whitelisted source surface of
+# backend/pusher/Dockerfile, on the shared OS layer.
+FROM os-base AS pusher
+
+COPY --from=venv-pusher /opt/venv /opt/venv
+# backend/pusher/Dockerfile's runtime user has home /app; keep that for `~` expansion.
+RUN mkdir -p _temp _samples _segments _speech_profiles \
+    && chown -R omi:omi _temp _samples _segments _speech_profiles \
+    && usermod -d /app omi
+
+# Whitelist-copy only the modules pusher reaches
+COPY backend/config/ ./config/
+COPY backend/database/ ./database/
+COPY backend/models/ ./models/
+COPY backend/routers/ ./routers/
+COPY backend/services/ ./services/
+COPY backend/testing/parity_pack_v0/ ./testing/parity_pack_v0/
+COPY backend/utils/ ./utils/
+COPY backend/pusher/ ./pusher/
+COPY backend/omi_logging.py ./omi_logging.py
+
+EXPOSE 8080
+USER omi
+ENV OMI_ROLE=realtime
+CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop", "--timeout-graceful-shutdown", "60"]
+ARG OMI_RELEASE_SHA=unknown
+ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}
+LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}

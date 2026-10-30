@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-referral-retry.png",
+      "platform": "web",
+      "description": "Real LoginClient with synthetic auth and local failing/successful claim responses; no production account changed.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-web-referral-retried.png",
+      "platform": "web",
+      "description": "Real LoginClient with synthetic auth and local failing/successful claim responses; no production account changed.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

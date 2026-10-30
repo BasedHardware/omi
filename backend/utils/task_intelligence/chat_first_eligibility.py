@@ -4,9 +4,39 @@ from dataclasses import dataclass
 from typing import Callable
 
 import database.task_intelligence_control as task_control_db
-from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl
+from models.task_intelligence import (
+    TaskIntelligenceRolloutDecision,
+    TaskWorkflowControl,
+    TaskWorkflowMode,
+)
 from utils.observability.fallback import record_fallback
-from utils.task_intelligence.rollout import resolve_chat_first_ui, resolve_task_intelligence_for_user
+
+
+def resolve_task_intelligence_for_user(
+    *,
+    uid: str,
+    workflow_mode: TaskWorkflowMode | str,
+    account_generation: int = 0,
+) -> TaskIntelligenceRolloutDecision:
+    """Universal task-intelligence decision: every authenticated account is entitled."""
+    mode = workflow_mode if isinstance(workflow_mode, TaskWorkflowMode) else TaskWorkflowMode(workflow_mode)
+    if not uid:
+        raise ValueError('uid is required')
+    if account_generation < 0:
+        raise ValueError('account_generation must be nonnegative')
+    return TaskIntelligenceRolloutDecision(
+        uid=uid,
+        workflow_mode=mode,
+        memory_cohort_eligible=True,
+        account_generation=account_generation,
+        legacy_reads_authoritative=False,
+        legacy_writes_enabled=False,
+        intelligence_evaluation_enabled=True,
+        canonical_sidecar_writes_enabled=True,
+        canonical_reads_authoritative=True,
+        compatibility_projection_required=False,
+        intelligence_product_enabled=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -37,7 +67,7 @@ def resolve_chat_first_eligibility(
             workflow_mode=control.workflow_mode,
             account_generation=control.account_generation,
         )
-        if not resolve_chat_first_ui(rollout):
+        if not rollout.intelligence_product_enabled:
             return ChatFirstEligibility(enabled=False)
         return ChatFirstEligibility(enabled=True, account_generation=control.account_generation)
     except Exception:

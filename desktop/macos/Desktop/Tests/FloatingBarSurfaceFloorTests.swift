@@ -196,7 +196,9 @@ final class FloatingBarSurfaceFloorTests: XCTestCase {
       let required = window.surfaceFloorWindowSize()
       XCTAssertGreaterThan(required.width, idle.width, "the card must require more than the idle lobe")
 
-      drainMainQueue { window.frame.width + 0.5 >= required.width }
+      // AppKit animates the frame over 0.18 seconds. The next-main-turn
+      // budget above only covers scheduling, not the animation landing.
+      drainMainQueue(passes: 200) { window.frame.width + 0.5 >= required.width }
 
       XCTAssertEqual(window.frame.width, required.width, accuracy: 0.5)
       XCTAssertEqual(window.frame.height, required.height, accuracy: 0.5)

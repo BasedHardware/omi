@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/ui.dart';
 
 class PermissionsPage extends StatefulWidget {
   const PermissionsPage({super.key});
@@ -143,73 +144,50 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: AppBar(
-        title: Text(context.l10n.permissions),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        elevation: 0,
-      ),
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.permissions)),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-                    child: Column(
-                      children: [
-                        _buildPermissionRow(
-                          icon: FontAwesomeIcons.solidBell,
-                          title: context.l10n.notifications,
-                          isGranted: _notificationsGranted,
-                          onTap: () =>
-                              _handlePermissionTap(Permission.notification, _notificationsGranted, 'notifications'),
-                        ),
-                        const Divider(height: 1, color: Color(0xFF3C3C43)),
-                        _buildPermissionRow(
-                          icon: FontAwesomeIcons.locationArrow,
-                          title: context.l10n.location,
-                          isGranted: _locationGranted,
-                          onTap: _handleLocationTap,
-                        ),
-                        const Divider(height: 1, color: Color(0xFF3C3C43)),
-                        _buildPermissionRow(
-                          icon: FontAwesomeIcons.bluetooth,
-                          title: context.l10n.bluetooth,
-                          isGranted: _bluetoothGranted,
-                          onTap: _handleBluetoothTap,
-                        ),
-                        const Divider(height: 1, color: Color(0xFF3C3C43)),
-                        _buildPermissionRow(
-                          icon: FontAwesomeIcons.microphone,
-                          title: context.l10n.microphone,
-                          isGranted: _microphoneGranted,
-                          onTap: () => _handlePermissionTap(Permission.microphone, _microphoneGranted, 'microphone'),
-                        ),
-                        if (Platform.isAndroid) ...[
-                          const Divider(height: 1, color: Color(0xFF3C3C43)),
-                          _buildPermissionRow(
-                            icon: FontAwesomeIcons.batteryFull,
-                            title: context.l10n.backgroundActivity,
-                            isGranted: _backgroundGranted,
-                            onTap: _handleBackgroundTap,
-                          ),
-                        ],
-                      ],
+          ? const OmiLoadingState()
+          : ListView(
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              children: [
+                OmiSettingsGroup(
+                  footer: context.l10n.permissionsPageDescription,
+                  children: [
+                    _buildPermissionRow(
+                      icon: FontAwesomeIcons.solidBell,
+                      title: context.l10n.notifications,
+                      isGranted: _notificationsGranted,
+                      onTap: () =>
+                          _handlePermissionTap(Permission.notification, _notificationsGranted, 'notifications'),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      context.l10n.permissionsPageDescription,
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                    _buildPermissionRow(
+                      icon: FontAwesomeIcons.locationArrow,
+                      title: context.l10n.location,
+                      isGranted: _locationGranted,
+                      onTap: _handleLocationTap,
                     ),
-                  ),
-                ],
-              ),
+                    _buildPermissionRow(
+                      icon: FontAwesomeIcons.bluetooth,
+                      title: context.l10n.bluetooth,
+                      isGranted: _bluetoothGranted,
+                      onTap: _handleBluetoothTap,
+                    ),
+                    _buildPermissionRow(
+                      icon: FontAwesomeIcons.microphone,
+                      title: context.l10n.microphone,
+                      isGranted: _microphoneGranted,
+                      onTap: () => _handlePermissionTap(Permission.microphone, _microphoneGranted, 'microphone'),
+                    ),
+                    if (Platform.isAndroid)
+                      _buildPermissionRow(
+                        icon: FontAwesomeIcons.batteryFull,
+                        title: context.l10n.backgroundActivity,
+                        isGranted: _backgroundGranted,
+                        onTap: _handleBackgroundTap,
+                      ),
+                  ],
+                ),
+              ],
             ),
     );
   }
@@ -220,29 +198,15 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
     required bool isGranted,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return OmiSettingsRow(
+      leading: FaIcon(icon),
+      title: title,
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        child: Row(
-          children: [
-            SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-              ),
-            ),
-            Text(
-              isGranted ? context.l10n.permissionEnabled : context.l10n.permissionEnable,
-              style: TextStyle(color: isGranted ? Colors.white.withValues(alpha: 0.5) : Colors.white, fontSize: 15),
-            ),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
-          ],
-        ),
+      showChevron: true,
+      // "Enable" is the call to action, so it reads brighter than the settled "Enabled".
+      trailing: Text(
+        isGranted ? context.l10n.permissionEnabled : context.l10n.permissionEnable,
+        style: OmiType.subhead.copyWith(color: isGranted ? OmiColors.textSecondary : OmiColors.textPrimary),
       ),
     );
   }

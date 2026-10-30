@@ -1,0 +1,11 @@
+{
+  "schema": "record-trace/1",
+  "name": "sync_owner_reconnect_finalize",
+  "source": "#24084: seal eligibility follows the persisted owner, batch_sync_v1 included",
+  "row": {"record_lane_owner": "batch_sync_v1"},
+  "durable": [false, true],
+  "sessions": [
+    {"frames": ["conversation", "finalize"], "upload": "ok"}
+  ],
+  "expect": {"sealed": true, "upload_failed": false, "open_tokens": 0, "admissible": true}
+}

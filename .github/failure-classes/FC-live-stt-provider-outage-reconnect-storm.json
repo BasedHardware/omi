@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-stt-provider-outage-reconnect-storm",
+  "violated_contract": "When every configured live STT provider is unavailable, listen reconnects must not repeatedly create provider sessions or amplify the outage.",
+  "canonical_prevention": "Before provider setup, shed sessions when all eligible provider breakers are open, signal a bounded retry delay using the existing terminal status event, preserve breaker half-open recovery probes, and apply a bounded per-user and per-device reconnect token bucket.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/live_chain.py",
+    "backend/utils/listen_reconnect_budget.py",
+    "backend/tests/unit/test_live_stt_chain.py",
+    "backend/tests/unit/test_listen_reconnect_budget.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/runtime.py",
+    "backend/routers/listen/receiver.py",
+    "backend/utils/stt/live_failure.py"
+  ],
+  "status": "open"
+}

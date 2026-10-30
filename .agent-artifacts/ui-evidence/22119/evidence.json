@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-stall-before.png",
+      "platform": "mobile-ios",
+      "description": "Home while the pendant link is stalled, before (7745645b79): amber recovery card under the capture pill; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-stall-after.png",
+      "platform": "mobile-ios",
+      "description": "Home while the pendant link is stalled, after: no banner; the Activity bell's amber dot is the only signal; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-live-stall-before.png",
+      "platform": "mobile-ios",
+      "description": "Live transcription page with a stalled pendant link, before (7745645b79): amber card with Reconnect, What's going on? and a corner dismiss; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-live-stall-after.png",
+      "platform": "mobile-ios",
+      "description": "Live transcription page with a stalled pendant link, after: header reads Reconnecting, one line under it with Reconnect; no card, no dismiss; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-activity-attention-before.png",
+      "platform": "mobile-ios",
+      "description": "Activity Needs attention, before (7745645b79): amber header, amber-washed badges, Manage/Retry buttons, no link-stall row; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-activity-attention-after.png",
+      "platform": "mobile-ios",
+      "description": "Activity Needs attention, after: link-stall row with in-place Reconnect, storage and upload rows with chevrons into Offline Sync; amber only in the icons; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

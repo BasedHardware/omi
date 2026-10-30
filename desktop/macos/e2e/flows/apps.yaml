@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/Services/APIClient/AppSetupURL.swift
   - desktop/macos/Desktop/Sources/Chat/ChatAppContext.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsCatalogKind.swift
   # S5b is the only place either of these is exercised where it can actually fail. `AppsPage`
   # presents its connector sheet with `.dismissableSheet`, which mounts a `ShellModalScrim`; Apps
@@ -93,6 +94,46 @@ steps:
       interactive_count: { min: 5 }
       text_visible:
         - Home
+
+  - id: S5f
+    name: Connected Calendar exposes its destructive action
+    do: "With Calendar connected on a disposable test account, note one imported Calendar memory's exact title, then reopen Apps → Imports → Calendar. Verify a Disconnect action appears beside Sync now."
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - Sync now
+        - Disconnect…
+
+  - id: S5g
+    name: Calendar disconnect states its retention boundary
+    do: "Activate Disconnect…. Verify the confirmation names Google Calendar, says future Calendar access stops, and explicitly says memories already imported into Omi will remain."
+    expect:
+      text_visible:
+        - Disconnect Google Calendar?
+        - Memories already imported into Omi will remain.
+
+  - id: S5h
+    name: Cancelling Calendar disconnect is non-destructive
+    do: "Cancel the confirmation. Verify the connected Calendar sheet returns with Sync now and Disconnect… still available."
+    expect:
+      text_visible:
+        - Sync now
+        - Disconnect…
+
+  - id: S5i
+    name: Confirmed Calendar disconnect returns to Connect
+    do: "Open Disconnect… again and confirm it on the disposable account. Verify the sheet returns to Connect Calendar and reports that imported memories remain."
+    expect:
+      text_visible:
+        - Google Calendar disconnected. Imported memories remain in Omi.
+        - Connect Calendar
+
+  - id: S5j
+    name: Calendar disconnect retains previously imported memories
+    do: "Open Memories, search for the exact Calendar memory title recorded in S5f, and verify that same memory is still present after the grant was revoked."
+    expect:
+      text_visible:
+        - Memories
 
   - id: S6
     name: Return to Home

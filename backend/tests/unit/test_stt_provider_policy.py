@@ -8,6 +8,7 @@ import yaml
 from config.stt_provider_policy import (
     DEEPGRAM_CLOUD_PROVIDER,
     DEEPGRAM_SELF_HOSTED_PROVIDER,
+    HELD_RECOVERY_SECOND_PROVIDER,
     MODULATE_PROVIDER,
     PARAKEET_MODEL_BY_SURFACE,
     PARAKEET_PROVIDER,
@@ -37,23 +38,29 @@ def _chart_env_value(values_path: Path, name: str) -> str | None:
     return None
 
 
-def test_hosted_deepgram_serves_streaming_only():
-    assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
-    # PTT dispatches only Parakeet and Modulate and raises on anything else;
-    # batch is carried by Parakeet/Velma.
+def test_deepgram_is_retired_on_every_surface():
+    # Deepgram retired 2026-08-27 (no contract); do not route or add keys.
+    # Absent from PROVIDER_SERVING_SURFACES, so both deployments answer False
+    # everywhere and no `dg-*` token can be admitted by an env edit.
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PRERECORDED)
-
-
-def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
-    assert provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
+    assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PRERECORDED)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PTT)
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.HELD_RECOVERY)
+
+
+def test_soniox_async_is_limited_to_held_recovery():
+    assert HELD_RECOVERY_SECOND_PROVIDER == 'soniox'
+    assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
+    assert not provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    assert not provider_is_enabled('soniox', STTServingSurface.PTT)
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
     expected = {
-        STTServingSurface.STREAMING: 'modulate-velma-2,soniox,dg-nova-3,parakeet',
+        STTServingSurface.STREAMING: 'modulate-velma-2,soniox,parakeet',
         STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
         STTServingSurface.PTT: 'modulate-velma-2,parakeet',
     }
@@ -69,9 +76,10 @@ def test_deepgram_model_tokens_report_the_hosted_deployment_by_default():
     assert deepgram_provider_for_runtime(True) == DEEPGRAM_SELF_HOSTED_PROVIDER
 
 
-def test_deepgram_token_is_admissible_while_either_deployment_serves_the_surface():
-    assert model_is_enabled('dg-nova-3', STTServingSurface.STREAMING)
+def test_retired_deepgram_tokens_are_never_admissible():
+    assert not model_is_enabled('dg-nova-3', STTServingSurface.STREAMING)
     assert not model_is_enabled('dg-nova-3', STTServingSurface.PRERECORDED)
+    assert not model_is_enabled('nova-3', STTServingSurface.STREAMING)
 
 
 def test_parakeet_capability_tracks_the_model_selected_for_each_surface():
@@ -87,9 +95,12 @@ def test_parakeet_capability_tracks_the_model_selected_for_each_surface():
 def test_parakeet_chart_models_match_the_capability_policy(values_path: Path):
     """A model deployment swap must update the policy before routing can change (#10009)."""
     assert _chart_env_value(values_path, 'PARAKEET_MODEL') == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]
-    assert (
-        _chart_env_value(values_path, 'PARAKEET_STREAM_MODEL') == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.STREAMING]
-    )
+    stream_model = _chart_env_value(values_path, 'PARAKEET_STREAM_MODEL')
+    if values_path.name.startswith('prod_'):
+        # Prod serves /v3/stream with VAD + the TDT model; RNNT is not loaded there.
+        assert stream_model is None
+    else:
+        assert stream_model == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.STREAMING]
     assert PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PTT] == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.STREAMING]
 
 

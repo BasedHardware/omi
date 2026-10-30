@@ -448,6 +448,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// shells — the recap is part of the thread's history there. Task chat opts out: that thread is
   /// about one task, not about the day.
   var showsDailySummary: Bool = true
+
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   // MARK: - Scroll State
@@ -456,6 +457,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// switch this to `.freeScrolling` — only physical user input (wheel/trackpad,
   /// mouse, or keyboard scroll-navigation).
   @State private var scrollMode: ChatScrollMode = .followingBottom
+  /// Whether the daily summary card is currently allowed above the thread.
+  /// See `admitDailySummaryIfFollowing` (INV-CHAT-2).
+  @State private var dailySummaryAdmitted = false
+
   @ObservedObject private var dailySummaryStore: HomeDailySummaryStore = ChatDailySummaryCoordinator.shared.store
   /// Withdraws the recap row when the reader clears Chat. See `noteChatCleared`.
   @ObservedObject private var dailySummaryCoordinator: ChatDailySummaryCoordinator =
@@ -1126,7 +1131,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       VStack(spacing: OmiSpacing.md) {
         ProgressView()
           .scaleEffect(0.8)
-        Text("Loading...")
+        Text("Loading…")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }

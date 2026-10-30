@@ -1,0 +1,62 @@
+[
+  {
+    "case": "account_deleted",
+    "reason": "account_deleted"
+  },
+  {
+    "case": "account_invalid_marker",
+    "reason": "account_deleted"
+  },
+  {
+    "case": "account_missing",
+    "reason": "account_missing"
+  },
+  {
+    "case": "e2ee",
+    "reason": "data_protection_changed"
+  },
+  {
+    "case": "migration",
+    "reason": "data_protection_changed"
+  },
+  {
+    "case": "privacy_blocked",
+    "reason": "privacy_generation_changed"
+  },
+  {
+    "case": "privacy_purging",
+    "reason": "privacy_generation_changed"
+  },
+  {
+    "case": "conversation_tombstone",
+    "reason": "conversation_deleted"
+  },
+  {
+    "case": "conversation_deleted",
+    "reason": "conversation_deleted"
+  },
+  {
+    "case": "redirect_cycle",
+    "reason": "conversation_redirect_cycle"
+  },
+  {
+    "case": "fence_budget",
+    "reason": "conversation_fence_budget"
+  },
+  {
+    "case": "custom_stt",
+    "reason": "recording_privacy_changed"
+  },
+  {
+    "case": "owner_opt_out",
+    "reason": "recording_privacy_changed"
+  },
+  {
+    "case": "source_opt_out",
+    "reason": "recording_privacy_changed"
+  },
+  {
+    "case": "redirect_missing",
+    "reason": "conversation_redirect_missing"
+  }
+]

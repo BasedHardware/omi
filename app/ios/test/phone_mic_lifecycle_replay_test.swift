@@ -84,7 +84,8 @@ final class FakeEngine: PhoneMicEngineControlling {
     var isRunning: Bool { true }
     var audioEngineForMonitor: AVAudioEngine? { nil }
 
-    func buildAndInstallTap(epoch: UInt64) throws {}
+    var installedEpoch: UInt64 = 0
+    func buildAndInstallTap(epoch: UInt64) throws { installedEpoch = epoch }
 
     func startEngine() throws {
         if startFailuresRemaining > 0 {
@@ -117,6 +118,32 @@ final class FakeMonitor: PhoneMicInterruptionSource {
     func startObserving() {}
     func stopObserving() {}
     func bindEngine(_ engine: AVAudioEngine?) {}
+}
+
+final class FakeBatchEncoder: PhoneMicBatchEncoding {
+    func encode(_ pcm: Data) -> [Data] { [Data([0x01])] }
+    func discardPartial() {}
+}
+
+final class FakeBatchWriter: PhoneMicBatchWriting {
+    var sessionFramesWritten: Int64 = 0
+    var storageFull = false
+
+    func append(opusPackets: [Data], marker: String) {
+        sessionFramesWritten += Int64(opusPackets.count)
+    }
+
+    func closeNowLocked(_ reason: String) {}
+
+    func consumeStorageFullTransitionLocked() -> Bool {
+        if !storageFull { return false }
+        storageFull = false
+        return true
+    }
+}
+
+final class WriterBox {
+    var writer: FakeBatchWriter?
 }
 
 final class FakePermission: PhoneMicPermissionChecking {
@@ -186,6 +213,36 @@ final class ReplayWorld {
             batchAutoMarker: { false },
             makeEncoder: { nil },
             makeWriter: { _, _ in fatalError("stream-mode vectors never build a batch writer") }
+        ))
+    }
+
+    func makeBatchController(writers: WriterBox) -> PhoneMicController {
+        let sink = self.sink
+        let monitorBox = self.monitorBox
+        let engineBox = self.engineBox
+        return PhoneMicController(environment: PhoneMicControllerEnvironment(
+            sink: sink,
+            permission: FakePermission(status: .granted),
+            configureSession: {},
+            describeRoute: { "harness-route" },
+            makeMonitor: { controlQueue, onSignal in
+                let monitor = FakeMonitor(queue: controlQueue, handler: onSignal)
+                monitorBox.monitor = monitor
+                return monitor
+            },
+            makeEngine: { _, onConvertedData, _ in
+                let engine = FakeEngine(onConvertedData: onConvertedData)
+                engineBox.engines.append(engine)
+                return engine
+            },
+            batchDirectory: { "/tmp/omi-phonemic-replay" },
+            batchAutoMarker: { false },
+            makeEncoder: { FakeBatchEncoder() },
+            makeWriter: { _, _ in
+                let writer = FakeBatchWriter()
+                writers.writer = writer
+                return writer
+            }
         ))
     }
 }
@@ -275,6 +332,18 @@ func assertNoFrameAfterIdle(_ delivered: [RecordedDelivery], label: String) {
     }
 }
 
+func progressCount(_ sink: RecordingSink) -> Int {
+    sink.deliveries.filter { $0.kind == .progress }.count
+}
+
+func startBatch(_ controller: PhoneMicController, _ sessionId: Int64) -> Result<Void, Error> {
+    let box = ResultBox()
+    controller.start(mode: .batch, sessionId: sessionId) { box.result = $0 }
+    waitUntil({ box.result != nil }, "batch start completion (sid \(sessionId))")
+    drainMain(seconds: 0.05)
+    return box.result!
+}
+
 func start(_ controller: PhoneMicController, _ sessionId: Int64) -> Result<Void, Error> {
     let box = ResultBox()
     controller.start(mode: .stream, sessionId: sessionId) { box.result = $0 }
@@ -307,9 +376,119 @@ func frameBytes(_ vector: Vector, _ index: Int) -> Data {
     vector.events[index].frame!
 }
 
+// Replays observed input order from a metadata-only physical trace. The
+// samples use synthetic silence and compressed time: this tests controller
+// policy, NOT the OS scheduling, radio, or wall-clock continuity in the trace.
+// Accepts start/stop, denied permission, foreground and interruption signals.
+// Unsupported inputs fail closed; outputs must match independently tested policy.
+func replayDeviceTrace(_ path: String) {
+    let doc = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
+    precondition(doc["schema"] as? String == "phone-mic-device-probe/v1", "unsupported device trace")
+    precondition(doc["scope"] as? String == "native-stream-only" && doc["audio_retained"] as? Bool == false,
+                 "device trace scope mismatch")
+    let events = doc["events"] as! [[String: Any]]
+    let sessionId = doc["session_id"] as! Int64
+    let expectedStates = events.filter { $0["kind"] as? String == "state" }.map { $0["state"] as! String }
+    let denied = events.contains { $0["kind"] as? String == "start_failed" && $0["code"] as? String == "permission_denied" }
+    precondition(expectedStates.first == "starting" && expectedStates.last == "idle", "invalid lifecycle boundaries")
+    precondition(events.last?["kind"] as? String == "observation_completed", "incomplete trace")
+    let world = ReplayWorld()
+    let controller = world.makeController(permission: FakePermission(status: denied ? .denied : .granted))
+    var started = false
+    var stopped = false
+    var frameSamples = 0
+    var interruptionOpen = false
+    let pcm = Data(repeating: 0, count: 320)
+    for event in events {
+        let kind = event["kind"] as! String
+        switch kind {
+        case "start_requested":
+            precondition(!started && !stopped, "duplicate start")
+            let result = start(controller, sessionId)
+            if denied {
+                guard case .failure(let error) = result, (error as? PhoneMicPigeonError)?.code == "permission_denied" else {
+                    preconditionFailure("denied permission must fail with permission_denied")
+                }
+                precondition(world.engineBox.engines.isEmpty, "denied permission must not create an engine")
+            } else {
+                guard case .success = result else { preconditionFailure("trace start failed") }
+            }
+            started = true
+        case "os_signal":
+            precondition(started && !stopped, "OS signal outside live session")
+            let count = world.engineBox.engines.count
+            let signal = event["signal"] as! String
+            switch signal {
+            case "appBecameActive":
+                world.monitorBox.monitor!.fire(.appBecameActive)
+                drainMain(seconds: 0.05)
+                if !interruptionOpen { precondition(world.engineBox.engines.count == count, "healthy foreground return rebuilt engine") }
+            case "interruptionBegan":
+                precondition(!interruptionOpen, "nested interruption requires review")
+                world.monitorBox.monitor!.fire(.interruptionBegan)
+                waitForState(world.sink, "interrupted", label: "device interruption")
+                interruptionOpen = true
+                let before = world.sink.deliveries.count
+                let old = world.engineBox.engines.last!
+                old.emitConverted(pcm, epoch: old.installedEpoch)
+                drainMain(seconds: 0.03)
+                precondition(world.sink.deliveries.count == before, "stale frame escaped interruption")
+            case "interruptionEnded":
+                precondition(interruptionOpen, "end without interruption")
+                guard let resume = event["should_resume"] as? Bool else { preconditionFailure("missing should_resume") }
+                world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: resume))
+                waitForState(world.sink, "running", label: "device interruption recovery")
+                precondition(world.engineBox.engines.count >= count, "recovery lost engine")
+                interruptionOpen = false
+            case "allCallsEnded": world.monitorBox.monitor!.fire(.allCallsEnded); drainMain(seconds: 0.05)
+            case "routeChanged":
+                world.monitorBox.monitor!.fire(.routeChanged(reasonDescription: "device-redacted")); drainMain(seconds: 0.05)
+            case "engineConfigChanged": world.monitorBox.monitor!.fire(.engineConfigChanged); drainMain(seconds: 0.05)
+            case "mediaServicesReset": world.monitorBox.monitor!.fire(.mediaServicesReset); drainMain(seconds: 0.05)
+            default: preconditionFailure("unsupported OS signal: add a reviewed adapter")
+            }
+        case "sample":
+            precondition(started && !stopped, "sample outside live session")
+            if denied { preconditionFailure("denied attempt cannot sample audio") }
+            let before = world.sink.deliveries.filter { $0.kind == .frame }.count
+            let engine = world.engineBox.engines.last!
+            engine.emitConverted(pcm, epoch: engine.installedEpoch)
+            drainMain(seconds: 0.03)
+            let running = world.sink.deliveries.last(where: { $0.kind == .state })?.state == "running"
+            precondition(world.sink.deliveries.filter { $0.kind == .frame }.count == before + (running ? 1 : 0),
+                         "sample delivery violated running/interrupted policy")
+            if running { frameSamples += 1 }
+        case "stop_requested":
+            precondition(started && !stopped, "stop without start or duplicate stop")
+            stop(controller)
+            stopped = true
+            let before = world.sink.deliveries.count
+            for engine in world.engineBox.engines { engine.emitConverted(pcm, epoch: engine.installedEpoch) }
+            drainMain(seconds: 0.05)
+            precondition(world.sink.deliveries.count == before, "late frame escaped after stop")
+        case "start_failed", "capture_error":
+            precondition(denied && event["code"] as? String == "permission_denied", "unexpected capture failure")
+        case "state", "app_lifecycle", "start_completed", "stop_completed", "observation_completed":
+            break // observed outputs, compared below; lifecycle is OS-owned, not simulated
+        default:
+            preconditionFailure("unsupported/failing trace event: \(kind)")
+        }
+    }
+    precondition(started && stopped && !interruptionOpen && (denied || frameSamples > 0),
+                 "trace replay executed no complete capture/denial")
+    let actualStates = world.sink.deliveries.filter { $0.kind == .state }.map { $0.state! }
+    precondition(actualStates == expectedStates, "device/replay state sequence differs")
+    assertNoFrameAfterIdle(world.sink.deliveries, label: "device trace")
+    print("phone-mic device trace: lifecycle policy replay passed (synthetic audio, compressed time)")
+}
+
 @main
 struct Harness {
     static func main() {
+        if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--device-trace" {
+            replayDeviceTrace(CommandLine.arguments[2])
+            return
+        }
         let vectors = loadVectors()
 
         // 1. start-running: starting, running, two frames under the live epoch.
@@ -456,6 +635,193 @@ struct Harness {
             drainMain(seconds: 0.05)
             stop(controller)
             assertDeliveriesMatch(vector, staleIndices: [], world.sink.deliveries, label: "session-adoption")
+        }
+
+        // A permission failure cannot poison a later start on the same
+        // controller. No engine before consent; a fresh session owns recovery.
+        do {
+            let world = ReplayWorld()
+            let permission = FakePermission(status: .denied)
+            let controller = world.makeController(permission: permission)
+            guard case .failure(let error) = start(controller, 91),
+                  (error as? PhoneMicPigeonError)?.code == "permission_denied" else {
+                preconditionFailure("permission recovery must begin with denied start")
+            }
+            precondition(world.engineBox.engines.isEmpty, "engine created without consent")
+            permission.status = .granted
+            guard case .success = start(controller, 92) else { preconditionFailure("permission restoration did not recover") }
+            let engine = world.engineBox.engines.last!
+            engine.emitConverted(Data(repeating: 0, count: 320), epoch: engine.installedEpoch)
+            drainMain(seconds: 0.05)
+            let frames = world.sink.deliveries.filter { $0.kind == .frame }
+            precondition(frames.count == 1 && frames[0].sessionId == 92, "restored permission delivered wrong session")
+            stop(controller)
+            let before = world.sink.deliveries.count
+            engine.emitConverted(Data(repeating: 0, count: 320), epoch: engine.installedEpoch)
+            drainMain(seconds: 0.05)
+            precondition(world.sink.deliveries.count == before, "restored session leaked after stop")
+        }
+
+        // Batch heartbeat pacing: healthy running stays quiet well past the old
+        // 1s tick; interruption and foreground snap a beat back inside 1s.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 7) else {
+                preconditionFailure("batch pacing: start failed")
+            }
+            let started = progressCount(world.sink)
+            drainMain(seconds: 1.5)
+            precondition(progressCount(world.sink) == started,
+                "healthy batch heartbeat must stay on the 5s cadence (ticked within 1.5s)")
+
+            writers.writer?.storageFull = true
+            let engine = world.engineBox.engines[0]
+            engine.emitConverted(Data([1, 2, 3, 4]), epoch: engine.installedEpoch)
+            drainMain(seconds: 1.0)
+            precondition(
+                world.sink.deliveries.contains { $0.kind == .error && $0.code == "batch_storage_full" },
+                "storage-full must be reported from the write, not the slow heartbeat")
+
+            world.monitorBox.monitor!.fire(.interruptionBegan)
+            let beforeInterrupt = progressCount(world.sink)
+            // Stay under the 3s resume ticker so this window observes the 1s
+            // snap and the explicit interruptionEnded below is what resumes.
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) > beforeInterrupt,
+                "interruption must snap the heartbeat back to 1s")
+
+            let resumedAt = world.sink.deliveries.count
+            world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
+            waitUntil({
+                world.sink.deliveries.dropFirst(resumedAt).contains { $0.kind == .state && $0.state == "running" }
+            }, "batch pacing resumed")
+            drainMain(seconds: 0.05)
+            let afterResume = progressCount(world.sink)
+            // Recovery reaching .running must preserve the pending fast first
+            // beat: emitting it ~1s later keeps the beat gap under the Dart 10s
+            // stall deadline instead of silently retargeting to the slow cadence.
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) > afterResume,
+                "recovery must emit its pending fast beat within ~1s, not wait out the healthy cadence")
+            let fastBeatCount = progressCount(world.sink)
+            // After that fast beat the repeating cadence is the slow one.
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) == fastBeatCount,
+                "after the preserved fast beat the heartbeat must return to the healthy cadence")
+
+            world.monitorBox.monitor!.fire(.appBecameActive)
+            drainMain(seconds: 3.0)
+            precondition(progressCount(world.sink) > fastBeatCount,
+                "foreground must schedule one fast heartbeat")
+            stop(controller)
+        }
+
+        // Pins the native 4s constant itself: quiet through 3.3s (rejects 1s–3s),
+        // then a beat before the 500ms leeway can hide a 4s timer.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 11) else {
+                preconditionFailure("batch cadence: start failed")
+            }
+            let started = progressCount(world.sink)
+            drainMain(seconds: 3.3)
+            precondition(progressCount(world.sink) == started,
+                "healthy batch heartbeat is 4s; it must not tick within 3.3s")
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) > started,
+                "healthy batch heartbeat must tick at 4s (none by ~5.3s)")
+            stop(controller)
+        }
+
+        // Late-window recovery must keep the already-armed fast deadline. The
+        // 1s fault fire is armed when the interruption lands; recovering 0.85s
+        // into that window leaves only ~0.15s on it. Re-anchoring the deadline
+        // to resume + 1s (the regression this pins) would delay the beat past
+        // the check window — and, late enough, past Dart's unchanged 10s stall
+        // deadline, restarting a fully recovered session.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 21) else {
+                preconditionFailure("preserved deadline: start failed")
+            }
+            drainMain(seconds: 0.5)
+            world.monitorBox.monitor!.fire(.interruptionBegan)
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "interrupted" }
+            }, "preserved deadline: interrupted")
+            // 0.6s into the fault window: no fault beat has fired yet, and the
+            // armed one is ~0.4s out — enough margin that queue latency cannot
+            // let it fire before recovery completes.
+            drainMain(seconds: 0.6)
+            world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "running" }
+            }, "preserved deadline: resumed")
+            precondition(progressCount(world.sink) == 0,
+                "preserved deadline: no beat expected before recovery (timing drifted)")
+            drainMain(seconds: 0.7)
+            precondition(progressCount(world.sink) > 0,
+                "recovery must keep the already-armed fast fire (~0.15s out), not re-anchor it to resume + 1s")
+            let preservedBeatCount = progressCount(world.sink)
+            // After the preserved beat the cadence returns to healthy: no
+            // second beat on the old 1s fault repeat.
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) == preservedBeatCount,
+                "after the preserved beat the heartbeat must return to the healthy cadence")
+            stop(controller)
+        }
+
+        // A second fault before the preserved 1s recovery beat must not push
+        // that deadline later. Interruption arms the 1s fire; recovering halfway
+        // through the window leaves it armed; a route rebuild that returns to
+        // .running before the fire used to fall through the healthy-only guard
+        // and re-anchor to now+1s. The beat must still land on the original
+        // deadline, then the healthy 4s cadence resumes.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 22) else {
+                preconditionFailure("repeated fault: start failed")
+            }
+            drainMain(seconds: 0.5)
+            world.monitorBox.monitor!.fire(.interruptionBegan)
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "interrupted" }
+            }, "repeated fault: interrupted")
+            // Halfway through the fault window: the armed fire is ~0.5s out,
+            // enough for resume plus a second rebuild to land before it.
+            drainMain(seconds: 0.5)
+            world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "running" }
+            }, "repeated fault: resumed")
+            precondition(progressCount(world.sink) == 0,
+                "repeated fault: no beat expected before the second signal (timing drifted)")
+            let beforeRebuild = world.sink.deliveries.count
+            world.monitorBox.monitor!.fire(.routeChanged(reasonDescription: "3"))
+            waitUntil({
+                world.sink.deliveries.dropFirst(beforeRebuild).contains { $0.kind == .state && $0.state == "running" }
+            }, "repeated fault: rebuilt")
+            precondition(progressCount(world.sink) == 0,
+                "repeated fault: second signal must land before the preserved beat (timing drifted)")
+            // Original deadline is ~0.5s out from the interruption wait; the
+            // regression re-anchors to rebuild+1s. 0.75s covers the original
+            // fire and not the pushed one.
+            drainMain(seconds: 0.75)
+            precondition(progressCount(world.sink) > 0,
+                "a second fault must keep the already-armed fast fire, not push it to now+1s")
+            let repeatedBeatCount = progressCount(world.sink)
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) == repeatedBeatCount,
+                "after the preserved beat the heartbeat must return to the healthy cadence")
+            stop(controller)
         }
 
         print("phone-mic lifecycle replay: all 8 canonical vectors passed (stale/terminal-cleanup drops verified)")

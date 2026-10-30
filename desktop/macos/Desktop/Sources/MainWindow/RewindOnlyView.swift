@@ -93,7 +93,7 @@ struct RewindOnlyView: View {
       Button {
         openFullApp()
       } label: {
-        Label("Open Full omi App", systemImage: "square.grid.2x2")
+        Label("Open Full Omi App", systemImage: "square.grid.2x2")
       }
 
       Divider()

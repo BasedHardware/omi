@@ -1,0 +1,8 @@
+{
+  "version": "0.12.444",
+  "date": "2026-10-05",
+  "changes": [
+    "Omi can now look up a contact, read a Messages thread, send an iMessage, and run an AppleScript on your Mac — each one showing you exactly what it will do before it does it",
+    "Omi can now tell you what's waiting in your Apple Mail inbox — who wrote and about what, never the message bodies — and it says when Full Disk Access needs a restart instead of asking you to grant it again"
+  ]
+}

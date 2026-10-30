@@ -46,9 +46,9 @@ SCREEN_FRAME_PURPOSES: dict[ScreenFrameEgressPurpose, ScreenFramePurposePolicy] 
         max_persisted=7,
         setting_key="meeting_note_screenshots_enabled",
         share_default=True,
-        model="gemini-2.5-flash-lite",
+        model="gpt-6-luna",
         policy_version="meeting_note_privacy.v1",
-        prompt_version="meeting_note_frame_judge.v1",
+        prompt_version="meeting_note_frame_judge.v2",
     )
 }
 

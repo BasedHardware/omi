@@ -60,7 +60,7 @@ Before enabling universal memory writes in production:
 3. Confirm client direct access remains denied by Firestore Security Rules. Until real validation is available, the static guard is `pytest tests/unit/test_memory_firestore_security_rules.py -q`.
 4. Confirm the backend write path still uses the atomic apply adapter and operation journal; do not introduce a direct product writer bypass.
 5. Keep the global deployment-readiness declaration explicit:
-   `MEMORY_MODE=off` before proof and `MEMORY_MODE=read` after proof. It is not
+   `MEMORY_ENABLED=off` before proof and `MEMORY_ENABLED=on` after proof. It is not
    a user selector. See `backend/docs/runbooks/universal-memory-operations.md`.
 6. Confirm account deletion/source tombstone generation fences and the
    universal dual-format rollback reader before enabling global intake.
@@ -304,7 +304,7 @@ Remaining deployment gates before enabling this contract in production:
   universal dual-format reader deployed.
 - If IAM or Security Rules are wrong, stop canonical intake/maintenance with
   the global incident controls, then fix and redeploy rules/IAM before retrying
-  writes. Set the readiness declaration back to `MEMORY_MODE=off` as part of
+  writes. Set the readiness declaration back to `MEMORY_ENABLED=off` as part of
   the same global rollback; never reroute selected UIDs to a legacy writer.
 
 ## Verification currently available

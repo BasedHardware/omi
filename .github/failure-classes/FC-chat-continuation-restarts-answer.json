@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-chat-continuation-restarts-answer",
+  "violated_contract": "An unambiguous continuation command that directly follows a non-empty assistant answer must resume that answer. Treating a bare Continue as an unrelated prompt lets the model restart, summarize, or repeat the original long-form request.",
+  "canonical_prevention": "Recognize only short, explicit continuation commands after an assistant turn, preserve the user's text, and add a server-owned resume contract before the provider call. Regress both the recognition boundary and the provider payload through the real agent stream.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_chat_async_offload.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/retrieval/agentic.py"
+  ],
+  "status": "open"
+}

@@ -1,5 +1,7 @@
 import html
+import logging
 import re
+import unicodedata
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit
 
@@ -10,6 +12,9 @@ from models import AuthorWorksInput, ChatToolResponse, GetWorkInput, SearchWorks
 
 CROSSREF_BASE = "https://api.crossref.org"
 TIMEOUT = 20.0
+
+logger = logging.getLogger(__name__)
+_REQUEST_FAILED_MESSAGE = "Crossref request failed. Please try again later."
 
 app = FastAPI(
     title="Crossref Omi Integration",
@@ -22,10 +27,16 @@ def clamp_max_results(value: int) -> int:
     return max(1, min(10, value))
 
 
-_DOI_RE = re.compile(
-    r"^10\.\d{4,9}/[-._;()/:A-Z0-9#]+$",
-    re.IGNORECASE,
-)
+_DOI_PREFIX_RE = re.compile(r"^10\.[0-9]{4,9}(?:\.[0-9]+)*/")
+
+
+def _is_valid_doi(value: str) -> bool:
+    """Accept visible DOI characters; reject whitespace and non-graphic code points."""
+    prefix = _DOI_PREFIX_RE.match(value)
+    if prefix is None:
+        return False
+    suffix = value[prefix.end() :]
+    return bool(suffix) and all(unicodedata.category(character)[0] in "LMNPS" for character in suffix)
 
 
 def normalize_doi(value: Any) -> str | None:
@@ -33,8 +44,8 @@ def normalize_doi(value: Any) -> str | None:
 
     Chat callers commonly paste resolver links instead of the bare DOI.  Only
     the two DOI resolver hosts are accepted; their query and fragment are
-    discarded before decoding the path exactly once.  A second encoded layer
-    remains invalid rather than being silently interpreted as a different DOI.
+    discarded before decoding the path exactly once.  Any remaining percent
+    escape is kept literal and safely re-encoded for the Crossref API request.
     """
     if not isinstance(value, str):
         return None
@@ -63,7 +74,7 @@ def normalize_doi(value: Any) -> str | None:
         # Query and fragment are intentionally omitted; decode the path once.
         raw = unquote(parsed.path.lstrip("/"))
 
-    if ".." in raw or not _DOI_RE.fullmatch(raw):
+    if not _is_valid_doi(raw):
         return None
     return raw
 
@@ -232,7 +243,8 @@ async def search_crossref_works(payload: SearchWorksInput):
             {"query": query, "rows": limited, "sort": "relevance", "order": "desc"},
         )
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.warning("Crossref search request failed: %s", type(exc).__name__)
+        return ChatToolResponse(error=_REQUEST_FAILED_MESSAGE)
     items = payload.get("message", {}).get("items", [])
     if not items:
         return ChatToolResponse(result=f"No Crossref results found for '{query}'.")
@@ -255,8 +267,14 @@ async def get_crossref_work(payload: GetWorkInput):
 
     try:
         payload = await crossref_get(f"/works/{quote(normalized, safe='')}", {})
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return ChatToolResponse(error=f"No Crossref record found for DOI '{normalized}'.")
+        logger.warning("Crossref work request failed with status %s", exc.response.status_code)
+        return ChatToolResponse(error=_REQUEST_FAILED_MESSAGE)
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.warning("Crossref work request failed: %s", type(exc).__name__)
+        return ChatToolResponse(error=_REQUEST_FAILED_MESSAGE)
     item = payload.get("message", {})
     title = clean((item.get("title") or ["Untitled"])[0])
     publisher = clean(item.get("publisher"))
@@ -294,7 +312,8 @@ async def get_crossref_works_by_author(payload: AuthorWorksInput):
             },
         )
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.warning("Crossref author request failed: %s", type(exc).__name__)
+        return ChatToolResponse(error=_REQUEST_FAILED_MESSAGE)
     items = payload.get("message", {}).get("items", [])
     if not items:
         return ChatToolResponse(result=f"No recent works found for author '{author}'.")

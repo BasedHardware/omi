@@ -1,13 +1,11 @@
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:version/version.dart';
-
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -15,6 +13,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart' show walMinPlausibleTimerStartSeconds;
 
 class SDCardWalSyncImpl implements SDCardWalSync {
   List<Wal> _wals = [];
@@ -38,8 +37,36 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   static final Version _timestampMarkerMinVersion = Version.parse("3.0.16");
 
+  /// How far past "now" a device timestamp may sit and still count as a real
+  /// clock: one day absorbs pendant clock skew without reopening the door to
+  /// the years-away garbage that split real recordings into fragments.
+  static const int _markerFutureToleranceSeconds = 24 * 60 * 60;
+
+  /// Whether a decoded timestamp marker can name a real recording time. The
+  /// window matches the backend's filename gate (>= 2024-01-01, not beyond
+  /// now): once the packet walk desynchronizes, audio bytes decode as markers
+  /// with garbage epochs — years in the future were rejected at upload as
+  /// 1-second fragments, and garbage in the past uploaded silently under a
+  /// wrong date. An implausible marker is ignored so the recording keeps the
+  /// app-estimated clock instead of splitting.
+  @visibleForTesting
+  static bool markerEpochPlausible(int epoch, {DateTime? now}) {
+    if (epoch < walMinPlausibleTimerStartSeconds) return false;
+    final ceiling = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000 + _markerFutureToleranceSeconds;
+    return epoch <= ceiling;
+  }
+
   /// Parses an 83-byte SD card packet: byte 3 is the frame length, frame data starts at byte 4.
   /// Returns null when the length byte is corrupted (frame would exceed the packet bounds).
+  /// Arms [duration] and cancels [previous]. A later packet or the initial 5s
+  /// arm must not leave the earlier timer running, or it fires into a transfer
+  /// that is still receiving data.
+  @visibleForTesting
+  static Timer replaceTimer(Timer? previous, Duration duration, void Function() onFire) {
+    previous?.cancel();
+    return Timer(duration, onFire);
+  }
+
   static List<int>? parseLegacyPacketFrame(List<int> value) {
     final amount = value[3];
     if (amount <= 0 || 4 + amount > value.length) {
@@ -175,15 +202,27 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       storageOffset = 0;
     }
 
-    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    final BleAudioCodec codec;
+    try {
+      codec = await _getAudioCodec(deviceId);
+    } catch (e) {
+      Logger.debug('SDCardWalSync: failed to get audio codec, skipping listing: ');
+      return [];
+    }
     if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
       var seconds = ((totalBytes - storageOffset) / codec.getFramesLengthInBytes()) ~/ codec.getFramesPerSecond();
       // Use device-provided recording start timestamp if available (firmware >= 3.0.16), otherwise estimate
       int timerStart;
-      if (_supportsTimestampMarkers() && storageFiles.length >= 3 && storageFiles[2] > 0) {
-        timerStart = storageFiles[2];
+      String? clockRun;
+      final listedStart = storageFiles.length >= 3 ? storageFiles[2] : 0;
+      if (_supportsTimestampMarkers() && markerEpochPlausible(listedStart)) {
+        timerStart = listedStart;
       } else {
+        if (listedStart > 0) {
+          DebugLogManager.logEvent('implausible_timestamp_marker_ignored', {'epoch': listedStart, 'source': 'listing'});
+        }
         timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
+        clockRun = Wal.newClockRun();
       }
       Logger.debug(
         'SDCardWalSync: totalBytes=$totalBytes storageOffset=$storageOffset frameLengthInBytes=${codec.getFramesLengthInBytes()} fps=${codec.getFramesPerSecond()} calculatedSeconds=$seconds timerStart=$timerStart now=${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
@@ -211,6 +250,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           deviceModel: deviceModel,
           totalFrames: seconds * codec.getFramesPerSecond(),
           syncedFrameOffset: 0,
+          clockRun: clockRun,
         ),
       );
     }
@@ -259,39 +299,27 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
   }
 
+  int _storageFileSeq = 0;
+  int _admittedGeneration = -1;
+
+  /// Non-null while the chunks being flushed carry an app-estimated start
+  /// time; see [Wal.clockRun]. A device timestamp marker clears it.
+  String? _activeClockRun;
+
   Future<File> _flushToDisk(Wal wal, List<List<int>> chunk, int timerStart) async {
-    final directory = await getApplicationDocumentsDirectory();
-    String filePath = '${directory.path}/${wal.getFileNameByTimeStarts(timerStart)}';
-    List<int> data = [];
-
-    // Debug: Log first frame info
-    if (chunk.isNotEmpty) {
-      final firstFrame = chunk[0];
-      final frameHex = firstFrame.take(8).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-      Logger.debug(
-        "SDCardWalSync _flushToDisk: ${chunk.length} frames, first frame size=${firstFrame.length}, hex: $frameHex",
-      );
-    }
-
-    for (int i = 0; i < chunk.length; i++) {
-      var frame = chunk[i];
-
-      final byteFrame = ByteData(frame.length);
-      for (int i = 0; i < frame.length; i++) {
-        byteFrame.setUint8(i, frame[i]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
-    }
-    final file = File(filePath);
-    await file.writeAsBytes(data);
-
-    Logger.debug("SDCardWalSync _flushToDisk: Wrote ${data.length} bytes to $filePath");
-
-    return file;
+    final localSync = _localSync;
+    if (localSync == null) throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
+    final saved = await localSync.persistDeviceChunk(
+        source: wal,
+        frames: chunk,
+        timerStart: timerStart,
+        admittedGeneration: _admittedGeneration,
+        clockRun: _activeClockRun,
+        nextCollisionSequence: () => _storageFileSeq++);
+    return File((await Wal.getFilePath(saved.filePath))!);
   }
 
-  Future _readStorageBytesToFile(
+  Future<bool> _readStorageBytesToFile(
     Wal wal,
     Function(File f, int offset, int timerStart, int chunkFrames) callback,
   ) async {
@@ -301,7 +329,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     return _readStorageBytesToFileLegacy(wal, callback);
   }
 
-  Future _readStorageBytesToFileLegacy(
+  Future<bool> _readStorageBytesToFileLegacy(
     Wal wal,
     Function(File f, int offset, int timerStart, int chunkFrames) callback,
   ) async {
@@ -309,26 +337,35 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
 
-    Logger.debug("_readStorageBytesToFileLegacy ${offset}");
+    Logger.debug("_readStorageBytesToFileLegacy $offset");
 
     List<List<int>> bytesData = [];
     var chunkSize = sdcardChunkSizeSecs * 100;
     await _storageStream?.cancel();
     final completer = Completer<bool>();
     bool hasError = false;
+    bool sawEndSignal = false;
+    bool parseGap = false;
     bool firstDataReceived = false;
     Timer? timeoutTimer;
 
     _storageStream = await _getBleStorageBytesListener(
       deviceId,
-      onStorageBytesReceived: (List<int> value) async {
-        if (value.isEmpty || hasError) return;
+      onStorageBytesReceived: (List<int> value) {
+        if (value.isEmpty || hasError || completer.isCompleted) return;
 
         if (!firstDataReceived) {
           firstDataReceived = true;
           timeoutTimer?.cancel();
           Logger.debug('First data received, timeout cancelled');
         }
+        timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 15), () {
+          if (!completer.isCompleted) {
+            hasError = true;
+            Logger.debug('SD card read stalled: no data for 15s');
+            completer.completeError(TimeoutException('SD card read stalled'));
+          }
+        });
 
         if (value.length == 1) {
           Logger.debug('returned $value');
@@ -336,20 +373,25 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             Logger.debug('good to go');
           } else if (value[0] == 3) {
             Logger.debug('bad file size. finishing...');
+            hasError = true;
+            if (!completer.isCompleted) completer.complete(false);
           } else if (value[0] == 4) {
             Logger.debug('file size is zero. going to next one....');
+            sawEndSignal = true;
             if (!completer.isCompleted) {
               completer.complete(true);
             }
           } else if (value[0] == 100) {
             Logger.debug('end');
+            sawEndSignal = true;
             if (!completer.isCompleted) {
               completer.complete(true);
             }
           } else {
             Logger.debug('Error bit returned');
+            hasError = true;
             if (!completer.isCompleted) {
-              completer.complete(true);
+              completer.complete(false);
             }
           }
           return;
@@ -361,6 +403,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             bytesData.add(frame);
           } else {
             Logger.debug('Skipping corrupted SD card packet: invalid frame length ${value[3]}');
+            parseGap = true;
           }
           offset += 80;
         } else if (value.length == 440) {
@@ -379,13 +422,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             packageOffset += packageSize + 1;
           }
           offset += value.length;
+        } else {
+          parseGap = true;
         }
       },
     );
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
+    timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 5), () {
       if (!firstDataReceived && !completer.isCompleted) {
         hasError = true;
         final error = TimeoutException('No data received from SD card within 5 seconds');
@@ -395,20 +440,23 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
     });
 
+    bool sawEnd = false;
     try {
-      await completer.future;
+      sawEnd = await completer.future;
     } catch (e) {
       rethrow;
     } finally {
       await _storageStream?.cancel();
-      timeoutTimer.cancel();
+      timeoutTimer?.cancel();
     }
 
     // After download: compute accurate duration from actual frame count
     if (!hasError && bytesData.isNotEmpty) {
       int totalFrames = bytesData.length;
       int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
+      // This firmware stores no recording time: every chunk's start is an estimate.
       int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+      _activeClockRun = wal.clockRun ?? Wal.newClockRun();
 
       int bytesLeft = 0;
       int chunkOffset = wal.storageOffset;
@@ -433,10 +481,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
     }
 
-    return;
+    final expectedEnd = wal.storageTotalBytes;
+    final offsetReached = expectedEnd <= 0 || offset >= expectedEnd;
+    return sawEnd && sawEndSignal && offsetReached && !hasError && !parseGap && !_isCancelled;
   }
 
-  Future _readStorageBytesToFileWithMarkers(
+  Future<bool> _readStorageBytesToFileWithMarkers(
     Wal wal,
     Function(File f, int offset, int timerStart, int chunkFrames) callback,
   ) async {
@@ -444,8 +494,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
     int timerStart = wal.timerStart;
+    // Estimated until the first device timestamp marker, unless the listing
+    // already supplied the device's recording start.
+    _activeClockRun = wal.clockRun;
 
-    Logger.debug("_readStorageBytesToFileWithMarkers ${offset}");
+    Logger.debug("_readStorageBytesToFileWithMarkers $offset");
 
     List<List<int>> bytesData = [];
     var bytesLeft = 0;
@@ -454,19 +507,30 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     await _storageStream?.cancel();
     final completer = Completer<bool>();
     bool hasError = false;
+    bool sawEndSignal = false;
+    bool parseGap = false;
     bool firstDataReceived = false;
     Timer? timeoutTimer;
 
+    Future<void> cbQueue = Future.value();
+
     _storageStream = await _getBleStorageBytesListener(
       deviceId,
-      onStorageBytesReceived: (List<int> value) async {
-        if (value.isEmpty || hasError) return;
+      onStorageBytesReceived: (List<int> value) {
+        if (value.isEmpty || hasError || completer.isCompleted) return;
 
         if (!firstDataReceived) {
           firstDataReceived = true;
           timeoutTimer?.cancel();
           Logger.debug('First data received, timeout cancelled');
         }
+        timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 15), () {
+          if (!completer.isCompleted) {
+            hasError = true;
+            Logger.debug('SD card read stalled: no data for 15s');
+            completer.completeError(TimeoutException('SD card read stalled'));
+          }
+        });
 
         if (value.length == 1) {
           Logger.debug('returned $value');
@@ -474,20 +538,25 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             Logger.debug('good to go');
           } else if (value[0] == 3) {
             Logger.debug('bad file size. finishing...');
+            hasError = true;
+            if (!completer.isCompleted) completer.complete(false);
           } else if (value[0] == 4) {
             Logger.debug('file size is zero. going to next one....');
+            sawEndSignal = true;
             if (!completer.isCompleted) {
               completer.complete(true);
             }
           } else if (value[0] == 100) {
             Logger.debug('end');
+            sawEndSignal = true;
             if (!completer.isCompleted) {
               completer.complete(true);
             }
           } else {
             Logger.debug('Error bit returned');
+            hasError = true;
             if (!completer.isCompleted) {
-              completer.complete(true);
+              completer.complete(false);
             }
           }
           return;
@@ -499,6 +568,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             bytesData.add(frame);
           } else {
             Logger.debug('Skipping corrupted SD card packet: invalid frame length ${value[3]}');
+            parseGap = true;
           }
           offset += 80;
         } else if (value.length == 440) {
@@ -516,9 +586,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
                   (value[packageOffset + 3] << 16) |
                   (value[packageOffset + 4] << 24);
               packageOffset += 5;
-              if (epoch > 0) {
+              if (markerEpochPlausible(epoch)) {
                 timestampMarkers.add(MapEntry(bytesData.length, epoch));
                 Logger.debug('Timestamp marker: epoch=$epoch at frame ${bytesData.length}');
+              } else {
+                // Audio bytes that decoded like a marker: ignoring it keeps the
+                // estimated clock and the recording whole instead of splitting
+                // it into fragments dated years away.
+                DebugLogManager.logEvent('implausible_timestamp_marker_ignored', {'epoch': epoch});
+                Logger.debug('Ignored implausible timestamp marker: epoch=$epoch');
               }
               continue;
             }
@@ -530,71 +606,78 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             packageOffset += packageSize + 1;
           }
           offset += value.length;
+        } else {
+          parseGap = true;
         }
 
-        // Find the next marker boundary (if any) after bytesLeft
-        int nextMarkerIdx = bytesData.length;
-        for (var m in timestampMarkers) {
-          if (m.key > bytesLeft) {
-            nextMarkerIdx = m.key;
-            break;
-          }
-        }
-
-        // Chunk up to the next marker boundary or chunkSize, whichever comes first
-        while (bytesData.length - bytesLeft >= chunkSize && bytesLeft + chunkSize <= nextMarkerIdx) {
-          var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
-          var chunkFrames = chunk.length;
-          var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
-          bytesLeft += chunkSize;
-          try {
-            var file = await _flushToDisk(wal, chunk, timerStart);
-            await callback(file, offset, timerStart, chunkFrames);
-          } catch (e) {
-            Logger.debug('Error in callback during chunking: $e');
-            hasError = true;
-            if (!completer.isCompleted) {
-              completer.completeError(e);
+        cbQueue = cbQueue.then((_) async {
+          if (hasError) return;
+          // Find the next marker boundary (if any) after bytesLeft
+          int nextMarkerIdx = bytesData.length;
+          for (var m in timestampMarkers) {
+            if (m.key > bytesLeft) {
+              nextMarkerIdx = m.key;
+              break;
             }
           }
-          timerStart += chunkSecs;
-        }
-
-        // If we've reached a marker boundary, flush remaining frames before it and advance timerStart
-        if (timestampMarkers.any((m) => m.key == nextMarkerIdx) &&
-            nextMarkerIdx <= bytesData.length &&
-            bytesLeft < nextMarkerIdx) {
-          var chunk = bytesData.sublist(bytesLeft, nextMarkerIdx);
-          var chunkFrames = chunk.length;
-          if (chunkFrames > 0) {
+          // Chunk up to the next marker boundary or chunkSize, whichever comes first
+          while (bytesData.length - bytesLeft >= chunkSize && bytesLeft + chunkSize <= nextMarkerIdx) {
+            var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
+            var chunkFrames = chunk.length;
             var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
-            bytesLeft = nextMarkerIdx;
+            bytesLeft += chunkSize;
             try {
               var file = await _flushToDisk(wal, chunk, timerStart);
               await callback(file, offset, timerStart, chunkFrames);
             } catch (e) {
-              Logger.debug('Error flushing segment at marker: $e');
+              Logger.debug('Error in callback during chunking: $e');
               hasError = true;
-              if (!completer.isCompleted) completer.completeError(e);
+              if (!completer.isCompleted) {
+                completer.completeError(e);
+              }
+              rethrow;
             }
             timerStart += chunkSecs;
-          } else {
-            bytesLeft = nextMarkerIdx;
           }
-          // Apply the marker's epoch
-          for (var m in timestampMarkers) {
-            if (m.key == nextMarkerIdx) {
-              timerStart = m.value;
-              break;
+
+          // If we've reached a marker boundary, flush remaining frames before it and advance timerStart
+          if (timestampMarkers.any((m) => m.key == nextMarkerIdx) &&
+              nextMarkerIdx <= bytesData.length &&
+              bytesLeft < nextMarkerIdx) {
+            var chunk = bytesData.sublist(bytesLeft, nextMarkerIdx);
+            var chunkFrames = chunk.length;
+            if (chunkFrames > 0) {
+              var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
+              bytesLeft = nextMarkerIdx;
+              try {
+                var file = await _flushToDisk(wal, chunk, timerStart);
+                await callback(file, offset, timerStart, chunkFrames);
+              } catch (e) {
+                Logger.debug('Error flushing segment at marker: $e');
+                hasError = true;
+                if (!completer.isCompleted) completer.completeError(e);
+                rethrow;
+              }
+              timerStart += chunkSecs;
+            } else {
+              bytesLeft = nextMarkerIdx;
+            }
+            // Apply the marker's epoch
+            for (var m in timestampMarkers) {
+              if (m.key == nextMarkerIdx) {
+                timerStart = m.value;
+                _activeClockRun = null;
+                break;
+              }
             }
           }
-        }
+        }).catchError((_) {});
       },
     );
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
+    timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 5), () {
       if (!firstDataReceived && !completer.isCompleted) {
         hasError = true;
         final error = TimeoutException('No data received from SD card within 5 seconds');
@@ -604,13 +687,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
     });
 
+    bool sawEnd = false;
     try {
-      await completer.future;
+      sawEnd = await completer.future;
     } catch (e) {
       rethrow;
     } finally {
       await _storageStream?.cancel();
-      timeoutTimer.cancel();
+      timeoutTimer?.cancel();
+      await cbQueue;
     }
 
     // Flush remaining data, respecting any unprocessed timestamp markers
@@ -618,23 +703,28 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       List<List<int>> segments = [];
       int segStart = bytesLeft;
       int segEpoch = timerStart;
+      // 1 when the segment starts at a device marker, 0 when it continues the
+      // current (possibly estimated) clock.
+      int segMarked = 0;
       for (var marker in timestampMarkers) {
         if (marker.key > bytesLeft && marker.key < bytesData.length) {
           if (marker.key > segStart) {
-            segments.add([segStart, marker.key, segEpoch]);
+            segments.add([segStart, marker.key, segEpoch, segMarked]);
           }
           segStart = marker.key;
           segEpoch = marker.value;
+          segMarked = 1;
         }
       }
       if (segStart < bytesData.length) {
-        segments.add([segStart, bytesData.length, segEpoch]);
+        segments.add([segStart, bytesData.length, segEpoch, segMarked]);
       }
 
       for (var seg in segments) {
         int sStart = seg[0];
         int sEnd = seg[1];
         int sEpoch = seg[2];
+        if (seg[3] == 1) _activeClockRun = null;
         var chunk = bytesData.sublist(sStart, sEnd);
         var chunkFrames = chunk.length;
         if (chunkFrames > 0) {
@@ -644,7 +734,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
     }
 
-    return;
+    final expectedEnd = wal.storageTotalBytes;
+    final offsetReached = expectedEnd <= 0 || offset >= expectedEnd;
+    return sawEnd && sawEndSignal && offsetReached && !hasError && !parseGap && !_isCancelled;
   }
 
   Future<SyncLocalFilesResponse> _syncWal(final Wal wal, Function(int offset, double speedKBps)? updates) async {
@@ -657,6 +749,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     }
 
     final admittedGeneration = _localSync!.sessionGeneration;
+    _admittedGeneration = admittedGeneration;
 
     int chunksDownloaded = 0;
     int lastOffset = wal.storageOffset;
@@ -674,15 +767,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     _downloadStartTime = DateTime.now();
     _totalBytesDownloaded = 0;
 
+    bool readComplete = false;
     try {
-      await _readStorageBytesToFile(wal, (File file, int offset, int timerStart, int chunkFrames) async {
+      readComplete = await _readStorageBytesToFile(wal, (File file, int offset, int timerStart, int chunkFrames) async {
         if (_isCancelled) {
           throw Exception('Sync cancelled by user');
         }
 
         int bytesInChunk = offset - lastOffset;
         _updateSpeed(bytesInChunk);
-        await _registerSingleChunk(wal, file, timerStart, chunkFrames, admittedGeneration);
         chunksDownloaded++;
         lastOffset = offset;
 
@@ -717,40 +810,18 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     Logger.debug("SDCard Phase 1 complete: $chunksDownloaded chunks downloaded");
     DebugLogManager.logInfo('SD card BLE download complete', {'chunks': chunksDownloaded});
 
+    if (!readComplete) {
+      Logger.debug('SDCard: read incomplete — leaving card contents intact');
+      throw StateError('SD card read incomplete; refusing to clear');
+    }
     Logger.debug("SDCard Phase 3: Clearing SD card storage");
-    await _writeToStorage(wal.device, wal.fileNum, 1, 0);
-
-    return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
-  }
-
-  Future<void> _registerSingleChunk(Wal wal, File file, int timerStart, int chunkFrames, int admittedGeneration) async {
-    if (_localSync == null) {
-      Logger.debug("SDCard: WARNING - Cannot register chunk, LocalWalSync not available");
-      return;
+    final cleared = await _writeToStorage(wal.device, wal.fileNum, 1, 0);
+    if (!cleared) {
+      Logger.debug('SDCard: CLEAR not acknowledged — leaving wal as miss');
+      throw StateError('SD card clear not acknowledged');
     }
 
-    int chunkSeconds = chunkFrames ~/ wal.codec.getFramesPerSecond();
-
-    Wal localWal = Wal(
-      codec: wal.codec,
-      channel: wal.channel,
-      sampleRate: wal.sampleRate,
-      timerStart: timerStart,
-      filePath: file.path.split('/').last,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      device: wal.device,
-      deviceModel: wal.deviceModel,
-      seconds: chunkSeconds,
-      totalFrames: chunkFrames,
-      syncedFrameOffset: 0,
-      originalStorage: WalStorage.sdcard,
-    );
-
-    await _localSync!.addExternalWal(localWal, admittedGeneration: admittedGeneration);
-    Logger.debug(
-      "SDCard: Registered chunk (ts: $timerStart) with LocalWalSync - codec=${localWal.codec}, sampleRate=${localWal.sampleRate}, channel=${localWal.channel}",
-    );
+    return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
   }
 
   @override
@@ -784,7 +855,6 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       try {
         var partialRes = await _syncWal(wal, (offset, speedKBps) {
-          wal.storageOffset = offset;
           wal.syncSpeedKBps = speedKBps;
 
           final bytesRemaining = wal.storageTotalBytes - offset;
@@ -794,6 +864,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
           final bytesDownloaded = offset - storageOffsetStarts;
           final progressPercent = totalBytes > 0 ? bytesDownloaded / totalBytes : 0.0;
+          wal.deviceDownloadFraction = progressPercent.clamp(0.0, 1.0);
 
           progress?.onWalSyncedProgress(progressPercent.clamp(0.0, 1.0), speedKBps: speedKBps);
           listener.onWalUpdated();
@@ -816,6 +887,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         wal.syncStartedAt = null;
         wal.syncEtaSeconds = null;
         wal.syncSpeedKBps = null;
+        wal.deviceDownloadFraction = null;
         wal.syncMethod = SyncMethod.ble;
         listener.onWalUpdated();
         _resetSyncState();
@@ -826,6 +898,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       wal.syncStartedAt = null;
       wal.syncEtaSeconds = null;
       wal.syncSpeedKBps = null;
+      wal.deviceDownloadFraction = null;
       wal.syncMethod = SyncMethod.ble;
       listener.onWalUpdated();
     }
@@ -836,10 +909,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
-    var walToSync = _wals.where((w) => w == wal).firstOrNull;
+    // setDevice() and start() rebuild _wals with new Wal objects on every
+    // connection, so a recording page opened before a reconnect holds an object
+    // that is no longer listed. Match by id, as deleteWal does, and by storage,
+    // because a phone copy of the recording can share its id.
+    var walToSync = _wals.where((w) => w.storage == wal.storage && w.id == wal.id).firstOrNull;
     if (walToSync == null) {
       Logger.debug("SDCardWalSync: WAL not found in _wals, skipping sync");
-      return null;
+      // Transfer to Phone reports any normal return as a completed transfer.
+      throw Exception('Device recording list changed; go back and try again');
     }
 
     _resetSyncState();
@@ -851,12 +929,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     walToSync.syncMethod = SyncMethod.ble;
     listener.onWalUpdated();
 
-    final storageOffsetStarts = wal.storageOffset;
-    final totalBytes = wal.storageTotalBytes - storageOffsetStarts;
+    final storageOffsetStarts = walToSync.storageOffset;
+    final totalBytes = walToSync.storageTotalBytes - storageOffsetStarts;
 
     try {
-      var partialRes = await _syncWal(wal, (offset, speedKBps) {
-        walToSync.storageOffset = offset;
+      var partialRes = await _syncWal(walToSync, (offset, speedKBps) {
         walToSync.syncSpeedKBps = speedKBps;
 
         final bytesRemaining = walToSync.storageTotalBytes - offset;
@@ -866,6 +943,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
         final bytesDownloaded = offset - storageOffsetStarts;
         final progressPercent = totalBytes > 0 ? bytesDownloaded / totalBytes : 0.0;
+        walToSync.deviceDownloadFraction = progressPercent.clamp(0.0, 1.0);
 
         progress?.onWalSyncedProgress(progressPercent.clamp(0.0, 1.0), speedKBps: speedKBps);
         listener.onWalUpdated();
@@ -880,7 +958,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         ),
       );
 
-      wal.status = WalStatus.synced;
+      walToSync.status = WalStatus.synced;
     } catch (e) {
       Logger.debug("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
       DebugLogManager.logError(e, null, 'SD card single WAL sync failed: ${e.toString()}', {'walId': wal.id});
@@ -888,17 +966,19 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
       walToSync.syncSpeedKBps = null;
+      walToSync.deviceDownloadFraction = null;
       walToSync.syncMethod = SyncMethod.ble;
       listener.onWalUpdated();
       _resetSyncState();
       rethrow;
     }
 
-    wal.isSyncing = false;
-    wal.syncStartedAt = null;
-    wal.syncEtaSeconds = null;
-    wal.syncSpeedKBps = null;
-    wal.syncMethod = SyncMethod.ble;
+    walToSync.isSyncing = false;
+    walToSync.syncStartedAt = null;
+    walToSync.syncEtaSeconds = null;
+    walToSync.syncSpeedKBps = null;
+    walToSync.deviceDownloadFraction = null;
+    walToSync.syncMethod = SyncMethod.ble;
 
     listener.onWalUpdated();
     _resetSyncState();

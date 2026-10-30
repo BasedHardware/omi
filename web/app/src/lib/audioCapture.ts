@@ -154,7 +154,7 @@ export function createAudioCapture(options: AudioCaptureOptions): AudioCapture {
   let systemStream: MediaStream | null = null;
   let micSource: MediaStreamAudioSourceNode | null = null;
   let systemSource: MediaStreamAudioSourceNode | null = null;
-  let processor: ScriptProcessorNode | null = null;
+  let processor: AudioWorkletNode | null = null;
   let micAnalyser: AnalyserNode | null = null;
   let systemAnalyser: AnalyserNode | null = null;
   let levelInterval: NodeJS.Timeout | null = null;
@@ -212,22 +212,20 @@ export function createAudioCapture(options: AudioCaptureOptions): AudioCapture {
         mixerNode = micGain;
       }
 
-      // Create script processor for audio data extraction
-      // TODO: Migrate to AudioWorklet when prioritized
-      // ScriptProcessorNode is deprecated but still works in all modern browsers.
-      // AudioWorklet is the replacement but requires:
-      //   1. A separate JS file for the AudioWorkletProcessor
-      //   2. Registration via audioContext.audioWorklet.addModule()
-      //   3. MessagePort communication for sending audio data
-      // Benefits of migration: runs on audio thread (no main thread blocking),
-      // lower latency, better performance during heavy UI operations.
-      // Current approach works fine for typical use cases.
-      processor = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
+      // Add audio worklet module
+      await audioContext.audioWorklet.addModule('/audio-processor.js');
 
-      processor.onaudioprocess = (e) => {
+      // Create audio worklet node for audio data extraction
+      processor = new AudioWorkletNode(audioContext, 'omi-audio-processor', {
+        processorOptions: {
+          bufferSize: BUFFER_SIZE,
+        },
+      });
+
+      processor.port.onmessage = (e) => {
         if (isPaused) return;
 
-        const inputData = e.inputBuffer.getChannelData(0);
+        const inputData = e.data as Float32Array;
 
         // Resample to target sample rate
         const resampledData = resample(inputData, audioContext!.sampleRate, TARGET_SAMPLE_RATE);

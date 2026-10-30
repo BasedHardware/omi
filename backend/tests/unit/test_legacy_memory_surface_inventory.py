@@ -72,12 +72,6 @@ def test_representative_paths_keep_evidence_backed_potential_roles() -> None:
         if item.path == "backend/utils/conversations/process_conversation.py"
         and item.classification == "conversation_eager_memory_writer"
     ]
-    maintenance_job = [
-        item
-        for item in findings
-        if item.path == ".github/workflows/gcp_memory_maintenance_job.yml"
-        and item.classification == "maintenance_resources"
-    ]
     lifecycle_worker = [
         item
         for item in findings
@@ -85,7 +79,6 @@ def test_representative_paths_keep_evidence_backed_potential_roles() -> None:
     ]
 
     assert process_writer and {item.potential_roles for item in process_writer} == {("writer",)}
-    assert maintenance_job and {item.potential_roles for item in maintenance_job} == {("job",)}
     assert lifecycle_worker and {item.potential_roles for item in lifecycle_worker} == {("reader", "writer", "job")}
 
 
@@ -193,3 +186,17 @@ def test_checked_in_inventory_has_no_baseline_growth() -> None:
     growth, _shrinkage = inventory.compare_counts(current, baseline)
 
     assert growth == []
+
+
+def test_canonical_apply_metadata_key_is_not_a_legacy_promotion_surface(tmp_path):
+    root = tmp_path / 'backend' / 'utils' / 'memory'
+    root.mkdir(parents=True)
+    (root / 'fixture.py').write_text(
+        "patch = {'promotion_audit': metadata}\n"
+        "promotion_audit_worker(item)\n"
+        "from legacy import promotion_audit\n"
+        "promotion(item)\n"
+    )
+    rule = next(rule for rule in inventory.RULES if rule.classification == 'consolidation_promotion')
+    findings = inventory.scan(tmp_path, (rule,))
+    assert [finding.line for finding in findings] == [2, 3, 4]

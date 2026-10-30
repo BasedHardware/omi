@@ -765,17 +765,7 @@ private struct CloudConnectorCardHeaderView: View {
 
       Spacer(minLength: 0)
 
-      Button(action: onDismiss) {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.rowFillHover))
-          .contentShape(Circle())
-      }
-      .buttonStyle(.plain)
-      .help("Dismiss")
-      .accessibilityLabel("Close")
+      DismissButton(action: onDismiss, accessibilityLabel: "Dismiss", size: .compact)
     }
   }
 }
@@ -793,8 +783,9 @@ private struct CloudConnectorInstructionCardView: View {
       .padding(.vertical, OmiSpacing.lg)
       .frame(width: size.width, height: size.height, alignment: .topLeading)
       .inkGlassPanel()
-      .contentShape(Rectangle())
-      .onTapGesture(perform: onDismiss)
+      // Instructions are read, re-read and selected; clicking them must not make them disappear.
+      // The close button and Esc are the ways out.
+      .overlay { OverlayModalEscapeCatcher(action: onDismiss) }
   }
 }
 

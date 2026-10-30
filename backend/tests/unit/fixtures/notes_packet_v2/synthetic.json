@@ -1,0 +1,74 @@
+{
+  "two_speakers_unknown_owner": {
+    "segments": [
+      {
+        "id": "synthetic-a",
+        "speaker_id": 0,
+        "is_user": true,
+        "text": "I moved cities for a new training program last spring.",
+        "start": 0,
+        "end": 4
+      },
+      {
+        "id": "synthetic-b",
+        "speaker_id": 1,
+        "is_user": true,
+        "text": "I stayed nearby and started a small community garden instead.",
+        "start": 4,
+        "end": 8
+      }
+    ],
+    "people": [
+      {
+        "id": "synthetic-contact",
+        "name": "Nik Shevchenko"
+      }
+    ]
+  },
+  "contact_spelling": {
+    "transcript": "Nick suggested that the workshop should open with practical exercises before discussing the schedule.",
+    "people": [
+      {
+        "id": "synthetic-contact",
+        "name": "Nik Shevchenko"
+      }
+    ]
+  },
+  "english_with_noise": {
+    "segments": [
+      {
+        "id": "synthetic-en",
+        "speaker_id": 0,
+        "is_user": false,
+        "text": "We reviewed the workshop schedule and agreed to invite the remaining volunteers before Friday afternoon.",
+        "language_conformance": "in_profile"
+      },
+      {
+        "id": "synthetic-noise",
+        "speaker_id": 1,
+        "is_user": false,
+        "text": "欢迎订阅这个频道",
+        "language_conformance": "out_of_profile"
+      }
+    ],
+    "preference": "en",
+    "conversation_language": "zh"
+  },
+  "ambiguous_contact_spelling": {
+    "transcript": "John",
+    "people": [
+      {
+        "id": "synthetic-a",
+        "name": "John Yang"
+      },
+      {
+        "id": "synthetic-b",
+        "name": "Jon Deragon"
+      },
+      {
+        "id": "synthetic-c",
+        "name": "John Example"
+      }
+    ]
+  }
+}

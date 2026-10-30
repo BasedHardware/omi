@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, cast
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
+from utils.log_sanitizer import sanitize
 from utils.memory.kg_graph_traversal import format_traversal_result, traverse_knowledge_graph
 
 logger = logging.getLogger(__name__)
@@ -76,5 +77,5 @@ def traverse_knowledge_graph_tool(
         result = traverse_knowledge_graph(uid, entity, hops=hops)
         return format_traversal_result(result)
     except Exception as exc:
-        logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", uid, exc)
-        return f"Error traversing knowledge graph: {exc}"
+        logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", uid, sanitize(str(exc)))
+        return "Error traversing knowledge graph: Unable to complete traversal."

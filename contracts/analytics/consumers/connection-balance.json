@@ -1,0 +1,24 @@
+{
+  "id": "connection-balance",
+  "kind": "question",
+  "owner": "Product infra",
+  "question": "Are Device Connected people still balanced against the platform's real disconnect event? Mobile uses Device Disconnected Detailed. macOS uses Device Disconnected. Unique people and reconnection volume are different numbers: one person dropping the link five times is one person and five reconnects. The deprecated property-less mobile Device Disconnected event is not the mobile denominator.",
+  "query": "contracts/analytics/consumers/connection-balance.sql",
+  "events": [
+    "deviceDisconnected",
+    "deviceDisconnectedDetailed"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "A zero disconnect count is not a healthy connection day. Unique-people ratio uses a null denominator when nobody disconnected. Reconnect volume is the event count and must not be substituted for unique people.",
+  "balance": {
+    "connected_event": "Device Connected",
+    "mobile_disconnected_event": "Device Disconnected Detailed",
+    "macos_disconnected_event": "Device Disconnected",
+    "unique_people": "uniq(person) per event, per surface",
+    "reconnect_volume": "count of disconnect events, not unique people"
+  }
+}

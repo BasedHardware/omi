@@ -1,13 +1,19 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/components/omi_spinner.dart';
+import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/widgets/speaker_label_badge.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -47,22 +53,29 @@ void main() {
   testWidgets('mounted transcript follows people refresh, rename, and account clear', (tester) async {
     await setupSharedPreferences();
     var loaded = <Person>[];
-    final people = PeopleProvider(loadPeople: () async => loaded, renamePerson: (_, __) async => true);
+    final people = PeopleProvider(
+      loadPeople: () async => PeopleListResponse(people: loaded),
+      renamePerson: (_, __) async => true,
+    );
     final segment = segmentFor('reactive', 2)..personId = 'later';
-    await tester.pumpWidget(ChangeNotifierProvider.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
         value: people,
         child: MaterialApp(
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate
+            GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: TranscriptWidget(segments: [segment])),
-        )));
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Speaker 3'), findsOneWidget);
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
     loaded = [Person(id: 'later', name: 'Alex', createdAt: DateTime(2026), updatedAt: DateTime(2026))];
     await people.setPeople();
     await tester.pumpAndSettle();
@@ -74,10 +87,90 @@ void main() {
     people.clearUserData();
     await tester.pumpAndSettle();
     expect(find.text('Sam'), findsNothing);
-    expect(find.text('Speaker 3'), findsOneWidget);
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
+  });
+
+  testWidgets('live short epochs render unnamed while preserving correction identities', (tester) async {
+    await setupSharedPreferences();
+    await tester.binding.setSurfaceSize(const Size(800, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final rows = [for (var id = 4; id <= 8; id++) segmentFor('epoch-$id', id)];
+    final edited = <int>[];
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+          body: TranscriptWidget(
+        segments: rows,
+        followLatest: true,
+        editSegment: (_, id) => edited.add(id),
+      )),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Speaker'), findsNWidgets(5));
+    for (var id = 1; id <= 8; id++) {
+      expect(find.text('Speaker $id'), findsNothing);
+    }
+    await tester.tap(
+        find.descendant(of: find.byKey(const ValueKey('transcript-segment-epoch-5')), matching: find.text('Speaker')));
+    await tester.pump();
+    expect(edited, [5]);
   });
 
   group('Speaker label display', () {
+    for (final source in ['auto', 'manual']) {
+      testWidgets('Omi speaker with $source label stays inert', (tester) async {
+        await setupSharedPreferences();
+        var edits = 0;
+        final segment = segmentFor('omi', omiSpeakerId)..speakerLabelSource = source;
+        await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: [segment], editSegment: (_, __) => edits++)),
+        ));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('edit_speaker_label_omi')), findsNothing);
+        expect(find.text('Omi'), findsOneWidget);
+        await tester.tap(find.text('Omi'));
+        await tester.pump();
+        expect(edits, 0);
+      });
+    }
+
+    for (final source in ['auto', 'manual', 'carried']) {
+      testWidgets('$source live labels have an edit button only at turn starts', (tester) async {
+        await setupSharedPreferences(cachedPeople: [
+          {'id': 'maya', 'name': 'Maya', 'created_at': '2026-01-01T00:00:00Z', 'updated_at': '2026-01-01T00:00:00Z'},
+        ]);
+        TranscriptSegment named(String id) => segmentFor(id, 1)
+          ..personId = 'maya'
+          ..speakerLabelSource = source;
+        final edited = <String>[];
+        await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+              body: TranscriptWidget(
+            segments: [named('first'), named('mid'), segmentFor('other', 2), named('next-turn')],
+            editSegment: (id, _) => edited.add(id),
+          )),
+        ));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('edit_speaker_label_first')), findsOneWidget);
+        expect(find.byKey(const ValueKey('edit_speaker_label_mid')), findsNothing);
+        expect(find.byKey(const ValueKey('edit_speaker_label_next-turn')), findsOneWidget);
+        expect(
+            find.byKey(Key(source == 'auto' ? 'speaker_label_likely' : 'speaker_label_confirmed')), findsNWidgets(2));
+        // The middle line retains the existing plain-name correction entry point.
+        final names = find.text('Maya');
+        expect(names, findsNWidgets(3));
+        await tester.tap(names.at(1));
+        await tester.pump();
+        expect(edited, ['mid']);
+      });
+    }
+
     testWidgets('shows person name when personId is set and in cache', (tester) async {
       final now = DateTime.now();
       await setupSharedPreferences(
@@ -142,6 +235,28 @@ void main() {
       expect(find.text('Speaker 1'), findsOneWidget);
     });
 
+    testWidgets('unavailable resolution does not render chunk ids as distinct people', (tester) async {
+      final segments = [segmentFor('first', 27), segmentFor('second', 28)];
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: segments, unresolvedSpeakers: true)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Speaker'), findsNWidgets(2));
+      expect(find.text('Speaker ?'), findsNothing);
+      expect(find.text('Speaker 1'), findsNothing);
+      expect(find.text('Speaker 2'), findsNothing);
+    });
+
     testWidgets('Tag button is removed from UI', (tester) async {
       final segment = segmentFor('seg3', 1);
 
@@ -154,15 +269,124 @@ void main() {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: TranscriptWidget(segments: [segment], isConversationDetail: true),
-          ),
+          home: Scaffold(body: TranscriptWidget(segments: [segment], isConversationDetail: true)),
         ),
       );
       await tester.pumpAndSettle();
 
       // Tag button should no longer exist
       expect(find.text('Tag'), findsNothing);
+    });
+  });
+
+  group('Saved conversation lines', () {
+    testWidgets('name and clock time sit over the words, with no bubble or avatar', (tester) async {
+      await setupSharedPreferences();
+      final mine = TranscriptSegment(
+        id: 'mine',
+        text: 'We ship the widgets first.',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        personId: null,
+        start: 0,
+        end: 2,
+        translations: [],
+      );
+      final theirs = TranscriptSegment(
+        id: 'theirs',
+        text: 'Agreed, chat can follow.',
+        speaker: 'SPEAKER_01',
+        isUser: false,
+        personId: null,
+        start: 65,
+        end: 67,
+        translations: [],
+      );
+      final named = <(String, int)>[];
+      final played = <String>[];
+      final edited = <int>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: TranscriptWidget(
+              segments: [mine, theirs],
+              isConversationDetail: true,
+              startedAt: DateTime(2026, 9, 30, 12, 40),
+              editSegment: (id, speakerId) => named.add((id, speakerId)),
+              onSegmentTap: (segment) => played.add(segment.id),
+              onEditSegmentText: edited.add,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('You'), findsOneWidget);
+      expect(find.text('Speaker 1'), findsOneWidget);
+      // The wall clock (start + offset), not "0:00" / "1:05"; intl may put a narrow space before PM.
+      expect(find.textContaining(RegExp(r'^12:40\sPM$')), findsOneWidget);
+      expect(find.textContaining(RegExp(r'^12:41\sPM$')), findsOneWidget);
+      expect(find.byType(CircleAvatar), findsNothing);
+
+      // Only a voice nobody has named is underlined.
+      final unnamed = tester.widget<Text>(find.text('Speaker 1'));
+      expect(unnamed.style?.decoration, TextDecoration.underline);
+      expect(unnamed.style?.decorationStyle, TextDecorationStyle.dotted);
+      expect(tester.widget<Text>(find.text('You')).style?.decoration, isNull);
+
+      await tester.tap(find.text('Speaker 1'));
+      expect(named, [('theirs', 1)]);
+      expect(played, isEmpty);
+
+      // Tapping the words plays from that line; so does the rest of the line (the time).
+      // A single tap waits out the double-tap window (double-tap edits).
+      await tester.tap(find.text('We ship the widgets first.', findRichText: true));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await tester.tap(find.textContaining(RegExp(r'^12:41')));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      expect(played, ['mine', 'theirs']);
+
+      final words = find.text('Agreed, chat can follow.', findRichText: true);
+      await tester.tap(words);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(words);
+      await tester.pumpAndSettle();
+      expect(edited, [1]);
+      expect(played, ['mine', 'theirs']);
+    });
+
+    testWidgets('a long saved transcript opens at its first line and stays there when it changes', (tester) async {
+      await setupSharedPreferences();
+      List<TranscriptSegment> lines(int count) => [
+            for (var i = 0; i < count; i++)
+              TranscriptSegment(
+                id: 'line-$i',
+                text: 'Line number $i of the conversation.',
+                speaker: 'SPEAKER_0${i % 2}',
+                isUser: i.isEven,
+                personId: null,
+                start: i * 10.0,
+                end: i * 10.0 + 5,
+                translations: [],
+              ),
+          ];
+      Widget page(List<TranscriptSegment> segments) => MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: TranscriptWidget(segments: segments, isConversationDetail: true)),
+          );
+
+      await tester.pumpWidget(page(lines(60)));
+      await tester.pumpAndSettle();
+      expect(find.text('Line number 0 of the conversation.', findRichText: true).hitTestable(), findsOneWidget);
+      expect(find.text('Line number 59 of the conversation.', findRichText: true), findsNothing);
+
+      await tester.pumpWidget(page(lines(61)));
+      await tester.pumpAndSettle();
+      expect(find.text('Line number 0 of the conversation.', findRichText: true).hitTestable(), findsOneWidget);
     });
   });
 
@@ -191,7 +415,7 @@ void main() {
     late List<Widget> leadingItems;
     late List<String> leadingItemIds;
 
-    Future<void> pumpTranscript(WidgetTester tester, {bool settle = true}) async {
+    Future<void> pumpTranscript(WidgetTester tester, {bool settle = true, double height = 320}) async {
       await tester.pumpWidget(
         MaterialApp(
           localizationsDelegates: const [
@@ -203,7 +427,7 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SizedBox(
-              height: 320,
+              height: height,
               child: TranscriptWidget(
                 key: const ValueKey('live-transcript-test-session'),
                 segments: segments,
@@ -245,6 +469,200 @@ void main() {
       );
     });
 
+    testWidgets('opening 1000 live segments builds only the newest viewport', (tester) async {
+      segments = List.generate(1000, (index) => segmentFor('large-$index', 0));
+      final built = <int>[];
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+            body: SizedBox(
+                height: 320,
+                child: TranscriptWidget(
+                  segments: segments,
+                  followLatest: true,
+                  bottomMargin: 0,
+                  onScrollControllerReady: (value) => controller = value,
+                  segmentBuilder: (context, segment, index) {
+                    built.add(index);
+                    return SizedBox(height: 48 + (index % 3) * 24, child: Text(segment.id));
+                  },
+                ))),
+      ));
+      // pumpWidget renders exactly one frame: the newest row must already paint.
+      expect(find.text('large-999').hitTestable(), findsOneWidget);
+      expect(built.length, lessThan(40));
+      await tester.pumpAndSettle();
+      expect(built.length, lessThan(40));
+      expect(built, contains(999));
+      expect(find.text('large-999').hitTestable(), findsOneWidget);
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      debugPrint('TRANSCRIPT_OPEN row_builds=${built.length} history=1000');
+    });
+
+    for (final fixture in ['single segment', 'multiple segments', 'photos and segments']) {
+      testWidgets('short live $fixture paint at the top on the first frame', (tester) async {
+        segments = [
+          segmentFor('short-first', 0)..text = 'First short line',
+          if (fixture != 'single segment') segmentFor('short-last', 1)..text = 'Last short line',
+        ];
+        if (fixture == 'photos and segments') {
+          leadingItemIds = ['photo'];
+          leadingItems = const [SizedBox(key: ValueKey('short-photo'), height: 56)];
+        }
+        // Include both rows, the photo (when present), and the standard footer.
+        await pumpTranscript(tester, settle: false, height: 600);
+        expect(find.text('First short line', findRichText: true).hitTestable(), findsOneWidget);
+        if (segments.length > 1) {
+          expect(find.text('Last short line', findRichText: true).hitTestable(), findsOneWidget);
+        }
+        final viewport = tester.getRect(find.bySubtype<CustomScrollView>());
+        expect(tester.getTopLeft(find.byKey(const ValueKey('transcript_header'))).dy, closeTo(viewport.top, 0.1));
+        if (fixture == 'photos and segments') {
+          final photo = tester.getRect(find.byKey(const ValueKey('short-photo')));
+          expect(photo.top, greaterThanOrEqualTo(viewport.top));
+          expect(photo.bottom, lessThan(viewport.bottom));
+        }
+        expect(controller.position.maxScrollExtent, 0);
+      });
+    }
+
+    for (final rowCount in [5, 7]) {
+      final history = rowCount == 5 ? 'short' : 'long';
+      for (final change in ['insert photo', 'grow photo', 'grow older row', 'cross viewport height']) {
+        for (final activity in ['drag', 'fling', 'idle']) {
+          testWidgets('$history live $change preserves the visible row during $activity', (tester) async {
+            segments = List.generate(rowCount, (index) => segmentFor('anchor-$index', 0));
+            var olderRowHeight = 85.0;
+            var photoHeight = change == 'insert photo' ? 0.0 : 10.0;
+            Future<void> pumpRows() => tester.pumpWidget(MaterialApp(
+                  localizationsDelegates: AppLocalizations.localizationsDelegates,
+                  supportedLocales: AppLocalizations.supportedLocales,
+                  home: Scaffold(
+                    body: SizedBox(
+                      height: 400,
+                      child: TranscriptWidget(
+                        segments: segments,
+                        followLatest: true,
+                        bottomMargin: 0,
+                        topMargin: false,
+                        separator: false,
+                        scrollState: scrollState,
+                        contentVersion: contentVersion,
+                        leadingItemIds: photoHeight == 0 ? const [] : const ['photo'],
+                        leadingItems: photoHeight == 0 ? const [] : [SizedBox(height: photoHeight)],
+                        onScrollControllerReady: (value) => controller = value,
+                        segmentBuilder: (context, segment, index) => SizedBox(
+                          height: index == 0 ? olderRowHeight : 85,
+                          child: Text(segment.id),
+                        ),
+                      ),
+                    ),
+                  ),
+                ));
+            await pumpRows();
+            await tester.pumpAndSettle();
+            expect(controller.position.maxScrollExtent, greaterThan(80));
+            final gesture = await tester.startGesture(tester.getCenter(find.bySubtype<CustomScrollView>()));
+            for (var step = 0; step < 3; step++) {
+              await gesture.moveBy(const Offset(0, 20), timeStamp: Duration(milliseconds: (step + 1) * 20));
+              await tester.pump(const Duration(milliseconds: 20));
+            }
+            if (activity == 'fling') {
+              await gesture.up(timeStamp: const Duration(milliseconds: 70));
+              await tester.pump();
+              await tester.pump(const Duration(milliseconds: 16));
+              expect(controller.position.isScrollingNotifier.value, isTrue);
+            } else if (activity == 'idle') {
+              await tester.pump(const Duration(milliseconds: 200));
+              await gesture.up(timeStamp: const Duration(milliseconds: 270));
+              await tester.pumpAndSettle();
+              expect(controller.position.isScrollingNotifier.value, isFalse);
+            }
+            expect(controller.position.maxScrollExtent - controller.offset, greaterThan(24));
+            final row = find.byKey(ValueKey('transcript-segment-anchor-${rowCount - 2}'));
+            final top = tester.getTopLeft(row).dy;
+            final viewport = tester.getRect(find.bySubtype<CustomScrollView>());
+            expect(top, inExclusiveRange(viewport.top, viewport.bottom));
+            if (change == 'grow older row') {
+              final olderRow = find.byKey(const ValueKey('transcript-segment-anchor-0'), skipOffstage: false);
+              expect(tester.getBottomLeft(olderRow).dy, lessThanOrEqualTo(viewport.top));
+              olderRowHeight += 30;
+            } else {
+              photoHeight += change == 'cross viewport height' ? 180 : 30;
+            }
+            contentVersion++;
+            // No elapsed time: content must not move the row on this very frame.
+            await pumpRows();
+            expect(tester.getTopLeft(row).dy, closeTo(top, 0.1));
+            if (activity == 'drag') {
+              await gesture.moveBy(const Offset(0, 10));
+              await tester.pump(const Duration(milliseconds: 16));
+              expect(tester.getTopLeft(row).dy, closeTo(top + 10, 0.1));
+              await gesture.cancel();
+            } else if (activity == 'fling') {
+              expect(controller.position.isScrollingNotifier.value, isTrue);
+              await tester.pump(const Duration(milliseconds: 16));
+              // Momentum continues upward without undoing the correction or
+              // introducing another content-sized jump on the next tick.
+              expect(tester.getTopLeft(row).dy - top, inInclusiveRange(0, 30));
+            }
+            await tester.pumpAndSettle();
+            if (activity == 'idle') {
+              expect(tester.getTopLeft(row).dy, closeTo(top, 0.1));
+            }
+          });
+        }
+      }
+    }
+
+    testWidgets('a remount after appends preserves the reader and the scroll origin', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
+      await tester.pumpAndSettle();
+      segments = [...segments, segmentFor('after-open', 0)];
+      contentVersion++;
+      await pumpTranscript(tester);
+      final anchor = scrollState.anchorSegmentId;
+      final offset = controller.offset;
+      final top = tester.getTopLeft(find.byKey(ValueKey('transcript-segment-$anchor'))).dy;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpTranscript(tester);
+      expect(controller.offset, closeTo(offset, 0.1));
+      expect(scrollState.anchorSegmentId, anchor);
+      expect(tester.getTopLeft(find.byKey(ValueKey('transcript-segment-$anchor'))).dy, closeTo(top, 5));
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+    });
+
+    testWidgets('search reveals and highlights a lazy older live row', (tester) async {
+      segments = List.generate(
+          60, (i) => segmentFor('search-$i', 0)..text = i == 4 ? 'A unique needle here' : 'Ordinary transcript words');
+      Future<void> pumpSearch(String query) => tester.pumpWidget(MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+                body: SizedBox(
+                    height: 320,
+                    child: TranscriptWidget(
+                      segments: segments,
+                      onScrollControllerReady: (value) => controller = value,
+                      followLatest: true,
+                      bottomMargin: 0,
+                      searchQuery: query,
+                      currentResultIndex: query.isEmpty ? -1 : 0,
+                    ))),
+          ));
+      await pumpSearch('');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('transcript-segment-search-4')), findsNothing);
+      await pumpSearch('needle');
+      await tester.pumpAndSettle();
+      expect(find.text('needle').hitTestable(), findsOneWidget);
+      final highlight =
+          tester.widget<Container>(find.ancestor(of: find.text('needle'), matching: find.byType(Container)).first);
+      expect((highlight.decoration! as BoxDecoration).color, OmiColors.warning);
+    });
+
     testWidgets('a fresh long transcript opens at the latest segment', (tester) async {
       await pumpTranscript(tester);
 
@@ -255,7 +673,7 @@ void main() {
 
     testWidgets('a fresh transcript load starts at the latest segment', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       expect(scrollState.isAtBottom, isFalse);
@@ -272,7 +690,7 @@ void main() {
 
     testWidgets('the jump control animates to the latest segment and hides', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('transcript_jump_to_latest')));
@@ -285,7 +703,7 @@ void main() {
 
     testWidgets('manual scrolling up stays put while live transcript grows', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final preservedOffset = controller.offset;
@@ -314,7 +732,7 @@ void main() {
 
     testWidgets('manual scrolling up stays put when live content arrives mid-gesture', (tester) async {
       await pumpTranscript(tester);
-      final gestureStart = tester.getCenter(find.byType(ListView));
+      final gestureStart = tester.getCenter(find.bySubtype<CustomScrollView>());
       final gesture = await tester.startGesture(gestureStart);
       for (var step = 0; step < 5; step++) {
         await gesture.moveBy(const Offset(0, 52));
@@ -373,7 +791,7 @@ void main() {
       // The reader starts dragging up slowly from the live edge. The first
       // pixels stay inside the at-bottom band where a lost gesture used to be
       // forgotten and re-pinned by the next live tick.
-      final gesture = await tester.startGesture(tester.getCenter(find.byType(ListView)));
+      final gesture = await tester.startGesture(tester.getCenter(find.bySubtype<CustomScrollView>()));
       for (var step = 0; step < 3; step++) {
         await gesture.moveBy(const Offset(0, 12));
         await tester.pump(const Duration(milliseconds: 40));
@@ -419,7 +837,7 @@ void main() {
 
     testWidgets('same-ID growth of the live segment holds an unfollowed reading position', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final preservedOffset = controller.offset;
@@ -515,13 +933,13 @@ void main() {
 
     testWidgets('layout changes restore the same transcript anchor instead of a raw offset', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final anchorId = scrollState.anchorSegmentId;
       expect(anchorId, isNotNull);
       final anchorFinder = find.byKey(ValueKey('transcript-segment-$anchorId'));
-      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.bySubtype<CustomScrollView>()).dy;
       expect(scrollState.anchorViewportOffset, closeTo(anchorTop, 5));
 
       layoutIdentity = 'photo-timeline';
@@ -531,7 +949,7 @@ void main() {
       await pumpTranscript(tester);
 
       expect(scrollState.anchorSegmentId, anchorId);
-      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.bySubtype<CustomScrollView>()).dy;
       // Sliver layout may round the restored edge by the four-point separator,
       // but it must keep the same segment at the same reading position.
       expect(restoredTop, closeTo(anchorTop, 5));
@@ -540,13 +958,13 @@ void main() {
 
     testWidgets('deleting the first segment preserves a later reading anchor', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final anchorId = scrollState.anchorSegmentId;
       expect(anchorId, isNotNull);
       final anchorFinder = find.byKey(ValueKey('transcript-segment-$anchorId'));
-      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.bySubtype<CustomScrollView>()).dy;
       expect(scrollState.anchorViewportOffset, closeTo(anchorTop, 5));
 
       segments = segments.skip(1).toList();
@@ -554,7 +972,7 @@ void main() {
       await pumpTranscript(tester);
 
       expect(scrollState.anchorSegmentId, anchorId);
-      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.bySubtype<CustomScrollView>()).dy;
       // Sliver layout may round the restored edge by the four-point separator,
       // but it must keep the same segment at the same reading position.
       expect(restoredTop, closeTo(anchorTop, 5));
@@ -566,6 +984,356 @@ void main() {
 
       final footer = tester.widget<SizedBox>(find.byKey(const ValueKey('transcript_bottom_spacing')));
       expect(footer.height, 120);
+    });
+  });
+
+  group('Saved detail lines from one voice', () {
+    TranscriptSegment line(
+      String id,
+      int speakerId,
+      String text,
+      double start, {
+      bool isUser = false,
+      String? personId,
+      String? source,
+    }) =>
+        TranscriptSegment(
+          id: id,
+          text: text,
+          speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+          speakerId: speakerId,
+          isUser: isUser,
+          personId: personId,
+          start: start,
+          end: start + 5,
+          translations: const [],
+          speakerLabelSource: source,
+        );
+
+    List<TranscriptSegment> voicesFixture() => [
+          line('a1', 3, 'First thing they said.', 0),
+          line('a2', 3, 'Still the same voice.', 10),
+          line('b1', 4, 'Another voice replies.', 20),
+          line('a3', 3, 'The first voice again.', 30),
+        ];
+
+    Finder speakerNameLabels() =>
+        find.byWidgetPredicate((widget) => widget is Text && RegExp(r'^Speaker(?: \?)?$').hasMatch(widget.data ?? ''));
+
+    Future<void> pumpDetail(
+      WidgetTester tester,
+      List<TranscriptSegment> segments, {
+      bool unresolved = false,
+      List<String> tagging = const [],
+      void Function(TranscriptSegment)? onSegmentTap,
+      void Function(int)? onEditSegmentText,
+      void Function(String, int)? editSegment,
+      void Function(TranscriptSegment)? onConfirmSpeakerLabel,
+      void Function(TranscriptSegment)? onRejectSpeakerLabel,
+    }) =>
+        tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: TranscriptWidget(
+                segments: segments,
+                isConversationDetail: true,
+                unresolvedSpeakers: unresolved,
+                taggingSegmentIds: tagging,
+                onSegmentTap: onSegmentTap,
+                onEditSegmentText: onEditSegmentText,
+                editSegment: editSegment,
+                onConfirmSpeakerLabel: onConfirmSpeakerLabel,
+                onRejectSpeakerLabel: onRejectSpeakerLabel,
+              ),
+            ),
+          ),
+        );
+
+    group('unresolved', () {
+      testWidgets('render a name row once per turn, not once per line', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true);
+        await tester.pumpAndSettle();
+
+        expect(speakerNameLabels(), findsNWidgets(3));
+      });
+
+      testWidgets('name rows are the neutral "Speaker", never "Speaker ?" or a number', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Speaker'), findsNWidgets(3));
+        expect(find.text('Speaker ?'), findsNothing);
+        expect(find.text('Speaker 1'), findsNothing);
+      });
+
+      testWidgets('show the time where a turn starts, not on its continuation', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true);
+        await tester.pumpAndSettle();
+
+        expect(find.text('0:00'), findsOneWidget);
+        expect(find.text('0:20'), findsOneWidget);
+        expect(find.text('0:30'), findsOneWidget);
+        expect(find.text('0:10'), findsNothing);
+      });
+
+      testWidgets('every line still seeks in order and double-tap edits without seeking', (tester) async {
+        await setupSharedPreferences();
+        final segments = voicesFixture();
+        final played = <TranscriptSegment>[];
+        final edited = <int>[];
+        await pumpDetail(tester, segments, unresolved: true, onSegmentTap: played.add, onEditSegmentText: edited.add);
+        await tester.pumpAndSettle();
+
+        for (final segment in segments) {
+          expect(find.byKey(ValueKey('transcript-segment-${segment.id}')), findsOneWidget);
+          await tester.tap(find.text(segment.text, findRichText: true));
+          await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        }
+        expect(played, segments);
+        expect(played.asMap().entries.every((entry) => identical(entry.value, segments[entry.key])), isTrue);
+
+        final a2 = find.text('Still the same voice.', findRichText: true);
+        await tester.tap(a2);
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.tap(a2);
+        await tester.pumpAndSettle();
+        expect(edited, [1]);
+        expect(played, segments);
+      });
+
+      testWidgets('a continuation keeps selection area and long press does not seek or edit', (tester) async {
+        await setupSharedPreferences();
+        final played = <TranscriptSegment>[];
+        final edited = <int>[];
+        await pumpDetail(
+          tester,
+          voicesFixture(),
+          unresolved: true,
+          onSegmentTap: played.add,
+          onEditSegmentText: edited.add,
+        );
+        await tester.pumpAndSettle();
+
+        final words = find.text('Still the same voice.', findRichText: true);
+        expect(find.ancestor(of: words, matching: find.byType(SelectionArea)), findsOneWidget);
+        await tester.longPress(words);
+        await tester.pump();
+        await tester.pump(kDoubleTapTimeout);
+        expect(played, isEmpty);
+        expect(edited, isEmpty);
+      });
+
+      testWidgets('a continuation line keeps its tagging spinner without name or time', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true, tagging: ['a2']);
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+
+        expect(find.byType(OmiSpinner), findsOneWidget);
+        expect(speakerNameLabels(), findsNWidgets(3));
+        expect(find.text('0:10'), findsNothing);
+      });
+
+      testWidgets('unresolved name rows carry the dotted underline affordance', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture(), unresolved: true);
+        await tester.pumpAndSettle();
+
+        final labels = tester.widgetList<Text>(speakerNameLabels()).toList();
+        expect(labels, hasLength(3));
+        expect(labels.every((label) => label.style?.decoration == TextDecoration.underline), isTrue);
+      });
+
+      testWidgets('tapping a turn-first label opens naming for that segment', (tester) async {
+        await setupSharedPreferences();
+        final tagged = <(String, int)>[];
+        await pumpDetail(
+          tester,
+          voicesFixture(),
+          unresolved: true,
+          editSegment: (id, speakerId) => tagged.add((id, speakerId)),
+        );
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 3; i++) {
+          await tester.tap(speakerNameLabels().at(i));
+          await tester.pumpAndSettle();
+        }
+        expect(tagged, [('a1', 3), ('b1', 4), ('a3', 3)]);
+      });
+    });
+
+    group('resolved', () {
+      testWidgets('group consecutive lines of one voice into one name row', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, voicesFixture());
+        await tester.pumpAndSettle();
+
+        expect(find.text('Speaker 1'), findsNWidgets(2));
+        expect(find.text('Speaker 2'), findsOneWidget);
+        expect(find.text('0:00'), findsOneWidget);
+        expect(find.text('0:20'), findsOneWidget);
+        expect(find.text('0:30'), findsOneWidget);
+        expect(find.text('0:10'), findsNothing);
+      });
+
+      testWidgets('consecutive owner lines group into one "You" row', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, [
+          line('u1', 0, 'I start.', 0, isUser: true),
+          line('u2', 0, 'I keep going.', 10, isUser: true),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(find.text('You'), findsOneWidget);
+        expect(find.text('0:10'), findsNothing);
+      });
+
+      testWidgets('a changed isUser or personId starts a new name row', (tester) async {
+        final now = DateTime.now();
+        await setupSharedPreferences(
+          cachedPeople: [
+            {
+              'id': 'p1',
+              'name': 'Ada',
+              'created_at': now.toUtc().toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
+            },
+            {
+              'id': 'p2',
+              'name': 'Ben',
+              'created_at': now.toUtc().toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
+            },
+          ],
+        );
+        await pumpDetail(tester, [line('own', 0, 'Mine.', 0, isUser: true), line('same-id-other', 0, 'Not me.', 10)]);
+        await tester.pumpAndSettle();
+        expect(find.text('You'), findsOneWidget);
+        expect(find.text('Speaker 1'), findsOneWidget);
+
+        await pumpDetail(tester, [
+          line('ada', 5, 'Ada speaks.', 0, personId: 'p1', source: 'manual'),
+          line('ben', 5, 'Ben speaks.', 10, personId: 'p2', source: 'manual'),
+        ]);
+        await tester.pumpAndSettle();
+        expect(find.text('Ada'), findsOneWidget);
+        expect(find.text('Ben'), findsOneWidget);
+      });
+
+      testWidgets('a changed label source alone does not start a new name row', (tester) async {
+        final now = DateTime.now();
+        await setupSharedPreferences(
+          cachedPeople: [
+            {
+              'id': 'p1',
+              'name': 'Ada',
+              'created_at': now.toUtc().toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
+            },
+          ],
+        );
+        await pumpDetail(tester, [
+          line('a1', 5, 'First labelled line.', 0, personId: 'p1', source: 'manual'),
+          line('a2', 5, 'Second labelled line.', 10, personId: 'p1', source: 'auto'),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Ada'), findsOneWidget);
+      });
+
+      testWidgets('a continuation keeps its likely-speaker confirmation on the first auto line', (tester) async {
+        final now = DateTime.now();
+        await setupSharedPreferences(
+          cachedPeople: [
+            {
+              'id': 'p1',
+              'name': 'Ada',
+              'created_at': now.toUtc().toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
+            },
+          ],
+        );
+        final segments = [
+          line('m1', 5, 'Ada manual line.', 0, personId: 'p1', source: 'manual'),
+          line('a2', 5, 'Ada auto line.', 10, personId: 'p1', source: 'auto'),
+          line('a3', 5, 'Ada auto again.', 20, personId: 'p1', source: 'auto'),
+        ];
+        final confirmed = <TranscriptSegment>[];
+        final rejected = <TranscriptSegment>[];
+        final played = <TranscriptSegment>[];
+        await pumpDetail(
+          tester,
+          segments,
+          onConfirmSpeakerLabel: confirmed.add,
+          onRejectSpeakerLabel: rejected.add,
+          onSegmentTap: played.add,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Ada'), findsOneWidget);
+        expect(find.text('0:00'), findsOneWidget);
+        expect(find.text('0:10'), findsNothing);
+        expect(find.text('0:20'), findsNothing);
+
+        final confirmBadge = find.byType(SpeakerLikelyConfirm);
+        expect(confirmBadge, findsOneWidget);
+        expect(
+          find.descendant(of: find.byKey(const ValueKey('transcript-segment-a2')), matching: confirmBadge),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const Key('speaker_likely_yes')));
+        await tester.pumpAndSettle();
+        expect(confirmed, hasLength(1));
+        expect(identical(confirmed.single, segments[1]), isTrue);
+
+        await tester.tap(find.byKey(const Key('speaker_likely_not')));
+        await tester.pumpAndSettle();
+        expect(rejected, hasLength(1));
+        expect(identical(rejected.single, segments[1]), isTrue);
+
+        expect(played, isEmpty);
+        for (final segment in segments) {
+          expect(find.byKey(ValueKey('transcript-segment-${segment.id}')), findsOneWidget);
+          expect(find.text(segment.text, findRichText: true), findsOneWidget);
+        }
+      });
+
+      testWidgets('consecutive Omi lines do not group', (tester) async {
+        await setupSharedPreferences();
+        await pumpDetail(tester, [
+          line('o1', omiSpeakerId, 'Omi first.', 0),
+          line('o2', omiSpeakerId, 'Omi second.', 10),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Omi'), findsNWidgets(2));
+        expect(find.text('0:00'), findsOneWidget);
+        expect(find.text('0:10'), findsOneWidget);
+      });
+    });
+
+    testWidgets('the live bubble transcript still names every line', (tester) async {
+      await setupSharedPreferences();
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: TranscriptWidget(segments: [line('v1', 3, 'Bubble one.', 0), line('v2', 3, 'Bubble two.', 10)]),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Speaker 1'), findsNWidgets(2));
     });
   });
 }

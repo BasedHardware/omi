@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-expiry-cancels-unowned-transfer",
+  "violated_contract": "When the OS ends a background window it granted for recording recovery, the app may stop only the work that window started. The iOS refresh task's expiry called WalSyncs.cancelSync(), which every device and phone sync treats as a user cancel, so a Transfer to Phone or a Sync the user started before leaving the app, or a drain the periodic wake had only joined, stopped partway and was reported as 'Transfer failed: Sync cancelled by user' or as complete.",
+  "canonical_prevention": "The owner that runs drains decides what an expiring window may stop: RecordingTransferCoordinator.cancelPeriodicWake() retires the window and reports whether that window's own drain is running, and PeriodicRecordingSync cancels only then. Cover it with bridge tests where the expiry arrives during work the window did not start (a transfer outside the coordinator, a pass another wake started) and assert nothing is cancelled, next to a control where the window's own drain is.",
+  "canonical_prevention_artifact": [
+    "app/test/services/wals/periodic_recording_sync_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/periodic_recording_sync.dart",
+    "app/lib/services/wals/recording_transfer_coordinator.dart"
+  ],
+  "status": "open"
+}

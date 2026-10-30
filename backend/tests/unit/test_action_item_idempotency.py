@@ -14,17 +14,25 @@ would happily produce a duplicate document. The fix:
   named "123" are two tasks, and hashing the title returned the first
   document (wrong due date, gone after reload).
 
+- ``utils/mcp_action_items.create_action_item`` still derives its retry key
+  from the title, so it may only collapse onto a task that is still open: a
+  finished task with the same title is an earlier task, not a retry.
+
 These tests exercise the db-layer contract (idempotency hit / miss / no-key
-backwards compat) and the router-layer key handling.
+backwards compat), the MCP title-derived key, and the router-layer key handling.
 """
 
-from unittest.mock import MagicMock
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from google.api_core.exceptions import Aborted
 
 from database import action_items as action_items_db  # noqa: E402
 from database import firestore_transaction_retry
 from routers import action_items as action_items_router  # noqa: E402
+from utils import mcp_action_items  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # create_action_item — db layer
@@ -34,7 +42,7 @@ from routers import action_items as action_items_router  # noqa: E402
 def _make_doc(doc_id, data=None):
     doc = MagicMock()
     doc.id = doc_id
-    doc.to_dict.return_value = data or {}
+    doc.to_dict.return_value = {'idempotency_key': 'abc123', **(data or {})}
     return doc
 
 
@@ -48,23 +56,39 @@ def _stub_collection(monkeypatch, existing_docs, *, control_generation=None):
 
     fake_query = MagicMock()
 
-    # Chain: .where(...).where(...).limit(N).stream() — every intermediate
-    # call returns the same fake so we don't have to model a query builder.
+    # Chain: .where(...).where(...).limit(N)[.start_after(doc)].stream() — where()
+    # returns the same fake so we don't have to model a query builder.
     def _where(*, filter):
         captured['filters'].append((filter.field_path, filter.op_string, filter.value))
         return fake_query
 
     fake_query.where.side_effect = _where
-    fake_query.limit.return_value = fake_query
 
     def _stream(**kwargs):
-        generation_filters = [value for field, operator, value in captured['filters'] if field == 'account_generation']
-        if not generation_filters:
-            return iter(existing_docs)
-        generation = generation_filters[-1]
-        return iter([doc for doc in existing_docs if doc.to_dict().get('account_generation') == generation])
+        # Match all equality filters, not just generation: ignoring completed
+        # made this fake certify a lookup that excludes finished tasks in Firestore.
+        return iter(
+            doc
+            for doc in existing_docs
+            if all(doc.to_dict().get(field) == value for field, _operator, value in captured['filters'])
+        )
 
     fake_query.stream.side_effect = _stream
+
+    def _limit(count, after=None):
+        # Firestore returns key matches in document-id order and stops at the limit.
+        # Ignoring the limit made this fake certify a lookup that misses a live task
+        # sorted behind a full page of deleted ones.
+        def _page_stream(**kwargs):
+            matches = sorted(_stream(), key=lambda doc: doc.id)
+            return iter([doc for doc in matches if after is None or doc.id > after][:count])
+
+        page = MagicMock()
+        page.start_after.side_effect = lambda snapshot: _limit(count, snapshot.id)
+        page.stream.side_effect = _page_stream
+        return page
+
+    fake_query.limit.side_effect = _limit
 
     fake_action_items_ref = MagicMock()
     fake_action_items_ref.where.side_effect = _where
@@ -152,6 +176,29 @@ def test_idempotency_hit_on_active_returns_existing_id(monkeypatch):
     assert captured['added'] == [], "no new document should be created on idempotency hit"
 
 
+@pytest.mark.parametrize('state', [{'completed': True}, {}])
+def test_idempotency_hit_does_not_depend_on_completion_field(monkeypatch, state):
+    captured = _stub_collection(monkeypatch, [_make_doc('existing-id', state)])
+    result = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+    assert result == 'existing-id'
+    assert captured['added'] == []
+
+
+def test_completed_key_match_still_respects_generation(monkeypatch):
+    captured = _stub_collection(
+        monkeypatch,
+        [
+            _make_doc('old', {'completed': True, 'account_generation': 6}),
+            _make_doc('current', {'completed': True, 'account_generation': 7}),
+        ],
+        control_generation=7,
+    )
+    assert action_items_db.create_action_item('uid', {'description': 'Task'}, idempotency_key='abc123') == 'current'
+    assert captured['added'] == []
+
+
 def test_idempotency_falls_through_when_only_match_is_deleted(monkeypatch):
     """A soft-deleted match must not block recreation — the user explicitly
     deleted it, so a fresh POST is a recreation, not a retry."""
@@ -165,6 +212,30 @@ def test_idempotency_falls_through_when_only_match_is_deleted(monkeypatch):
     assert result == 'newly-created-id', "deleted match must not short-circuit"
     assert len(captured['added']) == 1
     assert captured['added'][0].get('idempotency_key') == 'abc123'
+
+
+@pytest.mark.parametrize(
+    'skipped',
+    [{'deleted': True}, {'account_generation': 4}],
+    ids=['deleted', 'other-generation'],
+)
+def test_idempotency_hit_behind_a_full_page_of_skipped_matches(monkeypatch, skipped):
+    """Rows the lookup skips keep their key, so they pile up ahead of the live task.
+
+    Firestore returns key matches in document-id order. The lookup read one
+    limit(5) page and skipped deleted (or other-generation) rows in Python, so
+    once five of them sorted first, a retry missed the live task and created a
+    duplicate.
+    """
+    earlier = [_make_doc(f'earlier-{index:02d}', {'completed': False, **skipped}) for index in range(12)]
+    captured = _stub_collection(monkeypatch, [*earlier, _make_doc('live-id', {'completed': False})])
+
+    result = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+
+    assert result == 'live-id'
+    assert captured['added'] == [], 'a retry must not duplicate the live task'
 
 
 def test_idempotency_miss_writes_key_on_new_doc(monkeypatch):
@@ -244,6 +315,72 @@ def test_create_retries_precommit_contention_without_duplicate_write(monkeypatch
 
 
 # ---------------------------------------------------------------------------
+# MCP create — the retry key is derived from the title
+# ---------------------------------------------------------------------------
+
+
+def _stub_mcp_create(monkeypatch, existing):
+    """Real MCP orchestration over the real db create. ``existing`` maps doc id -> stored fields."""
+    captured = _stub_collection(monkeypatch, [_make_doc(doc_id, data) for doc_id, data in existing.items()])
+    reminders = []
+    monkeypatch.setattr(mcp_action_items, 'upsert_action_item_vector', lambda *args, **kwargs: None)
+    monkeypatch.setattr(mcp_action_items, 'sync_action_item_reminder', lambda **kwargs: reminders.append(kwargs))
+    monkeypatch.setattr(
+        action_items_db,
+        'get_action_item',
+        lambda uid, item_id: {'id': item_id, **{**existing, **captured['set']}[item_id]},
+    )
+    return captured, reminders
+
+
+@pytest.mark.parametrize(
+    'finished',
+    [{'completed': True, 'status': 'completed'}, {'completed': True}, {'completed': False, 'status': 'cancelled'}],
+    ids=['completed', 'legacy-completed', 'cancelled'],
+)
+def test_mcp_create_with_the_title_of_a_finished_task_creates_a_new_task(monkeypatch, finished):
+    """Last week's finished "Call mom" must not swallow this week's MCP create.
+
+    The MCP key is a hash of the title, so the finished task carries the same key.
+    Returning it reported success while nothing new reached the task list, and the
+    requested due date never armed a reminder.
+    """
+    key = mcp_action_items.content_idempotency_key('uid', 'Call mom')
+    captured, reminders = _stub_mcp_create(
+        monkeypatch, {'last-week': {'idempotency_key': key, 'description': 'Call mom', **finished}}
+    )
+
+    item = mcp_action_items.create_action_item('uid', 'Call mom', due_at='2030-01-06')
+
+    assert item['id'] == 'newly-created-id'
+    assert item['completed'] is False
+    assert item['due_at'] == datetime(2030, 1, 6, tzinfo=timezone.utc)
+    assert [row['idempotency_key'] for row in captured['added']] == [key]
+    assert [call['action_item_id'] for call in reminders] == ['newly-created-id']
+
+
+def test_mcp_create_retry_still_returns_the_open_task_with_that_title(monkeypatch):
+    key = mcp_action_items.content_idempotency_key('uid', 'Call mom')
+    captured, _reminders = _stub_mcp_create(
+        monkeypatch,
+        {
+            'last-week': {'idempotency_key': key, 'description': 'Call mom', 'completed': True, 'status': 'completed'},
+            'first-attempt': {
+                'idempotency_key': key,
+                'description': 'Call mom',
+                'completed': False,
+                'status': 'active',
+            },
+        },
+    )
+
+    item = mcp_action_items.create_action_item('uid', 'Call mom')
+
+    assert item['id'] == 'first-attempt'
+    assert captured['added'] == []
+
+
+# ---------------------------------------------------------------------------
 # router-layer Idempotency-Key
 # ---------------------------------------------------------------------------
 
@@ -255,12 +392,11 @@ def test_client_idempotency_key_strips_and_drops_blank():
     assert action_items_router._client_idempotency_key(' retry-1 ') == 'retry-1'
 
 
-def _stub_router_create(monkeypatch, *, capture):
+def _stub_router_create(monkeypatch, *, capture, saved_fields=None):
     monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_router, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_router, 'send_action_item_data_message', lambda **kwargs: None)
-    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None)
 
     def _create(uid, data, idempotency_key=None, **kwargs):
         capture.append({'data': data, 'idempotency_key': idempotency_key})
@@ -270,7 +406,13 @@ def _stub_router_create(monkeypatch, *, capture):
     monkeypatch.setattr(
         action_items_db,
         'get_action_item',
-        lambda uid, task_id: {'id': task_id, 'description': '123', 'completed': False, 'due_at': None},
+        lambda uid, task_id: {
+            'id': task_id,
+            'description': '123',
+            'completed': False,
+            'due_at': None,
+            **(saved_fields or {}),
+        },
     )
 
 
@@ -305,6 +447,40 @@ def test_router_honors_client_idempotency_key(monkeypatch):
     assert capture[0]['idempotency_key'] == 'retry-1'
 
 
+@pytest.mark.parametrize('completed,has_due_date', [(False, True), (False, False), (True, True)])
+def test_router_replay_effects_use_persisted_state(monkeypatch, completed, has_due_date):
+    due = datetime(2030, 2, 1, 12, tzinfo=timezone.utc) if has_due_date else None
+    saved = {'description': 'Edited task', 'completed': completed, 'due_at': due}
+    _stub_router_create(monkeypatch, capture=[], saved_fields=saved)
+    reminder, vector, auto_sync = MagicMock(), MagicMock(), AsyncMock()
+    monkeypatch.setattr(action_items_router, '_schedule_action_item_reminder', reminder)
+    monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', vector)
+    monkeypatch.setattr(action_items_router, 'auto_sync_action_item', auto_sync)
+    monkeypatch.setattr(action_items_router, 'submit_with_context', lambda _pool, fn: fn())
+
+    response = action_items_router.create_action_item(
+        action_items_router.CreateActionItemRequest(
+            description='Original task', due_at=datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
+        ),
+        uid='user-1',
+        idempotency_key='retry-1',
+    )
+
+    assert response.description == 'Edited task'
+    assert response.completed == completed
+    vector.assert_called_once_with('user-1', 'task-1', 'Edited task')
+    if has_due_date and not completed:
+        reminder.assert_called_once_with(
+            'user-1', 'task-1', 'Edited task', due, completed=response.completed, status=response.status, deleted=False
+        )
+    else:
+        reminder.assert_not_called()
+    if completed:
+        auto_sync.assert_not_called()
+    else:
+        auto_sync.assert_awaited_once_with('user-1', {'id': 'task-1', **saved}, skip_apple_reminders=True)
+
+
 def test_create_dispatches_auto_sync_outside_the_database_pool(monkeypatch):
     postprocess_pool = object()
     submitted_to = []
@@ -321,7 +497,6 @@ def test_create_dispatches_auto_sync_outside_the_database_pool(monkeypatch):
     monkeypatch.setattr(legacy_db_executor, 'submit', lambda function: database_submissions.append(function))
     monkeypatch.setattr(action_items_router, 'db_executor', legacy_db_executor, raising=False)
     monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *args, **kwargs: None)
-    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_db, 'create_action_item', lambda *args, **kwargs: 'task-1')
     monkeypatch.setattr(
         action_items_db,

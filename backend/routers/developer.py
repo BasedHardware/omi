@@ -1,3 +1,13 @@
+from models.developer_transcript import SimpleTranscriptSegment
+from routers import developer_segments
+from routers.developer_segments_models import (
+    CreateConversationFromTranscriptRequest,
+    DevTranscriptSegment,
+    CaptureEvidenceLineage,
+    CaptureEvidenceLineageUnit,
+)
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -5,8 +15,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from enum import Enum
 from typing import Any, List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_serializer
 
 import database.folders as folders_db
 import database.conversations as conversations_db
@@ -15,16 +25,24 @@ import database.goals as goals_db
 import database.users as users_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
+from utils.list_version_check import ListVersionCheck
 
+from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_validation import DailySummaryUnavailable, read_daily_summary_page, require_daily_summary
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
-from utils.goals_response import normalize_goal_history_entry
+from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
+from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import ClientProcessing
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
+from utils.capture_evidence import MAX_ENVELOPE_BYTES
+from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import (
     Conversation as OmiConversation,
     CreateConversation,
@@ -42,6 +60,7 @@ from utils.conversations.render import populate_speaker_names, populate_folder_n
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     ApiKeyAuth,
+    get_api_key_auth,
     check_conversation_transcript_read_limit,
     get_auth_with_conversation_detail_read,
     get_auth_with_conversations_read,
@@ -61,8 +80,20 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
+from utils.observability.external_lists import (
+    observe_action_items_page,
+    observe_action_items_rows,
+    observe_action_items_shape,
+)
+from utils.observability.firestore_request_reads import ReadComponent, read_component
+from utils import external_list_reads as external_lists
+from utils.mcp_server.handlers.conversations import conversation_cards_page_core
+from utils.mcp_server.errors import ToolExecutionError
+from utils.mcp_server.helpers import conversation_participants
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.projection_payload import (
     client_processing_mutation,
     omit_null_processing_state,
@@ -71,26 +102,23 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations.transcript_hash import (
     stored_transcript_segment,
-    transcript_sha256,
     transcript_sha256_for_binding,
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
-from utils.conversations.mcp_transcript_search import (
-    merge_summary_and_transcript_ids,
-    resolve_mcp_conversation_search_ids,
-)
 import database.vector_db as vector_db
 from utils.conversations.factory import deserialize_conversations
 from utils.llm.chat import qa_rag
 from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
-    record_and_persist_finalized_meeting_receipt,
+    record_finalized_meeting_receipt,
 )
 from utils.executors import postprocess_executor
+from utils.external_read_contract import ignore_unknown_query, pagination_headers, utc_window
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.developer_memory_list import read_developer_memories
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
@@ -103,7 +131,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=external_lists.ExternalListCacheRoute)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -297,6 +325,9 @@ class DeveloperMemoryVectorSearchResponse(BaseModel):
     items: List[DeveloperMemoryVectorItem] = Field(default_factory=list)
     returned_count: int
     archive_default_visible: bool
+    effective_limit: int = 20
+    search_coverage: str = "eligible_indexed_memories"
+    message: Optional[str] = None
     policy: DeveloperMemoryVectorPolicy
 
 
@@ -348,18 +379,21 @@ def get_memories(
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
+    ignore_unknown_query(request, {"limit", "offset", "categories"}, response)
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-    offset = max(0, offset)
-    limit = max(1, min(limit, 1000))
+    offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     category_list = []
     if categories:
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+            logger.error(f"Invalid category in developer memories: {type(e).__name__}")
+            raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
@@ -378,45 +412,35 @@ def get_memories(
 
     service = MemoryService(db_client=db)
     allowed = {category.value for category in category_list} if category_list else None
-    if allowed is None:
-        memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
-        valid_memories = []
-        for memory in memories:
-            try:
-                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
-            except (AttributeError, TypeError, ValidationError, ValueError):
-                logger.warning("Skipping malformed memory in Developer API list")
-        return valid_memories
-    # Category is a sparse filter.  Read ordered universal pages until the
-    # requested category page is filled instead of filtering after a raw page
-    # (which returned short/empty pages whenever non-matching memories led it).
-    target_end = offset + limit
-    scan_offset = 0
-    matched = []
-    max_scan = 5000
-    while scan_offset < max_scan and len(matched) < target_end:
-        batch_limit = min(500, max_scan - scan_offset)
-        batch = service.read(uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True)
-        if not batch:
-            break
-        scan_offset += len(batch)
-        if allowed is None:
-            matched.extend(batch)
-        else:
-            matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
-        if len(batch) < batch_limit:
-            break
-    memories = matched[offset:target_end]
-    valid_memories = []
-    for memory in memories:
-        try:
-            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
-        except (AttributeError, TypeError, ValidationError, ValueError):
-            # MemoryService normally returns validated MemoryDB rows, but a
-            # malformed historical adapter row must not turn this compatibility
-            # endpoint into a 500 for every otherwise healthy memory.
-            logger.warning("Skipping malformed memory in Developer API list")
-    return valid_memories
+    if offset + limit > 5000:
+        raise HTTPException(status_code=413, detail="Memory pagination window exceeded")
+    budget = list_read_budget_for_request(request, route='developer-memories', owner_uid=uid, context=auth_context)
+    cached = external_lists.cached_external_list(request, response, auth_context, locals())
+    if cached is not None:
+        return cached
+    read_limit = min(limit + 1, 5000 - offset)
+    memories = read_developer_memories(
+        service,
+        uid,
+        limit=read_limit,
+        offset=offset,
+        allowed=allowed,
+        budget=budget,
+        response_model=CleanerMemory,
+        logger=logger,
+    )
+    if offset + limit == 5000 and len(memories) == limit:
+        # The compatibility reader cannot probe beyond this window. Signal
+        # incomplete coverage without introducing a newly failing lookahead.
+        budget.mark_exhausted('documents')
+    finish_list_budget(response, budget)
+    pagination_headers(
+        response,
+        limit=limit,
+        has_more=len(memories) > limit or budget.truncated,
+        next_offset=offset + min(len(memories), limit) if memories and offset + len(memories) < 5000 else None,
+    )
+    return memories[:limit]
 
 
 @router.get(
@@ -470,6 +494,11 @@ def search_memories_vector(
     ]
     return {
         'items': items,
+        'effective_limit': min(limit, 20),
+        'search_coverage': 'eligible_indexed_memories',
+        'message': (
+            'No eligible indexed matches; use the memory list to inspect unindexed content.' if not items else None
+        ),
         'returned_count': len(items),
         'archive_default_visible': False,
         'policy': {
@@ -538,6 +567,11 @@ def create_memory(
     - **category**: Memory category (auto-categorized if not provided)
     - **visibility**: Visibility: public or private (default: private)
     - **tags**: List of tags associated with the memory
+
+    A memory is identified by its text. Sending text the user already has (ignoring surrounding
+    whitespace; case-sensitive) returns that memory unchanged, so retries are safe without extra
+    headers. Use PATCH to change an existing memory's fields. After a delete, the same text creates
+    a new memory.
     """
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
@@ -606,6 +640,10 @@ def create_memories_batch(
     Create multiple memories in a batch.
 
     - **memories**: List of memories to create (max 25)
+
+    Items follow the single-create rule: text the user already has returns the existing memory at
+    that position, so a retried batch creates nothing twice. `created_count` is the number of
+    memories returned.
     """
     # Fail closed: a legacy/read-only Developer key (no persisted memories.write
     # grant) must not mutate canonical memories. Gated before any memory
@@ -844,12 +882,15 @@ class BatchActionItemsResponse(BaseModel):
 )
 def get_action_items(
     uid: str = Depends(get_uid_with_action_items_read),
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
     conversation_id: Optional[str] = None,
     completed: Optional[bool] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Get action items with optional filters. Locked action items are excluded.
@@ -863,37 +904,39 @@ def get_action_items(
     """
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-    offset = max(0, offset)
-    limit = max(1, min(limit, 1000))
-    action_items = action_items_db.get_action_items(
-        uid=uid,
-        conversation_id=conversation_id,
-        completed=completed,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit,
-        offset=offset,
-    )
+    offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
+    observe_action_items_page(limit, offset)
+    version_check = ListVersionCheck.start(request, uid, 'action_items')
+    if version_check.not_modified is not None:
+        return version_check.not_modified
+    with read_component(ReadComponent.OTHER):
+        budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
+        cached = (
+            external_lists.cached_external_list(request, response, auth, locals())
+            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
+            else None
+        )
+        observe_action_items_shape(
+            conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
+        )
+        if cached is not None:
+            return cached
+        action_items = action_items_db.get_action_items(
+            uid=uid,
+            conversation_id=conversation_id,
+            completed=completed,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+            budget=budget,
+            probe_filtered_legacy=external_lists.lever_enabled('OMI_DEV_ACTION_ITEMS_FILTERED_LEGACY_PROBE_ENABLED'),
+        )
 
-    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
-    # field like description/completed) doesn't fail the whole page with a 500. Mirrors the hardening
-    # already applied to GET /v1/dev/user/memories.
-    valid_action_items = []
-    for item in action_items:
-        if not isinstance(item, dict) or not item.get('id'):
-            logger.warning('Skipping malformed action item in Developer API action-item list')
-            continue
-        if item.get('is_locked', False):
-            continue
-        try:
-            valid_action_items.append(ActionItemResponse.model_validate(item))
-        except ValidationError as e:
-            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-            logger.warning(
-                f"Skipping invalid action item doc {item.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {invalid_fields}"
-            )
-            continue
+    valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
+    observe_action_items_rows('returned', len(valid_action_items))
+    finish_list_budget(response, budget)
+    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 
@@ -931,12 +974,15 @@ def create_action_item(
         raise HTTPException(status_code=500, detail="Failed to create action item")
 
     # Send FCM data message if action item has a due date
-    if request.due_at:
+    if action_item.get('due_at'):
         send_action_item_data_message(
             user_id=uid,
             action_item_id=action_item_id,
-            description=request.description.strip(),
-            due_at=request.due_at.isoformat(),
+            description=action_item.get('description', ''),
+            due_at=action_item['due_at'].isoformat(),
+            completed=bool(action_item.get('completed')),
+            status=action_item.get('status'),
+            deleted=bool(action_item.get('deleted')),
         )
 
     return ActionItemResponse(**action_item)
@@ -984,13 +1030,16 @@ def create_action_items_batch(
     created_items_list = action_items_db.get_action_items_by_ids(uid, created_ids)
 
     # Send FCM messages for items with due dates
-    for idx, item in enumerate(created_items_list):
-        if idx < len(request.action_items) and request.action_items[idx].due_at:
+    for item in created_items_list:
+        if item.get('due_at'):
             send_action_item_data_message(
                 user_id=uid,
                 action_item_id=item['id'],
-                description=request.action_items[idx].description.strip(),
-                due_at=request.action_items[idx].due_at.isoformat(),
+                description=item.get('description', ''),
+                due_at=item['due_at'].isoformat(),
+                completed=bool(item.get('completed')),
+                status=item.get('status'),
+                deleted=bool(item.get('deleted')),
             )
 
     # Convert to response objects
@@ -1070,21 +1119,24 @@ def update_action_item(
 
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
+    updated_item = action_items_db.get_action_item(uid, action_item_id)
+    if not updated_item:
+        raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
 
-    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
-    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
-    # (#5085).
-    if 'completed' in update_data or 'due_at' in update_data:
-        description = request.description.strip() if request.description else action_item.get('description', '')
+    # Reconcile the client-scheduled reminder from the final state whenever the write touched a field
+    # it is armed from, title included (#5085): cancel if completed or undated, else (re)schedule it.
+    if action_item_write_affects_reminder(update_data):
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
-            description=description,
-            completed=bool(update_data.get('completed', action_item.get('completed'))),
-            due_at=update_data.get('due_at', action_item.get('due_at')),
+            description=updated_item.get('description', ''),
+            completed=bool(updated_item.get('completed')),
+            due_at=updated_item.get('due_at'),
+            status=updated_item.get('status'),
+            deleted=bool(updated_item.get('deleted')),
         )
 
-    return action_items_db.get_action_item(uid, action_item_id)
+    return updated_item
 
 
 # ******************************************************
@@ -1125,17 +1177,6 @@ class SimpleStructured(BaseModel):
     events: List[Event] = []
 
 
-class SimpleTranscriptSegment(BaseModel):
-    model_config = ConfigDict(title='DeveloperTranscriptSegment')
-
-    id: Optional[str] = None
-    text: str
-    speaker_id: Optional[int] = None
-    speaker_name: Optional[str] = None
-    start: float
-    end: float
-
-
 class Conversation(BaseModel):
     model_config = ConfigDict(title='DeveloperConversation')
 
@@ -1147,6 +1188,10 @@ class Conversation(BaseModel):
     language: Optional[str] = None
     source: Optional[str] = None
     transcript_segments: Optional[List[SimpleTranscriptSegment]] = None
+    transcript_included: bool = False
+    participants_included: bool = False
+    participants: List[dict] = Field(default_factory=list)
+    person_ids: List[str] = Field(default_factory=list)
     geolocation: Optional[Geolocation] = None
     folder_id: Optional[str] = None
     folder_name: Optional[str] = None
@@ -1170,6 +1215,13 @@ class CreateConversationRequest(BaseModel):
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
 
+    @field_validator('started_at', 'finished_at')
+    @classmethod
+    def read_naive_timestamp_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+        # Naive next to aware made the handler's finished_at < started_at comparison a TypeError (500).
+        # Two naive values were always accepted here, so read them as UTC instead of the from-segments 422.
+        return value.replace(tzinfo=timezone.utc) if value is not None and value.tzinfo is None else value
+
 
 class ConversationResponse(BaseModel):
     model_config = ConfigDict(title='ConversationCreateResponse')
@@ -1178,6 +1230,14 @@ class ConversationResponse(BaseModel):
     status: str
     discarded: bool
     meeting_treatment_eligible: bool = False
+    processing_deferred: bool = False
+
+    @model_serializer(mode='wrap')
+    def serialize_processing_deferred(self, handler):
+        data = handler(self)
+        if not self.processing_deferred:
+            data.pop('processing_deferred', None)
+        return data
 
 
 class UpdateConversationRequest(BaseModel):
@@ -1192,94 +1252,6 @@ class UpdateConversationRequest(BaseModel):
     @classmethod
     def title_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
         return _optional_patch_text(value, 'title')
-
-
-class DevTranscriptSegment(BaseModel):
-    model_config = ConfigDict(title='CreateConversationTranscriptSegment')
-
-    text: str = Field(description="The text spoken in this segment")
-    speaker: Optional[str] = Field(
-        default='SPEAKER_00', description="Speaker identifier (e.g., 'SPEAKER_00', 'SPEAKER_01')"
-    )
-    speaker_id: Optional[int] = Field(default=None, description="Numeric speaker ID")
-    is_user: bool = Field(default=False, description="Whether this segment is from the user")
-    person_id: Optional[str] = Field(default=None, description="ID of person speaking (if known)")
-    start: float = Field(description="Start time in seconds (e.g., 0.0, 1.5, 60.2)")
-    end: float = Field(description="End time in seconds (e.g., 1.5, 3.0, 65.8)")
-
-
-class CreateConversationFromTranscriptRequest(BaseModel):
-    model_config = ConfigDict(title='CreateConversationFromTranscriptRequest')
-
-    transcript_segments: List[DevTranscriptSegment] = Field(
-        description="List of transcript segments with speaker and timing info", min_length=1, max_length=500
-    )
-    client_processing: Optional[Any] = Field(
-        default=None,
-        description=(
-            "Untrusted client-authored display projection. Accepted as a raw payload "
-            "and validated in the handler: a malformed projection is dropped and the "
-            "conversation still lands. Display only — never an input to intelligence."
-        ),
-    )
-    client_session_id: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices('client_session_id', 'client_conversation_id', 'session_id', 'client_id'),
-        min_length=1,
-        max_length=200,
-        description="Stable client-generated session ID. When provided, retries return the same conversation ID.",
-    )
-    source: Optional[ConversationSource] = Field(
-        default=ConversationSource.phone,
-        description="Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)",
-    )
-    started_at: Optional[datetime] = Field(default=None, description="When conversation started (defaults to now)")
-    finished_at: Optional[datetime] = Field(
-        default=None, description="When conversation finished (calculated from segments duration if not provided)"
-    )
-    language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
-    client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
-    client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
-    conversation_role: Literal['ambient', 'meeting'] = 'ambient'
-    # Optional for backwards compatibility. When supplied, rotation fragments
-    # are persisted but do not create a notes-ready receipt.
-    conversation_finalization_reason: (
-        Literal[
-            'user_stop',
-            'finish_and_continue',
-            'meeting_started',
-            'meeting_ended',
-            'max_duration_rotation',
-            'crash_recovery',
-            'retry',
-        ]
-        | None
-    ) = None
-
-    @field_validator('client_session_id')
-    @classmethod
-    def normalize_client_session_id(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError('client_session_id cannot be empty')
-        return value
-
-    @field_validator('started_at', 'finished_at')
-    @classmethod
-    def require_timezone_offset(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Reject offset-naive timestamps with a 422 instead of a 500.
-
-        A naive ``finished_at`` against the tz-aware ``started_at`` default (or
-        the reverse) makes the handler's ``finished_at <= started_at`` check
-        raise TypeError — an uncaught 500 on a malformed body. Both from-segments
-        routes (developer and first-party) share this model, so both get the 422.
-        """
-        if value is not None and value.tzinfo is None:
-            raise ValueError('must include a timezone offset (e.g. 2026-09-11T12:00:00Z)')
-        return value
 
 
 class DeveloperFolder(BaseModel):
@@ -1320,13 +1292,13 @@ def get_developer_daily_summaries(
     status = 500
     returned_count = 0
     try:
-        summaries = daily_summaries_db.get_daily_summaries(
-            auth.uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        try:
+            summaries = read_daily_summary_page(
+                auth.uid, limit=limit, offset=offset, start_date=start_date, end_date=end_date, request=request
+            )
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         returned_count = len(summaries)
         status = 200
         return {'summaries': summaries}
@@ -1361,9 +1333,14 @@ def get_developer_daily_summary(
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
+        try:
+            validated = require_daily_summary(summary, uid=auth.uid, operation='developer_detail')
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         status = 200
         returned_count = 1
-        return summary
+        return validated
     finally:
         _audit_developer_read(
             request=request,
@@ -1397,7 +1374,23 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     those paths, so the empty-list case here only affects users who have never opened the
     conversations tab nor created a single conversation.
     """
-    return folders_db.get_folders(uid)
+    folders = folders_db.get_folders(uid)
+    valid_folders = []
+    for folder in folders:
+        if not folder or not folder.get('id'):
+            logger.warning('Skipping malformed folder in Developer API folder list')
+            continue
+        try:
+            DeveloperFolder.model_validate(folder)
+            valid_folders.append(folder)
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_folders
 
 
 class DeveloperAskRequest(BaseModel):
@@ -1474,15 +1467,7 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
     except ConversationSearchUnavailableError as exc:
         raise HTTPException(status_code=503, detail="Search temporarily unavailable") from exc
     items = results.get("items", []) if isinstance(results, dict) else []
-    summary_ids = [item["id"] for item in items if item.get("id")]
-    transcript_ids = resolve_mcp_conversation_search_ids(
-        uid,
-        question,
-        limit=request.limit,
-        query_vectors=lambda *args, **kwargs: [],
-        search_transcript_chunks=vector_db.search_transcript_chunks,
-    )
-    conversation_ids = merge_summary_and_transcript_ids(transcript_ids, summary_ids, request.limit)
+    conversation_ids = [item["id"] for item in items if item.get("id")][: request.limit]
     if not conversation_ids:
         return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
 
@@ -1508,6 +1493,12 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
     return DeveloperAskResponse(answer=answer, sources=sources)
 
 
+# Register named read routes before the conversation-id catch-all.
+from routers.developer_read import router as developer_read_router
+
+router.include_router(developer_read_router)
+
+
 @router.get(
     "/v1/dev/user/conversations",
     response_model=List[Conversation],
@@ -1525,6 +1516,8 @@ def get_conversations(
     starred: Optional[bool] = None,
     uid: ApiKeyAuth = Depends(get_auth_with_conversations_read),
     request: Request = None,
+    response: Response = None,
+    cursor: Optional[str] = None,
 ):
     """
     Get conversations with optional transcript inclusion.
@@ -1533,6 +1526,22 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
+    ignore_unknown_query(
+        request,
+        {
+            "start_date",
+            "end_date",
+            "categories",
+            "limit",
+            "offset",
+            "include_transcript",
+            "folder_id",
+            "starred",
+            "cursor",
+        },
+        response,
+    )
+    start_date, end_date = utc_window(start_date, end_date)
     auth = uid
     uid = auth.uid
     status = 500
@@ -1543,36 +1552,84 @@ def get_conversations(
 
         # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
         # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-        offset = max(0, offset)
-        limit = max(1, min(limit, 25 if include_transcript else 100))
+        offset, limit = external_lists.clamp_list_page(offset, limit, 200)
         try:
             category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
         except ValueError as e:
             status = 400
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+            logger.error(f"Invalid category in developer conversations: {type(e).__name__}")
+            raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
-        conversations = conversations_db.get_conversations(
-            uid,
-            limit,
-            offset,
-            include_discarded=False,
-            statuses=["completed"],
-            start_date=start_date,
-            end_date=end_date,
-            categories=[c.value for c in category_list],
-            folder_id=folder_id,
-            starred=starred,
+        budget = external_lists.developer_conversation_offset_budget(request, response, offset, auth)
+        cached = external_lists.cached_external_list(request, response, auth, locals())
+        if cached is not None:
+            status = 200
+            returned_count = len(json.loads(bytes(cached.body)))
+            return cached
+        budget_kwargs = {'budget': budget} if budget is not None else {}
+
+        next_cursor = None
+        if not include_transcript and folder_id is None and starred is None:
+            try:
+                conversations, next_cursor = conversation_cards_page_core(
+                    uid,
+                    limit=limit,
+                    offset=offset,
+                    cursor_token=cursor,
+                    start_dt=start_date,
+                    end_dt=end_date,
+                    categories=[c.value for c in category_list],
+                    cursor_kind="developer_conversations",
+                    extra_field_paths=["structured", "source", "geolocation", "folder_id"],
+                    **budget_kwargs,
+                )
+            except ToolExecutionError as exc:
+                raise HTTPException(status_code=exc.http_status or 400, detail=exc.message) from exc
+            has_more = next_cursor is not None
+        else:
+            if cursor:
+                raise HTTPException(
+                    status_code=400, detail="cursor requires include_transcript=false and no folder/starred filter"
+                )
+            conversations = conversations_db.get_conversations_without_photos(
+                uid,
+                limit + 1,
+                offset,
+                include_discarded=False,
+                statuses=["completed"],
+                start_date=start_date,
+                end_date=end_date,
+                categories=[c.value for c in category_list],
+                folder_id=folder_id,
+                starred=starred,
+                **budget_kwargs,
+            )
+            has_more = len(conversations) > limit
+            conversations = conversations[:limit]
+        if budget is not None:
+            finish_list_budget(response, budget)
+            has_more = has_more or budget.truncated
+        pagination_headers(
+            response,
+            limit=limit,
+            has_more=has_more,
+            next_offset=offset + len(conversations) if next_cursor is None and conversations else None,
+            next_cursor=next_cursor,
         )
 
         # Filter out locked conversations completely
         unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
+
+        for conv in unlocked_conversations:
+            conv.update(conversation_participants(conv, include_display=False))
+            conv['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
         if not include_transcript:
             for conv in unlocked_conversations:
                 conv.pop('transcript_segments', None)
         else:
-            populate_speaker_names(uid, unlocked_conversations)
+            populate_speaker_names(uid, unlocked_conversations, preserve_api_values=True)
 
         populate_folder_names(uid, unlocked_conversations)
 
@@ -1686,6 +1743,7 @@ def create_conversation(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        processing_deferred=conversation.processing_deferred,
     )
 
 
@@ -1700,6 +1758,7 @@ def get_conversation_endpoint(
     include_transcript: bool = False,
     uid: ApiKeyAuth = Depends(get_auth_with_conversation_detail_read),
     request: Request = None,
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Get a single conversation by ID.
@@ -1707,6 +1766,7 @@ def get_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to retrieve
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
+    ignore_unknown_query(request, {"include_transcript"}, response)
     auth = uid
     uid = auth.uid
     status = 500
@@ -1716,22 +1776,27 @@ def get_conversation_endpoint(
             check_conversation_transcript_read_limit(auth, request=request)
 
         conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation:
+        if not conversation or conversation.get('deleted', False):
             status = 404
             returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
 
         # Filter out locked conversations
         if conversation.get('is_locked', False):
             status = 404
             returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
+
+        from utils.mcp_server.helpers import conversation_participants
+
+        conversation.update(conversation_participants(conversation, include_display=False))
+        conversation['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
         if not include_transcript:
             conversation.pop('transcript_segments', None)
         else:
-            populate_speaker_names(uid, [conversation])
+            populate_speaker_names(uid, [conversation], preserve_api_values=True)
 
         populate_folder_names(uid, [conversation])
 
@@ -1758,6 +1823,29 @@ def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
     return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
 
 
+# Recording facts that identify a blank-id upload: the same values hash to one
+# conversation across retries, different recordings hash apart. Routing fields a
+# retry may legitimately resend differently (folder, calendar context, client
+# projection, finalization reason) are deliberately absent so a retry lands on
+# the first attempt's conversation instead of forking a duplicate.
+_BLANK_SESSION_ID_IDENTITY_FIELDS = frozenset(
+    {'source', 'started_at', 'finished_at', 'language', 'geolocation', 'transcript_segments'}
+)
+
+
+def _derived_client_session_id(uid: str, request: CreateConversationFromTranscriptRequest) -> str:
+    """Stable retry identity for uploads whose client persisted a blank session id.
+
+    These clients resend byte-identical requests (BasedHardware/omi#15500), so a
+    digest of the recording's own facts is identical on every retry while a
+    different recording — different segments or clock — digests apart.
+    """
+    payload = dict(request.model_dump(mode='json', by_alias=False, include=_BLANK_SESSION_ID_IDENTITY_FIELDS))
+    payload['uid'] = uid
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return f'derived:{digest}'
+
+
 def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, now: datetime) -> bool:
     external_data = conversation.get('external_data') or {}
     if external_data.get('from_segments_client_session_id') != client_session_id:
@@ -1780,6 +1868,7 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
         id=conversation['id'],
         status=status,
         discarded=bool(conversation.get('discarded', False)),
+        processing_deferred=bool(conversation.get('processing_deferred', False)),
         meeting_treatment_eligible=projected_meeting_treatment_eligible(conversation),
     )
 
@@ -1837,7 +1926,7 @@ def _log_client_projection_rejected(reason: str, raw: Any) -> None:
 
 def _parse_client_projection(raw: Any) -> Optional[ClientProcessing]:
     """Validate an untrusted projection payload. Invalid means drop, never 422."""
-    if raw is None:
+    if raw is None or not client_summaries_at_cap_enabled():
         return None
     try:
         return ClientProcessing.model_validate(raw)
@@ -1859,16 +1948,13 @@ def _bind_projection_to_segments(
     row must bind through ``transcript_sha256_for_binding``, which refuses a
     legacy row whose identity was written before canonicalization: there, a
     matching digest would not imply matching rendered attribution. Request
-    segments are not stored yet -- they are canonicalized on write -- so they
-    bind with the plain client-reproducible digest.
+    segments have already been canonicalized by ingest. Both paths share the
+    fail-closed scope guard without changing the client-reproducible encoding.
     """
-    if stored:
-        expected = transcript_sha256_for_binding(segments or [])
-        if expected is None:
-            _log_client_projection_rejected('stored_transcript_not_canonical', raw)
-            return None
-    else:
-        expected = transcript_sha256(segments or [])
+    expected = transcript_sha256_for_binding(segments or [])
+    if expected is None:
+        _log_client_projection_rejected('stored_transcript_not_canonical' if stored else 'unsafe_ingest_binding', raw)
+        return None
     if expected != projection.transcript_sha256:
         _log_client_projection_rejected('hash_mismatch', raw)
         return None
@@ -1882,8 +1968,8 @@ def _accepted_client_projection(
     """Bind a client projection to the stored transcript, or drop it.
 
     Schema failure and hash mismatch are not request errors: the conversation
-    still lands, with the projection discarded and the coordinator storing the
-    deterministic minimum. The warning is content-free (reason plus provenance
+    still lands, with the projection discarded and the coordinator retaining
+    ordinary funded processing or raw budget deferral. The warning is content-free (reason plus provenance
     only — never transcript or body). Provenance itself may be missing.
     The digest is over ``segments`` — the canonical rows ingest persists —
     so a client hashing the same canonicalization as ``canonical_segment``
@@ -1930,7 +2016,93 @@ def _bind_late_client_projection(
     return updated
 
 
+def _apply_late_from_segments_context(
+    uid: str,
+    existing_conversation: dict,
+    request: CreateConversationFromTranscriptRequest,
+) -> dict:
+    """Idempotency hit: bind a folder or calendar context the retry carries.
+
+    The first attempt's 200 can be lost to a timeout while the row still lands,
+    and the client re-sends the same ``client_session_id`` with the folder and
+    calendar context it built. Returning early from the idempotency branch used
+    to throw both away, leaving the conversation in the AI-assigned folder with
+    no meeting block on its summary.
+    """
+    conversation_id = existing_conversation.get('id')
+    if not conversation_id:
+        return existing_conversation
+
+    updates: dict[str, Any] = {}
+
+    previous_folder = existing_conversation.get('folder_id')
+    folder_id = getattr(request, 'folder_id', None)
+    if folder_id is not None and folder_id != previous_folder:
+        # The first attempt rejects an unknown folder with 422; a folder deleted
+        # between attempts must not come back as a dangling reference here.
+        if folders_db.get_folder(uid, folder_id):
+            updates['folder_id'] = folder_id
+        else:
+            logger.warning(
+                'from-segments retry names a folder that no longer exists uid=%s folder_id=%s; keeping the stored folder',
+                uid,
+                folder_id,
+            )
+
+    calendar_context = request.calendar_meeting_context.to_context() if request.calendar_meeting_context else None
+    external_data = dict(existing_conversation.get('external_data') or {})
+    stored_calendar_context = None
+    if calendar_context is not None and 'calendar_meeting_context' not in external_data:
+        # Dotted path, so a concurrent writer's other external_data keys survive.
+        stored_calendar_context = calendar_context.to_storage_dict()
+        updates['external_data.calendar_meeting_context'] = stored_calendar_context
+
+    if not updates or not conversations_db.update_conversation(uid, conversation_id, updates):
+        return existing_conversation
+
+    if 'folder_id' in updates:
+        # A preset folder skips AI folder assignment, and with it the count
+        # refresh that assignment does. Both folders can be affected.
+        for affected_folder in {previous_folder, folder_id}:
+            if not affected_folder:
+                continue
+            try:
+                folders_db.update_folder_conversation_count(uid, affected_folder)
+            except Exception:
+                logger.exception(
+                    'from-segments late folder count refresh failed uid=%s folder_id=%s',
+                    uid,
+                    affected_folder,
+                )
+
+    updated = dict(existing_conversation)
+    if 'folder_id' in updates:
+        updated['folder_id'] = updates['folder_id']
+    if stored_calendar_context is not None:
+        updated['external_data'] = {**external_data, 'calendar_meeting_context': stored_calendar_context}
+    return updated
+
+
 def _create_conversation_from_segments(
+    uid: str, request: CreateConversationFromTranscriptRequest, **kwargs
+) -> ConversationResponse:
+    if request.chunk_index is not None:
+        conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
+        return developer_segments.continuation(
+            uid,
+            request,
+            conversation_id,
+            lambda assembled: _ingest_conversation_from_segments(uid, assembled, **kwargs),
+            ConversationResponse,
+        )
+    return _ingest_conversation_from_segments(uid, request, **kwargs)
+
+
+def _ingest_conversation_from_segments(
     uid: str,
     request: CreateConversationFromTranscriptRequest,
     *,
@@ -1945,8 +2117,20 @@ def _create_conversation_from_segments(
     if not request.transcript_segments or len(request.transcript_segments) == 0:
         raise HTTPException(status_code=422, detail="transcript_segments cannot be empty")
 
-    if len(request.transcript_segments) > 500:
+    if request.chunk_count is None and len(request.transcript_segments) > 500:
         raise HTTPException(status_code=422, detail="Maximum 500 transcript segments allowed")
+
+    # A sent-blank client_session_id must not take the unkeyed create path: these
+    # clients resend byte-identical requests, so a lost 200 followed by the retry
+    # would fork a duplicate conversation (Luna review of #23886). Derive the
+    # stable id the client failed to send; an id that was never sent keeps the
+    # plain create path.
+    if request.client_session_id is None and request.sent_blank_client_session_id:
+        request = request.model_copy(update={'client_session_id': _derived_client_session_id(uid, request)})
+
+    request, covered_response = developer_segments.admit_segments(uid, request, ConversationResponse)
+    if covered_response is not None:
+        return covered_response
 
     # Validate segments
     for idx, segment in enumerate(request.transcript_segments):
@@ -1984,6 +2168,10 @@ def _create_conversation_from_segments(
     if finished_at <= started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
+    if request.folder_id is not None and not folders_db.get_folder(uid, request.folder_id):
+        raise HTTPException(status_code=422, detail="folder_id does not match any of your folders")
+    calendar_context = request.calendar_meeting_context.to_context() if request.calendar_meeting_context else None
+
     # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
     geolocation = resolve_geolocation(validated_geolocation_or_none(request.geolocation))
 
@@ -1997,6 +2185,21 @@ def _create_conversation_from_segments(
     conversation_id = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        # One point read suppresses retries even when a prior delete failed during cleanup.
+        # Residual race: a create already past this read can overlap a delete commit;
+        # this guard deliberately does not transact across the two collections.
+        # A live conversation deleted elsewhere is tombstoned under its raw
+        # client session id (the ws doc id), not this derived uuid5 — check both.
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
+            logger.info(
+                "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation_id,
+            )
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
         existing_conversation = conversations_db.get_conversation(
             uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
         )
@@ -2019,7 +2222,8 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
                         receipt.get('meeting_treatment_eligible')
@@ -2034,6 +2238,33 @@ def _create_conversation_from_segments(
     # never write this field.
     client_projection = _accepted_client_projection(request, transcript_segments)
 
+    # Keep original desktop segment IDs before client compaction. Only a bounded,
+    # validated metadata payload enters the existing conversation write.
+    capture_evidence = None
+    evidence_status = 'missing'
+    if request.capture_evidence is not None:
+        candidate = request.capture_evidence.model_dump()
+        if (
+            candidate['capture_root'] != request.client_session_id
+            or not all(unit['end_ms'] > unit['start_ms'] for unit in candidate['units'])
+            or (candidate['lineage'] == 'complete' and not candidate['units'])
+        ):
+            evidence_status = 'ineligible'
+        elif len(json.dumps(candidate, separators=(',', ':')).encode()) > MAX_ENVELOPE_BYTES:
+            evidence_status = 'overflow'
+        else:
+            capture_evidence = candidate
+            evidence_status = 'lineage' if candidate['lineage'] == 'complete' else 'incomplete'
+    if capture_evidence is None:
+        capture_evidence = {
+            'version': 1,
+            'capability': 'unknown',
+            'coverage': 'unknown',
+            'origin': 'from_segments',
+            'reason': evidence_status,
+        }
+    OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
+
     # Create conversation object with transcript segments
     if conversation_id:
         create_conversation_obj = OmiConversation(
@@ -2047,11 +2278,18 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            folder_id=request.folder_id,
             structured=Structured(),
             external_data={
                 'from_segments_client_session_id': request.client_session_id,
                 'from_segments_claimed_at': datetime.now(timezone.utc),
                 'conversation_role': request.conversation_role,
+                **({'capture_evidence': capture_evidence} if capture_evidence is not None else {}),
+                **(
+                    {'calendar_meeting_context': calendar_context.model_dump(mode='json')}
+                    if calendar_context is not None
+                    else {}
+                ),
                 **(
                     {'conversation_finalization_reason': request.conversation_finalization_reason}
                     if request.conversation_finalization_reason is not None
@@ -2075,7 +2313,8 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
                         receipt.get('meeting_treatment_eligible')
@@ -2092,8 +2331,11 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            folder_id=request.folder_id,
+            calendar_meeting_context=calendar_context,
             external_data={
                 'conversation_role': request.conversation_role,
+                **({'capture_evidence': capture_evidence} if capture_evidence is not None else {}),
                 **(
                     {'conversation_finalization_reason': request.conversation_finalization_reason}
                     if request.conversation_finalization_reason is not None
@@ -2112,6 +2354,11 @@ def _create_conversation_from_segments(
     process_kwargs: dict = {}
     if client_projection is not None:
         process_kwargs['client_projection'] = client_projection
+    # A client-uploaded, already-final transcript is not a capture-time event. Run it now,
+    # like the sibling desktop finalize paths (/finalize, /v1/conversations pass
+    # CLIENT_FINALIZE), instead of letting the freemium desktop deferral store a cheap
+    # placeholder and skip enrichment entirely.
+    process_kwargs['trigger'] = ProcessingTrigger.CLIENT_FINALIZE
     try:
         if conversation_id:
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
@@ -2129,6 +2376,31 @@ def _create_conversation_from_segments(
     if client_projection is not None and not request.client_session_id:
         conversations_db.bind_client_processing(uid, conversation.id, client_processing_mutation(client_projection))
     if request.client_session_id:
+        # A delete committing while processing ran must win: re-check intent
+        # before the final persist, otherwise the loser of the admission race
+        # re-persists the row the user just deleted. Both identities are
+        # checked (derived uuid5 and the raw session id, matching admission),
+        # and a hit also purges the processing/processing-completed row this
+        # call may have created or completed, so the retired identity is not
+        # published by our own response path.
+        suppress_id = None
+        if conversation_tombstones.is_deleted(uid, conversation.id):
+            suppress_id = conversation.id
+        elif conversation_tombstones.is_deleted(uid, request.client_session_id):
+            suppress_id = request.client_session_id
+        if suppress_id is not None:
+            logger.info(
+                "from_segments_tombstoned_suppress uid=%s client_session_id=%s conversation_id=%s suppress_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation.id,
+                suppress_id,
+            )
+            try:
+                conversations_db.delete_conversation(uid, conversation.id)
+            except Exception:
+                logger.exception('tombstone suppress row cleanup failed uid=%s conversation=%s', uid, conversation.id)
+            return ConversationResponse(id=conversation.id, status='deleted', discarded=True)
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
             uid,
@@ -2139,6 +2411,13 @@ def _create_conversation_from_segments(
             uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
         )
 
+    if request.folder_id is not None:
+        # A preset folder skips AI folder assignment, and with it the count refresh that assignment does.
+        try:
+            folders_db.update_folder_conversation_count(uid, request.folder_id)
+        except Exception:
+            logger.exception('from-segments folder count refresh failed uid=%s folder_id=%s', uid, request.folder_id)
+
     conversation.external_data = {
         **(conversation.external_data or {}),
         'conversation_role': request.conversation_role,
@@ -2148,7 +2427,7 @@ def _create_conversation_from_segments(
             else {}
         ),
     }
-    receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
+    receipt = record_finalized_meeting_receipt(uid, conversation)
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
     # Only new successful ingests reach here; idempotent replays return above.
@@ -2162,6 +2441,7 @@ def _create_conversation_from_segments(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        processing_deferred=conversation.processing_deferred,
         meeting_treatment_eligible=meeting_treatment_eligible,
     )
 
@@ -2221,6 +2501,9 @@ def create_conversation_from_segments(
     - **finished_at**: When conversation finished (calculated from last segment if not provided)
     - **language**: Language code (default: 'en')
     - **geolocation**: Optional geolocation data
+    - **folder_id**: Optional ID of one of your folders (from GET /v1/dev/user/folders); skips AI folder assignment
+    - **calendar_meeting_context**: Optional calendar meeting (title, participants, start_time, duration_minutes,
+      notes…) used as context for the summary
 
     **Example:**
     ```json
@@ -2275,16 +2558,29 @@ def delete_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to delete
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     # Lazy: keep developer routes off the merge/memory import graph so stubbed
     # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
-    from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
+    from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
+    from utils.other.storage import delete_owner_prompt_embedding_cache
+    from utils.screen_frames.store import delete_conversation_screen_frames
 
-    delete_conversation_with_sync_sources(uid, conversation_id)
+    conversation_tombstones.record_deletion(uid, conversation_id)
+    # Prompt vectors are derived evidence even when primary audio is retained.
+    delete_owner_prompt_embedding_cache(uid, conversation_id)
+    # Must run before delete_conversation_and_frame_evidence purges the parent doc
+    # below: Firestore does not cascade subcollection deletes, and the GCS objects
+    # have no other cleanup path once the parent doc is gone.
+    delete_conversation_screen_frames(uid, conversation_id)
+    # Deletes the conversation doc itself (and any sync-merge sources) as its
+    # default deleter, alongside photo/frame-request GCS evidence.
+    delete_conversation_and_frame_evidence(uid, conversation_id)
+    vector_db.delete_vector(uid, conversation_id)
+    vector_db.delete_transcript_chunk_vectors(uid, conversation_id)
     return {"success": True}
 
 
@@ -2307,7 +2603,7 @@ def update_conversation_endpoint(
     - **discarded**: Whether the conversation is discarded (optional)
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -2367,7 +2663,7 @@ class GoalResponse(BaseModel):
 
 
 class CreateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='CreateGoalRequest')
+    model_config = ConfigDict(title='CreateGoalRequest', allow_inf_nan=False)
 
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2383,7 +2679,7 @@ class CreateGoalRequest(BaseModel):
 
 
 class UpdateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='UpdateGoalRequest')
+    model_config = ConfigDict(title='UpdateGoalRequest', allow_inf_nan=False)
 
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2420,6 +2716,7 @@ class UpdateGoalRequest(BaseModel):
 
 def _serialize_goal_datetimes(goal: dict) -> dict:
     """Convert datetime objects to ISO strings for JSON serialization."""
+    goal = normalize_goal_response(goal)
     if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
         goal['created_at'] = goal['created_at'].isoformat()
     if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
@@ -2442,16 +2739,14 @@ def get_goals(
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     limit = max(1, min(limit, 1000))
-    if include_inactive:
-        # Pass the clamp down so the response honours the documented limit. The bound is
-        # applied after the in-Python newest-first sort rather than at the query, because a
-        # Firestore order_by('created_at') would silently exclude legacy goals that lack the
-        # field; see get_all_goals.
-        goals = goals_db.get_all_goals(uid, include_inactive=True, limit=limit)
-    else:
-        goals = goals_db.get_user_goals(uid, limit=limit)
-
-    return [_serialize_goal_datetimes(g) for g in goals]
+    return list_developer_goals(
+        uid,
+        limit=limit,
+        include_inactive=include_inactive,
+        goals_db=goals_db,
+        response_model=GoalResponse,
+        logger=logger,
+    )
 
 
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")
@@ -2554,7 +2849,7 @@ def update_goal(
 )
 def update_goal_progress(
     goal_id: str,
-    current_value: float = Query(..., description="New progress value"),
+    current_value: float = Query(..., description="New progress value", allow_inf_nan=False),
     uid: str = Depends(get_uid_with_goals_write),
 ):
     """

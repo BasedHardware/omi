@@ -1,6 +1,6 @@
 # Backend (Python) — Developer Guide
 
-Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific development guidance.
+Speaker text: `utils.speakers.display.display_participants` + `DiarizationLabel`; raw ids are storage keys.
 
 ## Setup
 
@@ -23,9 +23,9 @@ When intentionally changing backend Python dependencies, edit the relevant `requ
 
 By default, the lock refresh preserves already-locked package versions so unrelated transitive upgrades do not sneak into infrastructure changes. Set `PYLOCK_UPGRADE=1` only when intentionally refreshing dependency versions.
 
-Key env vars: `OPENAI_API_KEY` (LLM calls), `HOSTED_PARAKEET_API_URL` / `MODULATE_API_KEY` (default STT), `DEEPGRAM_API_KEY` with its self-hosted endpoint, `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` (desktop chat), `ENCRYPTION_SECRET` (tests), and `REDIS_DB_HOST` (fail-open rate limiting). `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are default Firebase Admin credentials; never commit them. When `SERVICE_ACCOUNT_JSON` is set, Firestore (and GCS) pin that customer-data SA and its `project_id` so GKE Workload Identity / a compute-project `GOOGLE_CLOUD_PROJECT` cannot silently win user-doc reads. Dev desktop-backend keeps ADC on the compute project for GCE/`agentVm`; quota and `llm_usage` use `get_customer_firestore_client()` from the Auth SA file (`FIREBASE_AUTH_CREDENTIALS_PATH`) so Beta sees production `based-hardware` entitlements without writing `agentVm` there.
+Key env vars: `OPENAI_API_KEY` (LLM calls), `HOSTED_PARAKEET_API_URL` / `MODULATE_API_KEY` / `SONIOX_API_KEY` (default STT; Deepgram retired 2026-08-27), `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` (desktop chat), `ENCRYPTION_SECRET` (tests), and `REDIS_DB_HOST` (fail-open rate limiting). `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are default Firebase Admin credentials; never commit them. When `SERVICE_ACCOUNT_JSON` is set, Firestore (and GCS) pin that customer-data SA and its `project_id` so GKE Workload Identity / a compute-project `GOOGLE_CLOUD_PROJECT` cannot silently win user-doc reads. Dev desktop-backend keeps ADC on the compute project for GCE/`agentVm`; quota and `llm_usage` use `get_customer_firestore_client()` from the Auth SA file (`FIREBASE_AUTH_CREDENTIALS_PATH`) so Beta sees production `based-hardware` entitlements without writing `agentVm` there.
 
-Chat SSE deadlines: `AGENT_STREAM_SETUP_TIMEOUT_SECONDS` / `AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS` default `25`; heartbeat/max/cancel grace default `20`/`150`/`2`. Provider retries: `AGENT_STREAM_PROVIDER_MAX_ATTEMPTS` (3) with backoff/`MIN_RETRY_HEADROOM_SECONDS`. Managed agentic/desktop chat uses gateway Luna (`omi:auto:chat-agent`) only when **both** `OMI_LLM_GATEWAY_FEATURE_MODE=gateway` and `OMI_LLM_CHAT_AGENT_ROUTE=gateway` (aliases `luna`/`on`); `CHAT_AGENT_ROUTE=direct` is the chat-only kill switch. Authorized desktop public-web turns stay on the gateway `omi:auto:web-search` lane (Perplexity `sonar-pro`) instead of leaving the gateway for Anthropic server-side search; a tainted or unauthorized request stays on the chat-agent lane without search. Gateway silent-interval: `OMI_LLM_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS` (15) — no per-request `timeout=`. `desktop-backend` is a **separate** Cloud Run release with env declared inline in `.github/workflows/desktop_backend_*.yml`; backend-wide rollouts do not reach it, and an unset feature mode routes managed desktop chat direct to Anthropic. Public shared chat: `PUBLIC_SHARED_CONVERSATION_CHAT_MODE=off|gateway` (default off) + frontend OIDC. Detail: `backend/docs/runbooks/llm-gateway-fallback.md`.
+Chat SSE deadlines: `AGENT_STREAM_SETUP_TIMEOUT_SECONDS` / `AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS` default `25`; heartbeat/max/cancel grace default `20`/`150`/`2`. Mobile opts into typed errors via `X-Omi-Chat-Failure-Protocol: 1`; missing/unknown headers keep legacy `done`. App/persona prompts add identity/style while preserving tools, safety, retrieval, memory and file guidance. Provider retries: `AGENT_STREAM_PROVIDER_MAX_ATTEMPTS` (3) with backoff/`MIN_RETRY_HEADROOM_SECONDS`. Managed agentic/desktop chat uses gateway Luna (`omi:auto:chat-agent`) only when **both** `OMI_LLM_GATEWAY_FEATURE_MODE=gateway` and `OMI_LLM_CHAT_AGENT_ROUTE=gateway` (aliases `luna`/`on`); `CHAT_AGENT_ROUTE=direct` is the chat-only kill switch. Authorized desktop public-web turns stay on the gateway `omi:auto:web-search` lane (Perplexity `sonar-pro`) instead of leaving the gateway for Anthropic server-side search; a tainted or unauthorized request stays on the chat-agent lane without search. Gateway silent-interval: `OMI_LLM_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS` (15) — no per-request `timeout=`. `desktop-backend` is a **separate** Cloud Run release with env declared inline in `.github/workflows/desktop_backend_*.yml`; backend-wide rollouts do not reach it, and an unset feature mode routes managed desktop chat direct to Anthropic. Public shared chat: `PUBLIC_SHARED_CONVERSATION_CHAT_MODE=off|gateway` (default off) + frontend OIDC. Detail: `backend/docs/runbooks/llm-gateway-fallback.md`.
 
 LLM gateway resilience: `OMI_LLM_GATEWAY_CONNECT_TIMEOUT_SECONDS` (default `3`), `OMI_LLM_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS` (default `15`), `OMI_LLM_GATEWAY_CIRCUIT_FAILURE_THRESHOLD` (default `2`), and `OMI_LLM_GATEWAY_CIRCUIT_COOLDOWN_SECONDS` (default `30`) bound the optional gateway hop. Gateway-first callers use the shared process-local circuit and may fall back only before stream output. Never restore a production `OMI_LLM_GATEWAY_URL` static IP: the backend deployment derives it after `verify-llm-gateway-serving.py` validates the ready Kubernetes workload, ingress/ILB attachment, and Cloud Run VPC smoke route.
 
@@ -66,11 +66,11 @@ backend/
                           #   app generation, fair-use classification, usage tracking
       clients.py          #     Model instances: OpenAI (Luna/Nano), leftover Anthropic (desktop),
                           #     OpenRouter (gemini-flash), with prompt caching and usage callbacks
-    stt/                  #   Speech-to-text (7 files): Parakeet/Modulate and explicit self-hosted Deepgram streaming, VAD gating, speech profiles,
+    stt/                  #   Speech-to-text (7 files): Parakeet/Modulate/Soniox streaming (Deepgram retired 2026-08-27), VAD gating, speech profiles,
                           #   pre-recorded batch transcription, speaker embeddings
     conversations/        #   Conversation lifecycle (6 files): ingestion, memory extraction, action items,
                           #   merge, post-processing, search
-    retrieval/            #   RAG pipeline (25+ files): agentic RAG via gateway Luna (gpt-5.6-luna) with 18 tool types —
+    retrieval/            #   RAG pipeline (25+ files): agentic RAG via gateway Luna (gpt-x-luna) with 18 tool types —
                           #   action items, calendar, Gmail, Apple Health, conversations, memories,
                           #   screen activity, files, Perplexity web search, notifications, etc.
     other/                #   Storage (GCS), auth dependencies, timeout middleware, Hume emotion detection
@@ -95,6 +95,8 @@ backend/
 
 ## Service Map
 
+[Plugin transport](docs/plugin-transport.md).
+
 ```
 Shared: Firestore, Redis
 
@@ -104,7 +106,7 @@ backend (main.py)
   ├── ──────► vad (modal/)
   ├── ──────► parakeet (parakeet/)
   ├── ──────► modulate (managed API)
-  ├── ──────► deepgram-self-hosted (explicit streaming policy only)
+  ├── ──────► (Deepgram retired 2026-08-27; absent from stt_provider_policy)
   ├── ──────► nllb-translation (nllb_translation/)
   └── ──────► llm-gateway (llm_gateway/main.py)
 
@@ -119,38 +121,44 @@ backend-sync (main.py, Cloud Run)
   ├── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
   └── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
 
-Cron jobs: notifications (`modal/job.py`), memory maintenance (`modal/memory_maintenance_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
+Cron jobs: notifications (`modal/job.py`), X sync (`modal/x_connector_sync_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
 ```
+
+Dream agent: `docs/runbooks/dream-agent.md`.
+
+Required intake: canonical capture normalizes inline; Dream retries and dedupes
+the backlog. Ownership, bounds and ramp: `docs/runbooks/dream-agent.md`.
 
 Helm charts: `backend/charts/`.
 
 STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operational/windowed-live-stt.md`.
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection (`utils/stt/vad.py`). Live STT prefers Deepgram (`DEEPGRAM_API_KEY`), falling back to Modulate then Parakeet; self-hosted Deepgram replaces the hosted endpoint when `DEEPGRAM_SELF_HOSTED_*` is set (`utils/stt/streaming.py`). Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
+- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection (`utils/stt/vad.py`). Live STT serves Parakeet/Modulate/Soniox per `STT_SERVICE_MODELS` and `config/stt_provider_policy.py` (`utils/stt/streaming.py`). Deepgram retired 2026-08-27: no policy admission, `dg-*` slots refused, batch client raises. Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
 - **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
 - **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients. Public shared-conversation chat uses only the dedicated `omi:auto:public-shared-conversation-chat` lane and returns unavailable on every gateway fault. Also owns the `/v1/embeddings` surface and the company-paid desktop-Vertex lanes (see `docs/llm/model_endpoint_inventory.yaml`).
-- Conversation notes v2 is independently dogfood-gated by `CONVERSATION_NOTES_V2_ENABLED`, `CONVERSATION_APPS_OPT_IN_ONLY`, `CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED`, and `CONVERSATION_OCR_CONTEXT_ENABLED`; all runtime-manifest defaults stay off until promoted.
+- Conversation notes v2 is on for every processing host; the legacy branch still hosts the gateway shadow gates. Calendar/OCR context reads are dev-on/prod-off. Generated `docs/feature-flag-registry.md` catalogs declarations, not an enablement lever.
 - Meeting identity reaches the summarization prompt through `utils/conversations/meeting_context.resolve_meeting_context`, called before `_get_structured`. Sources, best first: stored calendar-backed meeting (exact `redis_db` conversation→meeting mapping, else a time-overlap query over `users/{uid}/meetings`) → `calendar_meeting_context` on the create request → overlapping Google Calendar event (read-only) → stored on-device screen-derived identity → server-side conferencing-window OCR. Every layer degrades to no context; none may fail the conversation. Defaults on: `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED`, `WAKE_WORD_ADJUDICATION_ENABLED`.
 - `users/{uid}/meetings` is populated only through `POST /v1/calendar/meetings`. The macOS client writes flag-gated EventKit identity as `system_calendar` and minimum on-device OCR-derived identity as `screen_activity` before conversation processing; the resolver always ranks a real calendar event above `screen_activity`.
 - Calendar capture (SCA-381): overlap retains scraps; `GET /v1/calendar/capture-gaps` surfaces gaps. See `.github/agent-docs/calendar-capture.md`.
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and the configured Parakeet/Modulate STT provider for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
-- **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings at `/v2/embedding`; match policy in `utils/stt/speaker_match.py`. Called by backend and pusher (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
+- **diarizer** (`diarizer/main.py`) — `/v2/embedding`, `/v2/diarization`. Batch seam: `utils/stt/diarization.py`; naming: `utils/stt/speaker_match.py`. Backend/pusher use `HOSTED_SPEAKER_EMBEDDING_API_URL`.
 - **vad** (`modal/main.py`) — GPU. `/v1/vad`. Called by backend only.
-- **deepgram-self-hosted** — GPU STT deployment behind an explicit non-cloud endpoint. Hosted Deepgram serves the live streaming surface (`dg-nova-3` first, `DEEPGRAM_API_KEY`); it stays off batch. A deployment that sets `DEEPGRAM_SELF_HOSTED_ENABLED` must point at its own endpoint — never `api.deepgram.com`.
+- **Deepgram** — Retired 2026-08-27. Absent from `config/stt_provider_policy.py`, no `DEEPGRAM_*` env in serving manifests, self-hosted chart deleted ([fleet retirement](docs/runbooks/audio-fleet.md#self-hosted-deepgram-retirement)). Do not route or add keys.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and Parakeet is selected. Clients must not call it directly — they go through the authed backend proxy `POST /v1/stt/transcribe` (`routers/stt.py`).
 - **modulate** — Managed STT provider for configured languages. Called by backend when `MODULATE_API_KEY` is configured and Modulate is selected.
 - **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.
-- **backend-sync** (`main.py`, same image as backend) — Cloud Run admission service for `/v2/sync-local-files`. The server classifies whole batches: recordings no more than six hours old enter `sync-jobs` (fresh), while older or untrusted batches enter `sync-backfill` and the scale-to-zero **backend-sync-backfill** worker. Fresh keeps its bounded inline fallback; backfill never falls into fresh/inline capacity. Backfill defaults to one in-flight job per UID, four processed speech hours per UID/day, 555 processed speech hours globally/day, a 30-day lookback, and four queue workers. Live fair-use reads only `realtime + sync_fresh`; `sync_backfill` is separately metered. A 45-day Firestore content ledger protects transcription and usage side effects across job expiry and re-upload. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`) — per-part files plus one dense per-conversation `conversation.mp3` whose spans manifest + audio_files fingerprint are stamped on the conversation doc (`conversation_audio`); a fingerprint mismatch after late chunks re-enqueues the build. In production, account deletion requires `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` and complete Cloud Tasks bindings to enqueue opaque job IDs to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; startup rejects inline or incomplete configuration, reconciliation only re-dispatches tasks so the OIDC handler is the sole wipe executor, and the post-deploy queue-drain window accepts the former sync OIDC audience only for legacy UID payloads. API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
-- **notifications-job** (`modal/job.py`) — Hourly cron job, reads Firestore/Redis, sends push notifications, runs X connector sync, and emits the weekly read-only Chat-first materialization-health verdict consumed by its routed Cloud Monitoring decision review. No canonical maintenance flags or Typesense secrets; its deploy removes only those bindings and keeps other notification/X-sync env. Selection mode + run lock: `docs/runbooks/daily-summary-cutover.md`.
-- **memory-maintenance-job** (`modal/memory_maintenance_job.py`) — Cloud Run Job for canonical maintenance (TTL audit → terminal consolidation/promotion; explicit-submission L2 is folded into the consolidation planner). Deploy manually via `.github/workflows/gcp_memory_maintenance_job.yml`; auto-dev on `main` via `gcp_memory_maintenance_job_auto_dev.yml`. Request-path product enablement is one flag (`MEMORY_ENABLED=on|off`; code default off; both overlays on). Maintenance stays a separate ops switch (`MEMORY_CANONICAL_MAINTENANCE_ENABLED`); `MEMORY_ENABLED=on` must not require the ST→LT cron. Both env overlays pin the job-hosted cron on with `MEMORY_CANONICAL_MAINTENANCE_FLEX=true` (Luna `omi:auto:memory-conflict-flex`; `memory-l2-flex` remains for non-job required-processing callers). Env contract is validated by `backend/scripts/validate-backend-runtime-env.py`; Scheduler owns cadence. When enabled, consolidation uses the gateway-only Luna Flex lane; workflows derive the endpoint after the serving gate and Cloud Run VPC probe.
-- **monitoring** (`backend/charts/monitoring/`) — Prometheus, Grafana, Loki, Alloy, alerts, and HPA metric adapters for backend services.
+- **backend-sync** (`main.py`, same image as backend) — Cloud Run `/v2/sync-local-files` admission: batches ≤6 hours old enter `sync-jobs`; older/untrusted batches enter `sync-backfill` → **backend-sync-backfill**. Fresh keeps its bounded inline fallback; backfill never falls into fresh/inline capacity. Backfill defaults to one in-flight job per UID, four processed speech hours per UID/day, 555 processed speech hours globally/day, a 30-day lookback, and thirty concurrent dispatches (30/second cap). Live fair-use reads only `realtime + sync_fresh`; `sync_backfill` is separately metered. A 45-day Firestore content ledger protects transcription and usage side effects across job expiry and re-upload. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`) — per-part files plus one dense per-conversation `conversation.mp3` whose spans manifest + audio_files fingerprint are stamped on the conversation doc (`conversation_audio`); a fingerprint mismatch after late chunks re-enqueues the build. In production, account deletion requires `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` and complete Cloud Tasks bindings to enqueue opaque job IDs to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; startup rejects inline or incomplete configuration, reconciliation only re-dispatches tasks so the OIDC handler is the sole wipe executor, and the post-deploy queue-drain window accepts the former sync OIDC audience only for legacy UID payloads. Only `?grace=true` requests with the kill switch on and a positive window persist a pending-deletion marker and complete immediate billing/session revocation before API success; requests without opt-in dispatch an immediate wipe. The reconciler dispatches grace wipes after `wipe_due_at`. See `docs/runbooks/account-deletion-grace-period.md`.
+- **notifications-job** (`modal/job.py`) — Every-15-minute cron job for local-hour delivery, reads Firestore/Redis, sends push notifications and emits the read-only Redis memory check. Automatic Chat materialization and its weekly decision review are retired. No canonical maintenance flags or Typesense secrets; its deploy removes only those bindings and keeps notification env. Recipient reads + run lock: `docs/runbooks/daily-summary-cutover.md`.
+- **monitoring** (`backend/charts/monitoring/`) — Prometheus/Grafana, Loki/Alloy, alerts and HPA adapters. Sync export flags, sizing and CPU audit: [runbook](docs/runbooks/sync-cloudrun-rightsizing.md).
 - **backend-secrets** (`backend/charts/backend-secrets/`) — ExternalSecret and SecretStore resources that sync backend runtime secrets into GKE namespaces.
 
-Backend runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `backend/scripts/pre-deploy-check.sh` after backend runtime env or deploy workflow changes. The backend deploy must validate the exact JSON state emitted by `render_backend_runtime_env.py --state-output`, and any Cloud Run export/replace editor must preserve those literal values before apply. The `llm_gateway` manifest section owns the release, ingress, and static-address identity; a reserved address alone is never an endpoint contract. Gateway-mode promotion requires the control-plane gate plus `probe-llm-gateway-from-cloud-run.sh` before Cloud Run revisions are created.
+[Reset recovery](docs/locked-content-reset-recovery.md). Dark funded-STT admission and held-audio recovery: [dispatch contract](docs/stt-cap-dispatch.md).
+
+Runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `backend/scripts/pre-deploy-check.sh` after backend runtime env or deploy workflow changes. The backend deploy must validate the exact JSON state emitted by `render_backend_runtime_env.py --state-output`, and any Cloud Run export/replace editor must preserve those literal values before apply. The `llm_gateway` manifest section owns the release, ingress, and static-address identity; a reserved address alone is never an endpoint contract. Gateway-mode promotion requires the control-plane gate plus `probe-llm-gateway-from-cloud-run.sh` before Cloud Run revisions are created.
 
 Subscription plan contract: edit `config/plan_catalog.json`, then run `python scripts/generate_plan_catalog.py`; runtime code imports `config.plan_catalog`, never JSON or a copied plan set. Before review run `python scripts/generate_plan_catalog.py --check --base-ref origin/main`. Current Stripe amounts are import-blocked; follow `.github/agent-docs/plan-source-of-truth.md` and never publish or rebind a Price from an ordinary code-change workflow.
 
-Firestore index boundary: backend deploy workflows run `reconcile_firestore_indexes.py --check-only` against `RUNTIME_GCP_PROJECT_ID` in an isolated approved-source job using dedicated read-only credentials. Auto-dev deploys accept only a first-attempt successful same-repository `Release Eligibility` proof for `main` whose `head_sha` still equals freshly fetched and checked-out `main`, then use that admitted SHA for every source-derived step; manual **deploy** mode accepts only an exact main SHA with the same successful proof. Traffic-only repair leaves that input empty and stays source-independent because it changes no source-derived runtime state. A failed gate writes and locally revalidates a short-lived, redacted create-only proposal before upload; backend deployment must never mutate the serving schema. `gcp_firestore_indexes.yml` automatically creates missing composite indexes after a manifest merge, then fails visibly if generated field exemptions are not serving. Single-field exemptions are a separate manual `field-exemptions` operation, prod-environment protected and exact-confirmed with `APPLY_FIRESTORE_FIELD_EXEMPTIONS`; it disables only the generated fields and verifies them afterward. Composite reconciliation remains create-only, so undeclared live composites are warnings rather than deletions.
+Firestore schema rollout, readiness, and change controls are documented in [Firestore queries and indexes](../.github/agent-docs/firestore-queries-and-indexes.md).
 
 Update this map for inter-service call changes. For audio, transcription, conversation lifecycle (including advisory cross-device overlap links), speakers, or listen/pusher WebSocket changes, update `backend/docs/listen_pusher_pipeline.mdx` in the same PR; it owns the overlap env/wire contract.
 
@@ -170,6 +178,13 @@ Runtime-selected providers must keep model-token parsing and required environmen
 
 **Firestore** (primary store): use `get_firestore_client()` from `database._client` at call time, and add optional keyword-only `firestore_client` parameters on converted database helpers so tests can inject fake clients. `db` remains a legacy lazy compatibility proxy only; do not use it in new code. Never construct Firestore clients at import time. Segments are encrypted at rest — direct Firestore reads return opaque blobs. Feature gating via user fields: e.g., translation requires `users/{uid}.language` non-empty — silently disabled if missing.
 
+### Firestore queries and indexes
+
+See [Firestore queries and indexes](../.github/agent-docs/firestore-queries-and-indexes.md) for query-driver, index-declaration, deployment, oracle, and alert-response workflow.
+Change checklist (driver registry, Dream drivers, `BODY_DIGEST` re-pin, index declaration, enforcing guard tests): [docs/firestore-query-checklist.md](docs/firestore-query-checklist.md).
+
+The changed-file backend unit selector runs the Firestore guard set for every serving-query inventory Python source change, including router/helper changes, and for manifest, registry, and guard-support changes. `Backend unit suite` is not a required branch-protection status check today; making it required is an owner decision. The readiness-gate workflow callsites are listed and discoverable in the linked Firestore guide.
+
 **Redis** (cache/rate-limiting/locks): `from database import redis_db` — **fail-open** (all errors caught and logged, requests proceed). Rate limiting via Lua scripts. `try_acquire_listen_lock(uid)` prevents duplicate WS connections.
 
 ## Auth
@@ -182,12 +197,13 @@ Rate limiting: `Depends(auth.with_rate_limit(get_current_user_uid, "policy_name"
 
 ## Logging Security
 
-Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.log_sanitizer`.
+Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils/log_sanitizer`.
 
 - `sanitize()` for `response.text`, API responses, error bodies.
 - `sanitize_pii()` for names, emails, user text.
 - Keep UIDs, IPs, status codes visible for debugging.
 - Never put raw `response.text` in exception messages.
+- BYOK provider failures are user account state: typed 429 + one WARNING (`byok=true ...`), never ERROR — [runbook](docs/runbooks/byok-provider-failures.md).
 
 ## Error Composition & Memory
 
@@ -202,7 +218,7 @@ bash test.sh             # Run all tests (CI source of truth)
 npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention for listen cleanup/content
 ```
 
-**Tests are selector-driven.** `scripts/run-unit-ci.sh` is the full GitHub Actions contract: it selects changed-file tests on PRs, runs preflight and type-checking, then invokes `test.sh`; main CI uses it with `--all`. Local pre-push intentionally keeps its own 40-file cap and runs changed test files when a broad selector exceeds that budget. Do not make the hook call the CI runner: bounded push latency protects the normal development loop. Local `test.sh` runs the selected set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.
+**Tests are selector-driven.** `scripts/run-unit-ci.sh` is the full GitHub Actions contract: it selects changed-file tests on PRs, runs preflight and type-checking, then invokes `test.sh`; main CI uses it with `--all`. Local pre-push intentionally keeps its own 40-file cap and runs changed test files when a broad selector exceeds that budget. Do not make the hook call the CI runner: bounded push latency protects the normal development loop. Local `test.sh` runs the selected set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`. The `Backend Unit Tests` workflow fans the same selection out to six shard jobs (sorted round-robin slices, union = the full selection), each under a 720 s wall budget; every file keeps its own pytest process because sharing sessions is blocked by `sys.modules` contamination. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.
 
 **Runtime image contracts.** `runtime_images.json` registers each deployed Python image, its Dockerfile, build context, entrypoints, and deployment workflows. Run `make runtime-image-source-closure` to verify final-stage first-party source closure and that every registered deployment workflow smokes its declared Dockerfile; it is the fast pre-push and CI gate. `make runtime-image-smoke SERVICE=pusher` builds one image, checks every reachable third-party module is installed offline, then imports the registered isolated entrypoint. PR CI builds every registry-selected CPU image; deployment workflows build, smoke, then publish. GPU images use the same dependency-presence probe after their deployment build but defer full import until model initialization is lazy. Do not add a hand-maintained image-layout test or workflow mapping; add the service to the registry instead.
 
@@ -226,7 +242,7 @@ Live suites record `NOT_RUN` when credentials/backend are unavailable — never 
 
 ## Self-Testing a Change (run the real path)
 
-A passing unit test is not the same as exercising the endpoint. Before putting a change in a PR:
+Before a PR, exercise the endpoint:
 
 1. **Serve locally**: `./scripts/dev-serve.sh` (per-worktree port) or `uvicorn main:app --port 8080`. No GCP credentials? Use the offline harness — `PROVIDER_MODE=offline make dev-up` from the repo root (fake providers, no external services).
 2. **Authenticate without a client**: set `ADMIN_KEY` in `.env`, then call endpoints as any uid with `Authorization: Bearer <ADMIN_KEY><uid>` (the key concatenated with the uid).
@@ -258,7 +274,8 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
   - **Long-running pipelines must be async coordinators.** Each blocking step uses `await run_blocking(pool, fn)`, borrowing a thread only for that step. Never hold a thread pool slot across await points or for >60s.
   - **Pool assignment** (match work type to pool):
     - `critical_executor` (8w) — auth gates only: `_verify_ws_auth`, `validate_byok_websocket`, `check_rate_limit`, `is_hard_restricted`, session/code Redis ops in `auth.py`
-    - `db_executor` (24w) — Firestore/Redis CRUD, vector DB queries
+    - `db_executor` (32w; `PUSHER_DB_EXECUTOR_WORKERS`) — Firestore/Redis CRUD, vector DB queries
+    - `record_barrier_executor` (16w; `PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS`) — pusher custody transactions; 64 queued, async capacity wait
     - `llm_executor` (6w) — LLM API calls (`get_llm().invoke()`, `get_app_result()`, persona generation, KG rebuild with cap 4)
     - `stripe_executor` (4w) — Stripe API calls
     - `sync_executor` (16w) — sync endpoint pipeline work, parent calls that fan out to storage_executor
@@ -302,8 +319,7 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work
 10. **New fallbacks** — call `utils.observability.fallback.record_fallback` (see `.github/agent-docs/fallback-telemetry.md`); do not invent a new `*_fallback_total` Counter
-11. **Queue caps for user data** — `private_cloud_queue` uses `deque(maxlen=20)` to prevent OOM kills (sized for 30 conns/pod); dropping oldest chunk is better than killing the pod and losing ALL data for ALL users
+11. **Audio custody** — never drop uncommitted audio. Queue durable receipts and backpressure producers; see the [runbook](docs/runbooks/audio-durable-outbox.md).
 12. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
-13. **DG keepalive vs response timeout** — `keep_alive()` prevents DG's 10s idle timeout but NOT 1011 response timeout after all audio is processed. Post-session 1011 is benign.
 
 Speaker assignments: [owner and teaching](docs/listen_pusher_pipeline.mdx).

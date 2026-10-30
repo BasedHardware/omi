@@ -177,7 +177,10 @@ PLIST
 PLIST
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
-  chmod +x "$app/Contents/MacOS/Omi Computer" "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/ffmpeg"
+  chmod +x "$app/Contents/MacOS/Omi Computer" \
+    "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node" \
+    "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/ffmpeg"
   # The runtime payload pi-mono loads after the bridge script. Non-empty on
   # purpose: a zero-byte entry point cannot answer a turn either.
   printf 'runtime\n' > "$app/Contents/Resources/agent/dist/index.js"

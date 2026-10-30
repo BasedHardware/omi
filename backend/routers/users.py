@@ -8,7 +8,7 @@ import os
 import asyncio
 
 import pytz
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -20,14 +20,19 @@ from database import (
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
     llm_usage as llm_usage_db,
+    people as people_db,
     users as users_db,
 )
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
-from services.users.data_export import iter_user_data_export
-from services.users.account_deletion import background_wipe_user_data, start_account_deletion
+from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
+from services.users.data_export_response import DataExportStreamingResponse
+from services.users.account_deletion import run_deletion_wipe_with_lease
+from routers.account_deletion import router as account_deletion_router
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
+from database.conversation_scan import conversation_scan_budget, people_stats_scan
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -38,6 +43,7 @@ from database.redis_db import (
     enable_user_webhook_db,
     user_webhook_status_db,
     set_user_preferred_app,
+    clear_user_preferred_app,
     set_user_data_protection_level,
     get_generic_cache,
     set_generic_cache,
@@ -46,6 +52,7 @@ from database.redis_db import (
     remove_daily_summary_to_uid,
 )
 
+from utils.storefront_copy import format_money
 from utils.chat_rating_triage import extract_rating_triage_fields, normalize_rating_reason
 from database.users import (
     claim_deletion_wipe_for_task,
@@ -53,10 +60,18 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
+from utils import screen_vector_entitlements
+from utils.observability.fallback import record_fallback
+from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
+from utils.sync.held_audio_summary import attach_subscription_held_audio
+from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled, recovery_cohort_admits
+from utils.generated_compute import require_generated_compute, generated_compute_configured
+from models.users import ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from utils.feedback import record_chat_message_feedback
+from utils.product_metrics import sanitize_app_build
 from utils.marketplace_reviewers import is_marketplace_reviewer
 from database.users import *
 from models.conversation import Conversation
@@ -87,9 +102,12 @@ from models.users import (
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
+from database.fsr_read_cache import fresh_cache_reads
 from utils.subscription import (
+    DESKTOP_CHAT_BYOK_PROVIDER,
     resolve_transcription_allowance,
     request_has_llm_byok_key,
+    request_has_byok_provider,
     enforce_chat_quota,
     get_chat_quota_snapshot,
     get_basic_plan_limits,
@@ -118,7 +136,8 @@ from utils.cloud_tasks import (
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
 )
-from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
+from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -131,14 +150,24 @@ from utils.other.notifications import (
 )
 from models.notification_message import NotificationMessage
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
+from utils.daily_summary_validation import (
+    DailySummaryUnavailable,
+    read_daily_summary_page,
+    require_daily_summary,
+    validate_daily_summaries,
+)
+from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_allowed
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
+from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
     delete_all_conversation_recordings,
     get_speech_sample_signed_urls,
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
+from utils.people_stats import apply_people_stats, collect_people_stats
 from utils.webhooks import button_event_webhook, webhook_first_time_setup
 from utils.byok import (
     get_byok_key,
@@ -151,6 +180,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(account_deletion_router)
 
 
 class MigrationRequest(BaseModel):
@@ -224,6 +254,7 @@ class UserDataExportResponse(BaseModel):
     action_items: List[Dict[str, Any]] = Field(default_factory=list)
     task_data: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
     chat_messages: List[Dict[str, Any]] = Field(default_factory=list)
+    export_complete: Optional[bool] = None
 
 
 class StoreRecordingPermissionResponse(BaseModel):
@@ -278,23 +309,6 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=410, detail="User not found")
     profile.setdefault('uid', uid)
     return profile
-
-
-class DeleteAccountRequest(BaseModel):
-    reason: Optional[str] = None
-    reason_details: Optional[str] = None
-
-
-@router.delete('/v1/users/delete-account', tags=['v1'], response_model=UserStatusResponse)
-def delete_account(
-    request: DeleteAccountRequest = DeleteAccountRequest(),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    try:
-        return start_account_deletion(uid, reason=request.reason, reason_details=request.reason_details)
-    except Exception as e:
-        logger.info(f'delete_account {sanitize(str(e))}')
-        raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
 
 
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse
@@ -352,13 +366,7 @@ async def run_account_deletion_wipe(
 
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
-        ok = await run_blocking(
-            cleanup_executor,
-            background_wipe_user_data,
-            uid,
-            task_authentication.retry_count,
-            terminal,
-        )
+        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token)
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 
@@ -428,6 +436,17 @@ def set_user_webhook_endpoint(
     wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     url = data.url
+    # Reject a non-public target at configuration time, so an internal/loopback/metadata address
+    # is a 400 here rather than an SSRF from the backend's network position at delivery time.
+    target = webhook_url_from_setting(wtype, url)
+    if target:
+        try:
+            safe_request_target(target)
+        except (UnsafeWebhookURLError, ValueError):
+            # UnsafeWebhookURLError: non-public/unresolvable target. ValueError: the shared URL
+            # validator raises it for a malformed URL (e.g. an invalid IPv6 literal) — both are a
+            # bad configuration, so answer 400 rather than letting it escape as a 500.
+            raise HTTPException(status_code=400, detail='Webhook URL must be a valid public http(s) address')
     set_user_webhook_db(uid, wtype, url)
     if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)
@@ -556,14 +575,14 @@ class OnboardingStateUpdate(BaseModel):
 @router.patch('/v1/users/onboarding', tags=['v1'], response_model=UserStatusResponse)
 def update_onboarding_state(data: OnboardingStateUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """Update the user's onboarding state."""
-    current_state = get_user_onboarding_state(uid)
+    updates = {}
     if data.completed is not None:
-        current_state['completed'] = data.completed
+        updates['completed'] = data.completed
     if data.acquisition_source is not None:
-        current_state['acquisition_source'] = data.acquisition_source
+        updates['acquisition_source'] = data.acquisition_source
     if data.device_onboarding_completed is not None:
-        current_state['device_onboarding_completed'] = data.device_onboarding_completed
-    set_user_onboarding_state(uid, current_state)
+        updates['device_onboarding_completed'] = data.device_onboarding_completed
+    set_user_onboarding_state(uid, updates)
     return {'status': 'ok'}
 
 
@@ -601,15 +620,14 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
     if existing_person:
         return existing_person
 
-    # Create new person
+    # Create new person unless a concurrent or retried request with this name just did
     person_data = {
         'id': str(uuid.uuid4()),
         'name': data.name,
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
-    result = create_person(uid, person_data)
-    return result
+    return people_db.get_or_create_person_by_name(uid, person_data)
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
@@ -619,7 +637,12 @@ def get_single_person(
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    person = Person(**person)
+    # A malformed/legacy doc (e.g. missing the required name) must read as not-found, not 500:
+    # the list endpoint already skips these via Person.deserialize_many_safe (#8264).
+    people = Person.deserialize_many_safe([person])
+    if not people:
+        raise HTTPException(status_code=404, detail="Person not found")
+    person = people[0]
     if include_speech_samples:
         # Convert stored GCS paths to signed URLs
         stored_paths = person.speech_samples
@@ -628,9 +651,21 @@ def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+def get_all_people(
+    include_speech_samples: bool = True,
+    include_stats: bool = False,
+    uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
+):
     logger.info(f'get_all_people {include_speech_samples}')
+    budget = conversation_scan_budget(request, route='people-stats') if include_stats else None
     people = Person.deserialize_many_safe(get_people(uid))
+    if include_stats and people:
+        stats = collect_people_stats(people_stats_scan(uid, budget=budget), uid=uid, budget=budget)
+        apply_people_stats(people, stats)
+    if budget is not None:
+        finish_list_budget(response, budget)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
@@ -703,14 +738,14 @@ class FollowupQuestionResponse(BaseModel):
 
 
 @router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], response_model=FollowupQuestionResponse)
-def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
         memory = get_in_progress_conversation(uid)
         if not memory:
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
         memory = get_conversation(uid, memory_id)
-    if not memory:
+    if not memory or memory.get('deleted', False):
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
@@ -755,6 +790,8 @@ def set_chat_message_analytics(
     message_id: str,
     value: int,
     reason: str = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -769,18 +806,30 @@ def set_chat_message_analytics(
     snapshot = chat_db.update_message_rating(uid, message_id, rating_value) or {}
     triage = extract_rating_triage_fields(snapshot)
     normalized_reason = normalize_rating_reason(reason)
+    app_version = (x_app_version or '').strip()[:64] or None
+    app_build = sanitize_app_build(x_app_build, x_app_version)
     set_chat_message_rating_score(
         uid,
         message_id,
         value,
         reason=normalized_reason,
         platform='mobile',
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
         notification_kind=triage.get('notification_kind'),
         app_id=triage.get('app_id'),
     )
 
     # Unified feedback ledger — the daily thumbs-down report reads from here.
-    record_chat_message_feedback(uid, message_id, value, reason=normalized_reason, platform='mobile')
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        reason=normalized_reason,
+        platform='mobile',
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
+    )
 
     # Try to submit feedback to LangSmith if the message has a run_id
     try:
@@ -884,6 +933,9 @@ def update_transcription_preferences_endpoint(
     - single_language_mode: If True, uses exact language for higher accuracy but disables translation
     - vocabulary: List of custom keywords/terms (max 100) for better transcription accuracy
     """
+    # Refuse a longer list: storing only its first 100 terms and answering ok made the rest look saved.
+    if data.vocabulary is not None and len(data.vocabulary) > 100:
+        raise HTTPException(status_code=400, detail='Custom vocabulary is limited to 100 terms')
     set_user_transcription_preferences(uid, single_language_mode=data.single_language_mode, vocabulary=data.vocabulary)
     return {'status': 'ok'}
 
@@ -909,19 +961,22 @@ def handle_migration_requests(
                 conversations_db.migrate_conversations_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
+                logger.error(f"Failed to migrate conversation {request.id}: {sanitize(str(e))}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}")
         elif request.type == 'memory':
             try:
                 memories_db.migrate_memories_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate memory {request.id}: {e}")
+                logger.error(f"Failed to migrate memory {request.id}: {sanitize(str(e))}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Failed to migrate memory {request.id}")
         elif request.type == 'chat':
             try:
                 chat_db.migrate_chats_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}: {e}")
+                logger.error(f"Failed to migrate chat message {request.id}: {sanitize(str(e))}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}")
         else:
             raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
     elif isinstance(request, MigrationTargetRequest):
@@ -974,9 +1029,8 @@ def handle_batch_migration_requests(
             else:
                 errors.append(f"Unknown object type for migration: {req_type}")
         except Exception as e:
-            error_detail = f"Failed to migrate batch of type {req_type}: {e}"
-            logger.info(error_detail)
-            errors.append(error_detail)
+            logger.error(f"Failed to migrate batch of type {req_type}: {sanitize(str(e))}", exc_info=True)
+            errors.append(f"Failed to migrate batch of type {req_type}")
 
     if errors:
         raise HTTPException(status_code=500, detail={"message": "Some objects failed to migrate.", "errors": errors})
@@ -1019,6 +1073,18 @@ def set_preferred_app_for_user(
         raise HTTPException(status_code=500, detail="Failed to store app preference.")
 
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}
+
+
+@router.delete('/v1/users/preferences/app', tags=['v1'], response_model=UserStatusResponse)
+def clear_preferred_app_for_user(uid: str = Depends(auth.get_current_user_uid)):
+    """Clears the user's preferred app: future processing uses Omi's own summary. Idempotent."""
+    try:
+        clear_user_preferred_app(uid)
+    except Exception as e:
+        logger.error(f"Failed to clear preferred app in Redis for user {uid}: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Failed to clear app preference.")
+
+    return {"status": "ok", "message": "Preferred app cleared."}
 
 
 # **************************************
@@ -1074,9 +1140,21 @@ def set_location_context_consent(update: LocationContextConsentUpdate, uid: str 
 def get_user_usage_stats_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
     period: UsagePeriod = UsagePeriod.TODAY,
+    time_zone: str | None = None,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
-    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=notification_db.get_user_time_zone(uid))
+
+    def valid_zone(value: str | None) -> str | None:
+        if not value:
+            return None
+        try:
+            pytz.timezone(value)
+        except (pytz.UnknownTimeZoneError, ValueError):
+            return None
+        return value
+
+    zone = valid_zone(time_zone) or valid_zone(notification_db.get_user_time_zone(uid)) or 'UTC'
+    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=zone)
     return stats
 
 
@@ -1150,6 +1228,7 @@ def _byok_unlimited_subscription(
 
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
 def get_user_subscription_endpoint(
+    request: Request,
     # Keep reachable even when BYOK fingerprints drift — broken-BYOK users
     # must still see their plan so they can recover.
     uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
@@ -1158,26 +1237,100 @@ def get_user_subscription_endpoint(
 ):
     """Gets the user's subscription plan and usage, plus the one transcription-allowance answer."""
     already_read: dict[str, Any] = {}
-    response = _user_subscription_response(uid, x_app_platform, x_app_version, already_read)
-    # The same resolver the listen socket enforces, so the client's startup
-    # snapshot and the server's gate cannot disagree about which STT mode to
-    # open. `X-App-Platform` plays the listen `source` role for the paywall,
-    # and the subscription/usage the snapshot already read are reused.
-    allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
+    # Both released mobile and desktop clients use this route to unlock after checkout.
+    # They send no payment-refresh marker, so every entitlement refresh must be fresh.
+    with fresh_cache_reads(uid, 'subscription_cache'):
+        response = _user_subscription_response(
+            uid, x_app_platform, x_app_version, already_read, request.headers.get('X-Omi-Plan-Identity')
+        )
+    if funded_processing_enabled(uid):
+        from utils import funded_processing
+
+        funded = funded_processing.allowance(
+            uid, **{key: value for key, value in already_read.items() if key in {'subscription', 'usage'}}
+        )
+        allowance = (
+            resolve_transcription_allowance(
+                uid,
+                source=x_app_platform,
+                **{
+                    key: value for key, value in already_read.items() if key in {'subscription', 'usage', 'byok_active'}
+                },
+            )
+            if already_read.get('byok_active')
+            else funded
+        )
+    else:
+        allowance = resolve_transcription_allowance(
+            uid,
+            source=x_app_platform,
+            **{key: value for key, value in already_read.items() if key in {'subscription', 'usage', 'byok_active'}},
+        )
+        funded = allowance
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
+    # Resolve from the real subscription, never the synthetic BYOK response plan.
+    try:
+        if 'subscription' not in already_read:
+            already_read['subscription'] = users_db.get_user_valid_subscription(uid, provision=False)
+        if already_read.get('screen_vector_authority_unavailable'):
+            raise screen_vector_entitlements.ScreenVectorAuthorityUnavailable('Billed identity unavailable')
+        response.cloud_screen_vectors = screen_vector_entitlements.resolve_subscription(
+            uid, already_read.get('subscription'), already_fresh=already_read.get('screen_vector_identity_fresh', False)
+        )['capabilities']['cloud_screen_vectors']
+    except Exception:
+        # This additive display field must not break the existing recovery endpoint.
+        # Unknown authority grants neither a capability nor a false Free-plan denial.
+        record_fallback(
+            component='firestore_read',
+            from_mode='subscription_capability',
+            to_mode='unknown',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+    # A closed result with no resolved total is not an unlimited allowance.
+    # Keep the already-built finite snapshot instead of emitting the wire's
+    # 0 == unlimited sentinel. Known totals (including exhaustion) still win.
+    if allowance.remaining_seconds is None or (allowance.limit_seconds is not None and allowance.limit_seconds > 0):
+        response.transcription_seconds_limit = allowance.limit_seconds or 0
+        response.subscription.limits.transcription_seconds = allowance.limit_seconds
+    # Dispatch off: leave held_audio unset so the response omits the field.
+    # On: reuse this allowance, kick recovery without waiting, and read the
+    # running summary (plus a short newest-first page when the count is positive).
+    attach_subscription_held_audio(response, uid, funded, already_read.get('subscription'))
+    if funded_processing_enabled(uid):
+        from utils import processing_backlog
+
+        held = response.held_audio
+        audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
+        response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
     return response
 
 
-def _user_subscription_response(
-    uid: str, x_app_platform: Optional[str], x_app_version: Optional[str], already_read: dict[str, Any]
-) -> UserSubscriptionResponse:
-    """The subscription/usage snapshot, unchanged; the endpoint decorates it.
+@router.post('/v1/users/processing-backlog/process', response_model=ProcessingBacklog, tags=['v1'])
+def process_waiting_recordings(
+    uid: str = Depends(auth.get_current_user_uid),
+    idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=8, max_length=128),
+):
+    if not recovery_cohort_admits(uid) or not funded_processing_enabled(uid):
+        raise HTTPException(status_code=404, detail='Not found')
+    from utils import processing_backlog
 
-    ``already_read`` receives the BYOK enrolment, the valid subscription
-    (``None`` when there is none) and the monthly usage this snapshot reads,
-    so the allowance is resolved from the same reads rather than repeating
-    them.
-    """
+    processing_backlog.choose(uid, request_key=idempotency_key)
+    snapshot = processing_backlog.snapshot(uid)
+    if snapshot is not None and snapshot.state == 'capped':
+        raise HTTPException(status_code=402, detail={'error': 'usage_budget_exhausted', 'trigger': 'usage_budget'})
+    return snapshot
+
+
+def _user_subscription_response(
+    uid: str,
+    x_app_platform: Optional[str],
+    x_app_version: Optional[str],
+    already_read: dict[str, Any],
+    plan_identity_version: Optional[str],
+) -> UserSubscriptionResponse:
+    """Read subscription/usage once, reusing those reads for the allowance."""
     # BYOK free plan: unlimited chat/insights only for a validated LLM-capability
     # key (same predicate as enforce_chat_quota). Deepgram-only does not unlock this.
     # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
@@ -1187,11 +1340,7 @@ def _user_subscription_response(
     byok_active = users_db.is_byok_active(uid)
     already_read['byok_active'] = byok_active
     if byok_active and request_has_llm_byok_key():
-        # Snapshot split: a validated LLM key unlocks unlimited chat/insights, but
-        # backend transcription credits still flow through Omi's Deepgram, so the
-        # transcription/words fields stay metered on the free tier unless this
-        # request also carries a validated Deepgram key (same predicate as
-        # has_transcription_credits).
+        # Preserve synthetic Neo feature access; the outer resolver supplies the STT budget.
         if get_byok_key('deepgram'):
             return UserSubscriptionResponse(
                 subscription=_byok_unlimited_subscription(),
@@ -1205,7 +1354,12 @@ def _user_subscription_response(
                 show_subscription_ui=False,
                 phone_call_quota=unlimited_phone_quota,
             )
-        usage = get_monthly_usage_for_subscription(uid)
+        if funded_processing_enabled(uid):
+            from utils.funded_processing import monthly_usage
+
+            usage = monthly_usage(uid)
+        else:
+            usage = get_monthly_usage_for_subscription(uid)
         already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
         basic_limits = get_basic_plan_limits()
         return UserSubscriptionResponse(
@@ -1262,15 +1416,19 @@ def _user_subscription_response(
         # Return default basic plan if no valid subscription
         subscription = get_default_basic_subscription()
 
-    # Get current price ID from Stripe if subscription exists
-    if subscription.stripe_subscription_id:
-        try:
-            stripe_sub = stripe_utils.stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-            stripe_sub_dict = stripe_sub.to_dict()
-            if stripe_sub_dict and stripe_sub_dict.get('items', {}).get('data'):
-                subscription.current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
-        except Exception as e:
-            logger.error(f"Error retrieving current price ID: {e}")
+    # Explicit subscription refresh bypasses the bounded frame cache. Reuse its
+    # real identity for capability and allowance before either client plan remap.
+    try:
+        refreshed = screen_vector_entitlements.refresh_subscription(
+            uid, already_read['subscription'], force_refresh=True
+        )
+        already_read['subscription'] = refreshed
+        already_read['screen_vector_identity_fresh'] = True
+        if refreshed is not None:
+            subscription.current_price_id = refreshed.current_price_id
+    except Exception:
+        # Keep the existing subscription/allowance response, but not a guessed capability.
+        already_read['screen_vector_authority_unavailable'] = True
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
@@ -1285,7 +1443,12 @@ def _user_subscription_response(
         subscription.plan = PlanType.unlimited
 
     # Get current usage
-    usage = get_monthly_usage_for_subscription(uid)
+    if funded_processing_enabled(uid):
+        from utils.funded_processing import monthly_usage
+
+        usage = monthly_usage(uid)
+    else:
+        usage = get_monthly_usage_for_subscription(uid)
     already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
 
     # Calculate usage metrics
@@ -1314,8 +1477,7 @@ def _user_subscription_response(
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
 
-    # Build available plans. Version-gated: new clients see Operator + Architect,
-    # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
+    # Version-adapt identities, then filter retired plans from the purchase catalog.
     all_definitions = get_paid_plan_definitions()
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
@@ -1338,7 +1500,7 @@ def _user_subscription_response(
                     PricingOption(
                         id=price_data['id'],
                         title="Monthly",
-                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        price_string=f"{format_money(price_data['unit_amount'], price_data['currency'])}/{price_data['recurring']['interval']}",
                         description="Billed monthly. Cancel anytime.",
                     )
                 )
@@ -1360,7 +1522,7 @@ def _user_subscription_response(
                     PricingOption(
                         id=price_data['id'],
                         title="Annual",
-                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        price_string=f"{format_money(price_data['unit_amount'], price_data['currency'])}/{price_data['recurring']['interval']}",
                         description=definition["annual_description"],
                     )
                 )
@@ -1390,6 +1552,14 @@ def _user_subscription_response(
             )
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
+    # Read from the true plan, before the client remap below. Fail closed: when the Stripe customer
+    # lookup is unavailable the client must not promise a trial the checkout may refuse.
+    trial_eligible = False
+    if subscription.plan == PlanType.basic:
+        try:
+            trial_eligible = not users_db.get_stripe_customer_id(uid)
+        except Exception:  # noqa: BLE001 - eligibility is a promotion hint, never worth a 500
+            trial_eligible = False
 
     # Phone-call feature access + monthly free-tier usage snapshot.
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
@@ -1404,7 +1574,7 @@ def _user_subscription_response(
     # Grandfather is read from the true plan before the label is remapped for
     # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
     desktop_grandfather_until = neo_grandfather_until(subscription)
-    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
+    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version, plan_identity_version)
 
     return UserSubscriptionResponse(
         subscription=subscription,
@@ -1416,6 +1586,7 @@ def _user_subscription_response(
         insights_gained_limit=insights_gained_limit,
         available_plans=available_plans,
         show_subscription_ui=show_subscription_ui,
+        trial_eligible=trial_eligible,
         chat_quota_used=round(chat_snapshot['used'], 4),
         chat_quota_unit=chat_snapshot['unit'],
         chat_quota_percent=chat_percent,
@@ -1435,10 +1606,17 @@ def get_user_chat_usage_quota(
 
     Used by the desktop app. Mobile uses the subscription endpoint instead.
     """
-    # BYOK free plan: user brings their own keys, so there's no Omi-side cost
-    # to meter. Only return unlimited when BYOK headers are on the request (desktop).
-    # Mobile (no headers) should see real quota.
-    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
+    # Match enforce_desktop_chat_quota: only the provider actually used by
+    # desktop chat can exempt it. Other enrolled keys still use managed chat.
+    customer_client = get_customer_firestore_client()
+    from utils import ladder_v1
+
+    shared_budget = ladder_v1.budget_snapshot(uid, firestore_client=customer_client)
+    if (
+        shared_budget is None
+        and users_db.is_byok_active(uid, firestore_client=customer_client)
+        and request_has_byok_provider(DESKTOP_CHAT_BYOK_PROVIDER)
+    ):
         return ChatUsageQuota(
             plan='Free (BYOK)',
             plan_type=PlanType.unlimited.value,
@@ -1457,7 +1635,11 @@ def get_user_chat_usage_quota(
     # here while /v2/chat/completions gates on the customer project's, and the
     # two disagree for the same uid (#11199).
     snapshot = get_chat_quota_snapshot(
-        uid, platform=x_app_platform, firestore_client=get_customer_firestore_client(), provision=False
+        uid,
+        platform=x_app_platform,
+        firestore_client=customer_client,
+        provision=False,
+        required_llm_provider=DESKTOP_CHAT_BYOK_PROVIDER,
     )
     plan = snapshot['plan']
 
@@ -1475,7 +1657,9 @@ def get_user_chat_usage_quota(
         percent=percent,
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
-        is_overage_plan=plan_uses_overage(plan),
+        is_overage_plan=snapshot.get('is_overage_plan', plan_uses_overage(plan)),
+        chat_at_cap=snapshot.get('chat_at_cap'),
+        uses_shared_budget=snapshot.get('uses_shared_budget', False),
     )
 
 
@@ -1527,11 +1711,19 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
 class DailySummarySettingsResponse(BaseModel):
     enabled: bool
     hour: int  # Local hour (0-23) in user's timezone
+    depth: DailySummaryDepth = DEFAULT_DAILY_SUMMARY_DEPTH
 
 
 class DailySummarySettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
     hour: Optional[int] = None  # Local hour (0-23), e.g., 22 for 10 PM, 8 for 8 AM
+    depth: Optional[DailySummaryDepth] = None
+
+
+class DailySummarySettingsUpdateResponse(UserStatusResponse):
+    # An echo lets a new desktop client detect an older backend that silently
+    # ignores the additive PATCH field instead of falsely claiming it was saved.
+    depth: Optional[DailySummaryDepth] = None
 
 
 @router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
@@ -1542,6 +1734,7 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     Returns:
         - enabled: Whether daily summary notifications are enabled (default: True)
         - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
+        - depth: Recap detail level (brief by default)
     """
     enabled = notification_db.get_daily_summary_enabled(uid)
     local_hour = notification_db.get_daily_summary_hour_local(uid)
@@ -1550,10 +1743,12 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     if local_hour is None:
         local_hour = notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
 
-    return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
+    return DailySummarySettingsResponse(
+        enabled=enabled, hour=local_hour, depth=notification_db.get_daily_summary_depth(uid)
+    )
 
 
-@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=UserStatusResponse)
+@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsUpdateResponse)
 def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """
     Update user's daily summary notification settings.
@@ -1562,6 +1757,7 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         - enabled: Enable/disable daily summary notifications
         - hour: Preferred hour in local timezone (0-23).
                 Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)
+        - depth: brief, normal, or deep for newly generated recaps
 
     Note: Hour is stored as local time. The system determines when to send
     based on the user's timezone and will send the summary at the correct local time
@@ -1576,9 +1772,13 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         try:
             notification_db.set_daily_summary_hour_local(uid, data.hour)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            logger.error(f"Failed to set daily summary hour: {sanitize(str(e))}", exc_info=True)
+            raise HTTPException(status_code=400, detail="Invalid hour. Must be between 0 and 23.")
 
-    return {'status': 'ok'}
+    if data.depth is not None:
+        notification_db.set_daily_summary_depth(uid, data.depth)
+
+    return {'status': 'ok', 'depth': data.depth}
 
 
 def _memories_learned_payload(uid, conversations, start_date_utc, end_date_utc):
@@ -1611,6 +1811,7 @@ def test_daily_summary(
     Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
     """
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    require_generated_compute(uid, 'daily_summary')
     enforce_chat_quota(uid, platform=x_app_platform)
     time_zone_name = notification_db.get_user_time_zone(uid)
     tokens = notification_db.get_all_tokens(uid)
@@ -1651,7 +1852,10 @@ def test_daily_summary(
             start_date_utc = start_of_day.astimezone(pytz.utc)
             end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(
+                f"Failed to resolve user timezone for daily summary (uid={uid}): {sanitize(str(e))}", exc_info=True
+            )
+            raise HTTPException(status_code=500, detail='Failed to resolve user timezone.')
     else:
         now_utc = datetime.now(pytz.utc)
         if target_date:
@@ -1691,6 +1895,11 @@ def test_daily_summary(
         memories_learned=_memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
     )
 
+    # Validate before storing or sending anything, as in the shared scheduled/on-demand producer.
+    try:
+        require_daily_summary(summary_data, uid=uid, operation='test_generation_candidate')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
 
@@ -1827,14 +2036,19 @@ class CreateDailySummaryRequest(BaseModel):
 
 @router.get('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummariesResponse)
 def get_daily_summaries(
-    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,
 ):
     """
     Get list of daily summaries for the authenticated user.
     Returns summaries in reverse chronological order.
     """
-    summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
-    return {'summaries': summaries}
+    try:
+        return {'summaries': read_daily_summary_page(uid, limit=limit, offset=offset, request=request)}
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.post('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummaryResponse)
@@ -1861,7 +2075,11 @@ def create_user_daily_summary(
         try:
             today = datetime.now(pytz.timezone(time_zone_name)).date()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(
+                f"Failed to resolve user timezone for daily summary recap (uid={uid}): {sanitize(str(e))}",
+                exc_info=True,
+            )
+            raise HTTPException(status_code=500, detail='Failed to resolve user timezone.')
     else:
         today = datetime.now(pytz.utc).date()
     if target_date > today:
@@ -1869,9 +2087,13 @@ def create_user_daily_summary(
 
     date_str = target_date.strftime('%Y-%m-%d')
     existing = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-    if existing:
-        return existing
+    if existing and daily_summary_delivery_allowed(uid, existing):
+        try:
+            return require_daily_summary(existing, uid=uid, operation='create_existing').model_dump(exclude_unset=True)
+        except DailySummaryUnavailable:
+            raise HTTPException(status_code=503, detail='Stored daily recap data is temporarily unavailable') from None
 
+    require_generated_compute(uid, 'daily_summary')
     cooldown_key = f'daily_summary_create:{uid}:{date_str}'
     if get_generic_cache(cooldown_key):
         raise HTTPException(
@@ -1880,13 +2102,20 @@ def create_user_daily_summary(
         )
 
     start_date_utc, end_date_utc = local_day_bounds_utc(target_date, time_zone_name)
-    record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    try:
+        record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     if record:
+        try:
+            validated = require_daily_summary(record, uid=uid, operation='create_result')
+        except DailySummaryUnavailable:
+            raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
         # The cooldown exists to rate-limit LLM spend, so it is armed by a generation that
         # happened. Arming it before the call charged the user for attempts that cost nothing
         # and left them 429'd for 30s after a 400 they could have fixed by recording something.
         set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
-        return record
+        return validated.model_dump(exclude_unset=True)
 
     if declined == DAILY_SUMMARY_DECLINE_LOCKED:
         # Another writer — almost always the cron for the same day — is mid-generation. That is a
@@ -1894,6 +2123,30 @@ def create_user_daily_summary(
         # empty at the exact moment it was being summarized.
         raise HTTPException(status_code=409, detail='This recap is already being generated. Try again in a moment.')
     raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
+
+
+# Declared before `/v1/users/daily-summaries/{summary_id}` so `search` is not captured as an id.
+@router.get('/v1/users/daily-summaries/search', tags=['v1'], response_model=DailySummariesResponse)
+def search_daily_summaries(
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Search the user's recent daily summaries, newest first.
+
+    Case-insensitive substring match: every whitespace-separated term must appear
+    in the recap's readable text (headline, overview, highlights, action items,
+    questions, decisions, knowledge nuggets, learned memories, place addresses).
+    Only the latest 365 summaries are scanned.
+    """
+    summaries = daily_summaries_db.get_daily_summaries(uid, limit=DAILY_SUMMARY_SEARCH_WINDOW, offset=0)
+    try:
+        valid = validate_daily_summaries(summaries, uid=uid, operation='search')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
+    filtered = filter_daily_summaries([item.model_dump() for item in valid], query, limit)
+    return {'summaries': [DailySummaryResponse.model_validate(item) for item in filtered]}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
@@ -1904,7 +2157,10 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
-    return summary
+    try:
+        return require_daily_summary(summary, uid=uid, operation='detail')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'], response_model=UserStatusResponse)
@@ -1968,6 +2224,7 @@ def regenerate_daily_summary(
     except ValueError:
         raise HTTPException(status_code=400, detail='Daily summary has an invalid date')
 
+    require_generated_compute(uid, 'daily_summary')
     cooldown_key = f'daily_summary_regen:{uid}:{summary_id}'
     if get_generic_cache(cooldown_key):
         raise HTTPException(
@@ -1991,7 +2248,10 @@ def regenerate_daily_summary(
             start_date_utc = start_of_day.astimezone(pytz.utc)
             end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(
+                f"Failed to resolve user timezone for day conversations (uid={uid}): {sanitize(str(e))}", exc_info=True
+            )
+            raise HTTPException(status_code=500, detail='Failed to resolve user timezone.')
     else:
         start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
         end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
@@ -2025,10 +2285,19 @@ def regenerate_daily_summary(
         summary_data['created_at'] = summary['created_at']
     summary_data['regenerated_at'] = datetime.utcnow().isoformat()
 
+    try:
+        validated = require_daily_summary({**summary_data, 'id': summary_id}, uid=uid, operation='regenerate_result')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
 
     refreshed = daily_summaries_db.get_daily_summary(uid, summary_id)
-    return refreshed or {**summary_data, 'id': summary_id}
+    if not refreshed:
+        return validated.model_dump(exclude_unset=True)
+    try:
+        return require_daily_summary(refreshed, uid=uid, operation='regenerate_readback').model_dump(exclude_unset=True)
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'], response_model=DailySummaryResponse)
@@ -2039,6 +2308,14 @@ def get_shared_daily_summary(summary_id: str):
     uid = get_daily_summary_uid(summary_id)
     if not uid:
         raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    try:
+        if account_deletion_blocks_user_work(uid):
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Daily summary unavailable') from exc
 
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary or summary.get('visibility') != 'shared':
@@ -2056,7 +2333,12 @@ def get_shared_daily_summary(summary_id: str):
         'decisions_made',
         'knowledge_nuggets',
     }
-    return {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}
+    try:
+        return require_daily_summary(
+            {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}, uid=uid, operation='shared'
+        )
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=404, detail='Daily summary not found') from None
 
 
 # ***********************************
@@ -2105,7 +2387,8 @@ def update_mentor_notification_settings(
     try:
         notification_db.set_mentor_notification_frequency(uid, data.frequency)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Failed to set mentor notification frequency: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=400, detail="Invalid frequency. Must be between 0 and 5.")
 
     return {'status': 'ok'}
 
@@ -2172,15 +2455,39 @@ def get_llm_top_features(
 # response_model omitted: this streams a chunked JSON document via StreamingResponse (not a single JSON object);
 # the responses= override documents the streamed shape in OpenAPI without enforcing response_model validation.
 @router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
-def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
-    """Export all user data for GDPR/CCPA compliance from a disk-backed spool."""
+def export_all_user_data(
+    stream: Annotated[
+        bool,
+        Query(
+            description=(
+                'Stream the export lazily instead of spooling it server-side before headers. '
+                'When true, clients MUST verify the body ends with the "export_complete": true '
+                'completion suffix; a truncated body is a failed export even after HTTP 200.'
+            )
+        ),
+    ] = False,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Export all user data for GDPR/CCPA compliance."""
+    headers = {
+        'Content-Disposition': 'attachment; filename="omi-export.json"',
+        'Cache-Control': 'private, no-store',
+    }
+    if stream:
+        headers['X-Accel-Buffering'] = 'no'
+        return DataExportStreamingResponse(
+            uid,
+            iterator_factory=iter_user_data_export_streaming,
+            media_type='application/json',
+            headers=headers,
+        )
     # Iterator construction eagerly validates and spools the complete export,
     # including retained image bytes, before HTTP 200 and headers are committed.
-    export_stream = iter_user_data_export(uid)
-    return StreamingResponse(
-        export_stream,
+    return DataExportStreamingResponse(
+        uid,
+        iterator_factory=iter_user_data_export,
         media_type='application/json',
-        headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
+        headers=headers,
     )
 
 
@@ -2372,6 +2679,8 @@ async def synthesize_ai_profile(
     """
     from utils.llm import ai_user_profile as ai_user_profile_llm
 
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
     synthesis = await run_blocking(
@@ -2434,3 +2743,25 @@ def record_llm_usage_bucket(
 def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
     total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}
+
+
+class SurfaceStateRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    session_id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9-]+$')
+    surface_open: bool
+    foreground: bool
+    transcript_visible: bool
+
+
+@router.post(
+    '/v1/users/client-state', tags=['users'], response_model=UserStatusResponse, response_model_exclude_none=True
+)
+async def report_surface_state(
+    body: SurfaceStateRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'users:surface_state', fail_closed=True)),
+):
+    """Explicit expiring human-surface intent; no user-document lookup."""
+    from utils.conversations.demand_processing import observe_surface
+
+    await run_blocking(db_executor, observe_surface, uid, body.session_id, body.model_dump())
+    return {'status': 'ok'}

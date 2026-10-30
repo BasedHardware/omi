@@ -35,6 +35,8 @@ from models import (
     ShopifyShop,
 )
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 # Shopify API Configuration
@@ -107,13 +109,13 @@ def shopify_api_request(
     
     try:
         if method.upper() == "GET":
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         elif method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=json_data, params=params)
+            response = requests.post(url, headers=headers, json=json_data, params=params, timeout=REQUEST_TIMEOUT)
         elif method.upper() == "PUT":
-            response = requests.put(url, headers=headers, json=json_data, params=params)
+            response = requests.put(url, headers=headers, json=json_data, params=params, timeout=REQUEST_TIMEOUT)
         elif method.upper() == "DELETE":
-            response = requests.delete(url, headers=headers, params=params)
+            response = requests.delete(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         else:
             return {"error": f"Unsupported HTTP method: {method}"}
         
@@ -132,7 +134,8 @@ def shopify_api_request(
         
         return response.json() if response.content else {"success": True}
     except requests.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
+        print(f"❌ Shopify API request failed: {e}", flush=True)
+        return {"error": "Shopify API request failed"}
 
 
 def shopify_fetch_all_pages(
@@ -421,6 +424,7 @@ async def shopify_callback(
             "client_secret": SHOPIFY_CLIENT_SECRET,
             "code": code,
         },
+        timeout=REQUEST_TIMEOUT,
     )
     
     if response.status_code != 200:
@@ -448,14 +452,15 @@ async def shopify_callback(
     headers = get_auth_header(access_token)
     shop_response = requests.get(
         f"https://{shop}/admin/api/{SHOPIFY_API_VERSION}/shop.json",
-        headers=headers
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
     )
     if shop_response.status_code == 200:
         shop_data = shop_response.json().get("shop", {})
         store_default_store(uid, shop, shop_data.get("name", shop))
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 @app.get("/setup/shopify", tags=["setup"])
@@ -469,7 +474,7 @@ async def check_setup(uid: str):
 async def disconnect_shopify(uid: str):
     """Disconnect Shopify account."""
     delete_shopify_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 # ============================================
@@ -845,7 +850,8 @@ async def tool_get_analytics(request: Request):
         return ChatToolResponse(result=result)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get analytics: {str(e)}")
+        print(f"❌ Error getting analytics: {e}", flush=True)
+        return ChatToolResponse(error="Failed to get analytics due to an internal error.")
 
 
 @app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -919,7 +925,8 @@ async def tool_get_orders(request: Request):
         return ChatToolResponse(result="\n".join(lines))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get orders: {str(e)}")
+        print(f"❌ Error getting orders: {e}", flush=True)
+        return ChatToolResponse(error="Failed to get orders due to an internal error.")
 
 
 @app.post("/tools/get_order_details", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1038,7 +1045,8 @@ async def tool_get_order_details(request: Request):
         return ChatToolResponse(result=result_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get order details: {str(e)}")
+        print(f"❌ Error getting order details: {e}", flush=True)
+        return ChatToolResponse(error="Failed to get order details due to an internal error.")
 
 
 def match_products_by_title(all_products, title):
@@ -1211,7 +1219,7 @@ async def tool_create_order(request: Request):
             print(f"❌ Exception getting tokens: {e}")
             import traceback
             traceback.print_exc()
-            return ChatToolResponse(error=f"Auth error: {str(e)}")
+            return ChatToolResponse(error="Failed to authenticate with Shopify. Please reconnect your store.")
         
         if not tokens:
             print(f"❌ No Shopify tokens found")
@@ -1794,7 +1802,8 @@ async def tool_create_order(request: Request):
         return ChatToolResponse(result=response_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create order: {str(e)}")
+        print(f"❌ Error creating order: {e}", flush=True)
+        return ChatToolResponse(error="Failed to create order due to an internal error.")
 
 
 @app.post("/tools/get_customers", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1853,7 +1862,8 @@ async def tool_get_customers(request: Request):
         return ChatToolResponse(result="\n".join(lines))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get customers: {str(e)}")
+        print(f"❌ Error getting customers: {e}", flush=True)
+        return ChatToolResponse(error="Failed to get customers due to an internal error.")
 
 
 @app.post("/tools/create_customer", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1948,7 +1958,8 @@ async def tool_create_customer(request: Request):
         return ChatToolResponse(result=response_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create customer: {str(e)}")
+        print(f"❌ Error creating customer: {e}", flush=True)
+        return ChatToolResponse(error="Failed to create customer due to an internal error.")
 
 
 # ============================================

@@ -14,6 +14,8 @@
 // parse + validate the ids against the bundle (below) so the model output is fully
 // handled; `linkTasks` is a documented no-op seam awaiting an orchestrator ruling.
 import { BrowserWindow, net } from 'electron'
+import { GeminiLane } from '../../../shared/geminiAttribution'
+import { geminiClientPlatform, geminiProxyFetch } from '../../../shared/geminiProxy'
 import {
   getAbortSignal,
   getBackendSession,
@@ -109,25 +111,24 @@ async function attempt(
   return withTimeout(
     REQUEST_TIMEOUT_MS,
     async (signal) => {
-      const res = await net.fetch(
-        `${session.desktopApiBase}/v1/proxy/gemini/models/${MODEL}:generateContent`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session.token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: GOAL_SYSTEM_PROMPT }] },
-            generationConfig: {
-              responseMimeType: 'application/json',
-              responseSchema: GOAL_SUGGESTION_SCHEMA
-            }
-          }),
-          signal
-        }
-      )
+      const res = await geminiProxyFetch(net.fetch, {
+        baseURL: session.desktopApiBase,
+        model: MODEL,
+        action: 'generateContent',
+        token: session.token,
+        lane: GeminiLane.goals,
+        workload: 'interactive',
+        platform: geminiClientPlatform(process.platform),
+        signal,
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          systemInstruction: { parts: [{ text: GOAL_SYSTEM_PROMPT }] },
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: GOAL_SUGGESTION_SCHEMA
+          }
+        })
+      })
       if (!res.ok)
         throw new GeminiHttpError(res.status, res.headers?.get?.('x-omi-retryable') === 'true')
       return extractText(await res.json())

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.509",
+  "date": "2026-10-20",
+  "changes": [
+    "Fixed Daily Summary, Store Recordings, and Private Cloud Sync switches staying flipped and silently reverting later when the account refused the save"
+  ]
+}

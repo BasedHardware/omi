@@ -1,0 +1,16 @@
+{
+  "name": "@omi/note-shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./note-citations.mjs": {
+      "types": "./note-citations.d.mts",
+      "default": "./note-citations.mjs"
+    },
+    "./note-sources.mjs": {
+      "types": "./note-sources.d.mts",
+      "default": "./note-sources.mjs"
+    }
+  }
+}

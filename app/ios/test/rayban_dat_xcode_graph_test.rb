@@ -139,6 +139,20 @@ class RayBanDatXcodeGraphTest < Minitest::Test
     refute_includes frameworks, 'Pods_Runner.framework in Frameworks'
   end
 
+  # Thin Binary reads the processed Info.plist; embedding a framework after it makes
+  # Xcode report "Cycle inside RunnerRayBanDat" once that target embeds OnDeviceParakeet.
+  def test_iphone_targets_embed_frameworks_before_thin_binary
+    %w[Runner RunnerRayBanDat].each do |name|
+      phases = native_target(name)[/buildPhases = \((.*?)\);/m, 1].to_s.scan(/\/\* (.+?) \*\//).flatten
+      embed = phases.index('Embed Frameworks')
+      thin = phases.index('Thin Binary')
+
+      refute_nil embed, "#{name} has no Embed Frameworks phase"
+      refute_nil thin, "#{name} has no Thin Binary phase"
+      assert_operator embed, :<, thin, "#{name} must embed frameworks before Thin Binary: #{phases.inspect}"
+    end
+  end
+
   def test_shared_flutter_scheme_builds_only_the_dat_target
     document = REXML::Document.new(read_required(SCHEME_FILE))
     references = REXML::XPath.match(document, '//BuildableReference')

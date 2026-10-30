@@ -80,6 +80,24 @@
         "title": "ActionItem",
         "type": "object"
       },
+      "ConversationCreateResponse": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "conversation_id"
+        ],
+        "title": "ConversationCreateResponse",
+        "type": "object"
+      },
       "ConversationItem": {
         "properties": {
           "app_id": {
@@ -1217,41 +1235,6 @@
             "title": "Arguments",
             "type": "object"
           },
-          "as_of": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "As Of"
-          },
-          "belief_class": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Belief Class"
-          },
-          "belief_computed_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Belief Computed At"
-          },
           "body": {
             "anyOf": [
               {
@@ -1334,28 +1317,6 @@
             "title": "Curation Weight",
             "type": "integer"
           },
-          "currency": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Currency"
-          },
-          "currency_band": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Currency Band"
-          },
           "data_protection_level": {
             "anyOf": [
               {
@@ -1390,17 +1351,6 @@
             },
             "title": "Evidence",
             "type": "array"
-          },
-          "half_life_days": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -2903,7 +2853,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EmptyResponse"
+                  "$ref": "#/components/schemas/ConversationCreateResponse"
                 }
               }
             },

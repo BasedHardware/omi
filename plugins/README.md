@@ -48,4 +48,7 @@ environment variables.
   app.
 - `hume-ai/`, `composio/`, `uber_call/` — standalone services hosted outside
   the monorepo's deploy workflows.
+- `zapier/omi-zap/` — the Zapier integration package (not part of the monolith).
+  Its jest suite runs via `run-tests.sh`, registered as `omi-zap-tests` in
+  `.github/checks-manifest.yaml`.
 - `logos/`, `import/` — static assets and import tooling.

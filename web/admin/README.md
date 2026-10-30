@@ -48,9 +48,11 @@ local backend accepts when its `ADMIN_KEY` matches `OMI_API_SECRET_KEY`.
 Admin actions can mutate the backend and its data stores, so this mode must
 never point at production.
 
-Routes that read or write Firestore also need `FIREBASE_PROJECT_ID`,
-`FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` for a non-production
-Firebase project. Pages that use an external system need only that system's
+Routes that read or write Firestore also need Admin SDK credentials for a
+non-production Firebase project: either Application Default Credentials plus
+`FIREBASE_PROJECT_ID`, or `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and
+`FIREBASE_PRIVATE_KEY` together. Production mounts no key: Cloud Run runs as
+`omi-admin-dashboard-runtime@` and the SDK uses that identity through ADC. Pages that use an external system need only that system's
 credential from `.env.example` (for example Stripe, PostHog, Typesense, or
 GoAffPro). LLM-backed routes require `OMI_LLM_GATEWAY_URL` and the server-only
 `OMI_LLM_GATEWAY_SERVICE_TOKEN`; they never receive provider credentials.
@@ -76,7 +78,9 @@ In normal operation, the browser signs in with Firebase Google or email
 authentication. The client and every protected route require the user UID to
 exist at `adminData/{uid}` in Firestore. Server route handlers verify the
 Firebase ID token with the Firebase Admin SDK; they do not trust the
-client-side check alone.
+client-side check alone. Each route then requires a scope from the member's
+role (`requireScope`); roles, the legacy full-access default and the agent
+proposal API are in [`docs/team-access.md`](docs/team-access.md).
 
 For local work, permissions break down as follows:
 

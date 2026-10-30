@@ -16,6 +16,7 @@ flows to the mix path).
 
 import asyncio
 from types import MethodType, SimpleNamespace
+from unittest.mock import AsyncMock
 
 import routers.listen.receiver as receiver
 
@@ -28,14 +29,19 @@ def _make_receiver(audio_bytes_send):
             request=SimpleNamespace(codec='pcm', sample_rate=TARGET_SAMPLE_RATE, websocket=None),
             use_custom_stt=True,
             audio_bytes_send=audio_bytes_send,
-            state=SimpleNamespace(last_audio_received_time=0.0, first_audio_byte_timestamp=1.0),
+            state=SimpleNamespace(
+                current_conversation_id=None, last_audio_received_time=0.0, first_audio_byte_timestamp=1.0
+            ),
         ),
+        raw_archive=SimpleNamespace(append=AsyncMock()),
         channel_id_to_index={0: 0, 1: 1},
         multi_opus_decoders=[None, None],
         stt_sockets_multi=[None, None],
         channel_mix_buffers=[bytearray(), bytearray()],
     )
-    # Bind the real _mark_first_audio so first-audio gating runs in this fake too.
+    # Bind the accepted-frame hooks so lease renewal and first-audio gating run
+    # through the real receiver behavior in this minimal double.
+    recv._note_audio_activity = MethodType(receiver.ListenReceiver._note_audio_activity, recv)
     recv._mark_first_audio = MethodType(receiver.ListenReceiver._mark_first_audio, recv)
     recv._capture = MethodType(receiver.ListenReceiver._capture, recv)
     return recv

@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
+
 // --- Waveform painter ---
 
 class _WaveformPainter extends CustomPainter {
@@ -55,7 +57,8 @@ class _WaveformBar extends StatelessWidget {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
+      decoration:
+          BoxDecoration(color: OmiColors.textPrimary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
           Container(
@@ -75,7 +78,7 @@ class _WaveformBar extends StatelessWidget {
                     ? const Color(0xFFEF5350).withValues(alpha: 0.5)
                     : showStar
                         ? const Color(0xFFFFB300).withValues(alpha: 0.6)
-                        : const Color(0xFF333333).withValues(alpha: 0.5),
+                        : OmiColors.textSecondary,
                 amplitude: isMuted ? 0.1 : 1.0,
               ),
               size: const Size(double.infinity, 28),
@@ -142,7 +145,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: OmiColors.textPrimary.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -157,7 +160,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                 child: _isSplit
                     ? _buildSplitWaveform(phase)
                     : CustomPaint(
-                        painter: _WaveformPainter(phase: phase, color: const Color(0xFF333333).withValues(alpha: 0.5)),
+                        painter: _WaveformPainter(phase: phase, color: OmiColors.textSecondary),
                         size: const Size(double.infinity, 28),
                       ),
               ),
@@ -190,7 +193,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                     height: 3,
                     width: leftWidth * 0.9,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.15),
+                      color: OmiColors.textPrimary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -199,7 +202,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                     height: 3,
                     width: leftWidth * 0.6,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.1),
+                      color: OmiColors.textPrimary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -208,7 +211,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                     height: 3,
                     width: leftWidth * 0.75,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.08),
+                      color: OmiColors.textPrimary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -222,7 +225,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                   width: 2,
                   height: 20,
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.2),
+                    color: OmiColors.textPrimary.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(1),
                   ),
                 ),

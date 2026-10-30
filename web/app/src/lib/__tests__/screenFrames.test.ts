@@ -3,7 +3,12 @@ import {
   BANNER_LIGHTBOX_INDEX,
   buildLightboxFrames,
   findFrameIndex,
+  FRAME_URL_REFRESH_MARGIN_MS,
+  MAX_FRAME_REFRESH_BACKOFF_MS,
+  MIN_FRAME_REFRESH_INTERVAL_MS,
+  frameUrlRetryFloorMs,
   isFrameSetEmpty,
+  msUntilFrameUrlRefresh,
   resolveIndexAfterRemoval,
   stepFrameIndex,
   stripFrameLightboxIndex,
@@ -155,5 +160,48 @@ describe('stripFrameLightboxIndex', () => {
 describe('BANNER_LIGHTBOX_INDEX', () => {
   it('is 0 — the banner always occupies the first lightbox slot', () => {
     expect(BANNER_LIGHTBOX_INDEX).toBe(0);
+  });
+});
+
+describe('msUntilFrameUrlRefresh', () => {
+  const at = (iso: string) => Date.parse(iso);
+
+  it('is null when there is nothing to refresh', () => {
+    expect(msUntilFrameUrlRefresh(null, 0)).toBeNull();
+    expect(
+      msUntilFrameUrlRefresh({ revision: 0, banner: null, strip: [] }, 0),
+    ).toBeNull();
+  });
+
+  it('counts down to a margin before the earliest expiry, banner included', () => {
+    const set: ConversationScreenFrameSet = {
+      revision: 1,
+      banner: { ...frame('b'), url_expires_at: '2026-08-24T10:30:00Z' },
+      strip: [frame('a')],
+    };
+    expect(msUntilFrameUrlRefresh(set, at('2026-08-24T10:00:00Z'))).toBe(
+      30 * 60 * 1000 - FRAME_URL_REFRESH_MARGIN_MS,
+    );
+  });
+
+  it('is due now inside the margin, past expiry, or with an unparseable expiry', () => {
+    const set: ConversationScreenFrameSet = { revision: 1, strip: [frame('a')] };
+    expect(msUntilFrameUrlRefresh(set, at('2026-08-24T10:59:00Z'))).toBe(0);
+    expect(msUntilFrameUrlRefresh(set, at('2026-08-24T12:00:00Z'))).toBe(0);
+    const bad: ConversationScreenFrameSet = {
+      revision: 1,
+      strip: [{ ...frame('a'), url_expires_at: 'never' }],
+    };
+    expect(msUntilFrameUrlRefresh(bad, at('2026-08-24T10:00:00Z'))).toBe(0);
+  });
+});
+
+describe('frameUrlRetryFloorMs', () => {
+  it('starts at the base interval, doubles per miss, and stays bounded', () => {
+    expect(frameUrlRetryFloorMs(0)).toBe(MIN_FRAME_REFRESH_INTERVAL_MS);
+    expect(frameUrlRetryFloorMs(1)).toBe(2 * MIN_FRAME_REFRESH_INTERVAL_MS);
+    expect(frameUrlRetryFloorMs(2)).toBe(4 * MIN_FRAME_REFRESH_INTERVAL_MS);
+    expect(frameUrlRetryFloorMs(50)).toBe(MAX_FRAME_REFRESH_BACKOFF_MS);
+    expect(frameUrlRetryFloorMs(-1)).toBe(MIN_FRAME_REFRESH_INTERVAL_MS);
   });
 });

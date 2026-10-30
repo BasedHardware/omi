@@ -30,11 +30,15 @@ enum ConversationSummarySelection {
   }
 
   static func primarySummary(for conversation: ServerConversation) -> Primary {
+    let valid = Set(conversation.transcriptSegments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
+    func presentable(_ text: String) -> String {
+      NoteCitationContract.repair(text.trimmingCharacters(in: .whitespacesAndNewlines), valid: valid).text
+    }
     if let (resultIndex, result) = conversation.appsResults.enumerated().first(where: {
       !$0.element.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }) {
       return Primary(
-        content: result.content.trimmingCharacters(in: .whitespacesAndNewlines),
+        content: presentable(result.content),
         kind: .app,
         appId: result.appId,
         resultIndex: resultIndex
@@ -47,7 +51,7 @@ enum ConversationSummarySelection {
       return Primary(content: renderedSections, kind: .sections, appId: nil, resultIndex: nil)
     }
     if !overview.isEmpty {
-      return Primary(content: overview, kind: .overview, appId: nil, resultIndex: nil)
+      return Primary(content: presentable(overview), kind: .overview, appId: nil, resultIndex: nil)
     }
     if !renderedSections.isEmpty {
       return Primary(content: renderedSections, kind: .sections, appId: nil, resultIndex: nil)
@@ -86,9 +90,46 @@ enum ConversationSummarySelection {
 
   /// References are useful only when their source is in the loaded transcript.
   static func resolvableSourceIDs(_ ids: [String], segments: [TranscriptSegment]) -> [String] {
-    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 }.filter { !$0.isEmpty } })
     var seen = Set<String>()
     return ids.filter { valid.contains($0) && seen.insert($0).inserted }
+  }
+
+  /// Whole-unit read-time repair; no stored-document rewrite. Code and ordinary links survive.
+  static func presentableSection(_ section: SummarySection, segments: [TranscriptSegment]) -> SummarySection {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
+    let heading = NoteCitationContract.repair(section.heading, valid: valid)
+    let body = NoteCitationContract.repair(section.bodyMarkdown, valid: valid)
+    let sourceIDs = resolvableSourceIDs(
+      section.sourceSegmentIDs + heading.sourceIDs + body.sourceIDs, segments: segments)
+    return SummarySection(heading: heading.text, bodyMarkdown: body.text, sourceSegmentIDs: sourceIDs)
+  }
+
+  /// Read-time repair of a single-line note field (action item text). Generation already
+  /// sweeps these; this covers items stored before it did. Display only: task promotion keeps
+  /// comparing the stored description.
+  static func presentableText(_ text: String, segments: [TranscriptSegment]) -> String {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    // Titles render on every list row: skip the regex passes when nothing can match. Without a
+    // bracket, a speaker label or a known ID the repair returns the text unchanged.
+    let lowered = text.lowercased()
+    let mayCarryDebris =
+      text.contains(where: { "[(［【".contains($0) }) || lowered.contains("spk") || lowered.contains("speaker")
+      || valid.contains(where: { text.contains($0) })
+    guard mayCarryDebris else { return text }
+    return NoteCitationContract.repair(text, valid: valid).text
+  }
+
+  /// A conversation title for display: like `presentableText`, but ordinary bracketed words
+  /// ("Project [Q3]") are kept; see `NoteCitationContract.repairTitle`.
+  static func presentableTitle(_ title: String, segments: [TranscriptSegment]) -> String {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    let lowered = title.lowercased()
+    let mayCarryDebris =
+      title.contains(where: { "[(［【".contains($0) }) || lowered.contains("spk") || lowered.contains("speaker")
+      || valid.contains(where: { title.contains($0) })
+    guard mayCarryDebris else { return title }
+    return NoteCitationContract.repairTitle(title, valid: valid)
   }
 
   /// Suggested "Try with Apps" rows: memories-capable apps that have not

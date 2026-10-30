@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-early-terminal-strips-paid-period",
+  "violated_contract": "A subscription that reaches its terminal Stripe status early — the portal's cancel-immediately mode fires customer.subscription.deleted/updated with status canceled while current_period_end is still in the future — must not be projected as an immediate Basic downgrade. The customer paid through current_period_end, and persisting Basic makes the stored row permanently hide the paid-period grace get_user_valid_subscription already implements.",
+  "canonical_prevention": "When projecting an inactive snapshot on the subscription-event path, keep the resolvable paid plan with status active and cancel_at_period_end true while current_period_end is in the future, and only for status canceled; the grace candidate must still route through the stale-downgrade shield so a newer stored paid subscription or an adoptable active replacement wins, and unresolvable price IDs, unpaid/incomplete_expired and past-period-end cancellations still downgrade to Basic immediately. Pin the boundaries (future vs past period end, unknown price, unpaid, superseded subscription id, replacement adoption) with behavioral tests executed against the extracted builder.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_stripe_webhook_behavioral.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/payment.py",
+    "backend/utils/subscription_state_machine.py"
+  ],
+  "status": "open"
+}

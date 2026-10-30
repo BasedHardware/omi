@@ -1,0 +1,10 @@
+{
+  "version": "1.0.571",
+  "date": "2026-10-21",
+  "changes": [
+    "Keeps pendant audio that arrives while recording restarts after a Bluetooth reconnect",
+    "Smoother scrolling and conversation opening, with fixes for freezes and crashes",
+    "Catch-up details now appear on the Device page, keeping Home clearer",
+    "The timer on the live page updates every second"
+  ]
+}

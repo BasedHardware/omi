@@ -147,6 +147,29 @@ class TestRealCaptureFf8b9998:
         assert context.calendar_source == 'screen_activity'
         assert context.platform == 'Google Chrome'
 
+    def test_a_supplied_transcript_span_drives_duration_minutes(self):
+        context = context_from_screen_activity(
+            _rows(PRE_JOIN_OCR),
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+            duration_seconds=90.0,
+        )
+
+        assert context is not None
+        # 90 seconds of transcript, not the ~29-minute screen-activity window (#4056).
+        assert context.duration_minutes == 1
+
+    def test_without_a_span_the_window_stays_the_fallback(self):
+        context = context_from_screen_activity(
+            _rows(PRE_JOIN_OCR),
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+
+        assert context is not None
+        window_minutes = int((CONVERSATION_END - CONVERSATION_START).total_seconds() / 60)
+        assert context.duration_minutes == max(1, window_minutes)
+
     def test_the_roster_frame_is_reached_even_when_it_is_not_first(self):
         # The 12k character budget used to be spent on whichever full-desktop frames
         # came first chronologically, so the pre-join card could fall outside it.
@@ -340,3 +363,28 @@ class TestCalendarLinkPairing:
             ('Sarah Chen', None),
             (None, 'sarah@acme.com'),
         ]
+
+
+def test_open_messaging_chat_through_an_in_person_conversation_is_not_a_meeting():
+    """2026-10-22: a Telegram chat with a colleague stayed open on the Mac through an in-person
+    dinner; its contact card's emails became the "meeting" roster and named the wrong person."""
+    rows = [
+        {
+            'appName': 'Telegram',
+            'windowTitle': 'Alex K | Marketing',
+            'ocrText': 'alex@example.com\nalex.k@example.org\nphoto\nyesterday',
+        }
+    ] * 12
+    context = context_from_screen_activity(rows, started_at=CONVERSATION_START, finished_at=CONVERSATION_END)
+    assert context is None
+
+
+def test_messaging_chat_beside_a_real_call_adds_no_participants():
+    rows = [
+        {'appName': 'Telegram', 'windowTitle': 'Alex Kim', 'ocrText': 'see you soon'},
+    ] * 8 + [
+        {'appName': 'Telegram', 'windowTitle': 'Blair Ortiz', 'ocrText': 'Mute\nEnd Call'},
+    ]
+    context = context_from_screen_activity(rows, started_at=CONVERSATION_START, finished_at=CONVERSATION_END)
+    assert context is not None
+    assert [p.name for p in context.participants] == ['Blair Ortiz']

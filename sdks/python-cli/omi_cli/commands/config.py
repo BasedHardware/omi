@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import typer
 from rich.markup import escape
@@ -64,6 +65,30 @@ def path(typer_ctx: typer.Context) -> None:
 _SETTABLE_KEYS = {"api_base", "local_api_url", "local_token"}
 
 
+def validated_url(key: str, value: str) -> str:
+    """Return ``value`` stripped of whitespace and trailing slashes, or raise if it is not an
+    http(s) URL with a host."""
+    cleaned = value.strip().rstrip("/")
+    try:
+        parsed = urlsplit(cleaned)
+        # ``urlsplit`` validates some components lazily; touching ``.port``
+        # and ``.hostname`` forces those checks so malformed values raise a
+        # clean UsageError instead of a leaked ValueError.
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError as exc:
+        raise UsageError(
+            message=f"Invalid URL for '{key}'",
+            detail=f"'{key}' must be an http:// or https:// URL with a valid host (got '{value}').",
+        ) from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not hostname:
+        raise UsageError(
+            message=f"Invalid URL for '{key}'",
+            detail=f"'{key}' must be an http:// or https:// URL with a valid host (got '{value}').",
+        )
+    return cleaned
+
+
 @app.command("set", help="Set a per-profile config value. Keys: api_base, local_api_url, local_token.")
 def set_value(
     typer_ctx: typer.Context,
@@ -78,20 +103,30 @@ def set_value(
         )
     config = ctx.load_config()
     profile = config.get_profile(ctx.profile_name)
-    if key == "api_base":
-        profile.api_base = value.rstrip("/")
-    elif key == "local_api_url":
-        profile.local_api_url = value.rstrip("/")
+    if key in {"api_base", "local_api_url"}:
+        stored_value = validated_url(key, value)
+        if key == "api_base":
+            profile.api_base = stored_value
+        else:
+            profile.local_api_url = stored_value
     elif key == "local_token":
-        profile.local_token = value
+        cleaned = value.strip()
+        if not cleaned:
+            raise UsageError(
+                message=f"Invalid value for '{key}'",
+                detail=f"'{key}' cannot be empty.",
+            )
+        stored_value = cleaned
+        profile.local_token = stored_value
     config.set_profile(profile)
     cfg.save(config)
     display_value = (
-        cfg.Profile(name=profile.name, local_token=value).masked_local_token() if key == "local_token" else value
+        cfg.Profile(name=profile.name, local_token=stored_value).masked_local_token()
+        if key == "local_token"
+        else stored_value
     )
     ctx.renderer.success(
-        f"Set [bold]{escape(key)}[/bold] = {escape(display_value)} "
-        f"on profile [bold]{escape(profile.name)}[/bold]."
+        f"Set [bold]{escape(key)}[/bold] = {escape(display_value)} " f"on profile [bold]{escape(profile.name)}[/bold]."
     )
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"ok": True, "profile": profile.name, "key": key, "value": display_value})
@@ -151,7 +186,7 @@ def profile_delete(
     if name not in config.profiles:
         raise UsageError(message=f"No such profile: '{name}'")
     if not confirm:
-        typer.confirm(f"Delete profile '{name}'?", abort=True)
+        typer.confirm(f"Delete profile '{name}'?", abort=True, err=ctx.renderer.json_mode)
     config.delete_profile(name)
     cfg.save(config)
     ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")

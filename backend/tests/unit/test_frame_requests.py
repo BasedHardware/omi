@@ -104,81 +104,7 @@ def test_create_route_accepts_temporary_non_conversation_requests(monkeypatch):
     assert calls["requested_ttl_seconds"] == 518400
 
 
-def test_temporary_image_read_is_owner_fenced_and_never_promotes(monkeypatch):
-    _enable_authority(monkeypatch, 7)
-    now = datetime.now(timezone.utc)
-    temporary = FrameRequest(
-        request_id="frame-1",
-        uid="uid-1",
-        device_id="mac-1",
-        account_generation=7,
-        dedupe_key="dedupe-1",
-        screenshot_id="42",
-        state=FrameRequestState.uploaded,
-        created_at=now,
-        expires_at=now.replace(year=now.year + 1),
-        uploaded_at=now,
-        byte_count=3,
-        content_type="image/jpeg",
-        storage_id="storage-1",
-        cleanup_state="pending",
-        cleanup_next_attempt_at=now,
-    )
-    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: temporary)
-    monkeypatch.setattr(frame_requests, "download_frame_request_pixels", lambda *_args: b"jpg")
-
-    response = _client().get("/v1/frame-requests/temporary/frame-1/image?account_generation=7")
-
-    assert response.status_code == 200
-    assert response.content == b"jpg"
-    assert response.headers["content-type"] == "image/jpeg"
-    assert temporary.state == FrameRequestState.uploaded
-
-
-def test_temporary_image_read_force_refreshes_authority_before_releasing_pixels(monkeypatch):
-    calls = []
-
-    async def authorize(_uid, account_generation, **kwargs):
-        assert account_generation == 7
-        calls.append(kwargs.get("force_refresh", False))
-        if kwargs.get("force_refresh"):
-            raise PermissionError("kill switch enabled")
-
-    monkeypatch.setattr(frame_requests, "authorize_frame_request", authorize)
-    now = datetime.now(timezone.utc)
-    temporary = FrameRequest(
-        request_id="frame-1",
-        uid="uid-1",
-        device_id="mac-1",
-        account_generation=7,
-        dedupe_key="dedupe-1",
-        screenshot_id="42",
-        state=FrameRequestState.uploaded,
-        created_at=now,
-        expires_at=now.replace(year=now.year + 1),
-        uploaded_at=now,
-        byte_count=3,
-        content_type="image/jpeg",
-        storage_id="storage-1",
-        cleanup_state="pending",
-        cleanup_next_attempt_at=now,
-    )
-    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: temporary)
-    download = MagicMock(return_value=b"jpg")
-    monkeypatch.setattr(frame_requests, "download_frame_request_pixels", download)
-
-    response = _client().get("/v1/frame-requests/temporary/frame-1/image?account_generation=7")
-
-    assert response.status_code == 404
-    assert calls == [False, True]
-    download.assert_not_called()
-
-
-def test_temporary_image_read_rejects_conversation_owned_pixels(monkeypatch):
-    _enable_authority(monkeypatch, 7)
-    row = _request().model_copy(update={"account_generation": 7, "conversation_id": "conversation-1"})
-    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: row)
-
+def test_temporary_frame_image_route_is_removed():
     response = _client().get("/v1/frame-requests/temporary/frame-1/image?account_generation=7")
 
     assert response.status_code == 404
@@ -193,16 +119,6 @@ def test_status_read_reports_uploaded_without_promoting(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["request"]["state"] == "claimed"
-
-
-def test_temporary_image_read_rejects_stale_account_generation(monkeypatch):
-    _enable_authority(monkeypatch, 7)
-    row = _request().model_copy(update={"account_generation": 6})
-    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: row)
-
-    response = _client().get("/v1/frame-requests/temporary/frame-1/image?account_generation=7")
-
-    assert response.status_code == 404
 
 
 def test_pending_route_is_owner_device_scoped(monkeypatch):

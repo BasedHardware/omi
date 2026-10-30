@@ -56,6 +56,10 @@ struct SpeakerSegment: Identifiable {
 enum FinishConversationResult {
   case saved
   case discarded
+  /// Another rotation already holds `conversationRotationInFlight`; this caller's
+  /// finalize intent is covered by the in-flight rotation, so the result is not
+  /// an error and must not tear down the session.
+  case busy
   case error(String)
 }
 
@@ -313,6 +317,7 @@ class AppState: ObservableObject {
       } else {
         preferredMicrophoneReconnectMonitor.stop()
       }
+      publishMeetingCaptureActivity()
     }
   }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
@@ -364,7 +369,7 @@ class AppState: ObservableObject {
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
   var hasActiveConversationFilters: Bool {
-    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil || showDiscardedConversations
   }
 
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
@@ -378,9 +383,11 @@ class AppState: ObservableObject {
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
   let conversationRepository = ConversationRepository()
+  let conversationRestored = PassthroughSubject<ServerConversation, Never>()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
+  @Published var showDiscardedConversations: Bool = false
   @Published var selectedDateFilter: Date? = nil
   @Published var selectedFolderId: String? = nil
 
@@ -397,6 +404,7 @@ class AppState: ObservableObject {
 
   /// Maps live speaker IDs to person IDs during recording (cleared on finalize)
   @Published var liveSpeakerPersonMap: [Int: String] = [:]
+  var liveManualSpeakerPersonMap: [Int: String] = [:]
 
   // Permission states for onboarding
   @Published var hasNotificationPermission = false
@@ -494,17 +502,54 @@ class AppState: ObservableObject {
   }
   var captureGateInFlight = false
   var captureReconcilePending = false
-  var pendingCoreAudioCaptureRecoveryReason: String?
+  var pendingCoreAudioCaptureRecovery: CoreAudioCaptureRecoveryRequest?
   /// While ambient transcription is live, reapply a preferred mic when it reconnects (#10921).
   let preferredMicrophoneReconnectMonitor = PreferredMicrophoneReconnectMonitor()
-  /// Counts CoreAudio rebuilds caused by a zero-sample microphone during one
-  /// transcription session. This lives above `AudioCaptureService` because each
-  /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
+  /// Session-owned recovery budget survives microphone driver replacement.
   var silentMicRecoveryAttempts = 0
-  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+  /// No microphone signal after bounded recovery; system audio can still be live.
+  @Published var isMicrophoneSignalMissing = false
+  var armedMicrophoneTransitionInFlight = false
+  @Published var isWaitingForMicrophone = false
+  let armedMicrophoneRecovery = ArmedMicrophoneRecoveryCoordinator()
+  var silentMicDiagnosticLimit = SilentMicDiagnosticRateLimit()
+  var lastCaptureWakeAt: Date?
+  var lastCaptureUnlockAt: Date?
+  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient {
+    didSet { publishMeetingCaptureActivity() }
+  }
+  /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
+  func publishMeetingCaptureActivity() {
+    UpdateInstallActivity.setMeetingCaptureActive(
+      isTranscribing && currentConversationRole == .meeting
+        && (isLiveCapturing || meetingDetector?.resumeOffAt != nil))
+  }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
-  var meetingBoundaryInProgress = false
+  var (meetingBoundaryInProgress, meetingBoundaryEvidence) = (false, MeetingBoundaryEvidence())
   var pendingMeetingState: Bool?
+  var pendingMeetingEndedAt: Date?
+  var meetingRelaunchChecked = false
+  var meetingRelaunchCheckGeneration: UInt64?
+  var meetingRelaunchCheckMode: AssistantSettings.AudioRecordingMode?
+  /// True while `finishConversation` is rotating the logical conversation.
+  /// Serializes ALL rotation callers — `handleMeetingObservation`'s boundary
+  /// flag only covers detector edges; the deferred `.meetingEnded` finalizer,
+  /// the BLE double-tap, and the Rewind "finish" action each bump
+  /// `recordingGeneration`, and two overlapping rotations abort one another into
+  /// `handleMeetingObservation`'s error path, which used to hard-stop the whole
+  /// session (SCA-526).
+  var conversationRotationInFlight = false
+  /// Deferred preferred-mic reapply requested while the capture gate was
+  /// mid-flight; consumed by the `reconcileCapture` tail.
+  var pendingPreferredMicReapplyDeviceID: AudioDeviceID?
+  var pendingPreferredMicReapplyDeviceName: String?
+  /// Last in-place preferred-mic swap, for the reapply cooldown.
+  var lastPreferredMicSwapAt: Date?
+  /// Last `freemium_threshold_reached` admission stop. The 60s trial-metadata
+  /// refresh must not clear a paywall flag an admission event just set — a
+  /// disagreement between the two backend verdicts would otherwise loop
+  /// capture stop/re-arm on every refresh tick (SCA-526).
+  var lastPaywallAdmissionStopAt: Date?
 
   /// The input device a silent-mic fallback healed onto, held for the rest of the session.
   ///
@@ -515,14 +560,16 @@ class AppState: ObservableObject {
   /// user gets an alert, then it starts over.
   var silentMicHealedDeviceID: AudioDeviceID?
   var meetingEndFinalizationInProgress = false
-  @Published var isAwaitingMeeting = false
+  @Published var isAwaitingMeeting = false {
+    didSet { publishMeetingCaptureActivity() }
+  }
 
   /// Audio is actually reaching STT — not merely that a transcription session is armed.
   ///
   /// Only Meetings keeps `isTranscribing` true while waiting for a call so capture can start
   /// instantly, and sets `isAwaitingMeeting` while the mic is paused. Live UI (the Conversations
   /// card, the expanded transcript, the top-bar mic dot) must follow this, not `isTranscribing`.
-  var isLiveCapturing: Bool { isTranscribing && !isAwaitingMeeting }
+  var isLiveCapturing: Bool { isTranscribing && !isAwaitingMeeting && !isWaitingForMicrophone }
 
   var audioRecordingMode: AssistantSettings.AudioRecordingMode {
     AssistantSettings.shared.audioRecordingMode
@@ -666,11 +713,12 @@ class AppState: ObservableObject {
   /// switch posts only .runtimeOwnerDidChange, so without this the previous
   /// account's folders, filters, counts, and people kept rendering.
   func resetOwnerScopedContent() {
-    ownerScopeGeneration &+= 1
+    (ownerScopeGeneration, meetingBoundaryEvidence) = (ownerScopeGeneration &+ 1, MeetingBoundaryEvidence())
     folders = []
     selectedFolderId = nil
     selectedDateFilter = nil
     showStarredOnly = false
+    showDiscardedConversations = false
     totalConversationsCount = nil
     filteredConversationsCount = nil
     conversationsError = nil
@@ -721,7 +769,7 @@ class AppState: ObservableObject {
     // didSet writes the new value. Only basic-tier users have a legitimate
     // pre-fetch paywalled state to preserve.
     // Freemium: the desktop trial paywall is disabled by default
-    // (backend TRIAL_PAYWALL_ENABLED off), so a stale cached
+    // (backend paywall permanently off), so a stale cached
     // `desktop_isPaywalled=true` from a pre-freemium session must not gate
     // anything on launch. Previously basic-tier users trusted that cache and
     // flashed the "monthly limit" popup until fetchTrialMetadata refreshed
@@ -838,12 +886,14 @@ class AppState: ObservableObject {
 
   /// Setup observers for app quit and system sleep to finalize conversations
   private func setupLifecycleObservers() {
+    ClientTelemetryFlags.installProductionRefresh()
     // App is about to quit
     willTerminateObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.willTerminateNotification,
       object: nil,
       queue: .main
     ) { [weak self] _ in
+      ClientTelemetryTransport.scheduleBestEffortFlush()
       guard let self = self else { return }
       Task { @MainActor in
         if self.isTranscribing {
@@ -851,10 +901,10 @@ class AppState: ObservableObject {
           let sessionId = self.currentSessionId
           self.stopAudioCapture()
           if let sessionId {
-            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .appTerminated)
           }
           self.clearTranscriptionState(
-            finalizationReason: .userStop,
+            finalizationReason: .appTerminated,
             runFinalizer: false,
             allowCloudForceProcess: false,
             finishSession: false
@@ -869,6 +919,7 @@ class AppState: ObservableObject {
       object: nil,
       queue: .main
     ) { [weak self] _ in
+      ClientTelemetryTransport.scheduleBestEffortFlush()
       guard let self = self else { return }
       Task { @MainActor in
         self.wasTranscribingBeforeSleep = self.isTranscribing
@@ -878,10 +929,10 @@ class AppState: ObservableObject {
           let sessionId = self.currentSessionId
           self.stopAudioCapture()
           if let sessionId {
-            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .systemSleep)
           }
           self.clearTranscriptionState(
-            finalizationReason: .userStop,
+            finalizationReason: .systemSleep,
             runFinalizer: false,
             allowCloudForceProcess: false,
             finishSession: false
@@ -904,13 +955,15 @@ class AppState: ObservableObject {
       // Restart transcription if it was active before sleep
       Task { @MainActor in
         guard let self = self else { return }
+        self.lastCaptureWakeAt = Date()
         if self.wasTranscribingBeforeSleep && AssistantSettings.shared.audioRecordingMode != .off {
           log("System wake: Restarting transcription (was active before sleep)")
           // Brief delay to let audio subsystem settle after wake
           try? await Task.sleep(for: .seconds(2))
           if !self.isTranscribing {
             self.startTranscription(
-              conversationRole: self.conversationRoleBeforeSleep, userInitiated: false)
+              conversationRole: self.conversationRoleBeforeSleep, userInitiated: false,
+              launchContext: .wake)
           }
         }
         self.wasTranscribingBeforeSleep = false
@@ -946,6 +999,7 @@ class AppState: ObservableObject {
           return  // Ignore duplicate within 1 second
         }
         self?.lastScreenUnlockTime = now
+        self?.lastCaptureUnlockAt = now
         log("Screen unlocked")
         NotificationCenter.default.post(name: .screenDidUnlock, object: nil)
       }
@@ -962,7 +1016,7 @@ class AppState: ObservableObject {
         guard let self else { return }
         switch AssistantSettings.shared.audioRecordingMode {
         case .off:
-          self.stopTranscription()
+          self.stopTranscription(finalizationReason: .recordingDisabled)
         case .always, .onlyMeetings:
           if self.isTranscribing {
             await self.reconcileCapture()

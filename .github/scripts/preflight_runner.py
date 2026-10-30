@@ -637,10 +637,40 @@ def resolve_repo_root() -> Path:
     return Path(toplevel or Path.cwd()).resolve()
 
 
+def python_floor_ok() -> bool:
+    """Return whether this interpreter satisfies the check scripts' >= 3.10 floor."""
+    return sys.version_info >= (3, 10)
+
+
+def warn_below_python_floor() -> None:
+    """Explain a below-floor runner interpreter before its children crash.
+
+    preflight_runner is spawned by scripts/pre-push-singleflight with whatever
+    interpreter scripts/dev-harness/_resolve_python.sh selected. When that is
+    bare `python3` on a host where PATH resolves it to Xcode CLT Python 3.9, the
+    child check scripts die at import (`str | None` at module scope needs 3.10).
+    Name the fix instead of letting a TypeError stand in for it.
+    """
+    print(
+        "FAIL: pre-push preflight runner is Python "
+        f"{sys.version_info.major}.{sys.version_info.minor}; the check scripts "
+        "require >= 3.10 (PEP 604 unions at module scope).\n"
+        "Fix: run `make lane-bootstrap` to create backend/.venv (the canonical\n"
+        "interpreter), or install Python >= 3.10 (e.g. `brew install python@3.12`)\n"
+        "and put it on PATH, or select one explicitly with `PYTHON=/path/to/python3.12`.",
+        file=sys.stderr,
+    )
+    flush_output(sys.stderr)
+
+
 def main() -> int:
     configure_output_streams()
     if sys.argv[1:2] == [WINDOWS_CHILD_BOOTSTRAP_FLAG]:
         return run_windows_child_bootstrap(sys.argv[2:])
+
+    if not python_floor_ok():
+        warn_below_python_floor()
+        return 2
 
     args = parse_args()
     command = list(args.command)

@@ -2,6 +2,7 @@ from typing import Any, Optional, cast
 from urllib.parse import urlparse
 
 from database._client import get_firestore_client
+from database.fsr_read_cache import serving_config
 
 # Keep the default live until the stable-promotion workflow has published the
 # static repair page. Operators can point an active recovery policy at that
@@ -109,11 +110,16 @@ def get_desktop_update_policy(
     current_build: Optional[int], platform: str = "macos", *, firestore_client: Any = None
 ) -> dict[str, Any]:
     client: Any = firestore_client if firestore_client is not None else get_firestore_client()
-    doc = client.collection("desktop_update_policy").document("current").get()
-    if not getattr(doc, "exists", False):
-        return default_desktop_update_policy()
 
-    raw_doc: object = doc.to_dict()
+    def fetch():
+        doc = client.collection("desktop_update_policy").document("current").get()
+        if not getattr(doc, "exists", False):
+            return None
+        return doc.to_dict()
+
+    raw_doc: object = serving_config('desktop_update_policy', fetch, identity=id(client))
+    if raw_doc is None:
+        return default_desktop_update_policy()
     raw: dict[str, Any] = cast(dict[str, Any], raw_doc) if isinstance(raw_doc, dict) else {}
     policy = _normalize_policy(raw)
     if not _applies_to_platform(policy, platform):

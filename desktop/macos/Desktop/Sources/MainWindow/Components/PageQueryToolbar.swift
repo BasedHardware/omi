@@ -191,6 +191,30 @@ struct PageQueryActionLabel: View {
   }
 }
 
+/// The page toolbar's "More" menu: `[secondary…] [More] [primary]`.
+///
+/// A `Menu` label inherits the surrounding accent tint, and a tint on the label itself does not
+/// reach the menu's own rendering, so the neutral ink has to be set on the `Menu`. Every page uses
+/// this rather than rebuilding the menu, so none of them can drift back to a blue "More".
+struct PageMoreMenu<Content: View>: View {
+  let help: String
+  let accessibilityIdentifier: String
+  @ViewBuilder let content: () -> Content
+
+  var body: some View {
+    Menu(content: content) {
+      PageQueryActionLabel(icon: "ellipsis", title: "More")
+    }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    .tint(Ink.primary)
+    .help(help)
+    .accessibilityLabel(help)
+    .accessibilityIdentifier(accessibilityIdentifier)
+  }
+}
+
 /// A filter value and the action that removes it. Keeping these as data lets
 /// the strip progressively collapse values into one `+N` menu instead of
 /// wrapping the page header or clipping the selected value.

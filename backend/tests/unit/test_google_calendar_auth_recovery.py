@@ -1,10 +1,8 @@
 import asyncio
 import importlib.util
-import re
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-PROCESS_CONVERSATION = BACKEND_DIR / 'utils' / 'conversations' / 'process_conversation.py'
 GOOGLE_UTILS = BACKEND_DIR / 'utils' / 'retrieval' / 'tools' / 'google_utils.py'
 
 
@@ -32,14 +30,6 @@ def _load_google_utils():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
-
-
-def test_conversation_processing_calendar_auto_link_is_opt_in():
-    source = PROCESS_CONVERSATION.read_text(encoding='utf-8')
-
-    assert 'GOOGLE_CALENDAR_AUTO_LINK_ENABLED' in source
-    assert 'def _calendar_auto_link_enabled()' in source
-    assert re.search(r'_calendar_auto_link_enabled\(\)\s+and\s+not\s+discarded', source)
 
 
 def test_refresh_google_token_marks_missing_refresh_token_reauth_required(monkeypatch):

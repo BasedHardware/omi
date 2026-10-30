@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'widgets/synced_conversation_list_item.dart';
 
 class SyncedConversationsPage extends StatelessWidget {
@@ -15,9 +16,9 @@ class SyncedConversationsPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(context.l10n.processedConversations),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
       ),
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       body: Consumer<SyncProvider>(
         builder: (context, syncProvider, child) {
           return SingleChildScrollView(
@@ -67,7 +68,7 @@ class ConversationsListWidget extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 18),
-        Text(title, style: const TextStyle(color: Colors.white, fontSize: 20)),
+        Text(title, style: TextStyle(color: OmiColors.textPrimary, fontSize: 20)),
         const SizedBox(height: 10),
         ListView.separated(
           shrinkWrap: true,

@@ -39,7 +39,8 @@ final class AgentErrorClassifierTests: XCTestCase {
     XCTAssertFalse(
       classified.userMessage.lowercased().contains("try again"),
       "copy must not prescribe retries for an unretryable billing error")
-    XCTAssertTrue(classified.userMessage.contains("credit balance"))
+    XCTAssertEqual(classified.userMessage, AgentErrorClassifier.billingFailureMessage)
+    XCTAssertFalse(classified.userMessage.contains("Your Anthropic"), "the error does not identify the account owner")
   }
 
   /// Reproduced live: the Omi-account proxy answers an exhausted billing lane
@@ -107,7 +108,7 @@ final class AgentErrorClassifierTests: XCTestCase {
   func testForbiddenAndPermissionDeniedRouteToAuthNotLeakSuspicion() {
     // 403 / permission errors are authorization failures, not credential leaks.
     // The leak bucket's copy ("AI service authentication error") is dropped by
-    // SentryBeforeSendPolicy, so mislabeling here misdirects the user AND hides
+    // the failure classifier, so mislabeling here misdirects the user AND hides
     // a real forbidden-class bug from triage.
     for raw in ["Provider returned 403 Forbidden", "permission denied by upstream"] {
       let classified = AgentErrorClassifier.classify(raw)
@@ -115,7 +116,7 @@ final class AgentErrorClassifierTests: XCTestCase {
       XCTAssertFalse(classified.retryable, raw)
       XCTAssertFalse(
         classified.userMessage.lowercased().contains("ai service authentication error"),
-        "must not carry the Sentry-dropped leak copy — \(raw)")
+        "must not carry the legacy leak copy — \(raw)")
     }
   }
 
@@ -279,28 +280,50 @@ final class AgentErrorClassifierTests: XCTestCase {
     XCTAssertEqual(notice?.text, classified.userMessage)
   }
 
-  /// A 402 from the Omi proxy means the managed lane ran, which is exactly the case a
-  /// BYOK user needs told apart from their own provider billing. The shipped copy said
-  /// only "Omi's AI service" and pointed at Plan and Usage, so a user holding a funded
-  /// OpenRouter key read it as their key failing and spent the investigation on the
-  /// wrong account entirely.
-  func testBillingCopyNamesTheManagedLaneAndBothRemedies() {
+  /// The same proxy receives BYOK and managed requests. A bare status cannot
+  /// prove that a saved key was ignored or identify whose billing rejected it.
+  func testBillingCopyDoesNotGuessTheAccountOrSuggestAnotherKey() {
     let classified = AgentErrorClassifier.classify("HTTP 402 status code (no body)")
 
     XCTAssertEqual(classified.code, .providerBillingExhausted)
     XCTAssertFalse(classified.retryable)
-    XCTAssertTrue(
-      classified.userMessage.contains("This request ran on the managed lane"),
-      "the copy must say which lane declined, not just \"Omi's AI service\"")
-    XCTAssertTrue(
-      classified.userMessage.contains("Check Settings → Plan and Usage"),
-      "the managed remedy stays")
-    // Asserted as the whole remedy clause, not a bare `contains("key")`: the loose
-    // form passed on copy that merely mentioned a key without telling the user to
-    // add one, which is the half of the message this PR exists to add.
-    XCTAssertTrue(
-      classified.userMessage.contains("add a key for the provider this path uses"),
-      "a BYOK user needs the second remedy named as an action they can take")
+    XCTAssertEqual(classified.userMessage, AgentErrorClassifier.billingFailureMessage)
+    XCTAssertFalse(classified.userMessage.contains("managed lane"))
+    XCTAssertFalse(classified.userMessage.contains("Your Anthropic"))
+    XCTAssertFalse(classified.userMessage.contains("add a key"))
+    XCTAssertTrue(classified.userMessage.contains("Settings → AI & Automation"))
+    XCTAssertTrue(classified.userMessage.contains("contact Omi Support"))
+  }
+
+  func testBillingClassificationSurvivesDisplayedCopyAndRuntimeWrapping() {
+    for raw in ["HTTP 402 status code (no body)", "402 Payment Required", "Credit balance is too low"] {
+      let first = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(AgentErrorClassifier.classify(first.userMessage), first)
+      XCTAssertEqual(
+        AgentErrorClassifier.classify(
+          AgentRuntimeFailure(code: "adapter_execution_failed", userMessage: first.userMessage)),
+        first)
+    }
+  }
+
+  func testPreviouslyShippedManagedBillingCopyIsNotReclassifiedAsPlanLimit() {
+    let oldCopy =
+      "Omi's managed AI service declined this request for billing reasons. "
+      + "This request ran on the managed lane — your own provider key is used only "
+      + "when the request goes to a provider you hold a key for. Check Settings → "
+      + "Plan and Usage, or add a key for the provider this path uses. "
+      + "Resending the same message won't help."
+    let classified = AgentErrorClassifier.classify(oldCopy)
+    XCTAssertEqual(classified.code, .providerBillingExhausted)
+    XCTAssertEqual(classified.userMessage, AgentErrorClassifier.billingFailureMessage)
+    XCTAssertFalse(classified.retryable)
+  }
+
+  func testAnExplicitPlanLimitStillWinsOverItsTransportStatus() {
+    let classified = AgentErrorClassifier.classify(
+      "HTTP 402: You've hit your Free plan limit. Upgrade in Settings → Plan and Usage.")
+    XCTAssertEqual(classified.code, .planLimitReached)
+    XCTAssertFalse(classified.retryable)
   }
 
   /// Reproduced 2026-09-09: desktop-backend returned HTTP 503 with an empty

@@ -48,8 +48,6 @@ from typing import Any, Dict, Optional, cast
 
 from prometheus_client import Counter
 
-from utils.conversations.fragment_visibility import is_effectively_discarded
-
 logger = logging.getLogger(__name__)
 
 
@@ -105,22 +103,10 @@ _INDEXED_FIRESTORE_FIELDS = (
     "created_at",
     "discarded",
     "deleted",
+    "dream_duplicate_of",
     "started_at",
     "finished_at",
     "geolocation",
-    # Visibility metadata for legacy review rows. These fields are not part of
-    # the Typesense schema; they are read only to project the existing
-    # ``discarded`` field consistently before indexing.
-    "status",
-    "sync_relevance",
-    "sync_relevance_user_kept",
-    "sync_live_target",
-    "has_photos",
-    "folder_user_set",
-    "visibility",
-    "starred",
-    "user_title",
-    "client_processing.schema_version",
 )
 
 CONVERSATION_TYPESENSE_INDEX_EVENTS = Counter(
@@ -291,7 +277,7 @@ def build_conversation_index_document(uid: str, conversation_data: Dict[str, Any
         "id": conversation_id,
         "userId": uid,
         "created_at": created_at,
-        "discarded": is_effectively_discarded(conversation_data),
+        "discarded": bool(conversation_data.get("discarded", False)),
     }
     started_at = _epoch_seconds(conversation_data.get("started_at"))
     if started_at is not None:
@@ -394,7 +380,7 @@ def _sync_conversation_index_after_write(
         # this sync); converge the index to absence instead of upserting stale
         # content — the race the extension's delete trigger otherwise covered.
         return delete_conversation_index_doc(uid, conversation_id)
-    if data.get("deleted"):
+    if data.get("deleted") or data.get("dream_duplicate_of"):
         # Redirect tombstones must not stay searchable, including after a later
         # discarded=True write that would otherwise upsert them again.
         return delete_conversation_index_doc(uid, conversation_id)

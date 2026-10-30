@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+
+from config.rollout_cohorts import warm_rollout_cohorts
 from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, WebSocketException
@@ -59,6 +61,7 @@ async def _watch_account_deletion(request: ListenRequest) -> None:
 
 
 async def _run_listen_session_with_deletion_fence(request: ListenRequest) -> None:
+    await warm_rollout_cohorts(request.uid)
     session = asyncio.create_task(run_listen_session(request), name=f'listen:{request.uid}:session')
     deletion_watcher = asyncio.create_task(
         _watch_account_deletion(request),
@@ -97,6 +100,8 @@ async def _stream_handler(
     conversation_role: str = 'ambient',
     geolocation: Optional[Geolocation] = None,
     speech_profile_redo: bool = False,
+    screen_evidence_pass: bool = False,
+    local_preview: bool = False,
 ) -> None:
     """Compatibility facade for the accepted-socket listen session."""
     await _run_listen_session_with_deletion_fence(
@@ -122,6 +127,8 @@ async def _stream_handler(
             client_device_context=client_device_context,
             geolocation=geolocation,
             speech_profile_redo=speech_profile_redo,
+            screen_evidence_pass=screen_evidence_pass and conversation_role == 'meeting',
+            local_preview=local_preview,
         )
     )
 
@@ -147,6 +154,8 @@ async def _listen(
     conversation_role: str = 'ambient',
     geolocation: Optional[Geolocation] = None,
     speech_profile_redo: bool = False,
+    screen_evidence_pass: bool = False,
+    local_preview: bool = False,
 ) -> None:
     try:
         await websocket.accept()
@@ -174,6 +183,8 @@ async def _listen(
         conversation_role=conversation_role,
         geolocation=geolocation,
         speech_profile_redo=speech_profile_redo,
+        screen_evidence_pass=screen_evidence_pass,
+        local_preview=local_preview,
     )
 
 
@@ -198,6 +209,8 @@ async def listen_handler(
     client_conversation_id: Optional[str] = None,
     conversation_role: str = 'ambient',
     speech_profile_redo: str = 'disabled',
+    screen_evidence: str = 'disabled',
+    local_preview: str = 'disabled',
 ) -> None:
     geolocation = geolocation_from_private_header(websocket.headers.get('x-omi-conversation-geolocation'))
     await _listen(
@@ -221,6 +234,12 @@ async def listen_handler(
         conversation_role=conversation_role,
         geolocation=geolocation,
         speech_profile_redo=speech_profile_redo == 'enabled',
+        # The desktop runs a pre-notes screen-evidence pass for this meeting; the
+        # finalizer may wait for it (utils/conversations/meeting_evidence_admission.py).
+        screen_evidence_pass=screen_evidence == 'enabled',
+        # The client renders its own on-device live transcript preview, so it
+        # tolerates a session with no cloud streaming STT (CLOUD_LIVE_STT_MODE).
+        local_preview=local_preview == 'enabled',
     )
 
 

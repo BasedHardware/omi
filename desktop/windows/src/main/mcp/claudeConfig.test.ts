@@ -13,12 +13,13 @@ import { join } from 'path'
 import {
   writeClaudeMcpEntry,
   claudeMcpConnected,
+  claudeMcpStatus,
   removeClaudeMcpEntry,
   claudeConfigPath,
   detectClaudeCode,
   CorruptConfigError
 } from './claudeConfig'
-import { MCP_SERVER_KEY, mcpServerUrl } from '../../shared/mcpExports'
+import { MCP_SERVER_KEY, mcpServerUrl, mcpLegacyServerUrl } from '../../shared/mcpExports'
 
 const root = mkdtempSync(join(tmpdir(), 'claude-config-test-'))
 afterAll(() => rmSync(root, { recursive: true, force: true }))
@@ -141,6 +142,122 @@ describe('claudeMcpConnected', () => {
     expect(claudeMcpConnected(API, path)).toBe(true)
     // A different base does not count as connected.
     expect(claudeMcpConnected('https://other.example', path)).toBe(false)
+  })
+})
+
+describe('claudeMcpStatus (canonical vs legacy /sse)', () => {
+  it('a same-key /v1/mcp/sse entry reads needsUpdate, not connected', () => {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        mcpServers: {
+          [MCP_SERVER_KEY]: {
+            type: 'http',
+            url: mcpLegacyServerUrl(API),
+            headers: { Authorization: `Bearer ${KEY}` }
+          }
+        }
+      }),
+      'utf8'
+    )
+    expect(claudeMcpStatus(API, path, KEY)).toBe('needsUpdate')
+    expect(claudeMcpConnected(API, path, KEY)).toBe(false)
+    // A stale bearer on the legacy URL is just disconnected.
+    expect(claudeMcpStatus(API, path, 'rotated-key')).toBe('disconnected')
+    // And the Update path rewrites it to the canonical URL.
+    writeClaudeMcpEntry(API, KEY, path)
+    expect(claudeMcpStatus(API, path, KEY)).toBe('connected')
+    expect(read().mcpServers[MCP_SERVER_KEY]?.url).toBe(mcpServerUrl(API))
+  })
+
+  it('a canonical URL in an unrelated field never reads as connected', () => {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        mcpServers: {
+          [MCP_SERVER_KEY]: {
+            note: mcpServerUrl(API),
+            headers: { Authorization: `Bearer ${KEY}` }
+          }
+        }
+      }),
+      'utf8'
+    )
+    expect(claudeMcpStatus(API, path, KEY)).toBe('disconnected')
+  })
+
+  it('a conflicting url + mcp-remote arg never reads as connected', () => {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        mcpServers: {
+          [MCP_SERVER_KEY]: {
+            url: mcpServerUrl(API),
+            args: ['-y', 'mcp-remote', mcpLegacyServerUrl(API), '--header', `Authorization: Bearer ${KEY}`],
+            headers: { Authorization: `Bearer ${KEY}` }
+          }
+        }
+      }),
+      'utf8'
+    )
+    expect(claudeMcpStatus(API, path, KEY)).toBe('disconnected')
+  })
+
+  it('a legacy mcp-remote args entry reads needsUpdate', () => {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        mcpServers: {
+          [MCP_SERVER_KEY]: {
+            command: 'npx',
+            args: ['-y', 'mcp-remote', mcpLegacyServerUrl(API), '--header', `Authorization: Bearer ${KEY}`]
+          }
+        }
+      }),
+      'utf8'
+    )
+    expect(claudeMcpStatus(API, path, KEY)).toBe('needsUpdate')
+    expect(claudeMcpConnected(API, path, KEY)).toBe(false)
+  })
+
+  it('a present-but-malformed args marks ambiguity, never connected', () => {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        mcpServers: {
+          [MCP_SERVER_KEY]: {
+            url: mcpServerUrl(API),
+            args: 'not-an-array',
+            headers: { Authorization: `Bearer ${KEY}` }
+          }
+        }
+      }),
+      'utf8'
+    )
+    expect(claudeMcpStatus(API, path, KEY)).toBe('disconnected')
+  })
+
+  it('multiple mcp-remote tokens declaring different endpoints refuse', () => {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        mcpServers: {
+          [MCP_SERVER_KEY]: {
+            command: 'npx',
+            args: [
+              'mcp-remote',
+              mcpServerUrl(API),
+              'mcp-remote',
+              mcpLegacyServerUrl(API),
+              '--header',
+              `Authorization: Bearer ${KEY}`
+            ]
+          }
+        }
+      }),
+      'utf8'
+    )
+    expect(claudeMcpStatus(API, path, KEY)).toBe('disconnected')
   })
 })
 

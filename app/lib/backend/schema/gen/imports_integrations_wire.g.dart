@@ -9,6 +9,7 @@ class GeneratedImportJobResponse {
   final String? error;
   final String jobId;
   final int? processedFiles;
+  final String? sourceType;
   final String status;
   final int? totalFiles;
 
@@ -19,6 +20,7 @@ class GeneratedImportJobResponse {
     this.error,
     required this.jobId,
     this.processedFiles,
+    this.sourceType,
     required this.status,
     this.totalFiles,
   });
@@ -31,6 +33,7 @@ class GeneratedImportJobResponse {
       error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
       jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
       processedFiles: _readFieldValue<int>(_readField(json, const ["processed_files"]), "processed_files", _readInt, requiredField: false, nullable: true),
+      sourceType: _readFieldValue<String>(_readField(json, const ["source_type"]), "source_type", _readString, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
       totalFiles: _readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: false, nullable: true),
     );
@@ -44,6 +47,7 @@ class GeneratedImportJobResponse {
       'error': error,
       'job_id': jobId,
       'processed_files': processedFiles,
+      'source_type': sourceType,
       'status': status,
       'total_files': totalFiles,
     };

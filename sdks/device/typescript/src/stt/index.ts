@@ -5,6 +5,23 @@ export interface StreamingTranscriber {
   stop(): void;
 }
 
+/** Thrown by a Parakeet transcriber's appendPcm and stop when the server closed the stream
+ *  before sending ready, e.g. 1013 capacity_full or service_not_ready. That stream never
+ *  becomes ready, so callers can retry or switch engines instead of losing the session's audio. */
+export class SttStreamClosedError extends Error {
+  /** The WebSocket close code, e.g. 1013 (try again later), or 1006 if the connection failed. */
+  readonly closeCode: number;
+  /** The server's close reason, e.g. capacity_full; empty if it gave none. */
+  readonly closeReason: string;
+
+  constructor(closeCode: number, closeReason: string) {
+    super(`stream closed before ready: ${closeCode}${closeReason ? ` ${closeReason}` : ''}`);
+    this.name = 'SttStreamClosedError';
+    this.closeCode = closeCode;
+    this.closeReason = closeReason;
+  }
+}
+
 export function parakeetWsUrl(apiUrl: string, sampleRate = 16000): string {
   const trimmed = apiUrl.trim();
   const rawUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
@@ -45,6 +62,7 @@ export function createDeepgramTranscriber(opts: {
   const url = deepgramWsUrl(opts.sampleRate ?? 16000);
   const ws = opts.createWebSocket(url);
   ws.binaryType = 'arraybuffer';
+  let stopped = false;
   ws.onmessage = (event: MessageEvent) => {
     try {
       const data = typeof event.data === 'string' ? JSON.parse(event.data) : null;
@@ -54,9 +72,12 @@ export function createDeepgramTranscriber(opts: {
   };
   return {
     appendPcm(chunk) {
+      if (stopped) return;
       if (ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
+      if (stopped) return;
+      stopped = true;
       let sentClose = false;
       try {
         if (ws.readyState === 1) {
@@ -110,6 +131,7 @@ export function createParakeetTranscriber(opts: {
   let stopped = false;
   let sentFinalize = false;
   let finished = false;
+  let closedBeforeReady: SttStreamClosedError | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   ws.onmessage = (event: MessageEvent) => {
     if (typeof event.data !== 'string') return;
@@ -125,6 +147,11 @@ export function createParakeetTranscriber(opts: {
       if (text) opts.onTranscript(text);
     } catch { /* ignore */ }
   };
+  // The server can close the stream before ready, e.g. 1013 capacity_full or service_not_ready
+  // (backend/parakeet/main.py). Such a stream never becomes ready, so keep why it closed.
+  ws.onclose = (ev) => {
+    if (!ready && !stopped) closedBeforeReady = new SttStreamClosedError(ev.code, ev.reason);
+  };
   const finish = () => {
     if (finished) return;
     finished = true;
@@ -136,6 +163,8 @@ export function createParakeetTranscriber(opts: {
   return {
     appendPcm(chunk) {
       if (stopped) return;
+      // PCM before ready is dropped, unless the server already closed the stream.
+      if (closedBeforeReady) throw closedBeforeReady;
       if (ready && ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
@@ -153,6 +182,7 @@ export function createParakeetTranscriber(opts: {
 
       if (!sentFinalize) {
         finish();
+        if (closedBeforeReady) throw closedBeforeReady;
         return;
       }
 
@@ -175,12 +205,20 @@ export function createWhisperTranscriber(opts: {
   const batchBytes = (opts.batchSeconds ?? 5) * 16000 * 2;
   let buffer = new Uint8Array(0);
   let stopped = false;
-  async function flush(deliverWhenStopped = false) {
+  let queue: Promise<void> = Promise.resolve();
+  function flush() {
     if (!buffer.byteLength) return;
     const pcm = buffer;
     buffer = new Uint8Array(0);
-    const text = await opts.runner(pcm);
-    if (text && (!stopped || deliverWhenStopped)) opts.onTranscript(text);
+    const job = async () => {
+      try {
+        const text = await opts.runner(pcm);
+        if (text) opts.onTranscript(text);
+      } catch {
+        return;
+      }
+    };
+    queue = queue.then(job, job);
   }
   return {
     appendPcm(chunk) {
@@ -193,8 +231,9 @@ export function createWhisperTranscriber(opts: {
       if (buffer.byteLength >= batchBytes) void flush();
     },
     stop() {
+      if (stopped) return;
       stopped = true;
-      void flush(true);
+      flush();
     },
   };
 }

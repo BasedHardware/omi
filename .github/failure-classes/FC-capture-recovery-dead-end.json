@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-capture-recovery-dead-end",
+  "violated_contract": "A recovery affordance shown on a surface the reader is using must act where they stand: it may retry in place, explain on demand, or be dismissed — it must not navigate to a page that cannot fix the problem (back from there does not return the reader to where they were), and one failure must be stated once per surface, not repeated as equivalent sentences across a heading, a banner, and an empty state.",
+  "canonical_prevention": "Wire the alert's tap to the same in-place recovery the monitor already runs (retryVisibleEpisode), with a details sheet for the explanation and an explicit dismiss for the current episode; name the moment everywhere else through the one shared capture-state table so headings stay short and empty states stay neutral while the alert banner owns the full sentence.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/capture_recovery_banner_test.dart",
+    "app/test/unit/capture_state_labels_test.dart",
+    "app/test/widgets/capturing_empty_state_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversation_capturing/capture_recovery_status.dart",
+    "app/lib/pages/conversations/capture_state_labels.dart",
+    "app/lib/pages/conversation_capturing/",
+    "app/lib/pages/episodes/"
+  ],
+  "status": "open"
+}

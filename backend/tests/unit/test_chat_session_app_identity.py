@@ -7,8 +7,8 @@ app:
 
 - `DELETE /v2/messages` filtered the message delete by `plugin_id == None`, so
   an app session's record was deleted while its messages survived;
-- `GET /v2/messages` on an empty session created the greeting in the *current*
-  app session rather than the selected one;
+- `GET /v2/messages` must read the selected app session; an empty history now
+  returns no messages and creates no greeting;
 - `POST /v2/messages` ran the turn with no app, giving the wrong persona and
   storing the reply as main chat.
 
@@ -18,12 +18,14 @@ no FastAPI app construction.
 """
 
 from datetime import datetime, timezone
+from unittest.mock import Mock
 
 import pytest
 from fastapi import HTTPException
 
 import routers.chat as chat_router
 import utils.chat_session_target as chat_target
+import utils.chat_turn as chat_turn
 from starlette.requests import Request
 
 APP_SESSION = {
@@ -99,27 +101,28 @@ def test_clearing_a_named_app_session_deletes_its_messages(monkeypatch, sessions
     assert deleted == []
 
 
-def test_reading_an_empty_named_session_greets_that_session(monkeypatch, sessions):
+def test_reading_an_empty_named_session_returns_no_messages_and_writes_no_greeting(monkeypatch, sessions):
     recorded = {}
 
-    monkeypatch.setattr(
-        chat_router.chat_db,
-        'get_messages',
-        lambda uid, limit=100, offset=0, include_conversations=False, app_id=None, chat_session_id=None: [],
-    )
-
-    def _initial(uid, app_id=None, chat_session_id=None):
+    def _get_messages(uid, limit=100, offset=0, include_conversations=False, app_id=None, chat_session_id=None):
         recorded['app_id'] = app_id
         recorded['chat_session_id'] = chat_session_id
-        return {'id': 'greeting'}
+        return []
 
-    monkeypatch.setattr(chat_router, 'initial_message_util', _initial)
+    monkeypatch.setattr(chat_router.chat_db, 'get_messages', _get_messages)
+    initial = Mock(return_value={'id': 'greeting'})
+    add_message = Mock()
+    monkeypatch.setattr(chat_router, 'initial_message_util', initial)
+    monkeypatch.setattr(chat_router.chat_db, 'add_message', add_message)
 
-    chat_router.get_messages(plugin_id=None, app_id=None, chat_session_id='sess-app', limit=100, offset=0, uid='uid-1')
+    result = chat_router.get_messages(
+        plugin_id=None, app_id=None, chat_session_id='sess-app', limit=100, offset=0, uid='uid-1'
+    )
 
-    # Without the session id the greeting is written into the *current* session.
-    assert recorded['chat_session_id'] == 'sess-app'
-    assert recorded['app_id'] == 'app-9'
+    assert result == []
+    assert recorded == {'chat_session_id': 'sess-app', 'app_id': 'app-9'}
+    initial.assert_not_called()
+    add_message.assert_not_called()
 
 
 def test_reading_a_named_session_scopes_history_to_its_app(monkeypatch, sessions):
@@ -155,7 +158,7 @@ def test_over_quota_turn_in_a_named_session_carries_session_and_app(monkeypatch,
             detail={'error': 'quota_exceeded', 'plan': 'Free', 'unit': 'questions', 'limit': 30},
         )
 
-    monkeypatch.setattr(chat_router, 'enforce_chat_quota', _enforce)
+    monkeypatch.setattr(chat_turn, 'enforce_chat_quota', _enforce)
     monkeypatch.setattr(chat_router.chat_db, 'add_message', lambda uid, msg: added.append(msg))
     monkeypatch.setattr(
         chat_router.chat_db,

@@ -15,7 +15,7 @@ import typer
 from rich.markup import escape
 
 from omi_cli import config as cfg
-from omi_cli.errors import UsageError
+from omi_cli.errors import CliError, UsageError
 from omi_cli.json_input import load_json_input
 from omi_cli.local_client import existing_path
 
@@ -148,7 +148,7 @@ def screenshot(
     written = _write_screenshot_result(result, output)
     raw_metadata = result.get("metadata") if isinstance(result, Mapping) else None
     metadata: Mapping[str, Any] = raw_metadata if isinstance(raw_metadata, Mapping) else {}
-    ctx.renderer.success(f"Wrote screenshot to [bold]{written}[/bold].")
+    ctx.renderer.success(f"Wrote screenshot to [bold]{escape(str(written))}[/bold].")
     ctx.renderer.emit(
         {
             "path": str(written),
@@ -196,7 +196,7 @@ def complete_task(
     task_id: str = typer.Argument(..., help="Task backend ID."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    _emit_tool(ctx, "complete_task", {"task_id": task_id}, success=f"Completed task [bold]{task_id}[/bold].")
+    _emit_tool(ctx, "complete_task", {"task_id": task_id}, success=f"Completed task [bold]{escape(task_id)}[/bold].")
 
 
 @task_app.command("delete", help="Delete a task permanently.")
@@ -207,8 +207,8 @@ def delete_task(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete task {task_id}?", abort=True)
-    _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{task_id}[/bold].")
+        typer.confirm(f"Delete task {task_id}?", abort=True, err=ctx.renderer.json_mode)
+    _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{escape(task_id)}[/bold].")
 
 
 def _emit_tool(
@@ -300,10 +300,13 @@ def _normalize_sql_result(result: Any) -> Any:
 
     if result == "No results":
         return {"rows": [], "columns": [], "row_count": 0}
+    # Column labels can start with status prefixes too. Prefer a complete,
+    # validated table; use the status interpretation only for non-table text.
+    fallback: dict[str, Any] = {"text": result}
     if result.startswith("Error:") or result.startswith("SQL Error:"):
-        return {"error": result}
-    if result.startswith("OK:"):
-        return {"ok": True, "message": result}
+        fallback = {"error": result}
+    elif result.startswith("OK:"):
+        fallback = {"ok": True, "message": result}
 
     # Find first non-empty line (header) and last non-empty line (footer)
     header_idx = None
@@ -319,17 +322,17 @@ def _normalize_sql_result(result: Any) -> Any:
             break
 
     if header_idx is None or footer_idx is None or header_idx >= footer_idx:
-        return {"text": result}
+        return fallback
 
     footer = lines[footer_idx].strip()
     row_count_match = re.match(r"^(\d+) row\(s\)$", footer)
     if not row_count_match:
-        return {"text": result}
+        return fallback
 
     header = lines[header_idx].strip()
     sep_idx = header_idx + 1
     if sep_idx >= footer_idx or not set(lines[sep_idx].strip()) <= {"-", " "}:
-        return {"text": result}
+        return fallback
 
     expected_count = int(row_count_match.group(1))
 
@@ -340,18 +343,24 @@ def _normalize_sql_result(result: Any) -> Any:
         data_lines.pop()
 
     if len(data_lines) != expected_count:
-        return {"text": result}
+        return fallback
 
     # Verify no embedded empty continuation lines inside data_lines
     if any(not line.strip() for line in data_lines):
-        return {"text": result}
+        return fallback
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
+    # Ambiguous tables must not be silently reshaped: duplicate column names
+    # would collapse rows keyed by column, so treat the text as non-table.
+    if len(set(columns)) != len(columns):
+        return fallback
     rows = []
     for line in data_lines:
+        if line.startswith("Result truncated after "):
+            return fallback
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
         if len(values) != len(columns):
-            return {"text": result}
+            return fallback
         rows.append({column: values[index] for index, column in enumerate(columns)})
 
     return {
@@ -370,7 +379,16 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
     app_filter = arguments.get("app_filter")
     limit = int(arguments.get("limit") or 15)
 
-    if result.startswith("No matching screen-history results") or result.startswith("No screen history is available"):
+    # Desktop's emptySemanticSearchMessage (ChatToolExecutor.swift) formats four
+    # no-hit messages: no history captured, screenshots not indexed yet, no matches
+    # among indexed frames, and no matches when reading index stats failed.
+    if result.startswith(
+        (
+            "No matching screen-history results",
+            "No screen history is available",
+            "No screenshots found matching ",
+        )
+    ) or (result.startswith("Omi has ") and "not ready to search yet" in result):
         suggestions = [
             "Try a broader query",
             "Increase --days",
@@ -390,8 +408,10 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
 
     results: list[dict[str, Any]] = []
     current: Optional[dict[str, Any]] = None
+    # Desktop labels each hit with its similarity score (Gemini route) or with how it
+    # matched: "hybrid: keyword|vector|both" (on-device route), "match: text" (text fallback).
     result_line = re.compile(
-        r"^\s*(\d+)\. \[(.*?)\] (.*?)(?: - (.*?))? \(screenshot_id: (\d+), similarity: ([0-9.]+)\)$"
+        r"^\s*(\d+)\. \[(.*?)\] (.*?)(?: - (.*?))? \(screenshot_id: (\d+), (?:similarity: ([0-9.]+)|\w+: (\w+))\)$"
     )
     for line in result.splitlines():
         match = result_line.match(line)
@@ -402,7 +422,8 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
                 "app_name": match.group(3),
                 "window_title": match.group(4) or None,
                 "screenshot_id": int(match.group(5)),
-                "similarity": float(match.group(6)),
+                "similarity": float(match.group(6)) if match.group(6) else None,
+                "matched_by": match.group(7),
             }
             results.append(current)
             continue
@@ -451,7 +472,14 @@ def _add_exact_screen_fallback(
         "ORDER BY timestamp DESC "
         f"LIMIT {limit}"
     )
-    fallback = _normalize_sql_result(client.call_tool("execute_sql", {"query": sql}))
+    try:
+        raw_fallback = client.call_tool("execute_sql", {"query": sql})
+    except CliError as exc:
+        fallback: Any = {"error": exc.message}
+        if exc.detail:
+            fallback["detail"] = exc.detail
+    else:
+        fallback = _normalize_sql_result(raw_fallback)
     next_payload["exact_fallback"] = {
         "query": sql,
         "source": "app_window_ocr_sql",
@@ -482,6 +510,13 @@ def _decode_base64_payload(value: str) -> bytes:
     payload = value
     if "," in payload and payload.lstrip().startswith("data:"):
         payload = payload.split(",", 1)[1]
+    # Drop ASCII whitespace before validating. Line-wrapped base64 is ordinary
+    # output - it is what base64.encodebytes and most MIME encoders produce -
+    # but validate=True rejects every character outside the alphabet, newlines
+    # included, so a correct payload would otherwise be refused as corrupt.
+    # Stripping only whitespace keeps validate=True strict about everything
+    # else, which is what catches a truncated or non-base64 screenshot.
+    payload = "".join(payload.split())
     try:
         return base64.b64decode(payload, validate=True)
     except (binascii.Error, ValueError) as exc:

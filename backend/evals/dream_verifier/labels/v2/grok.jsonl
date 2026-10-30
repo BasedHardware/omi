@@ -1,0 +1,1144 @@
+{"id": "9b30780f5aa940b370351960b8da", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "46cea0b0ed1d35c60ba7901d29a3", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "440a992461daf87846568f422ba7", "label": "accept", "reason": "The owner states ZeravaTray as the current project name.", "reviewer": "grok"}
+{"id": "c8d01cd8d9af4e285a77f78f85b0", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "316396863eefad899f657a46d72b", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "95cef1de27b48cf6ac033b5216b2", "label": "reject", "reason": "The later statement does not replace this workplace fact.", "reviewer": "grok"}
+{"id": "3f913577abdd52472a3be9bae4b0", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "09e82b8c5e017f9083653306ac39", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "e636834b9e430552cbd6485cd54a", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "a28499f02fe5b0605af8e88fb3e8", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "79a6e87d965e70a1ea02104860e2", "label": "reject", "reason": "An existing generated title must not be overwritten.", "reviewer": "grok"}
+{"id": "55efdb1d455c15770b0d52efb836", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Tavira tray to West depot.", "reviewer": "grok"}
+{"id": "6d50acf81795c6f0be6cb4c6f729", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "47d451e150066aec18bef8e246e0", "label": "accept", "reason": "The transcript says the new glaze was not approved and the decision remains open.", "reviewer": "grok"}
+{"id": "2ad70c16d7e84ce845f74814dffb", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "2eb840f388647b0fb64cefcff722", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "81fd2968dec77f41874b463ea934", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "71da45259a8ae18e2e625a8f529e", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "3136abc9c625533d26b0a4549d3a", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "d6bf7efe821d1e90527d2ea0a530", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Ixelune tray to West depot.", "reviewer": "grok"}
+{"id": "d68455d75303e21d98db1de35609", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "160885b6d7537e87a2627484ca3a", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "482658d2012704ba088e6ce339b0", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "88387c643c76cfd9e349997bdf61", "label": "reject", "reason": "The later statement does not replace this workplace fact.", "reviewer": "grok"}
+{"id": "e762fae9ec2d07ff3f58ec0c6675", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "e6a14664a48baca8dc07511a27e3", "label": "accept", "reason": "The summary keeps Luro's blue labels and Vesha's green labels separate.", "reviewer": "grok"}
+{"id": "dd6b338538595428084a0d39c796", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "4857fb9299f468be7abd6935d6b0", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "64cae70ad43ee14940212c2046e5", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Tavira tray to West depot.", "reviewer": "grok"}
+{"id": "05de0cfd4d7a152653249e39ea59", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "9212cf6b2edf40d8f3f949bbe43d", "label": "accept", "reason": "The owner says this exact task is finished: Ship Qelori tray to West depot.", "reviewer": "grok"}
+{"id": "e53cbeba279ab9a015587903fa0d", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "ee49ddbf2fb442741ba66baa1eff", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "8f3a7b454f502ccd5c085c5cf7a2", "label": "reject", "reason": "The later record repeats the same value.", "reviewer": "grok"}
+{"id": "790e382f29134852645a309c160c", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Tavira tray to West depot.", "reviewer": "grok"}
+{"id": "8d4ed62045b1d595e8ee8e6f8467", "label": "accept", "reason": "The owner states AruvenKiln as the current project name.", "reviewer": "grok"}
+{"id": "1cbd54760966739d239c041bd449", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "bb40fcda81dcd80ef5b8269b71f5", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "e975187033245a1afd68db2f575e", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "0c1fe9ca41d92361966aacc98003", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "aa5dcc044770dcf63365592748f1", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "d732be3ba8732d6d06b4736b12a8", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "923878b3ce9efcb5f1c6fb53b94c", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "483c27ad2f65b3bbd1f3b7fd7810", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "ea37175c0fc56fcbedd4a78be7fc", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "be6d93370ad4c1d3c1622505057e", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "4f56d717251bc1e2ec990b3d0760", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "8087b9ac9286e946508b6562a00d", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "68023779630b6ca2e8dac7e3890d", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "bb12ecf98a969495e0258dd69a19", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "4463763881c8a67dd48c12d35132", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "4c0ad958fb8bced1616297e25f22", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "2b03620867b372385548d7c8db29", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "3d220e6f74df6470e8fb276392eb", "label": "accept", "reason": "The owner says this exact task is finished: Ship Nuvessa tray to West depot.", "reviewer": "grok"}
+{"id": "9cf741cb2468538fe2161c2793c7", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "9157900b55cc8879a4bcf521742e", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "c4e5b94bb6b6002827c3b0409833", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "1edef43f82e9cf6381efe32fd833", "label": "accept", "reason": "The owner says this exact task is finished: Ship Qelori tray to West depot.", "reviewer": "grok"}
+{"id": "15fd8868292ff861deaf0de57cb8", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "1c6873743ff32e94db06ddfdb835", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "ba008abcfb4e48e27a114ee2022f", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "923d4c4f069a62118280de4c532a", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "8b19e5c1469db6b224f51f37a02c", "label": "accept", "reason": "The owner states MirexuTray as the current project name.", "reviewer": "grok"}
+{"id": "cda4a2433055d2ede44d3336b88b", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "1ea571b5dcc59d4aa1a77274ed7b", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "615044f7ee18697ec406a3899ac6", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "41ac34154202de51cf086f59a9db", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "51fba52549da845b4b0cf7dd84ac", "label": "accept", "reason": "The transcript says only the red crate needs replacement.", "reviewer": "grok"}
+{"id": "05c0e9f0d157aba82cdec466ebed", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "626ec010cf7ae8de1eecd4ce0a41", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "86fee175c3a69418f2d3c133b352", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "bb8f23b38fbb0e78b0e3791eb212", "label": "accept", "reason": "The owner states Zelumi as the current project name.", "reviewer": "grok"}
+{"id": "4adb5066c21d597eac3c9482f8f2", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "db043f169e5b065b1b54112c7605", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "3166ce82cdcabc181c0607a8198b", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "7a6de13d9abe32aab606669a76a3", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "ec7f26592bf38f58b77995d5c334", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "061002606286417d220ec56df1f8", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "3377f19db6f08b4ddea429a93619", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "a6a0fbd9249c173ddb688570c431", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "f62a00ef637b4db07460db30c104", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "0468058ef0e02ef20a7221b7ae7a", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "5d5c675d5b0a451802a3ad4e0139", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "077015969b365250c3c32a52fcc0", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "232c17bccfa81921890317c298ea", "label": "accept", "reason": "The transcript is ja.", "reviewer": "grok"}
+{"id": "efc86ea6dc2ba872faa764e07813", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "a6d92be83213e0c30a01a4b63a74", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "544108e4ceb96ce730bb6d91d2d7", "label": "accept", "reason": "The transcript says the crack might be cosmetic and still needs inspection.", "reviewer": "grok"}
+{"id": "b16034d73f0cc4e1f8aa09739af2", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "5485101c17d257d74464e7bf2059", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "bdcbd7cbc4a0b0f7925675026668", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "8faa8e6846a74649f38e2a92fe48", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "248a87c74742bece5d7623e55298", "label": "accept", "reason": "The owner states Toruvin as the current project name.", "reviewer": "grok"}
+{"id": "14d2b592c005c1e0015894ae667a", "label": "accept", "reason": "The transcript is fr.", "reviewer": "grok"}
+{"id": "5429d7690280705d5168750d162b", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "3264cbb32193b38183c20f527e2e", "label": "accept", "reason": "The speaker spells Vozeli and says the transcript's Vozelah is the error.", "reviewer": "grok"}
+{"id": "a26b52bab7ab358724f9d1efcea6", "label": "reject", "reason": "One capture does not have a positive duration.", "reviewer": "grok"}
+{"id": "f5da1422b4cb93c57bc11a1d4e24", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "5f6ff1ab2ce4bc36c5dbdfe21b50", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "a01d3c5c9d8403404bf4197f1645", "label": "accept", "reason": "The owner says this exact task is finished: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "60fccc7c0d5683a672659542ae15", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "20cf02bc1dd0dd0883437a5d6245", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "820a160e52fda8861f6fc4bb905a", "label": "accept", "reason": "The owner states Neraval as the current project name.", "reviewer": "grok"}
+{"id": "6e52ab6ab59ef36deb8d80fa0cf6", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "f9588c2ee188bd74f17ed7835b7c", "label": "reject", "reason": "The transcript does not say the fan stoppage caused the cooling.", "reviewer": "grok"}
+{"id": "e47a8f0354f642c0e837e5e77296", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "df46b092027cf4751c46037feae7", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "d1ebcc66078b6afb13a8e58bb445", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "aed455e674ddda162dee7deb8111", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "5158de2f34d5534303ea3de35b38", "label": "accept", "reason": "The owner says this exact task is finished: Ship Nuvessa tray to West depot.", "reviewer": "grok"}
+{"id": "2a1852a7a652bd83285135b8e6cc", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "e2f38f394f9fee6057099f0c8097", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "58ddaa1fa32cc525ad684fd9bb65", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "966d0be1872c8e53729c4a331e74", "label": "accept", "reason": "The transcript says only the red crate needs replacement.", "reviewer": "grok"}
+{"id": "b01a753923a19dd2a82b6cfbb346", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "14c2324033a496c073fcb1c3832f", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "57bf1baa9851d5c4664b34583cb4", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "5e9fe4715d6f2b03402353d4d57d", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "2121ad883fb9d41d6ca4e873fafa", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Aruven tray to West depot.", "reviewer": "grok"}
+{"id": "5ed6b8e92f29c99280cd308f1053", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "494f4a04b5dde13ca14d6bbb0567", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "573dca8e657eb3ca01e6e88a4771", "label": "accept", "reason": "The transcript is it.", "reviewer": "grok"}
+{"id": "71b98c389a677b086d410e529882", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "c243ba8075c0f5b93e48b7c06783", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "5ed0e53837960a18f4a85c579637", "label": "reject", "reason": "The later record repeats the same value.", "reviewer": "grok"}
+{"id": "2a42430c893f99293a1a3b56fdce", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "2aefe20b3dd1f4d88a9f071b9b79", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "21eb7a6d6085739e0368cb74f415", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "8f146939d67f8d39eee588bba009", "label": "accept", "reason": "The transcript is hi.", "reviewer": "grok"}
+{"id": "dce8e960ed2cd34a8d7db877e25e", "label": "accept", "reason": "The author says unknown in this note was a transcription error for Aruven.", "reviewer": "grok"}
+{"id": "22095abf411e3cdb10bce3f1ff41", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "acd8dd735f672c16d0eb09ef8675", "label": "reject", "reason": "The later record repeats the same value.", "reviewer": "grok"}
+{"id": "fddb9e5e7022dbcce78b3cafa285", "label": "accept", "reason": "The author says Glass in this note was a transcription error for Glasses.", "reviewer": "grok"}
+{"id": "85eb93224507c9519029921c7689", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "7bca4a6e006affc7a08dc90b7b02", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "f6af7bc4c6fa5fdfedca95095f5d", "label": "accept", "reason": "The transcript is es.", "reviewer": "grok"}
+{"id": "1f6de9fab77cab14e40cb4866b63", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "e441627cf137ef2dc9dbca268646", "label": "accept", "reason": "The speaker spells Vozeli and says the transcript's Vozelah is the error.", "reviewer": "grok"}
+{"id": "31be1b873c3e0a6aee5d52fab22e", "label": "accept", "reason": "The transcript corrects the packing deadline to Tuesday.", "reviewer": "grok"}
+{"id": "1bca33f027ea14a7c7859c63268f", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "96a3cc9732797cb3b1b103d416b9", "label": "accept", "reason": "The transcript reports both events and does not establish a cause.", "reviewer": "grok"}
+{"id": "2e7ecda2e22be677f403bfefb99c", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "7a28c1928b4cee5d808ea0ab669e", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "bd896d5387d817c938a27c99c11e", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "bcc96d02fdd3f35292822b4d5ab5", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "31b120a038f42fbe225dd363cee6", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "952ef4fbc0536de72769d44c00eb", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "f2b2bda18ffbdab627f2849cc33d", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "e5f017e2102d7b416461dd3018ad", "label": "accept", "reason": "The speaker spells Qelori and says the transcript's Qelorah is the error.", "reviewer": "grok"}
+{"id": "703cd9e610078aa023352c03c999", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "c9a4e7b73e9f0ad1d0d7c4ff8649", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "83845574941a556cca6228ef1e08", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "a180fa3cef6541efb61de2bcb606", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "7262267f90427fc704daa70ef1d5", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "f74c3cce6ca200b3158ada7ad4d8", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "86be63f5a9424f7a367d2e020625", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "339a92aea49559af95350356196d", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Aruven tray to West depot.", "reviewer": "grok"}
+{"id": "a9fbb75a52190d477868e58514d9", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "077e2d27f374b6b88059d8f89bc5", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "e40a5c976067b9d6bd06540e3d6d", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "ce618e5d7e506392ba7dd7927a63", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "0d0ce2c74349941eef58fca8df8c", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "51d66d22645a60274074c739d60b", "label": "accept", "reason": "The speaker spells Aruven and says the transcript's Aruveah is the error.", "reviewer": "grok"}
+{"id": "62ceb9dc185e36aa925c59c03082", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "ac6075873c18a397c761c2a4f182", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "ccc0d503795b97f48fd5d724539f", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "64f46dc9337022d7193399194c6e", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "204c05d185fdccebb38bdd7afd8a", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "2585355ad182e7593a9879274ee5", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "254785094298ce1e0122c9c2b46b", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "0328be4b9d1724a739ec172b7ef1", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "39faee555571b277eb3bea8d703c", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "7e25e0d06a3efe27139a7de74608", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "e7f3aaeefb31b028bd1ae2d99618", "label": "accept", "reason": "The owner states bonjour as the current project name.", "reviewer": "grok"}
+{"id": "84c0b08866bed937bce36ef47449", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "6a75e72383f7ce2a458e5e2abeaf", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "21ea266cf82274cc92ae01c2d613", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "0f3dca9e834ad745895f471199a1", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "f74a126a57ac7856dd992d63b666", "label": "reject", "reason": "An existing generated title must not be overwritten.", "reviewer": "grok"}
+{"id": "e3e4859c7626ec5500eee6bd60c8", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "3c9084dbc966896465dc2a0a4564", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "604aa528dde0a877e2b47980bfba", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "a1fee3d720548f89661e0414711a", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "1d57f55af905da63a454f5f05985", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "e26cd8b420f453a2ae6053a6803a", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "797d079a670f66d5306d3c3fdb30", "label": "reject", "reason": "The transcript says nobody was appointed workshop manager.", "reviewer": "grok"}
+{"id": "d924ef1b811ad1b8ef766876bc5a", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "d5a127e704bf9f642dd2806a8e5f", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "04f39cf2f8fe3d9a87bffd6a3616", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "ee6c21b12e4c5594890c557db5f8", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "f429d2d7a4ac38a3257cc42aba3f", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "155661f954742db26152091d94d1", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "424d24abb8927b17ab0d8e5cf4c4", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "b9fa181b5755e5b591fc234b02d8", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "4eb989922faa566268e0ce287ac1", "label": "accept", "reason": "The speaker spells Zerava and says the transcript's Zeravah is the error.", "reviewer": "grok"}
+{"id": "0a5aacbae80ac4804bce36822d27", "label": "accept", "reason": "The owner states table as the current project name.", "reviewer": "grok"}
+{"id": "b873d25b8ce98aa3f6b9a03e97fa", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "3eebb036cdf8b69db56b6abd23bb", "label": "reject", "reason": "The transcript assigns the drawing review to the other person.", "reviewer": "grok"}
+{"id": "4663b30b74b0bf09087b56716f88", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "09584b03a7acfc465fdb84950d19", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "540d7191f1185aaec3f844fa9853", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "29bacaeb1b592f0d469f23f859cd", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "10efab671907e05394360d33e807", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "5020438f7134e966023d22f5c282", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "dfb55c8c033057f788cf1c05e7be", "label": "reject", "reason": "An existing generated overview must not be overwritten.", "reviewer": "grok"}
+{"id": "19aa1b7bb58d6c0167d56e8d5ae1", "label": "accept", "reason": "The owner states IxeluneGlass as the current project name.", "reviewer": "grok"}
+{"id": "ee1a8cb83ba3291013f09d5934c5", "label": "reject", "reason": "The proposal swaps or merges the Luro and Vesha label colors.", "reviewer": "grok"}
+{"id": "7fa9f3e9434f6edf311ad5673c5d", "label": "accept", "reason": "The transcript is vi.", "reviewer": "grok"}
+{"id": "b36e3f1da3c25f6793e81d8bf25b", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "270618a31c7124a48c2401175c19", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Nuvessa tray to West depot.", "reviewer": "grok"}
+{"id": "07cd18541524d6c6e5063f990b58", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "5cad6b6f80c1525fe11f78d2c986", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "10761f40d2a6eccf2999fd9ea7b6", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "9350e6394367374edddefa52475a", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "287e7f60d173169fedf125d2bdee", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "ca2d8d2ab307744a84f597cf4d6e", "label": "accept", "reason": "The owner says this exact task is finished: Ship Aruven tray to West depot.", "reviewer": "grok"}
+{"id": "c2d1740bfa4cc853e6b1c966527d", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "5b96108adec733a1c34f52256fe7", "label": "reject", "reason": "An existing generated overview must not be overwritten.", "reviewer": "grok"}
+{"id": "9c350acdfccd6cf9ef8a29bfdfc5", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "0d85cae61033792fcbd629189f00", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "8d937380ae757b2249f1d1d29783", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "f59b19d3c7697a33c7ca6e9df6cd", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "dc0de961ed5d4ff0a74f93b39177", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "9350ba519956ddb078e3aaa3b806", "label": "accept", "reason": "The transcript is fr.", "reviewer": "grok"}
+{"id": "907b669bc1b09a000b92ee8268d0", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "70303d27304d244073d7e3c5dcb3", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "d00c30446a55e17712aae946e65b", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "07aa1642770ec524a3aba41398a0", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "f1a02528c1423f13a18db8f321c4", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "a66b3d1eb392b4d0fca3e908f9db", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "6b54239c23e406dae1255c44393c", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "165515ca351933afd04ea5e4ebba", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "764d51c7faca6cddfab18c82efa8", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "559b304ef7082754fd5bfd49ea71", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "9719fbb7872d1988575bccda4c41", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "2db7730773195ba2eee5a538fab8", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "bea3df4b1eb8f25e0519112e1567", "label": "reject", "reason": "An existing generated title must not be overwritten.", "reviewer": "grok"}
+{"id": "ddf3d4824dd51f4d8c51a03acd0e", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "7774f59e2996605f1cb2fa4ab94f", "label": "accept", "reason": "The owner says this exact task is finished: Ship Ixelune tray to West depot.", "reviewer": "grok"}
+{"id": "99683b6ba2795a87f66bd2218d28", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "57ceac3f3b01f183be0cc2705c57", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "0b3222c4b3d754f64b1d7bdfa4cf", "label": "accept", "reason": "The owner states AruvenGlaze as the current project name.", "reviewer": "grok"}
+{"id": "12e2ca3ab3b9af9b2e1ef87967be", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "1ffc278d6c5c97df544a5d106981", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "487d4e184bd26d7ddd8f46a80c8b", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "e354cf23753345ad8bbf1dac5bfc", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "e08fb235b8d698de7fe59919fcda", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "4a94124e433b531838ed04ff8931", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "5720efb9e2e6028a5b160d8caa64", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "b77ef98eef6f655b39da3239995f", "label": "accept", "reason": "The transcript is vi.", "reviewer": "grok"}
+{"id": "fb4e6d381322a582ccdfc717fef6", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "994061c57dc4f9b2ae4aaa17f757", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "f0cb2a7aca12f1bc52e73289d012", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "e53e85fd50a1f3102890cbfa6e4e", "label": "accept", "reason": "The transcript reports both events and does not establish a cause.", "reviewer": "grok"}
+{"id": "ebf1c5faf430d90c892a26642ea6", "label": "reject", "reason": "The transcript says eight of the trays were rejected.", "reviewer": "grok"}
+{"id": "d106dad4051c5a6e1933c13ad625", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "a2f44b1ef72b9b63b1ac217635f4", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "6021358d869d2cf24a37138fb48c", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "842b10777dde96446359755624d9", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "40ad7c88a89058863eeba3859853", "label": "accept", "reason": "The owner states TaviraTray as the current project name.", "reviewer": "grok"}
+{"id": "20b899662f2aaac2d4b4678c627b", "label": "reject", "reason": "An existing generated overview must not be overwritten.", "reviewer": "grok"}
+{"id": "419e21c706cfba857adbe0289bef", "label": "accept", "reason": "The owner says this exact task is finished: Ship Ixelune tray to West depot.", "reviewer": "grok"}
+{"id": "23fee927034c0e54cc4dd4b2b471", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "071a3da86f853387d08710859605", "label": "accept", "reason": "The transcript says two sample trays were accepted and eight were rejected.", "reviewer": "grok"}
+{"id": "a45a2da1efff9e9948a45f2b2bc1", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "36d498917e9004ffd542bfa73dff", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "8a9ae48727c3143b0864039cc928", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "44ef09adb5cea88ecd525cb99e43", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "d112e82e6dba238eb0b18e753a7d", "label": "accept", "reason": "The speaker spells Qelori and says the transcript's Qelorah is the error.", "reviewer": "grok"}
+{"id": "f0cd07ba33dd982fa5fdd6d1f76e", "label": "reject", "reason": "The transcript does not confirm the crack is cosmetic.", "reviewer": "grok"}
+{"id": "ac66bf2d27c8a3a7b23d192d17da", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "3154f0cf57bc3b8a30956e62128e", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "5a1f8c8b1bb24def4af4f4e250fe", "label": "accept", "reason": "The owner says this exact task is finished: Ship Tavira tray to West depot.", "reviewer": "grok"}
+{"id": "7b03114b1b232db18ef55836e2dd", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "d12c6545758b1cd1bdcd78a58e83", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "7a2f833272d3676ea2bf6d1ebd41", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "d4f312e3fb7e2cd573ff9d19519d", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "b9d3d37f73c14be71851f7d3c4a3", "label": "accept", "reason": "The speaker spells Mirexu and says the transcript's Mirexah is the error.", "reviewer": "grok"}
+{"id": "b7ef79aaa90b39d508ac09c78428", "label": "reject", "reason": "The transcript says the extra tray test is not a release requirement.", "reviewer": "grok"}
+{"id": "3523add7850ebe7ea1252b558fd4", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "7010e47ed22a59fe59042f06297e", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "9e197d1a9f1177d699c64e7bd11e", "label": "accept", "reason": "The transcript is fr.", "reviewer": "grok"}
+{"id": "4cc3af305a89c085c69a72777972", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "1c5418e54c502a581992a6f8a497", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "4129900a58dca901325ae6274f20", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "0d282eabb8a6d889b8ac7fad0c84", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Qelori tray to West depot.", "reviewer": "grok"}
+{"id": "49a151aac193cca45a5cab7aa637", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "afb13f4547917b906fa7fdb427e6", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "95f7681a34c7fa80651e2ee826b6", "label": "accept", "reason": "The transcript is ja.", "reviewer": "grok"}
+{"id": "c7dcd49da27b1a731707082e5bb2", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "80d9549afe39688390776ec5628b", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "e7639e1e2392fad9fc96053c0db5", "label": "accept", "reason": "The owner states VozeliKiln as the current project name.", "reviewer": "grok"}
+{"id": "e3fe7cb3144e86467e2eee3194b1", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "7977bad04a66d8f22b768e8044f8", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "5ddb4958f40a63b00f68870daeac", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "f0baf55a6a10eb6ddac6694fbad4", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "da92514f47abbc5fe965abe1aa5e", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "054ad2667d90ee27c2823d84fbf4", "label": "accept", "reason": "The author says Zela in this note was a transcription error for Zéla.", "reviewer": "grok"}
+{"id": "2d8889a51bcfbdd28b52f576808f", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "d7b3105d90fe8a353b2c75ab5ff0", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "048d90f2699ef0e90fae55f20432", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "d6e9e523e15b88fdefcc4edb7890", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "450d0210d9c2f360540348f554f5", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "e9a9bbcb26dda0cd48253862327f", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "bdebe13196e58e2c2dda5245066e", "label": "accept", "reason": "The owner states MirexuGlaze as the current project name.", "reviewer": "grok"}
+{"id": "71ef1620613e689fd1c9a69f2ac6", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "17b76aa68881198a897a2695ddb4", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "3a74e182d9a3bbb4317195403de6", "label": "accept", "reason": "The owner states MirexuKiln as the current project name.", "reviewer": "grok"}
+{"id": "16554a6fcabd3b6bfb9ce5379c76", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "dcac2f08e1325a80e426eb9c6fb4", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "77c84379034d3165041a165017ee", "label": "accept", "reason": "The transcript is nl.", "reviewer": "grok"}
+{"id": "0b73b0a2230b33de02c1f6e4c1b3", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "5ab587be70e5d5b406597f9d97d9", "label": "accept", "reason": "The author says Zeravi in this note was a transcription error for Zerava.", "reviewer": "grok"}
+{"id": "8e72518fa7a6d335f96a85308e53", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "16c0c2e6b2ab54bffc58e1bd4210", "label": "accept", "reason": "The transcript is ja.", "reviewer": "grok"}
+{"id": "22677de299535aac5c968a353562", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "a1c906c4378f05233a15ec4f0a82", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "0c7bbe9f96c3421bf49a7458042d", "label": "accept", "reason": "The transcript is es.", "reviewer": "grok"}
+{"id": "49f49db141dc54bf6213adc0f46f", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "2c7eeba3e48300502703ded6e3f0", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "9c3f123d4fa17d2ecefb76de43ea", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "48c6535fda47d0eed913765dfed5", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Ixelune tray to West depot.", "reviewer": "grok"}
+{"id": "ff3a8f7910179f875ed62e231359", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "06d320e958c1ab3f485f13c26606", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "2f7aeb8eee48a995aac61f151423", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "25ad3e24dfb115534f21477a82ac", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "d8708b183e5f2ca23b6bba4015ec", "label": "accept", "reason": "The owner states ZeravaGlaze as the current project name.", "reviewer": "grok"}
+{"id": "beb0094d6926af03ee3529a2fbdf", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Vozeli tray to West depot.", "reviewer": "grok"}
+{"id": "49233fc6ad4059d77bdf479a76a5", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "0ad6994ea0acfe2a7404c037ff6f", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "bc277b21e1788be921148b539bef", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "71cf9af7519de834f1904f95ae01", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Aruven tray to West depot.", "reviewer": "grok"}
+{"id": "b897161de8c8fd9ad435273d176d", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "2c2aee736d0e9740d3550340c7df", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "df2967119b03b17f324ddd4c1701", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "d4fe229811d01608f919845ca5cd", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "79ffe9add898f3be84a2eb808b7c", "label": "accept", "reason": "The speaker spells Zerava and says the transcript's Zeravah is the error.", "reviewer": "grok"}
+{"id": "6e608a2318592a4fa183ba0b6d27", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "c16c23ca5a402031d21a4f24068d", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "efb6a7b87fefbb50ec3b13388409", "label": "accept", "reason": "The transcript is vi.", "reviewer": "grok"}
+{"id": "1cb0d76c9986dc2ef3e05b68cb05", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "6fb02a8a5f0b1f493a9c9ab46bca", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "96004b91ba27c36c1183fefea654", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "b26ab6d428d1e3bf8ce939d1a07e", "label": "accept", "reason": "The owner says this exact task is finished: Ship Nuvessa tray to West depot.", "reviewer": "grok"}
+{"id": "9313495a0c71b968d92051c25c66", "label": "reject", "reason": "The transcript does not confirm the crack is cosmetic.", "reviewer": "grok"}
+{"id": "e7e913008d24c47a288ba88ed3ee", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "06745d65557bc5288f708c574781", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "6184af3e60efeff9e32b4f4e85d2", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "244fbe92cb98eece88caf5d94f6b", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "2922f1d65b24c21860e6e74e22f9", "label": "accept", "reason": "The owner says this exact task is finished: Ship Mirexu tray to West depot.", "reviewer": "grok"}
+{"id": "b12451dae7b61178d48643a303a6", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "800a7208ef79dcca079f75fb730a", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "a3a927c546b149b7d11fa679b252", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "ddd62a88754040fd81fb4c316063", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "380d7ccd5640853f95aad09c2f61", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "5a80116a0f2dcbc4e187e8306a34", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "f945f76e2551ab64b64ad0e95cbe", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "9b3591ebd6e316346103de27bf36", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "42dd5fc793cd3837ba19a5041e72", "label": "reject", "reason": "The transcript says the inspection has not happened yet.", "reviewer": "grok"}
+{"id": "d5ca68187cf25340d47448809dd0", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "1b29f395d68276f9f5968107d27e", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "b03285c71032fc630b9398f386c1", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "c7b895a693f05bf82873246a951c", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "d877e930c13a6d9f036681824d38", "label": "accept", "reason": "The transcript is zh.", "reviewer": "grok"}
+{"id": "cf157b9a8ff6ac1f9537e1e17ef3", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "7adc56e08613d71e116dbb4fdb5c", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "2936b63ce9f329b7800f167623e6", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "e1aec6dd4bf4966d0eee39d02991", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "34328ff5d4dc760726629fbf39c9", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "18496ba2aac3a43e7cc2f8439886", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "26cfa72a7e9bf36d5a47cb3ca332", "label": "accept", "reason": "The transcript is vi.", "reviewer": "grok"}
+{"id": "086ba52860b81271b26fee7330f1", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "e9f6ea5d8a68b0b795638967b3c1", "label": "reject", "reason": "The transcript says the glaze decision remains open.", "reviewer": "grok"}
+{"id": "c5931e54f4c169d75e5957f55500", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "a34e43a330f5a396b92fb87e107f", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "6162a2a2812cda5e70d7c5f28eee", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "b24604629f31723c695875367e78", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "a66011bf837fcad448237c0e77f1", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "19665f6db8c719df9c930b7f0396", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "836ff6b178ff57e3983c8e5e47a4", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "3190410d4ad1d0df8ca59132aa12", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "2c3bdcc0c5972d149a641d1c6946", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "87b3e1065b0395945b49bc711f53", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "46f17ffc02468caad36ebec7a021", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "9c2a884bca526860e47d153160c7", "label": "accept", "reason": "The owner states VozeliTray as the current project name.", "reviewer": "grok"}
+{"id": "b65835241a4e814a06f45c460abc", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "a4aa07e2bfd555078cc3a5a8ce3a", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "bd574d6b80c27ea4f466111fc954", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "e8d7a9ae7bb96f4263918a98d68b", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "539cf9cafa1df1f712eb26415ad4", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "8d45340907319c823c03c1ec9991", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "e9438f587642c651f8f5eaae92e5", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "f0229bec30f913c93bd420bbc6cb", "label": "accept", "reason": "The transcript corrects the packing deadline to Tuesday.", "reviewer": "grok"}
+{"id": "77ecd42164e0302b8fef90443acb", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "8288818447779ba04da2d27c0110", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "7dd488f37665d66783a3398fe882", "label": "accept", "reason": "The transcript is de.", "reviewer": "grok"}
+{"id": "717094ce545f4230d0f74f7822ea", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "808fd0eeaaa6cfdc4005f973a065", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "d9d1609610ac6d864c32f1bbeb42", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "db4338e0e8ce1689320c40d1b6dd", "label": "accept", "reason": "The owner says this exact task is finished: Ship Aruven tray to West depot.", "reviewer": "grok"}
+{"id": "9daa06392f8d4e21427ae6789b98", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "5302fe8b9bcaaffdfa3f1c696a64", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "6f5f7a609bf644b3e5bf547fb5cb", "label": "reject", "reason": "The later record repeats the same value.", "reviewer": "grok"}
+{"id": "901b7cf136ffe07095f20fb3b1c0", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "9370de3016b2803c71fe69a6c402", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "fffc54791e3f251a991c62625e66", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "3f09bfada4181055a09c02d5efcf", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "2e7cf82044c08a5a8d0dabe55123", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "24120af9e8980e51411761107513", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "f0c229abf49ff253917cc7fedb85", "label": "accept", "reason": "The owner says this exact task is finished: Ship Mirexu tray to West depot.", "reviewer": "grok"}
+{"id": "414b15f6507eebec75128d5e55e1", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "d83fb1d94297ce748d07ba1b7c73", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "84ad9a59671cc9d971d41d3c0636", "label": "accept", "reason": "The transcript is vi.", "reviewer": "grok"}
+{"id": "c9e3387a786c39d1cf680b90ceb6", "label": "reject", "reason": "The transcript says nobody was appointed workshop manager.", "reviewer": "grok"}
+{"id": "a30cfaff0ab2ec15cdeb1c395cdf", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "15352160426eca352c44e545ab51", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "ed64a7221d3cb8a70570b6d482d7", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "3ae0f63ab4e8c67f3124be4c2ea2", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "c8a735b5ef6a0d31e549ffbd1ba4", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "660977774c6db44320e2b52413db", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "ae1657c450305cddb725d894347f", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "a8327f8392c493b8a8b8bcd2b028", "label": "accept", "reason": "The author says Nuvex in this note was a transcription error for Nuvexa.", "reviewer": "grok"}
+{"id": "8cdaf7b83a2d680fe0cb29fbc728", "label": "reject", "reason": "One capture is missing a known start or end time.", "reviewer": "grok"}
+{"id": "da28d7dd04598f130d37c4c2156d", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "26c6416728d42cef8528bc7c27a2", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "e6ecb507b4e39fe01e01d10fac7d", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "2976a8ee9ca35c56e19ae7a2c714", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "27796e81f09139742550b7de4dfd", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "f6bcdac73d3a79d23654744d9b4d", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "3ca2f6d59f0576abf14486587935", "label": "accept", "reason": "The owner states Qoruvane as the current project name.", "reviewer": "grok"}
+{"id": "b360cded1a3718aa2c4e895a7141", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "1b3c953674220b5ac4be97fcba6b", "label": "accept", "reason": "The owner says this exact task is finished: Ship Vozeli tray to West depot.", "reviewer": "grok"}
+{"id": "4508c68c15d19d635cd7dcde6a0a", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "1709f13c1c79849b1becadb1978d", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "79d851ce9eeca22ac3c90cc54e93", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "5db3c7b955a1605f17d632ed2687", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "4152d76f8267a0327e58d04b8c2a", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "123f1f6308a0fefd4c578d98c0a1", "label": "accept", "reason": "The owner states NuvessaTray as the current project name.", "reviewer": "grok"}
+{"id": "2121a43b644c49467a80733b1f0d", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "6b7bafeaddfa5a1bb7e1c84a09a8", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "d7e042581f9092bb2b9e08bb4967", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "e53b64f94a8addd4feb76428950d", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "a30428c4774d6e4611e92c2791ff", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "6620da8b3aef955dfd5bc9f0abb4", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "7eb8e00114a09568fa8f5b13113e", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "b2f54dbe6187a031c255bf1a6a7f", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "94f801d8d79d14cd6a7074b8e434", "label": "accept", "reason": "The owner states MirexuGlass as the current project name.", "reviewer": "grok"}
+{"id": "3e91015e7178646f67bbbb16a572", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "5882b28ba3fdee33fe7bf8df3c9e", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "603458eb235024d4e77c8d7f296d", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "b4148158293c271d3136b83a6736", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "3bd015e3d63014634cb43d8fe027", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "49f648a8f92ff68aeaf98005af13", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "aa6dd5bd85232079f066d8573e1d", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "7ed04c2248453c99c37dbb378581", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "302436e844512fa0d6d28ec87442", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "daaa12a19e7dc8bf950df919f651", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "4f7fe16fe7eee31dbaad5205ae7b", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "f40491a86f3bace6cc75c2092a0d", "label": "reject", "reason": "The later record repeats the same value.", "reviewer": "grok"}
+{"id": "2bfe587e4e930475b99ed7d860cb", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "b9c10478d5a8c9caf3660d3fd310", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "3de0890a6a3fdc17d44b4f9eb0c9", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "420a86f35879ef2a5f37be981ff5", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "2c106c2e5f323b61f0e436e3114d", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "35571d5992fc813f432436883ab0", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Nuvessa tray to West depot.", "reviewer": "grok"}
+{"id": "fa50e781ff232b93842819ce9897", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "06dacad2b4ef180a52cb0dc7509b", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "94e09de83199cf1ac17b69d7cdc2", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "8b4ce68df0a75c3a0dbe026a91b7", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "f137d6e35e8e7b43d0b5de2f4c8b", "label": "accept", "reason": "The transcript says the crate inspection is still planned for tomorrow.", "reviewer": "grok"}
+{"id": "7a799836a8ee9720e2e143766369", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "38523f4d9f195bd879a8b05a6f19", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "29ec2cd7905fbaad1b57e799832b", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "596722e8ec9719615d7e13a5d61b", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "d35f98d555fd00d56748d1ab5c5d", "label": "accept", "reason": "The owner says this exact task is finished: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "21946865f88633429f2f997faafa", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "85c91b1e483b385eecd488739c56", "label": "reject", "reason": "The later statement does not replace this workplace fact.", "reviewer": "grok"}
+{"id": "9b6be80776a40d98c98b87348788", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "3669ae7ad9b3c6efb0a063ba8acf", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "8f1a831def4e2400f6c23f0a64fc", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "76b8c1af4d387ce95afbb8b647d8", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "ecfc3a583834c6a4ab2b828f8beb", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "9f2a04d1cef85009bcc3bb00af9e", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "620cbdb95c568c8eb8d80a67275d", "label": "accept", "reason": "The transcript is es.", "reviewer": "grok"}
+{"id": "d72fef8032fa79853e08b59eadf9", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "f2f0ab01ff7098e6cd3f529f9dc7", "label": "accept", "reason": "The transcript is ko.", "reviewer": "grok"}
+{"id": "b50060d5b7724bafe7b11e0f5299", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "a25b6141d6a33a717de33c875a83", "label": "reject", "reason": "The later statement does not replace this workplace fact.", "reviewer": "grok"}
+{"id": "3e24fe4db014400341d3ca4d3174", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "b3d40fee825d3f106f7e354c642a", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "4a905a5ecdcad90f79ed352264a4", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "d2a359d85486a1239c255f965bbf", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "f250ca1db8188d151444fdccea3f", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "80cfd275a128056708c399b96e94", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "8ca2af28b1641f61f8caaa3f0d39", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "da26651bf1c54ac07fde298ce597", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "e9f9972500e3862d490cb158fbf6", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Qelori tray to West depot.", "reviewer": "grok"}
+{"id": "e83416e12bcda30ab40232785c12", "label": "accept", "reason": "The transcript is es.", "reviewer": "grok"}
+{"id": "1e30031237dd46f772e625e5bb69", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "9def0091a061d366b62d6e535fbc", "label": "accept", "reason": "The title states the separate label colors the transcript describes.", "reviewer": "grok"}
+{"id": "7d5a2f29562e9e0eb638b1376bef", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "7ebf18f8b77c4edb8ad44a846dc0", "label": "accept", "reason": "The speaker spells Ixelune and says the transcript's Ixelunah is the error.", "reviewer": "grok"}
+{"id": "5a159ced57bc4bd9f630d5d45a91", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "f9a5a11d97626cd17b411b69e296", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "44d8312e1c1021146a22659ef8a1", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "4b50918855a8a49d0dc81e5dd128", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "10d9f3ffc6622c586eb97c21e285", "label": "reject", "reason": "The transcript says the glaze decision remains open.", "reviewer": "grok"}
+{"id": "a0363ad00f705cb094f04a670659", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "ec47ee54aa00cbea5f888e919abb", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "27c0f988953d9177d664a2e2b0c8", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "39724bbfb6884414cbb21379f15f", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "a07eebb7a5b9abc453c443cb660e", "label": "accept", "reason": "The owner states NuvessaKiln as the current project name.", "reviewer": "grok"}
+{"id": "887597711edf251c511c869ec85f", "label": "reject", "reason": "Joining the group does not establish that this person personally reviewed the work.", "reviewer": "grok"}
+{"id": "3daebccc5c61c9d125b16985e2bb", "label": "accept", "reason": "The transcript is fr.", "reviewer": "grok"}
+{"id": "9f923a3b672060bd4138aa50949d", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "9855f1a58144b871317ffb96aba6", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "c84101c43605c05644b702f14e5b", "label": "accept", "reason": "The owner states Velorin as the current project name.", "reviewer": "grok"}
+{"id": "310136ca2297cfde24241a7ebf3d", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "4a90afd64b5b15ddac906f78c26c", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "424d9aae583aece1a7c31dd5a80a", "label": "accept", "reason": "The owner says this exact task is finished: Ship Tavira tray to West depot.", "reviewer": "grok"}
+{"id": "2db117fcadfb861f9960fbf63683", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "f9c020c8655a3543a064f6003e34", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "7a96168119357bae09509ed253aa", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "72b5313d79dea7bf54c689761321", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "3b89c904f95639f246e4f2d91ebe", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "75386cf1057cb9275686e5b862ed", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "bfee417871fd6341f5a13ae6d2d8", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "f0108d24dc6ad44bbf53e4e05479", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "c584698326f2c94d90832a238f75", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "bc2fdaa23d7f742515a44a7cb1ba", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "d68b20d60708ba1b8ae64fea5844", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "003f0e7d45f1e231f58732be3d31", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "a5326a38fed766dee53fc59fea49", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "575641e144c356f952531c47b00f", "label": "accept", "reason": "The owner says this exact task is finished: Ship Qelori tray to West depot.", "reviewer": "grok"}
+{"id": "92429d849147cdaa79b7468a7116", "label": "accept", "reason": "The owner says this exact task is finished: Ship Vozeli tray to West depot.", "reviewer": "grok"}
+{"id": "04c784dd2e8516bb558509e0a915", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "37c22d1e53ce21ab99a0535e5550", "label": "accept", "reason": "The transcript is ja.", "reviewer": "grok"}
+{"id": "de13793db82faa2dd08025a1d8af", "label": "accept", "reason": "The transcript is pt.", "reviewer": "grok"}
+{"id": "ac16e8fddec1d17a090d2cece4bb", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "19c58bc29df48b45b900cd7a671d", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "381096a015473d5d05a4cd00442c", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "e9c9233684a2595243db62e92d06", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "0329bc80eb7ba11e06dd48b0e31d", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "91a87a819f28c50fbf2791082a69", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "aec00eada7b0ed7bdb7af58caf99", "label": "reject", "reason": "The transcript says the deadline is Tuesday, not Thursday.", "reviewer": "grok"}
+{"id": "064341f2e42f12a46efe594510c2", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "f6856854e3558bcd8e445838f92f", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "9ae3c24ce0af8f3ecf1f1cedd033", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "51bb278c4afea4e764411ff49891", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "2f8f609c6b0a066b0397c5b53ab1", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "dfed0b19db4e20aaed307f51a6cc", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "5e25528c7e5f0abb4021174b13f6", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "5ea6b64690ad0e6a91ab1fdd1492", "label": "accept", "reason": "The author says Taviro in this note was a transcription error for Tavira.", "reviewer": "grok"}
+{"id": "c3c3a66d6c00a9638b07c5e21f02", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "648a66e27b0d2d576df4e0f10238", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "2bbe074c3fd25a44a39fc893b6ba", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "6ac6e0e6a73c5ac7b06f0f9aa192", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "2a178fee615b9e6685d01644ba9c", "label": "accept", "reason": "The owner states VozeliGlass as the current project name.", "reviewer": "grok"}
+{"id": "b3e3346605c6f97e9f7a5c09845f", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "172ad3750e3763ca4d322f17d667", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "231b8267416b814150e0ec8662a8", "label": "accept", "reason": "The transcript is ja.", "reviewer": "grok"}
+{"id": "9690635092172c4d8a43b9087677", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "f8c52c559890f8857a4b19c9f1a8", "label": "accept", "reason": "The transcript is es.", "reviewer": "grok"}
+{"id": "ea5b395566bedd62415ada949dde", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "9a49beeb1811cf76dd13fa1b72b7", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "1c81dc857ee8df0c86c086c3e0cc", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "b3b8ef650be89b9f9767749c072c", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "5e0195e39ff5ada63893bf034866", "label": "accept", "reason": "The owner says this exact task is finished: Ship Aruven tray to West depot.", "reviewer": "grok"}
+{"id": "fc6b6683e9125414c76484fa4341", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "1f0b142fb48010684d803b004e58", "label": "accept", "reason": "The transcript says the temperature was recorded and no manager was appointed.", "reviewer": "grok"}
+{"id": "decc74fb87d5f997402f9a8b73db", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "965bbe81d4dc4fb58d83902efeba", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "879cd4881c89190f74a971a34d1d", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "8bce686048b850073bd987f6f290", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "ac0da90277be67b124f380f57981", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "ee428fc2f740d32c0b0c855518cc", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "fcd37980084ec1d502ab2b384891", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Vozeli tray to West depot.", "reviewer": "grok"}
+{"id": "804cc142c5a1b3c8184690284ce4", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "6f9898cc649ef6ede8bb2ad39169", "label": "accept", "reason": "The transcript is ja.", "reviewer": "grok"}
+{"id": "fae3067ab7c5371e0ff56eb6536f", "label": "accept", "reason": "The owner states QeloriGlaze as the current project name.", "reviewer": "grok"}
+{"id": "d313e38825743332537cd6c6d9d5", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "3f8524510a97d076125db675d7b8", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "d7a4878445a024741721eaef11ca", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "b8a39956e414850886f4dd5e448b", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "5cf5b3fba8c870b4074225ceb4d5", "label": "accept", "reason": "The author says Tavirs in this note was a transcription error for Tavira.", "reviewer": "grok"}
+{"id": "b0a0bde6195739f85a14e58b9c76", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "2140081d1652993351fd8fe3f846", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "055685a65a3a28ddcadebb803d1a", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "30cafda541036a5dcbf99e3edfb9", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "ac7bb8c1460852d913e3a88516cf", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "81bfda045e145eda12310c1a7637", "label": "reject", "reason": "An existing generated title must not be overwritten.", "reviewer": "grok"}
+{"id": "f02ad061f9f1e031f53b94d7babc", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "ea8034a5ad269b5898518734a27e", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "01919969de86bab7f4fe87ee411d", "label": "accept", "reason": "The owner states AruvenGlass as the current project name.", "reviewer": "grok"}
+{"id": "0d758d0a83f6dcf7a2e1718020b0", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "6d0856988ab0231332527263f6de", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "0a03226f8b8dcd3420238bbccf51", "label": "accept", "reason": "The speaker spells Ixelune and says the transcript's Ixelunah is the error.", "reviewer": "grok"}
+{"id": "caf9197aff51441ceefc6f488b5e", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "1a6a24f547b7201628a2641c20f4", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "e12e2185a7ac8b2eddb0b36c6e26", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "bd79df54c3fc3e74325b2544079f", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "a13d57e41284b63b2e06abde4c72", "label": "accept", "reason": "The speaker spells Aruven and says the transcript's Aruveah is the error.", "reviewer": "grok"}
+{"id": "a889c031d9e669a0b02dc3d80c8e", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "13480ab3c61723390af6791b65ba", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "dfdcc924c691ee9d521d95413aeb", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "712752f9c41afb44385c0d8db583", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "c2ea46fd8a17ecdd06f984134e92", "label": "accept", "reason": "The transcript says the new glaze was not approved and the decision remains open.", "reviewer": "grok"}
+{"id": "bfe5ade872ea521d25a5e22a402b", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "f72893cda9cdb727f08c5690c83b", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "b071f9032421e7e39340f105f8ae", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "c352f4bc98e046552108bf4539c6", "label": "accept", "reason": "The transcript is fr.", "reviewer": "grok"}
+{"id": "478400beb14d96b3b406063fa8d8", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "70e636a66aeb0285a5f1f5cd14ce", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "e46fbbec10dc3d79713871d8fa06", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "220a0dfbcca2093b1aa1852bb088", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "9afec26e17dd2d9a469f52de8703", "label": "accept", "reason": "The transcript says the temperature was recorded and no manager was appointed.", "reviewer": "grok"}
+{"id": "529baba3a4ec187906dd2f951300", "label": "reject", "reason": "The transcript says eight of the trays were rejected.", "reviewer": "grok"}
+{"id": "11894d01cb10317f471fd13aa6aa", "label": "reject", "reason": "An existing generated title must not be overwritten.", "reviewer": "grok"}
+{"id": "1caff89d5fcc37d3a9cf759dc210", "label": "accept", "reason": "The transcript is es.", "reviewer": "grok"}
+{"id": "c876f670f0b811035142f71eddde", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "72a65d60c40111857e50a4a3ed95", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "dea06b39c1f6ac408b38fd97a7ba", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "d970db35dd4e0a01149c54080bdf", "label": "accept", "reason": "The owner states ZeravaGlass as the current project name.", "reviewer": "grok"}
+{"id": "26e49620e2999f52a499186e7d55", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "15fdfa8f522625aabb8fc7744143", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "1e9a7ff6545761ae226551caf068", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "0859e36d8c5595589ca6dbb85c01", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "d10280efaf1864a7c17c44bd54ce", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "3924cdcd0242dd67cbbf80bc5336", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "5dc5dddb367631a8b95e82945e29", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "a0b59ca00ead54e41de767552fae", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "22add8fcabb155e65d0eda3eec1a", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "e06a9e384cd1cc4d2b1d0a3416ea", "label": "reject", "reason": "An existing generated title must not be overwritten.", "reviewer": "grok"}
+{"id": "f5dc7d59cc171479761eb6600ad8", "label": "accept", "reason": "The owner says this exact task is finished: Ship Mirexu tray to West depot.", "reviewer": "grok"}
+{"id": "537deddf74a324732d32ffe36770", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "11dd1b4202a5cdef24e945089f13", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "3da9f1db4306140a09b90093975f", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "65925f20cdba95f06d4cda346bd7", "label": "accept", "reason": "The transcript says two sample trays were accepted and eight were rejected.", "reviewer": "grok"}
+{"id": "d15d6a2272b18d342394c82ff2fa", "label": "accept", "reason": "The owner says this exact task is finished: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "bbeb6e45ec65d28fabd700f1edba", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "1d1543fd6cf7c2e920abff5d5e52", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "99dec158cc5e1e91a97a8d95f319", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "4246bc0e8dd32d4509e09b69d0bf", "label": "accept", "reason": "The author says Mireku in this note was a transcription error for Mirexu.", "reviewer": "grok"}
+{"id": "3fa82b2d1b0af374bcacb4a6a321", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "aa3ede0b23aae83e254b59e6ba77", "label": "accept", "reason": "The speaker spells Nuvessa and says the transcript's Nuvessah is the error.", "reviewer": "grok"}
+{"id": "7f9f0cc369b878f8cdf1c846e909", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "e90694321ea779936016a601dd4a", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "273e162da67284f3d6f013a55026", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "e1cffeaca28771e0827ed0df72cd", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "88b026210aae3a09e9f1b63c889a", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "c47bf129e9868bfcdd01985d30bf", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "044fa8e8cdec130f1c463d9deeb3", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "808b40605bc89c2456331a4f8415", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "a3e9138633c735a369f0c8d19146", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "c0af94738a88f036b38e04b53953", "label": "accept", "reason": "The owner states NuvessaGlaze as the current project name.", "reviewer": "grok"}
+{"id": "f4915ea2303a7d504695cea0bcb1", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "ac8624140a220a681485a9f124fb", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "5e0680533b5e2f2b8601f6bc9b6f", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "43d5787e69bcc0902dde89f4bdf9", "label": "accept", "reason": "The owner states TaviraGlass as the current project name.", "reviewer": "grok"}
+{"id": "5ebeac02bf3717cbc8e59efc9cf1", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "9a4c58498567e5230f63066a4318", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "65bec8d816f318b00fcdab6f836e", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "22e6f979b900c5d26e253022c8b4", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "e51bc97ccde0c9b00e8292c3bc58", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "0d03c05a8f56cb6f54a1b84acfd4", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "7f33b97107acb787f36785889d2e", "label": "accept", "reason": "The transcript is uk.", "reviewer": "grok"}
+{"id": "33d73616aeb0875961cef1fe7800", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "9b14699fcd71f6f75c62e26a9a53", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "d4e0dc72f6e2fd9fcbed7c90de10", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "bc5eed9078e4f56b40506a8d7902", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "40f86c689c7b91be762e08623b15", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Vozeli tray to West depot.", "reviewer": "grok"}
+{"id": "66e7ca02800def953e7fd72d113e", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "2b26f3108073ad2e3b2364cb39c6", "label": "accept", "reason": "The transcript is vi.", "reviewer": "grok"}
+{"id": "94d8c814b1cffe5a9ef45d4975e5", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "442ac1fd2cba636cbf6bc4d82a8e", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "b9f9fb2694c8bf39c3ff33a55d09", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "6aea551007f5f3612bd2e3586861", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "0304e9a0c53c150c1baa95464a9e", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "7e00116040618d9bc974b05ab119", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "17ad79bd9f612623d503a7eda845", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "5085e3b6877fc1f3b49e47cc94bf", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "895e7996f862daa5409678d5a372", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "ee31edf1a0afb1109c045fbbb670", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "bbcd1bd15ebd4eed9b4fc69763d9", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "0de97ec63e16db12f9ac460ae85d", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "439145814dab3c857d518866f916", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "e932699d959d84f310345401bffb", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "b5008cea1a991ad473d87dfadb78", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "3a7c75cc06140dd4900469ab1f46", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "fe000113684837f1cd08191e9b5e", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "785b35f200eda11fa5d094ee27c1", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "632781d5281c6fe49620bb8d7046", "label": "accept", "reason": "The transcript is fr.", "reviewer": "grok"}
+{"id": "bbc83e6564342299fb56e45ac893", "label": "reject", "reason": "A carried speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "56590134610dbccc2b9e154c71c5", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "86af4138424f5d5e6c204178d741", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "c506a32b5081d88d51dfefeeed02", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "56a2bf8f90627c7a601dc9e36e98", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "b5e709d1fd95610c34d9285f4983", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "423de182767841523175bd4539b9", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Mirexu tray to West depot.", "reviewer": "grok"}
+{"id": "49215028d8dfd326464538d067e4", "label": "accept", "reason": "The owner says this exact task is finished: Ship Vozeli tray to West depot.", "reviewer": "grok"}
+{"id": "02716fda2062fcd074bb394c6698", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "ddd36fa66c0c3e7d6485d6d2ef83", "label": "accept", "reason": "The owner says this exact task is finished: Ship Tavira tray to West depot.", "reviewer": "grok"}
+{"id": "1772bdb499a58bd78504744eb4ba", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "5c662fe2aa83f62ca5220bbac81f", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "ae7d7e4a4a74558193e1e6593ee3", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "28eae4d0271109a4a2d2522f7aee", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "0c96626870819d251fde7be8b575", "label": "accept", "reason": "The owner states Ilavora as the current project name.", "reviewer": "grok"}
+{"id": "969afef9ee4acfd6724496eb8c26", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Nuvessa tray to West depot.", "reviewer": "grok"}
+{"id": "908e12015db8cbd5847f1c518eba", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "2c6c13f903782715884ba5249565", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "1597c4d6fa66b72e13925180c69b", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "486fed0d79ba2d5cb2b1bf7bce4d", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Aruven tray to West depot.", "reviewer": "grok"}
+{"id": "a108d700a4f25ad34efca36a494a", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "27058bcaa996ec9fcc2d2878abe5", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "cac34a60f9d470cadf9e5dbc5067", "label": "accept", "reason": "The speaker spells Mirexu and says the transcript's Mirexah is the error.", "reviewer": "grok"}
+{"id": "7a621d47f5664153f2dfbc0510a5", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "c2842e6b8ceae9f8594ca4c7c7f3", "label": "accept", "reason": "The transcript is ar.", "reviewer": "grok"}
+{"id": "5b7378e1345e66af6479320e49e5", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "b29dd41fc16271c25bf0a5a2c1f9", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "42fb836df8348ec8d60224778a3d", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "37a18575016b76eebd81c2b6b090", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "184b5abfbfdb9b3c992f6a8ca8d5", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "83fb0055460c4533a51236d661f0", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "f12107312ee0e9c422fd150bf081", "label": "accept", "reason": "The owner says this exact task is finished: Ship Ixelune tray to West depot.", "reviewer": "grok"}
+{"id": "cfac946ca825e2969a3952c9629d", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "2968d79efbd8addfd00c3313ac3b", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "58fe932f9c92845edc8319647f96", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "2248cc2b9f619c9d182261b16259", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "9ad9fe3e1c9494593740f1fa1fc2", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "d77b510afcb06b603200097e033c", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "d00260d4fb372e3168cf3af4c7c3", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "e65b91c42ba013bdbf2a8d607ab7", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "35a524759803bad3201444b745ef", "label": "reject", "reason": "The later record repeats the same value.", "reviewer": "grok"}
+{"id": "782cbfdab905b27ac77fe1ced6bc", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "9aa895f9dc5f58c0fd2403ab2d2f", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "c251425bf4cd4465fc1e4f946546", "label": "accept", "reason": "The speaker spells Nuvessa and says the transcript's Nuvessah is the error.", "reviewer": "grok"}
+{"id": "3a8cbf70339af24efd4192aaf0ce", "label": "accept", "reason": "The speaker spells Tavira and says the transcript's Tavirah is the error.", "reviewer": "grok"}
+{"id": "eec43bcae24bc1664534b6e305fc", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "989d0b02445585e226b0e9bf1672", "label": "accept", "reason": "The speaker spells Tavira and says the transcript's Tavirah is the error.", "reviewer": "grok"}
+{"id": "57e426b85f80af17a940d5db721e", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "0cf5831e14f9587e5f9c28182891", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "9e90df603f2cbb625cce38757173", "label": "accept", "reason": "The transcript is th.", "reviewer": "grok"}
+{"id": "3edd730783cde3b574f452ab2ddc", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "c4f451820d9328d1136694e87e99", "label": "accept", "reason": "The transcript is vi.", "reviewer": "grok"}
+{"id": "a55aeacdc095457f835cdfce3b22", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "a617a8731f8cfc1dd6a3e1bf9ae5", "label": "accept", "reason": "The transcript is ja.", "reviewer": "grok"}
+{"id": "49cf727d432840780f313f505373", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "83e7f13af1fa5e21ea5e33c0f9d0", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "cf7db85ec1779257cbac79a40a2e", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "194328fb0f2f94182ebfa8c7802b", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "01824f6df78cc05da060e7b3f555", "label": "accept", "reason": "The author says Var-Nel in this note was a transcription error for Varnel.", "reviewer": "grok"}
+{"id": "75a2987dfc9f739aeff2c79c6e7c", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "8e7a33d5751a18b92033ea999120", "label": "accept", "reason": "The speaker spells Ixelune and says the transcript's Ixelunah is the error.", "reviewer": "grok"}
+{"id": "46d12396172c49deb0b4b14954d3", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "1b35e3cf06830c4cae4441028565", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Tavira tray to West depot.", "reviewer": "grok"}
+{"id": "412c6e3d812d6852a5ffb8c609df", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "7fd23542cd92f764f99ea786ff8d", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "f6c4ffc4ffae64d5650d79d2dcfb", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "0d88bd5663883b0d09e803bcb9f9", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "bfd45c030f8dedf937f6eaf708f4", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "83325c75e631eca156dc8a552384", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "7cecbbc048e84c0e5699dcd91a9c", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "d0a68c8b6f579befcf2fb2e79f52", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "7f32647bcbd66d57b8e47f8a6653", "label": "accept", "reason": "The speaker spells Tavira and says the transcript's Tavirah is the error.", "reviewer": "grok"}
+{"id": "1baa7d7c50ce4ff71ab1b92d6640", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "10dbe181afd1ff936eb3bca6e9a4", "label": "accept", "reason": "The transcript says the extra tray test is optional.", "reviewer": "grok"}
+{"id": "7f4de0341081a299e14d267544a7", "label": "accept", "reason": "The speaker spells Ixelune and says the transcript's Ixelunah is the error.", "reviewer": "grok"}
+{"id": "70e840031def196899c3c00ceef7", "label": "accept", "reason": "The owner states IxeluneKiln as the current project name.", "reviewer": "grok"}
+{"id": "941eba0c906b80e8cadf3cade2db", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "a663619ea7860be97836e4156e5a", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Mirexu tray to West depot.", "reviewer": "grok"}
+{"id": "6c5342e70c6ef3a7c2cb1ae34e28", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "a48bd14465d5d2d19c18da96aa99", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "91bf959415485ca87b63fcbb887b", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "c156c16a06e22ccf95e7685cd9cf", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "d074da375f08fb42551b871d462f", "label": "accept", "reason": "The transcript is tr.", "reviewer": "grok"}
+{"id": "b1f4895e770cb43fca10bbb66688", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "3650ad4c24d57be167d248beb2db", "label": "reject", "reason": "The transcript does not say the fan stoppage caused the cooling.", "reviewer": "grok"}
+{"id": "3ae7410473767e231da27fac175e", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Qelori tray to West depot.", "reviewer": "grok"}
+{"id": "0166acf6faf44a29b26393593136", "label": "reject", "reason": "The later record repeats the same value.", "reviewer": "grok"}
+{"id": "71a465e2fdbed5dce776d9db02bc", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "6a1fae949229c64b142285d010f3", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "8498776d01df7636ea8cfff3f68c", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "35a3b004281aa0bc6686e3637a69", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "d29ea9a896c03e8c68303acc95bc", "label": "accept", "reason": "The speaker spells Qelori and says the transcript's Qelorah is the error.", "reviewer": "grok"}
+{"id": "0508eedfb0058c057aeb63c054e3", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "9112c8a321858e2c0dec8426de40", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "606f34270ffca8bae591403497d1", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "98c6f493e50c75aa261eaf2a3df3", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "6ad0b7425554ccfe94d77ff2fb67", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "91cf242ab4290f6d5d08ea67049f", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "b43d86a351e15ba55403f3686a35", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "c20e3bdc084a3cafd87063365c25", "label": "reject", "reason": "The transcript says the deadline is Tuesday, not Thursday.", "reviewer": "grok"}
+{"id": "5e12206f6e9e50794208c19e4329", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "59f1dd81d1a2d037be9f4f3ac39b", "label": "accept", "reason": "The transcript says the person joined a group discussion of labels and a separate checklist.", "reviewer": "grok"}
+{"id": "ef2a5c4fd2d45852cc04d918cb04", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "2947a754ecc2eb6170bf9384d566", "label": "accept", "reason": "The owner states ZeravaKiln as the current project name.", "reviewer": "grok"}
+{"id": "1b9a547f338e02967eddd0112225", "label": "accept", "reason": "The transcript is es.", "reviewer": "grok"}
+{"id": "7662c54615e9cb43325a438328ba", "label": "reject", "reason": "An existing generated title must not be overwritten.", "reviewer": "grok"}
+{"id": "f46cd250540dfd97b16f29c4c34b", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "e9f135a347139c093b5f05ad6221", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "b46e4b4f7364645dd5d488d953b3", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "168e240b0ea62d954c40faf1fa44", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "a69c678020e0638d643368ed3cfe", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "99de7bf6448b9499f33f171b6e8f", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "d8d0c9dc316bb64c1d879295e92c", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "609179433625b4939f0bcbd3a535", "label": "accept", "reason": "The owner states NuvessaGlass as the current project name.", "reviewer": "grok"}
+{"id": "a81176fd67fc81f26cfe999093f6", "label": "accept", "reason": "The owner states QeloriGlass as the current project name.", "reviewer": "grok"}
+{"id": "495992b27ca7474d07765af17bb0", "label": "accept", "reason": "The owner states Veshaloom as the current project name.", "reviewer": "grok"}
+{"id": "05b30d8bc534202157d5e85c522c", "label": "accept", "reason": "The title names the person who reviewed the crate drawings.", "reviewer": "grok"}
+{"id": "973cdcd4aac2318f3542d835d1ab", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "4c8a59845d436df2e658eec90b36", "label": "accept", "reason": "The transcript is ru.", "reviewer": "grok"}
+{"id": "4e112e9f162553f99b7500d12650", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "c245c3f17f51fc800ec3ee2378d0", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "0ca0e8fc694e2b1e0acbc6d4a095", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "b38b1d2b5360d3d448571bc14846", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "d33116e424109676aded377d19bf", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "5b80d733a34162f4b377aa684f47", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "7b1430662fa8dcabd676e23d3a0b", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "365dc60b2a8cdff2012c23896e21", "label": "accept", "reason": "The owner says this exact task is finished: Ship Nuvessa tray to West depot.", "reviewer": "grok"}
+{"id": "e9658e8bd2d93d3e158c8cc15f79", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "3dd4056e24adf11699ec8a58aacc", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "b924356b82c47c1cba0b0767fcb2", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "bf17102af42490b39ff8683d8e86", "label": "accept", "reason": "The transcript says the crate inspection is still planned for tomorrow.", "reviewer": "grok"}
+{"id": "c26c22d2027674d322489b93401a", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "813a73d3deb3d07d57120395fde4", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "1158f407cdbdbd526072fa8dfd6d", "label": "accept", "reason": "The speaker spells Mirexu and says the transcript's Mirexah is the error.", "reviewer": "grok"}
+{"id": "8548f9c73cbec7bbbb8d90a97c07", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "b44ec9150ff0e8e2ccbbd4658331", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "8a827f9dfac1e4fdb1ba6979a7a3", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "aebe85c8ba1397d424e2c9c572f1", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "d465e3ad9767aaf0d6379cc9793a", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "13876f80d92cbdabfe1b5ab78bf9", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "465c55e42ebb1e8be2d64fc7b104", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "d8963ebdc69882db19b9373c7c93", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "52a45891d66cbf5a82854ab33572", "label": "accept", "reason": "The transcript is vi.", "reviewer": "grok"}
+{"id": "45debb210c72ba1dff51274f3eb1", "label": "accept", "reason": "The speaker spells Zerava and says the transcript's Zeravah is the error.", "reviewer": "grok"}
+{"id": "049e7585f9cf2e16c86037aa90c7", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "fa7e376ef682ab38d60c479e59de", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "3d3a13ff7c28838cf346a33219b8", "label": "reject", "reason": "The transcript says the extra tray test is not a release requirement.", "reviewer": "grok"}
+{"id": "5f6914ee92ca27e1bbd22839e1a2", "label": "accept", "reason": "The transcript is fr.", "reviewer": "grok"}
+{"id": "afed7e175eafbd68ddd1ae9c3932", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "9daf4684bcf9d974f8dbf27e7a4c", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "c42c2ab8c2ed66eb2f7512b51935", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "40a666d43cdd763951695cfc12d9", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "d09eace72f94e8b2f396d03d1639", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "b63415f625692fbe517dd39f3214", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "f2931aa8eb33773f0ba3c2089e40", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "95a152a29602fee20668998df851", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "3f6bad39bb15c2e5eae20ff20686", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "a10ca1fe5ce341b757e45aed7574", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "e5b06bbc36e4f2ec3d08c635a4cf", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "e9d190540ea3cd1c186f147c6aa5", "label": "accept", "reason": "The transcript says the extra tray test is optional.", "reviewer": "grok"}
+{"id": "76cffb886a5ded9efca0e06a892a", "label": "accept", "reason": "The author says Qelory in this note was a transcription error for Qelori.", "reviewer": "grok"}
+{"id": "baac01f1d4d7f44157f6ca9cf80e", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "deb82fd685ff87363e69634f640e", "label": "accept", "reason": "The speaker spells Vozeli and says the transcript's Vozelah is the error.", "reviewer": "grok"}
+{"id": "409ef3e511b3265c272f7fb1127c", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "386894cd00e431bc64789240bbe6", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "7c1c07df231deceb57154afe0c87", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "fdc7e9b31ebfc790450b7a282e1c", "label": "reject", "reason": "An existing generated overview must not be overwritten.", "reviewer": "grok"}
+{"id": "fdf19d3ae6f7e87d1b045f0745b8", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "5f26209fc44f00b502e8dcf074d8", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "7297a9bef30074113428efdc1fef", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "035e60e0973ba06adf8ec7c38431", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "7be78b94d33ef0c920537b8d867e", "label": "accept", "reason": "The owner states IxeluneTray as the current project name.", "reviewer": "grok"}
+{"id": "ada350a6a5e9ecbe6d82f77acc8c", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "16079354ce318826ff8273d2e704", "label": "accept", "reason": "The owner states NeraluxPro as the current project name.", "reviewer": "grok"}
+{"id": "e0f9f74f16abf56c628c2c85e8b2", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "804f229e3a235d847a66d11c9a9e", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "02bbeeb10b8ca7481ad4a623ce1a", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Nuvessa tray to West depot.", "reviewer": "grok"}
+{"id": "0636efb25fdc599cc615317ccf9b", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "2284952f874bcb246b3f60f303f8", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "4bc46c06f5b58b359d706fecafba", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "9ae2cb82759b9beb2ec5fc8ed9f8", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "964dfb5f176406f5e0564d354d20", "label": "accept", "reason": "The speaker spells Zerava and says the transcript's Zeravah is the error.", "reviewer": "grok"}
+{"id": "5be2a3386616af95480dbb16c13b", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "0d6596dd288c13432cfe31c99141", "label": "accept", "reason": "The author says qLine in this note was a transcription error for Qline.", "reviewer": "grok"}
+{"id": "a425bc7b0e1b51d2eee3c7189a0f", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop in the next weekly batch.", "reviewer": "grok"}
+{"id": "e31f22975e81f05bc511c1fef75b", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "298006acd118fe454b917e8f3039", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "7bad6df5f33e225962a77544f451", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "e15c06d5d54f0b5981626819bf1e", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "23d31487a71b33365b87df548b8b", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "42b303bb3ec88f7105a1711d19c3", "label": "accept", "reason": "The owner says this exact task is finished: Ship Mirexu tray to West depot.", "reviewer": "grok"}
+{"id": "f31fbc33d3898770e183616efc2f", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "5c0df429e8000f9171472c59ffd3", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "9fb6237e0316a1d236478a019d6c", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "f3e204f23a9dd32be50a094c9648", "label": "accept", "reason": "The transcript is fr.", "reviewer": "grok"}
+{"id": "f94d69155e5480f45876e1f7a161", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "5b5a0acfd90278b38fb7e153a203", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "955c388e60be28b85ef4571f814f", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "aa6a9279505179237811ba1c430b", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "f8a925d8200200d39d3bd3caa3a5", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "52d74bce451d7b1fe0e0a1d0dd43", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "35213d2062ae6d63640f622fd49b", "label": "accept", "reason": "The overview attributes the drawing review and the listening role as the transcript does.", "reviewer": "grok"}
+{"id": "126a621fcff96476e6a5b66f0695", "label": "reject", "reason": "An existing generated overview must not be overwritten.", "reviewer": "grok"}
+{"id": "4a930603183a88aa050064940b20", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "6f7205dc25877d2277cda817e69a", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "f0a8d2ff4b0e2a985f55f3097cc1", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "8a21fa3c63eb2e35ce35e93650f8", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "6f8db3fd35c816e6e22f7f128ed9", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "fec9368ca4d4d167f0c7fddd94f4", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "0621ef5658ea10388cdc49a241cb", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "ecb79bf0679f5493e41e43bb26f8", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "f4098e362559b92f1bf0a7e365fe", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "4cbe9667987d8f41b864e30c6da6", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "ae8083d91c6af60ffa96ca7a20d4", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "1973577a09ca5dfed219d08721dd", "label": "reject", "reason": "The proposal swaps or merges the Luro and Vesha label colors.", "reviewer": "grok"}
+{"id": "bf64383d0eff825a9a9df9e3065d", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "0b9e9bcdd3cb1db819e48c773616", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "f91750d4425de460fb784cb7b58e", "label": "accept", "reason": "The owner states IxeluneGlaze as the current project name.", "reviewer": "grok"}
+{"id": "27772b33d9396c69a23106df8de6", "label": "accept", "reason": "The speaker spells Qelori and says the transcript's Qelorah is the error.", "reviewer": "grok"}
+{"id": "0f4924345551e8eeabd85a817924", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "cc2f9600a88dff6e034370596754", "label": "accept", "reason": "The owner says this exact task is finished: Ship Aruven tray to West depot.", "reviewer": "grok"}
+{"id": "aaa268ffec33f04ff29d6ea8a8a1", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "917ea82eecdbe375863a09ccdf16", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "eba3910e4d9468b4c4d2f40c1ec8", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "97d3d643d749ba799951d0104342", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "7ac8b0469266e1d16d7f3c27ea22", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "54ca3a47e0f6b04d280bf9ae64b1", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "3ea8669888d485ace3097c648616", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "a5cc2f31444da09fa0e653c1dac0", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "10763eb73391a9f2c8e990d9747a", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "71a6b9a1b8a2c8080a0237c98b2d", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "2248a36d52b85dead000bfb32988", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "05f45e906d785d14174d65150a17", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "08ab2056e2e0168f77937f64b69c", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Ixelune tray to West depot.", "reviewer": "grok"}
+{"id": "f30221c4e191fe8f12ccfa8daed0", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "b1cd1ca35df2a91896852048c890", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "6e4b631f31e79b77e19cc77c11a6", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "07a771d8d25acedf3a599e5ce412", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "5c0f73f729abfddb13514500ecd4", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "b5723c78f2b32ac3e96677b3a1af", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "4a46fc8794810c6e9ab6f5059ef2", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "96aed5927b7b80133e6208cb0cae", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "c6fc301cfa9cd91102b4a55a5e0a", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "0630877824cc86b4bd43a8484ce4", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "2da650aeff3d22071679f5f7bb2c", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "16a2132739cca6eb96e78cce7931", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "86f369ecd5ef828740edf63f7dc3", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "bb1a748390f920aaa8f4a8ad821a", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "d39437db0f0837999a2eb7732880", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "27ba83c05a1f637f4c1b0c4597eb", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "b9c71b9b76e00762a3e81c84c17b", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "1467d498fba3bffa8c569fd0e2e6", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "5a5ba9b6720d396073ac54b73072", "label": "accept", "reason": "The owner says this exact task is finished: Ship Tavira tray to West depot.", "reviewer": "grok"}
+{"id": "ef3f421c8f0da331aa145826e435", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "80de7b1046f4519496c2bec55684", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "26db625109d819e532f5bd26f56b", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "946480039bf9ca643233fef8ec6c", "label": "accept", "reason": "The owner says this exact task is finished: Ship Vozeli tray to West depot.", "reviewer": "grok"}
+{"id": "67eee04f80e091fb47d3aa8f2e10", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "bc2969c459bb7bd86d3518da74e3", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "4138b0389bfc99bd421ced9d214d", "label": "accept", "reason": "The speaker spells Vozeli and says the transcript's Vozelah is the error.", "reviewer": "grok"}
+{"id": "b4d10625d9c90fb637fb7dbaac4b", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "31867ea6b6de61ea172d6b626a0c", "label": "accept", "reason": "The transcript says the person joined a group discussion of labels and a separate checklist.", "reviewer": "grok"}
+{"id": "d35851a6d31ca79315b17eafe74b", "label": "accept", "reason": "The owner states VozeliGlaze as the current project name.", "reviewer": "grok"}
+{"id": "dc54480d017546564ca429a1cd59", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "7903811f2ed6b511bbac52f91f1d", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "07c2382a0c0a50e0f73858a64392", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "3563ea29e9ec7800c2b1513fa23e", "label": "reject", "reason": "An existing generated title must not be overwritten.", "reviewer": "grok"}
+{"id": "280bbb40236fd41127653235f3e9", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "987b8a4e913f4c3e4748ecbe5c0a", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "75663fffd335a6a8139977511891", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "a58eaa8d704d58ccdee55a7f1941", "label": "accept", "reason": "The transcript is ja.", "reviewer": "grok"}
+{"id": "de660441ec4cb734486bc939ac45", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "1f472294eff0238c181611595045", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "99d99e028b46859452d63ed4920b", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "eb32df8df54eb270949ef3b011c6", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "8fd58c4f7b2ff7933cbf080497a8", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "4f87323b10605334736cc5e72f87", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "97203d6ef807949733d02123eebf", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "37aa59568a6afee011d85a717dc6", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "11fa1af2410ceff739c4564699c0", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "7ceb2b0c921929c0eb333006c830", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "fe0ccff43e103cb3a54032935ee1", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "672e141587047034d73b0f34d3e1", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "f94788a42f0dd8b39781580dc95d", "label": "reject", "reason": "Joining the group does not establish that this person personally reviewed the work.", "reviewer": "grok"}
+{"id": "39ef647f3dddd753941e96ac1f83", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "d6c434517b614495772c055bef99", "label": "accept", "reason": "The transcript says the crack might be cosmetic and still needs inspection.", "reviewer": "grok"}
+{"id": "b89ef7fb83f685c5ee758e0310ea", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "7ca4198e4b9290035ff977088b0a", "label": "accept", "reason": "The speaker spells Aruven and says the transcript's Aruveah is the error.", "reviewer": "grok"}
+{"id": "3c5fde7790f4d095eb93230b8e6b", "label": "accept", "reason": "The owner states Omirel as the current project name.", "reviewer": "grok"}
+{"id": "18e62b8151a7694a826239b2d236", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "74335483f197d994e0dbf9dc410e", "label": "reject", "reason": "The transcript says the inspection has not happened yet.", "reviewer": "grok"}
+{"id": "ab7c527340ec4ab60d39dd4f2b0a", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "1c6e644b0c921880898d453bf5fb", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "3d6bf148b540883f328637525932", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "5cfecea89094e088512491237268", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "24f3d3f2116c3661a9f4d50f7fdd", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "8c6e3cdb125edfd09bd0aee87d58", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "602ca56ec0ad40c2bce63baa726a", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "9d200ccd6985aa5424fb5b41e7b4", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "b0f9ab10f7d4bf11c5e871b64ccb", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "4e0e0e1d7ba217698c7a1e7c8075", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "c0c94e93898a0b1c34bf8ace6c58", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "749b4ad8d76c82fe7e96a70a4fd4", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "c5530e0a934fac1ce93ee9ea505f", "label": "accept", "reason": "The owner states AruvenTray as the current project name.", "reviewer": "grok"}
+{"id": "3ead7d785af2c9e9ad700262cbd8", "label": "accept", "reason": "The owner states QeloriTray as the current project name.", "reviewer": "grok"}
+{"id": "0e254cf2227d8453fdd27563bc0c", "label": "accept", "reason": "The owner says this exact task is finished: Ship Qelori tray to West depot.", "reviewer": "grok"}
+{"id": "41d7af8a816ea21276c28a805bd4", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "2e0e271aa0c9a0809eb8f8b73706", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "4b2b7361ad4124a2d9bb82d374b2", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "1fb709fc2a18985bf0398ff4f94c", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "2fc911d2617cdcc7c08aa64cc9dd", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "be7ea5289150866cc441658dbf8a", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "d04b39366c67c18a1e7daa33b411", "label": "accept", "reason": "The owner says this exact task is finished: Ship Ixelune tray to West depot.", "reviewer": "grok"}
+{"id": "d73f27e138d1613ff7f4f710f446", "label": "reject", "reason": "The proposed replacement is not a strictly newer fact.", "reviewer": "grok"}
+{"id": "943031dcb8be897b0ac2c8a87f8e", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "0be92938e30cf6cfe3360ced640e", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "d1a6663941c601a552a61d8b9591", "label": "reject", "reason": "An existing generated overview must not be overwritten.", "reviewer": "grok"}
+{"id": "5eb3c12c50cba1fc9d9f5d222f98", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "3bf095880bcdacd3e144f8f8aadf", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "fbc0557b3961e7b23dd66e271915", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "dc310f54f777fcd085bf0f3b62fd", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "9cc53337bfa3be46617fd6834efb", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "b1282eb4ecee648fe8b5617d1693", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "e6840c05eb18cbd049d90905a804", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "51a7731da6af07182fba9195f556", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "8506a4f1fb1ced626ad905e2847c", "label": "accept", "reason": "The owner says this exact task is finished: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "6560537036f4384fa4004bb0422e", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "c5ad4a813f42014b2a156d550137", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "374256206e8ad70d715d3eb02343", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "e79604f838efa851aab17e0fa279", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Mirexu tray to West depot.", "reviewer": "grok"}
+{"id": "dd7dc5a1dc15c964cd8f80b0ebb2", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "f28870e820c8e82eccedeb4e2b47", "label": "accept", "reason": "The title matches the stated review of the kiln schedule and shipping labels.", "reviewer": "grok"}
+{"id": "90a4c28bac10306e5932b5ed94d9", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "575905f1d4b925dbf4aed46ce6c3", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "eaaaa5538933d10b098a8838f339", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Ixelune tray to West depot.", "reviewer": "grok"}
+{"id": "9a0cff93705b6a4454b9ced8b89b", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "ded769493ff13833b55e006e84c0", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "a1fffe624f5d7d1d2c3a877776cd", "label": "accept", "reason": "The speaker spells Nuvessa and says the transcript's Nuvessah is the error.", "reviewer": "grok"}
+{"id": "5a1bf077e3e2d5e970a48bbb9b5c", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Zerava tray to West depot.", "reviewer": "grok"}
+{"id": "f28580d7f0dcf5802d294d942c4c", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "1a58ef5dfdd28ea197ed6c108e52", "label": "reject", "reason": "A manual speaker label makes this capture protected.", "reviewer": "grok"}
+{"id": "e1e1ad947a4ec146d5f6f479b9e1", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "609e2a9665870425b86f27a85fa6", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "bce818f719bf83412bf9ea5deb2d", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "c0751f60b0e5ec6f315c505259d1", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "dd9448e7cc6fcd0fc9e4fb8f8e26", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "7ef115b591918dc094a016571c3c", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Mirexu tray to West depot.", "reviewer": "grok"}
+{"id": "aafe57efa063a4c8709c54054fd7", "label": "accept", "reason": "The speaker spells Aruven and says the transcript's Aruveah is the error.", "reviewer": "grok"}
+{"id": "01927cffb149ded64c8e08f6f9dd", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "1d3e8ae037f93053a9f2d1a7d484", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "5ef3c6cea7bd6d49ca79d23462a1", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "29183856a1ed54dd7aac2a8fd2e1", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Vozeli tray to West depot.", "reviewer": "grok"}
+{"id": "b13baf7dea54749a093040984aea", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "c0e9ddfec4a58fb71073967427f5", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "fb0344da333df483e727b3b9da0b", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "01445b3f0345e132eb436f31841b", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "d8417a90be3139eb0d80ceeceafa", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "dee1206588a4c17001c558c1bbac", "label": "reject", "reason": "The transcript does not say this person reviewed the crate drawings.", "reviewer": "grok"}
+{"id": "41576a999e8b6322eab27f30cd16", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "c7196531f9f1fe26c1ac956426b2", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "4aa306443cffbf149be39f0c72f9", "label": "accept", "reason": "The owner states TaviraGlaze as the current project name.", "reviewer": "grok"}
+{"id": "63900d68e06182607318ee350958", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "364b1cf08c570bdf999e3b47287a", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "dbe72100de611e05a533c3c0bd55", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "dbb0f942dbe89605fb54be8568cf", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "17d1c88d93a46b1888333e6eff68", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "710a55b1ac489d99173c9947a9fc", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "f4c828e0c5590b3e7f91dd3c7473", "label": "reject", "reason": "The shared speech is shorter than 12 words.", "reviewer": "grok"}
+{"id": "031e54caa228117684b5ef9137fb", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "0acbde4cc319bd43bf8b9c5deb23", "label": "accept", "reason": "The owner states a newer workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "6ca301a29291e604d7dc68e4e6d0", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "a3d1a7f03de06fff9ca10854b2e1", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "6178653676fd002b38771185fa8f", "label": "accept", "reason": "The owner states QeloriKiln as the current project name.", "reviewer": "grok"}
+{"id": "72c71468ae708f3e60977636d6f3", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "3344fdb6aa0d5d714c63d906fed1", "label": "reject", "reason": "An existing generated overview must not be overwritten.", "reviewer": "grok"}
+{"id": "ed6be3597cc3fc9cc5bf3f6adb4c", "label": "accept", "reason": "The speaker spells Tavira and says the transcript's Tavirah is the error.", "reviewer": "grok"}
+{"id": "3f8f9c8e2c09f769a8dcb6db6682", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "35f452afc7b73c68a9e815dc35be", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "c173a9fc4cd40903f1f0bc3c5994", "label": "accept", "reason": "The owner says this exact task is finished: Pack six production trays for the west shop.", "reviewer": "grok"}
+{"id": "0af96c8760f958925515350a03be", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "632fddb3dfc1392d1696c13e4a67", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "e0192fd6ff44617b401270e5d93a", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "da9fd6696b6a9e118c63ad00f6d2", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "392f099f42a34cba8807b5e5d757", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "c9a1cc5cb84d34aa104272fec8f5", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "e30c4b2aa67d4e56fd937c0a6ad4", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "d4771a4bea73cdccefc1baef685e", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "407566c6db719d9fecb25e6ac28d", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "1ec0caf1153350f864496d8c9fc9", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "43ee22b6635f13489f623b157d9b", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "f1a069ab3789f2e71d4a70502806", "label": "reject", "reason": "The evidence does not establish this string as the project name.", "reviewer": "grok"}
+{"id": "19ccad8cf574858850e44d4fb0f5", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "43a2c23c2e6ab12cde2ca0fbd014", "label": "accept", "reason": "The owner says this memory was taken from someone else's statement and denies it.", "reviewer": "grok"}
+{"id": "f2f2322fd40bca6f52ad569d0099", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "519865cd078f675afdfac3b5167e", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "a1230799c38d02d9624b6a210b57", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "6e7642a4cff84d7db564828fc86b", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "22654b45bac89d2d5e1db15d1bfb", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "4fe63e27b7c81315223bc3e1f256", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "8aca1c7ca42e56349d677085f075", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "3322d9be796b2d4aeeb94f86e5d9", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "c408c8bf6389beab3046222d508d", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "ed4646a5f5620ba00451a65478ff", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "6a7d0bd41820ccc715119e0498ca", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "4322ab624565166edd640834d72f", "label": "reject", "reason": "The evidence does not show this exact task is finished.", "reviewer": "grok"}
+{"id": "027b68646cfe133b3865909650d1", "label": "accept", "reason": "The owner permanently cancelled this generated reminder: Ship Qelori tray to West depot.", "reviewer": "grok"}
+{"id": "53aa3c23ba834e2b13aeae66e55d", "label": "reject", "reason": "The transcript says to keep every crate except the red one.", "reviewer": "grok"}
+{"id": "cbae20a3febc922f08cf4be8254c", "label": "reject", "reason": "An existing generated overview must not be overwritten.", "reviewer": "grok"}
+{"id": "5d529ea077b41672897a9b3c848d", "label": "reject", "reason": "The evidence does not confirm this spelling replacement.", "reviewer": "grok"}
+{"id": "8386e13ba291f6c7edb36d94f0b7", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "e803fd0d3717c2288d3745e7273c", "label": "accept", "reason": "The overview matches the stated personal review and the Friday inspection.", "reviewer": "grok"}
+{"id": "2c86e567080a40c239de10951297", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "b8fb9241e5e6c0e4de8edf19ad5c", "label": "reject", "reason": "The later statement does not replace this workplace fact.", "reviewer": "grok"}
+{"id": "25354fd8ffc86dc7e6de3cbcbd44", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "bdccc6265f2c7cd2a0b0a36a5e54", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "2dd36231531c52ff06946bd0b4eb", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "30dc6f6ef876269965dfb649a3dc", "label": "accept", "reason": "The owner states TaviraKiln as the current project name.", "reviewer": "grok"}
+{"id": "b0b76c4da52288666514c1c45d45", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "b6afd4059fc2c8c9a6a7833680e3", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}
+{"id": "1cb5f5a2ee5064910abef573c082", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "62c7efa7b9579ba22b1a2e1e8bc9", "label": "accept", "reason": "The speaker spells Nuvessa and says the transcript's Nuvessah is the error.", "reviewer": "grok"}
+{"id": "f26c3654871007a96e297a941808", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "482dbf7ab7cb9aa233237d31ee34", "label": "reject", "reason": "The stored text is a stated fact rather than extraction junk.", "reviewer": "grok"}
+{"id": "79560e53bbb6b1eedbc16f894436", "label": "reject", "reason": "The evidence does not establish this spelling as the current project name.", "reviewer": "grok"}
+{"id": "e7cab46607b084650c2718750d2f", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "c47b7e1d0309da1c6e461a67ec9d", "label": "reject", "reason": "The task is protected because it is edited by the user.", "reviewer": "grok"}
+{"id": "92c0476a4387e299f6850f0b9667", "label": "reject", "reason": "The captures overlap for less than half of the shorter capture.", "reviewer": "grok"}
+{"id": "6eaf9639c17facb1afbbe54433e3", "label": "accept", "reason": "The owner confirms these two profiles are one person.", "reviewer": "grok"}
+{"id": "38fdeff963e02667b845ba25d16f", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "9e98748c071f80e20d8ccf4c64db", "label": "reject", "reason": "The evidence says these names belong to different people.", "reviewer": "grok"}
+{"id": "3a456c306cd174da996d4578c804", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "2858065c066f418df30ce01fa546", "label": "reject", "reason": "The proposal states an event the transcript does not support.", "reviewer": "grok"}
+{"id": "c40125407d96b66f7928473e7a40", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "ec705af57f85b1b338a5cb539c67", "label": "reject", "reason": "The later record repeats the same value.", "reviewer": "grok"}
+{"id": "3e5f5f806e9c3727995f1527de9b", "label": "accept", "reason": "The author says Luro in this note was a transcription error for Vesha.", "reviewer": "grok"}
+{"id": "f9981d13260313acdad93a3caf7b", "label": "accept", "reason": "The memory is extraction junk from speech that states no fact.", "reviewer": "grok"}
+{"id": "ae3162e3225fc3b2c7b9785a1a83", "label": "reject", "reason": "The evidence does not permanently cancel this exact reminder.", "reviewer": "grok"}
+{"id": "ecc646de71df7c4fde5996f04bee", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "8370b2c6f0ec79b38959ec8897e1", "label": "accept", "reason": "A later statement gives a new workplace for the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "eb0173de0ed9c42d685109f877db", "label": "reject", "reason": "The speech itself is English.", "reviewer": "grok"}
+{"id": "364e1b6174a5de397f4437e2c486", "label": "accept", "reason": "The speaker spells Mirexu and says the transcript's Mirexah is the error.", "reviewer": "grok"}
+{"id": "f0c7404903a9dbe3cc5a8efd7dab", "label": "reject", "reason": "The two captures do not contain the same speech.", "reviewer": "grok"}
+{"id": "c3011840b4cddb5eab1aeadb5f8f", "label": "accept", "reason": "The transcript is es.", "reviewer": "grok"}
+{"id": "8c9b8f5d542396300f02d9bd6729", "label": "reject", "reason": "The evidence rejects or withholds this string as a project name.", "reviewer": "grok"}
+{"id": "4b6eea22fe0303d22f621190b72c", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "5313fab38fbb2e710fdcb59ffde3", "label": "reject", "reason": "The transcript says to keep every crate except the red one.", "reviewer": "grok"}
+{"id": "919771c8a567b1c426f62900b40c", "label": "accept", "reason": "The owner states Mavrola as the current project name.", "reviewer": "grok"}
+{"id": "4b13227895c7d65322142facb20e", "label": "accept", "reason": "Both reminders have the same description, and the speaker says they are one obligation.", "reviewer": "grok"}
+{"id": "1106f415c97933be62e0919a7a60", "label": "reject", "reason": "The newer fact is not about the same subject, slot, and visibility.", "reviewer": "grok"}
+{"id": "f0ee99a04cd507cb5e353c44b78d", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "2adb49076621325924b1eb5f7b3f", "label": "reject", "reason": "The evidence does not show these two reminders are the same obligation.", "reviewer": "grok"}
+{"id": "c41a9951fdae927ec0c8a1949dfe", "label": "accept", "reason": "The captures are the same speech, at least 12 words, with known positive spans overlapping at least half the shorter one.", "reviewer": "grok"}

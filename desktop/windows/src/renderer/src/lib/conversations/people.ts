@@ -37,7 +37,7 @@ export async function assignSegmentsBulk(
   const body: BulkAssignSegmentsRequest = {
     segment_ids: segmentIds,
     assign_type: assign.type,
-    value: assign.type === 'person_id' ? assign.personId : null
+    value: assign.type === 'person_id' ? assign.personId : 'true'
   }
   await omiApi.patch<Conversation>(`/v1/conversations/${conversationId}/segments/assign-bulk`, body)
 }

@@ -1,6 +1,14 @@
 name: Repo Checks
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: main
   pull_request:
@@ -18,8 +26,22 @@ concurrency:
   # cancel an in-flight code run it shares no work with, and cancelled jobs render
   # as red "fail" checks on the PR — flaky red with no code cause. Key the group by
   # lane so newer-cancels-older still holds within each lane, but never across them.
-  group: repo-checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action) && 'metadata' || 'code' }}
-  cancel-in-progress: true
+  # Within a lane, only PR runs cancel in progress: a newer main push replaces the
+  # pending code run instead of cancelling the running one, so the newest main SHA
+  # still gets a complete deterministic-check run.
+  group: repo-checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action) && 'metadata' || 'code' }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
+  # from github.com intermittently stop receiving data for 7-10 minutes before
+  # the connection resets (Backend Hermetic E2E run 39435458398 spent 498 s in
+  # "Checkout code" and hit its 10-minute cap). With these set, git aborts any
+  # transfer that stays under 1 KB/s for 60 s, and actions/checkout retries the
+  # fetch (its built-in 3 attempts); a healthy depth-1 fetch takes ~20 s.
+  # Applies to every git network call in the workflow, including script steps.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   metadata-preflight:
@@ -30,7 +52,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -59,17 +87,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
-      has_arb: ${{ steps.changes.outputs.has_arb }}
-      has_dart: ${{ steps.changes.outputs.has_dart }}
-      has_firmware: ${{ steps.changes.outputs.has_firmware }}
-      has_format: ${{ steps.changes.outputs.has_format }}
-      has_python: ${{ steps.changes.outputs.has_python }}
-      has_workflows: ${{ steps.changes.outputs.has_workflows }}
+      has_arb: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_arb) }}
+      has_dart: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_dart) }}
+      has_firmware: ${{ inputs.nightly_main_sha != '' && 'false' || steps.changes.outputs.has_firmware }}
+      has_format: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_format) }}
+      has_python: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_python) }}
+      has_workflows: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_workflows) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Detect changed paths
         id: changes
@@ -84,7 +118,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -116,7 +156,11 @@ jobs:
 
       - name: Save changed files
         run: |
-          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          if [ -n "${{ inputs.nightly_main_sha }}" ]; then
+            cp /tmp/nightly-all-files.txt /tmp/changed-files.txt
+          else
+            scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          fi
           cat /tmp/changed-files.txt
 
       - name: Run shared PR contract preflight
@@ -150,6 +194,7 @@ jobs:
             --from-commit-body-file /tmp/main-push-commit-message.txt \
             --output "$PR_BODY_FILE"
           python3 .github/scripts/run_checks.py --lane ci \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
             --base "${{ needs.changes.outputs.diff_base }}" \
             --pr-body-file "$PR_BODY_FILE"
 
@@ -186,11 +231,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Save changed files
         run: |
-          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          if [ -n "${{ inputs.nightly_main_sha }}" ]; then
+            cp /tmp/nightly-all-files.txt /tmp/changed-files.txt
+          else
+            scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          fi
           cat /tmp/changed-files.txt
 
       - name: Set up uv for Python formatting
@@ -223,7 +278,9 @@ jobs:
           fi
 
       - name: Check Python formatting
-        if: needs.changes.outputs.has_python == 'true'
+        # Nightly 39610825548: the dart step failed first and this step never
+        # ran, masking four unformatted files run 1 could not report.
+        if: ${{ !cancelled() && needs.changes.outputs.has_python == 'true' }}
         run: |
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
@@ -231,7 +288,9 @@ jobs:
           fi
 
       - name: Check ARB formatting
-        if: needs.changes.outputs.has_arb == 'true'
+        # Same masking hole as the Python step (Luna P2, PR 23064 round 1): a
+        # dart-format failure must not hide ARB findings from the same nightly.
+        if: ${{ !cancelled() && needs.changes.outputs.has_arb == 'true' }}
         run: |
           FILES=$(grep '\.arb$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           failed=0

@@ -1,16 +1,19 @@
 """
 Hermetic unit tests for Omi Open Food Facts Integration App.
 Verifies safe integer parsing, null allergen lists, barcode lookup, product summaries,
-and tool endpoints with deterministic standard-library execution.
+URL/slug extraction, 4-18 digit length cap, 404 error handling, and tool endpoints.
 """
 
 import asyncio
+import os
 import sys
 from types import ModuleType, SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-# --- Hermetic stubs for environments without FastAPI/Pydantic installed ---
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# --- Hermetic stubs for environments without FastAPI/Pydantic/Requests installed ---
 if "fastapi" not in sys.modules:
     fastapi_mod = ModuleType("fastapi")
 
@@ -58,6 +61,7 @@ if "starlette.concurrency" not in sys.modules:
 if "requests" not in sys.modules:
     requests_mod = ModuleType("requests")
     requests_mod.RequestException = Exception
+    requests_mod.get = MagicMock()
     sys.modules["requests"] = requests_mod
 
 import main
@@ -177,6 +181,61 @@ class TestOpenFoodFacts(unittest.TestCase):
         # Non-digits only
         res_letters = asyncio.run(main._lookup_barcode("abcdef"))
         self.assertIn("error", res_letters)
+        self.assertIn("4 to 18 digits", res_letters["error"])
+
+    def test_barcode_sanitization_and_url_extraction(self):
+        self.assertEqual(main.sanitize_barcode("3017620422003"), "3017620422003")
+        self.assertEqual(main.sanitize_barcode(3017620422003), "3017620422003")
+        self.assertEqual(main.sanitize_barcode("  301-762-042-2003  "), "3017620422003")
+
+        # Open Food Facts URL & slug extraction
+        url = "https://world.openfoodfacts.org/product/3017620422003/nutella"
+        self.assertEqual(main.sanitize_barcode(url), "3017620422003")
+        url_fr = "https://fr.openfoodfacts.org/produit/0049000006582"
+        self.assertEqual(main.sanitize_barcode(url_fr), "0049000006582")
+        slug = "/product/5449000000996"
+        self.assertEqual(main.sanitize_barcode(slug), "5449000000996")
+
+    def test_barcode_length_bounds_4_to_18(self):
+        # Min/max bounds
+        self.assertEqual(main.sanitize_barcode("1234"), "1234")
+        self.assertEqual(main.sanitize_barcode("123456789012345678"), "123456789012345678")
+
+        # Bounds violations
+        self.assertIsNone(main.sanitize_barcode("123"))
+        self.assertIsNone(main.sanitize_barcode("1"))
+        self.assertIsNone(main.sanitize_barcode("1234567890123456789"))
+        self.assertIsNone(main.sanitize_barcode(None))
+        self.assertIsNone(main.sanitize_barcode(""))
+
+    def test_openfoodfacts_404_graceful_handling(self):
+        with patch("main.requests.get") as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 404
+            mock_get.return_value = mock_resp
+
+            result = main._openfoodfacts_get("/api/v2/product/00000000.json")
+            self.assertTrue(result.get("not_found"))
+            self.assertEqual(result.get("status"), 0)
+            mock_resp.raise_for_status.assert_not_called()
+
+        with patch("main._openfoodfacts_get_async") as mock_async_get:
+            mock_async_get.return_value = {"status": 0, "product": None, "not_found": True}
+            lookup_res = asyncio.run(main._lookup_barcode("3017620422003"))
+            self.assertIn("error", lookup_res)
+            self.assertEqual(lookup_res["error"], "no product found for barcode 3017620422003")
+
+    def test_tool_lookup_barcode_endpoints(self):
+        with patch.object(main, "_lookup_barcode", new_callable=AsyncMock) as mock_lookup:
+            mock_lookup.return_value = {"product": {"name": "Nutella"}}
+            resp = asyncio.run(main.tool_lookup_barcode(main.Request({"barcode": "3017620422003"})))
+            self.assertTrue(resp.success)
+            self.assertIn("Nutella found", resp.message)
+
+            mock_lookup.return_value = {"error": "no product found for barcode 00000000"}
+            resp_404 = asyncio.run(main.tool_lookup_barcode(main.Request({"barcode": "00000000"})))
+            self.assertFalse(resp_404.success)
+            self.assertIn("no product found", resp_404.message)
 
     def test_health_and_manifest(self):
         h = asyncio.run(main.health())
@@ -186,6 +245,64 @@ class TestOpenFoodFacts(unittest.TestCase):
         manifest = asyncio.run(main.get_omi_tools_manifest())
         self.assertIn("tools", manifest)
         self.assertEqual(len(manifest["tools"]), 4)
+
+
+class TestUpstreamFailuresDoNotLeakExceptionText(unittest.TestCase):
+    """A failed Open Food Facts request reaches the chat as a fixed message."""
+
+    SENSITIVE = "proxy-user:hunter2@corp-proxy.internal:8080 (10.0.0.12)"
+    GENERIC_ERROR = "Open Food Facts request failed. Please try again later."
+
+    def setUp(self):
+        failure = main.requests.RequestException(f"Cannot connect to proxy {self.SENSITIVE}")
+        patcher = patch.object(main.requests, "get", side_effect=failure)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _assert_failed_without_leak(self, resp):
+        self.assertFalse(resp.success)
+        self.assertNotIn(self.SENSITIVE, f"{resp.message} {resp.data}")
+
+    def test_get_returns_fixed_error_when_request_fails(self):
+        result = main._openfoodfacts_get("/api/v2/product/737628064502.json")
+        self.assertEqual(result, {"error": self.GENERIC_ERROR})
+
+    def test_get_logs_exception_class_name_only(self):
+        with self.assertLogs(main.logger, level="WARNING") as logs:
+            main._openfoodfacts_get("/api/v2/product/737628064502.json")
+        output = "\n".join(logs.output)
+        self.assertIn(main.requests.RequestException.__name__, output)
+        self.assertNotIn(self.SENSITIVE, output)
+
+    def test_search_foods_hides_exception_text(self):
+        resp = asyncio.run(main.tool_search_foods(main.Request({"query": "oat milk"})))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(resp.message, self.GENERIC_ERROR)
+
+    def test_lookup_barcode_hides_exception_text(self):
+        resp = asyncio.run(main.tool_lookup_barcode(main.Request({"barcode": "737628064502"})))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(resp.message, self.GENERIC_ERROR)
+
+    def test_compare_foods_hides_exception_text(self):
+        resp = asyncio.run(main.tool_compare_foods(main.Request({"barcodes": ["737628064502"]})))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(
+            resp.data["errors"],
+            [{"barcode": "737628064502", "error": self.GENERIC_ERROR}],
+        )
+
+    def test_check_allergens_by_barcode_hides_exception_text(self):
+        body = {"barcode": "737628064502", "avoid": ["peanuts"]}
+        resp = asyncio.run(main.tool_check_allergens(main.Request(body)))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(resp.message, self.GENERIC_ERROR)
+
+    def test_check_allergens_by_query_hides_exception_text(self):
+        body = {"query": "oat milk", "avoid": ["peanuts"]}
+        resp = asyncio.run(main.tool_check_allergens(main.Request(body)))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(resp.message, self.GENERIC_ERROR)
 
 
 if __name__ == "__main__":

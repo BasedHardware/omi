@@ -35,11 +35,13 @@ def proactive_env(monkeypatch):
     """Neutralize every dependency _process_proactive_notification touches except the real
     Message deserialization this test is exercising (app_int.Message stays the real class)."""
     monkeypatch.setattr(app_int, "_hit_proactive_notification_rate_limits", lambda uid, app: False)
+    monkeypatch.setattr(app_int, "account_deletion_blocks_user_work", lambda _uid: False)
     monkeypatch.setattr(app_int, "_proactive_daily_cap_reached", lambda uid: False)
     monkeypatch.setattr(app_int, "_set_proactive_noti_sent_at", MagicMock())
     monkeypatch.setattr(app_int, "get_prompt_memories", lambda uid: ("Zach", "likes tea"))
     monkeypatch.setattr(app_int, "send_app_notification", MagicMock())
     monkeypatch.setattr(app_int, "incr_daily_notification_count", MagicMock())
+    monkeypatch.setattr(app_int, "_user_day_zone", lambda _uid: timezone.utc)
 
     llm = MagicMock()
     llm.invoke.return_value.content = "Here is your nudge."
@@ -76,3 +78,18 @@ def test_all_messages_malformed_still_sends(proactive_env):
     )
 
     assert result == "Here is your nudge."
+
+
+def test_pending_deletion_blocks_proactive_app_before_compute_or_prompt_reads(proactive_env):
+    proactive_env.setattr(app_int, "account_deletion_blocks_user_work", lambda _uid: True)
+    proactive_env.setattr(
+        app_int,
+        "generated_compute_allowed",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("pending owner must be skipped first")),
+    )
+
+    result = app_int._process_proactive_notification(
+        "uid-pending", _make_app(), {"prompt": "context: {{user_chat}}", "params": ["user_chat"]}
+    )
+
+    assert result is None

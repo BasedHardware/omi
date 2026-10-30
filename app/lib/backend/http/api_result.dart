@@ -24,10 +24,13 @@ enum ApiProblemKind {
 }
 
 class ApiProblem {
-  const ApiProblem(this.kind, {this.statusCode, this.retryAfter});
+  const ApiProblem(this.kind, {this.statusCode, this.retryAfter, this.detail});
   final ApiProblemKind kind;
   final int? statusCode;
   final Duration? retryAfter;
+
+  /// Bounded machine code such as budget_period_changed. Never a free-form message.
+  final String? detail;
   bool get retryable => switch (kind) {
         ApiProblemKind.transport ||
         ApiProblemKind.authTransient ||
@@ -46,9 +49,10 @@ sealed class ApiResult<T> {
 }
 
 final class ApiSuccess<T> extends ApiResult<T> {
-  const ApiSuccess(this.data, {this.rejectedRows = 0});
+  const ApiSuccess(this.data, {this.rejectedRows = 0, this.truncated = false});
   final T data;
   final int rejectedRows;
+  final bool truncated;
 }
 
 final class ApiFailure<T> extends ApiResult<T> {
@@ -91,7 +95,7 @@ ApiFailure<T> _authFailure<T>(AuthTokenResult result) {
   return ApiFailure(ApiProblem(transient ? ApiProblemKind.authTransient : ApiProblemKind.authTerminal));
 }
 
-Duration? _retryAfter(http.Response response, DateTime Function() now) {
+Duration? parseApiRetryAfter(http.Response response, DateTime Function() now) {
   final raw = response.headers['retry-after'];
   if (raw == null) return null;
   final seconds = int.tryParse(raw.trim());
@@ -108,24 +112,34 @@ Duration? _retryAfter(http.Response response, DateTime Function() now) {
   }
 }
 
-ApiResult<T> _decodeSuccess<T>(String body, T Function(String) decode) {
+ApiResult<T> _decodeSuccess<T>(String body, T Function(String) decode, {bool truncated = false}) {
   try {
-    return ApiSuccess(decode(body));
+    return ApiSuccess(decode(body), truncated: truncated);
   } on FormatException {
     return const ApiFailure(ApiProblem(ApiProblemKind.decode));
   }
 }
 
+String? _boundedDetail(String body) {
+  try {
+    final decoded = jsonDecode(body);
+    final detail = decoded is Map ? decoded['detail'] : null;
+    if (detail is String && RegExp(r'^[a-z0-9_]{1,64}$').hasMatch(detail)) return detail;
+  } catch (_) {}
+  return null;
+}
+
 ApiResult<T> _classifyResponse<T>(http.Response response, T Function(String) decode, DateTime Function() now) {
   if (response.statusCode >= 200 && response.statusCode < 300) {
-    return _decodeSuccess(response.body, decode);
+    return _decodeSuccess(response.body, decode, truncated: isOmiListTruncated(response));
   }
   final kind = _kindForStatus(response.statusCode);
   return ApiFailure(
     ApiProblem(
       kind,
       statusCode: response.statusCode,
-      retryAfter: kind == ApiProblemKind.rateLimited ? _retryAfter(response, now) : null,
+      retryAfter: kind == ApiProblemKind.rateLimited ? parseApiRetryAfter(response, now) : null,
+      detail: _boundedDetail(response.body),
     ),
   );
 }
@@ -138,9 +152,11 @@ Future<ApiResult<T>> executeApi<T>({
   ApiSend? send,
   ApiExecutionSeams? execution,
   DateTime Function()? now,
+  bool Function()? canSend,
 }) async {
   final clock = now ?? DateTime.now;
   try {
+    if (canSend != null && !canSend()) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
     if (send != null) {
       return _classifyResponse(await send(request), decode, clock);
     }
@@ -151,6 +167,7 @@ Future<ApiResult<T>> executeApi<T>({
       body: request.body,
       method: request.method,
       execution: execution,
+      canSend: canSend,
       onAuthRefresh: (result) => observedRefresh = result,
     );
     if (response.statusCode == 401 && observedRefresh is AuthTokenTransientFailure) {

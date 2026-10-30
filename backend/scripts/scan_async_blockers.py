@@ -339,6 +339,69 @@ def _handed_off_operands(argument: ast.expr) -> Iterator[ast.Call]:
         yield argument
 
 
+def _database_context_manager_imports(tree: ast.Module, source_path: str, cache: Dict[Path, Set[str]]) -> Set[str]:
+    """Resolve nonblocking database context managers from source, without importing them.
+
+    A decorator alone is insufficient: __enter__/__exit__ can perform I/O.
+    Retain the existing direct/transitive blocking checks on their generator
+    bodies. Missing or ambiguous source stays conservatively classified as DB.
+    """
+    imports = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith('database.') and not node.level
+    ]
+    if not imports:
+        return set()
+    root = next((parent for parent in Path(source_path).resolve().parents if (parent / 'database').is_dir()), None)
+    if root is None:
+        return set()
+    names: Set[str] = set()
+    for node in imports:
+        module_path = root.joinpath(*(node.module or '').split('.')).with_suffix('.py')
+        if module_path not in cache:
+            cache[module_path] = set()
+            try:
+                source = module_path.read_text(encoding='utf-8')
+                module_tree = ast.parse(source, filename=str(module_path))
+            except (OSError, UnicodeError, SyntaxError):
+                continue
+            decorators = set()
+            contextlib_names = set()
+            for statement in module_tree.body:
+                if isinstance(statement, ast.ImportFrom) and statement.module == 'contextlib' and not statement.level:
+                    decorators.update(
+                        alias.asname or alias.name for alias in statement.names if alias.name == 'contextmanager'
+                    )
+                elif isinstance(statement, ast.Import):
+                    contextlib_names.update(
+                        alias.asname or alias.name for alias in statement.names if alias.name == 'contextlib'
+                    )
+            db_names, db_modules = get_db_imports(source)
+            utility_db, utility_network = get_sync_utility_imports(source)
+            effects = analyze_local_sync_helpers(
+                module_tree,
+                db_names | utility_db,
+                db_modules,
+                get_storage_imports(source),
+                get_prerecorded_stt_imports(source),
+                utility_network,
+            )
+            for name, function in _module_sync_helpers(module_tree).items():
+                if len(function.decorator_list) != 1 or effects[name]:
+                    continue
+                decorator = function.decorator_list[0]
+                if (isinstance(decorator, ast.Name) and decorator.id in decorators) or (
+                    isinstance(decorator, ast.Attribute)
+                    and isinstance(decorator.value, ast.Name)
+                    and decorator.value.id in contextlib_names
+                    and decorator.attr == 'contextmanager'
+                ):
+                    cache[module_path].add(name)
+        names.update(alias.asname or alias.name for alias in node.names if alias.name in cache[module_path])
+    return names
+
+
 def _scan_function_body(
     node: FunctionNode,
     db_names: Set[str],
@@ -346,6 +409,7 @@ def _scan_function_body(
     storage_names: Set[str],
     prerecorded_stt_names: Set[str],
     sync_network_names: Set[str],
+    context_manager_names: Optional[Set[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Return direct blocking calls in a function body, excluding nested scopes."""
     db_calls: List[Dict[str, Any]] = []
@@ -357,6 +421,14 @@ def _scan_function_body(
     offloaded = _get_offloaded_lines(node)
     nested = _collect_nested_func_lines(node)
     awaited = _awaited_call_ids(node) | _coroutine_handoff_call_ids(node)
+
+    context_calls = {
+        id(item.context_expr)
+        for statement in _walk_body(node)
+        if isinstance(statement, ast.With)
+        for item in statement.items
+        if isinstance(item.context_expr, ast.Call)
+    }
 
     for child in _walk_body(node):
         if not isinstance(child, ast.Call):
@@ -373,7 +445,9 @@ def _scan_function_body(
             continue
         body_call_lines.add(line)
         if isinstance(child.func, ast.Name):
-            if child.func.id in db_names:
+            if child.func.id in db_names and not (
+                id(child) in context_calls and child.func.id in (context_manager_names or set())
+            ):
                 db_calls.append({"line": line, "call": child.func.id})
             if child.func.id in storage_names:
                 call_name = child.func.id
@@ -446,6 +520,7 @@ def analyze_local_sync_helpers(
     storage_names: Set[str],
     prerecorded_stt_names: Set[str],
     sync_network_names: Set[str],
+    context_manager_names: Optional[Set[str]] = None,
 ) -> LocalHelperEffects:
     """Compute the shortest blocking path reachable from each local sync helper.
 
@@ -466,6 +541,7 @@ def analyze_local_sync_helpers(
             storage_names,
             prerecorded_stt_names,
             sync_network_names,
+            context_manager_names,
         )
         direct_by_field = {
             "db_calls": db_calls,
@@ -525,6 +601,7 @@ def scan_async_function(
     local_helper_effects: Optional[LocalHelperEffects] = None,
     prerecorded_stt_names: Optional[Set[str]] = None,
     sync_network_names: Optional[Set[str]] = None,
+    context_manager_names: Optional[Set[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Scan direct and module-local transitive blocking calls on the event loop."""
     db_calls, file_io, network_io, sleeps, body_call_lines = _scan_function_body(
@@ -534,6 +611,7 @@ def scan_async_function(
         storage_names,
         prerecorded_stt_names or set(),
         sync_network_names or set(),
+        context_manager_names,
     )
     if local_helper_effects:
         propagated = _propagated_helper_calls(node, local_helper_effects)
@@ -580,6 +658,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
     total_async = 0
     files_scanned = 0
 
+    context_manager_cache: Dict[Path, Set[str]] = {}
     for fpath in collect_py_files(dirs):
         with open(fpath, encoding="utf-8") as f:
             source = f.read()
@@ -595,6 +674,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
         asyncio_module_names, asyncio_to_thread_names = get_asyncio_to_thread_imports(source)
         utility_db_names, sync_network_names = get_sync_utility_imports(source)
         db_names.update(utility_db_names)
+        context_manager_names = _database_context_manager_imports(tree, fpath, context_manager_cache)
         local_helper_effects = analyze_local_sync_helpers(
             tree,
             db_names,
@@ -602,6 +682,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
             storage_names,
             prerecorded_stt_names,
             sync_network_names,
+            context_manager_names,
         )
         module_level_nodes = set(tree.body)
         is_dependency_module = os.path.basename(fpath) == 'dependencies.py'
@@ -631,6 +712,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
                 local_helper_effects=local_helper_effects,
                 prerecorded_stt_names=prerecorded_stt_names,
                 sync_network_names=sync_network_names,
+                context_manager_names=context_manager_names,
             )
             unmanaged_offloads = _unmanaged_to_thread_calls(node, asyncio_module_names, asyncio_to_thread_names)
             endpoint_has_await = has_await(node)

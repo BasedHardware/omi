@@ -61,12 +61,12 @@ struct ReferralProgramView: View {
           .accessibilityHidden(true)
 
         VStack(spacing: OmiSpacing.sm) {
-          Text("Give a friend one free month of Operator")
+          Text("Give a friend one free month of Omi Pro")
             .scaledFont(size: OmiType.title, weight: .semibold)
             .foregroundColor(Ink.primary)
             .multilineTextAlignment(.center)
 
-          Text("Share your unique link. When a friend joins Omi, they'll get one month of Operator free.")
+          Text("Share your unique link. When a friend joins Omi, they'll get one month of Omi Pro free.")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
@@ -115,7 +115,7 @@ struct ReferralProgramView: View {
         Text("We couldn't get your referral link.")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
-        Button("Try again") {
+        Button("Try Again") {
           Task { await viewModel.load() }
         }
         .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
@@ -141,17 +141,7 @@ struct ReferralSheetView: View {
 
   var body: some View {
     VStack(alignment: .trailing, spacing: 0) {
-      Button {
-        dismiss()
-      } label: {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 28, height: 28)
-          .background(Circle().fill(Ink.wash))
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Close")
+      DismissButton(action: { dismiss() })
 
       ReferralProgramView()
         .padding(.horizontal, OmiSpacing.xxl)

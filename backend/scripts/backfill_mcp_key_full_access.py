@@ -92,13 +92,16 @@ def main() -> None:
     db: Any = get_firestore_client()
     counts: defaultdict[str, int] = defaultdict(int)
     grant_cache: dict[str, Any] = {}
-    query = db.collection("mcp_api_keys").select(["id", "user_id", "app_id", "scopes"])
+    query = db.collection("mcp_api_keys").select(["id", "user_id", "app_id", "scopes", "explicit_scopes"])
     if args.limit:
         query = query.limit(args.limit)
 
     for doc in query.stream():
         data = cast(dict[str, Any], doc.to_dict() or {})
         counts["total_mcp_key_docs"] += 1
+        if data.get("explicit_scopes") is True:
+            counts["explicit_scoped_keys_skipped"] += 1
+            continue
 
         key_id = str(data.get("id") or doc.id)
         uid = data.get("user_id")

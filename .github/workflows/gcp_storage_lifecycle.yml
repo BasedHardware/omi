@@ -50,6 +50,12 @@ concurrency:
   group: storage-lifecycle-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development' }}
   cancel-in-progress: false
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   apply:
     if: >-
@@ -58,6 +64,7 @@ jobs:
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development' }}
     permissions:
       contents: read
+      id-token: write
       actions: read
     runs-on: ubuntu-latest
     env:
@@ -159,9 +166,22 @@ jobs:
             echo "project=$project"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: google-github-actions/auth@v3
+      # Prod: GitHub WIF as omi-ci-schema-prod@ (bucket get/update on
+      # omi-private-cloud-sync only; credential-hygiene WS-C). Development keeps JSON.
+      - name: Google Auth (prod WIF)
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development') == 'prod' }}
+        uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development') != 'prod' }}
+        uses: google-github-actions/auth@v3
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - uses: google-github-actions/setup-gcloud@v3
 

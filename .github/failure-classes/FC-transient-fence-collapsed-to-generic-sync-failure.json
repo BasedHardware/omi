@@ -10,7 +10,8 @@
     "backend/routers/sync.py",
     "backend/tests/unit/test_sync_cloud_tasks.py",
     "backend/tests/unit/test_sync_v2.py",
-    "backend/tests/unit/test_transcription_outcomes.py"
+    "backend/tests/unit/test_transcription_outcomes.py",
+    "backend/tests/unit/test_audio_merge_destructive_deferral.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

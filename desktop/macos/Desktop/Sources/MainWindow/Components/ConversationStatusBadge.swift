@@ -23,10 +23,10 @@ struct ConversationStatusBadge: View {
       )
     case .locked:
       Pill(
-        icon: "lock.fill",
-        text: "Locked",
+        icon: "hourglass",
+        text: "Saved and waiting",
         color: PageGlass.warning,
-        help: "This conversation is locked until your subscription is active."
+        help: "This conversation is saved. Check your plan and usage to see when processing is available."
       )
     case .failed:
       Pill(
@@ -38,9 +38,9 @@ struct ConversationStatusBadge: View {
     case .untitledRecoverable:
       Pill(
         icon: "wand.and.stars",
-        text: "Needs reprocess",
+        text: ConversationProcessingProgress.untitledRecoverableBadgeText,
         color: Ink.accent,
-        help: "The transcript was captured but no title was generated. Try Reprocess."
+        help: ConversationProcessingProgress.untitledRecoverableBadgeHelp
       )
     case .titled, .untitledEmpty:
       // Titled state — no badge needed. Empty-state untitled also stays

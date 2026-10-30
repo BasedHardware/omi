@@ -11,6 +11,8 @@ playback/; request paths are pure metadata reads.
 import os
 import sys
 import unittest
+from datetime import datetime
+from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -146,7 +148,7 @@ class TestEnqueueAudioMergeJob:
         """
         ct = _load_cloud_tasks()
         merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
-        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, 'enqueue_named_task') as enqueue:
             ct.enqueue_audio_merge_job(
                 {'conversation_id': 'conv1', 'audio_file_id': 'file1', 'uid': 'u', 'timestamps': [1.0]}
             )
@@ -158,7 +160,7 @@ class TestEnqueueAudioMergeJob:
     def test_schema_v2_enqueued_audience_matches_handler_when_sync_audience_is_backfill(self):
         ct = _load_cloud_tasks()
         merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
-        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, 'enqueue_named_task') as enqueue:
             ct.enqueue_audio_merge_job(
                 {'schema_version': 2, 'conversation_id': 'conv1', 'fingerprint': 'abc123def456', 'uid': 'u'}
             )
@@ -236,12 +238,18 @@ class TestUnavailableContract:
         missing = handler[handler.index('except FileNotFoundError') : handler.index("'chunks_missing'}")]
         assert 'mark_playback_unavailable' in missing
 
-    def test_urls_reports_unavailable_without_enqueue(self):
-        src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
-        fn = src[src.index('def _get_audio_urls_via_artifacts') : src.index('def get_audio_signed_urls')]
-        unavailable = fn[fn.index('is_playback_unavailable') : fn.index('else:')]
-        assert '"unavailable"' in unavailable
-        assert 'to_enqueue.append' not in unavailable
+    def test_urls_reports_unavailable_without_enqueue(self, monkeypatch):
+        playback = routers_sync.sync_playback
+        monkeypatch.setattr(playback, 'get_playback_artifact_signed_url', lambda *_: None)
+        monkeypatch.setattr(playback, 'get_merged_audio_signed_url', lambda *_: None)
+        monkeypatch.setattr(playback, 'is_playback_unavailable', lambda *_: True)
+        monkeypatch.setattr(playback, 'get_playback_failure_retry_epoch', lambda *_: None)
+        monkeypatch.setattr(playback, '_conversation_audio_urls_entry', lambda *_: {'status': 'unavailable'})
+        enqueue = MagicMock()
+        monkeypatch.setattr(playback, 'enqueue_conversation_audio_merge', enqueue)
+        result = playback._get_audio_urls_via_artifacts('u', 'c', [{'id': 'file'}])
+        assert result['audio_files'][0]['status'] == 'unavailable'
+        enqueue.assert_not_called()
 
     def test_storage_marker_helpers(self):
         src = _read_source(os.path.join('utils', 'other', 'storage.py'))
@@ -261,7 +269,7 @@ class TestStorageArtifactHelpers:
         assert 'def get_playback_artifact_signed_url' in src
         assert 'def download_playback_artifact' in src
         assert 'def upload_playback_artifact' in src
-        assert "content_type='audio/mpeg'" in src
+        assert "content_type='audio/mpeg'" in _read_source(os.path.join('utils', 'other', 'playback_cache.py'))
 
     def test_precache_gates_to_enqueue(self):
         src = _read_source(os.path.join('utils', 'other', 'storage.py'))
@@ -302,6 +310,73 @@ class TestV2HandlerRetrySemantics:
         resp = await routers_sync.run_audio_merge_job(req, task_retry_count=0)
         assert resp.status_code == 200
         assert b'invalid_payload' in resp.body
+
+
+class TestConversationMergeStartedAtCoercion:
+    """Firestore rows written before the datetime-only invariant can carry
+    ``started_at`` as an ISO string, a bare epoch number, or leave it/``created_at``
+    both unset. ``.timestamp()`` on any of those crashes with an unhandled
+    AttributeError that isn't caught anywhere in this job, so the task retries
+    forever on a 500 instead of ever reaching the max-attempts final-failure path.
+    """
+
+    @staticmethod
+    def _patched(conversation, build_side_effect):
+        return (
+            patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='tok'),
+            patch.object(routers_sync, 'release_job_run_lock'),
+            patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False),
+            patch.object(routers_sync.conversations_db, 'get_conversation', return_value=conversation),
+            patch.object(routers_sync, 'compute_audio_files_fingerprint', return_value='fp1'),
+            patch.object(
+                routers_sync.playback_build, 'build_conversation_playback_artifact', side_effect=build_side_effect
+            ),
+            patch.object(routers_sync.playback_build, 'upload_conversation_playback_artifact'),
+            patch.object(routers_sync.playback_build, 'get_conversation_playback_manifest', return_value=None),
+            patch.object(routers_sync.conversations_db, 'update_conversation'),
+        )
+
+    async def test_iso_string_started_at_does_not_crash(self):
+        conversation = {
+            'started_at': '2026-01-01T00:00:00+00:00',
+            'audio_files': [{'id': 'af1', 'chunk_timestamps': [100.0, 101.0]}],
+        }
+        payload = {'uid': 'u1', 'conversation_id': 'c1', 'fingerprint': 'fp1'}
+        captured = {}
+
+        def fake_build(uid, conversation_id, audio_files, started_at_ts, *, strict_sources=False):
+            captured['started_at_ts'] = started_at_ts
+            return b'mp3', [{'len': 1.0, 'wall_offset': 0.0}]
+
+        patches = self._patched(conversation, fake_build)
+        with ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
+            result = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
+
+        assert result.status_code == 200
+        assert captured['started_at_ts'] == datetime.fromisoformat('2026-01-01T00:00:00+00:00').timestamp()
+
+    async def test_missing_started_at_falls_back_to_earliest_chunk_timestamp(self):
+        conversation = {
+            'started_at': None,
+            'audio_files': [{'id': 'af1', 'chunk_timestamps': [150.0, 200.0]}],
+        }
+        payload = {'uid': 'u1', 'conversation_id': 'c1', 'fingerprint': 'fp1'}
+        captured = {}
+
+        def fake_build(uid, conversation_id, audio_files, started_at_ts, *, strict_sources=False):
+            captured['started_at_ts'] = started_at_ts
+            return b'mp3', [{'len': 1.0, 'wall_offset': 0.0}]
+
+        patches = self._patched(conversation, fake_build)
+        with ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
+            result = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
+
+        assert result.status_code == 200
+        assert captured['started_at_ts'] == 150.0
 
 
 if __name__ == '__main__':

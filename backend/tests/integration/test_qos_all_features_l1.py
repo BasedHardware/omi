@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.clients import (
     MODEL_QOS_PROFILES,
     get_model,
@@ -80,7 +81,7 @@ class TestPremiumAllFeatures:
         if _active_profile_name != 'premium':
             pytest.skip("MODEL_QOS is not premium")
         model = get_model('chat_agent')
-        assert model == 'gpt-5.6-luna'
+        assert model == LUNA_MODEL
         llm = get_llm('chat_agent')
         response = llm.invoke(SIMPLE_PROMPT)
         text = response.content.strip() if hasattr(response, 'content') else str(response).strip()

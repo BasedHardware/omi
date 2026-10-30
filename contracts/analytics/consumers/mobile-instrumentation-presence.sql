@@ -3,6 +3,15 @@ SELECT event, count(*) AS emitted
 FROM events
 WHERE app_namespace = :app_namespace AND build_number = :build_number
   AND event IN (
+    'Onboarding First Capture Shown',
+    'Onboarding First Capture Choice Selected',
+    'Onboarding First Capture Recording Started',
+    'Onboarding First Capture Recording Completed',
+    'Onboarding First Capture Conversation Shown',
+    'Onboarding First Capture Empty Result',
+    'Onboarding First Capture Skipped',
+    'Onboarding Step Completed',
+
     'Onboarding Completed',
     'Phone Mic Recording Started',
     'Phone Mic Recording Stopped',
@@ -47,11 +56,18 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Phone Call Upsell Upgrade Tapped',
     'Phone Call Upsell Dismissed',
     'Device Disconnected',
+    'Device Disconnected Detailed',
+    'Diagnostics Sent',
+    'Diagnostics Send Failed',
     'Speech Profile Capture Page Clicked',
     'Speech Profile Skipped',
     'Speech Profile Upload Succeeded',
     'Speech Profile Embedding Stored',
     'Onboarding Step Speech Profile Continued',
+    'Onboarding Setup Rating Prompt Shown',
+    'Onboarding Setup Rating Prompt Answered',
+    'First Summary Rating Prompt Shown',
+    'First Summary Rating Prompt Answered',
     'Use Without Device Onboarding Welcome',
     'Use Without Device Onboarding Find Devices',
     'Fact Page Edited Fact',
@@ -122,6 +138,13 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Import History Page Opened',
     'Live Transcript Card Clicked',
     'Apple Reminders Sync Completed',
-    'Wrapped Generation Completed'
+    'Wrapped Generation Completed',
+    'Voice Reply Playback',
+    'Pendant Voice Question Dropped',
+    'Paywall Variant Shown',
+    'Paywall Variant Fallback',
+    'Onboarding Webview Shown',
+    'Onboarding Webview Completed',
+    'Onboarding Webview Fallback'
   )
 GROUP BY event ORDER BY event;

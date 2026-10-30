@@ -78,6 +78,70 @@ enum TaskChatRuntime {
   private static var agentBridge: AgentBridge?
   private static var activeWorkstreamId: String?
 
+  static func prepareSession(
+    workstreamId: String,
+    workspacePath: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> AgentSurfaceSession {
+    try requireCurrent(authorizationSnapshot)
+    let bridge = try await sharedBridge()
+    try requireCurrent(authorizationSnapshot)
+    let routing = try queryRouting(
+      bridgePreference: UserDefaults.standard.string(forKey: .chatBridgeMode),
+      runMode: "act",
+      workspacePath: workspacePath
+    )
+    let session = try await bridge.resolveSurfaceSession(
+      .workstream(workstreamId: workstreamId),
+      creationProfile: AgentSessionCreationProfile(
+        adapterId: routing.adapterId,
+        modelProfile: routing.modelProfile,
+        workingDirectory: routing.workingDirectory
+      ),
+      authorizationSnapshot: authorizationSnapshot
+    )
+    try requireCurrent(authorizationSnapshot)
+    return session
+  }
+
+  /// Only called by the explicit recovery button. Resolving a thread or changing
+  /// defaults never rewrites its pinned provider or removes its journal.
+  static func useOmiAI(
+    workstreamId: String,
+    workspacePath: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> AgentExecutionProfile {
+    let session = try await prepareSession(
+      workstreamId: workstreamId,
+      workspacePath: workspacePath,
+      authorizationSnapshot: authorizationSnapshot
+    )
+    let preference = UserDefaults.standard.string(forKey: .chatBridgeMode)
+    let mode = ChatProvider.BridgeMode(rawValue: preference ?? "piMono") ?? .piMono
+    let routing = try queryRouting(
+      bridgePreference: preference,
+      runMode: "act",
+      workspacePath: workspacePath
+    )
+    guard mode == .piMono || mode == .omiAI,
+      session.profile.adapterId == AgentAdapterId.acp.rawValue
+    else {
+      throw BridgeError.agentError("The thread's AI provider changed. Reopen the task and check its provider.")
+    }
+    let bridge = try await sharedBridge()
+    try requireCurrent(authorizationSnapshot)
+    let migrated = try await bridge.migrateSessionExecutionProfile(
+      sessionId: session.sessionId,
+      expectedProfileGeneration: session.profile.profileGeneration,
+      adapterId: routing.adapterId,
+      modelProfile: routing.modelProfile,
+      workingDirectory: routing.workingDirectory,
+      authorizationSnapshot: authorizationSnapshot
+    )
+    try requireCurrent(authorizationSnapshot)
+    return migrated.profile
+  }
+
   static func attachJournalEvents(
     workstreamId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
@@ -102,6 +166,11 @@ enum TaskChatRuntime {
     limit: Int = 100
   ) async throws -> AgentRuntimeProcess.JournalOperationResult {
     try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
+    _ = try await prepareSession(
+      workstreamId: workstreamId,
+      workspacePath: configuredWorkspacePath,
+      authorizationSnapshot: authorizationSnapshot
+    )
     let bridge = try await sharedBridge()
     try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
     return try await bridge.listJournalTurns(
@@ -120,6 +189,11 @@ enum TaskChatRuntime {
     turns: [KernelJournalTurnWrite]
   ) async throws -> AgentRuntimeProcess.JournalOperationResult {
     try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
+    _ = try await prepareSession(
+      workstreamId: workstreamId,
+      workspacePath: configuredWorkspacePath,
+      authorizationSnapshot: authorizationSnapshot
+    )
     let bridge = try await sharedBridge()
     try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
     return try await bridge.recordJournalExchange(
@@ -139,6 +213,11 @@ enum TaskChatRuntime {
     continuityKey: String? = nil
   ) async throws -> KernelJournalTurn {
     try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
+    _ = try await prepareSession(
+      workstreamId: workstreamId,
+      workspacePath: configuredWorkspacePath,
+      authorizationSnapshot: authorizationSnapshot
+    )
     let bridge = try await sharedBridge()
     try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
     return try await bridge.recordJournalTurn(
@@ -375,6 +454,11 @@ enum TaskChatRuntime {
         : workspacePath,
       runMode: runMode
     )
+  }
+
+  private static var configuredWorkspacePath: String {
+    let path = TaskAgentSettings.shared.workingDirectory
+    return path.isEmpty ? NSHomeDirectory() : path
   }
 
   static func interrupt(

@@ -36,13 +36,7 @@ struct ChatErrorCard: View {
         Spacer(minLength: 8)
 
         if let onDismiss = onDismiss {
-          Button(action: onDismiss) {
-            Image(systemName: "xmark")
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(Ink.secondary)
-          }
-          .buttonStyle(.plain)
-          .help("Dismiss")
+          DismissButton(action: onDismiss, accessibilityLabel: "Dismiss", size: .compact)
         }
       }
 

@@ -1,0 +1,25 @@
+SELECT
+    coalesce(nullIf(toString(properties.billing_event_id), ''), nullIf(toString(properties.event_id), ''), nullIf(toString(properties['$insert_id']), ''), toString(uuid)) AS event_id,
+    event AS event_name,
+    distinct_id AS user_id,
+    coalesce(nullIf(toString(properties.occurred_at), ''), toString(timestamp)) AS occurred_at,
+    timestamp AS ingested_at,
+    coalesce(nullIf(toString(properties.client_app_namespace), ''), nullIf(toString(properties['$app_namespace']), ''), nullIf(toString(properties.namespace), ''), 'unknown') AS namespace,
+    coalesce(nullIf(toString(properties.client_app_profile), ''), nullIf(toString(properties['$environment']), ''), nullIf(toString(properties.environment), ''), 'unknown') AS environment,
+    coalesce(nullIf(toString(properties['$app_build']), ''), nullIf(toString(properties.app_build), ''), 'unknown') AS app_build,
+    properties
+FROM events
+WHERE event IN (
+    'experiment_assigned',
+    'experiment_exposed',
+    'experiment_outcome',
+    'Experiment Enrolled',
+    'Experiment Assignment',
+    'Experiment Exposed',
+    'Experiment Outcome',
+    'Product Journey Outcome',
+    'Product Value'
+)
+  AND timestamp >= {date_from}
+  AND timestamp < {date_to}
+LIMIT 50001

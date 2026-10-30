@@ -656,29 +656,6 @@ final class FloatingBarGeometryTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(minimum.height, 194)
   }
 
-  func testInsightTeaserStaysExpandedDuringInterjectPTTHold() {
-    XCTAssertEqual(
-      FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
-        kindIsInsight: true,
-        isHovering: false,
-        interjectBarHovering: false,
-        interjectPTTHoldActive: true),
-      6)
-    XCTAssertEqual(
-      FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
-        kindIsInsight: true,
-        isHovering: false,
-        interjectBarHovering: false,
-        interjectPTTHoldActive: false),
-      1)
-    XCTAssertEqual(
-      FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
-        kindIsInsight: false,
-        isHovering: false,
-        interjectBarHovering: false,
-        interjectPTTHoldActive: true),
-      3)
-  }
 }
 
 // MARK: - Notch top re-anchoring

@@ -41,6 +41,25 @@ CATEGORY_META: Dict[str, Dict[str, str]] = {
 }
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    writing the rendered note raises UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the note export.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
+def render(lines: List[str]) -> str:
+    """Join rendered lines, stripping unencodable code points once at the boundary.
+
+    Every render path returns through here so the result is always encodable,
+    whichever caller writes it.
+    """
+    return strip_surrogates("\n".join(lines))
+
+
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
     """Safely parse an ISO-8601 datetime string and normalize to UTC."""
     if not iso_str or not isinstance(iso_str, str):
@@ -106,7 +125,7 @@ def format_memory_item(item: Dict[str, Any], include_metadata: bool = True) -> s
         if meta_tags:
             parts.append(f"  *({' · '.join(meta_tags)})*")
 
-    return "\n".join(parts)
+    return render(parts)
 
 
 def memories_to_markdown(
@@ -152,7 +171,7 @@ def memories_to_markdown(
     if not items:
         lines.append("_No memories found matching criteria._")
         lines.append("")
-        return "\n".join(lines)
+        return render(lines)
 
     if group_by == "category":
         category_groups: Dict[str, List[Dict[str, Any]]] = {}
@@ -198,7 +217,7 @@ def memories_to_markdown(
             lines.append(format_memory_item(it))
         lines.append("")
 
-    return "\n".join(lines)
+    return render(lines)
 
 
 def filter_memories(
@@ -225,6 +244,30 @@ def filter_memories(
             ]
 
     return filtered
+
+
+def extract_memories(data: Any) -> List[Dict[str, Any]]:
+    """Unwrap memory records from bare arrays, wrapped envelopes, or single objects.
+
+    Supports:
+    - Bare arrays: [ {...}, {...} ]
+    - Wrapped dicts: {"memories": [...]}, {"items": [...]}, {"data": [...]}
+    - Single memory dict: { "id": "...", "content": "..." }
+
+    Ensures that empty envelopes like {"memories": []} return an empty list
+    instead of falling through and creating phantom untitled memories.
+    """
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        for key in ("memories", "items", "data"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [item for item in val if isinstance(item, dict)]
+        if any(key in data for key in ("content", "category", "id", "created_at")):
+            return [data]
+        return []
+    return []
 
 
 def _sanitize_group_key(group_key: str) -> str:
@@ -397,13 +440,11 @@ def main() -> int:
         sys.stderr.write(f"Error reading input: {exc}\n")
         return 1
 
-    if isinstance(payload, list):
-        raw_items = payload
-    elif isinstance(payload, dict):
-        raw_items = payload.get("memories") or payload.get("items") or [payload]
-    else:
+    if not isinstance(payload, (list, dict)):
         sys.stderr.write("Error: Expected a JSON array of memories or object containing 'memories'.\n")
         return 1
+
+    raw_items = extract_memories(payload)
 
     items = filter_memories(
         raw_items,

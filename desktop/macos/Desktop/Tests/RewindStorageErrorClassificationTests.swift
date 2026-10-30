@@ -5,8 +5,8 @@ import XCTest
 
 /// Regression coverage for #9193: environmental disk/storage failures (the Rewind
 /// ffmpeg "The file couldn't be saved" clusters, OMI-DESKTOP-28/29) must be
-/// classified as non-actionable so they collapse into breadcrumbs instead of
-/// flooding Sentry with unactionable error groups.
+/// classified as non-actionable so they stay local diagnostics instead of
+/// flooding the error log with unactionable groups.
 final class RewindStorageErrorClassificationTests: XCTestCase {
   func testDiskFullCocoaErrorIsNonActionable() {
     let err = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError)

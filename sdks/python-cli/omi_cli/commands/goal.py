@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
 from omi_cli.output import shorten
+from omi_cli.validation import bounded_text
 
 if TYPE_CHECKING:
     from omi_cli.main import AppContext
@@ -22,6 +26,14 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     if obj is None:  # pragma: no cover
         raise RuntimeError("AppContext not initialized")
     return obj  # type: ignore[no-any-return]
+
+
+def _finite_number(value: Optional[float]) -> Optional[float]:
+    if value is not None and not math.isfinite(value):
+        raise UsageError(
+            message="Invalid goal value", detail="Goal numbers must be finite; NaN and infinity are not supported."
+        )
+    return value
 
 
 _LIST_COLUMNS = ["id", "title", "goal_type", "current_value", "target_value", "unit", "is_active"]
@@ -65,7 +77,7 @@ def get_goal(
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        result = client.get(f"/v1/dev/user/goals/{goal_id}")
+        result = client.get(f"/v1/dev/user/goals/{path_segment(goal_id)}")
     ctx.renderer.emit(result, title="goal")
 
 
@@ -76,19 +88,22 @@ def create_goal(
     typer_ctx: typer.Context,
     title: str = typer.Argument(..., help="Goal title (1-500 chars)."),
     target_value: Optional[float] = typer.Option(
-        None, "--target", help="Target value to achieve. Omit for qualitative goals."
+        None, "--target", callback=_finite_number, help="Target value to achieve. Omit for qualitative goals."
     ),
     goal_type: Optional[GoalType] = typer.Option(
         None, "--type", help="boolean, scale, or numeric. Omit for qualitative goals."
     ),
-    current_value: Optional[float] = typer.Option(None, "--current", help="Current progress value."),
-    min_value: Optional[float] = typer.Option(None, "--min", help="Minimum scale value."),
-    max_value: Optional[float] = typer.Option(None, "--max", help="Maximum scale value."),
+    current_value: Optional[float] = typer.Option(
+        None, "--current", callback=_finite_number, help="Current progress value."
+    ),
+    min_value: Optional[float] = typer.Option(None, "--min", callback=_finite_number, help="Minimum scale value."),
+    max_value: Optional[float] = typer.Option(None, "--max", callback=_finite_number, help="Maximum scale value."),
     unit: Optional[str] = typer.Option(
         None, "--unit", help="Unit label (e.g. 'users', 'points'). Requires a metric option such as --target."
     ),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    title = bounded_text(title, label="goal title")
     has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
     if unit is not None and not has_metrics:
         # The backend only persists ``unit`` on metric-backed goals; sending it on a
@@ -117,7 +132,7 @@ def create_goal(
     # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
-    ctx.renderer.success(f"Goal created: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Goal created: [bold]{escape(str(result.get('id')))}[/bold]")
     ctx.renderer.emit(result)
 
 
@@ -126,10 +141,10 @@ def update_goal(
     typer_ctx: typer.Context,
     goal_id: str = typer.Argument(..., help="Goal ID."),
     title: Optional[str] = typer.Option(None, "--title"),
-    target_value: Optional[float] = typer.Option(None, "--target"),
-    current_value: Optional[float] = typer.Option(None, "--current"),
-    min_value: Optional[float] = typer.Option(None, "--min"),
-    max_value: Optional[float] = typer.Option(None, "--max"),
+    target_value: Optional[float] = typer.Option(None, "--target", callback=_finite_number),
+    current_value: Optional[float] = typer.Option(None, "--current", callback=_finite_number),
+    min_value: Optional[float] = typer.Option(None, "--min", callback=_finite_number),
+    max_value: Optional[float] = typer.Option(None, "--max", callback=_finite_number),
     unit: Optional[str] = typer.Option(None, "--unit"),
     clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
 ) -> None:
@@ -138,7 +153,7 @@ def update_goal(
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
     body: dict[str, object] = {}
     if title is not None:
-        body["title"] = title
+        body["title"] = bounded_text(title, label="goal title")
     if target_value is not None:
         body["target_value"] = target_value
     if current_value is not None:
@@ -157,8 +172,8 @@ def update_goal(
             detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit.",
         )
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
-    ctx.renderer.success(f"Updated goal [bold]{goal_id}[/bold].")
+        result = client.patch(f"/v1/dev/user/goals/{path_segment(goal_id)}", json_body=body)
+    ctx.renderer.success(f"Updated goal [bold]{escape(goal_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -166,13 +181,15 @@ def update_goal(
 def update_progress(
     typer_ctx: typer.Context,
     goal_id: str = typer.Argument(..., help="Goal ID."),
-    current_value: float = typer.Argument(..., help="New progress value."),
+    current_value: float = typer.Argument(..., callback=_finite_number, help="New progress value."),
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         # The progress endpoint takes current_value as a query param.
-        result = client.patch(f"/v1/dev/user/goals/{goal_id}/progress", params={"current_value": current_value})
-    ctx.renderer.success(f"Updated progress on [bold]{goal_id}[/bold] → {current_value}.")
+        result = client.patch(
+            f"/v1/dev/user/goals/{path_segment(goal_id)}/progress", params={"current_value": current_value}
+        )
+    ctx.renderer.success(f"Updated progress on [bold]{escape(goal_id)}[/bold] → {current_value}.")
     ctx.renderer.emit(result)
 
 
@@ -184,7 +201,7 @@ def goal_history(
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        result = client.get(f"/v1/dev/user/goals/{goal_id}/history", params={"days": days})
+        result = client.get(f"/v1/dev/user/goals/{path_segment(goal_id)}/history", params={"days": days})
     ctx.renderer.emit(result, title=f"goal history (last {days}d)")
 
 
@@ -196,9 +213,9 @@ def delete_goal(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete goal {goal_id}?", abort=True)
+        typer.confirm(f"Delete goal {goal_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/goals/{goal_id}")
+        result = client.delete(f"/v1/dev/user/goals/{path_segment(goal_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted goal [bold]{goal_id}[/bold].")
+    ctx.renderer.success(f"Deleted goal [bold]{escape(goal_id)}[/bold].")

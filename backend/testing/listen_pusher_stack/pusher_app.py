@@ -79,14 +79,20 @@ _send_bytes = pusher_router.WebSocket.send_bytes
 _drain_tasks = pusher_router.drain_tasks
 
 
-def _offline_store_audio_chunks(chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str) -> None:
-    """Keep the real pusher queue/flush path local when 101 frames are enabled."""
+def _offline_store_audio_chunks(
+    chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str, *, sample_rate: int, **_kwargs: Any
+) -> None:
+    """Keep the real pusher queue/flush path local when 101 frames are enabled.
+
+    The pusher upload path passes flush-policy keywords (reconcile_prefix);
+    this stub records the admission without binding the call signature."""
     _record(
         {
             'event': 'audio_storage_skipped',
             'conversation_id': conversation_id,
             'chunks': len(chunks),
             'bytes': sum(len(chunk.get('data') or b'') for chunk in chunks),
+            'sample_rate': sample_rate,
         }
     )
 

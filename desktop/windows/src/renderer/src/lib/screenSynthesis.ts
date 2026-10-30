@@ -1,6 +1,7 @@
 // src/renderer/src/lib/screenSynthesis.ts
 import { omiApi } from './apiClient'
 import { generate } from './geminiClient'
+import { GeminiLane } from '../../../shared/geminiAttribution'
 import { redact, isPrivateWindow, isDeniedContext } from './screenRedact'
 import { groupFrames, budgetSegments } from './screenGrouping'
 import {
@@ -66,6 +67,8 @@ export async function runScreenSynthesisOnce(): Promise<number> {
     const raw = await generate({
       model: MODEL,
       parts: [{ text: buildScreenPrompt(segments) }],
+      lane: GeminiLane.screenSynthesis,
+      workload: 'extraction',
       responseSchema: SCREEN_RESPONSE_SCHEMA as unknown as Record<string, unknown>
     })
     const candidates = parseScreenResponse(raw)

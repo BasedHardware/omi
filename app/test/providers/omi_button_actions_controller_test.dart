@@ -1,4 +1,6 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -15,6 +17,7 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 class _TestEnvFields implements EnvFields {
@@ -56,6 +59,7 @@ class _NoSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     // Tests must never open a real transcription socket: connecting would hit
     // buildHeaders → AuthService.isSignedIn → FirebaseAuth, none of which are
@@ -68,13 +72,15 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
   int sendCount = 0;
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required void Function() onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) async {
     sendCount++;
+    return const VoiceQuestionResult.answered("Test answer");
   }
 }
 
@@ -113,6 +119,50 @@ void main() {
     await PlatformManager.initializeServices();
   });
 
+  test('a pendant press and its question reach the shared debug log', () async {
+    // A user's shared log showed transcription but no trace of the button, because
+    // presses were only ever logged at debug level, which never reaches the file.
+    await DebugLogManager.setEnabled(true);
+    addTearDown(() => DebugLogManager.setEnabled(false));
+    await DebugLogManager.clear();
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+
+    final expected = [
+      {'type': 'pendant_button_event', 'state': 1},
+      {'type': 'pendant_voice_question', 'phase': 'started'},
+      {'type': 'pendant_button_event', 'state': 1},
+      {'type': 'pendant_voice_question', 'phase': 'submitted', 'frames': 1, 'auto_submitted': false},
+    ];
+    var events = <Map<String, dynamic>>[];
+    for (var attempt = 0; attempt < 100 && events.length < expected.length; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      final files = await DebugLogManager.listLogFiles();
+      final lines = files.isEmpty ? <String>[] : await files.first.readAsLines();
+      events = [
+        for (final line in lines)
+          if ((jsonDecode(line) as Map<String, dynamic>)['type'] case final String type
+              when type.startsWith('pendant_'))
+            jsonDecode(line) as Map<String, dynamic>,
+      ];
+    }
+    expect([
+      for (final e in events)
+        Map.fromEntries(e.entries.where((entry) => entry.key != 'timestamp' && entry.key != 'level')),
+    ], expected);
+    expect(actions.sendCount, 1);
+    provider.dispose();
+  });
+
   test('disabled Omi actions still deliver tutorial button events', () {
     final onboarding = DeviceOnboardingProvider()..startOnboarding();
     onboarding.advanceStep();
@@ -125,19 +175,48 @@ void main() {
     expect(onboarding.voiceSessionActive, isTrue);
     expect(provider.hasVoiceCommandSessionForTesting, isTrue);
 
+    // No audio was ever captured for this session (the test never feeds BLE
+    // bytes in), so this is the same "pressed twice without speaking" case as
+    // #20789: the dropped question resets the step instead of sticking on
+    // "processing" forever.
     provider.handleButtonEventForTesting('test-id', 1);
-    expect(onboarding.questionSent, isTrue);
+    expect(onboarding.questionSent, isFalse);
+    expect(onboarding.questionFailed, isTrue);
     expect(onboarding.voiceSessionActive, isFalse);
 
     provider.dispose();
     onboarding.dispose();
   });
 
-  test('disabled Omi actions still deliver tutorial double-press events', () {
+  test('a tutorial question sent by the 15 s timeout moves the tutorial on (#20786)', () async {
     final onboarding = DeviceOnboardingProvider()..startOnboarding();
     onboarding.advanceStep();
-    onboarding.advanceStep();
-    onboarding.advanceStep();
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    // One press and some speech, then no second press: the timeout ends the session.
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.voiceSessionActive, isTrue);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.endVoiceCommandSessionForTesting('test-id', autoSubmitted: true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(actions.sendCount, 1);
+    expect(onboarding.voiceSessionActive, isFalse);
+    expect(onboarding.questionSent, isTrue);
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('disabled Omi actions still deliver tutorial double-press events', () {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.goToStep(DeviceOnboardingProvider.doublePressStep);
     onboarding.selectDoubleTapAction(1);
     final provider = _NoSocketCaptureProvider();
     provider.deviceOnboardingProvider = onboarding;
@@ -183,6 +262,76 @@ void main() {
     provider.cancelActiveVoiceSession();
 
     expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    provider.dispose();
+  });
+
+  test('modern single-tap release does not immediately submit the voice question', () async {
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.handleButtonEventForTesting('test-id', 5);
+
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+    expect(actions.sendCount, 0);
+
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    expect(actions.sendCount, 1);
+    provider.dispose();
+  });
+
+  test('legacy long-press release still submits the voice question', () async {
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 3);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 5);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    expect(actions.sendCount, 1);
+    provider.dispose();
+  });
+
+  test('tap just after auto-submit is ignored, then a later tap starts a new question', () async {
+    var now = DateTime.utc(2026, 9, 27, 12);
+    final actions = _RecordingCaptureExternalActions();
+    final provider = CaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+      now: () => now,
+    );
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.endVoiceCommandSessionForTesting('test-id', autoSubmitted: true);
+    await Future<void>.delayed(Duration.zero);
+    expect(actions.sendCount, 1);
+
+    now = now.add(const Duration(milliseconds: 500));
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+
+    now = now.add(const Duration(seconds: 3));
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
     provider.dispose();
   });
 

@@ -11,8 +11,21 @@ inputs:
     description: Google Cloud project that owns the Cloud Run service.
     required: true
   gcp_credentials:
-    description: Google Cloud credentials used only by the deploy actions.
-    required: true
+    description: >-
+      Google Cloud credentials JSON used only by the deploy actions. Required
+      unless the WIF inputs are set; never pass both.
+    required: false
+    default: ""
+  workload_identity_provider:
+    description: >-
+      GitHub WIF provider resource name (prod: omi-gha-deploy-prod). Mutually
+      exclusive with gcp_credentials.
+    required: false
+    default: ""
+  workload_identity_service_account:
+    description: Deployer service account for WIF. Required when workload_identity_provider is set.
+    required: false
+    default: ""
   service_account:
     description: Optional Cloud Run service identity supplied by the owning workflow.
     required: false
@@ -104,7 +117,36 @@ runs:
         target: ${{ inputs.target }}
         environment: ${{ inputs.environment }}
 
-    - name: Google Auth
+    - name: Validate deploy authentication inputs
+      shell: bash
+      env:
+        HAS_JSON: ${{ inputs.gcp_credentials != '' }}
+        HAS_WIF: ${{ inputs.workload_identity_provider != '' }}
+        HAS_WIF_SA: ${{ inputs.workload_identity_service_account != '' }}
+      run: |
+        set -euo pipefail
+        if [[ "$HAS_JSON" == "true" && "$HAS_WIF" == "true" ]]; then
+          echo "Pass gcp_credentials or workload_identity_provider, not both" >&2
+          exit 1
+        fi
+        if [[ "$HAS_JSON" != "true" && "$HAS_WIF" != "true" ]]; then
+          echo "Need workload_identity_provider or gcp_credentials" >&2
+          exit 1
+        fi
+        if [[ "$HAS_WIF" == "true" && "$HAS_WIF_SA" != "true" ]]; then
+          echo "workload_identity_service_account is required with workload_identity_provider" >&2
+          exit 1
+        fi
+
+    - name: Google Auth (WIF)
+      if: ${{ inputs.workload_identity_provider != '' }}
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.workload_identity_service_account }}
+
+    - name: Google Auth (JSON)
+      if: ${{ inputs.workload_identity_provider == '' }}
       uses: google-github-actions/auth@v3
       with:
         credentials_json: ${{ inputs.gcp_credentials }}

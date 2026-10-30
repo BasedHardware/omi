@@ -119,6 +119,7 @@
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "Cloud Run application metrics are arriving under Stackdriver-mangled names instead of their plain omi_ names",
       "threshold": "> 0 un-normalized omi series on the cloud-run-application-metrics job for 15m",
       "user_impact": "No user impact by itself, but every alert and dashboard built on these metrics is silently matching nothing, so a real user-facing failure on a Cloud Run path could pass unnoticed.",
@@ -132,11 +133,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-metric-names-unnormalized",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -256,10 +269,11 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "The Cloud Run metrics exporter is failing its Cloud Monitoring queries, so no omi_ series are being imported",
       "threshold": "stackdriver_monitoring_last_scrape_error > 0 on the cloud-run-application-metrics job for 15m",
       "user_impact": "No direct user impact, but every Cloud Run journey metric stops arriving while the exporter Deployment stays Available and its Prometheus target stays up. Panels render empty and read as no traffic rather than no ingestion, so a real user-facing failure on a Cloud Run path can run unnoticed for as long as this is firing.",
@@ -273,11 +287,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-egress-query-rejected",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -397,10 +423,11 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "The Cloud Run metrics exporter is not being scraped, so no omi_ series can reach Prometheus",
       "threshold": "up < 1 on the cloud-run-application-metrics job for 15m; an absent job counts as down",
       "user_impact": "No direct user impact, but every Cloud Run journey metric stops arriving. This is the case the query-rejected alert cannot see: a crashlooping or unscraped exporter publishes no error metric at all, so an error-based rule reads healthy while nothing is ingested and panels render as no traffic.",
@@ -414,11 +441,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-egress-down",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   }

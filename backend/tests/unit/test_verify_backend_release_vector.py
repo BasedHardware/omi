@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -306,9 +307,13 @@ def test_legacy_binding_migration_rejects_multi_container_services_without_mutat
     ]
 
 
-def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_calls() -> None:
+def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_calls(tmp_path: Path) -> None:
     preflight = _load_preflight()
     calls: list[list[str]] = []
+    # Project admission needs only this scope; unrelated service bindings make
+    # parsing the full production manifest dominate this fast boundary test.
+    manifest = tmp_path / 'runtime-env.yaml'
+    manifest.write_text('environments:\n  prod:\n    compute_project: based-hardware\n')
 
     with pytest.raises(ValueError, match="prod expects project 'based-hardware'"):
         preflight.migrate_legacy_public_bindings(
@@ -316,6 +321,7 @@ def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_cal
             env='prod',
             project='based-hardware-dev',
             region='us-central1',
+            manifest_path=manifest,
             runner=lambda command, **_kwargs: calls.append(command),
         )
 
@@ -401,25 +407,36 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
 
 
 def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> None:
+    composite = (BACKEND_DIR.parent / '.github/actions/firestore-readiness/action.yml').read_text(encoding='utf-8')
     workflows = (
         BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
         BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
     )
 
+    assert composite.count('backend/scripts/reconcile_firestore_indexes.py') == 2
+    assert composite.count('--check-only') == 1
+    assert composite.count('--validate-proposal') == 1
+    assert '--provision-missing' not in composite
+    assert '--proposal-output "$FIRESTORE_PROPOSAL_PATH"' in composite
+    assert '--source-commit "$FIRESTORE_SOURCE_COMMIT"' in composite
+    assert '--proposal-ttl-seconds 3600' in composite
+    assert 'actions/upload-artifact@v7' in composite
+    assert 'steps.validate_firestore_proposal.outcome == \'success\'' in composite
+    assert 'if-no-files-found: error' in composite
+    assert 'retention-days: 1' in composite
+    assert 'export_environment_variables: false' in composite
+    assert 'create_credentials_file: true' in composite
+    assert 'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE' in composite
+    assert 'backend/docs/runbooks/firestore-missing-index.md' in composite
+
     for workflow in workflows:
         text = workflow.read_text(encoding='utf-8')
-        assert text.count('backend/scripts/reconcile_firestore_indexes.py') == 2
-        assert '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"' in text
-        assert text.count('--check-only') == 1
-        assert text.count('--validate-proposal') == 1
-        assert '--provision-missing' not in text
-        assert '--proposal-output "$FIRESTORE_PROPOSAL_PATH"' in text
-        assert '--source-commit "$FIRESTORE_SOURCE_COMMIT"' in text
-        assert '--proposal-ttl-seconds 3600' in text
-        assert 'actions/upload-artifact@v7' in text
-        assert 'steps.validate_firestore_proposal.outcome == \'success\'' in text
-        assert 'if-no-files-found: error' in text
-        assert 'retention-days: 1' in text
+        assert 'backend/scripts/reconcile_firestore_indexes.py' not in text
+        assert '--check-only' not in text
+        assert 'uses: ./.github/firestore-workflow/.github/actions/firestore-readiness' in text
+        assert 'ref: ${{ github.workflow_sha }}' in text
+        assert 'path: .github/firestore-workflow' in text
+        assert 'project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}' in text
         assert 'credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in text
         assert 'needs: firestore_readiness' in text
 
@@ -428,17 +445,20 @@ def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
     text = workflow.read_text(encoding='utf-8')
     readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
+    composite = (BACKEND_DIR.parent / '.github/actions/firestore-readiness/action.yml').read_text(encoding='utf-8')
 
-    assert 'Verify read-only Firestore credentials target the development runtime project' in readiness
-    assert 'RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}' in readiness
-    assert 'credential_project="$(gcloud config get-value project 2>/dev/null)"' in readiness
-    assert '"$credential_project" != "$RUNTIME_GCP_PROJECT_ID"' in readiness
-    assert readiness.index('Google Auth for read-only Firestore inventory') < readiness.index(
-        'Verify read-only Firestore credentials target the development runtime project'
+    assert "verify_credential_project: 'true'" in readiness
+    assert 'Verify read-only Firestore credentials target the runtime project' in composite
+    assert "if: inputs.verify_credential_project == 'true'" in composite
+    assert 'RUNTIME_GCP_PROJECT_ID: ${{ inputs.project_id }}' in composite
+    assert 'credential_project="$(gcloud config get-value project 2>/dev/null)"' in composite
+    assert '"$credential_project" != "$RUNTIME_GCP_PROJECT_ID"' in composite
+    assert composite.index('Google Auth for read-only Firestore inventory') < composite.index(
+        'Verify read-only Firestore credentials target the runtime project'
     )
-    assert readiness.index(
-        'Verify read-only Firestore credentials target the development runtime project'
-    ) < readiness.index('Verify serving Firestore indexes')
+    assert composite.index('Verify read-only Firestore credentials target the runtime project') < composite.index(
+        'Verify serving Firestore indexes'
+    )
 
 
 def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_only_credentials_are_missing() -> None:
@@ -457,7 +477,7 @@ def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_onl
         assert 'if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then' in readiness
         assert readiness.index('Require read-only Firestore credentials') < readiness.index(checkout_marker)
         assert readiness.index('Require read-only Firestore credentials') < readiness.index(
-            'Google Auth for read-only Firestore inventory'
+            'Verify serving Firestore indexes'
         )
         if workflow.name == 'gcp_backend_auto_dev.yml':
             assert readiness.index('Resolve and verify the newest proven main source') < readiness.index(
@@ -501,7 +521,11 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert 'ref: ${{ github.sha }}' in text
     assert 'git rev-parse HEAD' in text
     assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
-    assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
+    # Both lanes authenticate keylessly: prod through omi-gha-deploy-prod, development
+    # through omi-gha-deploy-dev. No JSON key is passed.
+    assert 'secrets.GCP_CREDENTIALS' not in text
+    assert 'omi-gha-deploy-prod/providers/github' in text
+    assert 'omi-gha-deploy-dev/providers/github' in text
     composite = text.split('\n  reconcile_composite_indexes:', 1)[1].split(
         '\n  reconcile_development_composite_indexes:', 1
     )[0]
@@ -540,7 +564,10 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert '--dry-run' in plan
     assert '--dry-run' in plan
     assert '--dry-run' not in apply
-    assert '--timeout-seconds 3600' in apply
+    assert 'timeout-minutes: 240' in composite
+    assert 'timeout-minutes: 240' in development
+    assert '--timeout-seconds 10800' in apply
+    assert '--timeout-seconds 10800' in development
 
     # Firestore documents `gcloud firestore indexes fields update --disable-indexes`
     # as an explicit field override that does not affect composites. Keep that
@@ -573,10 +600,7 @@ def test_static_manual_deploy_requires_an_admitted_main_source() -> None:
     assert '.github/scripts/verify_backend_release_admission.py' in readiness
     assert "printf 'admitted_sha=%s\\n' \"$DEPLOY_SHA\" >> \"$GITHUB_OUTPUT\"" in readiness
     assert 'admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}' in deploy
-    assert readiness.index('Verify exact admitted main source') < readiness.index(
-        'Google Auth for read-only Firestore inventory'
-    )
-    assert readiness.index('Verify exact admitted main source') < readiness.index('--check-only')
+    assert readiness.index('Verify exact admitted main source') < readiness.index('Verify serving Firestore indexes')
     assert 'secrets.GCP_CREDENTIALS' not in readiness
 
 
@@ -698,7 +722,7 @@ def test_read_only_commands_are_limited_to_queries() -> None:
 
 def test_candidate_read_only_commands_describe_each_expected_revision() -> None:
     expectation = _expectation()
-    commands = verifier.build_read_only_commands(expectation, include_candidate_revisions=True)
+    commands = verifier.build_read_only_commands(expectation, include_revision_documents=True)
 
     verifier.assert_commands_are_read_only(commands)
     assert commands['cloud_run_revision/backend'][:5] == [
@@ -714,6 +738,47 @@ def test_evaluate_accepts_matching_deployed_composition() -> None:
     expectation = _expectation()
 
     assert verifier.evaluate(expectation, _documents(expectation)) == []
+
+
+def test_role_image_opt_in_expects_each_moved_service_at_its_digest() -> None:
+    api = 'gcr.io/based-hardware-dev/backend-api@sha256:' + 'c' * 64
+    listen = 'gcr.io/based-hardware-dev/backend-realtime@sha256:' + 'd' * 64
+    expectation = verifier.build_expectation(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware-dev',
+        region='us-central1',
+        environment='dev',
+        service_images={'backend': api, 'backend-listen': listen},
+    )
+    documents = _documents(expectation)
+    # Today's image on a moved service is a stale composition, not a pass.
+    assert verifier.evaluate(expectation, documents) == [
+        f'cloud_run/backend: template image is not {api}',
+        f'gke/deployment: template image is not {listen}',
+    ]
+    documents['cloud_run/backend']['spec']['template']['spec']['containers'][0]['image'] = api
+    documents['gke/deployment']['spec']['template']['spec']['containers'][0]['image'] = listen
+    assert verifier.evaluate(expectation, documents) == []
+    report = verifier.evidence(expectation, documents, [])
+    assert report['release_vector']['service_images'] == {'backend': api, 'backend-listen': listen}
+    assert report['release_vector']['backend_listen']['image'] == listen
+
+
+def test_role_image_opt_in_rejects_unknown_services_and_tags() -> None:
+    kwargs = dict(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware-dev',
+        region='us-central1',
+        environment='dev',
+    )
+    with pytest.raises(ValueError, match='unknown services'):
+        verifier.build_expectation(**kwargs, service_images={'pusher': 'x@sha256:' + 'c' * 64})
+    with pytest.raises(ValueError, match='digest references'):
+        verifier.build_expectation(**kwargs, service_images={'backend': 'gcr.io/p/backend-api:abcdef1'})
 
 
 def test_evaluate_fails_closed_when_a_stale_revision_is_serving() -> None:
@@ -905,7 +970,301 @@ def test_retry_derives_a_new_vector_and_accepts_only_the_converged_attempt() -> 
     assert verifier.evaluate(retry, _documents(retry)) == []
 
 
-def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence() -> None:
+def _lagging_serving_documents(
+    expectation: verifier.DeploymentExpectation, service: str = 'backend-integration'
+) -> dict:
+    """The false-rollback shape from gcp_backend.yml runs 40788118426 / 40795861405:
+    the expected revision is Ready and serves 100% of traffic, but the
+    service-level latestReadyRevisionName aggregate still names the previous
+    revision minutes after the promotion."""
+    documents = _documents(expectation)
+    documents[f'cloud_run/{service}']['status']['latestReadyRevisionName'] = f'{service}-previous'
+    return documents
+
+
+def _run_main(monkeypatch: pytest.MonkeyPatch, expectation, snapshots, tmp_path: Path, extra_argv=()) -> tuple:
+    """Run main() against successive collect_documents snapshots.
+
+    The first collection (the full command set) sees snapshots[0]; every later
+    collection (a poll refresh) sees the next snapshot, holding on the last.
+    """
+    calls: list[set[str]] = []
+    index = {'next': 0}
+
+    def fake_collect(commands):
+        calls.append(set(commands))
+        snapshot = snapshots[min(index['next'], len(snapshots) - 1)]
+        index['next'] += 1
+        return {key: snapshot[key] for key in commands}
+
+    monkeypatch.setattr(verifier, 'collect_documents', fake_collect)
+    evidence_path = tmp_path / 'evidence.json'
+    argv = [
+        'verify_backend_release_vector.py',
+        '--commit-sha',
+        expectation.commit_sha,
+        '--deploy-run-id',
+        expectation.deploy_run_id,
+        '--deploy-run-attempt',
+        expectation.deploy_run_attempt,
+        '--project',
+        expectation.project,
+        '--region',
+        expectation.region,
+        '--environment',
+        expectation.environment,
+        '--evidence-path',
+        str(evidence_path),
+        *extra_argv,
+    ]
+    monkeypatch.setattr(sys, 'argv', argv)
+    rc = verifier.main()
+    report = json.loads(evidence_path.read_text(encoding='utf-8'))
+    return rc, report, calls
+
+
+def test_serving_evaluation_reports_only_the_pointer_error_when_the_revision_is_ready() -> None:
+    expectation = _expectation()
+
+    errors = verifier.evaluate(expectation, _lagging_serving_documents(expectation))
+
+    assert errors == ['cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1']
+
+
+def test_serving_evaluation_fails_a_pointer_mismatch_on_a_not_ready_revision() -> None:
+    expectation = _expectation()
+    documents = _lagging_serving_documents(expectation)
+    documents['cloud_run_revision/backend-integration']['status']['conditions'] = [
+        {'type': 'Ready', 'status': 'False', 'reason': 'ContainerHealthy'}
+    ]
+
+    errors = verifier.evaluate(expectation, documents)
+
+    assert 'cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1' in errors
+    assert 'cloud_run/backend-integration: expected revision is not Ready' in errors
+
+
+def test_partition_latest_ready_lag_separates_pointer_lag_from_other_errors() -> None:
+    expectation = _expectation()
+    lag = 'cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1'
+    other = 'cloud_run/backend: expected revision does not receive 100% traffic'
+
+    assert verifier.partition_latest_ready_lag(expectation, [lag]) == (['backend-integration'], [])
+    assert verifier.partition_latest_ready_lag(expectation, [lag, other]) == (['backend-integration'], [other])
+    assert verifier.partition_latest_ready_lag(expectation, [other]) == ([], [other])
+
+
+def test_collect_documents_fails_closed_when_a_query_stalls(monkeypatch) -> None:
+    # A stalled gcloud during the latest-ready poll must surface as a clean
+    # RuntimeError (exit 1), never an unbounded subprocess holding the deploy.
+    def stalled_run(command, **kwargs):
+        assert kwargs.get('timeout') == verifier.QUERY_TIMEOUT_SECONDS, 'queries must carry a subprocess timeout'
+        raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs['timeout'])
+
+    monkeypatch.setattr(
+        verifier,
+        'subprocess',
+        SimpleNamespace(run=stalled_run, TimeoutExpired=subprocess.TimeoutExpired),
+    )
+
+    with pytest.raises(RuntimeError, match='cloud_run/backend query timed out'):
+        verifier.collect_documents({'cloud_run/backend': ['gcloud', 'run', 'services', 'describe', 'backend']})
+
+
+def test_latest_ready_poll_refreshes_only_lagging_services_until_convergence() -> None:
+    expectation = _expectation()
+    converged = _documents(expectation)
+    refreshes: list[set[str]] = []
+
+    def collector(commands):
+        refreshes.append(set(commands))
+        return {key: converged[key] for key in commands}
+
+    outcome = verifier.poll_latest_ready_convergence(
+        expectation,
+        _lagging_serving_documents(expectation),
+        ['backend-integration'],
+        wait_seconds=5,
+        interval_seconds=0.01,
+        collector=collector,
+    )
+
+    assert outcome.converged
+    assert not outcome.timed_out
+    assert refreshes == [{'cloud_run/backend-integration', 'cloud_run_revision/backend-integration'}]
+    assert verifier.evaluate(expectation, outcome.documents) == []
+
+
+def test_latest_ready_poll_times_out_when_the_pointer_never_converges() -> None:
+    expectation = _expectation()
+
+    outcome = verifier.poll_latest_ready_convergence(
+        expectation,
+        _lagging_serving_documents(expectation),
+        ['backend-integration'],
+        wait_seconds=0.05,
+        interval_seconds=0.01,
+        collector=lambda _commands: {},
+    )
+
+    assert not outcome.converged
+    assert outcome.timed_out
+
+
+def test_latest_ready_poll_stops_when_another_mismatch_appears_mid_poll() -> None:
+    expectation = _expectation()
+    broken = _lagging_serving_documents(expectation)
+    broken['cloud_run/backend-integration']['status']['traffic'] = [
+        {'revisionName': 'backend-integration-previous', 'percent': 100}
+    ]
+
+    outcome = verifier.poll_latest_ready_convergence(
+        expectation,
+        _lagging_serving_documents(expectation),
+        ['backend-integration'],
+        wait_seconds=5,
+        interval_seconds=0.01,
+        collector=lambda _commands: {key: broken[key] for key in _commands},
+    )
+
+    assert not outcome.converged
+    assert not outcome.timed_out
+    errors = verifier.evaluate(expectation, outcome.documents)
+    assert 'cloud_run/backend-integration: expected revision does not receive 100% traffic' in errors
+
+
+def test_serving_verify_polls_a_lagging_pointer_and_passes_when_it_converges(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [_lagging_serving_documents(expectation), _documents(expectation)],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '5', '--latest-ready-poll-interval-seconds', '0.01'],
+    )
+
+    assert rc == 0
+    assert report['result'] == 'pass'
+    assert report['errors'] == []
+    assert len(calls) == 2
+    assert calls[1] == {'cloud_run/backend-integration', 'cloud_run_revision/backend-integration'}
+    poll_report = report['latest_ready_lag_poll']
+    elapsed = poll_report.pop('elapsed_seconds')
+    assert poll_report == {
+        'services': ['backend-integration'],
+        'wait_seconds': 5.0,
+        'poll_interval_seconds': 0.01,
+        'converged': True,
+        'timed_out': False,
+    }
+    assert 0 <= elapsed < 5
+
+
+def test_serving_verify_fails_fast_when_the_lagging_revision_is_not_ready(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+    lagging = _lagging_serving_documents(expectation)
+    lagging['cloud_run_revision/backend-integration']['status']['conditions'] = [
+        {'type': 'Ready', 'status': 'False', 'reason': 'ContainerHealthy'}
+    ]
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [lagging],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '5', '--latest-ready-poll-interval-seconds', '0.01'],
+    )
+
+    assert rc == 1
+    assert len(calls) == 1, 'a not-Ready revision must fail before any polling'
+    assert (
+        'cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1'
+        in report['errors']
+    )
+    assert 'cloud_run/backend-integration: expected revision is not Ready' in report['errors']
+    assert 'latest_ready_lag_poll' not in report
+
+
+def test_serving_verify_fails_fast_when_traffic_is_not_on_the_expected_revision(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+    lagging = _lagging_serving_documents(expectation)
+    lagging['cloud_run/backend-integration']['status']['traffic'] = [
+        {'revisionName': 'backend-integration-previous', 'percent': 100}
+    ]
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [lagging],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '5', '--latest-ready-poll-interval-seconds', '0.01'],
+    )
+
+    assert rc == 1
+    assert len(calls) == 1, 'a traffic mismatch must fail before any polling'
+    assert 'cloud_run/backend-integration: expected revision does not receive 100% traffic' in report['errors']
+    assert 'latest_ready_lag_poll' not in report
+
+
+def test_serving_verify_fails_with_a_clear_error_when_the_pointer_never_converges(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [_lagging_serving_documents(expectation)],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '0.05', '--latest-ready-poll-interval-seconds', '0.01'],
+    )
+
+    assert rc == 1
+    assert len(calls) >= 2, 'the bounded window must have polled before failing'
+    assert report['latest_ready_lag_poll']['timed_out'] is True
+    assert report['latest_ready_lag_poll']['converged'] is False
+    assert any('after waiting 0.05s' in error for error in report['errors']), report['errors']
+    assert any('latestReadyRevisionName pointer did not converge' in error for error in report['errors'])
+    assert any(
+        'cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1' in error
+        for error in report['errors']
+    )
+
+
+def test_serving_verify_can_disable_the_latest_ready_wait(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [_lagging_serving_documents(expectation)],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '0'],
+    )
+
+    assert rc == 1
+    assert len(calls) == 1
+    assert 'latest_ready_lag_poll' not in report
+
+
+def test_candidate_verification_never_polls_the_latest_ready_pointer(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status'].update(
+            {
+                'latestReadyRevisionName': f'{service}-old',
+                'traffic': [{'revisionName': f'{service}-old', 'percent': 100}],
+            }
+        )
+
+    rc, report, calls = _run_main(monkeypatch, expectation, [documents], tmp_path, ['--candidate'])
+
+    assert rc == 0
+    assert len(calls) == 1
+    assert 'latest_ready_lag_poll' not in report
+
+
+def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(tmp_path) -> None:
     """Regression for the missing positional ``errors`` argument.
 
     ``main()`` builds ``errors`` via ``evaluate()`` and then renders
@@ -915,16 +1274,13 @@ def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(
     positional argument: 'errors'`` before writing any evidence. Both edited
     deploy workflows hit this path.
     """
-    import tempfile
-
     expectation = _expectation()
     documents = _documents(expectation)
 
     monkeypatch_collect = pytest.MonkeyPatch()
     monkeypatch_collect.setattr(verifier, 'collect_documents', lambda commands: documents)
 
-    with tempfile.NamedTemporaryFile('r+', suffix='.json', delete=False) as handle:
-        evidence_path = Path(handle.name)
+    evidence_path = tmp_path / 'evidence.json'
 
     argv = [
         'verify_backend_release_vector.py',
@@ -985,7 +1341,7 @@ def test_candidate_cloud_run_only_verification_does_not_require_listener_mutatio
         documents[f'cloud_run/{service}']['status']['traffic'] = [{'revisionName': f'{service}-old', 'percent': 100}]
     cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run')}
 
-    commands = verifier.build_read_only_commands(expectation, include_listener=False, include_candidate_revisions=True)
+    commands = verifier.build_read_only_commands(expectation, include_listener=False, include_revision_documents=True)
     errors = verifier.evaluate(
         expectation,
         cloud_run_only,

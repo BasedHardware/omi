@@ -101,7 +101,10 @@ class AppleHealthService {
     // sample, read access is confirmed.
     private func probeAccess(result: @escaping FlutterResult) {
         let endDate = Date()
-        let startDate = Calendar.current.date(byAdding: .day, value: -90, to: endDate)!
+        guard let startDate = Calendar.current.date(byAdding: .day, value: -90, to: endDate) else {
+            result(false)
+            return
+        }
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
 
         var probeTypes: [HKSampleType] = []
@@ -144,7 +147,11 @@ class AppleHealthService {
         let days = args?["days"] as? Int ?? 7
 
         let endDate = Date()
-        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: endDate)!
+        guard (1...365).contains(days),
+              let startDate = Calendar.current.date(byAdding: .day, value: -days, to: endDate) else {
+            result(FlutterError(code: "invalid_days", message: "days must be between 1 and 365", details: nil))
+            return
+        }
 
         var summary: [String: Any] = [:]
         let group = DispatchGroup()
@@ -268,7 +275,7 @@ class AppleHealthService {
         if let startMs = args?["startDate"] as? Int64 {
             startDate = Date(timeIntervalSince1970: TimeInterval(startMs) / 1000.0)
         } else {
-            startDate = Calendar.current.date(byAdding: .day, value: -7, to: endDate)!
+            startDate = Calendar.current.date(byAdding: .day, value: -7, to: endDate) ?? endDate
         }
 
         return (startDate, endDate)

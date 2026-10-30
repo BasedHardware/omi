@@ -3,7 +3,6 @@ import FirebaseAuth
 import FirebaseCore
 import OmiSupport
 import OmiTheme
-import Sentry
 import Sparkle
 import SwiftUI
 
@@ -136,6 +135,13 @@ struct OMIApp: App {
     return version.isEmpty ? title : "\(title) v\(version)"
   }
 
+  /// Posts the one navigation request the shell listens for. `hub` selects a page inside Memories.
+  static func navigate(to item: SidebarNavItem, hub: MemoryHubDestination? = nil) {
+    var info: [String: Any] = ["rawValue": item.rawValue]
+    if let hub { info["hubDestination"] = hub.rawValue }
+    NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil, userInfo: info)
+  }
+
   /// Size the shell first comes up at. The summoned shell is a panel you call over your work, not an
   /// app you switch to, so it matches `ShellSummonPlacement.defaultSize` rather than the old
   /// managed-window 1200×800. Rewind mode is still a window and keeps its own.
@@ -152,9 +158,6 @@ struct OMIApp: App {
         .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
-        .onAppear {
-          log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
-        }
     }
     .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
@@ -184,49 +187,23 @@ struct OMIApp: App {
         }
       }
 
-      // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
+      // ⌘1…⌘4 are the top bar's pills in order; ⌥⌘1…⌥⌘5 its Memories chip row; ⌘, Settings.
       CommandGroup(after: .sidebar) {
-        Button("Home") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
-        }
-        .keyboardShortcut("1", modifiers: .command)
+        Button("Chat") { Self.navigate(to: .dashboard) }
+          .keyboardShortcut("1", modifiers: .command)
+        Button("Memories") { Self.navigate(to: .conversations, hub: .activity) }
+          .keyboardShortcut("2", modifiers: .command)
+        Button("Tasks") { Self.navigate(to: .tasks) }
+          .keyboardShortcut("3", modifiers: .command)
+        Button("Apps") { Self.navigate(to: .apps) }
+          .keyboardShortcut("4", modifiers: .command)
 
-        Button("Conversations") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.conversations.rawValue])
+        Menu("Go to in Memories") {
+          ForEach(Array(ActivityDestinationChip.allCases.enumerated()), id: \.element) { index, chip in
+            Button(chip.title) { Self.navigate(to: .conversations, hub: chip.hubDestination) }
+              .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.command, .option])
+          }
         }
-        .keyboardShortcut("2", modifiers: .command)
-
-        Button("Memories") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.memories.rawValue])
-        }
-        .keyboardShortcut("3", modifiers: .command)
-
-        Button("Tasks") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.tasks.rawValue])
-        }
-        .keyboardShortcut("4", modifiers: .command)
-
-        Button("Rewind") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.rewind.rawValue])
-        }
-        .keyboardShortcut("5", modifiers: .command)
-
-        Button("Apps") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.apps.rawValue])
-        }
-        .keyboardShortcut("6", modifiers: .command)
 
         Divider()
 
@@ -275,7 +252,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   private nonisolated(unsafe) static var mainWindowIsKey = false
   private nonisolated(unsafe) static var lastMainWindowForegroundAt: Date?
 
-  private var sentryHeartbeatTimer: Timer?
   private var globalHotkeyMonitor: Any?
   private var localHotkeyMonitor: Any?
   private var windowObservers: [NSObjectProtocol] = []
@@ -347,10 +323,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // screenshots in the temp directory, and its close handler never ran. This is the first moment
     // anything of ours can take them off disk.
     ScreenFrameQuickLook.purgeStaleScratch()
-
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
+    ListenClientState.startSurfaceReporting()
     let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    CaptureLaunchContext.setPendingRelaunch(pendingUpdateRelaunch)
     let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
     if let restoreMainWindowAfterUpdateRelaunch {
       log(
@@ -418,62 +395,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     _ = UpdaterViewModel.shared
     UpdaterViewModel.shared.checkForUpdatesImmediatelyAfterLaunchIfNeeded()
 
-    // Initialize Sentry for crash reporting and error tracking.
-    // Non-production bundles keep explicit feedback/error APIs available, but must
-    // not install native crash/app-hang handlers: those handlers run in signal
-    // context and have caused named dogfood bundles to crash while reporting.
-    let isDev = AnalyticsManager.isDevBuild
-    SentrySDK.start { options in
-      options.dsn =
-        "https://bbffa02d948c81ea4dccd36246c7bd20@o4511085999816704.ingest.us.sentry.io/4511086024851456"
-      options.debug = false
-      options.enableAutoSessionTracking = !isDev
-      options.enableCrashHandler = !isDev
-      options.enableAppHangTracking = !isDev
-      options.enableWatchdogTerminationTracking = !isDev
-      options.environment = isDev ? "development" : "production"
-      // Build-attributable native events (#10425): bind every native crash / app-hang /
-      // watchdog event to the exact version+build (`v{version}+{build}-macos`, the same
-      // tag Codemagic publishes) and the release channel (`stable`/`beta`). Without these,
-      // Sentry's Release/Build filters return nothing for native events and beta+stable
-      // are indistinguishable (both report environment="production").
-      if let releaseTag = AppBuild.releaseTag {
-        options.releaseName = releaseTag
-      }
-      options.dist = AppBuild.currentUpdateChannel
-      // Disable automatic HTTP client error capture — the SDK creates noisy events
-      // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
-      // App code already handles HTTP errors and reports meaningful ones explicitly.
-      options.enableCaptureFailedRequests = false
-      options.maxBreadcrumbs = 100
-      // App-hang detection fires on the main thread stalling. The default 2s threshold
-      // flags transient jank (disk/IPC stalls, GC-like dealloc storms) that dominates
-      // event volume without being individually actionable. Raise to 3s so only
-      // sustained freezes — the ones users actually feel — are reported.
-      options.appHangTimeoutInterval = isDev ? 0 : 3.0
-      options.beforeSend = { event in
-        // The drop decision is extracted to the pure `shouldDropSentryEvent` so the
-        // filter list is unit-testable without constructing Sentry events (SET-05).
-        let drop = Self.shouldDropSentryEvent(
-          isUserReport: event.message?.formatted.hasPrefix("User Report") == true,
-          isDev: isDev,
-          urlTag: event.tags?["url"],
-          messageFormatted: event.message?.formatted,
-          exceptions: (event.exceptions ?? []).map { (type: $0.type, value: $0.value) })
-        return drop ? nil : event
-      }
-    }
-    // Tag every Sentry event (including native crashes, which bypass app code) with
-    // the release channel and bundle identity so a release cohort can be sliced without
-    // relying on `dist` alone (#10425).
-    SentrySDK.configureScope { scope in
-      scope.setTag(value: AppBuild.currentUpdateChannel, key: "update_channel")
-      scope.setTag(value: AppBuild.bundleIdentifier, key: "bundle_id")
-    }
-    log(
-      "Sentry initialized (environment: \(isDev ? "development" : "production"), nativeHandlers=\(!isDev))"
-    )
-
     // Initialize Firebase (skipped for local harness — Firebase SDK configure can hang;
     // local dev uses Auth emulator REST + stored tokens instead).
     let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist")
@@ -503,7 +424,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
-    OnboardingRerunFlag.install()
     AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.recoverMonitoringSessionIfNeeded()
     if let attempt = pendingUpdateRelaunch?.attempt {
@@ -554,13 +474,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Route completed background-agent results into live voice sessions.
     AgentCompletionVoiceDelivery.shared.start()
 
-    // Drain explicit JIT feedback queued during an offline session as soon as
-    // the app launches; the client also retries on owner restoration, app
-    // activation, and periodic network recovery.
-    Task { await JITTriggerFeedbackClient.shared.installLifecycleRetry() }
-
-    Task { await ContextWorkstreamReconciler.shared.start() }
-
     scheduleAppLifecycleMaintenance()
 
     // Offer an integration when the user opens an app Omi can connect to.
@@ -584,11 +497,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
       AnalyticsManager.shared.identify()
-      // Set an opaque Sentry user identifier for incident correlation. Do not
-      // attach email or display name to crash/error reports.
-      if let userID = AuthState.shared.userId {
-        SentrySDK.setUser(Sentry.User(userId: userID))
-      }
       // Fetch API keys after first-window warmup settles. First-use paths call waitForKeys().
       scheduleAPIKeyFetch()
 
@@ -674,43 +582,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
       }
     }
 
-    startSentryHeartbeat()
     startForegroundTracking()
 
-    // Dress and place the shell once SwiftUI has created it. `ShellSummon` owns both from here on:
-    // transparent, buttonless, summoned or anchored, and remembered per display.
+    // Dress and place the shell once SwiftUI has created it. A freshly-reset dev profile can take
+    // longer than the first launch tick to mount the `main` scene, so recovery asks SwiftUI for the
+    // scene and probes again instead of giving up after one 200 ms lookup (#12501).
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-      guard let window = ShellSummon.shellWindow() else {
-        log("AppDelegate: WARNING - shell window not found after launch")
-        return
-      }
-      ShellSummon.applyPresentation(to: window)
-      if restoreMainWindowAfterUpdateRelaunch == false {
-        window.orderOut(nil)
-        log("AppDelegate: Shell suppressed after background update relaunch")
-      } else if DesktopAutomationWindowPresentation.currentMode != .normal {
-        DesktopAutomationWindowPresentation.applyLaunchMode(to: window)
-        log(
-          "AppDelegate: Shell launched in \(DesktopAutomationWindowPresentation.currentMode.rawValue) automation presentation"
-        )
-      } else {
-        NSApp.activate()
-        ShellSummon.summon(alwaysPlace: true)
-        log("AppDelegate: Shell summoned on launch")
-      }
+      self.scheduleShellWindowPresentation(
+        restoreMainWindowAfterUpdateRelaunch: restoreMainWindowAfterUpdateRelaunch)
     }
 
+    SiriIndexLifecycle.shared.start(launchMode: OMIApp.launchMode.rawValue)
     log("AppDelegate: applicationDidFinishLaunching completed")
-  }
-
-  /// Start a timer that records Sentry session breadcrumbs every 5 minutes.
-  /// Breadcrumbs preserve observability without creating unresolved Sentry issues (#9191).
-  private func startSentryHeartbeat() {
-    guard !AnalyticsManager.isDevBuild else { return }
-    sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-      SentryHeartbeatTelemetry.recordSessionHeartbeat()
-      log("Sentry: Session heartbeat breadcrumb recorded")
-    }
   }
 
   private func startForegroundTracking() {
@@ -894,7 +777,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     if let button = item.button {
       if OMIApp.launchMode == .rewind {
         if let icon = NSImage(
-          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind")
+          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind")
         {
           icon.isTemplate = true
           button.image = icon
@@ -939,24 +822,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     guard let statusBarItem = statusBarItem else {
       log("AppDelegate: [MENUBAR] ERROR - Failed to create status bar item")
-      SentrySDK.capture(message: "Failed to create NSStatusItem") { scope in
-        scope.setLevel(.error)
-        scope.setTag(value: "menu_bar", key: "component")
-      }
       return
     }
 
     log("AppDelegate: [MENUBAR] NSStatusItem created successfully")
 
     let displayName =
-      Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
+      Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
 
     // Set up the button with compact circle mark.
     if let button = statusBarItem.button {
       if OMIApp.launchMode == .rewind {
         // Rewind mode uses SF Symbol
         if let icon = NSImage(
-          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind")
+          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind")
         {
           icon.isTemplate = true
           button.image = icon
@@ -1002,12 +881,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     menu.addItem(NSMenuItem.separator())
 
-    // Open app item
+    // No key equivalent: ⌘O here only worked with this menu open, yet read as the global shortcut.
     let openItem = NSMenuItem(
-      title: "Open \(displayName)", action: #selector(openOmiFromMenu), keyEquivalent: "o")
+      title: "Open \(displayName)", action: #selector(openOmiFromMenu), keyEquivalent: "")
     openItem.target = self
     menu.addItem(openItem)
+    menu.addItem(FloatingBarMenuBarItem.make())  // Show/Hide Floating Bar: the way back after Hide
 
+    let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettingsFromMenu), keyEquivalent: "")
+    settingsItem.target = self
+    menu.addItem(settingsItem)
     let undoDictationItem = NSMenuItem(
       title: "Undo Last Dictation", action: #selector(undoLastDictationFromMenu), keyEquivalent: "")
     undoDictationItem.target = self
@@ -1015,9 +898,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     menu.addItem(NSMenuItem.separator())
 
-    // Check for Updates
     let updatesItem = NSMenuItem(
-      title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+      title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     updatesItem.target = self
     menu.addItem(updatesItem)
 
@@ -1033,14 +915,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
       }
 
       let resetItem = NSMenuItem(
-        title: "Reset Onboarding...", action: #selector(resetOnboarding), keyEquivalent: "")
+        title: "Reset Onboarding…", action: #selector(resetOnboarding), keyEquivalent: "")
       resetItem.target = self
       menu.addItem(resetItem)
 
       menu.addItem(NSMenuItem.separator())
 
       let reportItem = NSMenuItem(
-        title: "Report Issue...", action: #selector(reportIssue), keyEquivalent: "")
+        title: "Report Issue…", action: #selector(reportIssue), keyEquivalent: "")
       reportItem.target = self
       menu.addItem(reportItem)
 
@@ -1119,6 +1001,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   @MainActor @objc private func openOmiFromMenu() {
     AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
     openMainAppWindow()
+  }
+
+  @MainActor @objc private func openSettingsFromMenu() {
+    AnalyticsManager.shared.menuBarActionClicked(action: "open_settings")
+    openMainAppWindow()
+    OMIApp.navigate(to: .settings)
   }
 
   /// "Continue in Omi": bring the main window forward *and* land on the chat
@@ -1215,6 +1103,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
+    // Settings asks the same question; the status menu has no shell window to draw it in.
+    let alert = NSAlert()
+    alert.messageText = "Reset Onboarding?"
+    alert.informativeText =
+      "This will reset onboarding for this app build only, clear onboarding chat history, "
+      + "and restart the app without affecting the other installed build."
+    alert.addButton(withTitle: "Reset & Restart")
+    alert.addButton(withTitle: "Cancel")
+    NSApp.activate(ignoringOtherApps: true)
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
     (AppState.current ?? AppState()).resetOnboardingAndRestart()
   }
 
@@ -1442,10 +1340,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Stop push-to-talk
     PushToTalkManager.shared.cleanup()
 
-    // Stop heartbeat timer
-    sentryHeartbeatTimer?.invalidate()
-    sentryHeartbeatTimer = nil
-
     apiKeyFetchTask?.cancel()
     apiKeyFetchTask = nil
     floatingBarPlanFetchTask?.cancel()
@@ -1457,8 +1351,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
-
-    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.
@@ -1472,12 +1364,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Report final resources before termination
     ResourceMonitor.shared.reportResourcesNow(context: "app_terminating")
     ResourceMonitor.shared.stop()
-
-    if !AnalyticsManager.isDevBuild {
-      let breadcrumb = Breadcrumb(level: .info, category: "lifecycle")
-      breadcrumb.message = "App Terminating"
-      SentrySDK.addBreadcrumb(breadcrumb)
-    }
   }
 
   @objc func handleGetURLEvent(
@@ -1493,6 +1379,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     NSLog("OMI AppDelegate: Received URL event: %@", urlString)
 
     Task { @MainActor in
+      if ItemLinkPresenter.shared.receive(url) { return }  // only items/conversation/task/memory hosts
       if !ThreeDoorsDemoPage.handleReturnURL(url) { AuthService.shared.handleOAuthCallback(url: url) }
       // Bring app to foreground after OAuth redirect — Safari stays in front otherwise.
       // NSApp.activate() alone doesn't switch macOS Spaces; ordering a window front does.

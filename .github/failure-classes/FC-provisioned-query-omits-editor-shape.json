@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-provisioned-query-omits-editor-shape",
+  "violated_contract": "A hand-written provisioned Grafana query must carry the same sibling objects the datasource's own editor writes, not only the fields the current server version happens to read. Grafana 13's cloud-monitoring migrateRequest treats a promQL target without metricQuery/timeSeriesQuery/timeSeriesList/sloQuery as a legacy metric query, rewrites it without promQLQuery, and the PromQL executor nil-dereferences, so every panel in the /api/ds/query batch returns 500 and paints No data after an otherwise clean Grafana upgrade.",
+  "canonical_prevention": "Provisioned Cloud Monitoring PromQL targets include a timeSeriesList stub, enforced by a static test over every monitoring and admin dashboard and alert JSON; a Grafana version bump replays one representative provisioned query per datasource type through /api/ds/query before acceptance.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_monitoring_cloud_monitoring_promql_shape.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/monitoring/dashboards/**/*.json",
+    "backend/charts/monitoring/alerts/*.json",
+    "web/admin/grafana/dashboards/*.json"
+  ],
+  "status": "open"
+}

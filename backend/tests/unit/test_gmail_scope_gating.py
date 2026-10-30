@@ -121,13 +121,16 @@ def test_gmail_oauth_url_runs_the_google_flow(monkeypatch):
 
 
 async def test_gmail_tool_asks_for_reconnect_when_the_scope_is_missing():
+    config = {"configurable": {"user_id": "u1", "user_timezone": "UTC"}}
     with patch.object(gmail_tools, 'prepare_access', return_value=('u1', LEGACY_GRANT, 'token', None)):
-        result = await gmail_tools.get_gmail_messages_tool.ainvoke({})
+        result = await gmail_tools.get_gmail_messages_tool.ainvoke({}, config=config)
 
     assert 'reconnect' in result.lower()
 
 
 async def test_gmail_tool_queries_gmail_once_the_scope_is_granted():
+    config = {"configurable": {"user_id": "u1", "user_timezone": "UTC"}}
+
     async def fake_retry_on_auth_async(*args, **kwargs):
         return [], None
 
@@ -135,6 +138,6 @@ async def test_gmail_tool_queries_gmail_once_the_scope_is_granted():
         patch.object(gmail_tools, 'prepare_access', return_value=('u1', GRANT_WITH_GMAIL, 'token', None)),
         patch.object(gmail_tools, 'retry_on_auth_async', fake_retry_on_auth_async),
     ):
-        result = await gmail_tools.get_gmail_messages_tool.ainvoke({})
+        result = await gmail_tools.get_gmail_messages_tool.ainvoke({}, config=config)
 
     assert result == 'No emails found.'

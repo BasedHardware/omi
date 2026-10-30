@@ -235,6 +235,9 @@ def stored_transcript_segment(segment: Any) -> TranscriptSegment | None:
         speaker_id=kept.speaker_id,
         is_user=kept.is_user,
         person_id=kept.person_id,
+        stt_provider=(
+            segment.get('stt_provider') if isinstance(segment, Mapping) else getattr(segment, 'stt_provider', None)
+        ),
         start=_segment_timing(segment, 'start', 0.0),
         end=_segment_timing(segment, 'end', 1.0),
     )
@@ -338,6 +341,19 @@ def transcript_sha256_for_binding(segments: Iterable[Any] | None) -> str | None:
     items = list(segments or [])
     if not stored_transcript_is_canonical(items):
         return None
+    # v5 predates scope-aware unnamed-voice labels. Preserve its wire framing,
+    # but never trust a projection when an unbound scope can change attribution.
+    # None (legacy/unscoped) is a scope too. Bound people and the owner do not
+    # acquire unnamed-voice ordinals, so their scopes do not affect this guard.
+    scopes: set[str | None] = set()
+    for segment in items:
+        kept = canonical_segment(segment)
+        if kept.is_user or kept.person_id:
+            continue
+        scope = _raw_field(segment, 'speaker_id_scope')
+        scopes.add(scope if isinstance(scope, str) else None)
+        if len(scopes) > 1:
+            return None
     return transcript_sha256(items)
 
 

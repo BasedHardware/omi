@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart' show SyncLocalFilesResponse;
@@ -14,6 +17,8 @@ import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/capture/capture_controller.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/scenarios/native_event_vector.dart';
@@ -24,9 +29,12 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_service.dart';
+
+import 'scripted_device_connection.dart';
 
 import 'virtual_capture_time.dart';
 
@@ -39,6 +47,8 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
   final List<String> startStacks = [];
   bool nativeRecording = false;
   Object Function()? nextStartError;
+  Completer<void>? holdNextStart;
+  Completer<void>? nextStartEntered;
 
   @override
   Future<void> start(PhoneMicCaptureMode mode, int sessionId) async {
@@ -47,6 +57,12 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
     lastStartMode = mode;
     lastStartSessionId = sessionId;
     startSessionIds.add(sessionId);
+    final entered = nextStartEntered;
+    nextStartEntered = null;
+    entered?.complete();
+    final held = holdNextStart;
+    holdNextStart = null;
+    if (held != null) await held.future;
     nativeRecording = true;
     final error = nextStartError;
     nextStartError = null;
@@ -162,6 +178,7 @@ class UploadAttempt {
   final int totalBytes;
   final String? conversationId;
   final bool claimLiveCapture;
+  final String? captureEvidence;
 
   UploadAttempt({
     required this.at,
@@ -169,6 +186,7 @@ class UploadAttempt {
     required this.totalBytes,
     required this.conversationId,
     required this.claimLiveCapture,
+    required this.captureEvidence,
   });
 }
 
@@ -185,6 +203,10 @@ class ScriptedUploads {
   /// keep WALs retryable across phases that would otherwise auto-upload.
   bool failAll = false;
 
+  /// Sees each upload's files while they still exist (a completed upload may
+  /// delete them), e.g. to follow audio custody into the server.
+  void Function(List<File> files)? onUploadFiles;
+
   ScriptedUploads(this.clock);
 
   void enqueueOutcome(Object Function() outcome) => script.add(outcome);
@@ -199,7 +221,18 @@ class ScriptedUploads {
   SyncUploadGate buildGate() {
     return SyncUploadGate(
       limiter: SyncRateLimiter.instance,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation,
+      }) async {
+        onUploadFiles?.call(files);
         attempts.add(
           UploadAttempt(
             at: clock.now(),
@@ -207,6 +240,7 @@ class ScriptedUploads {
             totalBytes: files.fold(0, (sum, f) => sum + f.lengthSync()),
             conversationId: conversationId,
             claimLiveCapture: claimLiveCapture,
+            captureEvidence: captureEvidence,
           ),
         );
         if (failAll) {
@@ -237,29 +271,57 @@ class CaptureReplayWorld {
   final Directory tempDir;
   final VirtualClock clock;
   final ScriptedUploads uploads;
+  final BleAudioCodec pendantCodec;
 
   late ManualScheduler scheduler;
   late FakePhoneMicHostApi hostApi;
   late NativeMicRecorderService mic;
   late WalService wal;
   late StreamController<bool> connectivityStream;
+  late StreamController<void> networkChangeStream;
   late RecordingTransferCoordinator coordinator;
   ScriptedPureSocket? socket;
   int socketCreates = 0;
+
+  /// The local_preview declaration of each socket the controller opened.
+  final List<bool> localPreviewRequests = [];
+
+  /// Every transcription socket the controller opened, in order, with the source it declared.
+  final List<({String? source, ScriptedPureSocket transport})> sockets = [];
+
+  /// The pendant's BLE link, when a scenario connects one.
+  ScriptedDeviceConnection? deviceConnection;
+
+  /// The Omi phone-call state capture observes (PhoneCallProvider.callStateListenable in the app).
+  final ValueNotifier<PhoneCallState> omiCall = ValueNotifier(PhoneCallState.idle);
   bool nextConnectFailsOnce = false;
 
   bool connected = true;
   bool signedIn = true;
+  bool allowMic = true;
+  int processCalls = 0;
+
+  /// Runs when the controller asks the server to process the in-progress conversation.
+  void Function()? onProcessInProgress;
+
+  /// When set, Process Now returns this outcome instead of a transport miss.
+  Future<InProgressProcessOutcome> Function()? processOutcome;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
   /// Server-side sync-job outcomes by job id, consulted by the reconciler
   /// through the injected job-status fetcher.
   final Map<String, SyncJobFetch> jobStatuses = {};
+  final List<({String jobId, DateTime at})> jobPolls = [];
+
+  final List<Map<String, Object?>> coverageEvents = [];
 
   _ReplayCaptureController? _controller;
 
-  CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads});
+  CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
+
+  CalendarCaptureGapMonitor? calendarGapMonitor;
+  CaptureWedgeMonitor? captureWedgeMonitor;
 
   bool _disposed = false;
   bool _controllerDisposed = false;
@@ -271,6 +333,9 @@ class CaptureReplayWorld {
     Map<String, Object> initialPrefs = const {},
     bool initiallyConnected = true,
     bool supportsBatch = true,
+    BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
+    CalendarCaptureGapMonitor? calendarGapMonitor,
+    CaptureWedgeMonitor? captureWedgeMonitor,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final start = startTime ?? defaultStart;
@@ -278,7 +343,10 @@ class CaptureReplayWorld {
       tempDir: tempDir,
       clock: VirtualClock(start),
       uploads: ScriptedUploads(VirtualClock(start)),
+      pendantCodec: pendantCodec,
     );
+    world.calendarGapMonitor = calendarGapMonitor;
+    world.captureWedgeMonitor = captureWedgeMonitor;
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
     return world;
@@ -293,6 +361,11 @@ class CaptureReplayWorld {
       SharedPreferences.setMockInitialValues(initialPrefs);
     }
     await SharedPreferencesUtil.init();
+    if (firstBoot) {
+      SyncRateLimiter.instance.clear();
+      SyncRateLimiter.instance.clockForTesting = clock.now;
+      SyncJobPoller.instance.resetForTesting(clock: clock.now);
+    }
 
     if (firstBoot) {
       SttModeResolver.instance = SttModeResolver(flagReader: () => false);
@@ -322,19 +395,30 @@ class CaptureReplayWorld {
       phoneUploadGate: uploads.buildGate(),
       phoneNow: clock.now,
       phonePeriodic: scheduler.periodic,
-      phoneJobStatusFetcher: (jobId) async => jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound),
+      phoneJobStatusFetcher: (jobId) async {
+        jobPolls.add((jobId: jobId, at: clock.now()));
+        return jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound);
+      },
+      phoneCoverageTelemetry: coverageEvents.add,
+      // The replay world has no real disk-space plugin; report ample space so
+      // the storage-admission gate proves capacity instead of failing closed.
+      phoneFreeDiskBytes: () async => 1 << 40,
     );
     wal.start();
     await wal.syncs.phone.walReady;
     connectivityStream = StreamController<bool>.broadcast();
+    networkChangeStream = StreamController<void>.broadcast();
     _controller = _ReplayCaptureController(
       world: this,
+      calendarGapMonitor: calendarGapMonitor,
+      captureWedgeMonitor: captureWedgeMonitor,
       walService: wal,
       phoneMicRecorder: mic,
       phoneMicBatchSupported: supportsBatch,
       connectivity: CaptureConnectivityBoundary(
         initiallyConnected: connected,
         changes: connectivityStream.stream,
+        networkChanges: networkChangeStream.stream,
         isConnected: () => connected,
       ),
       authBoundary: CaptureAuthBoundary(
@@ -347,8 +431,17 @@ class CaptureReplayWorld {
       now: clock.now,
       scheduling: scheduler,
       inProgressConversationLoader: () async {},
-      audioCodecLoader: (deviceId) async => BleAudioCodec.pcm16,
-      microphonePermissionRequester: () async => true,
+      deviceConnectionLoader: (deviceId) async => deviceConnection,
+      omiCallState: omiCall,
+      processInProgressOutcome: () async {
+        processCalls++;
+        onProcessInProgress?.call();
+        final custom = processOutcome;
+        if (custom != null) return custom();
+        return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
+      },
+      audioCodecLoader: (deviceId) async => pendantCodec,
+      microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
         checkPermission: () async => LocationPermission.denied,
@@ -374,6 +467,7 @@ class CaptureReplayWorld {
       },
       autoUploadEnabled: () => true,
       connectivityChanges: connectivityStream.stream,
+      networkChanges: networkChangeStream.stream,
       initiallyConnected: connected,
       clock: clock.now,
       scheduleCooldown: (delay, callback) => scheduler.once(delay, callback),
@@ -433,6 +527,12 @@ class CaptureReplayWorld {
     connectivityStream.add(value);
   }
 
+  /// The active interface changed (wifi -> cellular) without ever going offline.
+  void emitNetworkChange() {
+    timeline.add('network=changed');
+    networkChangeStream.add(null);
+  }
+
   /// Drain work started by timer callbacks and injections: WAL file writes
   /// returned as Futures from async periodic callbacks, coordinator recovery
   /// passes (including unawaited cooldown wakes), and event-queue microtasks.
@@ -466,6 +566,7 @@ class CaptureReplayWorld {
     _controller = null;
     socket = null;
     connectivityStream.close();
+    networkChangeStream.close();
   }
 
   /// Rebuilds the entire production graph from the same temp directory: a new
@@ -494,9 +595,12 @@ class CaptureReplayWorld {
     if (!_controllerDisposed) _controller?.dispose();
     coordinator.dispose();
     await connectivityStream.close();
+    await networkChangeStream.close();
     await wal.stop();
     SttModeResolver.debugResetInstance();
     SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       null,
@@ -534,6 +638,11 @@ class _ReplayCaptureController extends CaptureController {
     super.audioCodecLoader,
     super.microphonePermissionRequester,
     super.conversationLocationCapture,
+    super.deviceConnectionLoader,
+    super.processInProgressOutcome,
+    super.omiCallState,
+    super.calendarGapMonitor,
+    super.captureWedgeMonitor,
   });
 
   @override
@@ -546,8 +655,10 @@ class _ReplayCaptureController extends CaptureController {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     final transport = ScriptedPureSocket();
+    world.localPreviewRequests.add(localPreview);
     transport.connectAllowed = () => world.connected;
     if (world.nextConnectFailsOnce) {
       transport.nextConnectFails = true;
@@ -555,6 +666,7 @@ class _ReplayCaptureController extends CaptureController {
     }
     world.socket = transport;
     world.socketCreates++;
+    world.sockets.add((source: source, transport: transport));
     final service = TranscriptSegmentSocketService.withSocket(
       sampleRate,
       codec,
@@ -562,6 +674,7 @@ class _ReplayCaptureController extends CaptureController {
       transport,
       source: source,
       clientConversationId: clientConversationId,
+      localPreview: localPreview,
     );
     await service.start();
     if (service.state != SocketServiceState.connected) {

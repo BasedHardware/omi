@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
@@ -62,16 +63,7 @@ class WalSyncs implements IWalSync {
 
   /// Firmware >= 3.0.20 speaks the ring-buffer protocol; older multi-file
   /// firmware (3.0.17–3.0.19) keeps using StorageSync.
-  static bool isRingBufferFirmware(String? version) {
-    if (version == null || version.isEmpty || version == 'Unknown') return false;
-    final parts = version.split('.').map((p) => int.tryParse(p) ?? 0).toList();
-    if (parts.length < 3) return false;
-    if (parts[0] > 3) return true;
-    if (parts[0] < 3) return false;
-    if (parts[1] > 0) return true;
-    if (parts[1] < 0) return false;
-    return parts[2] >= 20;
-  }
+  static bool isRingBufferFirmware(String? version) => RingProtocol.isRingBufferFirmware(version);
 
   WalSyncs(
     this.listener, {
@@ -79,13 +71,17 @@ class WalSyncs implements IWalSync {
     DateTime Function()? phoneNow,
     Timer Function(Duration, void Function(Timer))? phonePeriodic,
     Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+    WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
+    Future<int?> Function()? phoneFreeDiskBytes,
   }) {
     _phoneSync = LocalWalSyncImpl(
       listener,
       uploadGate: phoneUploadGate,
       now: phoneNow,
       periodic: phonePeriodic,
+      freeDiskBytes: phoneFreeDiskBytes,
       jobStatusFetcher: phoneJobStatusFetcher,
+      coverageTelemetry: phoneCoverageTelemetry,
     );
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
@@ -118,14 +114,34 @@ class WalSyncs implements IWalSync {
     return wals;
   }
 
+  List<Wal>? _cachedPhoneWals;
+  List<Wal> _cachedDeviceWals = const [];
+  List<Wal>? _cachedAllWals;
+
   Future<List<Wal>> getAllWals() async {
-    List<Wal> wals = [];
-    wals.addAll(await _ringSync.getMissingWals());
-    wals.addAll(await _storageSync.getMissingWals());
-    wals.addAll(await _sdcardSync.getMissingWals());
-    wals.addAll(await _phoneSync.getAllWals());
-    wals.addAll(await _flashPageSync.getMissingWals());
-    return wals;
+    final devices = <Wal>[
+      ...await _ringSync.getMissingWals(),
+      ...await _storageSync.getMissingWals(),
+      ...await _sdcardSync.getMissingWals(),
+    ];
+    final phone = await _phoneSync.getAllWals();
+    final flash = await _flashPageSync.getMissingWals();
+    final allDevices = [...devices, ...flash];
+    var unchanged = identical(phone, _cachedPhoneWals) && allDevices.length == _cachedDeviceWals.length;
+    if (unchanged) {
+      for (var i = 0; i < allDevices.length; i++) {
+        if (!identical(allDevices[i], _cachedDeviceWals[i])) {
+          unchanged = false;
+          break;
+        }
+      }
+    }
+    if (_cachedAllWals == null || !unchanged) {
+      _cachedPhoneWals = phone;
+      _cachedDeviceWals = allDevices;
+      _cachedAllWals = List.unmodifiable([...devices, ...phone, ...flash]);
+    }
+    return _cachedAllWals!;
   }
 
   /// Enumerate offline recordings from the connected device WITHOUT downloading
@@ -202,11 +218,7 @@ class WalSyncs implements IWalSync {
   }
 
   int _estimateWalSize(Wal wal) {
-    return wal.codec.estimatedRecordingBytes(
-      seconds: wal.seconds,
-      sampleRate: wal.sampleRate,
-      channels: wal.channel,
-    );
+    return wal.codec.estimatedRecordingBytes(seconds: wal.seconds, sampleRate: wal.sampleRate, channels: wal.channel);
   }
 
   Future<void> deleteAllSyncedWals() async {
@@ -228,6 +240,10 @@ class WalSyncs implements IWalSync {
   /// Terminal corruption is produced by the phone-local WAL owner. Device
   /// stores keep their existing pending-deletion semantics.
   Future<void> deleteAllCorruptedWals() => _phoneSync.deleteAllCorruptedWals();
+
+  /// Bounded phone-only drain used while iOS/Android grants background time.
+  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
+      _phoneSync.syncLiveCaptureOnly(progress: progress);
 
   @override
   void start() {
@@ -379,6 +395,9 @@ class WalSyncs implements IWalSync {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       if (wal.fileNum == -1) {
         return _ringSync.syncWal(wal: wal, progress: progress);
+      }
+      if (_storageSync.owns(wal)) {
+        return _storageSync.syncWal(wal: wal, progress: progress);
       }
       return _sdcardSync.syncWal(wal: wal, progress: progress);
     } else if (wal.storage == WalStorage.flashPage) {

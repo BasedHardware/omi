@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { StickyNote, Mail, Inbox } from 'lucide-react'
+import { StickyNote, Inbox } from 'lucide-react'
 import { toast } from '../../../lib/toast'
 import { readAndExtractStickyNotes, importStickyMemories } from '../../../lib/stickyNotesImport'
 import { toastImportTally } from '../../../lib/importToast'
 import { useMemories } from '../../../hooks/useMemories'
-import { useGoogleConnection } from '../../../hooks/useGoogleConnection'
 import { GMAIL_SESSION_ENABLED } from '../../../lib/gmailSessionFeatureFlag'
 import { auth } from '../../../lib/firebase'
 import { SettingRow } from '../SettingRow'
@@ -60,18 +59,6 @@ export function IntegrationsTab(): React.JSX.Element {
       setStickyProfile('')
     }
   }
-
-  // --- Google --- (client-side Gmail lane; shared with the Hub Email card, incl.
-  // the sync-on-connect + 15-min background resync, via the singleton hook.)
-  const {
-    googleEnabled,
-    status: googleStatus,
-    connect: connectGoogle,
-    disconnect: disconnectGoogle,
-    syncNow: runSync,
-    busy: googleBusy,
-    syncing: googleSyncing
-  } = useGoogleConnection()
 
   // --- Gmail (session): Option B. Sign into Google once inside an Omi-owned window;
   // we replay Gmail's web endpoints against that persisted session (no OAuth scopes). ---
@@ -184,52 +171,6 @@ export function IntegrationsTab(): React.JSX.Element {
           </ul>
         )}
       </SettingRow>
-
-      {googleEnabled && (
-        <SettingRow
-          icon={Mail}
-          dot={googleStatus.connected ? 'on' : 'off'}
-          title="Google (Gmail + Calendar)"
-          subtitle={
-            googleStatus.connected
-              ? `Connected${googleStatus.email ? ` as ${googleStatus.email}` : ''}${
-                  googleStatus.lastSyncAt
-                    ? ` · last sync ${new Date(googleStatus.lastSyncAt).toLocaleString()}`
-                    : ''
-                }`
-              : 'Turn recent email (subject/sender only) into memories and upcoming events into tasks.'
-          }
-          keywords="google gmail calendar sync integration"
-          control={
-            googleStatus.connected ? (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={runSync}
-                  disabled={googleSyncing}
-                  className="btn-primary px-4 py-2 disabled:opacity-40"
-                >
-                  {googleSyncing ? 'Syncing…' : 'Sync now'}
-                </button>
-                <button
-                  onClick={disconnectGoogle}
-                  disabled={googleBusy}
-                  className="btn-ghost disabled:opacity-40"
-                >
-                  Disconnect
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={connectGoogle}
-                disabled={googleBusy}
-                className="btn-ghost disabled:opacity-40"
-              >
-                {googleBusy ? 'Connecting…' : 'Connect'}
-              </button>
-            )
-          }
-        />
-      )}
 
       {GMAIL_SESSION_ENABLED && (
         <SettingRow

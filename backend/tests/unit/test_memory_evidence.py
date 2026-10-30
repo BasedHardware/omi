@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from database import notifications
 
 from models.memories import SubjectAttribution
 
@@ -52,8 +53,7 @@ def memory_surfaces(monkeypatch):
 
     for module in (service_tools, chat_tools):
         monkeypatch.setattr(module, "MemoryService", FakeMemoryService)
-        monkeypatch.setattr(module, "belief_model_enabled", lambda: False)
-        monkeypatch.setattr(module.notification_db, "get_user_time_zone", lambda _uid: "UTC")
+    monkeypatch.setattr(notifications, "get_user_time_zone", lambda _uid: "UTC")
 
     state.service_tools = service_tools
     state.chat_tools = chat_tools
@@ -179,6 +179,23 @@ def test_rest_get_entrypoint_emits_complete_claim_with_attribution_and_order(mem
     assert memory_surfaces.read_calls == [("uid-test", {"limit": 2, "offset": 0, "now": None})]
 
 
+def test_chat_memory_lookup_failure_is_not_reported_as_empty(memory_surfaces, monkeypatch):
+    class FailingMemoryService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def read(self, *_args, **_kwargs):
+            raise RuntimeError("temporary memory store failure")
+
+    monkeypatch.setattr(memory_surfaces.chat_tools, "MemoryService", FailingMemoryService)
+
+    rendered = memory_surfaces.chat_tools.get_memories_tool.func(config={"configurable": {"user_id": "uid-test"}})
+
+    assert "memories could not be retrieved right now" in rendered
+    assert "not evidence that none exist" in rendered
+    assert "No memories found" not in rendered
+
+
 def test_rest_get_boundary_row_is_deferred_as_a_whole_and_next_offset_returns_it(memory_surfaces):
     from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS
 
@@ -207,7 +224,7 @@ def test_all_four_memory_surfaces_enforce_the_total_evidence_budget(memory_surfa
     memories = [_memory(f"claim-{index} " + ("C" * 5_000), memory_id=f"m-{index}") for index in range(20)]
     memory_surfaces.memories = memories
     memory_surfaces.matches = [SimpleNamespace(memory=memory, score=0.5) for memory in memories]
-    config = {"configurable": {"user_id": "uid-test"}}
+    config = {"configurable": {"user_id": "uid-test", "user_timezone": "UTC"}}
 
     rendered = (
         memory_surfaces.service_tools.get_memories_text("uid-test", limit=50),
@@ -306,6 +323,7 @@ def test_chat_get_entrypoint_uses_real_tool_wrapper_and_complete_claim(memory_su
     assert json.dumps(claim, ensure_ascii=False) in rendered
     assert "Exception: never on holidays." in rendered
     assert "subject: legacy_assumed" in rendered
+    assert "memory_id: chat-get" in rendered
     assert memory_surfaces.read_calls == [("uid-test", {"limit": 1, "offset": 0})]
 
 
@@ -324,42 +342,22 @@ def test_chat_search_entrypoint_uses_real_tool_wrapper_and_preserves_order(memor
     assert rendered.index("first search result") < rendered.index("second search result")
     assert "subject: user" in rendered
     assert "subject: unknown" in rendered
+    assert "memory_id: search-first" in rendered
+    assert "memory_id: search-second" in rendered
     assert memory_surfaces.search_calls == [("uid-test", "preferences", {"limit": 2})]
 
 
-def test_list_surfaces_preserve_evidence_clock_and_normalize_utc_label(memory_surfaces):
+def test_list_surfaces_use_creation_clock_and_normalize_utc_label(memory_surfaces):
     memory = _memory("An older evidence-backed claim.", memory_id="dated")
-    memory.as_of = datetime(2026, 9, 1, 8, 30, tzinfo=timezone(timedelta(hours=7)))
+    memory.created_at = datetime(2026, 9, 1, 8, 30, tzinfo=timezone(timedelta(hours=7)))
     memory_surfaces.memories = [memory]
 
     results = [
         memory_surfaces.service_tools.get_memories_text("uid-test", limit=1),
         memory_surfaces.chat_tools.get_memories_tool.invoke(
-            {"limit": 1}, config={"configurable": {"user_id": "uid-test"}}
+            {"limit": 1}, config={"configurable": {"user_id": "uid-test", "user_timezone": "UTC"}}
         ),
     ]
 
-    assert all("date: 2026-09-01 01:30:00 UTC" in result for result in results)
+    assert all("date: Tue 1 Sep 2026, 01:30 UTC" in result for result in results)
     assert all("2026-09-21" not in result for result in results)
-
-
-def test_temporal_truncated_page_keeps_rows_warns_and_omits_next_offset(memory_surfaces):
-    memory = _memory("truncated scan claim", memory_id="truncated")
-    memory_surfaces.memories = [memory]
-    memory_surfaces.read_page_result = SimpleNamespace(memories=[memory], next_cursor=None, truncated=True)
-    memory_surfaces.monkeypatch.setattr(memory_surfaces.service_tools, "belief_model_enabled", lambda: True)
-    memory_surfaces.monkeypatch.setattr(memory_surfaces.chat_tools, "belief_model_enabled", lambda: True)
-
-    results = [
-        memory_surfaces.service_tools.get_memories_text("uid-test", limit=1, offset=0),
-        memory_surfaces.chat_tools.get_memories_tool.invoke(
-            {"limit": 1, "offset": 0}, config={"configurable": {"user_id": "uid-test"}}
-        ),
-    ]
-
-    assert '"truncated scan claim"' in results[0]
-    assert '"truncated scan claim"' not in results[1]
-    assert all("may exist" in result for result in results)
-    assert all("Next list offset:" not in result for result in results)
-    assert "bounded scan" in results[0]
-    assert "bounded scan" in results[1]

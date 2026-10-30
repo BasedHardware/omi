@@ -119,8 +119,12 @@ class ParakeetTranscriber:
                 for task in done:
                     task.result()
             except asyncio.CancelledError:
+                send_task.cancel()
+                await asyncio.gather(send_task, return_exceptions=True)
                 try:
-                    await ws.send("finalize")
+                    await asyncio.wait_for(
+                        ws.send("finalize"), timeout=self.drain_timeout or 5.0
+                    )
                 except Exception:
                     pass
                 try:

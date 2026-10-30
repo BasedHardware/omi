@@ -151,7 +151,7 @@ async def refresh_oauth_token(
         raise
     except Exception as e:
         logger.error(f'{app_key}: Error refreshing token: {e}')
-        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to refresh {name} token due to an internal error")
 
 
 async def ensure_valid_oauth_token(
@@ -195,7 +195,14 @@ async def perform_request_with_token_retry(
     integration: dict,
     request_fn: Callable,
     client: Optional[httpx.AsyncClient] = None,
+    raise_resend_errors: bool = False,
 ) -> Tuple[Any, dict, Optional[Exception]]:
+    """Run ``request_fn`` and retry once after an OAuth refresh on 401.
+
+    With ``raise_resend_errors`` a returned error means the refresh failed
+    before any resend, and a failed resend raises, so a create caller can treat
+    it as possibly accepted rather than as never sent.
+    """
     client = client or get_http_client()
     access_token = integration.get('access_token') or ''
     response = await request_fn(client, access_token)
@@ -203,10 +210,16 @@ async def perform_request_with_token_retry(
         if app_key in ['google_tasks', 'asana']:
             try:
                 integration = await refresh_oauth_token(uid, app_key, integration, client=client)
-                new_access_token = integration.get('access_token') or ''
-                response = await request_fn(client, new_access_token)
             except Exception as e:
                 logger.error(f'{app_key}: Token refresh failed during retry: {e}')
+                return response, integration, e
+            new_access_token = integration.get('access_token') or ''
+            if raise_resend_errors:
+                return await request_fn(client, new_access_token), integration, None
+            try:
+                response = await request_fn(client, new_access_token)
+            except Exception as e:
+                logger.error(f'{app_key}: Request failed after token refresh: {e}')
                 return response, integration, e
     return response, integration, None
 
@@ -251,6 +264,10 @@ async def create_task_internal(
     if not access_token:
         return {"success": False, "error": f"No access token for {app_key}", "error_code": "no_access_token"}
 
+    # Set immediately before the task-create POST. An exception before that is
+    # still pre-accept (token refresh, timezone). After it, a timeout or reset
+    # may mean the provider already created the task.
+    request_sent = False
     try:
         client = client or get_http_client()
         if due_date and app_key != 'clickup':
@@ -263,6 +280,7 @@ async def create_task_internal(
             if due_date:
                 body['due_string'] = due_date.strftime('%Y-%m-%d')
 
+            request_sent = True
             response = await client.post(
                 'https://api.todoist.com/api/v1/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
@@ -285,6 +303,7 @@ async def create_task_internal(
                     "success": False,
                     "error": f"Todoist API error: {response.status_code}",
                     "error_code": "api_error",
+                    "status_code": response.status_code,
                 }
 
         elif app_key == 'asana':
@@ -312,8 +331,9 @@ async def create_task_internal(
                     json={'data': task_data},
                 )
 
+            request_sent = True
             response, integration, retry_err = await perform_request_with_token_retry(
-                uid, app_key, integration, _asana_post, client=client
+                uid, app_key, integration, _asana_post, client=client, raise_resend_errors=True
             )
             if retry_err:
                 return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
@@ -326,6 +346,7 @@ async def create_task_internal(
                     "success": False,
                     "error": f"Asana API error: {response.status_code}",
                     "error_code": "api_error",
+                    "status_code": response.status_code,
                 }
 
         elif app_key == 'google_tasks':
@@ -346,8 +367,9 @@ async def create_task_internal(
                     json=task_data,
                 )
 
+            request_sent = True
             response, integration, retry_err = await perform_request_with_token_retry(
-                uid, app_key, integration, _google_tasks_post, client=client
+                uid, app_key, integration, _google_tasks_post, client=client, raise_resend_errors=True
             )
             if retry_err:
                 return {
@@ -364,6 +386,7 @@ async def create_task_internal(
                     "success": False,
                     "error": f"Google Tasks API error: {response.status_code}",
                     "error_code": "api_error",
+                    "status_code": response.status_code,
                 }
 
         elif app_key == 'clickup':
@@ -377,6 +400,7 @@ async def create_task_internal(
             if due_date:
                 task_data['due_date'] = int(due_date.timestamp() * 1000)
 
+            request_sent = True
             response = await client.post(
                 f'https://api.clickup.com/api/v2/list/{list_id}/task',
                 headers={'Authorization': access_token, 'Content-Type': 'application/json'},
@@ -391,6 +415,7 @@ async def create_task_internal(
                     "success": False,
                     "error": f"ClickUp API error: {response.status_code}",
                     "error_code": "api_error",
+                    "status_code": response.status_code,
                 }
 
         else:
@@ -398,4 +423,7 @@ async def create_task_internal(
 
     except Exception as e:
         logger.error(f"Error creating task in {app_key}: {e}")
-        return {"success": False, "error": str(e)}
+        # ``not_sent`` is still before the provider could have accepted the create.
+        # ``in_doubt`` means the POST was issued and the response was not a definite error.
+        error_code = "in_doubt" if request_sent else "not_sent"
+        return {"success": False, "error": "Failed to create task due to an internal error", "error_code": error_code}

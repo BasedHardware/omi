@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-lifetime-task-inherits-request-context",
+  "violated_contract": "A task that outlives the request or session that happens to start it must not inherit that request's contextvars. asyncio.create_task copies the current context, so a process-lifetime task started lazily from inside a request pins whatever the request installed (validated BYOK provider keys, the authenticated uid) for the life of the process, after the socket that owned them is gone. #22397's listen loop-lag probe was started from the first listen session and retained that session's BYOK keys and uid on every listen pod.",
+  "canonical_prevention": "Start process-lifetime tasks from an empty context (contextvars.Context().run(start_background_task, ...)) or from app startup outside any request, and cover the launch with a test that installs BYOK keys and a uid in the caller's context and asserts the task's context carries neither.",
+  "canonical_prevention_artifact": [
+    "backend/utils/observability/listen_loop.py",
+    "backend/tests/unit/test_listen_loop_metrics.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/observability/listen_loop.py",
+    "backend/utils/executors.py",
+    "backend/utils/byok.py"
+  ],
+  "status": "open"
+}

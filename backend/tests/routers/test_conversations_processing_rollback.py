@@ -135,9 +135,7 @@ def _isolate_deferral_counter(monkeypatch):
             terminal.set()
 
     monkeypatch.setattr(conversations_router, 'record_lazy_desktop_deferral', _record)
-    monkeypatch.setattr(
-        conversations_router, 'record_and_persist_finalized_meeting_receipt', MagicMock(), raising=False
-    )
+    monkeypatch.setattr(conversations_router, 'record_finalized_meeting_receipt', MagicMock(), raising=False)
     return terminal
 
 
@@ -293,9 +291,7 @@ def test_deferred_enrichment_counts_started_and_complete_on_the_real_counter(mon
     monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
     monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
     monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
-    monkeypatch.setattr(
-        conversations_router, 'record_and_persist_finalized_meeting_receipt', MagicMock(), raising=False
-    )
+    monkeypatch.setattr(conversations_router, 'record_finalized_meeting_receipt', MagicMock(), raising=False)
     conv_obj = SimpleNamespace(id='deferred-conv-metric', language='en', deferred=False)
     monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda _data: conv_obj)
     done = threading.Event()
@@ -343,7 +339,7 @@ def test_deferred_enrichment_receipt_failure_does_not_count_as_enrich_failed(mon
     )
     monkeypatch.setattr(
         conversations_router,
-        'record_and_persist_finalized_meeting_receipt',
+        'record_finalized_meeting_receipt',
         MagicMock(side_effect=RuntimeError('receipt backend down')),
         raising=False,
     )

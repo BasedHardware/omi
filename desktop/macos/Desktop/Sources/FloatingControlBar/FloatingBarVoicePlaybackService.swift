@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import AppKit
 import CryptoKit
 import Foundation
 import OmiSupport
@@ -96,10 +97,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var shouldInterruptNextResponse = false
   private var streamedText = ""
   private var bufferedText = ""
-  private var synthesisQueue: [String] = []
-  // Carries each chunk's source text alongside its synthesized audio so playback can fall
-  // back to the system voice (speaking the text) if AVAudioPlayer can't play the audio.
-  private var audioQueue: [(audio: Data, text: String)] = []
+  private var progressivePipeline: ProgressiveTTSPlaybackPipeline?
   private var isFillerSynthesizing = false
   private var isOneShotSynthesizing = false
   private var isSynthesizing = false
@@ -107,15 +105,88 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var hasEmittedFirstChunk = false
   private var audioPlayer: AVAudioPlayer?
   private var activePlayerFallbackText = ""
+  private var activePlayerAudienceAllows: (() -> Bool)?
   private var playbackGeneration: UInt64 = 0
+  private var voiceSampleGeneration: UInt64 = 0
+  var voiceSampleActive = false
+  var voiceSampleSynthesizer: ((String) async throws -> Data)?
+  var oneShotSynthesizer: (@Sendable (_ text: String, _ voiceID: String, _ instructions: String) async throws -> Data)?
+  /// Where an audience-gated one-shot ended up, reported at the point it is decided, so
+  /// tests can await the outcome instead of inferring it from timing.
+  enum OneShotAudienceOutcome: Equatable { case played, fellBackToSystemVoice, withheld, droppedStale }
+  var oneShotAudienceObserver: ((OneShotAudienceOutcome) -> Void)?
+  var voiceSampleBusyProbe: (() -> Bool)?
+  var voiceSampleStarter: ((Data) -> Void)?
   // AVSpeechSynthesizer delegates arrive asynchronously, including after a
   // stop. The current token is the sole owner of both the physical utterance
   // and its PTT lease; a callback for an older utterance must not drain a
   // replacement turn.
   private var activeSystemSpeechToken: SystemSpeechToken?
+  private var activeSystemSpeechCompletion: (() -> Void)?
   private var activePTTLease: VoiceOutputLease?
   private var activeRealtimeSlowToolAcknowledgement: RealtimeSlowToolAcknowledgementKind?
   private var activeRealtimeSlowToolAcknowledgementTransport: String?
+  private var lifecycleObservers: [NSObjectProtocol] = []
+
+  /// What this service has recently said, so ambient capture can recognise Omi's own voice
+  /// coming back through the microphone instead of treating it as the user
+  /// (`VoicePlaybackEchoPolicy`). Kept for a window *after* playback ends, because the
+  /// transcript of the last words arrives about a second behind the audio.
+  private var spokenWordHistory: [(word: String, at: Date)] = []
+  /// Last text recorded from an engine outside this service, so a streamed reply that
+  /// repeats or extends itself is entered once rather than once per event.
+  private var lastExternallySpokenText: String?
+  private static let spokenHistoryWordCap = 300
+
+  /// Each word expires on its own clock rather than the history being kept alive as a
+  /// block. Extending one shared deadline on every chunk left several turns of speech
+  /// matchable at once, and a few hundred words of ordinary English will align with almost
+  /// any short sentence — live, "Sorry my mistake it's taking" was deleted that way. An
+  /// Ambient transcript delivery has been measured 34–36 seconds behind playback,
+  /// so retain enough history to cover that tail without spanning multiple turns.
+  static let spokenWordLifetime: TimeInterval = 45
+
+  /// Playback from the last few seconds, which is all an echo can be an echo of.
+  var recentlySpokenWords: [String] {
+    let cutoff = Date().addingTimeInterval(-Self.spokenWordLifetime)
+    return spokenWordHistory.filter { $0.at > cutoff }.map(\.word)
+  }
+
+  /// Record speech this app produced through some other engine.
+  ///
+  /// The realtime session plays its own audio rather than routing through this service, so
+  /// nothing here would know what was said — and the microphone hears it identically. Left
+  /// unrecorded, the model's own answer comes back through ambient capture and is attributed
+  /// to the user, which is the exact defect `VoicePlaybackEchoPolicy` exists to prevent.
+  /// What matters to the echo check is that Omi said it out loud, not which engine spoke it.
+  /// Arrives as a stream, and providers differ on whether each event is the new fragment or
+  /// the whole reply so far. Recording every event verbatim would enter the same words over
+  /// and over, and a padded history matches more of what a person says — the direction that
+  /// deletes real speech. Only the part that extends what was already recorded is kept.
+  func recordExternallySpokenText(_ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    defer { lastExternallySpokenText = trimmed }
+    guard let previous = lastExternallySpokenText else { return recordSpokenText(trimmed) }
+    if trimmed == previous { return }
+    if trimmed.hasPrefix(previous) {
+      let addition = String(trimmed.dropFirst(previous.count))
+      return recordSpokenText(addition)
+    }
+    recordSpokenText(trimmed)
+  }
+
+  private func recordSpokenText(_ text: String) {
+    let words = VoicePlaybackEchoPolicy.words(text)
+    guard !words.isEmpty else { return }
+    let now = Date()
+    let cutoff = now.addingTimeInterval(-Self.spokenWordLifetime)
+    spokenWordHistory.removeAll { $0.at <= cutoff }
+    spokenWordHistory.append(contentsOf: words.map { (word: $0, at: now) })
+    if spokenWordHistory.count > Self.spokenHistoryWordCap {
+      spokenWordHistory.removeFirst(spokenWordHistory.count - Self.spokenHistoryWordCap)
+    }
+  }
 
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
@@ -125,6 +196,22 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private override init() {
     super.init()
     speechSynthesizer.delegate = self
+    lifecycleObservers = [
+      NotificationCenter.default.addObserver(
+        forName: NSApplication.willTerminateNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.stop() }
+      },
+      NSWorkspace.shared.notificationCenter.addObserver(
+        forName: NSWorkspace.willSleepNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.stop() }
+      },
+    ]
   }
 
   var isSpeaking: Bool {
@@ -133,7 +220,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     if isFillerSynthesizing { return true }
     if isOneShotSynthesizing { return true }
     if isSynthesizing { return true }
-    return !audioQueue.isEmpty || !synthesisQueue.isEmpty
+    return progressivePipeline?.isActive == true
   }
 
   func playFillerIfEnabled() {
@@ -155,12 +242,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     switch mode {
     case .systemVoice:
       enqueueSystemSpeech(phrase)
-    case .openAI(let voiceID, let instructions):
+    case .cloud(let voiceID, let instructions):
       isFillerSynthesizing = true
       let generation = playbackGeneration
       fillerTask = Task { [weak self] in
         do {
-          let audioData = try await Self.synthesizeOpenAISpeech(
+          let audioData = try await Self.synthesizeCloudSpeech(
             text: phrase, voiceID: voiceID, instructions: instructions)
           try Task.checkCancellation()
           await MainActor.run {
@@ -198,7 +285,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     guard let message else { return }
 
     if currentResponseID != message.id {
-      resetPlaybackPipeline(clearMode: false, notifyPTTDrain: true)
+      resetPlaybackPipeline(clearMode: true, notifyPTTDrain: true)
       currentResponseID = message.id
       interruptedResponseID = shouldInterruptNextResponse ? message.id : nil
       shouldInterruptNextResponse = false
@@ -230,8 +317,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     if !text.hasPrefix(streamedText) {
       streamedText = ""
       bufferedText = ""
-      synthesisQueue.removeAll()
-      audioQueue.removeAll()
+      progressivePipeline?.cancel()
+      progressivePipeline = nil
     }
 
     // Cancel filler and stop filler audio when first real chunk is ready
@@ -256,16 +343,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   }
 
   private func resolvePlaybackMode() -> PlaybackMode {
-    let selectedVoice = ShortcutSettings.voiceOption(for: ShortcutSettings.shared.selectedVoiceID)
-
-    if selectedVoice.isOpenAI, let openAIVoice = selectedVoice.openAIVoice {
-      return .openAI(
-        voiceID: openAIVoice,
-        instructions: selectedVoice.openAIInstructions ?? ""
-      )
-    }
-
-    return .systemVoice(selectedVoice)
+    .cloud(voiceID: AssistantVoiceStore.shared.currentVoiceID, instructions: "")
   }
 
   private func drainBufferedText(isFinal: Bool, mode: PlaybackMode) {
@@ -286,84 +364,64 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     switch mode {
     case .systemVoice:
       enqueueSystemSpeech(text)
-    case .openAI:
-      synthesisQueue.append(text)
-      startSynthesisIfNeeded(mode: mode)
+    case .cloud(let voiceID, let instructions):
+      if progressivePipeline == nil {
+        progressivePipeline = makeProgressivePipeline(
+          voiceID: voiceID,
+          instructions: instructions)
+      }
+      progressivePipeline?.enqueue(text)
     }
   }
 
-  private func startSynthesisIfNeeded(mode: PlaybackMode) {
-    guard !isSynthesizing else { return }
-    guard !synthesisQueue.isEmpty else { return }
-
-    let text = synthesisQueue.removeFirst()
-    isSynthesizing = true
-    let token = currentSynthesisToken()
-    playbackTask?.cancel()
-    playbackTask = Task { [weak self] in
-      do {
-        let audioData: Data
-        switch mode {
-        case .openAI(let voiceID, let instructions):
-          audioData = try await Self.synthesizeOpenAISpeech(
-            text: text, voiceID: voiceID, instructions: instructions)
-        case .systemVoice:
-          return
-        }
-        try Task.checkCancellation()
-        await MainActor.run {
-          guard let self else { return }
-          guard self.ownsCurrentSynthesisToken(token) else { return }
-          self.isSynthesizing = false
-          self.playbackTask = nil
-          self.audioQueue.append((audio: audioData, text: text))
-          self.startPlaybackIfNeeded()
-          self.startSynthesisIfNeeded(mode: mode)
-          self.clearFloatingPillResponseGlowIfIdle()
-        }
-      } catch is CancellationError {
-        await MainActor.run {
-          guard let self else { return }
-          guard self.ownsCurrentSynthesisToken(token) else { return }
-          self.isSynthesizing = false
-          self.playbackTask = nil
-          self.startSynthesisIfNeeded(mode: mode)
-          self.clearFloatingPillResponseGlowIfIdle()
-        }
-      } catch {
-        if Self.isCancellation(error) {
-          await MainActor.run {
-            guard let self else { return }
-            guard self.ownsCurrentSynthesisToken(token) else { return }
-            self.isSynthesizing = false
-            self.playbackTask = nil
-            self.startSynthesisIfNeeded(mode: mode)
-            self.clearFloatingPillResponseGlowIfIdle()
-          }
-          return
-        }
-
-        await MainActor.run {
-          guard let self else { return }
-          guard self.ownsCurrentSynthesisToken(token) else { return }
-          self.isSynthesizing = false
-          self.playbackTask = nil
-          guard self.canUseCloudTTSFallback(after: error, token: token, operation: "chunk") else {
-            self.startSynthesisIfNeeded(mode: mode)
-            self.clearFloatingPillResponseGlowIfIdle()
-            return
-          }
-          log(
-            "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
-          )
-          self.recordSelectedVoiceFallback(
-            to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
-          self.enqueueSystemSpeech(text)
-          self.startSynthesisIfNeeded(mode: mode)
-          self.clearFloatingPillResponseGlowIfIdle()
-        }
-      }
+  private func makeProgressivePipeline(
+    voiceID: String,
+    instructions: String
+  ) -> ProgressiveTTSPlaybackPipeline {
+    let pipeline = ProgressiveTTSPlaybackPipeline(
+      streamFactory: { text in
+        try await Self.synthesizeCloudSpeechStream(
+          text: text,
+          voiceID: voiceID,
+          instructions: instructions)
+      },
+      playerFactory: { [weak self] in
+        try ProgressiveMP3Player(playbackRate: self?.playbackRate ?? 1)
+      })
+    pipeline.onActivityChanged = { [weak self] active in
+      self?.isSynthesizing = active
+      if !active { self?.clearFloatingPillResponseGlowIfIdle() }
     }
+    pipeline.onPlaybackStarted = { [weak self] _ in
+      guard let self else { return }
+      if let lease = self.activePTTLease {
+        _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
+      }
+      self.tracer?.end("tts_start")
+    }
+    pipeline.onStreamFailure = { error in
+      guard !Self.isCancellation(error) else { return }
+      log(
+        "FloatingBarVoicePlaybackService: progressive cloud TTS failed: \(error.localizedDescription)"
+      )
+    }
+    pipeline.onFallback = { [weak self] text, error, completion in
+      guard let self else {
+        completion()
+        return
+      }
+      let token = self.currentSynthesisToken()
+      guard self.canUseCloudTTSFallback(after: error, token: token, operation: "progressive_chunk") else {
+        completion()
+        return
+      }
+      self.recordSelectedVoiceFallback(
+        to: "system_voice_fallback",
+        reason: Self.ttsFallbackReason(for: error),
+        outcome: .degraded)
+      self.enqueueSystemSpeech(text, completion: completion)
+    }
+    return pipeline
   }
 
   func stop() {
@@ -375,55 +433,51 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
   /// Play a short preview of the given voice so the user can hear it
   /// when switching voices in settings.
-  func playVoiceSample(voiceID: String) {
-    guard VoiceTurnCoordinator.shared.activeTurnID == nil else {
-      log("FloatingBarVoicePlaybackService: voice sample denied while PTT owns audible output")
-      return
-    }
-    resetPlaybackPipeline(clearMode: true)
-    currentResponseID = nil
-    interruptedResponseID = nil
-    shouldInterruptNextResponse = false
+  func playVoiceSample(voiceID: String) async throws {
+    guard !voiceOutputBusy() else { throw VoiceSampleUnavailable.outputBusy }
 
     let phrase = Self.voiceSampleText
-    let voice = ShortcutSettings.voiceOption(for: voiceID)
 
-    if voice.isLocalSystem {
-      enqueueSystemSpeech(phrase)
-      return
-    }
-
-    if voice.isOpenAI, let openAIVoice = voice.openAIVoice {
-      let generation = playbackGeneration
-      playbackTask = Task { [weak self] in
-        do {
-          let audioData = try await Self.synthesizeOpenAISpeech(
-            text: phrase, voiceID: openAIVoice, instructions: voice.openAIInstructions ?? "")
-          try Task.checkCancellation()
-          await MainActor.run {
-            guard let self else { return }
-            guard self.playbackGeneration == generation else { return }
-            self.startPlayback(audioData)
-          }
-        } catch is CancellationError {
-          return
-        } catch {
-          if Self.isCancellation(error) { return }
-          log(
-            "FloatingBarVoicePlaybackService: OpenAI voice sample failed: \(error.localizedDescription)"
-          )
-        }
+    voiceSampleGeneration &+= 1
+    let generation = voiceSampleGeneration
+    let synthesize =
+      voiceSampleSynthesizer ?? { voiceID in
+        try await Self.synthesizeCloudSpeech(text: phrase, voiceID: voiceID, instructions: "")
       }
-      return
-    }
+    let audioData = try await synthesize(voiceID)
+    try Task.checkCancellation()
+    guard voiceSampleGeneration == generation else { throw CancellationError() }
+    guard !voiceOutputBusy() else { throw VoiceSampleUnavailable.outputBusy }
+    voiceSampleActive = true
+    (voiceSampleStarter ?? { self.startPlayback($0) })(audioData)
+  }
 
-    enqueueSystemSpeech(phrase)
+  private func voiceOutputBusy() -> Bool {
+    if VoiceTurnCoordinator.shared.activeTurnID != nil { return true }
+    if isSynthesizing || isOneShotSynthesizing || isFillerSynthesizing { return true }
+    if progressivePipeline?.isActive == true { return true }
+    if isSpeaking { return true }
+    return voiceSampleBusyProbe?() ?? false
+  }
+
+  func stopVoiceSample() {
+    voiceSampleGeneration &+= 1
+    guard voiceSampleActive else { return }
+    voiceSampleActive = false
+    audioPlayer?.stop()
+    audioPlayer = nil
+    activePlayerFallbackText = ""
+    activePlayerAudienceAllows = nil
+    clearFloatingPillResponseGlowIfIdle()
   }
 
   /// Synthesize and play a single short phrase via the selected voice. Used by
   /// agent pills to speak a short acknowledgement like "On it" before the agent kicks off.
-  func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil) {
-    let trimmed = InterjectVoiceFeedbackRouting.spokenText(from: text)
+  /// `audienceAllows` is re-read wherever audio would actually start (after cloud
+  /// synthesis and before any system-voice fallback), so speech accepted in private
+  /// is dropped if the audience changes while it is being generated.
+  func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil, audienceAllows: (() -> Bool)? = nil) {
+    let trimmed = LegacyReplyTokenSanitizer.spokenText(from: text)
       .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     if let lease {
@@ -438,32 +492,38 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       return
     }
     setFloatingPillResponseGlow(true)
-    let mode = currentMode ?? resolvePlaybackMode()
-    currentMode = mode
+    let mode = resolvePlaybackMode()
     switch mode {
-    case .openAI(let voiceID, let instructions):
+    case .cloud(let voiceID, let instructions):
       let token = currentSynthesisToken()
       isOneShotSynthesizing = true
+      let synthesize = oneShotSynthesizer ?? Self.synthesizeCloudSpeech
       Task { [weak self] in
         do {
-          let audio = try await Self.synthesizeOpenAISpeech(
-            text: trimmed, voiceID: voiceID, instructions: instructions)
+          let audio = try await synthesize(trimmed, voiceID, instructions)
           await MainActor.run {
-            guard let self, self.ownsCurrentSynthesisToken(token) else { return }
+            guard let self else { return }
+            guard self.ownsCurrentSynthesisToken(token) else {
+              if audienceAllows != nil { self.oneShotAudienceObserver?(.droppedStale) }
+              return
+            }
             self.isOneShotSynthesizing = false
-            self.startPlayback(audio, fallbackText: trimmed)
+            guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
+            self.startPlayback(audio, fallbackText: trimmed, audienceAllows: audienceAllows)
           }
         } catch {
           await MainActor.run {
             guard let self, self.ownsCurrentSynthesisToken(token) else { return }
             self.isOneShotSynthesizing = false
             guard self.canUseCloudTTSFallback(after: error, token: token, operation: "one_shot") else { return }
+            guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
             log(
               "FloatingBarVoicePlaybackService: one-shot synthesis failed; rendering the same response with system voice "
                 + "reason=\(Self.ttsFallbackReason(for: error))")
             self.recordSelectedVoiceFallback(
               to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
             self.enqueueSystemSpeech(trimmed)
+            if audienceAllows != nil { self.oneShotAudienceObserver?(.fellBackToSystemVoice) }
           }
         }
       }
@@ -480,11 +540,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
     let phrase = Self.randomBackgroundAgentKickoffPhrase()
     setFloatingPillResponseGlow(true)
-    let mode = currentMode ?? resolvePlaybackMode()
-    currentMode = mode
+    let mode = resolvePlaybackMode()
 
     switch mode {
-    case .openAI(let voiceID, let instructions):
+    case .cloud(let voiceID, let instructions):
       let token = currentSynthesisToken()
       isOneShotSynthesizing = true
       Task { [weak self] in
@@ -529,7 +588,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   /// an OpenAI/cedar clip (or the unrelated selected voice-picker profile).
   func speakRealtimeSlowToolAcknowledgement(
     _ kind: RealtimeSlowToolAcknowledgementKind,
-    provider: RealtimeHubProvider
+    provider: RealtimeHubProvider,
+    voiceName: String? = nil
   ) {
     if VoiceTurnCoordinator.shared.activeTurnID != nil,
       acquirePTTLeaseIfNeeded(.deterministicAgentAck) == nil
@@ -542,14 +602,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement queued kind=\(kind.rawValue)"
     )
     setFloatingPillResponseGlow(true)
-    let mode = currentMode ?? resolvePlaybackMode()
-    currentMode = mode
+    let mode = resolvePlaybackMode()
 
     // Bundled clips are the only acknowledgement path that is both immediate
     // and independent of auth/network/cache state. The locator tolerates the
     // flattened and nested forms emitted by SwiftPM processed resources.
     if case .bundled(let data) = RealtimeVoicePhraseAudioSelection.select(
-      provider: provider, kind: kind, phrase: phrase)
+      provider: provider, kind: kind, phrase: phrase, voiceName: voiceName)
     {
       activeRealtimeSlowToolAcknowledgementTransport = "pre_recorded"
       startPlayback(data, fallbackText: phrase)
@@ -557,7 +616,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
 
     switch mode {
-    case .openAI(let voiceID, let instructions):
+    case .cloud(let resolvedVoiceID, let instructions):
+      let voiceID = voiceName ?? resolvedVoiceID
       if let cached = Self.cachedRealtimeSlowToolAcknowledgementAudio(
         kind: kind,
         text: phrase,
@@ -587,9 +647,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     // Synthesis needs an authenticated backend call; signed out it can only fail — and at launch
     // it walked the main thread into the auth fence while a restore held it (#11374).
     guard AuthService.shared.isSignedIn else { return }
-    let mode = currentMode ?? resolvePlaybackMode()
-    currentMode = mode
-    guard case .openAI(let voiceID, let instructions) = mode else { return }
+    let mode = resolvePlaybackMode()
+    guard case .cloud(let voiceID, let instructions) = mode else { return }
 
     Task {
       for phrase in Self.backgroundAgentKickoffPhrases {
@@ -608,9 +667,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
   func prewarmRealtimeSlowToolAcknowledgementPhrases() {
     guard AuthService.shared.isSignedIn else { return }
-    let mode = currentMode ?? resolvePlaybackMode()
-    currentMode = mode
-    guard case .openAI(let voiceID, let instructions) = mode else { return }
+    let mode = resolvePlaybackMode()
+    guard case .cloud(let voiceID, let instructions) = mode else { return }
 
     Task {
       for kind in RealtimeSlowToolAcknowledgementKind.allCases {
@@ -661,14 +719,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return true
   }
 
-  private func startPlaybackIfNeeded() {
-    guard audioPlayer == nil else { return }
-    guard !audioQueue.isEmpty else { return }
-    let next = audioQueue.removeFirst()
-    startPlayback(next.audio, fallbackText: next.text)
+  /// Speech accepted for a private audience that is no longer private: say nothing.
+  /// The empty enqueue releases any output lease and clears the glow without speaking.
+  private func withholdOneShotForAudience() {
+    log("FloatingBarVoicePlaybackService: withholding one-shot speech because others can hear")
+    enqueueSystemSpeech("")
+    oneShotAudienceObserver?(.withheld)
   }
 
-  private func startPlayback(_ data: Data, fallbackText: String = "") {
+  private func startPlayback(_ data: Data, fallbackText: String = "", audienceAllows: (() -> Bool)? = nil) {
     do {
       if UserDefaults.standard.bool(forKey: "forceTTSPlaybackFail") {
         throw NSError(domain: "TTSPlayback", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced playback failure"])
@@ -689,6 +748,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }
       audioPlayer = player
       activePlayerFallbackText = fallbackText
+      recordSpokenText(fallbackText)
+      activePlayerAudienceAllows = audienceAllows
+      if audienceAllows != nil { oneShotAudienceObserver?(.played) }
       if let lease = activePTTLease {
         _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
       }
@@ -714,7 +776,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       if activeRealtimeSlowToolAcknowledgement != nil {
         activeRealtimeSlowToolAcknowledgementTransport = "system_voice"
       }
+      guard audienceAllows?() ?? true else { return withholdOneShotForAudience() }
       enqueueSystemSpeech(fallbackText)
+      if audienceAllows != nil { oneShotAudienceObserver?(.fellBackToSystemVoice) }
     }
   }
 
@@ -779,6 +843,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       // This exact utterance finished after its lease was superseded. Clear
       // only its physical marker; never let it drain the replacement lease.
       activeSystemSpeechToken = nil
+      activeSystemSpeechCompletion = nil
       return false
     }
     activeSystemSpeechToken = nil
@@ -799,8 +864,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       max(AVSpeechUtteranceMinimumSpeechRate, base * playbackSpeed))
   }
 
-  private func enqueueSystemSpeech(_ text: String) {
+  private func enqueueSystemSpeech(_ text: String, completion: (() -> Void)? = nil) {
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      completion?()
       if let lease = activePTTLease {
         activePTTLease = nil
         VoiceTurnCoordinator.shared.publish(
@@ -822,7 +888,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       generation: playbackGeneration,
       leaseID: activePTTLease?.id,
       utterance: utterance)
+    activeSystemSpeechCompletion = completion
     speechSynthesizer.speak(utterance)
+    recordSpokenText(text)
     tracer?.end("tts_start")
   }
 
@@ -838,16 +906,19 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         self.activeRealtimeSlowToolAcknowledgementTransport = nil
       }
       let fallbackText = self.activePlayerFallbackText
+      let audienceAllows = self.activePlayerAudienceAllows
       self.audioPlayer = nil
       self.activePlayerFallbackText = ""
+      self.activePlayerAudienceAllows = nil
+      self.voiceSampleActive = false
       if !flag, !fallbackText.isEmpty {
         log("FloatingBarVoicePlaybackService: player ended unsuccessfully; using system voice")
         self.recordSelectedVoiceFallback(
           to: "system_voice_fallback", reason: "enqueue_failed", outcome: .degraded)
+        guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
         self.enqueueSystemSpeech(fallbackText)
         return
       }
-      self.startPlaybackIfNeeded()
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -876,6 +947,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
       guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
+      let completion = self.activeSystemSpeechCompletion
+      self.activeSystemSpeechCompletion = nil
       if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
         log(
           "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=\(self.activeRealtimeSlowToolAcknowledgementTransport ?? "system_voice") success=true"
@@ -883,7 +956,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         self.activeRealtimeSlowToolAcknowledgement = nil
         self.activeRealtimeSlowToolAcknowledgementTransport = nil
       }
-      self.startPlaybackIfNeeded()
+      completion?()
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -893,6 +966,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
       guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
+      let completion = self.activeSystemSpeechCompletion
+      self.activeSystemSpeechCompletion = nil
       if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
         log(
           "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=\(self.activeRealtimeSlowToolAcknowledgementTransport ?? "system_voice") success=false"
@@ -900,6 +975,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         self.activeRealtimeSlowToolAcknowledgement = nil
         self.activeRealtimeSlowToolAcknowledgementTransport = nil
       }
+      completion?()
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -922,16 +998,20 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
     streamedText = ""
     bufferedText = ""
-    synthesisQueue.removeAll()
-    audioQueue.removeAll()
+    progressivePipeline?.cancel()
+    progressivePipeline = nil
     isSynthesizing = false
     hasStartedRealPlayback = false
     hasEmittedFirstChunk = false
     audioPlayer?.stop()
     audioPlayer = nil
     activePlayerFallbackText = ""
+    activePlayerAudienceAllows = nil
+    voiceSampleGeneration &+= 1
+    voiceSampleActive = false
     speechSynthesizer.stopSpeaking(at: .immediate)
     activeSystemSpeechToken = nil
+    activeSystemSpeechCompletion = nil
     activeRealtimeSlowToolAcknowledgement = nil
     activeRealtimeSlowToolAcknowledgementTransport = nil
     activePTTLease = nil
@@ -1033,28 +1113,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return AVSpeechSynthesisVoice(language: "en-US")
   }
 
-  /// Synthesize speech through the desktop backend's OpenAI TTS proxy.
+  /// Synthesize speech through the desktop backend's managed Gemini TTS route.
   /// APIClient attaches a user BYOK key when one is configured; otherwise the
   /// backend uses its server-side key.
-  private nonisolated static func synthesizeOpenAISpeech(
+  private nonisolated static func synthesizeCloudSpeech(
     text: String,
     voiceID: String,
     instructions: String
   ) async throws -> Data {
     let byokKey = APIKeyService.selectedBYOKLLMProvider == .openai ? APIKeyService.byokKey(.openai) : nil
     let fingerprint = byokKey.map(APIKeyService.byokFingerprint)
-    if let fingerprint {
-      let canUseKey = await MainActor.run {
-        CredentialHealthManager.shared.canUseBYOK(provider: .openai, fingerprint: fingerprint)
-      }
-      guard canUseKey else {
-        throw CredentialHealthError.providerAuth(
-          provider: .openai,
-          mode: .byok,
-          message: "Your OpenAI key was rejected. Update it in Settings."
-        )
-      }
-    }
 
     do {
       return try await APIClient.shared.synthesizeSpeech(
@@ -1083,6 +1151,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   }
 
   private nonisolated static func ttsFallbackReason(for error: Error) -> String {
+    if error as? ProgressiveTTSPlaybackError == .stalled {
+      return "timeout"
+    }
+    if let urlError = error as? URLError, urlError.code == .timedOut {
+      return "timeout"
+    }
     if let apiError = error as? APIError,
       case .httpError(let statusCode, _) = apiError,
       statusCode == 429
@@ -1134,7 +1208,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }.joined(separator: "\n\n")
     }
 
-    let spoken = InterjectVoiceFeedbackRouting.spokenText(from: baseText)
+    let spoken = LegacyReplyTokenSanitizer.spokenText(from: baseText)
     let collapsedWhitespace = spoken.replacingOccurrences(
       of: "\\s+", with: " ", options: .regularExpression)
     return collapsedWhitespace.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1166,7 +1240,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       return cached
     }
 
-    let audio = try await synthesizeOpenAISpeech(text: text, voiceID: voiceID, instructions: instructions)
+    let audio = try await synthesizeCloudSpeech(text: text, voiceID: voiceID, instructions: instructions)
     try FileManager.default.createDirectory(
       at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     try audio.write(to: cacheURL, options: [.atomic])
@@ -1215,7 +1289,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       return cached
     }
 
-    let audio = try await synthesizeOpenAISpeech(
+    let audio = try await synthesizeCloudSpeech(
       text: text,
       voiceID: voiceID,
       instructions: instructions)
@@ -1226,7 +1300,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return audio
   }
 
-  private nonisolated static func cachedRealtimeSlowToolAcknowledgementAudio(
+  nonisolated static func cachedRealtimeSlowToolAcknowledgementAudio(
     kind: RealtimeSlowToolAcknowledgementKind,
     text: String,
     voiceID: String,
@@ -1241,7 +1315,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return data
   }
 
-  private nonisolated static func realtimeSlowToolAcknowledgementCacheURL(
+  nonisolated static func realtimeSlowToolAcknowledgementCacheURL(
     kind: RealtimeSlowToolAcknowledgementKind,
     text: String,
     voiceID: String,
@@ -1403,8 +1477,12 @@ enum VoiceSynthesisFallbackPolicy {
 }
 
 private enum PlaybackMode: Sendable {
-  case openAI(voiceID: String, instructions: String)
-  case systemVoice(ShortcutSettings.VoiceOption)
+  case cloud(voiceID: String, instructions: String)
+  case systemVoice
+}
+
+enum VoiceSampleUnavailable: Error {
+  case outputBusy
 }
 
 /// The copy the floating bar shows in place of an answer it could not get.

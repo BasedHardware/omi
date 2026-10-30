@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-stt-silence-exhausts-replay-capacity",
+  "violated_contract": "Replay capacity reserved to protect untranscribed live speech must not replace a healthy provider solely because VAD-gated capture silence filled the ring.",
+  "canonical_prevention": "Check whether the window has admitted speech still awaiting text before treating a ring overrun as fatal. Allow bounded trimming only when no such speech exists and the current chunk fits, preserve replay and failover when speech is pending, and expose a bounded capacity reason and trim counter.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/resilient_stream.py",
+    "backend/tests/unit/test_live_stt_resilient_stream.py",
+    "backend/tests/unit/test_parakeet_window_live.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/receiver.py",
+    "backend/utils/stt/parakeet_window.py"
+  ],
+  "status": "open"
+}

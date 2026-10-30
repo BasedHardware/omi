@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'package:omi/utils/audio/background_location_cadence.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
@@ -13,6 +14,7 @@ void _startForegroundCallback() {
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
+  final _locationCadence = BackgroundLocationCadence();
 
   static const Duration _lastKnownMaxAge = Duration(minutes: 5);
 
@@ -24,7 +26,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
-    _locationInBackground();
+    await _locationCadence.onStart(refreshLocation: _locationInBackground);
   }
 
   Future _locationInBackground() async {
@@ -87,7 +89,16 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onRepeatEvent(DateTime timestamp) async {
     Logger.debug("Foreground repeat event triggered");
-    await _locationInBackground();
+    // The main isolate owns WAL state. A fresh headless capture engine must
+    // never be booted for this opportunistic recovery pass.
+    final now = DateTime.now();
+    await _locationCadence.onRepeat(
+      now: now,
+      sendSyncWake: () {
+        FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
+      },
+      refreshLocation: _locationInBackground,
+    );
   }
 
   @override
@@ -179,16 +190,24 @@ class ForegroundUtil {
     Logger.debug('startForegroundTask');
 
     try {
-      ServiceRequestResult result;
+      // restartService() calls startForegroundService() again. A stop that
+      // lands before the new startForeground() crashes Android 14+ with
+      // ForegroundServiceDidNotStartInTimeException. An already-running
+      // service has already promoted; leave it alone.
       if (await FlutterForegroundTask.isRunningService) {
-        result = await FlutterForegroundTask.restartService();
-      } else {
-        result = await FlutterForegroundTask.startService(
-          notificationTitle: 'Your Omi Device is connected.',
-          notificationText: 'Transcription service is running in the background.',
-          callback: _startForegroundCallback,
-        );
+        Logger.debug('ForegroundTask already running');
+        return const ServiceRequestSuccess();
       }
+      final ServiceRequestResult result = await FlutterForegroundTask.startService(
+        // Explicit location. The manifest also lists shortService as the
+        // timeout fallback; omitting serviceTypes makes the plugin pass
+        // FOREGROUND_SERVICE_TYPE_MANIFEST and adopt both, which imposes
+        // the 3-minute shortService limit on this task.
+        serviceTypes: const [ForegroundServiceTypes.location],
+        notificationTitle: 'Your Omi Device is connected.',
+        notificationText: 'Transcription service is running in the background.',
+        callback: _startForegroundCallback,
+      );
       Logger.debug('ForegroundTask started successfully');
       return result;
     } catch (e) {

@@ -9,7 +9,9 @@ struct CapturedFrame: @unchecked Sendable {
   let windowTitle: String?
   let frameNumber: Int
   let captureTime: Date
+  let capturedUptime: TimeInterval
   let screenshotId: Int64?
+  let taskBinding: ScreenTaskFrameBinding?
 
   private let lazyData: LazyJPEGData
 
@@ -19,14 +21,18 @@ struct CapturedFrame: @unchecked Sendable {
     windowTitle: String? = nil,
     frameNumber: Int,
     captureTime: Date = Date(),
-    screenshotId: Int64? = nil
+    capturedUptime: TimeInterval = ProcessInfo.processInfo.systemUptime,
+    screenshotId: Int64? = nil,
+    taskBinding: ScreenTaskFrameBinding? = nil
   ) {
     self.lazyData = LazyJPEGData(jpegData: jpegData)
     self.appName = appName
     self.windowTitle = windowTitle
     self.frameNumber = frameNumber
     self.captureTime = captureTime
+    self.capturedUptime = capturedUptime
     self.screenshotId = screenshotId
+    self.taskBinding = taskBinding
   }
 
   init(
@@ -36,14 +42,18 @@ struct CapturedFrame: @unchecked Sendable {
     windowTitle: String? = nil,
     frameNumber: Int,
     captureTime: Date = Date(),
-    screenshotId: Int64? = nil
+    capturedUptime: TimeInterval = ProcessInfo.processInfo.systemUptime,
+    screenshotId: Int64? = nil,
+    taskBinding: ScreenTaskFrameBinding? = nil
   ) {
     self.lazyData = LazyJPEGData(cgImage: cgImage, quality: jpegQuality)
     self.appName = appName
     self.windowTitle = windowTitle
     self.frameNumber = frameNumber
     self.captureTime = captureTime
+    self.capturedUptime = capturedUptime
     self.screenshotId = screenshotId
+    self.taskBinding = taskBinding
   }
 
   private final class LazyJPEGData: @unchecked Sendable {

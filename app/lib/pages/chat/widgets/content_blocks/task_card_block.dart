@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'chat_block_chrome.dart';
@@ -48,7 +49,8 @@ class _TaskCardBlockState extends State<TaskCardBlock> {
     if (_isToggling) return;
     setState(() => _isToggling = true);
     try {
-      await provider.updateActionItemState(item, !item.completed);
+      final saved = await provider.updateActionItemState(item, !item.completed);
+      if (!saved && mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
     } finally {
       if (mounted) setState(() => _isToggling = false);
     }
@@ -77,7 +79,6 @@ class _TaskCardBlockState extends State<TaskCardBlock> {
           );
         }
 
-        final colorScheme = Theme.of(context).colorScheme;
         return ChatBlockCard(
           key: Key('chat-block-taskCard-${widget.block.id}'),
           child: Column(
@@ -89,24 +90,19 @@ class _TaskCardBlockState extends State<TaskCardBlock> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  IconButton(
+                  OmiIconButton(
                     key: Key('chat-block-taskCard-${widget.block.id}-toggle'),
+                    label: item.completed ? l10n.markIncomplete : l10n.markComplete,
                     onPressed: _isToggling ? null : () => _toggle(provider, item),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    icon: Icon(
-                      item.completed ? Icons.check_circle : Icons.circle_outlined,
-                      size: 20,
-                      color: item.completed ? Colors.green : colorScheme.onSurfaceVariant,
-                    ),
+                    color: item.completed ? OmiColors.success : OmiColors.textSecondary,
+                    icon: Icon(item.completed ? Icons.check_circle : Icons.circle_outlined, size: 20),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: OmiSpacing.xxs),
                   Expanded(
                     child: Text(
                       item.description,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: item.completed ? colorScheme.onSurfaceVariant : colorScheme.onSurface,
+                            color: item.completed ? OmiColors.textSecondary : OmiColors.textPrimary,
                             decoration: item.completed ? TextDecoration.lineThrough : null,
                           ),
                     ),

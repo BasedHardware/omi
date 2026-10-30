@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-borrowed-token-lacks-target-api-scope",
+  "violated_contract": "An access token is valid only for the OAuth scopes it was minted with. Code that borrows one client's token to call a different Google API (for example the storage client's devstorage-scoped token handed to IAM signBlob) must mint a token scoped for that API; on Cloud Run the metadata server honours the requested scopes, so the borrowed token fails ACCESS_TOKEN_SCOPE_INSUFFICIENT, while a JSON key or GKE Workload Identity hides the defect.",
+  "canonical_prevention": "Derive a separately scoped credential of the same identity (with_scopes(cloud-platform)) for every cross-API call, cache it, and cover it with a test whose fake credentials mint tokens that carry only the requested scopes; prove the path on a real Cloud Run runtime before the key fallback is removed.",
+  "evidence_prs": [
+    17303
+  ],
+  "scope_hints": [
+    "backend/utils/other/local_storage.py",
+    "backend/utils/other/storage.py"
+  ],
+  "status": "open"
+}

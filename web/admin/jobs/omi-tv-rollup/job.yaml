@@ -1,0 +1,39 @@
+# Review artifact only. David supplies an immutable image digest built through
+# GitHub Actions after naming/authorizing a workflow. Do not deploy this placeholder.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: omi-tv-rollup
+  annotations:
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    spec:
+      parallelism: 1
+      taskCount: 1
+      template:
+        spec:
+          serviceAccountName: finops-writer@based-hardware.iam.gserviceaccount.com
+          maxRetries: 1
+          timeoutSeconds: "3600"
+          containers:
+            - image: IMAGE_DIGEST_FROM_APPROVED_GITHUB_ACTIONS
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              env:
+                - name: POSTHOG_PROJECT_ID
+                  value: "PROJECT_ID_FROM_EXISTING_ADMIN_CONFIG"
+                - name: POSTHOG_HOST
+                  value: https://us.posthog.com
+                - name: POSTHOG_PERSONAL_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: WEB_ADMIN_POSTHOG_PERSONAL_API_KEY
+                      key: latest
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: WEB_ADMIN_CRON_SECRET
+                      key: latest

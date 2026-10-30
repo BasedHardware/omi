@@ -15,12 +15,20 @@ def _module(name: str, **attributes: Any) -> ModuleType:
     return module
 
 
-def _stubs(store: dict[str, dict[str, Any]], create_calls: list[dict[str, Any]], *, default_app: str = 'todoist'):
+def _stubs(
+    store: dict[str, dict[str, Any]],
+    create_calls: list[dict[str, Any]],
+    *,
+    default_app: str = 'todoist',
+    fail_on: set[str] | None = None,
+):
     """Stub the database + integration ops so utils.task_sync loads without google.cloud.firestore.
 
     ``store`` maps action-item id to its persisted Firestore document. The stubbed
     ``get_action_item`` reads from it and ``update_action_item`` writes the export fields back,
     so a second auto-sync sees ``exported=True`` exactly like a retry against real Firestore.
+    ``fail_on`` raises inside ``create_task_internal`` for the given action-item titles, simulating
+    a transient per-item failure such as an OAuth preflight error.
     """
 
     def get_action_item(_uid: str, item_id: str):
@@ -30,6 +38,8 @@ def _stubs(store: dict[str, dict[str, Any]], create_calls: list[dict[str, Any]],
         store.setdefault(item_id, {}).update(updates)
 
     async def create_task_internal(**kwargs: Any) -> dict[str, Any]:
+        if fail_on and kwargs.get('title') in fail_on:
+            raise RuntimeError(f"token refresh failed for {kwargs.get('title')}")
         create_calls.append(kwargs)
         return {'success': True, 'external_task_id': f'ext-{len(create_calls)}'}
 
@@ -118,3 +128,32 @@ def test_first_cloud_sync_creates_the_external_task() -> None:
     assert result['synced'] is True
     assert len(create_calls) == 1
     assert store['task-9'].get('exported') is True
+
+
+def test_batch_cloud_sync_isolates_a_failing_item_from_the_rest() -> None:
+    store = {
+        'task-0': {'id': 'task-0', 'description': 'First'},
+        'task-1': {'id': 'task-1', 'description': 'Second'},
+        'task-2': {'id': 'task-2', 'description': 'Third'},
+    }
+    create_calls: list[dict[str, Any]] = []
+
+    with stub_modules(_stubs(store, create_calls, fail_on={'Second'})):
+        task_sync = load_module_fresh('utils.task_sync', str(BACKEND_DIR / 'utils' / 'task_sync.py'))
+
+        items = [
+            {'id': 'task-0', 'description': 'First'},
+            {'id': 'task-1', 'description': 'Second'},
+            {'id': 'task-2', 'description': 'Third'},
+        ]
+        results = asyncio.run(task_sync.auto_sync_action_items_batch('user-1', items))
+
+    # Item 0 (before the failure) and item 2 (after it) both still get attempted and succeed;
+    # only the failing item itself reports an error.
+    assert results[0]['synced'] is True
+    assert store['task-0'].get('exported') is True
+    assert results[1]['synced'] is False
+    assert 'error' in results[1]
+    assert results[2]['synced'] is True
+    assert store['task-2'].get('exported') is True
+    assert len(create_calls) == 2

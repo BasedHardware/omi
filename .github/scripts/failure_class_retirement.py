@@ -142,8 +142,19 @@ def run_report(events_path: Path, since: str, now: datetime, root: Path, runner=
         text=True,
         check=False,
     )
+    # `report` writes its payload to stdout; a crash writes a traceback to stderr and
+    # leaves stdout empty. Coercing that to "{}" made a crashed run indistinguishable
+    # from a clean one with nothing to do: no errors, no warnings, no classes, so
+    # `reopen_required` came back empty and the job went green without ever having
+    # read the registry. An absent report is never evidence that nothing recurred.
+    stdout = completed.stdout or ""
+    if not stdout.strip():
+        raise RetirementError(
+            f"failure-class report produced no output (exit {completed.returncode}); "
+            f"stderr: {completed.stderr.strip()}"
+        )
     try:
-        report = json.loads(completed.stdout or "{}")
+        report = json.loads(stdout)
     except json.JSONDecodeError as exc:
         raise RetirementError(
             f"failure-class report returned unparseable JSON (exit {completed.returncode}): "
@@ -155,6 +166,13 @@ def run_report(events_path: Path, since: str, now: datetime, root: Path, runner=
         raise RetirementError(f"failure-class report reported errors: {json.dumps(errors)}")
     if warnings:
         raise RetirementError(f"failure-class report reported warnings: {json.dumps(warnings)}")
+    # A non-zero exit that named no error is a failure mode this consumer cannot
+    # describe; refuse it rather than retire classes from a report it half-read.
+    if completed.returncode != 0:
+        raise RetirementError(
+            f"failure-class report exited {completed.returncode} without reporting an error; "
+            f"stderr: {completed.stderr.strip()}"
+        )
     return report
 
 

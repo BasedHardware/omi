@@ -56,8 +56,10 @@ struct Person: Codable, Identifiable {
 
 extension APIClient {
 
-  func getUserSubscription() async throws -> UserSubscriptionResponse {
-    return try await get("v1/users/me/subscription")
+  func getUserSubscription(authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil) async throws
+    -> UserSubscriptionResponse
+  {
+    return try await get("v1/users/me/subscription", authorizationSnapshot: authorizationSnapshot)
   }
 
   func getTrialMetadata() async throws -> TrialMetadataResponse {
@@ -179,6 +181,58 @@ extension APIClient {
     try await performVoidRequest(request)
   }
 
+  struct SpeakerAssignmentReceipt: Decodable, Sendable {
+    struct Segment: Decodable, Sendable {
+      let id: String?
+      let speakerId: Int?
+      let personId: String?
+      let isUser: Bool
+
+      enum CodingKeys: String, CodingKey {
+        case id
+        case speakerId = "speaker_id"
+        case personId = "person_id"
+        case isUser = "is_user"
+      }
+    }
+
+    let id: String
+    let transcriptSegments: [Segment]
+
+    enum CodingKeys: String, CodingKey {
+      case id
+      case transcriptSegments = "transcript_segments"
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      id = try container.decode(String.self, forKey: .id)
+      transcriptSegments =
+        try container.decodeIfPresent([Segment].self, forKey: .transcriptSegments) ?? []
+    }
+  }
+
+  func assignConversationSpeaker(
+    conversationId: String,
+    speakerId: Int,
+    personId: String
+  ) async throws -> SpeakerAssignmentReceipt {
+    var components = URLComponents(
+      string: baseURL + "v1/conversations/\(conversationId)/assign-speaker/\(speakerId)")
+    components?.queryItems = [
+      URLQueryItem(name: "assign_type", value: "person_id"),
+      URLQueryItem(name: "value", value: personId),
+    ]
+    guard let url = components?.url else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "PATCH"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+
+    return try await performRequest(request)
+  }
+
   // MARK: - LLM Usage
 
   func recordLlmUsage(
@@ -235,7 +289,30 @@ extension APIClient {
 
   /// Current-month chat usage + the plan's cap. Backed by Python backend
   /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
+  struct ChatAtCap: Decodable, Equatable {
+    let state: String
+    let title: String
+    let body: String
+    let resetAt: Int
+    let resetLine: String
+    let trigger: String
+    let upgradePlan: String?
+    let upgradeLabel: String?
+    var active: Bool {
+      state == "paused" && trigger == "usage_budget" && Double(resetAt) > Date().timeIntervalSince1970
+    }
+    enum CodingKeys: String, CodingKey {
+      case state, title, body, trigger
+      case resetAt = "reset_at"
+      case resetLine = "reset_line"
+      case upgradePlan = "upgrade_plan"
+      case upgradeLabel = "upgrade_label"
+    }
+  }
+
   struct ChatUsageQuota: Decodable {
+    var chatAtCap: ChatAtCap? = nil
+    var usesSharedBudget: Bool? = nil
     let plan: String  // display name: "Free" | "Plus" | "Pro"
     let planType: String  // internal id: "basic" | "unlimited" | "architect"
     let unit: String  // "questions" | "cost_usd"
@@ -260,6 +337,8 @@ extension APIClient {
       case allowed
       case resetAt = "reset_at"
       case isOveragePlan = "is_overage_plan"
+      case chatAtCap = "chat_at_cap"
+      case usesSharedBudget = "uses_shared_budget"
     }
   }
 
@@ -367,6 +446,76 @@ extension APIClient {
     }
 
     return data
+  }
+
+  /// Streams the desktop TTS response in bounded chunks. The request and status
+  /// mapping intentionally mirror `synthesizeSpeech` so progressive playback is
+  /// compatible with both buffered and chunked backend implementations.
+  func synthesizeSpeechStream(
+    request body: TtsSynthesizeRequest,
+    stallTimeout: TimeInterval = 10
+  ) async throws -> AsyncThrowingStream<Data, Error> {
+    let base = rustBackendURL
+    guard !base.isEmpty, let url = URL(string: base + "v1/tts/synthesize") else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    // Foundation resets the request timer whenever response data arrives. This
+    // bounds a silent upstream stall without imposing a whole-response deadline.
+    request.timeoutInterval = stallTimeout
+    request.allHTTPHeaderFields = try await buildHeaders()
+    request.httpBody = try JSONEncoder().encode(body)
+
+    return AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let (errorBody, httpResponse) = try await self.performAuthenticatedStreamingData(
+            for: request,
+            authPolicy: .providerCredentialBoundary,
+            onChunk: { continuation.yield($0) }
+          )
+
+          if httpResponse.statusCode == 401 {
+            let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: errorBody))?.preferredMessage
+            if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+              let mode: CredentialAuthMode =
+                APIKeyService.selectedBYOKLLMProvider == .openai ? .byok : .managed
+              throw CredentialHealthError.providerAuth(
+                provider: .openai,
+                mode: mode,
+                message: mode == .byok
+                  ? "Your OpenAI key was rejected. Update it in Settings."
+                  : "OpenAI authentication failed. Voice responses are using fallback."
+              )
+            }
+            await self.invalidateSessionAfterUnauthorized(
+              endpoint: self.endpointLabel(for: request),
+              signOutOn401: true
+            )
+            throw APIError.unauthorized
+          }
+
+          if httpResponse.statusCode == 429 {
+            let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: errorBody))?.preferredMessage
+            if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+              throw CredentialHealthError.providerQuota(
+                provider: .openai,
+                message: "OpenAI voice quota was exceeded. Voice responses are using fallback."
+              )
+            }
+            throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+          }
+          guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(statusCode: httpResponse.statusCode)
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { @Sendable _ in task.cancel() }
+    }
   }
 
 }

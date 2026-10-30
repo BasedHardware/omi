@@ -34,6 +34,11 @@ class PostHogManager {
 
     PostHogSDK.shared.setup(config)
 
+    // Remove the retired identity experiment's persisted super-properties.
+    for key in ["experiment_id", "variant", "experiment_forced"] {
+      PostHogSDK.shared.unregister(key)
+    }
+
     // Release-identity super-properties (#10425): every captured event carries the
     // app version + build + release channel, so PostHog (including
     // `floating_bar_ptt_ended` and other per-event tracks that previously carried no
@@ -218,6 +223,22 @@ class PostHogManager {
   /// compile-checked symbol instead of a raw notification-name string.
   static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
 
+  func screenTaskFrameTerminal(ownerID: String?, properties: [String: Any]) {
+    guard isInitialized else { return }
+    // A revocation outcome still belongs to its capture owner, never the account current at terminal time.
+    PostHogSDK.shared.capture(
+      "Screen Task Frame Terminal", distinctId: ownerID ?? "screen-task-unowned", properties: properties)
+  }
+
+  func screenTaskDeliveryCompleted(ownerID: String, completion: ScreenTaskDeliveryCompletion, deferred: Bool) {
+    guard isInitialized else { return }
+    PostHogSDK.shared.capture(
+      "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
+  }
+
+  /// Analytics opt-out also withholds the screen-task flag lease, as the retired fresh flag read did.
+  var screenTaskFlagWithheld: Bool { PostHogSDK.shared.isOptOut() }
+
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
@@ -310,7 +331,9 @@ extension PostHogManager {
       properties: Self.transcriptionStartedProperties(attemptId: attemptId, mode: mode, intent: intent))
   }
 
-  static func transcriptionStoppedProperties(wordCount: Int, attemptId: String? = nil) -> [String: Any] {
+  static func transcriptionStoppedProperties(
+    wordCount: Int, attemptId: String? = nil, reason: String? = nil
+  ) -> [String: Any] {
     var properties: [String: Any] = [
       "platform": "macos",
       "word_count": wordCount,
@@ -318,13 +341,17 @@ extension PostHogManager {
     if let attemptId {
       properties["attempt_id"] = attemptId
     }
+    if let reason {
+      properties["finalization_reason"] = reason
+    }
     return properties
   }
 
-  func transcriptionStopped(wordCount: Int, attemptId: String? = nil) {
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil, reason: String? = nil) {
     track(
       "Desktop Recording Stopped",
-      properties: Self.transcriptionStoppedProperties(wordCount: wordCount, attemptId: attemptId))
+      properties: Self.transcriptionStoppedProperties(
+        wordCount: wordCount, attemptId: attemptId, reason: reason))
   }
 
   // MARK: - Capture Attempt Outcome
@@ -341,17 +368,26 @@ extension PostHogManager {
     _ attempt: CaptureAttemptOutcomeState,
     finalizationReason: TranscriptionFinalizationReason
   ) -> [String: Any] {
-    [
+    var properties: [String: Any] = [
       "platform": "macos",
       "attempt_id": attempt.attemptId,
       "mode": attempt.mode,
       "intent": attempt.intent.rawValue,
+      "launch_context": attempt.launchContext,
+      "seconds_since_launch": attempt.secondsSinceLaunch,
+      "update_attempt_id": attempt.updateAttemptID ?? "none",
       "capture_eligible": attempt.captureEligible,
       "first_audio_frame": attempt.firstAudioFrame,
       "speech_observed": attempt.speechObserved,
       "terminal_reason": attempt.terminalReason(for: finalizationReason).rawValue,
+      "finalization_reason": finalizationReason.rawValue,
       "conversation_accepted": attempt.conversationAccepted,
     ]
+    if let episodeID = attempt.armedEpisodeID {
+      properties["armed_retry"] = true
+      properties["armed_episode_id"] = episodeID
+    }
+    return properties
   }
 
   /// Minimal outcome payload for an attempt whose process died mid-flight:
@@ -367,6 +403,12 @@ extension PostHogManager {
 
   func captureAttemptOutcome(properties: [String: Any]) {
     track(Self.captureAttemptOutcomeEventName, properties: properties)
+  }
+
+  /// One local day's per-bundle call-audio counts. `track` already drops the
+  /// event when analytics is uninitialized or the user has opted out.
+  func callAppAudioSummary(_ summary: CallAppAudioSummary) {
+    track(CallAppAudioSummaryTelemetry.eventName, properties: CallAppAudioSummaryTelemetry.properties(summary))
   }
 
   func recordingError(
@@ -847,12 +889,18 @@ extension PostHogManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func taskExtracted(taskCount: Int) {
-    track(
-      "Task Extracted",
-      properties: [
-        "task_count": taskCount
-      ])
+  func taskExtracted(
+    taskCount: Int, gateOutcome: String? = nil, auditSample: Bool = false, candidateCount: Int = 0,
+    extractor: String? = nil
+  ) {
+    var properties: [String: Any] = ["task_count": taskCount]
+    if let gateOutcome {
+      properties["gate_outcome"] = ["passed", "rejected", "fail_open"].contains(gateOutcome) ? gateOutcome : "none"
+      properties["audit_sample"] = auditSample
+      properties["extracted_candidate_count"] = max(0, min(candidateCount, 8))
+    }
+    if let extractor { properties["extractor"] = ["gemini_3_8", "legacy"].contains(extractor) ? extractor : "none" }
+    track("Task Extracted", properties: properties)
   }
 
   func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
@@ -946,6 +994,7 @@ extension PostHogManager {
   }
 
   func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    guard outcome.emitsAnalytics else { return }
     track(
       SuggestionAssistantTelemetry.gateOutcomeEventName,
       properties: SuggestionAssistantTelemetry.gateOutcomePayload(outcome)
@@ -1003,31 +1052,6 @@ extension PostHogManager {
     track(
       SuggestionAssistantTelemetry.deliveryOutcomeEventName,
       properties: SuggestionAssistantTelemetry.deliveryOutcomePayload(outcome, identity: identity)
-    )
-  }
-
-  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
-    var properties: [String: Any] = [:]
-    if let cat = InsightAssistantTelemetry.boundedCategory(category) { properties["category"] = cat }
-    if let deliveryID { properties["delivery_id"] = deliveryID.uuidString }
-    track("Advice Generated", properties: properties.isEmpty ? nil : properties)
-  }
-
-  func insightAssistantDeliveryOutcome(
-    _ outcome: InsightAssistantTelemetry.Outcome,
-    reason: InsightAssistantTelemetry.Reason,
-    deliveryID: UUID,
-    surface: InsightAssistantTelemetry.Surface? = nil
-  ) {
-    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
-    track(
-      InsightAssistantTelemetry.deliveryOutcomeEventName,
-      properties: InsightAssistantTelemetry.deliveryOutcomePayload(
-        outcome,
-        reason: reason,
-        identity: identity,
-        surface: surface
-      )
     )
   }
 
@@ -1160,8 +1184,7 @@ extension PostHogManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    attention: InterjectAttention? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     var properties = notificationProperties(
       notificationId: notificationId,
@@ -1170,45 +1193,10 @@ extension PostHogManager {
       surface: surface
     )
     properties["dismissal_kind"] = dismissalKind.rawValue
-    if let attention {
-      properties["attention"] = attention.rawValue
-    }
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",
       properties: properties)
-  }
-
-  func notificationHovered(
-    notificationId: String,
-    assistantId: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    var properties: [String: Any] = [
-      "notification_id": notificationId,
-      "assistant_id": assistantId,
-    ]
-    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
-    track("Notification Hovered", properties: properties)
-  }
-
-  func suggestionFeedbackRecorded(
-    verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    provenance: InterjectFeedbackProvenance? = nil
-  ) {
-    var properties: [String: Any] = ["verb": verb]
-    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
-    if let provenance {
-      // Keep account identity out of event properties; PostHog already binds
-      // events to the authenticated installation. These opaque joins are
-      // sufficient for receipt correlation without copying owner IDs.
-      properties["feedback_lane"] = provenance.lane
-      properties["feedback_delivery_id"] = provenance.deliveryID
-      properties["feedback_candidate_id"] = provenance.candidateID
-      properties["feedback_account_generation"] = provenance.accountGeneration
-    }
-    track("Suggestion Feedback Recorded", properties: properties)
   }
 
   private func notificationProperties(

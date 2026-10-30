@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from llm_gateway.gateway.schemas import OutputBudgetPolicy
-
-OUTPUT_BUDGET_EXPERIMENTS_ENV_VAR = 'OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS'
 
 
 @dataclass(frozen=True)
@@ -28,7 +25,7 @@ def apply_output_budget(
     if caller_limit is not None:
         return provider_request, OutputBudgetDecision(source='caller', max_completion_tokens=caller_limit)
 
-    if policy is None or not _experiment_enabled(policy.experiment):
+    if policy is None:
         return provider_request, OutputBudgetDecision(source='none', max_completion_tokens=None)
 
     provider_request['max_completion_tokens'] = policy.max_completion_tokens
@@ -64,9 +61,3 @@ def _caller_limit(request: Mapping[str, Any]) -> int | None:
     if isinstance(max_tokens, int) and not isinstance(max_tokens, bool):
         return max_tokens
     return None
-
-
-def _experiment_enabled(experiment: str) -> bool:
-    configured = os.getenv(OUTPUT_BUDGET_EXPERIMENTS_ENV_VAR, '')
-    enabled = {item.strip().lower() for item in configured.split(',') if item.strip()}
-    return experiment in enabled

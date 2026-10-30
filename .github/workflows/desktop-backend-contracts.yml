@@ -1,6 +1,14 @@
 name: Desktop Backend Contracts
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - ".github/workflows/desktop-backend-contracts.yml"
@@ -23,11 +31,19 @@ on:
       - "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift"
       - "desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   desktop-core-e2e-t0:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - uses: actions/setup-python@v6
         with:
@@ -54,6 +70,8 @@ jobs:
       GOOGLE_CLOUD_PROJECT: omi-contract-tests
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - uses: actions/setup-python@v6
         with:

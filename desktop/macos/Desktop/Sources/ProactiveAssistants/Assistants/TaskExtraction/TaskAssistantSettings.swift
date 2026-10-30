@@ -40,7 +40,7 @@ class TaskAssistantSettings {
   // MARK: - Browser Apps
 
   /// Apps identified as browsers — these get additional window-title keyword filtering
-  static let browserApps: Set<String> = [
+  nonisolated static let browserApps: Set<String> = [
     "Google Chrome",
     "Arc",
     "Safari",
@@ -51,7 +51,7 @@ class TaskAssistantSettings {
   ]
 
   /// Check if an app is a browser (subject to window title keyword filtering)
-  static func isBrowser(_ appName: String) -> Bool {
+  nonisolated static func isBrowser(_ appName: String) -> Bool {
     browserApps.contains(appName)
   }
 
@@ -416,6 +416,7 @@ class TaskAssistantSettings {
   /// For browser apps, check if the window title matches any keyword.
   /// Non-browser apps always pass this check.
   func isWindowAllowed(appName: String, windowTitle: String?) -> Bool {
+    guard !ScreenTaskPrivacy.isPrivateWindow(app: appName, title: windowTitle) else { return false }
     guard TaskAssistantSettings.isBrowser(appName) else { return true }
     guard let title = windowTitle, !title.isEmpty else { return false }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import {
   applyFirestoreActivationCompat,
   type FirestoreActivationCompat,
@@ -43,7 +43,7 @@ async function hogql(
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
 
     if (!apiKey || !projectId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "PostHog credentials not configured" },
         { status: 500 }
       );
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
       cache.platform === platform &&
       Date.now() - cache.timestamp < CACHE_TTL
     ) {
-      return NextResponse.json(
+      return authResult.json(
         applyFirestoreActivationCompat(cache.data, await activationOverlay())
       );
     }
@@ -872,10 +872,10 @@ export async function GET(request: NextRequest) {
     );
 
     cache = { data: result, days, platform, timestamp: Date.now() };
-    return NextResponse.json(result);
+    return authResult.json(result);
   } catch (error: any) {
     console.error("Viral metrics error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to fetch viral metrics" },
       { status: 500 }
     );

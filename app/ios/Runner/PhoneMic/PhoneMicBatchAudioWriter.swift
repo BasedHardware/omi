@@ -71,7 +71,7 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     func append(opusPackets: [Data], marker: String) {
         if opusPackets.isEmpty { return }
         let admission = CaptureAdmissionPolicy.load(from: defaults)
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let nowMs = CheckedIntegerConversion.epochMs()
 
         // Muted: drop packets but keep the open file's gap timer fresh so unmute
         // resumes the same recording instead of opening a new file.
@@ -144,8 +144,8 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
         closeCurrentLocked(reason)
     }
 
-    /// Drain the latched storage-full transition. Called by the controller on its
-    /// 1Hz progress tick (inside `audioQueue.sync`) so at most one onCaptureError
+    /// Drain the latched storage-full transition. The write path reports the edge
+    /// immediately; the progress tick is the backup. At most one onCaptureError
     /// fires per false->true edge.
     func consumeStorageFullTransitionLocked() -> Bool {
         let pending = pendingStorageFullReport

@@ -2,6 +2,10 @@ name: Notify Telegram
 description: Sends deployment status details to Telegram when notification credentials are configured.
 
 inputs:
+  deployment_tag:
+    description: Actual deployed image tag; defaults to the dispatch SHA for existing callers.
+    required: false
+    default: ''
   telegram_bot_token:
     description: Telegram bot token used to send the notification.
     required: false
@@ -46,13 +50,14 @@ runs:
       if: steps.configuration.outputs.enabled == 'true'
       shell: bash
       env:
+        DEPLOY_TAG: ${{ inputs.deployment_tag }}
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_bot_token }}
         TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
       run: |
         WORKFLOW_NAME="${{ github.workflow }}"
         ENVIRONMENT="${{ inputs.environment }}"
         DEPLOY_BRANCH="${{ github.ref_name }}"
-        DEPLOY_TAG="${GITHUB_SHA::7}"
+        DEPLOY_TAG="${DEPLOY_TAG:-${GITHUB_SHA::7}}"
         [[ -n "${{ inputs.release_version }}" ]] && RELEASE_VERSION="${{ inputs.release_version }}" || RELEASE_VERSION="release-$(date +'%Y%m%d')-${{ github.run_number }}"
         ACTOR="${{ github.actor }}"
         FINISH_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
@@ -61,7 +66,7 @@ runs:
         MESSAGE="🚀 <b>$WORKFLOW_NAME</b>: $ICON $STATUS
 
         ⚡️ <b>Environment:</b> $ENVIRONMENT
-        🌿 <b>Branch:</b> $DEPLOY_BRANCH
+        🌿 <b>Workflow ref:</b> $DEPLOY_BRANCH
         📦 <b>Release version:</b> $RELEASE_VERSION
         🏷️ <b>Tag:</b> $DEPLOY_TAG
         👤 <b>Triggered by:</b> $ACTOR

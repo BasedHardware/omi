@@ -87,6 +87,13 @@ def mem_module():
 
 
 class TestBaselineMemoryModel:
+    @pytest.fixture(scope='class', autouse=True)
+    def model_schema(self):
+        # Schema construction is setup; call-phase checks exercise real model behavior.
+        from models.memories import MemoryDB
+
+        return MemoryDB
+
     def test_is_baseline_defaults_to_false(self):
         """MemoryDB must default is_baseline to False so existing memories are unaffected."""
         from models.memories import MemoryDB

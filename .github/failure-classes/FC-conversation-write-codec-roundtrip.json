@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-conversation-write-codec-roundtrip",
+  "violated_contract": "A conversation writer must decode retained protected fields before passing them to the logical write encoder, and re-protect retained content when changing the document protection level.",
+  "canonical_prevention": "Use the strict field decoder at read-modify-write boundaries; test assignment, donor absorption, reprocessing and protection migration with real compressed and encrypted existing rows, asserting retained logical content and atomic failure on unreadable input.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_open_loops_assignment.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/database/conversations.py", "backend/database/sync_assignment.py", "backend/database/smart_merge.py"],
+  "status": "open"
+}

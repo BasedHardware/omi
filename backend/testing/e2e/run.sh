@@ -62,13 +62,11 @@ echo ""
 echo "Running e2e tests..."
 echo "================================"
 
-# The suite exercises normal universal memory CRUD. Production manifests keep
-# MEMORY_MODE=off until the operator completes the rollout proof, while this
-# hermetic harness must explicitly opt into the enabled mode. Preserve an
-# explicit `E2E_MEMORY_MODE=off` override so incident-fence tests can still run
-# with intake paused
-# without inheriting a production-oriented shell environment accidentally.
-export MEMORY_MODE="${E2E_MEMORY_MODE:-read}"
+# The suite exercises normal universal memory CRUD. The product intake fence
+# fails closed when unset, so this hermetic harness explicitly enables it.
+# E2E_MEMORY_ENABLED=off still exercises incident-fence behavior without
+# inheriting a production-oriented shell environment accidentally.
+export MEMORY_ENABLED="${E2E_MEMORY_ENABLED:-on}"
 
 if [ "$#" -eq 0 ]; then
     set -- -v --tb=short
@@ -76,6 +74,14 @@ fi
 
 # WebSocket/provider-seam regressions should fail instead of hanging forever.
 # Override with E2E_PYTEST_TIMEOUT=300s when deliberately debugging a slow run.
+# This budget covers the whole pytest process: interpreter start + backend
+# import during collection, the test session, pytest's exit path (~1.7s), and
+# C-level interpreter teardown (~1.75s) — run 40513231489 (140 tests) measured
+# 4.8s + 112.74s + ~3.4s ≈ 120.9s and was SIGTERMed mid-exit at 120s. The
+# ungated Typesense retry ladder (~4s per index delete/search against refused
+# localhost:8108, ~60s across the suite) is now routed hermetically in
+# conftest, bringing the measured green wall back to ~66s local / ~60s
+# CI-class. Keep an eye on --durations when this approaches the budget again.
 PYTEST_TIMEOUT="${E2E_PYTEST_TIMEOUT:-120s}"
 TIMEOUT_BIN=""
 if command -v timeout >/dev/null 2>&1; then

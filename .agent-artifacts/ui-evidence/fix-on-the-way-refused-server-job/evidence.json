@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-on-the-way-refused-before-main.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): nothing uploading on the phone, one refused recording, and a sync job the server is transcribing; the page lists only the refused recording",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-on-the-way-refused-server-job.png",
+      "platform": "mobile-ios",
+      "description": "After: the server's sync job is listed as Transcribing above the day that holds the refused recording",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

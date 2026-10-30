@@ -43,7 +43,8 @@ struct ChatQuotaBannerView: View {
 
     @ViewBuilder
     private var content: some View {
-      if let banner {
+      ChatBudgetPauseView.Slot()
+      if usageLimiter.serverQuota?.usesSharedBudget != true, let banner {
         ChatQuotaBannerView(
           banner: banner,
           onViewPlan: {
@@ -90,15 +91,8 @@ struct ChatQuotaBannerView: View {
       .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       .accessibilityIdentifier("chat-quota-banner-view-plan")
 
-      Button(action: onDismiss) {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-      }
-      .buttonStyle(.plain)
-      .help("Dismiss")
-      .accessibilityLabel("Dismiss")
-      .accessibilityIdentifier("chat-quota-banner-dismiss")
+      DismissButton(action: onDismiss, accessibilityLabel: "Dismiss", size: .compact)
+        .accessibilityIdentifier("chat-quota-banner-dismiss")
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
@@ -111,6 +105,11 @@ struct ChatQuotaBannerView: View {
     .accessibilityElement(children: .contain)
     .accessibilityLabel("\(banner.title). \(banner.message)")
     .accessibilityIdentifier("chat-quota-banner")
+    .onAppear {
+      AnalyticsManager.shared.paywallOpened(
+        source: "macos_chat_quota_banner",
+        currentPlan: UserDefaults.standard.string(forKey: .floatingBarCachedPlan) ?? "unknown")
+    }
   }
 
   /// A hard-capped plan at its allowance is stopped, not just warned — the

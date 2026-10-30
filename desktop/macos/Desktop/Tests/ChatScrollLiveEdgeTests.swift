@@ -417,6 +417,75 @@ final class UserScrollDetectorTests: XCTestCase {
     return event
   }
 
+  func testFollowGlideUsesInjectedTimeAndCancelsItsTimerAtTheTarget() {
+    let (scrollView, _) = makeScrollViewAtBottom()
+    let scheduler = ManualRunLoopTimerScheduler()
+    let glide = ChatFollowGlide(now: { scheduler.now }, schedule: scheduler.schedule)
+    XCTAssertTrue(glide.glide(clipView: scrollView.contentView, to: NSPoint(x: 0, y: 200), duration: 1))
+    XCTAssertEqual(scheduler.activeTimerCount, 1)
+
+    scheduler.fire()
+    XCTAssertEqual(scrollView.contentView.bounds.origin.y, 700, accuracy: 0.01)
+    scheduler.advance(by: 0.5)
+    scheduler.fire()
+    // The existing ease-out cubic moves 7/8 of the 500-point distance halfway through.
+    XCTAssertEqual(scrollView.contentView.bounds.origin.y, 262.5, accuracy: 0.01)
+    scheduler.advance(by: 0.5)
+    scheduler.fire()
+    XCTAssertEqual(scrollView.contentView.bounds.origin.y, 200, accuracy: 0.01)
+    XCTAssertFalse(glide.isActive)
+    XCTAssertEqual(scheduler.activeTimerCount, 0)
+  }
+
+  func testFollowGlideRetargetAndReleaseCancelEveryOwnedTimer() {
+    let (scrollView, _) = makeScrollViewAtBottom()
+    let scheduler = ManualRunLoopTimerScheduler()
+    var glide: ChatFollowGlide? = ChatFollowGlide(now: { scheduler.now }, schedule: scheduler.schedule)
+    weak var weakGlide: ChatFollowGlide?
+    weakGlide = glide
+    glide?.glide(clipView: scrollView.contentView, to: NSPoint(x: 0, y: 200), duration: 1)
+    glide?.glide(clipView: scrollView.contentView, to: NSPoint(x: 0, y: 100), duration: 1)
+    XCTAssertEqual(scheduler.timers.count, 2)
+    XCTAssertFalse(scheduler.timers[0].isValid)
+    XCTAssertEqual(scheduler.activeTimerCount, 1)
+
+    glide = nil
+    XCTAssertNil(weakGlide)
+    XCTAssertEqual(scheduler.activeTimerCount, 0)
+    scheduler.advance(by: 1)
+    scheduler.fire()
+    XCTAssertEqual(scrollView.contentView.bounds.origin.y, 700, accuracy: 0.01)
+  }
+
+  func testPinnersOwnIndependentTimersAndReleaseStopsFurtherTicks() {
+    let scheduler = ManualRunLoopTimerScheduler()
+    let first = ChatLiveEdgePinner(schedule: scheduler.schedule)
+    var second: ChatLiveEdgePinner? = ChatLiveEdgePinner(schedule: scheduler.schedule)
+    weak var weakSecond: ChatLiveEdgePinner?
+    weakSecond = second
+    var firstTicks = 0
+    var secondTicks = 0
+    first.start { firstTicks += 1 }
+    second?.start { secondTicks += 1 }
+    second?.start { secondTicks += 10 }
+    XCTAssertEqual(scheduler.activeTimerCount, 2, "updating the callback must reuse the armed timer")
+    scheduler.fire()
+    XCTAssertEqual(firstTicks, 1)
+    XCTAssertEqual(secondTicks, 10)
+
+    first.cancel()
+    first.cancel()
+    scheduler.fire()
+    XCTAssertEqual(firstTicks, 1)
+    XCTAssertEqual(secondTicks, 20)
+    XCTAssertEqual(scheduler.activeTimerCount, 1)
+    second = nil
+    XCTAssertNil(weakSecond)
+    XCTAssertEqual(scheduler.activeTimerCount, 0)
+    scheduler.fire()
+    XCTAssertEqual(secondTicks, 20)
+  }
+
   #if DEBUG
     func testFollowGlideInvalidatesItsCommonModeTimerOnDeinit() {
       let (scrollView, _) = makeScrollViewAtBottom()

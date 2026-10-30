@@ -109,7 +109,7 @@ def test_ask_endpoint_is_bound_to_the_dev_ask_rate_limited_dependency():
 
     auth = SimpleNamespace(uid="u1", app_id="a1", key_id="k1")
     with patch.object(deps, "_require_conversations_read_scope", lambda a: None), patch.object(
-        deps, "_check_dev_api_key_rate_limit_async", fake_enforce
+        deps, "check_developer_api_key_rate_limit", fake_enforce
     ):
         uid = asyncio.run(deps.get_uid_with_conversations_read_ask(auth=auth, request=None))
 
@@ -128,20 +128,6 @@ def test_ask_maps_search_outage_to_503():
             dev.ask_conversations(dev.DeveloperAskRequest(question="when?"), uid="u1")
 
     assert exc_info.value.status_code == 503
-
-
-def test_ask_merges_transcript_only_hits_before_rag():
-    with patch.object(dev, "search_conversations", return_value={"items": []}), patch.object(
-        dev, "resolve_mcp_conversation_search_ids", return_value=["c1"]
-    ), patch.object(dev.conversations_db, "get_conversations_by_id", return_value=[{"id": "c1"}]), patch.object(
-        dev, "deserialize_conversations", return_value=[_conv()]
-    ), patch.object(
-        dev, "qa_rag", return_value="answer"
-    ) as qa:
-        response = dev.ask_conversations(dev.DeveloperAskRequest(question="what was said?"), uid="u1")
-
-    assert response.sources[0].id == "c1"
-    qa.assert_called_once()
 
 
 def test_ask_lives_on_public_developer_api_not_app_client_firebase():

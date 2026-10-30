@@ -18,6 +18,7 @@ dependencies:
   connectivity_plus: ^6.0.3
   flutter_provider_utilities: ^1.0.6
   clock: ^1.1.1
+  characters: ^1.4.0
 
   # Localizations
   flutter_localizations:
@@ -81,8 +82,8 @@ dependencies:
   uuid: ^4.4.0
   tuple: ^2.0.2
   envied: 1.3.8
-  awesome_notifications_core: ^0.9.3
-  awesome_notifications: any
+  awesome_notifications_core: ^0.10.1
+  awesome_notifications: ^0.12.1
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
@@ -99,6 +100,7 @@ dependencies:
   flutter_background_service: 5.1.0
   flutter_background_service_android: 6.3.0
   flutter_background_service_platform_interface: 5.1.2
+  onnxruntime_v2: 1.23.2+2
   opus_flutter: ^3.0.3
   opus_dart:
     git:
@@ -136,6 +138,7 @@ dependencies:
   marionette_flutter: ^0.3.0
   quick_actions: ^1.0.0
   in_app_review: ^2.0.12
+  cryptography: ^2.9.0
 
 dependency_overrides:
   js: ^0.7.1
@@ -151,6 +154,8 @@ dependency_overrides:
       path: opus_flutter_android
 
 dev_dependencies:
+  flutter_driver:
+    sdk: flutter
   flutter_launcher_icons: 0.13.1
   google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0
@@ -171,6 +176,10 @@ dev_dependencies:
   # Direct dev dep for DeviceProvider tests' ConnectivityPlatform fake:
   # connectivity_plus depends on this but does not re-export it.
   connectivity_plus_platform_interface: ^2.0.1
+  # Direct dev dep for the Device Diagnostics send-support test's
+  # DeviceInfoPlatform fake: device_info_plus depends on this but does not
+  # re-export it.
+  device_info_plus_platform_interface: ^7.0.3
   # Direct dev dep for the j5 capture journey's scratch PathProviderPlatform:
   # the fake needs the platform-interface types path_provider does not re-export.
   path_provider_platform_interface: ^2.0.0
@@ -203,35 +212,14 @@ flutter:
   generate: true
   uses-material-design: true
   assets:
+    - assets/models/silero_vad.onnx
     - assets/images/stars.png
     - assets/images/herologo.png
-    - assets/fonts/
     - assets/images/
+    - assets/test/tts_progressive_probe.mp3
     - assets/integration_app_logos/
     - assets/competitor-logos/
     - shorebird.yaml
-  fonts:
-    - family: "SF Pro Display"
-      fonts:
-        - asset: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
-          weight: 100
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF
-          weight: 300
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYREGULAR.OTF
-        - asset: assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYMEDIUM.OTF
-          weight: 500
-        - asset: assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF
-          weight: 600
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYBOLD.OTF
-          weight: 700
-        - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
-          weight: 900
-          style: italic
 
 flutter_gen:
   output: lib/gen/

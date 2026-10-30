@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-catalog-exact-id-misses-helper-process",
+  "violated_contract": "An app catalog matched against OS process identities must match the processes that actually perform the behaviour, not only the app's main bundle. Electron/Chromium apps capture the microphone in helper processes with their own bundle IDs; ConferencingApps matched native call apps by exact bundle ID, so a Discord call (mic held by com.hnc.Discord.helper.Renderer) was never detected and Only-Meetings mode recorded nothing, while browsers already had prefix matching for the same reason.",
+  "canonical_prevention": "Resolve a process to its catalog entry by exact ID or dotted-prefix helper ID (longest match), use that resolved ID as the identity, and pin measured helper IDs in tests. Measure catalog entries with the call-audio probe rather than assuming the main bundle holds the device.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/MeetingGatedSystemAudioTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ConferencingApps.swift",
+    "desktop/macos/Desktop/Sources/Audio/DictationMicSuppression.swift"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-once-only-repair-before-prerequisite-ready",
+  "violated_contract": "A once-only repair trigger must not permanently discard work merely because its independently running prerequisite has not committed yet. Pusher audio drain can precede conversation completion; treating not_completed as terminal strands owner identity repair after first finalization.",
+  "canonical_prevention": "Retain the original admitted attempt through bounded asynchronous prerequisite rechecks. Re-read eligibility and revision after readiness, share the original concurrency/candidate/pass ceilings, coalesce overlapping triggers, and release admission only after the owned worker actually finishes. Prove repair at the persisted readable transcript and committed owner_added counter, plus exhausted waits, shared budgets, lifecycle rejection and cancellation.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_owner_repair_after_completion.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/speaker_identity_retry.py"
+  ],
+  "status": "open"
+}

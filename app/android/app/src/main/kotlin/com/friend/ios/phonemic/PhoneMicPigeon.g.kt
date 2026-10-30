@@ -284,8 +284,9 @@ class PhoneMicFlutterApi(private val binaryMessenger: BinaryMessenger, private v
     }
   }
   /**
-   * Emitted at 1Hz while batch capture runs. Its arrival is the liveness signal
-   * for the Dart batch watchdog; the value is derived from the number of frames
+   * Emitted while batch capture runs (iOS: 4s while healthy, 1s on fault or
+   * foreground; Android: 1Hz). Its arrival is the liveness signal for the Dart
+   * batch watchdog; the value is derived from the number of frames
    * actually written to disk, so mutes and interruptions freeze it while the
    * event keeps arriving.
    */

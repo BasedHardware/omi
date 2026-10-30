@@ -5,7 +5,11 @@ from fastapi import FastAPI, UploadFile, File
 from vad_modal import vad_endpoint
 import logging
 
-logging.basicConfig(level=logging.INFO)
+from utils.logging_config import configure_split_stream_logging
+
+# The internal HTTP LB already logs every request. Uvicorn access lines duplicated it.
+configure_split_stream_logging(level=logging.INFO)
+logging.getLogger('uvicorn.access').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +18,7 @@ app = FastAPI()
 
 @app.post('/v1/vad')
 def vad(file: UploadFile = File) -> Any:  # pyright: ignore[reportArgumentType]  # FastAPI bare File default
-    logger.info('vad')
-    logger.info(vad_endpoint)
+    logger.debug('vad')
     return vad_endpoint(file)
 
 

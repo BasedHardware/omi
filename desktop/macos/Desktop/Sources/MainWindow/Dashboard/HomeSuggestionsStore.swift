@@ -315,7 +315,7 @@ struct GeminiHomeSuggestionGenerator: HomeSuggestionGenerating {
       - Return an empty list if the context doesn't contain enough real, current material.
       """
 
-    let client = try GeminiClient(model: ModelQoS.Gemini.lightweight, workload: .maintenance)
+    let client = try GeminiClient(model: ModelQoS.Gemini.lightweight, lane: .homeSuggestions, workload: .maintenance)
     let responseText = try await client.sendRequest(
       prompt: prompt,
       systemPrompt:

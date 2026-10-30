@@ -107,6 +107,7 @@ When creating/updating the Omi app, use these URLs:
 |----------|-------------|----------|
 | `TWITTER_CLIENT_ID` | Twitter OAuth2 Client ID | Yes |
 | `TWITTER_CLIENT_SECRET` | Twitter OAuth2 Client Secret | Yes |
+| `TWITTER_TOOLS_SECRET` | HMAC secret for the disconnect link. Unset, disconnect fails closed | Yes |
 | `TWITTER_REDIRECT_URI` | OAuth callback URL | Yes |
 | `PORT` | Server port (default: 8080) | No |
 | `REDIS_URL` | Redis connection URL | No (uses file storage if not set) |

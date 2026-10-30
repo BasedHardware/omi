@@ -95,7 +95,7 @@ const PLAN_DISPLAY_NAMES: Readonly<Record<CatalogPlanId, string>> = {
   basic: 'Free',
   plus: 'Plus',
   unlimited: 'Neo',
-  unlimited_v2: 'Unlimited',
+  unlimited_v2: 'Omi Pro',
   operator: 'Operator',
   architect: 'Architect'
 }

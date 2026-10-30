@@ -34,7 +34,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
 
     XCTAssertTrue(
       source.contains(
-        "Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
+        "errorDescription: AgentFailureTranscriptFormatter.taskQueryFailure(for: error)"))
     XCTAssertTrue(source.contains("try await terminalizeJournalMessage("))
     XCTAssertFalse(source.contains("persistMessage("))
     XCTAssertTrue(source.contains("observeRuntimeProjectionFailures()"))
@@ -218,6 +218,31 @@ final class TaskChatKernelIdentityTests: XCTestCase {
       AgentFailureTranscriptFormatter.transcriptText(for: "Failed: OpenClaw failed"),
       "Failed: OpenClaw failed"
     )
+  }
+
+  func testBillingFailuresExplainKnownProviderWithoutBlamingAnUnknownAccount() {
+    let raw = "Internal error: Credit balance is too low"
+    let generic = AgentFailureTranscriptFormatter.userFacingFailure(raw)
+    XCTAssertTrue(generic.contains("provider account"))
+    XCTAssertFalse(generic.contains("Internal error"))
+    XCTAssertFalse(generic.contains("Your Anthropic"))
+    let otherError = BridgeError.agentError("You've reached your free plan limit; open Plan and Usage to upgrade.")
+    XCTAssertEqual(AgentFailureTranscriptFormatter.taskQueryFailure(for: otherError), otherError.localizedDescription)
+    for adapter in ["acp", "pi-mono"] {
+      let message = AgentFailureTranscriptFormatter.userFacingFailure(
+        for: BridgeError.agentRuntimeFailure(
+          AgentRuntimeFailure(
+            code: "adapter_execution_failed",
+            userMessage: "Send your message again.",
+            technicalMessage: raw,
+            adapterId: adapter,
+            retryable: false
+          ))
+      )
+      XCTAssertTrue(message.contains(adapter == "acp" ? "Claude" : "Omi AI"))
+      XCTAssertFalse(message.contains("Internal error"))
+      XCTAssertFalse(message.contains("Send your message again"))
+    }
   }
 
   func testRuntimeFailureProjectionSurfacingDoesNotReRecordStatus() throws {

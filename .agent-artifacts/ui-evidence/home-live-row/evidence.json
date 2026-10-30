@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-live-row-dark.png",
+      "platform": "mobile-ios",
+      "description": "Home, dark: outlined live row with breathing dot, topic title and Live · 24m; a background conversation is not shown and there is no Also line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-live-row-light.png",
+      "platform": "mobile-ios",
+      "description": "Home, light: the same live row",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-recap-in-the-background.png",
+      "platform": "mobile-ios",
+      "description": "Daily recap: In the background section listing the day's background conversations",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

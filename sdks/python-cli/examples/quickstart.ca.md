@@ -116,4 +116,4 @@ Aquesta ordre elimina les credencials desades localment. Per revocar una clau al
 servidor, utilitzeu la gestió de claus de desenvolupador del vostre compte.
 
 Per a la resta d'ordres i opcions avançades, consulteu la
-[guia principal en anglès](../README.md), `omi --help` i la comunitat a [discord.omi.me](https://discord.omi.me).
+[guia principal en anglès](../README.md), `omi --help` i la comunitat a [Discord](https://discord.gg/TdRNp5U7cy).

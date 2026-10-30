@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import time
 
 import httpx
@@ -13,6 +14,7 @@ from omi_cli import config as cfg
 from omi_cli.auth import oauth
 from omi_cli.auth.store import store_oauth_tokens
 from omi_cli.errors import AuthError, UsageError
+from omi_cli.main import app
 
 # ---- needs_refresh ---------------------------------------------------------
 
@@ -116,6 +118,36 @@ def test_refresh_persists_rotated_refresh_token(config_path, monkeypatch) -> Non
     reloaded = cfg.load().get_profile("default")
     assert reloaded.id_token == "new_id"
     assert reloaded.refresh_token == "refr_new_rotated"
+
+
+def test_refresh_emits_json_payload(config_path, cli_runner, monkeypatch) -> None:
+    """Regression: `omi --json auth refresh` must write the refreshed profile
+    to stdout, like `auth login`/`logout`/`status` already do. Previously it
+    wrote nothing, so scripts relying on the CLI's JSON contract got an empty
+    string and crashed on json.loads()."""
+    store_oauth_tokens(
+        "default",
+        id_token="old_id",
+        refresh_token="refr_1",
+        expires_at=time.time() - 10,
+        api_base="https://api.test.omi.local",
+    )
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(
+            200,
+            json={"id_token": "new_id", "refresh_token": "refr_1", "expires_in": "3600"},
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    result = cli_runner.invoke(app, ["--json", "auth", "refresh"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["profile"] == "default"
+    assert payload["auth_method"] == "oauth"
+    assert abs(payload["id_token_expires_at"] - (time.time() + 3540)) < 5
 
 
 def test_refresh_surfaces_firebase_error(config_path, monkeypatch) -> None:
@@ -317,6 +349,54 @@ def test_exchange_firebase_token_proceeds_when_listing_fails(monkeypatch) -> Non
     assert key == "omi_dev_after_failed_list"
 
 
+@pytest.mark.parametrize(
+    "listing",
+    [
+        httpx.Response(200, text="<html>gateway</html>"),  # 2xx that is not JSON
+        httpx.Response(200, json=5),  # JSON, but not iterable
+        httpx.Response(200, json={"keys": []}),  # JSON object instead of a list
+    ],
+    ids=["not-json", "scalar", "object"],
+)
+def test_exchange_firebase_token_proceeds_when_listing_is_malformed(monkeypatch, listing) -> None:
+    """Cleanup of our own stale keys is best-effort by design: a duplicate key
+    is recoverable, a failed login is not. A 200 carrying something other than
+    a JSON list must not abort the mint any more than a transport error does."""
+    posted = []
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        posted.append(url)
+        return httpx.Response(200, json={"key": "omi_dev_after_bad_list"})
+
+    monkeypatch.setattr(httpx.Client, "get", lambda self, url, **kw: listing)
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    key = oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+    assert key == "omi_dev_after_bad_list"
+    assert posted, "the mint request must still be sent"
+
+
+@pytest.mark.parametrize(
+    "mint",
+    [
+        httpx.Response(200, text="<html>gateway</html>"),  # 2xx that is not JSON
+        httpx.Response(200, json=["not", "an", "object"]),
+        httpx.Response(200, json="plain string"),
+    ],
+    ids=["not-json", "list", "string"],
+)
+def test_exchange_firebase_token_raises_on_malformed_mint_response(monkeypatch, mint) -> None:
+    """A mint response that is not a JSON object carrying `key` is the same
+    failure to the caller as a missing field, and must surface as the AuthError
+    this function already defines rather than a raw parse error."""
+    monkeypatch.setattr(httpx.Client, "get", lambda self, url, **kw: httpx.Response(200, json=[]))
+    monkeypatch.setattr(httpx.Client, "post", lambda self, url, **kw: mint)
+
+    with pytest.raises(AuthError) as info:
+        oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+    assert "missing the api key" in str(info.value).lower()
+
+
 def test_exchange_firebase_token_raises_on_non_200(monkeypatch) -> None:
     monkeypatch.setattr(httpx.Client, "get", lambda self, url, **kw: httpx.Response(200, json=[]))
     monkeypatch.setattr(httpx.Client, "post", lambda self, url, **kw: httpx.Response(403, json={"detail": "nope"}))
@@ -333,3 +413,63 @@ def test_exchange_firebase_token_raises_when_key_field_missing(monkeypatch) -> N
     with pytest.raises(AuthError) as info:
         oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
     assert "missing the api key" in str(info.value).lower()
+
+
+def test_store_oauth_tokens_can_keep_a_minted_dev_key(config_path) -> None:
+    """The browser-login profile must be oauth (for chat) AND keep the dev key.
+
+    #21223: browser login minted an api_key profile, so `omi chat` rejected it
+    with "Chat requires browser sign-in". store_oauth_tokens now accepts an
+    optional api_key so the profile is oauth AND the /v1/dev/* calls still
+    have their key.
+    """
+    from omi_cli.auth.store import store_oauth_tokens
+
+    profile = store_oauth_tokens(
+        "default",
+        id_token="idt",
+        refresh_token="rt",
+        expires_at=9999.0,
+        api_key="omi_dev_key",
+    )
+    assert profile.auth_method == "oauth"
+    assert profile.api_key == "omi_dev_key"
+    assert profile.id_token == "idt"
+    assert profile.refresh_token == "rt"
+
+
+def test_store_oauth_tokens_without_key_still_nulls_it(config_path) -> None:
+    """Backwards-compatible: no api_key passed -> api_key cleared as before."""
+    from omi_cli.auth.store import store_oauth_tokens
+
+    profile = store_oauth_tokens("default", id_token="idt", refresh_token="rt", expires_at=9999.0)
+    assert profile.auth_method == "oauth"
+    assert profile.api_key is None
+
+
+def test_refresh_rotation_preserves_stored_dev_key(config_path, monkeypatch) -> None:
+    """Regression: when Firebase rotates the refresh token, store_oauth_tokens
+    must carry the co-stored dev key — dropping it silently kills every
+    /v1/dev/user/* call on the next CLI invocation."""
+    store_oauth_tokens(
+        "default",
+        id_token="old_id",
+        refresh_token="refr_old",
+        expires_at=time.time() - 10,
+        api_base="https://api.test.omi.local",
+        api_key="omi_dev_keepme",
+    )
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(
+            200,
+            json={"id_token": "new_id", "refresh_token": "refr_rotated", "expires_in": "3600"},
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    oauth.refresh_id_token("default")
+
+    reloaded = cfg.load().get_profile("default")
+    assert reloaded.id_token == "new_id"
+    assert reloaded.refresh_token == "refr_rotated"
+    assert reloaded.api_key == "omi_dev_keepme"  # the minted key survived rotation

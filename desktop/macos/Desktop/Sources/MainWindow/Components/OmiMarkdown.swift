@@ -74,11 +74,11 @@ struct OmiMarkdown: View {
     self.documentProse = documentProse
   }
 
-  /// Assistant text may open with an Interject classification token; it is
+  /// Historical assistant text may open with a retired classification token; it is
   /// machine-facing and must never render on any chat surface.
   private static func renderableText(_ text: String, style: Style) -> String {
     guard style == .assistant else { return text }
-    return InterjectVoiceFeedbackRouting.displayText(from: text)
+    return LegacyReplyTokenSanitizer.displayText(from: text)
   }
 
   var body: some View {

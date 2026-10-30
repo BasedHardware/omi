@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-queued-write-outlives-storage-teardown",
+  "violated_contract": "A serialized write queue that callers may feed without awaiting (fire-and-forget persists) must expose a completion that covers every write queued so far, and whoever tears down the storage those writes target must await it first. Otherwise a queued temp-file write and rename runs after its directory is deleted, failing with PathNotFoundException after the owning test has already passed, or silently recreating storage that was just torn down.",
+  "canonical_prevention": "Give the queue owner a flush() that awaits the queue until it is idle, re-checking for writes enqueued while waiting, and await it before deleting the storage directory. In tests, first end the session that can enqueue more writes, then flush, then delete. The guard test holds the store's directory behind a gate so a fire-and-forget write is provably pending, and asserts flush() completes only after it lands, including a write queued while flush() was already waiting.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/pendant_ring_custody_flush_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/**",
+    "app/test/unit/**"
+  ],
+  "status": "open"
+}

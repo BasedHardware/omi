@@ -295,6 +295,28 @@ private actor ContextAdmissionRetryTestState {
 }
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testAgentEnvironmentStripsYoloModeOnlyInProduction() {
+    let inherited = ["OMI_YOLO_MODE": "1", "PATH": "/usr/bin", "OMI_UNRELATED": "keep"]
+
+    let production = AgentRuntimeCredentialPolicy.agentEnvironment(
+      inherited, isNonProduction: false)
+    XCTAssertNil(
+      production["OMI_YOLO_MODE"],
+      "production must never let an inherited YOLO override reach the agent subprocess")
+    XCTAssertEqual(production["PATH"], "/usr/bin")
+    XCTAssertEqual(production["OMI_UNRELATED"], "keep")
+
+    let productionOff = AgentRuntimeCredentialPolicy.agentEnvironment(
+      ["OMI_YOLO_MODE": "0"], isNonProduction: false)
+    XCTAssertNil(
+      productionOff["OMI_YOLO_MODE"],
+      "an explicit =0 must also be stripped so a shipped bundle can never carry the key")
+
+    let nonProduction = AgentRuntimeCredentialPolicy.agentEnvironment(
+      inherited, isNonProduction: true)
+    XCTAssertEqual(nonProduction, inherited)
+  }
+
   func testHermeticFaultModelTokenIsNonProductionOnlyAndAvoidsFirebaseRefresh() {
     let environment = [
       AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "fault-suite-model-token"
@@ -820,6 +842,62 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(snapshot.sentOwnerId, "stale refresh must not mutate runtime owner credentials")
   }
 
+  func testConnectClaudeAsksTheRuntimeForASignInURL() {
+    // The agent runtime's `case "start_provider_auth"` answers with `auth_required`
+    // carrying a URL; a turn whose token expired produces none.
+    XCTAssertEqual(
+      AgentRuntimeProcess.providerAuthRequestWireMessage()["type"] as? String, "start_provider_auth")
+    let url = "https://claude.ai/oauth/authorize?state=s"
+    let pressed = Date(timeIntervalSince1970: 1_000)
+    XCTAssertTrue(
+      ChatProvider.opensClaudeSignIn(
+        connectRequestedAt: pressed, now: pressed.addingTimeInterval(2), authUrl: url))
+    XCTAssertFalse(ChatProvider.opensClaudeSignIn(connectRequestedAt: nil, now: pressed, authUrl: url))
+    XCTAssertFalse(ChatProvider.opensClaudeSignIn(connectRequestedAt: pressed, now: pressed, authUrl: nil))
+    // A Connect the runtime never answered must not open a later, unrelated sign-in URL.
+    XCTAssertFalse(
+      ChatProvider.opensClaudeSignIn(
+        connectRequestedAt: pressed,
+        now: pressed.addingTimeInterval(ChatProvider.claudeConnectAnswerWindow + 1),
+        authUrl: url))
+  }
+
+  func testClaudeSignInMessagePointsAtClearChatNotAMissingNewChat() {
+    // The chat-first shell has no "new chat"; Clear Chat is what moves a pinned chat
+    // onto the selected provider, so the message must not send people looking for one.
+    let message = ChatProvider.providerAuthRequiredUserMessage(isUserClaudeMode: false)
+    XCTAssertFalse(message.contains("new chat"))
+    XCTAssertTrue(message.contains("Clear the chat"))
+  }
+
+  @MainActor
+  func testClearedChatProviderMoveMigratesOnlyOnMismatchAndKeepsProviderOnRefusal() async {
+    var calls = 0
+    let same = await ChatProvider.moveSessionToSelectedProvider(pinnedAdapterId: "acp", selectedAdapterId: "acp") {
+      calls += 1
+      return "acp"
+    }
+    guard case .unchanged = same else { return XCTFail("same adapter must not migrate, got \(same)") }
+    XCTAssertEqual(calls, 0)
+
+    let moved = await ChatProvider.moveSessionToSelectedProvider(
+      pinnedAdapterId: "pi-mono", selectedAdapterId: "acp"
+    ) {
+      calls += 1
+      return "acp"
+    }
+    guard case .moved(let from, let to) = moved else { return XCTFail("mismatch must migrate, got \(moved)") }
+    XCTAssertEqual([from, to], ["pi-mono", "acp"])
+    XCTAssertEqual(calls, 1)
+
+    struct RunActive: Error {}
+    let refused = await ChatProvider.moveSessionToSelectedProvider(
+      pinnedAdapterId: "pi-mono", selectedAdapterId: "acp"
+    ) { throw RunActive() }
+    guard case .refused(let error) = refused else { return XCTFail("refusal must be kept, got \(refused)") }
+    XCTAssertTrue(error is RunActive)
+  }
+
   func testRuntimeRefreshTokenWireRequiresCapturedOwnerToRemainCurrent() {
     let authorized = AgentRuntimeProcess.modelCredentialsReadyWireMessage(
       expectedOwnerId: "owner-a",
@@ -955,14 +1033,14 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testQueryResultPreservesResponseObservedProviderTargets() async throws {
     let message = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"result","protocolVersion":2,"requestId":"req-provider","clientId":"main-chat","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done","modelsUsed":["gpt-5.6-luna"],"providerTargets":["openai-codex"]}"#
+        #"{"type":"result","protocolVersion":2,"requestId":"req-provider","clientId":"main-chat","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done","modelsUsed":["gpt-6-luna"],"providerTargets":["openai-codex"]}"#
       )
     )
 
     let bridgeResult = await AgentRuntimeProcess.shared.queryResult(from: message)
     let clientResult = AgentClient.QueryResult(bridgeResult)
 
-    XCTAssertEqual(bridgeResult.modelsUsed, ["gpt-5.6-luna"])
+    XCTAssertEqual(bridgeResult.modelsUsed, ["gpt-6-luna"])
     XCTAssertEqual(bridgeResult.providerTargets, ["openai-codex"])
     XCTAssertEqual(clientResult.providerTargets, ["openai-codex"])
   }
@@ -1169,42 +1247,6 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
-  }
-
-  func testJITQABackendTupleIsPreservedInAgentChildEnvironment() {
-    let localTuple = [
-      "OMI_PYTHON_API_URL": "http://127.0.0.1:18080",
-      "OMI_DESKTOP_API_URL": "http://127.0.0.1:18081",
-      "OMI_AUTH_API_URL": "http://127.0.0.1:18080",
-      "OMI_ENV_STAGE": "dev",
-    ]
-    let localChild = AgentRuntimeProcess.childBackendRoutingEnvironment(
-      baseEnvironment: localTuple,
-      rustBase: "http://127.0.0.1:18081"
-    )
-    XCTAssertEqual(localChild["OMI_PYTHON_API_URL"], "http://127.0.0.1:18080")
-    XCTAssertEqual(localChild["OMI_DESKTOP_API_URL"], "http://127.0.0.1:18081")
-    XCTAssertEqual(localChild["OMI_AUTH_API_URL"], "http://127.0.0.1:18080")
-    XCTAssertEqual(localChild["OMI_ENV_STAGE"], "dev")
-    XCTAssertEqual(localChild["OMI_API_BASE_URL"], "http://127.0.0.1:18081/v2")
-
-    let deployedTuple = [
-      "OMI_PYTHON_API_URL": "https://api.omiapi.com",
-      "OMI_DESKTOP_API_URL": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
-      "OMI_AUTH_API_URL": "https://api.omiapi.com",
-      "OMI_ENV_STAGE": "dev",
-    ]
-    let deployedChild = AgentRuntimeProcess.childBackendRoutingEnvironment(
-      baseEnvironment: deployedTuple,
-      rustBase: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
-    )
-    XCTAssertEqual(deployedChild["OMI_PYTHON_API_URL"], "https://api.omiapi.com")
-    XCTAssertEqual(deployedChild["OMI_AUTH_API_URL"], "https://api.omiapi.com")
-    XCTAssertEqual(
-      deployedChild["OMI_API_BASE_URL"],
-      "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/v2"
-    )
-    XCTAssertFalse(deployedChild.values.contains { $0.contains("api.omi.me") })
   }
 
   @MainActor

@@ -102,6 +102,10 @@ or third-party attestation of real kernel egress or of an OS listener:
   `/v2/sync-local-files`, not replay of captured client traffic.
 - **No LC3 codec path**: PCM16 only.
 - **No release gate**: this experiment is advisory, not merge-blocking.
+- **Language provider unavailable**: the declared `language_gate.self_detect`
+  leaf returns unavailable; production routing keeps its fallback. This prevents
+  the shadow language probe from dialing the trap provider endpoint beside the
+  deterministic STT fake. The zero-denied-egress attestation is unchanged.
 - **No independent kernel-egress attestation**: evidence is SUT-emitted; see
   Honest attestation scope above.
 - **`_tasks_client` seam**: production `_get_tasks_client()` has no endpoint

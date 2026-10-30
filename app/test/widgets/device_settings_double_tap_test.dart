@@ -1,3 +1,5 @@
+import 'package:omi/services/pending_work/pending_work_store.dart';
+import '../support/typed_conversation_screen.dart' show inertPendingWorkStore;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -24,10 +26,25 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => true;
 
   @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
+
+  @override
   BtDevice? get connectedDevice => device;
 
   @override
   BtDevice? get pairedDevice => null;
+
+  @override
+  int get batteryLevel => 0;
+
+  @override
+  bool get isCharging => false;
+
+  @override
+  bool get havingNewFirmware => false;
+
+  @override
+  String get latestStableFirmwareVersion => '';
 
   @override
   Future<void> getDeviceInfo() async {}
@@ -51,12 +68,24 @@ Widget _app(DeviceProvider provider) {
       GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: AppLocalizations.supportedLocales,
+    // The device picture pulses while connected; Reduce Motion stops it so pumpAndSettle settles.
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    ),
     home: ChangeNotifierProvider<DeviceProvider>.value(value: provider, child: const DeviceSettings()),
   );
 }
 
 void main() {
   setUp(() async {
+    final previousStore = PendingWorkStore.instance;
+    final store = inertPendingWorkStore();
+    PendingWorkStore.instance = store;
+    addTearDown(() {
+      PendingWorkStore.instance = previousStore;
+      store.dispose();
+    });
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({'doubleTapAction': 1});
     await SharedPreferencesUtil.init();

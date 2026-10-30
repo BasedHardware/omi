@@ -16,7 +16,8 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from utils.memory.maintenance_cost import estimate_pass
+from utils.llm.model_config import LUNA_MODEL  # noqa: E402
+from utils.memory.maintenance_cost import estimate_pass  # noqa: E402
 
 
 def _render(label: str, pending_l2: int, pending_consolidation: int, *, flex: bool) -> str:
@@ -45,8 +46,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--uid-pending-consolidation", type=int, default=15)
     args = parser.parse_args(argv)
 
-    print("model=gpt-5.6-luna lanes=omi:auto:memory-l2-flex,omi:auto:memory-conflict-flex service_tier=flex")
-    print("rates=short-context $0.20/M in $1.20/M out * 50% Flex; consolidation batch=20; job L2 folded")
+    print(f"model={LUNA_MODEL} lanes=omi:auto:memory-l2-flex,omi:auto:memory-conflict-flex service_tier=flex")
+    print("rates=short-context $0.10/M in $0.60/M out * 50% Flex; consolidation batch=20; job L2 folded")
     print(_render("average_user", args.average_pending_l2, args.average_pending_consolidation, flex=args.flex))
     sample = args.uid or "sample_uid"
     print(_render(sample, args.uid_pending_l2, args.uid_pending_consolidation, flex=args.flex))

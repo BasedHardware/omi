@@ -171,18 +171,19 @@ struct SpineConversation: Identifiable, Equatable {
   /// otherwise the start, which makes the window a point and attaches nothing by accident.
   var finishedAt: Date { conversation.finishedAt ?? startedAt }
 
-  var duration: TimeInterval { max(0, finishedAt.timeIntervalSince(startedAt)) }
+  /// How long the conversation's speech lasted — the same number the Conversations list and the
+  /// detail show (`ServerConversation.durationInSeconds`). The clock window (`finishedAt -
+  /// startedAt`) measures how long the capture socket had been open, so an 8-second dictation read
+  /// as 42m45s here while the list said 8s (FC-capture-session-window-read-as-content-duration).
+  var duration: TimeInterval { TimeInterval(conversation.durationInSeconds) }
 
-  var title: String {
-    let title = conversation.structured.title.trimmingCharacters(in: .whitespacesAndNewlines)
-    return title.isEmpty ? "Untitled conversation" : title
-  }
+  /// The same title every other surface shows, including its processing, locked and failed states.
+  var title: String { conversation.displayTitle }
 
-  /// The tile glyph. An empty emoji from the server would render as a blank circle, so the category
-  /// initial is not used as a fallback — a speech mark is, because every conversation is one.
+  /// The tile's emoji, or empty when the pipeline has produced none — the row then draws the
+  /// neutral waveform the Conversations list uses, rather than a 💬 that claims an identity.
   var emoji: String {
-    let emoji = conversation.structured.emoji.trimmingCharacters(in: .whitespacesAndNewlines)
-    return emoji.isEmpty ? "💬" : emoji
+    conversation.structured.emoji.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   var isStarred: Bool { conversation.starred }
@@ -768,17 +769,9 @@ enum SpineFormat {
   }
 
   /// "8m 9s", "1h 04m", "42s".
-  static func duration(_ seconds: TimeInterval) -> String {
-    let total = Int(seconds.rounded())
-    let hours = total / 3600
-    let minutes = (total % 3600) / 60
-    let secs = total % 60
-    if hours > 0 { return String(format: "%dh %02dm", hours, minutes) }
-    if minutes > 0 { return "\(minutes)m \(secs)s" }
-    return "\(secs)s"
-  }
+  static func duration(_ seconds: TimeInterval) -> String { OmiDateFormat.duration(seconds) }
 
-  static func time(_ date: Date) -> String { timeFormatter.string(from: date) }
+  static func time(_ date: Date) -> String { OmiDateFormat.time(date) }
 
   /// The longest prefix that still reads as a category rather than as the first clause of a sentence.
   /// Past this, splitting stops being a label and becomes a fold through the middle of the copy.
@@ -813,18 +806,11 @@ enum SpineFormat {
     return SpineMemoryCopy(label: label, body: body)
   }
 
-  /// "Wednesday 6 August" — and "Today" / "Yesterday" for the two days a date is the wrong answer
-  /// for, because nobody reads their own morning as a date.
+  /// "Wednesday, Sep 23" — and "Today" / "Yesterday" for the two days a date is the wrong answer
+  /// for, because nobody reads their own morning as a date. The same day header the Conversations
+  /// list uses (`OmiDateFormat.dayHeader`), in the reader's own locale.
   static func day(_ date: Date, calendar: Calendar = .current, now: Date = Date()) -> String {
-    if calendar.isDate(date, inSameDayAs: now) { return "Today" }
-    if let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)),
-      calendar.isDate(date, inSameDayAs: yesterday)
-    {
-      return "Yesterday"
-    }
-    let formatter =
-      calendar.isDate(date, equalTo: now, toGranularity: .year) ? dayFormatter : dayYearFormatter
-    return formatter.string(from: date)
+    OmiDateFormat.dayHeader(date, now: now, calendar: calendar)
   }
 
   /// The hour a rail label states: "6 AM", "12 PM".
@@ -843,21 +829,4 @@ enum SpineFormat {
     return formatter
   }()
 
-  private static let timeFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "h:mm a"
-    return formatter
-  }()
-
-  private static let dayFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "EEEE d MMMM"
-    return formatter
-  }()
-
-  private static let dayYearFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "EEEE d MMMM yyyy"
-    return formatter
-  }()
 }

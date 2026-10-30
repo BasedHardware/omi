@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import {
   FeedbackApiError,
   listReportDates,
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 // Dates that have a materialized daily thumbs-down report, newest first.
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "users:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const parsed = parseInt(
@@ -19,11 +19,11 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Math.max(Number.isNaN(parsed) ? 30 : parsed, 1), 90);
 
   try {
-    return NextResponse.json(await listReportDates(authResult.uid, limit));
+    return authResult.json(await listReportDates(authResult.uid, limit));
   } catch (error) {
     const status = error instanceof FeedbackApiError ? error.status : 502;
     console.error("Feedback report list error:", error);
-    return NextResponse.json(
+    return authResult.json(
       {
         error:
           error instanceof Error ? error.message : "Failed to list reports",

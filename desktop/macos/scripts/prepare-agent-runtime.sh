@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 AGENT_DIR="$DESKTOP_DIR/agent"
 PI_MONO_DIR="$DESKTOP_DIR/pi-mono-extension"
@@ -12,10 +12,17 @@ PI_MONO_PACKAGED_NODE_MODULES="$PACKAGED_RUNTIME_DIR/pi-mono-extension-node_modu
 CACHE_STAMP="$PACKAGED_RUNTIME_DIR/cache.stamp"
 CACHE_LOCK="$DESKTOP_DIR/.harness/agent-runtime-prepare.lock.d"
 NODE_ARCHIVE_CACHE_DIR="${OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/Library/Caches}/OmiDesktop/node-archives}"
+NODE_RUNTIME_CACHE_DIR=""
+NODE_RUNTIME_LOCK=""
+NODE_RUNTIME_TEMP=""
+LOCAL_NODE_SOURCE=""
+STAGE_NODE_STATUS=0
 
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=agent-runtime-cache.sh
 source "$SCRIPT_DIR/agent-runtime-cache.sh"
+
+NODE_RUNTIME_CACHE_DIR="$(arc_node_runtime_cache_dir "$DESKTOP_DIR")"
 
 NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.19.0}"
 NODE_MIN_VERSION="v22.19.0"
@@ -47,6 +54,16 @@ Modes:
 Local runs reuse a content-addressed, worktree-local preparation when all
 inputs and validated outputs are unchanged. Set OMI_AGENT_RUNTIME_FORCE_REBUILD=1
 to bypass it. CI and --skip-npm always prepare without reading or writing a stamp.
+
+The universal (or local) Node binary is built once per content key. The cache
+is ${XDG_CACHE_HOME:-~/Library/Caches}/OmiDesktop/node-runtime when that
+directory is on the same APFS volume as this worktree, so staging can clone.
+Otherwise it is <volume>/.omi-cache/OmiDesktop/node-runtime on the worktree's
+own volume. OMI_AGENT_RUNTIME_NODE_CACHE_DIR overrides either choice. Staging
+clones only when the shared helper says the destination can take an APFS clone;
+it never treats a cross-volume cp -c as a clone. The staged path is always a
+regular file. CI skips the shared Node cache. OMI_AGENT_RUNTIME_FORCE_REBUILD=1
+bypasses it and then publishes a fresh cache entry.
 USAGE
 }
 
@@ -527,6 +544,148 @@ NODE
   arc_remove_broken_symlinks "$PI_MONO_PACKAGED_NODE_MODULES/.bin"
 }
 
+release_node_runtime_lock() {
+  if [ -n "${NODE_RUNTIME_LOCK:-}" ]; then
+    arc_release_lock "$NODE_RUNTIME_LOCK"
+    NODE_RUNTIME_LOCK=""
+  fi
+}
+
+finalize_node_binary() {
+  local bin="$1"
+  chmod +x "$bin"
+  xattr -cr "$bin" 2>/dev/null || true
+}
+
+validate_node_binary() {
+  local bin="$1"
+  local mode="$2"
+  local expected_version="$3"
+  [ -L "$bin" ] && return 1
+  [ -f "$bin" ] && [ -x "$bin" ] || return 1
+
+  local staged_version
+  staged_version="$("$bin" --version 2>/dev/null)" || return 1
+  node_version_at_least "$staged_version" "$NODE_MIN_VERSION" || return 1
+  [ "$staged_version" = "$expected_version" ] || return 1
+  if [ "$mode" = "universal" ]; then
+    file "$bin" | grep -q "universal binary" || return 1
+    command -v lipo >/dev/null 2>&1 || return 1
+    local arches
+    arches="$(lipo -archs "$bin" 2>/dev/null)" || return 1
+    case " $arches " in *" arm64 "*) ;; *) return 1 ;; esac
+    case " $arches " in *" x86_64 "*) ;; *) return 1 ;; esac
+  fi
+}
+
+install_staged_node_from_cache() {
+  local src="$1"
+  if [ -L "$src" ] || [ ! -f "$src" ]; then
+    echo "ERROR: shared Node cache entry is not a regular file: $src" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$NODE_RESOURCE")"
+  arc_clone_or_copy_file "$src" "$NODE_RESOURCE" || {
+    echo "ERROR: failed to stage Node from $src" >&2
+    exit 1
+  }
+  if [ -L "$NODE_RESOURCE" ] || [ ! -f "$NODE_RESOURCE" ]; then
+    echo "ERROR: staged Node is not a regular file: $NODE_RESOURCE" >&2
+    exit 1
+  fi
+  finalize_node_binary "$NODE_RESOURCE"
+  if arc_same_clone "$src" "$NODE_RESOURCE"; then
+    log "Staged Node via APFS clone from $src"
+  else
+    log "Staged Node via copy from $src"
+  fi
+}
+
+# Builder writes a Node binary to the path in $1.
+# Set STAGE_NODE_STATUS=10 and return 0 when a local Node is not self-contained.
+stage_node_with_cache() {
+  local version="$1"
+  local mode="$2"
+  local material="$3"
+  local builder="$4"
+  local policy dest
+  policy="$(arc_node_runtime_cache_policy "${CI:-}" "${OMI_AGENT_RUNTIME_FORCE_REBUILD:-0}")"
+  STAGE_NODE_STATUS=0
+
+  if [ "$policy" = "direct" ]; then
+    mkdir -p "$(dirname "$NODE_RESOURCE")"
+    rm -f "$NODE_RESOURCE"
+    "$builder" "$NODE_RESOURCE"
+    if [ "$STAGE_NODE_STATUS" -eq 10 ]; then
+      rm -f "$NODE_RESOURCE"
+      return 0
+    fi
+    finalize_node_binary "$NODE_RESOURCE"
+    validate_node_binary "$NODE_RESOURCE" "$mode" "$version" || {
+      echo "ERROR: staged Node failed validation" >&2
+      exit 1
+    }
+    log "Staged $mode Node $version at $NODE_RESOURCE (shared cache skipped)"
+    return 0
+  fi
+
+  dest="$(arc_node_runtime_cache_file "$NODE_RUNTIME_CACHE_DIR" "$version" "$mode" "$material")"
+  mkdir -p "$(dirname "$dest")"
+  if [ "$policy" = "reuse" ] && validate_node_binary "$dest" "$mode" "$version"; then
+    install_staged_node_from_cache "$dest"
+    return 0
+  fi
+
+  local lock="${dest}.lock.d"
+  arc_acquire_lock "$lock" 600
+  NODE_RUNTIME_LOCK="$lock"
+  if [ "$policy" = "reuse" ] && validate_node_binary "$dest" "$mode" "$version"; then
+    release_node_runtime_lock
+    install_staged_node_from_cache "$dest"
+    return 0
+  fi
+
+  local dir temp
+  dir="$(dirname "$dest")"
+  mkdir -p "$dir"
+  temp="$(mktemp "$dir/.node.XXXXXX")"
+  rm -f "$temp"
+  NODE_RUNTIME_TEMP="$temp"
+  "$builder" "$temp"
+  if [ "$STAGE_NODE_STATUS" -eq 10 ]; then
+    rm -f "$temp"
+    NODE_RUNTIME_TEMP=""
+    release_node_runtime_lock
+    return 0
+  fi
+  finalize_node_binary "$temp"
+  if ! validate_node_binary "$temp" "$mode" "$version"; then
+    rm -f "$temp"
+    NODE_RUNTIME_TEMP=""
+    release_node_runtime_lock
+    echo "ERROR: built Node failed validation before cache publish" >&2
+    exit 1
+  fi
+  # Publish by rename in the cache directory so readers never see a partial binary.
+  mv -f "$temp" "$dest"
+  NODE_RUNTIME_TEMP=""
+  release_node_runtime_lock
+  install_staged_node_from_cache "$dest"
+}
+
+build_local_node_into() {
+  local output="$1"
+  cp -f "$LOCAL_NODE_SOURCE" "$output"
+  chmod +x "$output"
+  xattr -cr "$output" 2>/dev/null || true
+  # Homebrew's node is a stub dynamically linked to libnode.dylib via @rpath,
+  # so the copied binary aborts at startup outside its install prefix.
+  if ! "$output" --version >/dev/null 2>&1; then
+    STAGE_NODE_STATUS=10
+    return 0
+  fi
+}
+
 stage_unsafe_local_node() {
   local node_bin
   node_bin="$(command -v node || true)"
@@ -542,26 +701,17 @@ stage_unsafe_local_node() {
     exit 1
   fi
 
-  mkdir -p "$(dirname "$NODE_RESOURCE")"
-  cp -f "$node_bin" "$NODE_RESOURCE"
-  chmod +x "$NODE_RESOURCE"
-  xattr -cr "$NODE_RESOURCE" 2>/dev/null || true
-
-  # Homebrew's node is a stub dynamically linked to libnode.dylib via @rpath,
-  # so the copied binary aborts at startup outside its install prefix. Fall back
-  # to the self-contained official build when the staged copy can't run alone.
-  local staged_version
-  if ! staged_version="$("$NODE_RESOURCE" --version 2>/dev/null)"; then
+  local source_sha material
+  source_sha="$(arc_sha256_file "$node_bin")"
+  material="$(printf 'schema=1\nmode=local\nversion=%s\nsource=%s\n' "$node_version" "$source_sha")"
+  LOCAL_NODE_SOURCE="$node_bin"
+  stage_node_with_cache "$node_version" "local" "$material" build_local_node_into
+  if [ "$STAGE_NODE_STATUS" -eq 10 ]; then
     log "Unsafe local Node at $node_bin is not self-contained (dynamically linked, e.g. Homebrew); falling back to official Node $NODE_VERSION download"
-    rm -f "$NODE_RESOURCE"
     stage_universal_node
     return
   fi
-  if ! node_version_at_least "$staged_version" "$NODE_MIN_VERSION"; then
-    echo "ERROR: staged Node $staged_version is below required $NODE_MIN_VERSION" >&2
-    exit 1
-  fi
-  log "Staged unsafe local Node $staged_version from $node_bin"
+  log "Staged unsafe local Node $node_version from $node_bin"
 }
 
 download_node_archive() {
@@ -603,31 +753,32 @@ download_node_archive() {
   arc_release_lock "$cache_lock"
 }
 
-stage_universal_node() {
-  local temp_dir
+build_universal_node_into() {
+  local output="$1"
+  local temp_dir arm64_node x64_node
   temp_dir="$(mktemp -d /tmp/omi-node-universal-XXXXXX)"
   PREP_TEMP_DIR="$temp_dir"
 
   download_node_archive "arm64" "$NODE_DARWIN_ARM64_SHA256" "$temp_dir/arm64.tar.gz"
   tar -xzf "$temp_dir/arm64.tar.gz" -C "$temp_dir"
-  local arm64_node="$temp_dir/node-$NODE_VERSION-darwin-arm64/bin/node"
+  arm64_node="$temp_dir/node-$NODE_VERSION-darwin-arm64/bin/node"
   require_executable "$arm64_node"
 
   download_node_archive "x64" "$NODE_DARWIN_X64_SHA256" "$temp_dir/x64.tar.gz"
   tar -xzf "$temp_dir/x64.tar.gz" -C "$temp_dir"
-  local x64_node="$temp_dir/node-$NODE_VERSION-darwin-x64/bin/node"
+  x64_node="$temp_dir/node-$NODE_VERSION-darwin-x64/bin/node"
   require_executable "$x64_node"
 
-  mkdir -p "$(dirname "$NODE_RESOURCE")"
-  lipo -create "$arm64_node" "$x64_node" -output "$NODE_RESOURCE"
-  chmod +x "$NODE_RESOURCE"
-  xattr -cr "$NODE_RESOURCE" 2>/dev/null || true
-  file "$NODE_RESOURCE" | grep -q "universal binary" || {
-    echo "ERROR: staged Node is not universal: $(file "$NODE_RESOURCE")" >&2
-    exit 1
-  }
+  lipo -create "$arm64_node" "$x64_node" -output "$output"
   rm -rf "$temp_dir"
   PREP_TEMP_DIR=""
+}
+
+stage_universal_node() {
+  local material
+  material="$(printf 'schema=1\nmode=universal\nversion=%s\narm64=%s\nx64=%s\n' \
+    "$NODE_VERSION" "$NODE_DARWIN_ARM64_SHA256" "$NODE_DARWIN_X64_SHA256")"
+  stage_node_with_cache "$NODE_VERSION" "universal" "$material" build_universal_node_into
   log "Staged universal Node $NODE_VERSION at $NODE_RESOURCE"
 }
 
@@ -743,11 +894,19 @@ compute_output_digest() {
 }
 
 cleanup() {
-  if [ -n "$PREP_TEMP_DIR" ]; then
+  if [ -n "${NODE_RUNTIME_TEMP:-}" ]; then
+    rm -f "$NODE_RUNTIME_TEMP"
+  fi
+  if [ -n "${PREP_TEMP_DIR:-}" ]; then
     rm -rf "$PREP_TEMP_DIR"
   fi
+  release_node_runtime_lock
   arc_release_lock "$CACHE_LOCK"
 }
+
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+  return 0
+fi
 
 mkdir -p "$DESKTOP_DIR/.harness"
 arc_acquire_lock "$CACHE_LOCK" "${OMI_AGENT_RUNTIME_LOCK_TIMEOUT:-600}"

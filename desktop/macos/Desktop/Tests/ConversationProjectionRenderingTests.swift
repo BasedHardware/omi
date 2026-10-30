@@ -3,6 +3,23 @@ import XCTest
 @testable import Omi_Computer
 
 final class ConversationProjectionRenderingTests: XCTestCase {
+  func testNullVisibilityDoesNotRejectConversationPage() throws {
+    let ordinary = try ProjectionRenderingFixture.decode()
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let encoded = try encoder.encode(ordinary)
+    var row = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    row["visibility"] = NSNull()
+    let normal = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let page = try decoder.decode(
+      [ServerConversation].self,
+      from: JSONSerialization.data(withJSONObject: [normal, row]))
+    XCTAssertEqual(page.count, 2)
+    XCTAssertEqual(page[1].visibility, "private")
+  }
+
   func testValidProjectionReplacesMinimumAndKeepsAttribution() throws {
     let conversation = try ProjectionRenderingFixture.decode()
     XCTAssertEqual(conversation.title, "On-device title")
@@ -18,6 +35,20 @@ final class ConversationProjectionRenderingTests: XCTestCase {
     XCTAssertEqual(conversation.localSummary?.generatedAt, "2026-09-18T00:00:00Z")
     XCTAssertEqual(conversation.localSummary?.transcriptVerified, true)
     XCTAssertEqual(conversation.localSummary?.schemaVersion, 1)
+  }
+
+  func testProjectionWithoutEmojiRendersNeutralFallback() throws {
+    // A server-stamped projection may omit the emoji (the backend applies the
+    // category fallback); a null/absent value must render 💬, never the old 🧠.
+    let conversation = try ProjectionRenderingFixture.decode {
+      var projection = ProjectionRenderingFixture.object($0, "client_processing")
+      var structure = ProjectionRenderingFixture.object(projection, "structure")
+      structure.removeValue(forKey: "emoji")
+      projection["structure"] = structure
+      $0["client_processing"] = projection
+    }
+    XCTAssertEqual(conversation.title, "On-device title")
+    XCTAssertEqual(conversation.structured.emoji, "💬")
   }
 
   func testLegacyConversationWithoutProjectionKeepsCanonicalStructure() throws {

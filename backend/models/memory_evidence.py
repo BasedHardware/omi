@@ -60,6 +60,50 @@ class ArtifactRef(BaseModel):
         return value
 
 
+# Every MemoryEvidence field belongs to exactly one class; a unit test fails on
+# an unclassified field. Identity names the source artifact an evidence_id
+# stands for, so a reused id must agree on it. Metadata describes how the source
+# was captured and may be absent on records written before the field existed,
+# so it never decides identity. State changes over the evidence lifecycle.
+EVIDENCE_IDENTITY_FIELDS = frozenset(
+    {
+        "evidence_id",
+        "source_type",
+        "source_id",
+        "source_version",
+        "conversation_id",
+        "artifact_refs",
+        "quote_refs",
+        "content_hash",
+        "lineage_id",
+        "client_device_id",
+    }
+)
+EVIDENCE_METADATA_FIELDS = frozenset(
+    {
+        "captured_at",
+        "source_signal",
+        "extractor_id",
+        "extractor_version",
+        "capture_confidence",
+        "independence_group",
+        "attribution",
+    }
+)
+EVIDENCE_STATE_FIELDS = frozenset(
+    {
+        "artifact_preservation",
+        "source_state",
+        "source_state_reason",
+        "provenance_visibility",
+        "redaction_status",
+        "encryption_or_redaction_status",
+        "patch_id",
+        "commit_id",
+    }
+)
+
+
 class MemoryEvidence(BaseModel):
     evidence_id: str
     source_type: str

@@ -1,0 +1,171 @@
+name: Firestore index readiness
+
+description: >-
+  Gate a deploy on every composite and field index required by the admitted
+  source being READY in the target Firestore database. Read-only: it never
+  provisions. On failure it emits a locally revalidated, bounded schema
+  proposal artifact for the human-owned gcp_firestore_indexes.yml lane.
+
+inputs:
+  source_sha:
+    description: Full 40-character lowercase non-zero commit SHA whose firestore.indexes.json and index registry are authoritative
+    required: true
+  project_id:
+    description: Runtime GCP project that owns the target Firestore database
+    required: true
+  database:
+    description: Firestore database id
+    required: false
+    default: '(default)'
+  credentials_json:
+    description: Read-only Firestore service account credentials (secrets.GCP_FIRESTORE_READONLY_CREDENTIALS)
+    required: true
+  verify_credential_project:
+    description: Set to 'true' to also require the credential's selected project to equal project_id
+    required: false
+    default: 'false'
+  artifact_suffix:
+    description: Optional suffix disambiguating the proposal artifact when one run gates more than once
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Validate Firestore readiness inputs
+      shell: bash
+      env:
+        FIRESTORE_SOURCE_SHA: ${{ inputs.source_sha }}
+        FIRESTORE_PROJECT_ID: ${{ inputs.project_id }}
+        FIRESTORE_DATABASE: ${{ inputs.database }}
+        GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ inputs.credentials_json }}
+      run: |
+        set -euo pipefail
+        if [[ ! "$FIRESTORE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ || "$FIRESTORE_SOURCE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+          echo "::error title=Invalid Firestore source SHA::source_sha must be one non-zero, lowercase, full commit SHA."
+          exit 1
+        fi
+        if [ -z "$FIRESTORE_PROJECT_ID" ]; then
+          echo "::error title=Missing Firestore project::Set the runtime GCP project id input before deploying."
+          exit 1
+        fi
+        if [ -z "$FIRESTORE_DATABASE" ]; then
+          echo "::error title=Missing Firestore database::Set the target Firestore database id before deploying."
+          exit 1
+        fi
+        if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then
+          echo "::error title=Missing Firestore read-only credentials::Set GCP_FIRESTORE_READONLY_CREDENTIALS in the selected environment before deploying."
+          exit 1
+        fi
+
+    - name: Checkout admitted Firestore source
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.source_sha }}
+        path: .github/firestore-source
+        persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: backend/database
+
+    - name: Verify admitted Firestore source identity
+      shell: bash
+      env:
+        FIRESTORE_SOURCE_SHA: ${{ inputs.source_sha }}
+      run: |
+        set -euo pipefail
+        checked_sha="$(git -C "${GITHUB_WORKSPACE}/.github/firestore-source" rev-parse 'HEAD^{commit}')"
+        if [[ "$checked_sha" != "$FIRESTORE_SOURCE_SHA" ]]; then
+          echo "::error title=Firestore source mismatch::Checked-out source $checked_sha does not match the admitted source $FIRESTORE_SOURCE_SHA."
+          exit 1
+        fi
+
+    - name: Google Auth for read-only Firestore inventory
+      id: firestore-readonly-auth
+      uses: google-github-actions/auth@v3
+      with:
+        credentials_json: ${{ inputs.credentials_json }}
+        export_environment_variables: false
+        create_credentials_file: true
+
+    - name: Set up gcloud
+      uses: google-github-actions/setup-gcloud@v3
+      env:
+        CLOUDSDK_CONFIG: ${{ runner.temp }}/firestore-readiness-cloudsdk
+        CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.firestore-readonly-auth.outputs.credentials_file_path }}
+
+    - name: Verify read-only Firestore credentials target the runtime project
+      if: inputs.verify_credential_project == 'true'
+      shell: bash
+      env:
+        CLOUDSDK_CONFIG: ${{ runner.temp }}/firestore-readiness-cloudsdk
+        CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.firestore-readonly-auth.outputs.credentials_file_path }}
+        CLOUDSDK_CORE_PROJECT: ${{ steps.firestore-readonly-auth.outputs.project_id }}
+        RUNTIME_GCP_PROJECT_ID: ${{ inputs.project_id }}
+      run: |
+        set -euo pipefail
+        credential_project="$(gcloud config get-value project 2>/dev/null)"
+        if [[ -z "$credential_project" || "$credential_project" == "(unset)" ]]; then
+          echo "::error title=Missing Firestore credential project::The read-only Firestore credentials do not select a GCP project."
+          exit 1
+        fi
+        if [[ "$credential_project" != "$RUNTIME_GCP_PROJECT_ID" ]]; then
+          echo "::error title=Firestore project mismatch::Read-only Firestore credentials target $credential_project, but the runtime project is $RUNTIME_GCP_PROJECT_ID."
+          exit 1
+        fi
+
+    - name: Verify serving Firestore indexes
+      id: firestore_readiness
+      shell: bash
+      env:
+        CLOUDSDK_CONFIG: ${{ runner.temp }}/firestore-readiness-cloudsdk
+        CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.firestore-readonly-auth.outputs.credentials_file_path }}
+        CLOUDSDK_CORE_PROJECT: ${{ steps.firestore-readonly-auth.outputs.project_id }}
+        FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}${{ inputs.artifact_suffix }}.json
+        FIRESTORE_SOURCE_COMMIT: ${{ inputs.source_sha }}
+        FIRESTORE_WORKFLOW_ROOT: ${{ github.action_path }}/../../..
+        FIRESTORE_SOURCE_ROOT: ${{ github.workspace }}/.github/firestore-source
+      run: |
+        set -euo pipefail
+        if ! python3 "${FIRESTORE_WORKFLOW_ROOT}/backend/scripts/reconcile_firestore_indexes.py" \
+          --manifest "${FIRESTORE_SOURCE_ROOT}/firestore.indexes.json" \
+          --source-root "${FIRESTORE_SOURCE_ROOT}" \
+          --project "${{ inputs.project_id }}" \
+          --database "${{ inputs.database }}" \
+          --check-only \
+          --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
+          --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+          --proposal-ttl-seconds 3600; then
+          echo "::error title=Firestore index readiness failed::The admitted source requires indexes that are not READY in ${{ inputs.project_id }}/${{ inputs.database }}. Apply the revalidated proposal artifact through gcp_firestore_indexes.yml; see backend/docs/runbooks/firestore-missing-index.md."
+          exit 1
+        fi
+
+    - name: Validate blocked Firestore schema proposal
+      id: validate_firestore_proposal
+      if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
+      shell: bash
+      env:
+        FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}${{ inputs.artifact_suffix }}.json
+        FIRESTORE_SOURCE_COMMIT: ${{ inputs.source_sha }}
+        FIRESTORE_WORKFLOW_ROOT: ${{ github.action_path }}/../../..
+        FIRESTORE_SOURCE_ROOT: ${{ github.workspace }}/.github/firestore-source
+      run: |
+        set -euo pipefail
+        python3 "${FIRESTORE_WORKFLOW_ROOT}/backend/scripts/reconcile_firestore_indexes.py" \
+          --manifest "${FIRESTORE_SOURCE_ROOT}/firestore.indexes.json" \
+          --source-root "${FIRESTORE_SOURCE_ROOT}" \
+          --project "${{ inputs.project_id }}" \
+          --database "${{ inputs.database }}" \
+          --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
+          --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+          --proposal-ttl-seconds 3600
+
+    - name: Preserve blocked Firestore schema proposal
+      if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
+      uses: actions/upload-artifact@v7
+      env:
+        FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}${{ inputs.artifact_suffix }}.json
+      with:
+        name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}${{ inputs.artifact_suffix }}
+        path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
+        if-no-files-found: error
+        retention-days: 1

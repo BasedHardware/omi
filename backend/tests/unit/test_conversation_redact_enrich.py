@@ -25,10 +25,10 @@ def _ensure_stub(name):
 # Stub database chain so render.py can import at module level without Firestore
 _ensure_stub("database")
 sys.modules["database"].__path__ = getattr(sys.modules["database"], "__path__", [])
-for _sub in ["_client", "redis_db", "users", "folders"]:
+for _sub in ["_client", "redis_db", "users", "folders", "auth"]:
     _ensure_stub(f"database.{_sub}")
 sys.modules["database._client"].db = MagicMock()
-sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "TestUser"})
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="TestUser")
 sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
 sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
 
@@ -216,6 +216,21 @@ class TestRedactForIntegration:
         results = redact_conversations_for_integration(convs)
         assert results[0]['structured']['title'] == ''
         assert results[1]['structured']['title'] == "Test Title"
+
+    def test_strips_internal_audio_evidence_from_segments(self):
+        conv = _make_conv_dict(is_locked=False)
+        conv['transcript_segments'] = [
+            {
+                'text': 'hi',
+                'audio_capture_start': 1.0,
+                'audio_capture_end': 2.0,
+                'audio_source': {'type': 'sync', 'start': 1.0, 'end': 2.0},
+            }
+        ]
+        result = redact_conversation_for_integration(conv)
+        segment = result['transcript_segments'][0]
+        for field in ('audio_capture_start', 'audio_capture_end', 'audio_source'):
+            assert field not in segment
 
 
 class TestSerializeDatetimes:

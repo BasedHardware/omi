@@ -153,11 +153,12 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
   }
 
   private func button(
-    _ systemImage: String, state: HomeStatusState, showsDot: Bool = true, isSelected: Bool = false
+    _ systemImage: String, state: HomeStatusState, showsDot: Bool = true, isSelected: Bool = false,
+    badge: String? = nil
   ) -> some View {
     ShellStatusIconButton(
       systemImage: systemImage, tooltip: "probe", state: state, showsDot: showsDot,
-      isSelected: isSelected, action: {})
+      isSelected: isSelected, badge: badge, action: {})
   }
 
   /// Everything one control draws in one state, with the badge suppressed: the base glyph, plus the
@@ -307,13 +308,27 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
 
   /// The colour at the centre of the dot — the fill, which is what names the state.
   private func dotCentre(_ rep: NSBitmapImageRep, dot: [(Pixel, NSColor)]) throws -> NSColor {
+    try dotSample(rep, dot: dot, offset: 0)
+  }
+
+  /// The colour `offset` points right of the dot's centre. At the middle of the armed band this is
+  /// the band's colour, which is what separates armed from off: both have a hollow centre.
+  private func dotSample(_ rep: NSBitmapImageRep, dot: [(Pixel, NSColor)], offset: CGFloat) throws
+    -> NSColor
+  {
     let xs = dot.map(\.0.x)
     let ys = dot.map(\.0.y)
     guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else {
       return try XCTUnwrap(nil as NSColor?, "the dot drew nothing")
     }
-    return try XCTUnwrap(
-      rep.colorAt(x: (minX + maxX) / 2, y: (minY + maxY) / 2)?.usingColorSpace(.sRGB))
+    let scale = CGFloat(rep.pixelsWide) / Self.canvas.width
+    let x = (minX + maxX) / 2 + Int((offset * scale).rounded())
+    return try XCTUnwrap(rep.colorAt(x: x, y: (minY + maxY) / 2)?.usingColorSpace(.sRGB))
+  }
+
+  /// Where the armed band's middle sits, measured from the dot's centre.
+  private static var armedBandMiddle: CGFloat {
+    ShellStatusDot.diameter / 2 - ShellStatusDot.armedBand / 2
   }
 
   // MARK: - The dot is the readout, so the dot has to be readable
@@ -325,7 +340,7 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
   /// tooltip nobody hovers.
   func testEveryStateOfTheDotClearsTheNonTextContrastBarOnBothDesktops() throws {
     for desktop in Desktop.allCases {
-      for state in [HomeStatusState.active, .inactive, .blocked] {
+      for state in [HomeStatusState.active, .armed, .inactive, .blocked] {
         let dot = try dotRender(ShellStatusGlyph.listening, state: state, over: desktop)
         let mark = try XCTUnwrap(
           strongest(dot.marks, over: desktop),
@@ -368,6 +383,38 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
           \(desktop.rawValue) desktop — two names for one glance.
           """)
       }
+    }
+  }
+
+  /// **Armed is its own glance.** Only Meetings waiting for a call used to wear the recording dot, so
+  /// green meant both "recording" and "waiting". Armed now has a hollow centre inside a green band:
+  /// its centre must differ from recording's (and blocked's), and its band must differ from off's at
+  /// the same spot, by the same ΔE 25 the other states are held to.
+  func testArmedIsDistinguishableFromRecordingOffAndBlocked() throws {
+    for desktop in Desktop.allCases {
+      let armed = try dotRender(ShellStatusGlyph.listening, state: .armed, over: desktop)
+      let armedCentre = try dotCentre(armed.rep, dot: armed.marks)
+      for other in [HomeStatusState.active, .blocked] {
+        let render = try dotRender(ShellStatusGlyph.listening, state: other, over: desktop)
+        let difference = deltaE(armedCentre, try dotCentre(render.rep, dot: render.marks))
+        XCTAssertGreaterThanOrEqual(
+          difference, 25,
+          """
+          armed and \(other) dots differ at the centre by ΔE \(String(format: "%.1f", difference)) \
+          over a \(desktop.rawValue) desktop. Green-filled has to mean recording now.
+          """)
+      }
+
+      let off = try dotRender(ShellStatusGlyph.listening, state: .inactive, over: desktop)
+      let armedBand = try dotSample(armed.rep, dot: armed.marks, offset: Self.armedBandMiddle)
+      let offBand = try dotSample(off.rep, dot: off.marks, offset: Self.armedBandMiddle)
+      let bandDifference = deltaE(armedBand, offBand)
+      XCTAssertGreaterThanOrEqual(
+        bandDifference, 25,
+        """
+        armed and off dots differ in the band by ΔE \(String(format: "%.1f", bandDifference)) over \
+        a \(desktop.rawValue) desktop. Armed is switched on and has to read that way.
+        """)
     }
   }
 
@@ -515,6 +562,58 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
     }
   }
 
+  /// Armed is switched on, so its glyph is the running glyph: no off-slash, nothing else moved.
+  func testArmedWearsNoOffSlash() throws {
+    for desktop in Desktop.allCases {
+      let running = try render(
+        button(ShellStatusGlyph.listening, state: .active, showsDot: false, isSelected: true),
+        over: desktop)
+      let armed = try render(
+        button(ShellStatusGlyph.listening, state: .armed, showsDot: false, isSelected: true),
+        over: desktop)
+      let moved = movement(running, armed)
+      XCTAssertTrue(
+        moved.pixels.isEmpty,
+        "armed moved \(moved.pixels.count) glyph pixels over a \(desktop.rawValue) desktop; "
+          + "only the dot may tell it from recording")
+    }
+  }
+
+  /// **The mode badge is laid against the mic, never in place of it.** Only Meetings used to swap
+  /// the mic for `person.2.fill`; now it adds a small handset. The mic's own pixels must survive
+  /// (the clearance punched around the badge may take a few), and the badge must be a visible mark.
+  func testTheOnlyMeetingsBadgeKeepsTheMicAndIsLegible() throws {
+    let badge = try XCTUnwrap(ShellStatusGlyph.listeningBadge(for: .onlyMeetings))
+    for desktop in Desktop.allCases {
+      for state in [HomeStatusState.active, .armed, .inactive] {
+        let plainRep = try render(
+          button(ShellStatusGlyph.listening, state: state, showsDot: false, isSelected: true),
+          over: desktop)
+        let badgedRep = try render(
+          button(
+            ShellStatusGlyph.listening, state: state, showsDot: false, isSelected: true,
+            badge: badge),
+          over: desktop)
+        let plain = Set(marks(plainRep, over: desktop).map(\.0))
+        let badgedMarks = marks(badgedRep, over: desktop)
+        let badged = Set(badgedMarks.map(\.0))
+        let context = "the Only Meetings badge over a \(desktop.rawValue) desktop while \(state)"
+
+        let lost = plain.subtracting(badged)
+        XCTAssertLessThanOrEqual(
+          CGFloat(lost.count), CGFloat(plain.count) * 0.12,
+          "\(context) erased \(lost.count) of the mic's \(plain.count) pixels; the mode must not redraw the name")
+
+        let added = badgedMarks.filter { !plain.contains($0.0) }
+        XCTAssertGreaterThan(added.count, 0, "\(context) drew nothing")
+        let mark = try XCTUnwrap(strongest(added, over: desktop), "\(context) drew nothing")
+        let ratio = contrast(mark, ground(over: desktop))
+        XCTAssertGreaterThanOrEqual(
+          ratio, 3.0, "\(context) measures \(String(format: "%.2f", ratio)):1, under the 3:1 bar")
+      }
+    }
+  }
+
   /// **Off has to read as off on both controls, over any wallpaper.** The reported symptom was that a
   /// coloured dot alone does not say "this is switched off" — so the slash is the readout now, and a
   /// slash under the non-text bar is the same non-report the dot was.
@@ -595,8 +694,8 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
   /// Asserts the property rather than the prose: every state of both controls opens with the
   /// capability's name, so no future state can be added that forgets to.
   func testEveryTooltipOpensWithTheNameOfItsCapability() {
-    for state in [HomeStatusState.active, .inactive, .blocked] {
-      let audio = ShellStatusTooltip.audio(state: state, mode: "In meeting", next: "Off")
+    for state in [HomeStatusState.active, .armed, .inactive, .blocked] {
+      let audio = ShellStatusTooltip.audio(state: state, mode: "In Meeting")
       XCTAssertTrue(
         audio.hasPrefix("Audio"),
         """
@@ -613,48 +712,12 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
     }
   }
 
-  /// Naming the capability must not cost the qualifier. "Listening" with no mode is a claim the
-  /// meetings-only mode does not actually make, so the mode still has to survive into the sentence.
+  /// Naming the capability must not cost the qualifier: the mode still has to survive into the
+  /// sentence, or "recording" overclaims what the meetings-only mode does.
   func testTheRunningAudioTooltipStillCarriesItsCaptureMode() {
-    let tooltip = ShellStatusTooltip.audio(state: .active, mode: "Meetings only", next: "Off")
+    let tooltip = ShellStatusTooltip.audio(state: .active, mode: "Meetings only")
     XCTAssertTrue(
       tooltip.contains("Meetings only"),
-      """
-      the running audio tooltip reads "\(tooltip)" and has dropped its capture mode — unqualified \
-      "listening" overclaims whenever the mode is armed rather than live.
-      """)
-  }
-
-  /// An armed Only Meetings wait is on — green dot, no slash — while nothing is transcribed yet, so
-  /// its sentence says the mic opens on a call rather than claiming "listening", "off", or "start".
-  func testTheAwaitingMeetingAudioTooltipSaysRecordingStartsOnACall() {
-    let tooltip = ShellStatusTooltip.audio(
-      state: .active, mode: "Only Meetings", isAwaitingMeeting: true,
-      next: CaptureListeningLogic.audioRecordingModeTitle(
-        CaptureListeningLogic.nextAudioRecordingMode(after: .onlyMeetings)))
-    XCTAssertTrue(tooltip.hasPrefix("Audio"))
-    XCTAssertTrue(tooltip.contains("call"))
-    XCTAssertTrue(tooltip.contains("Only Meetings"))
-    XCTAssertTrue(tooltip.contains("Click for Off"))
-    XCTAssertFalse(tooltip.contains("listening"), "nothing is transcribed while the mic waits for a call")
-    XCTAssertFalse(
-      tooltip.contains("Click to start"),
-      "An armed Only Meetings wait is not off; clicking turns listening off, it does not start it.")
-  }
-
-  /// The armed wait can outlive a revoked microphone grant. Promising that recording starts on the
-  /// next call would then be false, so the sentence names the missing grant instead, and still says
-  /// where a click goes, because from Only Meetings a click turns listening off without prompting.
-  func testTheAwaitingMeetingAudioTooltipNamesTheMissingMicrophoneGrant() {
-    let tooltip = ShellStatusTooltip.audio(
-      state: .active, mode: "Only Meetings", isAwaitingMeeting: true, next: "Off",
-      hasMicrophonePermission: false)
-    XCTAssertTrue(tooltip.hasPrefix("Audio"))
-    XCTAssertTrue(tooltip.localizedCaseInsensitiveContains("microphone"), "it has to say what is missing: \(tooltip)")
-    XCTAssertTrue(tooltip.contains("Only Meetings"))
-    XCTAssertTrue(tooltip.contains("click for Off"))
-    XCTAssertFalse(
-      tooltip.contains("Recording starts"),
-      "without the grant no call can be recorded, so the tooltip must not promise one: \(tooltip)")
+      "the running audio tooltip reads \"\(tooltip)\" and has dropped its capture mode")
   }
 }

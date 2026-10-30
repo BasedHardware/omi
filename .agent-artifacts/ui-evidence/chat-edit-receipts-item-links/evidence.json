@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-chat-edit-receipts-dark.png",
+      "platform": "mobile-ios",
+      "description": "Chat edit receipts, dark: task, memory (undone), conversation, person (not undoable), unknown kind",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-chat-edit-receipts-after-undo.png",
+      "platform": "mobile-ios",
+      "description": "Same receipts after tapping Undo on the first one",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-chat-edit-receipts-light.png",
+      "platform": "mobile-ios",
+      "description": "Chat edit receipts, light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-web-item-link-fallback-iphone.png",
+      "platform": "web",
+      "description": "h.omi.me/conversation/<id> fallback on an iPhone without the app",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-web-item-link-fallback-desktop.png",
+      "platform": "web",
+      "description": "h.omi.me/task/<id> fallback on desktop",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

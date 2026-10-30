@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-read-projection-omits-visibility-field",
+  "violated_contract": "A read that selects a Firestore field mask and then applies a shared visibility predicate in Python must select every field that predicate reads. A field outside the mask comes back absent, and the predicate reads an absent hide flag as visible, so the projected reader shows rows that every full-document reader hides, with no error. Dream's merge_conversations cleanup (#21480) folds a duplicate capture by writing dream_duplicate_of, which is_visible_conversation hides; the row stays discarded == False, so only that check can hide it. MCP_CONVERSATION_CARD_FIELD_PATHS predates the field and never selected it, so the hosted MCP get_conversations tool, GET /v1/mcp/conversations, the Developer API card list and projected search hydration returned both captures, while the app list and the Developer API transcript path hid the duplicate.",
+  "canonical_prevention": "Select the visibility predicate's inputs in every field mask that feeds it, and drive each projected reader with a fake that applies the mask the way Firestore does. A fake that returns whole documents passes even when the mask drops a hide flag; a masking fake shows the hidden row coming back.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_mcp_conversation_cards_dream_duplicates.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/conversations.py",
+    "backend/database/mcp_conversation_pages.py"
+  ],
+  "status": "open"
+}

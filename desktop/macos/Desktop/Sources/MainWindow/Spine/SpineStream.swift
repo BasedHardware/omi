@@ -454,8 +454,8 @@ struct SpineEmptyCopy: Equatable, Sendable {
     switch kind {
     case .everything: return "Conversations, memories, tasks and screen moments appear here as they happen."
     case .conversations: return "Conversations appear here once Omi has heard one."
-    case .memories: return "Memories appear here as Omi learns things worth keeping."
-    case .tasks: return "Tasks you add or Omi extracts appear here."
+    case .memories: return "Memories appear here as Omi learns about you from your conversations and screen."
+    case .tasks: return "Tasks you add, or that Omi finds in your conversations, appear here."
     case .screen: return "Screen moments appear here while screen capture is on."
     }
   }
@@ -566,9 +566,8 @@ struct SpineDayHeader: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .onHover { hovering in
+    .pointingHandOnHover { hovering in
       isHovering = hovering
-      if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
     }
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isButton)

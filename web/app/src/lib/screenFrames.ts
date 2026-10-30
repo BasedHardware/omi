@@ -97,3 +97,50 @@ export function isFrameSetEmpty(
 ): boolean {
   return !set || (!set.banner && (set.strip ?? []).length === 0);
 }
+
+/** Refetch this long before the earliest signed URL expires (they last 60 min). */
+export const FRAME_URL_REFRESH_MARGIN_MS = 2 * 60 * 1000;
+
+/**
+ * Never schedule refetches closer than this. A client clock running an hour
+ * fast would otherwise read every fresh set as already expired and loop.
+ */
+export const MIN_FRAME_REFRESH_INTERVAL_MS = 30 * 1000;
+
+/**
+ * Milliseconds until the set's signed URLs should be refreshed (0 = now), or
+ * null when there is nothing to refresh. Every frame's `content_url` and
+ * `thumbnail_url` stop working at its `url_expires_at`; a panel left open past
+ * that would otherwise show broken images. A frame without a parseable expiry
+ * counts as due.
+ */
+export function msUntilFrameUrlRefresh(
+  set: ConversationScreenFrameSet | null | undefined,
+  nowMs: number,
+  marginMs: number = FRAME_URL_REFRESH_MARGIN_MS,
+): number | null {
+  const frames = buildLightboxFrames(set);
+  if (frames.length === 0) return null;
+  let earliest = Infinity;
+  for (const frame of frames) {
+    const expiresAt = Date.parse(frame.url_expires_at);
+    earliest = Math.min(earliest, Number.isFinite(expiresAt) ? expiresAt : 0);
+  }
+  return Math.max(0, earliest - marginMs - nowMs);
+}
+
+/** Upper bound on the wait between renewal retries after repeated misses. */
+export const MAX_FRAME_REFRESH_BACKOFF_MS = 5 * 60 * 1000;
+
+/**
+ * Minimum gap between renewal attempts after `misses` consecutive renewals
+ * that adopted nothing: the base interval, doubling per miss, capped. Never
+ * infinite, so signed URLs are always eventually renewed.
+ */
+export function frameUrlRetryFloorMs(misses: number): number {
+  const steps = Math.max(0, Math.min(misses, 10));
+  return Math.min(
+    MIN_FRAME_REFRESH_INTERVAL_MS * 2 ** steps,
+    MAX_FRAME_REFRESH_BACKOFF_MS,
+  );
+}

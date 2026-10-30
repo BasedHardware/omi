@@ -1,12 +1,18 @@
 """Narrow Firestore transaction fixture for ordering-sensitive unit tests.
 
 This fixture models document-reference ``get(transaction=...)`` plus transaction
-``create``, ``set``, and ``update``. It enforces Firestore's rule that every
+``create``, ``set``, and ``update``, plus the emulator-proven People
+generation merge increment. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
+
+Parent reference navigation preserves the owning store and performs no IO.
 
 It also supports the direct-document is_locked projection used at dispatch,
 and equality-only, document-id projections with a positive limit,
 proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
+Projected client BatchGet of folder membership is covered by
+test_folder_delete_concurrency_emulator.py; all of its reads obey the same
+read-before-write rule. BatchGet does not promise request-order results.
 It deliberately does not model other queries, deletes, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
 one of those boundaries needs a hermetic guard.
@@ -22,6 +28,8 @@ from copy import deepcopy
 from threading import RLock
 from typing import Any
 
+from google.cloud.firestore_v1.transforms import Increment
+
 
 class ReadAfterWriteError(RuntimeError):
     """Raised when a transaction performs a read after staging a write."""
@@ -35,8 +43,24 @@ class UnsupportedFirestoreOperationError(NotImplementedError):
     """Raised for a Firestore operation this narrow fixture does not model."""
 
 
+class InvalidFirestoreValueError(ValueError):
+    """Raised for a value Firestore rejects with InvalidArgument (an array directly inside an array)."""
+
+
+def _assert_storable(value: Any, *, in_array: bool = False) -> None:
+    if isinstance(value, (list, tuple)):
+        if in_array:
+            raise InvalidFirestoreValueError('Firestore cannot store an array directly inside an array')
+        for item in value:
+            _assert_storable(item, in_array=True)
+    elif isinstance(value, dict):
+        for item in value.values():
+            _assert_storable(item)
+
+
 _SUPPORTED_OPERATIONS = (
-    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries'
+    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries, '
+    'projected client folder-membership BatchGet'
 )
 
 
@@ -55,23 +79,87 @@ class StrictFirestoreDocument:
         self._database = database
         self.path = path
 
+    @property
+    def id(self) -> str:
+        """The document's own id, as ``DocumentReference.id`` (e.g. the uid of ``users/{uid}``)."""
+        return self.path[-1]
+
+    @property
+    def parent(self) -> StrictFirestoreCollection:
+        """Navigate to the owning collection without reading or changing stores."""
+        return StrictFirestoreCollection(self._database, self.path[:-1])
+
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 
     def get(
-        self, transaction: StrictFirestoreTransaction | None = None, *, field_paths: list[str] | None = None
+        self,
+        transaction: StrictFirestoreTransaction | None = None,
+        *,
+        field_paths: list[str] | None = None,
+        timeout: float | None = None,
     ) -> StrictFirestoreSnapshot:
+        if timeout is not None:
+            assert 0 < timeout <= 3
         if transaction is not None:
             transaction._assert_reference_belongs(self)
             transaction._assert_read_allowed()
         data = self._database.rows.get(self.path)
         if field_paths is not None and data is not None:
-            if field_paths != ["is_locked"]:
-                raise UnsupportedFirestoreOperationError("only the sweep privacy projection is supported")
+            if field_paths not in (
+                ["is_locked"],
+                ["folder_id"],
+                ["language"],
+                ['discarded', 'deleted', 'sync_merged_into'],
+                [
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                ],
+                ['started_at', 'finished_at', 'discarded', 'deleted', 'sync_merged_into'],
+                [
+                    'started_at',
+                    'finished_at',
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'recorded_start',
+                    'recorded_end',
+                    'last_speech_at',
+                    'status',
+                    'capture_evidence',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                ],
+                ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
+                [
+                    'deleted',
+                    'discarded',
+                    'is_locked',
+                    'manual_speaker_assignments',
+                    'manual_speaker_assignments_compressed',
+                ],
+            ):
+                raise UnsupportedFirestoreOperationError(
+                    "only privacy, folder membership, language, episode visibility and speaker-receipt projections are supported"
+                )
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)
 
     def create(self, data: dict[str, Any]) -> None:
+        _assert_storable(data)
         if self.path in self._database.rows:
             raise RuntimeError('document already exists')
         self._database.rows[self.path] = deepcopy(data)
@@ -84,6 +172,12 @@ class StrictFirestoreCollection:
     def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
         self._database = database
         self._path = path
+
+    @property
+    def parent(self) -> StrictFirestoreDocument | None:
+        if len(self._path) == 1:
+            return None
+        return StrictFirestoreDocument(self._database, self._path[:-1])
 
     def document(self, name: str) -> StrictFirestoreDocument:
         return StrictFirestoreDocument(self._database, (*self._path, name))
@@ -188,15 +282,29 @@ class StrictFirestoreTransaction:
         if ref._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and document reference must belong to the same store')
 
-    def set(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
+    def set(self, ref: StrictFirestoreDocument, data: dict[str, Any], *, merge: bool = False) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(data)
         self.has_written = True
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
-        self._database.rows[ref.path] = payload
+        if merge:
+            # Proven by fsr_people_generation_emulator_test.py: set+Increment
+            # without merge replaces the counter and repeatedly stores 1.
+            # Keep this fixture narrow: only the People generation transform
+            # has an emulator proof; do not approximate arbitrary merge masks.
+            if set(data) != {'generation'} or not isinstance(data['generation'], Increment):
+                raise UnsupportedFirestoreOperationError('only the People generation merge transform is supported')
+            prior = dict(self._database.rows.get(ref.path) or {})
+            value = prior.get('generation', 0)
+            prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
+            self._database.rows[ref.path] = prior
+        else:
+            self._database.rows[ref.path] = payload
 
     def create(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(data)
         self.has_written = True
         if ref.path in self._database.rows:
             raise RuntimeError('document already exists')
@@ -206,6 +314,7 @@ class StrictFirestoreTransaction:
 
     def update(self, ref: StrictFirestoreDocument, patch: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(patch)
         self.has_written = True
         if ref.path not in self._database.rows:
             raise RuntimeError('missing row')
@@ -251,7 +360,27 @@ class StrictFirestore:
             raise ValueError('Firestore document paths require an even number of non-empty segments')
         return StrictFirestoreDocument(self, segments)
 
-    def transaction(self) -> StrictFirestoreTransaction:
+    def transaction(self, max_attempts: int | None = None) -> StrictFirestoreTransaction:
         transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        if max_attempts is not None:
+            transaction._max_attempts = max_attempts
         self.transactions.append(transaction)
         return transaction
+
+    def get_all(
+        self,
+        references: list[StrictFirestoreDocument],
+        *,
+        field_paths: list[str],
+        transaction: StrictFirestoreTransaction,
+    ) -> list[StrictFirestoreSnapshot]:
+        if field_paths != ['folder_id']:
+            raise UnsupportedFirestoreOperationError('only folder membership BatchGet is supported')
+        snapshots = []
+        for reference in reversed(references):
+            if reference._database is not self:
+                raise ForeignTransactionError('BatchGet and document reference must belong to the same store')
+            snapshot = reference.get(transaction=transaction, field_paths=field_paths)
+            snapshot.reference = reference
+            snapshots.append(snapshot)
+        return snapshots

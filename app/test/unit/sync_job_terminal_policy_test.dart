@@ -3,6 +3,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/sync_job_policy.dart';
 import 'package:omi/services/wals/wal.dart';
 
 void main() {

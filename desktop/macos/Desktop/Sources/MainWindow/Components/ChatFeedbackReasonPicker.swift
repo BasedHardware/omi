@@ -40,15 +40,7 @@ struct ChatFeedbackReasonPicker: View {
         .accessibilityLabel("Reason: \(reason.label)")
       }
 
-      Button(action: onSkip) {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.micro)
-          .foregroundColor(Ink.secondary)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .help("Skip")
-      .accessibilityLabel("Skip reason")
+      DismissButton(action: onSkip, accessibilityLabel: "Skip", size: .compact)
     }
   }
 }

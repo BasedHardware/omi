@@ -21,10 +21,14 @@ os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-not-real")
 os.environ.setdefault("PINECONE_API_KEY", "test-pinecone-key-not-real")
 
 import asyncio
+import time
 
 import pytest
 
 import routers.payment as payment
+from utils import apps as apps_utils
+
+_DAY = 60 * 60 * 24
 
 
 class _Request:
@@ -49,7 +53,9 @@ def webhook(monkeypatch):
             'retrieve',
             staticmethod(lambda sub_id: {'id': sub_id, 'metadata': subscription_metadata}),
         )
-        monkeypatch.setattr(payment, 'paid_app', lambda app_id, uid: rearmed.append((app_id, uid)))
+        monkeypatch.setattr(
+            payment, 'paid_app', lambda app_id, uid, current_period_end=None: rearmed.append((app_id, uid))
+        )
         return rearmed
 
     return _install
@@ -97,6 +103,72 @@ def test_an_unreadable_subscription_does_not_fail_the_webhook(webhook, monkeypat
 
     assert _run_webhook() == {"status": "success"}
     assert rearmed == []
+
+
+def _record_entitlement_ttls(monkeypatch):
+    ttls = []
+    monkeypatch.setattr(apps_utils, 'set_user_paid_app', lambda app_id, uid, ttl: ttls.append((app_id, uid, ttl)))
+    return ttls
+
+
+def test_a_renewal_keeps_the_entitlement_through_a_31_day_period(monkeypatch):
+    period_end = int(time.time()) + 31 * _DAY
+    monkeypatch.setattr(
+        payment.stripe_utils, 'parse_event', lambda payload, sig: _invoice_event('invoice.paid', 'sub_1')
+    )
+    monkeypatch.setattr(
+        payment.stripe.Subscription,
+        'retrieve',
+        staticmethod(
+            lambda sub_id: {
+                'id': sub_id,
+                'metadata': {'uid': 'user-1', 'app_id': 'app-1'},
+                'current_period_end': period_end,
+            }
+        ),
+    )
+    ttls = _record_entitlement_ttls(monkeypatch)
+
+    assert _run_webhook() == {"status": "success"}
+    [(app_id, uid, ttl)] = ttls
+    assert (app_id, uid) == ('app-1', 'user-1')
+    assert 31 * _DAY < ttl <= 32 * _DAY
+
+
+def test_a_purchase_keeps_the_entitlement_through_a_31_day_first_period(monkeypatch):
+    period_end = int(time.time()) + 31 * _DAY
+    session = {
+        'id': 'cs_1',
+        'client_reference_id': 'uid_user-1',
+        'metadata': {'app_id': 'app-1'},
+        'subscription': 'sub_1',
+        'customer': 'cus_1',
+    }
+    monkeypatch.setattr(
+        payment.stripe_utils,
+        'parse_event',
+        lambda payload, sig: {'type': 'checkout.session.completed', 'data': {'object': session}},
+    )
+    monkeypatch.setattr(
+        payment.stripe_utils,
+        'modify_subscription',
+        lambda sub_id, **kwargs: {'id': sub_id, 'metadata': kwargs['metadata'], 'current_period_end': period_end},
+    )
+    monkeypatch.setattr(payment, 'set_user_app_sub_customer_id', lambda app_id, uid, customer_id: None)
+    ttls = _record_entitlement_ttls(monkeypatch)
+
+    assert _run_webhook() == {"status": "success"}
+    [(app_id, uid, ttl)] = ttls
+    assert (app_id, uid) == ('app-1', 'user-1')
+    assert 31 * _DAY < ttl <= 32 * _DAY
+
+
+def test_an_elapsed_period_still_gets_the_renewal_grace(monkeypatch):
+    ttls = _record_entitlement_ttls(monkeypatch)
+
+    apps_utils.paid_app('app-1', 'user-1', int(time.time()) - 2 * _DAY)
+
+    assert ttls == [('app-1', 'user-1', apps_utils._PAID_APP_RENEWAL_GRACE_SECONDS)]
 
 
 def test_a_live_subscription_can_be_cancelled_when_the_entitlement_cache_is_cold(monkeypatch):

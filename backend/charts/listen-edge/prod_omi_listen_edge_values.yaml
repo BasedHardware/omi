@@ -1,0 +1,148 @@
+# listen-edge prod values (plan D, D2 shadow ingest). Deployed by
+# gcp_backend_listen_helm.yml with image.digest from the build-only train's
+# role-images publish (backend/scripts/role_images.py). Nothing connects to
+# this service until backend-listen gets EDGE_SHADOW_URL and the lead ramps
+# EDGE_SHADOW_PERCENT above 0.
+
+replicaCount: 3
+
+image:
+  repository: gcr.io/based-hardware/listen-edge
+  pullPolicy: Always
+  # The deploy passes --set-string image.digest=sha256:... from the train
+  # summary; a tag is only a local-render fallback.
+  tag: ""
+  digest: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # No Kubernetes API or GCP access: plain websocket traffic only.
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+podLabels: {}
+
+# Matches the omi user (uid/gid 10001) in backend/edge/Dockerfile.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  # Intentionally no annotations: no standalone NEG, no load balancer.
+  annotations: {}
+
+# NAME: "string" env values the deploy workflow renders from the
+# protected-environment secret LISTEN_EDGE_PRIVATE_VALUES_YAML, in the same
+# Helm rollout (the backend-listen privateEnv pattern). Never commit values
+# here. A key replaces the env entry of the same name below, or adds it.
+# EDGE_SHADOW_TOKEN (the shared token mirrors must send as
+# x-edge-shadow-token) is a secret and lives only here; unset, the edge
+# accepts every mirror the NetworkPolicy lets through.
+privateEnv: {}
+
+env:
+  - name: EDGE_UPSTREAM_URL
+    value: "ws://prod-omi-backend-listen:8080"
+  # Baked into the image at /models/silero_vad.onnx (backend/edge/Dockerfile);
+  # unset would disable the shadow ingest path (503).
+  - name: EDGE_VAD_MODEL_PATH
+    value: "/models/silero_vad.onnx"
+  - name: EDGE_SHADOW_MAX_SESSIONS
+    value: "500"
+
+resources:
+  requests:
+    cpu: 1
+    memory: 512Mi
+  limits:
+    cpu: 2
+    memory: 1Gi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  failureThreshold: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 2
+  timeoutSeconds: 5
+
+autoscaling:
+  enabled: false
+
+# The binary's worst-case drain at default knobs is 23 s (5 s ready delay +
+# 10 s spread + 5 s close timeout + 3 s slack); grace must exceed it with
+# margin. No preStop: the drain starts on SIGTERM itself.
+terminationGracePeriodSeconds: 40
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Shadow mirrors are accepted from backend-listen pods only. Requires the
+# cluster's network-policy enforcement; when unenforced this is inert (the
+# ClusterIP Service and the absence of any NEG/LB remain the real boundary).
+# kubectl port-forward (the gate runbook's scrape path) is not affected.
+# extraIngressFrom appends further from-rules (e.g. a metrics scraper
+# namespace) without editing the template.
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: backend-listen
+          app.kubernetes.io/instance: prod-omi-backend-listen
+  extraIngressFrom: []
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: listen-edge
+        app.kubernetes.io/instance: prod-omi-listen-edge
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

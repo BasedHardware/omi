@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-unsigned-disconnect-deletes-tokens",
+  "violated_contract": "A browser GET that deletes a user's stored third-party tokens must not treat the uid query parameter as authorization. plugins/omi-twitter-chat-tools-app GET /disconnect called delete_twitter_tokens for any supplied uid, so anyone who knew a uid could unlink that account.",
+  "canonical_prevention": "Sign the uid with TWITTER_TOOLS_SECRET in the settings-page link and verify it with hmac.compare_digest before deleting. Fail closed with 503 when the secret is unset and 401 when the signature is missing or wrong. Pin it with the hermetic suite that refuses delete until the signature matches.",
+  "canonical_prevention_artifact": [
+    "plugins/omi-twitter-chat-tools-app/test_twitter_link_auth.py",
+    "plugins/omi-twitter-chat-tools-app/twitter_link_auth.py",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/omi-twitter-chat-tools-app/**"
+  ],
+  "status": "open"
+}

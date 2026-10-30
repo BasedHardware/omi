@@ -32,7 +32,7 @@ describe('ClaudeAuthSheet', () => {
 
     beginClaudeSignIn()
 
-    await waitFor(() => expect(screen.getByText('Unlock Omi Pro for $199/month')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Unlock Omi Pro')).toBeTruthy())
     expect(screen.getByText(/Complete sign-in in your browser/)).toBeTruthy()
     // Title + primary CTA both read "Upgrade to Omi Pro".
     expect(screen.getAllByText('Upgrade to Omi Pro').length).toBeGreaterThanOrEqual(1)
@@ -42,23 +42,23 @@ describe('ClaudeAuthSheet', () => {
   it('Upgrade opens omi.me/pricing and closes the sheet', async () => {
     render(<ClaudeAuthSheet />)
     beginClaudeSignIn()
-    await waitFor(() => expect(screen.getByText('Unlock Omi Pro for $199/month')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Unlock Omi Pro')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: 'Upgrade to Omi Pro' }))
 
     expect(openExternalUrl).toHaveBeenCalledWith('https://omi.me/pricing')
-    await waitFor(() => expect(screen.queryByText('Unlock Omi Pro for $199/month')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Unlock Omi Pro')).toBeNull())
   })
 
   it('Cancel closes the sheet without opening a URL', async () => {
     render(<ClaudeAuthSheet />)
     beginClaudeSignIn()
-    await waitFor(() => expect(screen.getByText('Unlock Omi Pro for $199/month')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Unlock Omi Pro')).toBeTruthy())
 
     fireEvent.click(screen.getByText('Cancel'))
 
     expect(openExternalUrl).not.toHaveBeenCalled()
-    await waitFor(() => expect(screen.queryByText('Unlock Omi Pro for $199/month')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Unlock Omi Pro')).toBeNull())
   })
 
   it('auto-closes when the parallel OAuth completes (granted bypass)', async () => {
@@ -66,10 +66,10 @@ describe('ClaudeAuthSheet', () => {
     codingAgentStartAuth.mockReturnValue(new Promise((res) => (resolveAuth = res)))
     render(<ClaudeAuthSheet />)
     beginClaudeSignIn()
-    await waitFor(() => expect(screen.getByText('Unlock Omi Pro for $199/month')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Unlock Omi Pro')).toBeTruthy())
 
     resolveAuth({ ok: true, status: { connected: true, expiresAt: 1 } })
 
-    await waitFor(() => expect(screen.queryByText('Unlock Omi Pro for $199/month')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Unlock Omi Pro')).toBeNull())
   })
 })

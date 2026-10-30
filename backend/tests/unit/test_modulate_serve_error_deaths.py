@@ -59,14 +59,16 @@ from utils.stt.live_failure import (
     note_typed_provider_death,
     terminate_live_stt_session,
 )
+from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 from utils.stt.provider_resilience import ProviderCircuitBreaker
-from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_BUDGET_EXHAUSTED, PROVIDER_RATE_LIMITED
 from utils.stt.streaming import (
     MODULATE_DEATH_SERVE_ERROR,
     STTService,
     SafeModulateSocket,
     connect_stt_socket_with_fallback,
+    modulate_connect_rejection_reason,
     modulate_death_reason,
 )
 from utils.stt.vad_gate import GatedSTTSocket
@@ -189,10 +191,10 @@ def test_account_state_refusals_are_budget_exhausted():
     assert modulate_death_reason('quota exceeded') == PROVIDER_BUDGET_EXHAUSTED
 
 
-def test_session_scoped_shapes_stay_untyped():
+def test_session_scoped_shapes_have_an_explicit_censored_cause():
     """Invalid audio we sent is our fault; a rate limit is this session's.
     Neither may bench the provider for every other client."""
-    assert modulate_death_reason(SESSION_SCOPED_MESSAGE) is None
+    assert modulate_death_reason(SESSION_SCOPED_MESSAGE) == 'other'
     assert modulate_death_reason('rate limit') is None
     assert modulate_death_reason('connection reset') is None
 
@@ -222,7 +224,7 @@ def test_a_session_scoped_frame_logs_at_warning_not_error(caplog):
     with caplog.at_level(logging.WARNING, logger=STREAMING_LOGGER):
         sock = _drive_socket([_error_frame(SESSION_SCOPED_MESSAGE)])
     assert sock.is_connection_dead
-    assert sock.typed_death_reason is None
+    assert sock.typed_death_reason == 'other'
     assert [r.levelname for r in caplog.records if 'Modulate stream' in r.message] == ['WARNING']
 
 
@@ -271,12 +273,12 @@ def test_the_vad_gate_proxies_the_modulate_typed_reason():
     assert gated.typed_death_reason == MODULATE_DEATH_SERVE_ERROR
 
 
-def test_the_gate_reports_none_for_an_untyped_modulate_death():
-    """A session-scoped death wrapped by the gate must read as untyped too."""
+def test_the_gate_preserves_the_censored_modulate_cause():
+    """A session-scoped death wrapped by the gate must retain its explicit non-provider cause."""
     dead = _drive_socket([_error_frame(SESSION_SCOPED_MESSAGE)])
     gated = GatedSTTSocket(dead)
     assert gated.is_connection_dead
-    assert gated.typed_death_reason is None
+    assert gated.typed_death_reason == 'other'
 
 
 # ---------------------------------------------------------------------------
@@ -386,7 +388,9 @@ def _receiver_with_dead_modulate(dead_socket):
     receiver = ListenReceiver(host, [], {})
     receiver.stt_socket = dead_socket
     receiver.vad_gate = None
-    receiver._stt_rebuild = (lambda _s: None, lambda _s: None, 16000)
+    # Audio-timeline: _stt_rebuild holds a callback FACTORY plus the sample
+    # rate (a fresh epoch translator per rebuild), not the callbacks.
+    receiver._stt_rebuild = (lambda: (lambda _s: None, lambda _s: None, None), 16000)
     receiver._create_stt_socket = AsyncMock(return_value=HealthyReplacement())
     return receiver
 
@@ -425,7 +429,7 @@ async def test_a_serve_error_death_surviving_failover_opens_the_selection_circui
 async def test_a_session_scoped_death_surviving_failover_does_not_bench_the_provider():
     """Invalid audio we sent killed THIS stream; other clients keep Velma."""
     dead = await _drive_socket_in_loop([_error_frame(SESSION_SCOPED_MESSAGE)])
-    assert dead.typed_death_reason is None
+    assert dead.typed_death_reason == 'other'
     receiver = _receiver_with_dead_modulate(dead)
     calls, opener = _circuit_recorder()
 
@@ -517,7 +521,11 @@ async def test_selection_skips_the_benched_modulate_primary_on_the_next_connect(
     async def _connect_fallback():
         return healthy_fallback
 
-    with patch('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.02):
+    with patch('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.02), patch(
+        # Deepgram retired 2026-08-27; this walker regression pins a listed slot.
+        'utils.stt.streaming.stt_service_models',
+        ['modulate-velma-2', 'soniox', 'dg-nova-3'],
+    ):
         socket, service = await connect_stt_socket_with_fallback(
             primary_service=STTService.modulate,
             connect_primary=_refuse_primary,
@@ -530,9 +538,11 @@ async def test_selection_skips_the_benched_modulate_primary_on_the_next_connect(
 
 def test_the_circuit_recovers_through_the_half_open_probe():
     """Benching Velma must not brick it: after the serve-error cooldown a
-    probe is offered, and enough consecutive probe successes close it again.
-    A single half-open connect is not recovery during a 5xx storm
-    (first transcript succeeds, then teardown fails)."""
+    probe is offered, and enough consecutive SERVING probe successes close it
+    again. A grace-only connect success keeps the breaker half-open — during a
+    5xx storm the probe the grace admits is exactly the stream that dies
+    mid-session (2026-09-22: the re-close re-admitted the failing provider
+    every ~3 minutes for hours)."""
     now = [0.0]
     circuit = ProviderCircuitBreaker(
         failure_threshold=3,
@@ -555,8 +565,166 @@ def test_the_circuit_recovers_through_the_half_open_probe():
     circuit.record_success()
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
+    circuit.record_success(serving=True)
     assert circuit.state == 'closed'
+
+
+# ---------------------------------------------------------------------------
+# Out-of-credits answers ("Insufficient credits", HTTP 402/429). The budget
+# page keys on omi_stt_stream_close_total{reason="provider_budget_exhausted"}
+# and the kind=account circuit (stream_close.ACCOUNT_REJECTION_REASONS).
+# Production 2026-10-22: Velma-2 answered 429 "Insufficient credits" from
+# ~02:00Z for over an hour; every path saw an untyped provider error, so the
+# purpose-built page never fired and the outage surfaced through the generic
+# sync failure-rate alerts an hour late.
+# ---------------------------------------------------------------------------
+
+
+def test_insufficient_credits_frame_is_budget_exhausted():
+    assert modulate_death_reason('Insufficient credits') == PROVIDER_BUDGET_EXHAUSTED
+    assert modulate_death_reason('  INSUFFICIENT CREDITS. ') == PROVIDER_BUDGET_EXHAUSTED
+    assert modulate_death_reason('insufficient credits') == PROVIDER_BUDGET_EXHAUSTED
+
+
+def test_a_rate_limit_wording_is_still_not_budget():
+    assert modulate_death_reason('Too many requests') is None
+
+
+class _LegacyUpgradeRejection(Exception):
+    """websockets 12.0 legacy shape: InvalidStatusCode(status, headers), no body."""
+
+    def __init__(self, status_code, headers=None):
+        self.status_code = status_code
+        self.headers = headers or []
+        super().__init__(f'server rejected WebSocket connection: HTTP {status_code}')
+
+
+class _NewClientUpgradeRejection(Exception):
+    """New asyncio client shape: InvalidStatus(response) with phrase and body."""
+
+    def __init__(self, status_code, reason_phrase='', body=b'', headers=None):
+        self.response = SimpleNamespace(
+            status_code=status_code, reason_phrase=reason_phrase, body=body, headers=headers or []
+        )
+        super().__init__(f'server rejected WebSocket connection: HTTP {status_code}')
+
+
+def test_http_402_upgrade_refusal_is_budget_exhausted():
+    assert modulate_connect_rejection_reason(_LegacyUpgradeRejection(402)) == PROVIDER_BUDGET_EXHAUSTED
+    assert modulate_connect_rejection_reason(_NewClientUpgradeRejection(402)) == PROVIDER_BUDGET_EXHAUSTED
+
+
+def test_429_with_insufficient_credits_text_is_budget_exhausted():
+    legacy = _LegacyUpgradeRejection(429, headers=[('x-error', 'Insufficient credits')])
+    assert modulate_connect_rejection_reason(legacy) == PROVIDER_BUDGET_EXHAUSTED
+    assert modulate_connect_rejection_reason(_NewClientUpgradeRejection(429, reason_phrase='Insufficient credits')) == (
+        PROVIDER_BUDGET_EXHAUSTED
+    )
+    with_body = _NewClientUpgradeRejection(429, body=b'{"error": "Insufficient Credits."}')
+    assert modulate_connect_rejection_reason(with_body) == PROVIDER_BUDGET_EXHAUSTED
+
+
+def test_plain_429_upgrade_refusal_stays_rate_limited():
+    assert modulate_connect_rejection_reason(_LegacyUpgradeRejection(429)) == PROVIDER_RATE_LIMITED
+    rate_limited = _NewClientUpgradeRejection(429, reason_phrase='Too Many Requests')
+    assert modulate_connect_rejection_reason(rate_limited) == PROVIDER_RATE_LIMITED
+
+
+def test_other_upgrade_refusals_stay_unclassified():
+    assert modulate_connect_rejection_reason(_LegacyUpgradeRejection(500)) is None
+    assert modulate_connect_rejection_reason(_LegacyUpgradeRejection(403)) is None
+    assert modulate_connect_rejection_reason(TimeoutError('connect')) is None
+
+
+@patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+def test_process_audio_modulate_402_records_budget_close_and_raises_typed():
+    recorded = []
+    with patch.object(
+        streaming, 'record_stt_stream_close', lambda *, provider, reason: recorded.append((provider, reason))
+    ):
+        with patch.object(streaming, 'websockets') as mock_ws:
+            mock_ws.connect = AsyncMock(side_effect=_LegacyUpgradeRejection(402))
+            with pytest.raises(streaming.ModulateConnectionRejection) as raised:
+                asyncio.run(streaming.process_audio_modulate(lambda _segments: None, 16000, 'en'))
+    assert raised.value.reason == PROVIDER_BUDGET_EXHAUSTED
+    assert recorded == [('modulate', 'provider_budget_exhausted')]
+
+
+@patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+def test_process_audio_modulate_plain_429_records_rate_limited_close():
+    recorded = []
+    with patch.object(
+        streaming, 'record_stt_stream_close', lambda *, provider, reason: recorded.append((provider, reason))
+    ):
+        with patch.object(streaming, 'websockets') as mock_ws:
+            mock_ws.connect = AsyncMock(side_effect=_LegacyUpgradeRejection(429))
+            with pytest.raises(streaming.ModulateConnectionRejection) as raised:
+                asyncio.run(streaming.process_audio_modulate(lambda _segments: None, 16000, 'en'))
+    assert raised.value.reason == PROVIDER_RATE_LIMITED
+    assert recorded == [('modulate', 'provider_rate_limited')]
+
+
+def test_budget_rejection_reason_reaches_the_account_rejection_set():
+    """The configured chain benches kind=account exactly when the normalized
+    failure reason is in ACCOUNT_REJECTION_REASONS; the typed rejection must
+    keep its token through failure_reason, not collapse into provider_5xx."""
+    from utils.stt.live_chain import failure_reason
+
+    budget = streaming.ModulateConnectionRejection('HTTP 402', reason=PROVIDER_BUDGET_EXHAUSTED)
+    assert failure_reason(budget) == PROVIDER_BUDGET_EXHAUSTED
+    assert normalize_live_stt_reason(failure_reason(budget)) in ACCOUNT_REJECTION_REASONS
+
+    rate_limited = streaming.ModulateConnectionRejection('HTTP 429', reason=PROVIDER_RATE_LIMITED)
+    assert failure_reason(rate_limited) == PROVIDER_RATE_LIMITED
+    assert normalize_live_stt_reason(failure_reason(rate_limited)) not in ACCOUNT_REJECTION_REASONS
+
+
+@patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+def test_routed_endpoint_402_records_budget_close_and_raises_typed():
+    """A registry-endpoint (canary) dial must classify like the default dial:
+    otherwise the routed lane re-dials a dead account every cooldown while
+    the default lane benches it (GLM review round 1, P2)."""
+    from utils.stt import live_target_connect
+    from utils.stt.live_router import connecting_target
+
+    recorded = []
+    with patch.object(
+        streaming, 'record_stt_stream_close', lambda *, provider, reason: recorded.append((provider, reason))
+    ):
+        with patch.object(live_target_connect, 'websockets') as mock_ws:
+            mock_ws.connect = AsyncMock(side_effect=_LegacyUpgradeRejection(402))
+            token = connecting_target.set(SimpleNamespace(endpoint='wss://routed.example/stream'))
+            try:
+                with pytest.raises(streaming.ModulateConnectionRejection) as raised:
+                    asyncio.run(live_target_connect.connect_modulate(lambda _segments: None, 16000, 'en'))
+            finally:
+                connecting_target.reset(token)
+    assert raised.value.reason == PROVIDER_BUDGET_EXHAUSTED
+    assert recorded == [('modulate', 'provider_budget_exhausted')]
+
+
+@patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+def test_routed_endpoint_plain_429_stays_rate_limited():
+    from utils.stt import live_target_connect
+    from utils.stt.live_router import connecting_target
+
+    recorded = []
+    with patch.object(
+        streaming, 'record_stt_stream_close', lambda *, provider, reason: recorded.append((provider, reason))
+    ):
+        with patch.object(live_target_connect, 'websockets') as mock_ws:
+            mock_ws.connect = AsyncMock(side_effect=_LegacyUpgradeRejection(429))
+            token = connecting_target.set(SimpleNamespace(endpoint='wss://routed.example/stream'))
+            try:
+                with pytest.raises(streaming.ModulateConnectionRejection) as raised:
+                    asyncio.run(live_target_connect.connect_modulate(lambda _segments: None, 16000, 'en'))
+            finally:
+                connecting_target.reset(token)
+    assert raised.value.reason == PROVIDER_RATE_LIMITED
+    assert recorded == [('modulate', 'provider_rate_limited')]

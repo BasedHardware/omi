@@ -153,3 +153,36 @@ func TestWhisperRetainsBufferOnRunnerError(t *testing.T) {
 		t.Fatalf("runner calls = %d, want 2 (first batch retried)", calls)
 	}
 }
+
+func TestWhisperRefusesAudioAfterStop(t *testing.T) {
+	calls := 0
+	var got []string
+	w := &whisperBatch{
+		batch: 4,
+		runner: func(pcm []byte) (string, error) {
+			calls++
+			return "hello", nil
+		},
+		onTranscript: func(text string) { got = append(got, text) },
+	}
+	if err := w.AppendPCM([]byte{1, 2}); err != nil {
+		t.Fatalf("AppendPCM before Stop: %v", err)
+	}
+	if err := w.Stop(); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if calls != 1 || len(got) != 1 {
+		t.Fatalf("Stop flush: runner calls = %d, transcripts = %v, want 1 and [hello]", calls, got)
+	}
+	// A full batch after Stop must not be buffered, transcribed or delivered,
+	// and a repeated Stop has nothing left to flush.
+	if err := w.AppendPCM([]byte{3, 4, 5, 6}); err == nil {
+		t.Fatal("AppendPCM after Stop returned nil, want an error")
+	}
+	if err := w.Stop(); err != nil {
+		t.Fatalf("second Stop: %v", err)
+	}
+	if calls != 1 || len(got) != 1 {
+		t.Fatalf("after Stop: runner calls = %d, transcripts = %v, want only the audio accepted before Stop", calls, got)
+	}
+}

@@ -15,6 +15,8 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -115,6 +117,15 @@ def _valid(aid, completed=False):
     return {'id': aid, 'description': 'do a thing', 'completed': completed}
 
 
+@pytest.fixture(autouse=True)
+def untracked_list_version():
+    # This fixture stubs all utils modules. An unconfigured MagicMock would
+    # look like a 304 response and bypass the source-validation path under test.
+    check = types.SimpleNamespace(active=False, not_modified=None, finish=MagicMock())
+    with patch.object(ai_mod.ListVersionCheck, 'start', return_value=check):
+        yield
+
+
 def test_conversation_list_skips_malformed_not_500():
     bad = {'id': 'a2', 'description': 'missing completed'}  # missing required field -> ValidationError
     page = [_valid('a1'), bad]
@@ -159,3 +170,23 @@ def test_search_skips_malformed_not_500():
     ):
         resp = ai_mod.search_action_items(query='meeting', limit=10, uid='uid1')
     assert [i.id for i in resp['action_items']] == ['a1']
+
+
+def test_main_list_locked_null_description_does_not_crash():
+    locked_null = {'id': 'a1', 'description': None, 'is_locked': True, 'completed': False}
+    with patch.object(ai_mod.action_items_db, 'get_action_items', return_value=[locked_null]), patch.object(
+        ai_mod, 'list_cache_ttl_seconds', return_value=0
+    ), patch.object(ai_mod, 'enforce_hot_client_list_ceiling', return_value=None):
+        resp = ai_mod.get_action_items(
+            limit=50,
+            offset=0,
+            completed=None,
+            conversation_id=None,
+            start_date=None,
+            end_date=None,
+            due_start_date=None,
+            due_end_date=None,
+            uid='uid1',
+        )
+    assert [i.id for i in resp['action_items']] == ['a1']
+    assert resp['action_items'][0].description == ''

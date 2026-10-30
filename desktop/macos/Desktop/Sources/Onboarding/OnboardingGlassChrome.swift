@@ -140,7 +140,7 @@ struct OnboardingProgressBand: View {
             .frame(width: OnboardingGlass.dotDiameter, height: OnboardingGlass.dotDiameter)
         }
       }
-      .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.settle)), value: current)
+      .omiAnimation(.standard, value: current)
     }
   }
 }

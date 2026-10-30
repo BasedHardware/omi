@@ -6,13 +6,15 @@ Collection: users/{uid}/advice
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from ._client import db
+from .read_boundary import parse_snapshot_or_none, parse_snapshots
+from models.advice import Advice
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,7 @@ def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any
 
 def get_advice(
     uid: str, category: Optional[str] = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
-) -> List[Dict[str, Any]]:
+) -> List[Advice]:
     col = _user_col(uid, 'advice')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
     if category:
@@ -58,18 +60,15 @@ def get_advice(
         query = query.offset(offset)
     query = query.limit(limit)
 
-    items: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        raw: object = doc.to_dict()
-        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-        data['id'] = doc.id
-        items.append(data)
-    return items
+    # Route reads through the shared boundary: one malformed/legacy stored doc is
+    # dropped (and logged non-PII) instead of surfacing as a response-model 500 on
+    # the whole feed. document_id_field injects the snapshot id into Advice.id.
+    return parse_snapshots(Advice, query.stream(), document_id_field='id')
 
 
 def update_advice(
     uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
-) -> Optional[Dict[str, Any]]:
+) -> Optional[Advice]:
     ref = _user_col(uid, 'advice').document(advice_id)
     snap = ref.get()
     if not getattr(snap, "exists", False):
@@ -84,13 +83,9 @@ def update_advice(
     except NotFound:
         # The advice was deleted between the existence check and the update.
         return None
-    raw: object = ref.get().to_dict()
-    if raw is None:
-        # The advice was deleted between the update and the re-read.
-        return None
-    result: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-    result['id'] = advice_id
-    return result
+    # Re-read through the shared boundary: a poisoned doc surfaces as None (the
+    # PATCH router turns that into a 404) rather than a response-model 500.
+    return parse_snapshot_or_none(Advice, ref.get(), document_id_field='id')
 
 
 def delete_advice(uid: str, advice_id: str) -> bool:

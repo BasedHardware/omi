@@ -31,3 +31,20 @@ spec:
       name: http
   selector:
     {{- include "parakeet.selectorLabels" . | nindent 4 }}
+---
+# DNS returns each ready GPU pod, so listen can check the entire batch pool.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "parakeet.fullname" . }}-headless
+  labels:
+    {{- include "parakeet.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "parakeet.selectorLabels" . | nindent 4 }}

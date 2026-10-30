@@ -11,6 +11,9 @@ class Scopes:
     ACTION_ITEMS_WRITE = "action_items:write"
     GOALS_READ = "goals:read"
     GOALS_WRITE = "goals:write"
+    PEOPLE_READ = "people:read"
+    PROFILE_READ = "profile:read"
+    SCREEN_ACTIVITY_READ = "screen_activity:read"
 
 
 AVAILABLE_SCOPES = [
@@ -22,6 +25,9 @@ AVAILABLE_SCOPES = [
     Scopes.ACTION_ITEMS_WRITE,
     Scopes.GOALS_READ,
     Scopes.GOALS_WRITE,
+    Scopes.PEOPLE_READ,
+    Scopes.PROFILE_READ,
+    Scopes.SCREEN_ACTIVITY_READ,
 ]
 
 # Default scopes: read-only access

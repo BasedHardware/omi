@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-provider-proxy-finalize-signature-drift",
+  "violated_contract": "A provider proxy that advertises the wrapped socket's class must accept and forward the finalize arguments selected for that provider. Rejecting vad_pause at a cap proxy turns a normal window VAD pause into a local TypeError and a send_failed provider-health vote.",
+  "canonical_prevention": "Forward finalize arguments at the shared cap boundary and exercise a real funded window through managed VAD pause and resumed speech, rather than certifying only direct sockets or permissive mocks. Retain bounded failure-phase diagnostics at the serving seam.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_stt_cap_dispatch.py",
+    "backend/tests/unit/test_parakeet_window_live.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/stt_cap_dispatch.py", "backend/utils/stt/live_session.py"],
+  "status": "open"
+}

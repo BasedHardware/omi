@@ -3,8 +3,6 @@ import { moonshineJson } from '@tschk/moonshine-next/server';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
 
 const FORWARDED_RESPONSE_HEADERS = [
-  'X-Omi-Memory-As-Of',
-  'X-Omi-Memory-Belief-Enabled',
   'X-Omi-Memory-Canonical-Lifecycle-Exposed',
   'X-Omi-Memory-Default-Delete-Supported',
   'X-Omi-Memory-Device-Scope-Supported',
@@ -116,20 +114,6 @@ async function handleRequest(request: Request) {
 
     // Get response data
     const responseContentType = response.headers.get('content-type');
-
-    // Handle streaming responses (for chat)
-    if (
-      responseContentType?.includes('text/event-stream') ||
-      responseContentType?.includes('text/plain')
-    ) {
-      const text = await response.text();
-      return new Response(text, {
-        status: response.status,
-        headers: forwardedResponseHeaders(response, {
-          'Content-Type': responseContentType || 'text/plain',
-        }),
-      });
-    }
 
     // Handle download/streaming responses (e.g., data export) — pass body through without buffering
     const contentDisposition = response.headers.get('content-disposition');

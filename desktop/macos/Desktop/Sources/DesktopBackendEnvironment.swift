@@ -182,9 +182,29 @@ enum DesktopBackendEnvironment {
 
   static func conversationShareURL(
     id: String,
-    environmentValue: String? = currentEnvironmentValue("OMI_SHARE_BASE_URL")
+    environmentValue: String? = currentEnvironmentValue("OMI_SHARE_BASE_URL"),
+    sid: String = newShareID()
   ) -> String {
-    "\(shareBaseURL(environmentValue: environmentValue))/conversations/\(id)"
+    tagShareURL("\(shareBaseURL(environmentValue: environmentValue))/conversations/\(id)", sid: sid)
+  }
+
+  static func newShareID() -> String {
+    UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+  }
+
+  static func tagShareURL(_ raw: String, sid: String = newShareID()) -> String {
+    guard var parts = URLComponents(string: raw), parts.url != nil else { return raw }
+    parts.queryItems =
+      (parts.queryItems ?? []).filter { $0.name != "s" && $0.name != "sid" }
+      + [URLQueryItem(name: "s", value: "mac"), URLQueryItem(name: "sid", value: sid)]
+    return parts.url?.absoluteString ?? raw
+  }
+
+  static func shareID(from raw: String) -> String? {
+    guard let value = URLComponents(string: raw)?.queryItems?.first(where: { $0.name == "sid" })?.value,
+      value.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil
+    else { return nil }
+    return value
   }
 
   static func applyReleaseChannelDefaults() {

@@ -15,7 +15,10 @@ export 'package:omi/backend/http/api/conversations.dart'
         SyncJobFetchOutcome,
         SyncRateLimitedException,
         SyncRateLimitKind,
-        SyncRecoveryWindowExceededException;
+        SyncUploadHttpException,
+        SyncRecoveryWindowExceededException,
+        SyncInvalidCaptureTimeException,
+        isPacedSyncAdmissionReasonCode;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
@@ -69,6 +72,8 @@ abstract class LocalWalSync implements IWalSync {
   /// admission and pass to [addExternalWal]; do not re-read after an await.
   int get sessionGeneration;
 
+  int get captureEvidenceGeneration;
+
   Future<void> addExternalWal(Wal wal, {required int admittedGeneration});
   Future<List<Wal>> getAllWals();
 
@@ -79,22 +84,40 @@ abstract class LocalWalSync implements IWalSync {
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();
 
+  /// Applies the auto-remove synced-copies retention preference immediately
+  /// (e.g. right after the user enables it). Best-effort; returns the number
+  /// of local copies removed.
+  Future<int> applySyncedCopyRetention();
+
+  /// Deletes every local recording (index entry and file) owned by [uid],
+  /// whether active, retired or foreign. Called when that account is deleted
+  /// from this phone. Returns the number of records removed.
+  Future<int> purgeAccountWals(String uid);
+
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
-  void onFrameCaptured(WalFrame frame);
+  WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});
 
   /// Mark a frame as synced (sent to server via WebSocket).
   /// Matches frames by sync key (source-agnostic).
   void markFrameSynced(FrameSyncKey key);
 
-  /// Notify WAL that the audio codec has changed (resets frame state).
-  Future onAudioCodecChanged(BleAudioCodec codec);
+  /// Seal the old source before switching codec and optional device metadata.
+  /// Supply deviceInfo when ingress can continue during the flush, so those
+  /// arrivals belong to the new source before asynchronous I/O yields.
+  Future onAudioCodecChanged(BleAudioCodec codec, {({String id, String model})? deviceInfo});
 
   /// Set device metadata for WAL file naming.
   void setDeviceInfo(String? deviceId, String? deviceModel);
 
   /// Set the snapshot inherited by WALs created for the active session.
   void setSessionGeolocation(Geolocation? geolocation);
+
+  Future<bool> ensureStorageAdmission({required int bytes, required int admittedGeneration});
+
+  Future<bool> hasDurableWal(Wal wal, {required int admittedGeneration});
+
+  void releaseStorageAdmission(int bytes) {}
 }
 
 abstract class SDCardWalSync implements IWalSync {

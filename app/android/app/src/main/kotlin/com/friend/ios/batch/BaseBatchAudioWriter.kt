@@ -241,7 +241,7 @@ abstract class BaseBatchAudioWriter internal constructor(
     private fun recoverStalePartFiles(dir: File) {
         try {
             val parts = dir.listFiles { f ->
-                f.isFile && f.name.startsWith(recoveryPrefix) && f.name.endsWith(".bin$PART_SUFFIX")
+                f.isFile && (f.name.startsWith(recoveryPrefix) || (recoveryPrefix == "audio_omibatch_" && f.name.startsWith("audio_omibatchoverflow_"))) && f.name.endsWith(".bin$PART_SUFFIX")
             } ?: return
             for (p in parts) {
                 val completeBytes = try {

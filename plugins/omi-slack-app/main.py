@@ -13,7 +13,25 @@ import asyncio
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
 
 from simple_storage import SimpleUserStorage, SimpleSessionStorage
+_PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+if _PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, _PLUGIN_DIR)
+from slack_settings_auth import (
+    COOKIE_MAX_AGE_SECONDS,
+    COOKIE_NAME,
+    require_settings_session,
+    session_matches,
+    session_value,
+)
 from slack_client import SlackClient
+try:
+    from slack_client import resolve_channel_id
+except ImportError:
+    def resolve_channel_id(channel, channels=None):
+        target = getattr(sys.modules.get("slack_client"), "resolve_channel_id", None)
+        if callable(target):
+            return target(channel, channels)
+        return None, None
 from message_detector import MessageDetector
 
 load_dotenv()
@@ -520,10 +538,41 @@ async def auth_callback(
         access_token = token_data.get("access_token")
         team_id = token_data.get("team_id")
         team_name = token_data.get("team_name")
-        
+
+        existing_user = SimpleUserStorage.get_user(uid)
+        if isinstance(existing_user, dict) and existing_user.get("access_token"):
+            stored_team_id = str(existing_user.get("team_id") or "").strip()
+            new_team_id = str(team_id or "").strip()
+            same_workspace = bool(stored_team_id) and stored_team_id == new_team_id
+            if not session_matches(request, uid) and not same_workspace:
+                if state in oauth_states:
+                    del oauth_states[state]
+                return HTMLResponse(
+                    content=f"""
+                    <html>
+                        <head>
+                            <meta charset="utf-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1">
+                            <style>{get_mobile_css()}</style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
+                                    <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Already Connected</h2>
+                                    <p style="margin-bottom: 0;">This OMI account is already linked to a Slack workspace. Disconnect it from the existing session before linking a different workspace.</p>
+                                </div>
+                            </div>
+                        </body>
+                    </html>
+                    """,
+                    status_code=403,
+                )
+
         # Get workspace channels
         channels = slack_client.list_channels(access_token)
-        
+
+        cookie_val = session_value(uid)
+
         # Save user data
         SimpleUserStorage.save_user(
             uid=uid,
@@ -541,7 +590,7 @@ async def auth_callback(
         team_name_escaped = html.escape(str(team_name or "Unknown"), quote=True)
         uid_q = quote(str(uid), safe="")
 
-        return HTMLResponse(
+        response = HTMLResponse(
             content=f"""
             <html>
                 <head>
@@ -583,7 +632,18 @@ async def auth_callback(
             </html>
             """
         )
-    
+        response.set_cookie(
+            key=COOKIE_NAME,
+            value=cookie_val,
+            max_age=COOKIE_MAX_AGE_SECONDS,
+            httponly=True,
+            samesite="lax",
+            secure=getattr(getattr(request, "url", None), "scheme", "") == "https",
+        )
+        return response
+
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -623,10 +683,12 @@ async def check_setup(uid: str = Query(..., description="User ID from OMI")):
 
 @app.post("/update-channel")
 async def update_channel(
+    request: Request,
     uid: str = Query(...),
     channel: str = Query(...)
 ):
     """Update user's selected default channel."""
+    require_settings_session(request, uid)
     try:
         success = SimpleUserStorage.update_channel_selection(uid, channel)
         if success:
@@ -639,8 +701,12 @@ async def update_channel(
 
 
 @app.post("/refresh-channels")
-async def refresh_channels(uid: str = Query(...)):
+async def refresh_channels(
+    request: Request,
+    uid: str = Query(...)
+):
     """Refresh user's channel list from Slack."""
+    require_settings_session(request, uid)
     try:
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -666,8 +732,12 @@ async def refresh_channels(uid: str = Query(...)):
 
 
 @app.post("/logout")
-async def logout(uid: str = Query(...)):
+async def logout(
+    request: Request,
+    uid: str = Query(...)
+):
     """Logout user - clear all data and sessions."""
+    require_settings_session(request, uid)
     try:
         from simple_storage import users, sessions, save_users, save_sessions
         
@@ -1233,7 +1303,7 @@ async def chat_tool_send_message(request: Request):
         data = await request.json()
         
         # Validate required parameters
-        if not data:
+        if not data or not isinstance(data, dict):
             return JSONResponse(
                 content={'error': 'Missing request body'},
                 status_code=400
@@ -1243,17 +1313,17 @@ async def chat_tool_send_message(request: Request):
         channel = data.get('channel')
         message = data.get('message')
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        if not channel:
+        if not channel or not isinstance(channel, str) or not channel.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: channel'},
                 status_code=400
             )
-        if not message:
+        if not message or not isinstance(message, str) or not message.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: message'},
                 status_code=400
@@ -1271,16 +1341,7 @@ async def chat_tool_send_message(request: Request):
         
         # Get channels to find channel ID
         channels = slack_client.list_channels(access_token)
-        channel_id = None
-        channel_name = channel
-        
-        # Try to find channel by name (handle # prefix)
-        channel_search = channel.lstrip('#').lower()
-        for ch in channels:
-            if ch["name"].lower() == channel_search:
-                channel_id = ch["id"]
-                channel_name = ch["name"]
-                break
+        channel_id, channel_name = resolve_channel_id(channel, channels)
         
         if not channel_id:
             return JSONResponse(
@@ -1296,8 +1357,9 @@ async def chat_tool_send_message(request: Request):
         )
         
         if result and result.get("success"):
+            display_name = channel_name.lstrip('#') if channel_name else channel
             return JSONResponse(
-                content={'result': f'Successfully sent message to #{channel_name}'}
+                content={'result': f'Successfully sent message to #{display_name}'}
             )
         else:
             error = result.get("error", "Unknown error") if result else "Failed to send message"
@@ -1333,18 +1395,29 @@ async def chat_tool_search_messages(request: Request):
     try:
         data = await request.json()
         
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                content={'error': 'Missing request body'},
+                status_code=400
+            )
+
         uid = data.get('uid')
         query = data.get('query')
         channel = data.get('channel')
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        if not query:
+        if not query or not isinstance(query, str) or not query.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: query'},
+                status_code=400
+            )
+        if channel is not None and (not isinstance(channel, str) or not channel.strip()):
+            return JSONResponse(
+                content={'error': 'Invalid channel parameter'},
                 status_code=400
             )
         
@@ -1363,12 +1436,7 @@ async def chat_tool_search_messages(request: Request):
         channel_name = None
         if channel:
             channels = slack_client.list_channels(access_token)
-            channel_search = channel.lstrip('#').lower()
-            for ch in channels:
-                if ch["name"].lower() == channel_search:
-                    channel_id = ch["id"]
-                    channel_name = ch["name"]
-                    break
+            channel_id, channel_name = resolve_channel_id(channel, channels)
         
         # Search messages
         print(f"🔍 Searching messages - query: '{query}', channel: '{channel_name or channel}'", flush=True)
@@ -1453,15 +1521,22 @@ async def chat_tool_search_channels(request: Request):
     try:
         data = await request.json()
         
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                content={'error': 'Missing request body'},
+                status_code=400
+            )
+
         uid = data.get('uid')
         query = data.get('query', '')  # Allow empty query to list all channels
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        # Query is optional - if empty or "all", will return all channels
+        if query is not None and not isinstance(query, str):
+            query = str(query)
         
         # Get user's authentication token
         user = SimpleUserStorage.get_user(uid)

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "FC-reminder-reconcile-trigger-omits-armed-field",
+  "violated_contract": "A task write that changes any field a client-scheduled reminder was armed from (its lifecycle, its due time, or the title the phone shows) must reconcile that reminder from the saved row. The phone schedules the reminder locally from the FCM data message and never re-reads the task, so a write that skips reconciliation leaves a stale copy that fires later. Each task writer restated its trigger fields by hand (completion, status, due date) and none listed the description, so renaming a dated task from the app, the Apple Reminders sync batch, the developer API, MCP or the chat tools left the phone reminder firing under the old title.",
+  "canonical_prevention": "Decide reconciliation with one shared predicate over the fields a reminder is armed from (`ACTION_ITEM_REMINDER_FIELDS` and `action_item_write_affects_reminder` in `backend/config/action_item_reminder_triggers.py`), called by every task writer instead of an inline field list. A contract test pins that set to the reminder payload plus the admission predicate's inputs, so a field added to either side fails until writers reconcile it, and each write surface keeps a rename behavioral test.",
+  "canonical_prevention_artifact": [
+    "backend/config/action_item_reminder_triggers.py",
+    "backend/tests/unit/test_action_item_reminder_state_notifications.py",
+    "backend/tests/unit/test_action_item_reminder_state_http.py",
+    "backend/tests/unit/test_action_item_sync_batch_reminder.py",
+    "backend/tests/unit/test_retrieval_reminder_lifecycle_forwarding.py",
+    "backend/tests/unit/test_mcp_action_item_writes.py",
+    "backend/tests/unit/test_dev_api_action_items_poison.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/config/action_item_reminder_triggers.py",
+    "backend/routers/action_items.py",
+    "backend/routers/developer.py",
+    "backend/utils/mcp_action_items.py",
+    "backend/utils/retrieval/**/action_item*.py"
+  ],
+  "status": "open"
+}

@@ -45,3 +45,71 @@ def test_ask_json_mode_emits_raw_payload(authed_profile, respx_mock, cli_runner)
 
     assert result.exit_code == 0
     assert json.loads(result.stdout) == {"answer": "42", "sources": []}
+
+
+def test_ask_handles_non_dict_payload(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/ask").respond(json=["direct", "list", "response"])
+
+    result = cli_runner.invoke(app, ["ask", "what happened?"])
+
+    assert result.exit_code == 0
+    assert "direct" in result.stdout
+
+
+def test_ask_handles_none_answer_without_literal_none_string(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/ask").respond(json={"answer": None, "sources": []})
+
+    result = cli_runner.invoke(app, ["ask", "anything new?"])
+
+    assert result.exit_code == 0
+    assert "None" not in result.stdout
+
+
+def test_ask_handles_string_conversation_ids_in_sources(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/ask").respond(
+        json={
+            "answer": "Here is the summary.",
+            "sources": ["conv_123", "conv_456"],
+        }
+    )
+
+    result = cli_runner.invoke(app, ["ask", "what did I say?"])
+
+    assert result.exit_code == 0
+    assert "Here is the summary." in result.stdout
+    assert "conv_123" in result.stdout
+    assert "conv_456" in result.stdout
+
+
+def test_ask_handles_sources_with_missing_optional_fields(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/ask").respond(
+        json={
+            "answer": "Got it.",
+            "sources": [
+                {"title": "Sync only"},
+                {"id": "conv_nodate"},
+            ],
+        }
+    )
+
+    result = cli_runner.invoke(app, ["ask", "summary?"])
+
+    assert result.exit_code == 0
+    assert "Sync only" in result.stdout
+    assert "conv_nodate" in result.stdout
+    assert "()" not in result.stdout  # no empty parentheses
+    assert "[None]" not in result.stdout  # no literal [None]
+
+
+def test_ask_handles_non_list_sources(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/ask").respond(
+        json={
+            "answer": "Answer with malformed sources.",
+            "sources": {"error": "unexpected format"},
+        }
+    )
+
+    result = cli_runner.invoke(app, ["ask", "malformed sources?"])
+
+    assert result.exit_code == 0
+    assert "Answer with malformed sources." in result.stdout

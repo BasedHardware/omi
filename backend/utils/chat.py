@@ -16,7 +16,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.apps import get_available_app_by_id
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.conversation_helpers import extract_memory_ids
-from utils.conversations.factory import deserialize_conversation
+from utils.chat_citations import resolve_conversation_citations
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
 from utils.notifications import send_client_displayed_notification, send_client_displayed_notification_async
@@ -29,6 +29,7 @@ from utils.stt.pre_recorded import (
     prerecorded_from_bytes,
     get_prerecorded_service,
 )
+from utils.stt.parakeet_request_metrics import parakeet_caller
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
@@ -40,6 +41,22 @@ from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _log_skipped_memory(member, exc) -> None:
+    logger.warning(
+        'Skipping malformed memory conversation %s: %s',
+        member.get('id') if isinstance(member, dict) else getattr(member, 'id', None),
+        type(exc).__name__,
+    )
+
+
+def _log_skipped_message(record, exc) -> None:
+    logger.warning(
+        'Skipping malformed chat message %s: %s',
+        record.get('id') if isinstance(record, dict) else None,
+        type(exc).__name__,
+    )
 
 
 def acquire_chat_session(uid: str, app_id: Optional[str] = None):
@@ -68,17 +85,22 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id
         prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
     logger.info(f'initial_message_util returned {len(prev_messages)} prev messages for {app_id}')
 
+    # Skip malformed/legacy stored messages rather than 500 the whole initial-message call —
+    # the class already fixed for the list and send paths via Message.deserialize_many_safe (#8882).
+    prev_messages_safe = Message.deserialize_many_safe(prev_messages, on_error=_log_skipped_message)
+
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    # A malformed/legacy stored app doc must read as app-unavailable, not 500 initial-message.
+    app = App.deserialize_safe(app) if app else None
 
     text: str
     if app and app.is_a_persona():
-        text = initial_persona_chat_message(uid, app, [Message(**msg) for msg in prev_messages])
+        text = initial_persona_chat_message(uid, app, prev_messages_safe)
     else:
         prev_messages_str = ''
-        if prev_messages:
+        if prev_messages_safe:
             prev_messages_str = 'Previous conversation history:\n'
-            prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
+            prev_messages_str += Message.get_messages_as_string(prev_messages_safe)
         logger.info(f'initial_message_util {len(prev_messages_str)} {app_id}')
         text = initial_chat_message(uid, app, prev_messages_str)
 
@@ -156,13 +178,14 @@ def _transcribe_voice_message_url(
     provider, stt_language, stt_model = get_prerecorded_service(language)
     is_multi = stt_language == 'multi'
     try:
-        if is_multi and detect_language:
-            words, detected_language = prerecorded(
-                url, diarize=False, language=stt_language, return_language=True, model=stt_model
-            )
-        else:
-            words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
-            detected_language = stt_language
+        with parakeet_caller('voice_message'):
+            if is_multi and detect_language:
+                words, detected_language = prerecorded(
+                    url, diarize=False, language=stt_language, return_language=True, model=stt_model
+                )
+            else:
+                words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
+                detected_language = stt_language
     except Exception as error:
         failure = failure_from_exception(error, provider=provider)
         logger.warning(
@@ -243,31 +266,32 @@ def transcribe_pcm_bytes(
             raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
 
     try:
-        if is_multi:
-            result = prerecorded_from_bytes(
-                audio_bytes,
-                sample_rate=sample_rate,
-                diarize=False,
-                encoding=encoding,
-                channels=channels,
-                language=stt_language,
-                model=stt_model,
-                return_language=True,
-                keywords=keywords,
-            )
-            words, detected_language = result
-        else:
-            words = prerecorded_from_bytes(
-                audio_bytes,
-                sample_rate=sample_rate,
-                diarize=False,
-                encoding=encoding,
-                channels=channels,
-                language=stt_language,
-                model=stt_model,
-                keywords=keywords,
-            )
-            detected_language = stt_language
+        with parakeet_caller('voice_message'):
+            if is_multi:
+                result = prerecorded_from_bytes(
+                    audio_bytes,
+                    sample_rate=sample_rate,
+                    diarize=False,
+                    encoding=encoding,
+                    channels=channels,
+                    language=stt_language,
+                    model=stt_model,
+                    return_language=True,
+                    keywords=keywords,
+                )
+                words, detected_language = result
+            else:
+                words = prerecorded_from_bytes(
+                    audio_bytes,
+                    sample_rate=sample_rate,
+                    diarize=False,
+                    encoding=encoding,
+                    channels=channels,
+                    language=stt_language,
+                    model=stt_model,
+                    keywords=keywords,
+                )
+                detected_language = stt_language
     except Exception as error:
         raise failure_from_exception(error, provider=provider) from error
 
@@ -311,7 +335,9 @@ def process_voice_message_segment(
     app = None
     app_id = None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    messages = list(
+        reversed(Message.deserialize_many_safe(chat_db.get_messages(uid, limit=10), on_error=_log_skipped_message))
+    )
     with track_usage(uid, Features.CHAT):
         response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
     memories_id = extract_memory_ids(memories) if memories else []
@@ -325,7 +351,9 @@ def process_voice_message_segment(
         memories_id=memories_id,
     )
     chat_db.add_message(uid, ai_message.model_dump())
-    ai_message.memories = memories if len(memories) < 5 else memories[:5]
+    # Same defensive conversion as process_message — raw members can be dicts
+    # or live objects; assigning them untyped breaks model_dump() serialization.
+    ai_message.memories = MessageConversation.safe_build_many(memories[:5], on_error=_log_skipped_memory)
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
@@ -495,16 +523,8 @@ async def process_voice_message_segment_stream(
         langsmith_run_id = callback_data.get('langsmith_run_id')
         prompt_name = callback_data.get('prompt_name')
         prompt_commit = callback_data.get('prompt_commit')
-        memories_id = []
-        # check if the items in the conversations list are dict
-        if memories:
-            converted_memories = []
-            for m in memories[:5]:
-                if isinstance(m, dict):
-                    converted_memories.append(deserialize_conversation(m))
-                else:
-                    converted_memories.append(m)
-            memories_id = [str(getattr(m, 'id', '')) for m in converted_memories]
+        response, memories = resolve_conversation_citations(response, memories)
+        memories_id = extract_memory_ids(memories)
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
@@ -526,7 +546,11 @@ async def process_voice_message_segment_stream(
             await run_blocking(db_executor, chat_db.add_message_to_chat_session, uid, chat_session.id, ai_message.id)
 
         await run_blocking(db_executor, chat_db.add_message, uid, ai_message.model_dump())
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        # Convert memories defensively — a non-mapping member or a doc missing
+        # structured/created_at must not raise here: add_message already
+        # persisted this id, and a throw abandons the write while a fresh
+        # in-memory id desyncs the client from the stored document.
+        ai_message.memories = MessageConversation.safe_build_many(memories[:5], on_error=_log_skipped_memory)
 
         if app_id:
             await run_blocking(
@@ -536,7 +560,12 @@ async def process_voice_message_segment_stream(
         return ai_message, ask_for_nps
 
     messages = list(
-        reversed([Message(**msg) for msg in await run_blocking(db_executor, chat_db.get_messages, uid, limit=10)])
+        reversed(
+            Message.deserialize_many_safe(
+                await run_blocking(db_executor, chat_db.get_messages, uid, limit=10),
+                on_error=_log_skipped_message,
+            )
+        )
     )
     callback_data = {}
     answered = False

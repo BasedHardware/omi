@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-pro-budget-exhausted.png",
+      "platform": "desktop-macos",
+      "description": "Pro at 100% budget: banner, meter, recommended Architect checkout (ImageRenderer, pro_budget_cap golden)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-cancel-scheduled-plus.png",
+      "platform": "desktop-macos",
+      "description": "Cancel-scheduled Plus: Resubscribe, blocked line on every other tier (cancel_scheduled_plus golden)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-web-pro-budget-exhausted.png",
+      "platform": "web",
+      "description": "Web Settings > Plan at 1280px, Pro at 100% budget (headless Chrome, pro_budget_cap golden)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-web-exhausted-sheet-390.png",
+      "platform": "web",
+      "description": "Web contextual plans sheet at 390px, exhausted surface with Architect upsell",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

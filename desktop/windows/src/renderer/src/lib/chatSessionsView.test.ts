@@ -1,5 +1,5 @@
 // Pure view-model helpers: client-side search filter + date-bucket grouping.
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatSession } from '../../../shared/chatSessions'
 import { filterSessions, groupSessionsByDate, toEpochMs } from './chatSessionsView'
 
@@ -104,5 +104,45 @@ describe('groupSessionsByDate', () => {
     )
     expect(groups).toHaveLength(1)
     expect(groups[0].sessions.map((s) => s.id)).toEqual(['a', 'b'])
+  })
+
+  describe('across a daylight-saving change', () => {
+    // CI runs in UTC, which never changes its clocks, so pin a zone that does: in
+    // New York, Sun 2026-03-08 lasts 23 h and Sun 2026-11-01 lasts 25 h. On the
+    // Monday after each, today's midnight minus 24 h is not Sunday's midnight.
+    beforeEach(() => {
+      vi.stubEnv('TZ', 'America/New_York')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    // Length of a local calendar day in hours; proves the pinned zone took effect.
+    const dayHours = (y: number, m: number, d: number): number =>
+      (new Date(y, m, d + 1).getTime() - new Date(y, m, d).getTime()) / 3_600_000
+
+    it('files Sunday under "Yesterday" on the Monday after clocks spring forward', () => {
+      expect(dayHours(2026, 2, 8)).toBe(23)
+      const groups = groupSessionsByDate(
+        [
+          session({ id: 'today', updatedAt: at(2026, 2, 9) }),
+          session({ id: 'yst', updatedAt: at(2026, 2, 8) }),
+          session({ id: 'wk', updatedAt: at(2026, 2, 6) })
+        ],
+        new Date(2026, 2, 9, 12).getTime()
+      )
+      expect(groups.map((g) => g.label)).toEqual(['Today', 'Yesterday', 'This Week'])
+      expect(groups[1].sessions.map((s) => s.id)).toEqual(['yst'])
+    })
+
+    it('files Sunday under "Yesterday" on the Monday after clocks fall back', () => {
+      expect(dayHours(2026, 10, 1)).toBe(25)
+      const groups = groupSessionsByDate(
+        [session({ id: 'yst', updatedAt: at(2026, 10, 1) })],
+        new Date(2026, 10, 2, 12).getTime()
+      )
+      expect(groups.map((g) => g.label)).toEqual(['Yesterday'])
+    })
   })
 })

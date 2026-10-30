@@ -52,6 +52,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   let dueConfidence: Double?
   let provenance: [OmiAPI.EvidenceRef]?
   let supersededBy: String?
+  let isLocked: Bool
 
   // Ordering (synced to backend)
   var sortOrder: Int?  // Sort position within category
@@ -127,6 +128,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
       && lhs.taskId == rhs.taskId && lhs.taskStatus == rhs.taskStatus
       && lhs.taskOwner == rhs.taskOwner && lhs.workstreamId == rhs.workstreamId
       && lhs.dueConfidence == rhs.dueConfidence && lhs.supersededBy == rhs.supersededBy
+      && lhs.isLocked == rhs.isLocked
   }
 
   enum CodingKeys: String, CodingKey {
@@ -152,6 +154,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     case dueConfidence = "due_confidence"
     case provenance
     case supersededBy = "superseded_by"
+    case isLocked = "is_locked"
     case sortOrder = "sort_order"
     case indentLevel = "indent_level"
     case relevanceScore = "relevance_score"
@@ -187,6 +190,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     dueConfidence: Double? = nil,
     provenance: [OmiAPI.EvidenceRef]? = nil,
     supersededBy: String? = nil,
+    isLocked: Bool = false,
     sortOrder: Int? = nil,
     indentLevel: Int? = nil,
     relevanceScore: Int? = nil,
@@ -229,6 +233,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     self.dueConfidence = dueConfidence
     self.provenance = provenance
     self.supersededBy = supersededBy
+    self.isLocked = isLocked
     self.sortOrder = sortOrder
     self.indentLevel = indentLevel
     self.relevanceScore = relevanceScore
@@ -291,6 +296,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     dueConfidence = try wire?.dueConfidence ?? container.decodeIfPresent(Double.self, forKey: .dueConfidence)
     provenance = try wire?.provenance ?? container.decodeIfPresent([OmiAPI.EvidenceRef].self, forKey: .provenance)
     supersededBy = try wire?.supersededBy ?? container.decodeIfPresent(String.self, forKey: .supersededBy)
+    isLocked = try wire?.isLocked ?? container.decodeIfPresent(Bool.self, forKey: .isLocked) ?? false
     sortOrder = try wire?.sortOrder ?? container.decodeIfPresent(Int.self, forKey: .sortOrder)
     indentLevel = try wire?.indentLevel ?? container.decodeIfPresent(Int.self, forKey: .indentLevel)
     relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)

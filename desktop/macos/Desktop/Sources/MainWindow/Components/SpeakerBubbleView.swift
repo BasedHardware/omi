@@ -1,9 +1,23 @@
 import OmiTheme
 import SwiftUI
 
-/// Chat bubble view for a transcript segment
+/// One transcript turn as a chat bubble. The saved transcript and the live capture both render
+/// through it, so a meeting looks the same while it is recorded and after it is saved: name · time
+/// in the name row, the user's bubble in `Ink.rowFillHover`, every other speaker in their
+/// `PageGlass.speakerTints` tint, the same avatar, and `SpeakerLabelFormatter` naming.
 struct SpeakerBubbleView: View {
-  let segment: TranscriptSegment
+  struct Translation: Equatable {
+    let lang: String
+    let text: String
+  }
+
+  /// Stable per-segment identity, used for accessibility identifiers.
+  let segmentID: String
+  let text: String
+  /// Raw diarization index (0-based); labels and avatars show it 1-based.
+  let speakerId: Int
+  let start: Double
+  let translations: [Translation]
   let isUser: Bool
   var personName: String? = nil
   var onSpeakerTapped: (() -> Void)? = nil
@@ -11,38 +25,76 @@ struct SpeakerBubbleView: View {
   /// its timestamp trigger it; other sources pass nil and stay read-only.
   var onMomentTapped: (() -> Void)? = nil
   var isMomentPlayable = false
+  /// Find-in-transcript matches inside `text`. Empty for every bubble while no search runs.
+  var searchHighlights: [Range<String.Index>] = []
+  var currentSearchHighlight: Range<String.Index>? = nil
 
   @State private var isBubbleHovered = false
+  @State private var isLabelHovered = false
 
-  /// Get speaker color based on speaker ID
-  private var bubbleColor: Color {
+  /// A saved transcript segment.
+  init(
+    segment: TranscriptSegment,
+    isUser: Bool,
+    personName: String? = nil,
+    onSpeakerTapped: (() -> Void)? = nil,
+    onMomentTapped: (() -> Void)? = nil,
+    isMomentPlayable: Bool = false,
+    searchHighlights: [Range<String.Index>] = [],
+    currentSearchHighlight: Range<String.Index>? = nil
+  ) {
+    segmentID = segment.id
+    text = segment.text
+    speakerId = segment.speakerId
+    start = segment.start
+    translations = segment.translations.map { Translation(lang: $0.lang, text: $0.text) }
+    self.isUser = isUser
+    self.personName = personName
+    self.onSpeakerTapped = onSpeakerTapped
+    self.onMomentTapped = onMomentTapped
+    self.isMomentPlayable = isMomentPlayable
+    self.searchHighlights = searchHighlights
+    self.currentSearchHighlight = currentSearchHighlight
+  }
+
+  /// A live-capture segment, still streaming. Live bubbles carry no playback or search.
+  init(liveSegment: SpeakerSegment, personName: String? = nil, onSpeakerTapped: (() -> Void)? = nil) {
+    segmentID = liveSegment.id
+    text = liveSegment.text
+    speakerId = liveSegment.speaker
+    start = liveSegment.start
+    translations = liveSegment.translations.map { Translation(lang: $0.lang, text: $0.text) }
+    isUser = liveSegment.isUser
+    self.personName = personName
+    self.onSpeakerTapped = onSpeakerTapped
+  }
+
+  /// The user's bubble is the neutral fill; every other speaker gets their tint.
+  var bubbleColor: Color {
     if isUser {
       return Ink.rowFillHover
     }
-    let colorIndex = segment.speakerId % PageGlass.speakerTints.count
+    let colorIndex = max(0, speakerId) % PageGlass.speakerTints.count
     return PageGlass.speakerTints[colorIndex]
   }
 
-  /// Format timestamp as MM:SS
+  /// "3:38", or "1:02:05" once the recording passes an hour.
   private func formatTime(_ seconds: Double) -> String {
-    let totalSeconds = Int(seconds)
-    let minutes = totalSeconds / 60
-    let secs = totalSeconds % 60
-    return String(format: "%d:%02d", minutes, secs)
+    OmiDateFormat.offset(seconds)
   }
 
-  private var speakerLabel: String {
+  var speakerLabel: String {
     if isUser { return "You" }
-    if let name = personName { return name }
-    return "Speaker \(segment.speakerId)"
+    if let name = personName, !name.isEmpty { return name }
+    return SpeakerLabelFormatter.anonymousLabel(speakerId: speakerId)
   }
 
-  private var avatarInitial: String {
+  var avatarInitial: String {
     if isUser { return "Y" }
     if let name = personName, let first = name.first {
       return String(first).uppercased()
     }
-    return String(segment.speakerId)
+    return String(SpeakerLabelFormatter.displayNumber(speakerId: speakerId))
   }
 
   var body: some View {
@@ -53,33 +105,16 @@ struct SpeakerBubbleView: View {
       }
 
       VStack(alignment: isUser ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-        // Speaker label — clickable for non-user speakers
-        if !isUser, let onTap = onSpeakerTapped {
-          Button(action: onTap) {
-            HStack(spacing: OmiSpacing.xxs) {
-              Text(speakerLabel)
-                .scaledFont(size: OmiType.caption, weight: .medium)
-              if personName == nil {
-                Image(systemName: "pencil")
-                  .scaledFont(size: OmiType.micro)
-              }
-            }
-            .padding(.vertical, OmiSpacing.hairline)
-            .contentShape(Rectangle())
-            .foregroundColor(personName != nil ? Ink.primary : Ink.secondary)
-          }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier("transcript_speaker_button_\(segment.id)")
-          .accessibilityLabel("Transcript speaker \(speakerLabel)")
-          .modifier(PointingHandOnHover())
-        } else {
-          Text(speakerLabel)
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
+        // Name row: the speaker and where in the recording they spoke, together, so the time reads
+        // as part of the turn rather than floating loose under the bubble.
+        HStack(spacing: OmiSpacing.xs) {
+          if isUser { timestamp }
+          speakerLabelView
+          if !isUser { timestamp }
         }
 
         // Message bubble
-        // NOTE: .textSelection(.enabled) was removed here because it wraps each Text
+        // NOTE: SwiftUI text selection was removed here because it wraps each Text
         // in an NSTextView-backed StyledTextLayoutEngine, which is extremely expensive.
         // With 400 segments in a conversation, this caused 2+ second main thread hangs.
         // Users can still copy the full transcript via the "Copy" button in the header.
@@ -107,17 +142,17 @@ struct SpeakerBubbleView: View {
             .contentShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
           }
           .buttonStyle(.plain)
-          .help("Play from \(formatTime(segment.start))")
-          .accessibilityLabel("Play transcript from \(formatTime(segment.start)): \(segment.text)")
-          .accessibilityIdentifier("transcript_bubble_button_\(segment.id)")
-          .modifier(PointingHandOnHover(onHoverChange: { isBubbleHovered = $0 }))
+          .help("Play from \(formatTime(start))")
+          .accessibilityLabel("Play transcript from \(formatTime(start)): \(text)")
+          .accessibilityIdentifier("transcript_bubble_button_\(segmentID)")
+          .pointingHandOnHover { isBubbleHovered = $0 }
         } else {
           messageBubble
         }
 
         // Translations from backend
-        if !segment.translations.isEmpty {
-          ForEach(segment.translations, id: \.lang) { translation in
+        if !translations.isEmpty {
+          ForEach(translations, id: \.lang) { translation in
             Text(translation.text)
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
@@ -131,27 +166,6 @@ struct SpeakerBubbleView: View {
           }
         }
 
-        // Capture transcripts reuse their existing timestamps as precise
-        // playback controls. Other conversation sources keep the ordinary
-        // read-only timestamp without acquiring capture-specific chrome.
-        if let onMomentTapped {
-          Button(action: onMomentTapped) {
-            HStack(spacing: OmiSpacing.xxs) {
-              Image(systemName: "play.circle")
-              Text(formatTime(segment.start))
-            }
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(isMomentPlayable ? Ink.primary : Ink.secondary)
-          }
-          .buttonStyle(.plain)
-          .disabled(!isMomentPlayable)
-          .help(isMomentPlayable ? "Play from this moment" : "Timestamped playback is still preparing")
-          .accessibilityLabel("Play transcript from \(formatTime(segment.start))")
-        } else {
-          Text(formatTime(segment.start))
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        }
       }
 
       if isUser {
@@ -160,6 +174,62 @@ struct SpeakerBubbleView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+  }
+
+  /// The speaker's name. For other speakers it is the way to (re)assign who spoke: an unnamed speaker
+  /// always shows the pencil, a named one shows it under the pointer, so correcting a wrong name is
+  /// as discoverable as setting the first one.
+  @ViewBuilder
+  private var speakerLabelView: some View {
+    if !isUser, let onTap = onSpeakerTapped {
+      Button(action: onTap) {
+        HStack(spacing: OmiSpacing.xxs) {
+          Text(speakerLabel)
+            .scaledFont(size: OmiType.caption, weight: .medium)
+          Image(systemName: "pencil")
+            .scaledFont(size: OmiType.micro)
+            .opacity(personName == nil || isLabelHovered ? 1 : 0)
+        }
+        .padding(.vertical, OmiSpacing.xxs)
+        .contentShape(Rectangle())
+        .foregroundColor(personName != nil ? Ink.primary : Ink.secondary)
+      }
+      .buttonStyle(.plain)
+      .help(personName == nil ? "Name this speaker…" : "Change speaker…")
+      .accessibilityIdentifier("transcript_speaker_button_\(segmentID)")
+      .accessibilityLabel("Transcript speaker \(speakerLabel)")
+      .pointingHandOnHover { isLabelHovered = $0 }
+    } else {
+      Text(speakerLabel)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.secondary)
+    }
+  }
+
+  /// Capture transcripts reuse their timestamps as precise playback controls. Other conversation
+  /// sources keep the ordinary read-only timestamp without acquiring capture-specific chrome.
+  @ViewBuilder
+  private var timestamp: some View {
+    if let onMomentTapped {
+      Button(action: onMomentTapped) {
+        HStack(spacing: OmiSpacing.xxs) {
+          Image(systemName: "play.circle")
+          Text(formatTime(start))
+            .monospacedDigit()
+        }
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(isMomentPlayable ? Ink.primary : Ink.secondary)
+      }
+      .buttonStyle(.plain)
+      .disabled(!isMomentPlayable)
+      .help(isMomentPlayable ? "Play from this moment" : "Timestamped playback is still preparing")
+      .accessibilityLabel("Play transcript from \(formatTime(start))")
+    } else {
+      Text(formatTime(start))
+        .scaledFont(size: OmiType.caption)
+        .monospacedDigit()
+        .foregroundColor(Ink.secondary)
+    }
   }
 
   /// Appears beside the bubble under the pointer so the affordance is
@@ -173,7 +243,7 @@ struct SpeakerBubbleView: View {
   }
 
   private var messageBubble: some View {
-    Text(segment.text)
+    bubbleText
       .scaledFont(size: OmiType.body)
       .foregroundColor(Ink.primary)
       .padding(.horizontal, OmiSpacing.md)
@@ -182,6 +252,20 @@ struct SpeakerBubbleView: View {
         RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
           .fill(bubbleColor)
       )
+  }
+
+  /// Plain `Text` unless this bubble holds a search match; only matching bubbles pay for an
+  /// attributed string.
+  private var bubbleText: Text {
+    guard !searchHighlights.isEmpty else { return Text(text) }
+    return Text(
+      TranscriptSearchModel.highlighted(
+        text,
+        ranges: searchHighlights,
+        current: currentSearchHighlight,
+        matchColor: Ink.accent.opacity(0.22),
+        currentColor: Ink.accent.opacity(0.5)
+      ))
   }
 
   private var avatar: some View {
@@ -206,32 +290,3 @@ struct SpeakerBubbleView: View {
     .background(Ink.surface)
   }
 #endif
-
-/// The pointing hand while a clickable transcript element is hovered, pushed
-/// and popped in balance. SwiftUI does not deliver `onHover(false)` when a
-/// hovered view leaves the hierarchy — a transcript refresh or re-sync rebuilds
-/// every bubble — so an unpaired push would leave the hand over the whole app;
-/// `onDisappear` is the exit that hover never reports.
-private struct PointingHandOnHover: ViewModifier {
-  var onHoverChange: ((Bool) -> Void)? = nil
-  @State private var didPushCursor = false
-
-  func body(content: Content) -> some View {
-    content
-      .onHover { hovering in
-        onHoverChange?(hovering)
-        setHovered(hovering)
-      }
-      .onDisappear { setHovered(false) }
-  }
-
-  private func setHovered(_ hovering: Bool) {
-    if hovering, !didPushCursor {
-      NSCursor.pointingHand.push()
-      didPushCursor = true
-    } else if !hovering, didPushCursor {
-      NSCursor.pop()
-      didPushCursor = false
-    }
-  }
-}

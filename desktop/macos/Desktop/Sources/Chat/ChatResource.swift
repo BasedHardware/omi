@@ -797,9 +797,8 @@ enum ChatResourceActions {
     NSWorkspace.shared.activateFileViewerSelecting([url])
   }
 
-  static func copyPath(_ resource: ChatResource) {
+  @MainActor static func copyPath(_ resource: ChatResource) {
     guard let uri = resource.uri, !uri.isEmpty else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(resource.fileURL?.path ?? uri, forType: .string)
+    OmiToastCenter.shared.copy(resource.fileURL?.path ?? uri, confirming: "Path copied")
   }
 }

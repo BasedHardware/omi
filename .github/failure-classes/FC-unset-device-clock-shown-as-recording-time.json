@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-unset-device-clock-shown-as-recording-time",
+  "violated_contract": "A surface that turns a device-provided clock value into a person-visible time must enforce the same plausibility floor the boundary already enforces elsewhere. A pendant that recorded before its clock was ever set stamps audio with a decades-old epoch; the upload gate refuses filenames before 2024-01-01 (utils.request_validation.parse_sync_filename_timestamp), yet the device Catching up card accepted any positive timer_start and stretched its span to \"Sep 5, 1985 - now\", and On the Way pinned the recording to a 1985 day header.",
+  "canonical_prevention": "Apply the ingestion gate's product-era floor (first hardware date, mirrored as one named constant) to every display and range computation over device clock values: drop the value from the range and list the row undated while keeping its seconds, and log each drop once per source so a never-set clock is diagnosable. Mirror an existing gate's constant rather than inventing a recency bound: a floor anchored to the product era cannot invert as time passes.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/device_catching_up_test.dart",
+    "app/test/widgets/on_the_way_days_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/settings/device/device_catching_up_card.dart",
+    "app/lib/pages/conversations/on_the_way_page.dart",
+    "app/lib/utils/sync/offline_sync_amounts.dart"
+  ],
+  "status": "open"
+}

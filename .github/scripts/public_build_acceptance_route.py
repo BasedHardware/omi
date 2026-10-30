@@ -19,6 +19,8 @@ Subcommands:
   route             emit route=candidate_url|public_url and public_url=...
   serving-revision  read a `gcloud run services describe --format=json`
                     document on stdin and print the revision holding traffic
+  stale-tags        read the same document on stdin and print this target's
+                    superseded candidate tags, comma-separated
 """
 
 from __future__ import annotations
@@ -29,7 +31,13 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from check_public_build_contract import DEFAULT_CONTRACT, acceptance_route, load_contract, serving_revision
+from check_public_build_contract import (
+    DEFAULT_CONTRACT,
+    acceptance_route,
+    load_contract,
+    serving_revision,
+    stale_candidate_tags,
+)
 
 
 def _write_outputs(path: Path | None, outputs: dict[str, str]) -> None:
@@ -54,7 +62,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     serving = subparsers.add_parser("serving-revision", help="print the revision holding the largest traffic share")
     serving.add_argument("--contract", type=Path, default=DEFAULT_CONTRACT, help=argparse.SUPPRESS)
 
+    stale = subparsers.add_parser("stale-tags", help="print superseded candidate tags for one target")
+    stale.add_argument("--target", required=True)
+    stale.add_argument("--keep-latest", type=int, default=3)
+    stale.add_argument("--keep-tag", action="append", default=[])
+
     args = parser.parse_args(argv)
+    if args.command == "stale-tags":
+        try:
+            document = json.load(sys.stdin)
+        except json.JSONDecodeError:
+            print("stale-tags expects a Cloud Run service JSON document on stdin", file=sys.stderr)
+            return 1
+        tags = stale_candidate_tags(
+            document if isinstance(document, dict) else {},
+            target=args.target,
+            keep_latest=args.keep_latest,
+            keep_tags=args.keep_tag,
+        )
+        print(",".join(tags))
+        return 0
     if args.command == "serving-revision":
         try:
             document = json.load(sys.stdin)

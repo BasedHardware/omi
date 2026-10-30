@@ -72,6 +72,10 @@ def _loaded_notifications() -> Iterator[tuple[ModuleType, ModuleType, ModuleType
         'firebase_admin.messaging': messaging,
         'firebase_admin.auth': auth,
         'database.notifications': notification_db,
+        'database.account_deletion_marker': _module(
+            'database.account_deletion_marker',
+            account_deletion_blocks_user_work=MagicMock(return_value=False),
+        ),
         'database.redis_db': _module(
             'database.redis_db',
             set_credit_limit_notification_sent=MagicMock(),

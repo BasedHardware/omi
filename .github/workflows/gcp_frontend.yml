@@ -5,6 +5,7 @@ on:
     branches: ["main", "development"]
     paths:
       - 'web/frontend/**'
+      - 'web/packages/note-shared/**'
       - 'config/public-build-*.json'
       - '.github/actions/deploy-public-build/**'
       - '.github/actions/prepare-public-build/**'
@@ -29,6 +30,12 @@ concurrency:
   group: deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   deploy:
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
@@ -36,6 +43,8 @@ jobs:
       actions: read
       contents: read
       id-token: write
+    env:
+      DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -67,7 +76,11 @@ jobs:
           target: frontend
           environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
-          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod: GitHub WIF (omi-gha-deploy-prod, pinned to this file on main +
+          # the prod environment); development uses the dev deployer through
+          # omi-gha-deploy-dev (credential hygiene WS-D). No JSON key either way.
+          workload_identity_provider: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          workload_identity_service_account: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'omi-ci-web-prod@based-hardware.iam.gserviceaccount.com' || 'omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com' }}
           service_account: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
           runtime_env_vars: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE=${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
 

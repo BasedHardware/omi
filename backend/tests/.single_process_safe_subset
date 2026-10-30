@@ -60,7 +60,6 @@ tests/unit/test_short_term_memory.py
 tests/unit/test_sync_transcription_prefs.py
 tests/unit/test_desktop_updates.py
 tests/unit/test_review_queue_non_active_routes.py
-tests/unit/test_kg_user_type_mismatch.py
 tests/unit/test_kg_edge_id_sanitization.py
 tests/unit/test_conversation_events_bounds.py
 tests/unit/test_conversations_date_range_validation.py
@@ -73,7 +72,6 @@ tests/unit/test_geocoding_cache.py
 tests/unit/test_tts.py
 tests/unit/test_notification_token_cleanup.py
 tests/unit/test_proactive_notification_language.py
-tests/unit/test_mentor_notifications.py
 tests/unit/test_apps_review_reply_validation.py
 tests/unit/test_create_persona_user_none.py
 tests/unit/test_billable_transcription_seconds.py
@@ -111,6 +109,6 @@ tests/unit/test_translation_dedup_edge_cases.py
 tests/unit/test_translation_nllb.py
 tests/unit/test_translation_optimization.py
 tests/routers/test_users.py
-tests/unit/v3_router_probes/fastapi_route_contract.py
 tests/unit/test_desktop_transcribe.py
 tests/unit/test_redis_db_deserialize.py
+tests/unit/test_app_visibility_missing_doc_guard.py

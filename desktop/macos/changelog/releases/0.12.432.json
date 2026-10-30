@@ -1,0 +1,7 @@
+{
+  "version": "0.12.432",
+  "date": "2026-10-02",
+  "changes": [
+    "Added an Export All Data action in Settings > Data Controls that saves a verified JSON copy of your account data"
+  ]
+}

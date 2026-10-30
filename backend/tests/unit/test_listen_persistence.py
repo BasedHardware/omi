@@ -1,5 +1,7 @@
 """Tests for the executor-backed listen persistence boundary."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from models.users import PlanType
@@ -154,3 +156,123 @@ async def test_credit_refresh_emits_threshold_event_for_plus(monkeypatch):
 
 async def _completed():
     return None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('enforce,legacy', [(True, False), (False, False), (True, True)])
+async def test_without_funded_admission_keeps_main_long_refresh(monkeypatch, enforce, legacy):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(enforce).lower())
+    monkeypatch.setattr(listen_runtime.ladder_policy, 'entitlements', lambda _: None if legacy else {'plan_id': 'plus'})
+    runtime = object.__new__(listen_runtime.ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='user-1', source='desktop')
+    runtime.limits = ListenLimits(credits_refresh_seconds=900)
+    runtime.state = ListenSessionState(
+        remaining_seconds_cache=None, remaining_seconds_cache_ts=100, remaining_seconds_cache_initialized=True
+    )
+    runtime.user_has_credits = True
+    # Custom STT has no funded socket; it must not scan the ledger each minute.
+    runtime.receiver = SimpleNamespace(cap_admission=None)
+    reads = Mock(return_value=0)
+
+    async def call(function, *args, **kwargs):
+        if function is listen_runtime.check_credits_invalidation:
+            return False
+        if function is listen_runtime.get_remaining_transcription_seconds:
+            assert kwargs == {'source': 'desktop'}
+            return reads()
+        if function is listen_runtime.user_db.get_user_valid_subscription:
+            return SimpleNamespace(plan=PlanType.operator)
+        raise AssertionError(function)
+
+    runtime.persistence = SimpleNamespace(call=call)
+    # Budget crosses immediately after the previous read; no chunk performs IO.
+    for now in (110, 159, 160):
+        monkeypatch.setattr(listen_runtime.time, 'time', lambda: now)
+        await runtime._refresh_credits(transcription_seconds=10)
+        if now < 160:
+            reads.assert_not_called()
+    reads.assert_not_called()
+    assert runtime.user_has_credits
+    monkeypatch.setattr(listen_runtime.time, 'time', lambda: 1000)
+    await runtime._refresh_credits(transcription_seconds=10)
+    reads.assert_called_once()
+    assert not runtime.user_has_credits
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('plan,remaining', [(PlanType.operator, 0), (PlanType.plus, 0.5)])
+async def test_ladder_refresh_reuses_funded_admission_snapshot(monkeypatch, plan, remaining):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(listen_runtime.ladder_policy, 'entitlements', lambda _: {'plan_id': 'plus'})
+    runtime = object.__new__(listen_runtime.ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='user-1', source='desktop')
+    runtime.limits = ListenLimits()
+    runtime.state = ListenSessionState()
+    runtime.stt_service = 'modulate'
+    admission = SimpleNamespace(refresh=AsyncMock(), remaining=remaining, managed=remaining > 0, omi_selected=True)
+    runtime.receiver = SimpleNamespace(cap_admission=admission, cap_paused=False)
+    runtime.asend_event = AsyncMock()
+    monkeypatch.setattr(listen_runtime, 'send_credit_limit_notification', AsyncMock())
+
+    async def call(function, *args, **kwargs):
+        if function is listen_runtime.check_credits_invalidation:
+            return False
+        if function is listen_runtime.user_db.get_user_valid_subscription:
+            return SimpleNamespace(plan=plan)
+        raise AssertionError('redundant budget read')
+
+    runtime.persistence = SimpleNamespace(call=call)
+    await runtime._refresh_credits()
+    admission.refresh.assert_awaited_once()
+    assert runtime.state.remaining_seconds_cache == remaining
+    assert runtime.user_has_credits is (remaining > 0)
+    if plan == PlanType.plus:
+        event = runtime.asend_event.call_args.args[0]
+        assert event.remaining_seconds == 0
+        assert type(event.remaining_seconds) is int
+    else:
+        runtime.asend_event.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('remaining', [0, 100, None])
+async def test_ladder_only_admission_preserves_legacy_monthly_credit_state(monkeypatch, remaining):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setattr(listen_runtime.ladder_policy, 'entitlements', lambda _: None)
+    monkeypatch.setattr(listen_runtime.time, 'time', lambda: 101)
+    monkeypatch.setattr(listen_runtime, 'send_credit_limit_notification', AsyncMock())
+    runtime = object.__new__(listen_runtime.ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='legacy', source='desktop')
+    runtime.limits = ListenLimits(credits_refresh_seconds=900)
+    runtime.state = ListenSessionState(
+        remaining_seconds_cache=remaining, remaining_seconds_cache_ts=100, remaining_seconds_cache_initialized=True
+    )
+    runtime.stt_service = 'modulate'
+    runtime.asend_event = AsyncMock()
+    admission = SimpleNamespace(
+        refresh=AsyncMock(), reason='legacy_dispatch_disabled', remaining=None, managed=True, omi_selected=True
+    )
+    runtime.receiver = SimpleNamespace(cap_admission=admission, cap_paused=False)
+
+    async def call(function, *args, **kwargs):
+        if function is listen_runtime.check_credits_invalidation:
+            return False
+        if function is listen_runtime.user_db.get_user_valid_subscription:
+            return SimpleNamespace(plan=PlanType.plus)
+        raise AssertionError('unexpected legacy or ladder read')
+
+    runtime.persistence = SimpleNamespace(call=call)
+    await runtime._refresh_credits()
+    assert runtime.state.remaining_seconds_cache == remaining
+    assert runtime.user_has_credits is (remaining is None or remaining > 0)
+    assert admission.remaining is None  # Legacy dispatch remains disabled, without bypassing its credit meter.

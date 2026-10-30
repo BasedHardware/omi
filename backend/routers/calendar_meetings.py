@@ -1,18 +1,22 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.calendar_meetings as calendar_db
-from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant, MeetingParticipantSources
 from utils.other import endpoints as auth
 from utils.request_validation import CalendarMeetingsLimit
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _to_utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 
 
 class StoreMeetingRequest(BaseModel):
@@ -27,6 +31,12 @@ class StoreMeetingRequest(BaseModel):
     meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
     participants: List[MeetingParticipant] = Field(default_factory=list, description="Meeting participants")
     notes: Optional[str] = Field(default=None, description="Meeting notes/description")
+    participant_sources: Optional[MeetingParticipantSources] = None
+
+    @field_validator('participant_sources', mode='before')
+    @classmethod
+    def discard_client_provenance(cls, value):
+        return None
 
 
 class StoreMeetingResponse(BaseModel):
@@ -46,38 +56,32 @@ def store_calendar_meeting(
     Store or update a calendar meeting in Firestore.
     If a meeting with the same calendar_event_id and calendar_source exists, it will be updated.
     """
-    # Calculate duration
-    duration_minutes = int((request.end_time - request.start_time).total_seconds() / 60)
-
-    # Create CalendarMeetingContext for storage
+    start_utc, end_utc = _to_utc(request.start_time), _to_utc(request.end_time)
+    if end_utc <= start_utc:
+        raise HTTPException(status_code=422, detail="end_time must be after start_time")
+    duration_minutes = int((end_utc - start_utc).total_seconds() / 60)
     meeting_context = CalendarMeetingContext(
         calendar_event_id=request.calendar_event_id,
         title=request.title,
         participants=request.participants,
         platform=request.platform,
         meeting_link=request.meeting_link,
-        start_time=request.start_time,
+        start_time=start_utc,
         duration_minutes=duration_minutes,
         notes=request.notes,
         calendar_source=request.calendar_source,
+        participant_sources=request.participant_sources,
     )
-
     meeting_dict = meeting_context.model_dump()
-    meeting_dict['end_time'] = request.end_time
-
-    # Check if meeting already exists (by calendar_event_id + calendar_source)
+    meeting_dict['end_time'] = end_utc
     existing_meeting_id = calendar_db.get_meeting_id_by_calendar_event(
         uid, request.calendar_event_id, request.calendar_source
     )
-
     if existing_meeting_id:
-        # Update existing meeting
         calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
         meeting_id = existing_meeting_id
     else:
-        # Create new meeting
         meeting_id = calendar_db.create_meeting(uid, meeting_dict)
-
     return StoreMeetingResponse(meeting_id=meeting_id, calendar_event_id=request.calendar_event_id)
 
 
@@ -93,7 +97,7 @@ def get_calendar_meeting(
         raise HTTPException(status_code=404, detail="Meeting not found")
 
     try:
-        return CalendarMeetingContext(**meeting)
+        return CalendarMeetingContext(**meeting).without_tile_provenance()
     except ValidationError as exc:
         # A malformed/legacy stored meeting cannot be rendered; treat it as unavailable
         # (the list endpoint already skips such records) rather than 500 the request. Log a
@@ -121,7 +125,7 @@ def list_calendar_meetings(
     # record cannot hide every other meeting the user has. Log a safe identifier plus
     # the exception class only: a ValidationError's str() renders the field input_value,
     # which for a meeting can be sensitive (title, participant emails, link, notes).
-    return CalendarMeetingContext.from_records(
+    contexts = CalendarMeetingContext.from_records(
         meetings,
         on_error=lambda record, exc: logger.warning(
             'Skipping malformed calendar meeting for uid=%s event_id=%s: %s',
@@ -130,3 +134,5 @@ def list_calendar_meetings(
             type(exc).__name__,
         ),
     )
+
+    return [context.without_tile_provenance() for context in contexts]

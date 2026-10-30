@@ -1,4 +1,4 @@
-"""Tests for plan-aware fair-use soft caps and the hard daily-audio ceiling
+"""Tests for plan-aware fair-use caps and the hard daily-audio ceiling
 (utils/fair_use.py).
 
 ``utils.fair_use`` imports cleanly; we toggle ``FAIR_USE_ENABLED`` per-test via
@@ -6,6 +6,8 @@
 ``speech_totals`` so no Redis is touched. See backend/docs/test_isolation.md.
 """
 
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -132,3 +134,41 @@ class TestDailyAudioCeiling:
         totals = _totals(daily_ms=10**12)
         with patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', {'vip'}):
             assert fair_use_mod.is_daily_audio_ceiling_exceeded('vip', totals) is False
+
+
+class TestHardRestrictionUsesPlanCaps:
+    @pytest.mark.parametrize(
+        'plan,window,cap_index',
+        [
+            (PlanType.unlimited_v2, 'daily_ms', 0),
+            (PlanType.unlimited_v2, 'three_day_ms', 1),
+            (PlanType.unlimited_v2, 'weekly_ms', 2),
+            (PlanType.basic, 'daily_ms', 0),
+            (PlanType.basic, 'three_day_ms', 1),
+            (PlanType.basic, 'weekly_ms', 2),
+            (PlanType.plus, 'daily_ms', 0),
+            (PlanType.plus, 'three_day_ms', 1),
+            (PlanType.plus, 'weekly_ms', 2),
+        ],
+    )
+    def test_blocks_only_above_the_active_plan_cap(self, plan, window, cap_index):
+        cap = fair_use_mod.fair_use_caps_for_plan(plan)[cap_index]
+        state = {'stage': 'restrict', 'restrict_until': datetime.now(timezone.utc) + timedelta(days=1)}
+        subscription = SimpleNamespace(plan=plan)
+        with patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True), patch.object(
+            fair_use_mod, 'FAIR_USE_KILL_SWITCH', False
+        ), patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set()), patch.object(
+            fair_use_mod, 'fair_use_db'
+        ) as fair_use_db, patch.object(
+            fair_use_mod, 'get_rolling_speech_ms'
+        ) as get_speech, patch.object(
+            fair_use_mod.users_db, 'get_existing_user_subscription', return_value=subscription
+        ):
+            fair_use_db.get_fair_use_state.return_value = state
+            get_speech.return_value = _totals(**{window: cap})
+            assert fair_use_mod.get_hard_restriction_status('u') == (False, None)
+
+            get_speech.return_value = _totals(**{window: cap + 1})
+            restricted, retry_after = fair_use_mod.get_hard_restriction_status('u')
+            assert restricted is True
+            assert retry_after is not None

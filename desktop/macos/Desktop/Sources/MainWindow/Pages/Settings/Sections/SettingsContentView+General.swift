@@ -14,13 +14,13 @@ import WebKit
 // stop shimmering — and Notifications & Privacy already used it, so General and its neighbour were
 // two different designs.
 //
-// *Accent* spends the one accent on decoration. `Ink.accent` is reserved for the thing that is
-// actionable and is not already a control, which on this surface is the sidebar's selected row; with
-// every icon on the pane in the same blue, the selection had nothing left to say. The tile's default
+// *Accent* spends the one accent on decoration. `Ink.accent` is reserved for the one actionable link
+// on a surface; selection and on-state are neutral ink (`SettingsSelection`). The tile's default
 // tint is `Ink.primary`, which is what the rest of the pane is set in.
 extension SettingsContentView {
   var generalSection: some View {
     VStack(spacing: OmiSpacing.sm) {
+      storefrontFeatureEntry(.screenContext)
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         HStack(spacing: OmiSpacing.lg) {
@@ -88,6 +88,35 @@ extension SettingsContentView {
             AudioRecordingModeSwitcher(selection: audioRecordingModeBinding)
           }
 
+        }
+      }
+
+      // Wake word trigger (opt-in; needs ambient listening active to hear it)
+      settingsCard(settingId: "general.wakeword") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
+            SettingsIconTile(symbol: "waveform.and.mic")
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Wake Word")
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
+
+              Text(wakeWordSubtitle)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
+            }
+
+            Spacer()
+
+            Toggle(
+              "",
+              isOn: wakeWordEnabledBinding
+            )
+            .toggleStyle(OmiToggleStyle())
+            .labelsHidden()
+            .frame(width: 36, height: 20)
+          }
         }
       }
 
@@ -197,7 +226,7 @@ extension SettingsContentView {
               Button("Reset") {
                 fontScaleSettings.resetToDefault()
               }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
             }
           }
 
@@ -209,7 +238,7 @@ extension SettingsContentView {
               .foregroundColor(Ink.secondary)
 
             Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
-              .tint(Ink.accent)
+              .tint(SettingsSelection.valueFill)
               .onChange(of: fontScaleSettings.scale) { _, _ in
                 performStepHaptic()
               }
@@ -224,19 +253,6 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, OmiSpacing.xxs)
-
-          HStack {
-            Spacer()
-            Button(action: {
-              resetWindowToDefaultSize()
-            }) {
-              HStack(spacing: OmiSpacing.xs) {
-                Image(systemName: "arrow.uturn.backward")
-                Text("Reset Window Size")
-              }
-            }
-            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-          }
         }
       }
 
@@ -245,6 +261,39 @@ extension SettingsContentView {
         transparencyCard
       }
 
+      // Window
+      settingsCard(settingId: "general.window") {
+        windowSizeCard
+      }
+
+    }
+  }
+
+  /// Restores the default window size. A rarely used repair, so it is a quiet secondary button on
+  /// its own row rather than a primary button inside the Font Size card, which it has nothing to do
+  /// with.
+  private var windowSizeCard: some View {
+    HStack(spacing: OmiSpacing.lg) {
+      SettingsIconTile(symbol: "macwindow")
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Window Size")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        Text("Return the main window to its default dimensions")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+      }
+
+      Spacer()
+
+      Button("Reset") {
+        resetWindowToDefaultSize()
+      }
+      .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+      .accessibilityLabel("Reset Window Size")
+      .accessibilityIdentifier("settings-reset-window-size")
     }
   }
 
@@ -282,7 +331,7 @@ extension SettingsContentView {
           Button("Reset") {
             glassTransparencySettings.resetToDefault()
           }
-          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
           .disabled(reduced)
           .opacity(reduced ? 0.45 : 1)
         }
@@ -298,7 +347,7 @@ extension SettingsContentView {
           value: $glassTransparencySettings.transparency,
           in: InkGlassTransparencySettings.range
         )
-        .tint(Ink.accent)
+        .tint(SettingsSelection.valueFill)
         // The side icons' tooltips do not attach to the control, so without this VoiceOver reads a
         // bare percentage with no word for what it is.
         .accessibilityLabel("Transparency")
@@ -329,7 +378,7 @@ extension SettingsContentView {
         // The mode-change observer restores capture automatically, and automatic
         // starts never raise the TCC sheet. Enabling listening here IS an explicit
         // user action, so it owns the one-shot permission request itself (same
-        // contract as the Listen control's `cycleListening`).
+        // contract as the top bar's `selectListeningMode`).
         if AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
           currentMode: previousMode,
           requestedMode: mode,
@@ -343,6 +392,23 @@ extension SettingsContentView {
 
   private var audioRecordingNeedsAttention: Bool {
     audioRecordingMode != .off && !appState.hasMicrophonePermission
+  }
+
+  private var wakeWordEnabledBinding: Binding<Bool> {
+    Binding(
+      get: { AssistantSettings.shared.wakeWordEnabled },
+      set: { AssistantSettings.shared.wakeWordEnabled = $0 }
+    )
+  }
+
+  private var wakeWordSubtitle: String {
+    let requiresListeningText: String
+    switch audioRecordingMode {
+    case .off: requiresListeningText = "Requires Audio Recording to be on"
+    case .onlyMeetings: requiresListeningText = "Listens during meetings and calls"
+    case .always: requiresListeningText = "Listens in the background"
+    }
+    return "Say \"\(AssistantSettings.shared.wakeWordPhrase)\" then a command, hands-free. \(requiresListeningText)."
   }
 
   private var audioRecordingStatusText: String {
@@ -367,9 +433,10 @@ private struct AudioRecordingModeSwitcher: View {
 
   var body: some View {
     HStack(spacing: 2) {
-      segment(.off, label: "Off")
-      segment(.always, label: "Always")
-      segment(.onlyMeetings, label: "Meetings")
+      // The same names the top bar's audio control uses (`CaptureListeningLogic.audioRecordingModeTitle`).
+      segment(.off, label: CaptureListeningLogic.audioRecordingModeTitle(.off))
+      segment(.always, label: CaptureListeningLogic.audioRecordingModeTitle(.always))
+      segment(.onlyMeetings, label: CaptureListeningLogic.audioRecordingModeTitle(.onlyMeetings))
     }
     .padding(3)
     .background(
@@ -380,7 +447,8 @@ private struct AudioRecordingModeSwitcher: View {
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
         .strokeBorder(Ink.hairline, lineWidth: 1)
     )
-    .frame(width: 230)
+    // Wide enough for "Only Meetings" in equal segments at the default text size.
+    .frame(width: 300)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Audio Recording")
   }
@@ -436,7 +504,7 @@ private struct InterfaceSoundsRow: View {
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
 
-        Text("Sounds for important arrivals and completions.")
+        Text("Play a short sound when a chat answer finishes, a permission is granted, or a new card appears.")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }

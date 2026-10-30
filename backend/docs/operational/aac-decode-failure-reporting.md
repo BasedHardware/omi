@@ -31,13 +31,13 @@ corrupt/truncated client audio, frame after frame.
 consequences, one contract violation:
 
 1. **The receiver's decode-failure contract never fired for AAC.** The
-   listen receiver (`routers/listen/receiver.py`) already owns undecodable-
-   frame reporting: `_record_decode_failure` logs a per-frame warning with
-   the codec's own message, payload size, and streak, and the one-shot
+   listen receiver (`routers/listen/receiver.py`) owns undecodable-frame
+   reporting: `_record_decode_failure` logs the codec's own message, payload
+   size, and streak, and calls the one-shot
    `record_fallback(component='silent_mic', …, outcome='exhausted')` at 50
-   consecutive drops (1 s at the omi 20 ms frame cadence) — the contract
-   #11732 established when opus streams were dropping silently. All of it
-   hangs off the decoder *raising*. opuslib raises `OpusError`; the AAC
+   consecutive drops (1 s at the Omi 20 ms frame cadence) — the contract
+   #11732 established when Opus streams were dropping silently. All of it
+   depends on the decoder *raising*. opuslib raises `OpusError`; the AAC
    decoder swallowed, so a fully undecodable AAC stream recorded a whole
    session with no transcript, no ring buffer, no mixed audio, and **no
    fallback metric** — a fail-open branch with no operator signal (the
@@ -47,6 +47,11 @@ consequences, one contract violation:
    streak — strictly less information than the warning the receiver would
    have logged — and it duplicated that warning per frame once the receiver
    path existed, polluting the error feed the Loop S sensor watches.
+
+Since this note was written, the receiver has added
+`omi_listen_audio_decode_failures_total` for every dropped frame, limits the
+detailed warning to once per session, and emits one streak-exceeded event at
+the same 50-frame threshold.
 
 ## The fix
 
@@ -62,9 +67,13 @@ consequences, one contract violation:
 
 ## Operator-visible after this lands
 
-- Per corrupt frame: `WARNING … Listen audio frame decode failed codec=aac
-  type=AACDecodeError bytes=N streak=M detail=<ffmpeg message>` (uid/session
-  context via the existing warning shape).
+- On the first corrupt frame per session: `WARNING …
+  Listen audio frame decode failed codec=aac type=AACDecodeError bytes=N
+  streak=M detail=<ffmpeg message>` (bounded session context via the warning
+  shape). `omi_listen_audio_decode_failures_total` counts every dropped frame.
+- At 50 consecutive corrupt frames: one
+  `listen_audio_decode_streak_exceeded` event and one `silent_mic` fallback
+  metric per session.
 - A fully undecodable stream: one `silent_mic` fallback metric per session —
   the alertable signal that was missing.
 - The `ERROR:libav.aac:*` family should disappear from the error feed; any

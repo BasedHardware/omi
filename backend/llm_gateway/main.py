@@ -4,14 +4,22 @@ import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 
+from omi_logging import configure_logging
+
+# Text until llm-gateway's log consumers are admitted for JSON
+# (docs/runbooks/structured-logging-rollout.md); OMI_LOG_FORMAT=json opts in.
+configure_logging('llm-gateway', default_format='text')
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
+from database.firestore_tier_context import FirestoreTierMiddleware
 from llm_gateway.gateway.request_context import REQUEST_ID_HEADER, request_id_for, resolve_request_id
+from llm_gateway.gateway.vertex_diagnostics import request_id_context
 from llm_gateway.gateway.metrics import observe_gateway_config_identity
 from llm_gateway.gateway.accounting_sink import drain_accounting_persistence_tasks
-from llm_gateway.routers import anthropic_messages, embeddings, health, metrics, openai_compatible
+from llm_gateway.routers import anthropic_messages, embeddings, health, metrics, openai_compatible, systemone
 from llm_gateway.routers.dependencies import close_provider_registry, get_gateway_config
 
 logger = logging.getLogger(__name__)
@@ -42,6 +50,7 @@ async def _run_shutdown_cleanup(name: str, cleanup: Callable[[], Awaitable[None]
 
 
 app = FastAPI(title='Omi LLM Gateway', lifespan=lifespan)
+app.add_middleware(FirestoreTierMiddleware)
 
 
 @app.exception_handler(Exception)
@@ -65,7 +74,11 @@ async def request_correlation(
 ) -> Response:
     request_id = resolve_request_id(request.headers.get(REQUEST_ID_HEADER))
     request.state.request_id = request_id
-    response = await call_next(request)
+    token = request_id_context.set(request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_context.reset(token)
     response.headers[REQUEST_ID_HEADER] = request_id
     return response
 
@@ -73,5 +86,6 @@ async def request_correlation(
 app.include_router(health.router)
 app.include_router(openai_compatible.router)
 app.include_router(embeddings.router)
+app.include_router(systemone.router)
 app.include_router(anthropic_messages.router)
 app.include_router(metrics.router)

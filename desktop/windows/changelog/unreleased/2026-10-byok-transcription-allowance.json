@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "BYOK settings and plan usage now distinguish chat and AI keys from Deepgram transcription, so transcription limits stay clear when you bring only an LLM key."
+  ]
+}

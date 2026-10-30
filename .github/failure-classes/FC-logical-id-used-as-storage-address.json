@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-logical-id-used-as-storage-address",
+  "violated_contract": "A logical message ID must not be treated as a Firestore document address when an admitted producer uses auto-generated document IDs.",
+  "canonical_prevention": "Resolve the logical ID inside its owner collection, validate the session, and page with the resulting physical snapshot. Exercise the actual auto-ID producer in a Firestore emulator regression rather than only fixtures whose two IDs happen to match.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_shaped_chat_context_firestore.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/database/chat_context.py", "backend/database/chat.py"],
+  "status": "open"
+}

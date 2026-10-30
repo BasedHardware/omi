@@ -1,0 +1,7 @@
+{
+  "version": "0.12.469",
+  "date": "2026-10-11",
+  "changes": [
+    "Marketplace MCP installs now open connection setup so you can finish signing in without finding the server again"
+  ]
+}

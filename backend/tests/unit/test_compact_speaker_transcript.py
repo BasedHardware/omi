@@ -8,7 +8,9 @@ one-name calendar guard), the screenshot-equivalent sanitize path, and
 `get_app_result` stripping.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +22,35 @@ from models.app import App
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import stub_modules
+
+
+@pytest.fixture(autouse=True)
+def _passthrough_notes_transport(monkeypatch):
+    """Fake models aren't provider clients; skip the real transport isolation."""
+
+    @asynccontextmanager
+    async def _passthrough(model):
+        if not hasattr(model, 'ainvoke'):
+
+            async def ainvoke(messages, *args, **kwargs):
+                return model.invoke(messages)
+
+            model.ainvoke = ainvoke
+        yield model
+
+    monkeypatch.setattr(
+        __import__('utils.llm.conversation_processing', fromlist=['isolated_notes_model']),
+        'isolated_notes_model',
+        _passthrough,
+    )
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+        yield
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -38,6 +69,7 @@ def _seg(segment_id: str, text: str, *, speaker: str = 'SPEAKER_00', is_user: bo
         text=text,
         speaker=speaker,
         is_user=is_user,
+        speaker_match_source='conversation_voice' if is_user else None,
         person_id=person_id,
         start=0.0,
         end=2.0,
@@ -63,16 +95,16 @@ def test_renderer_uses_cluster_keys_and_run_length_form(monkeypatch):
     rendered, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation)
 
     assert rendered == (
-        '[seg-1 0] the flush is about 9mm\n\n'
+        '[seg-1 c0] the flush is about 9mm\n\n'
         '[seg-2] it can sit flush with the wall\n\n'
-        '[seg-3 1] can it sit flush\n\n'
+        '[seg-3 c1] can it sit flush\n\n'
         '[seg-4] yes, barely visible\n\n'
-        '[seg-5 0] ultra-thin then'
+        '[seg-5 c0] ultra-thin then'
     )
     assert 'Speaker' not in rendered
     assert 'segment:' not in rendered
     assert '0.000' not in rendered
-    assert speaker_map == {0: 'David', 1: None}
+    assert speaker_map == {'c0': 'David', 'c1': None}
 
 
 def test_speaker_map_binds_only_evidence_backed_names(monkeypatch):
@@ -90,12 +122,12 @@ def test_speaker_map_binds_only_evidence_backed_names(monkeypatch):
 
     _, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation, people)
 
-    assert speaker_map == {2: 'David', 5: 'Alice', 0: None}
+    assert speaker_map == {'c0': 'David', 'c1': 'Alice', 'c2': None}
 
 
 def test_prefix_renders_spk_map_and_never_speaker_labels(monkeypatch):
     from utils.conversations import transcript_for_llm
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_a, **_k: 'David')
     conversation = SimpleNamespace(
@@ -115,31 +147,31 @@ def test_prefix_renders_spk_map_and_never_speaker_labels(monkeypatch):
         speaker_map=speaker_map,
     )
 
-    assert 'spk 0 David\nspk 1 ?' in prefix.context
+    assert 'spk c0 David\nspk c1 ?' in prefix.context
     assert 'Speaker 0' not in prefix.context
     assert 'Speaker 1:' not in prefix.context
-    assert '[seg-1 0] the flush is about 9mm' in prefix.context
+    assert '[seg-1 c0] the flush is about 9mm' in prefix.context
 
 
 def test_calendar_guard_resolves_single_unresolved_cluster_from_map():
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-1',
-        transcript='[seg-1 0] hi',
+        transcript='[seg-1 c0] hi',
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
         timezone_name='UTC',
         language_code='en',
         calendar_context=None,
-        speaker_map={0: 'David', 1: None},
+        speaker_map={'c0': 'David', 'c1': None},
     )
 
-    assert 'spk 1 ?' in prefix.context
+    assert 'spk c1 ?' in prefix.context
 
 
 def test_calendar_guard_requires_exactly_one_unresolved_and_one_remaining_name():
     from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     context = CalendarMeetingContext(
         calendar_event_id='evt-1',
@@ -152,28 +184,28 @@ def test_calendar_guard_requires_exactly_one_unresolved_and_one_remaining_name()
     # Two unresolved clusters, one remaining name: ambiguous, so nothing is bound.
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-1',
-        transcript='[seg-1 0] hi',
+        transcript='[seg-1 c0] hi',
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
         timezone_name='UTC',
         language_code='en',
         calendar_context=context,
-        speaker_map={0: None, 1: None},
+        speaker_map={'c0': None, 'c1': None},
     )
-    assert 'spk 0 ?' in prefix.context
-    assert 'spk 1 ?' in prefix.context
-    assert 'spk 0 David' not in prefix.context
+    assert 'spk c0 ?' in prefix.context
+    assert 'spk c1 ?' in prefix.context
+    assert 'spk c0 David' not in prefix.context
 
     # One unresolved cluster, one remaining participant: bound through the map, not a transcript rewrite.
     resolved = build_conversation_prompt_prefix(
         conversation_id='conv-2',
-        transcript='[seg-1 0] hi',
+        transcript='[seg-1 c0] hi',
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
         timezone_name='UTC',
         language_code='en',
         calendar_context=context,
-        speaker_map={0: 'David', 1: None},
+        speaker_map={'c0': 'David', 'c1': None},
     )
-    assert 'spk 1 Ash' in resolved.context
+    assert 'spk c1 Ash' in resolved.context
     assert 'Speaker' not in resolved.context
 
 
@@ -195,7 +227,8 @@ def _joined_prompt(messages) -> str:
 
 def _poisoned_notes_model(captured):
     class Model:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
+            captured.setdefault('calls', []).append(messages)
             captured['messages'] = messages
             return SimpleNamespace(content='''{
                   "title":"Speaker 0 Examines Ultra-Thin Flush Design",
@@ -214,7 +247,7 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     """11s hardware scrap, unresolved cluster, model that copies Speaker 0 anyway."""
     from utils.conversations import transcript_for_llm
     from utils.llm import conversation_processing
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_a, **_k: 'David')
     conversation = SimpleNamespace(
@@ -225,6 +258,7 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     )
     transcript, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation)
     prefix = build_conversation_prompt_prefix(
+        uid='uid-notes',
         conversation_id='conv-scrap',
         transcript=transcript,
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
@@ -232,12 +266,11 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
         language_code='en',
         speaker_map=speaker_map,
     )
-    assert 'spk 0 ?' in prefix.context
+    assert 'spk c0 ?' in prefix.context
     assert 'Speaker 0' not in prefix.context
 
     captured: dict = {}
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_a, **_k: _poisoned_notes_model(captured))
-    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
     structured = conversation_processing.get_conversation_notes(
         prefix,
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
@@ -251,8 +284,15 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     assert 'Speaker 0' not in structured.title
     assert 'Speaker 0' not in structured.overview
     assert 'flush is about 9mm' in structured.overview
-    # The speaker-key guidance lives in the static cacheable prefix, the transcript in the
-    # volatile suffix; assert against the whole prompt rather than one message's position.
+    assert len(captured['calls']) == 1
+    assert [message['role'] for message in captured['messages']] == ['system', 'user']
+    assert 'flush is about 9mm' not in _joined_prompt(captured['messages'][:1])
+    evidence = json.loads(captured['messages'][1]['content'])
+    assert evidence['capture_evidence'] == prefix.shaped_context
+    identity = json.loads(evidence['capture_evidence'].split('\nFULL TRANSCRIPT\n', 1)[0])
+    assert identity['speaker_map'] == {'c0': None}
+    assert 'prompt_cache_breakpoint' not in json.dumps(captured['messages'])
+    # Speaker guidance lives in the shaped system block; raw cluster identity remains evidence.
     prompt = _joined_prompt(captured['messages'])
     assert 'Speaker keys are diarization clusters, not names' in prompt
 
@@ -271,14 +311,14 @@ def _summary_app() -> App:
 
 def test_get_app_result_strips_speaker_and_spk_placeholders(monkeypatch):
     from utils.llm import conversation_processing
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
     monkeypatch.setattr(
         conversation_processing,
         'get_llm',
         lambda *_a, **_k: SimpleNamespace(
             invoke=lambda _messages: SimpleNamespace(
-                content='```json\nSpeaker 0 said the flush is 9mm. spk 1 confirmed it. SPEAKER_02 agreed.```'
+                content='```json\nSpeaker 0 said the flush is 9mm. spk c1 confirmed it. SPEAKER_02 agreed.```'
             )
         ),
     )
@@ -286,6 +326,6 @@ def test_get_app_result_strips_speaker_and_spk_placeholders(monkeypatch):
     legacy = conversation_processing.get_app_result('raw transcript', [], _summary_app())
     assert legacy == 'said the flush is 9mm. confirmed it. agreed.'
 
-    prefix = ConversationPromptPrefix(conversation_id='conv-1', context='FULL TRANSCRIPT\n[seg-1 0] hi')
+    prefix = ConversationPromptPrefix(conversation_id='conv-1', context='FULL TRANSCRIPT\n[seg-1 c0] hi')
     prefixed = conversation_processing.get_app_result('raw transcript', [], _summary_app(), prompt_prefix=prefix)
     assert prefixed == 'said the flush is 9mm. confirmed it. agreed.'

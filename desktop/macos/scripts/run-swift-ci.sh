@@ -4,10 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-# Single source of truth for the desktop Swift ship/CI toolchain: version,
-# build, and expected app path live in ci/xcode-pin.json. Never duplicate
-# those literals here; the CI contract test enforces that this script,
-# desktop-swift-ci.yml, codemagic.yaml, and the pin file all agree.
+# Required desktop Swift CI toolchain. Codemagic releases intentionally use
+# Xcode 27.0 to compile Siri and package App Intents metadata.
 PIN_FILE="$MACOS_DIR/ci/xcode-pin.json"
 
 if [ ! -f "$PIN_FILE" ]; then
@@ -23,12 +21,12 @@ EXPECTED_XCODE_VERSION="$(read_pin version)"
 EXPECTED_XCODE_BUILD="$(read_pin build)"
 XCODE_APP="${OMI_SWIFT_CI_XCODE_APP:-$(read_pin app_path)}"
 # Identical configuration and destination are required for --skip-build reuse.
-RELEASE_OPTIONS=(-c release --package-path Desktop --triple arm64-apple-macosx)
+RELEASE_OPTIONS=(-c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values)
 # swift build --build-tests does not enable @testable imports in release.
 RELEASE_TEST_OPTIONS=("${RELEASE_OPTIONS[@]}" -Xswiftc -enable-testing)
 
 usage() {
-  echo "usage: $0 --select-toolchain | --test | --release-compile | --release-test-compile | --release-notification-regression" >&2
+  echo "usage: $0 --select-toolchain | --test | --test-compile | --release-compile | --release-test-compile | --release-notification-regression" >&2
   exit 2
 }
 
@@ -81,6 +79,15 @@ case "${1:-}" in
     cd "$MACOS_DIR"
     OMI_SWIFT_TEST_SUITE_WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-4}" \
       "$SCRIPT_DIR/swift-test-suites.sh"
+    ;;
+  --test-compile)
+    [ "$#" -eq 1 ] || usage
+    select_toolchain
+    cd "$MACOS_DIR"
+    # Same single debug app+test prebuild as swift-test-suites.sh. PR #21176
+    # measured 502.55s here versus another ~36 min executing suites. Building
+    # tests catches generated API renames used by either app or test code.
+    xcrun swift build -c debug --package-path Desktop --build-tests
     ;;
   --release-compile|--release-test-compile)
     [ "$#" -eq 1 ] || usage
