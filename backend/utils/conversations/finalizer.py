@@ -204,18 +204,14 @@ class ConversationFinalizationDisposition(str, Enum):
 
 
 def _record_registration_required(row: dict[str, Any]) -> bool:
-    """Retain required audio obligations; discarded and proven-empty rows have none."""
-    return (
-        row.get('record_lane_owner') == 'batch_live_v1'
-        and not row.get('discarded')
-        and not (
-            server_batch_owned(row)
-            and row.get('server_batch_audio_closed') is True
-            and row.get('server_batch_audio_received') is False
-            and not row.get('record_upload_failed')
-            and not row.get('record_upload_sessions')
-            and not server_batch_has_audio(row)
-        )
+    """Retain native audio obligations unless a closed archive proves no input."""
+    return row.get('record_lane_owner') == 'batch_live_v1' and not (
+        server_batch_owned(row)
+        and row.get('server_batch_audio_closed') is True
+        and row.get('server_batch_audio_received') is False
+        and not row.get('record_upload_failed')
+        and not row.get('record_upload_sessions')
+        and not server_batch_has_audio(row)
     )
 
 
@@ -435,9 +431,7 @@ async def finalize_persisted_conversation(
 
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
-        # Processing may have persisted a discard or revival after the initial read.
-        # Preserve that result while retaining the raw archive/producer metadata.
-        if _record_registration_required({**conversation_data, 'discarded': conversation.discarded}):
+        if _record_registration_required(conversation_data):
             stage = 'record_registration'
             if not await run_blocking(
                 db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
