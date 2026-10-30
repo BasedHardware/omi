@@ -25,6 +25,11 @@ from utils.batch_pipeline.recovery_recognizers import words_payload
 
 @pytest.fixture
 def repository(monkeypatch):
+    # Prepare the deferred serving module during fixture setup, as before;
+    # provider import cost is separate from the per-operation CPU guard.
+    from utils.batch_pipeline import quarantine_recovery as recovery
+
+    assert recovery.SECOND_PROVIDER == 'soniox'
     monkeypatch.setenv('BATCH_PIPELINE_SHADOW_PERCENT', '100')
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
