@@ -138,11 +138,15 @@ class PusherRecordBarrier:
         self.close_failures.pop(conversation_id, None)
         return True
 
-    async def fail_recording(self, conversation_id: str) -> None:
+    def hold_recording(self, conversation_id: str) -> None:
+        """Keep this socket's token without asserting permanent custody loss."""
         if len(self.failed_recordings) < 128:
             self.failed_recordings.add(conversation_id)
         else:
             self.record_upload_failed = True  # bounded fail-closed overflow, never forget a failed source
+
+    async def fail_recording(self, conversation_id: str) -> None:
+        self.hold_recording(conversation_id)
         # Await the durable refusal when available, but never let its failure
         # terminate the audio uploader or discard its remaining ready lane.
         try:

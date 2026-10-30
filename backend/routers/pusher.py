@@ -1576,7 +1576,10 @@ async def _websocket_util_trigger(
                     websocket_close_code = 1011
                     logger.exception(f'Durable audio window tail commit failed at shutdown {uid}')
                     if current_conversation_id:
-                        await record_barrier.fail_recording(current_conversation_id)
+                        # The immutable commit may have landed before ACK or
+                        # queue delivery failed. Keep the producer token, but
+                        # do not permanently poison retained custody.
+                        record_barrier.hold_recording(current_conversation_id)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
             if (

@@ -6403,7 +6403,9 @@ On durable-audio disconnect, a successful final tail commit requests inline
 closure after the existing projection worker has drained that conversation.
 Projection wait and metadata finish share a 20-second bound. Timeout or a
 retryable metadata failure leaves the background close request queued; a failed
-tail commit persists the sticky upload failure and keeps the producer token.
+shutdown tail holds closure locally and keeps the producer token. The immutable
+commit can succeed before its ACK/queue delivery fails, so this path does not
+assert permanent custody loss through a sticky upload-failure marker.
 `RECORD_BARRIER_INLINE_FINISH=false` restores background-only closure. It defaults
 on, adds no per-frame Firestore reads, and preserves custody → projection →
 metadata ordering. The legacy non-durable uploader keeps background-only closure.
