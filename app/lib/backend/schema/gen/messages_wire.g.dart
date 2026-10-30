@@ -184,6 +184,7 @@ class GeneratedFileChat {
   final String mimeType;
   final String name;
   final String openaiFileId;
+  final String? sourceUrl;
   final String? thumbName;
   final String? thumbnail;
   final GeneratedChatFileVideo? video;
@@ -194,6 +195,7 @@ class GeneratedFileChat {
     required this.mimeType,
     required this.name,
     required this.openaiFileId,
+    this.sourceUrl,
     this.thumbName = "",
     this.thumbnail = "",
     this.video,
@@ -206,6 +208,7 @@ class GeneratedFileChat {
       mimeType: _required(_readFieldValue<String>(_readField(json, const ["mime_type"]), "mime_type", _readString, requiredField: true, nullable: false), "mime_type"),
       name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
       openaiFileId: _required(_readFieldValue<String>(_readField(json, const ["openai_file_id"]), "openai_file_id", _readString, requiredField: true, nullable: false), "openai_file_id"),
+      sourceUrl: _readFieldValue<String>(_readField(json, const ["source_url"]), "source_url", _readString, requiredField: false, nullable: true),
       thumbName: _readFieldValue<String>(_readField(json, const ["thumb_name"]), "thumb_name", _readString, requiredField: false, nullable: true, defaultValue: ""),
       thumbnail: _readFieldValue<String>(_readField(json, const ["thumbnail"]), "thumbnail", _readString, requiredField: false, nullable: true, defaultValue: ""),
       video: _readFieldValue<GeneratedChatFileVideo>(_readField(json, const ["video"]), "video", (value) => _readObject(value, GeneratedChatFileVideo.fromJson), requiredField: false, nullable: true),
@@ -219,6 +222,7 @@ class GeneratedFileChat {
       'mime_type': mimeType,
       'name': name,
       'openai_file_id': openaiFileId,
+      'source_url': sourceUrl,
       'thumb_name': thumbName,
       'thumbnail': thumbnail,
       'video': video?.toJson(),

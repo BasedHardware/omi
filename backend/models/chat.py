@@ -387,6 +387,11 @@ class FileChat(BaseModel):
     created_at: datetime
     thumb_name: Optional[str] = ""
     video: Optional[ChatFileVideo] = None
+    # Public storage URL for the full image, when the attach-time upload put one
+    # in the standard chat files bucket. Legacy rows and documents stay unset and
+    # keep using the provider file_id lanes. Must not expire while the chat is
+    # open: only 'public' bucket token URLs belong here.
+    source_url: Optional[str] = None
 
     def is_image(self):
         return self.mime_type.startswith("image")
