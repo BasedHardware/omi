@@ -150,9 +150,14 @@ def launch_row(path, seconds, mode):
     process = subprocess.Popen(
         [sys.executable, str(script), '--row'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
     )
-    payload = json.dumps({'path': path, 'seconds': seconds, 'mode': mode}).encode()
-    process.stdin.write(payload)
-    process.stdin.close()
+    try:
+        payload = json.dumps({'path': path, 'seconds': seconds, 'mode': mode}).encode()
+        process.stdin.write(payload)
+        process.stdin.close()
+    except BaseException:
+        stop(process)
+        process.stdin.close()
+        raise
     return process
 
 

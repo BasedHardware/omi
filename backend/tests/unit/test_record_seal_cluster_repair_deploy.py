@@ -1,6 +1,7 @@
 """Offline rendered chart contracts for independent concurrent repair."""
 
 import json
+import re
 
 import yaml
 
@@ -77,11 +78,17 @@ def test_invalid_config_and_nonprod_refuse():
 def test_log_metrics_use_only_allowlisted_row_counts_and_numeric_age():
     metrics = json.loads((CHART.parents[1] / 'deploy/record-seal-repair/log-metrics.json').read_text())
     rows = next(metric for metric in metrics if metric['name'].endswith('_rows'))
-    assert rows['labelExtractors'] == {'disposition': 'EXTRACT(jsonPayload.disposition)'}
-    assert rows['valueExtractor'] == 'EXTRACT(jsonPayload.count)'
+
+    def extract(expression, message):
+        assert expression.startswith('REGEXP_EXTRACT(jsonPayload.message, ')
+        pattern = json.loads(expression.split(', ', 1)[1][:-1])
+        return re.search(pattern, json.dumps(message)).group(1)
+
+    assert list(rows['labelExtractors']) == ['disposition']
+    assert extract(rows['labelExtractors']['disposition'], {'disposition': 'privacy_refused'}) == 'privacy_refused'
+    assert extract(rows['valueExtractor'], {'count': 1}) == '1'
     assert all('resource.labels.container_name="repair"' in metric['filter'] for metric in metrics)
-    assert all('jsonPayload.event=' in metric['filter'] for metric in metrics)
-    assert [metric['valueExtractor'] for metric in metrics[1:]] == [
-        'EXTRACT(jsonPayload.seal_age_seconds)',
-        'EXTRACT(jsonPayload.oldest_unsealed_seconds)',
-    ]
+    assert all('jsonPayload.logger="record-seal-repair"' in metric['filter'] for metric in metrics)
+    assert all('jsonPayload.message' in metric['filter'] for metric in metrics)
+    assert extract(metrics[1]['valueExtractor'], {'seal_age_seconds': 1801}) == '1801'
+    assert extract(metrics[2]['valueExtractor'], {'oldest_unsealed_seconds': 1802}) == '1802'

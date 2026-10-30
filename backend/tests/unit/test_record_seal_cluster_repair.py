@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 import io
 import json
+import os
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -127,6 +129,44 @@ def test_missing_flag_map_refuses(monkeypatch):
     monkeypatch.delenv('RECORD_SEAL_REPAIR_SERVER_FLAGS', raising=False)
     with pytest.raises(KeyError):
         config.server_flags()
+
+
+def test_cli_disabled_uses_shared_json_logging_without_cloud():
+    script = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        env={**os.environ, 'RECORD_SEAL_REPAIR_ENABLED': 'false', 'OMI_LOG_FORMAT': 'json'},
+    )
+    assert result.returncode == 0 and not result.stderr
+    records = [json.loads(line) for line in result.stdout.splitlines()]
+    assert len(records) == 1 and records[0]['logger'] == 'record-seal-repair'
+    assert json.loads(records[0]['message']) == {'event': 'record_seal_repair', 'outcome': 'disabled'}
+
+
+def test_native_and_dependency_diagnostics_never_reach_cli_output(tmp_path):
+    entrypoint = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    script = tmp_path / 'output_boundary.py'
+    private = 'private@example.invalid ' + 'A' * 28 + ' users/private/conversations/private'
+    script.write_text(
+        'import runpy, sys, os, logging\n'
+        f'entry = runpy.run_path({str(entrypoint)!r})\n'
+        'def run(**kwargs):\n'
+        f'    os.write(1, {private.encode()!r})\n'
+        f'    os.write(2, {private.encode()!r})\n'
+        f'    logging.error({private!r})\n'
+        '    return {"event": "record_seal_repair", "outcome": "ok", "rows": 0}\n'
+        'entry["repair"].run = run\n'
+        f'sys.argv = [{str(entrypoint)!r}]\n'
+        'raise SystemExit(entry["main"]())\n'
+    )
+    result = subprocess.run(
+        [sys.executable, str(script)], capture_output=True, text=True, env={**os.environ, 'OMI_LOG_FORMAT': 'json'}
+    )
+    assert result.returncode == 0 and not result.stderr
+    assert private not in result.stdout
+    assert json.loads(json.loads(result.stdout)['message'])['rows'] == 0
 
 
 class FakeProcess:
