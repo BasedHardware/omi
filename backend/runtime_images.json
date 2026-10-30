@@ -543,13 +543,18 @@
       "entrypoint_source_root": "backend",
       "workdir": "/app",
       "entrypoints": [
-        "diarizer.batch_pipeline_runtime"
+        "diarizer.batch_pipeline_runtime",
+        "scripts.record_seal_sweep"
       ],
       "image_import_smoke": false,
       "smoke_entrypoints": [
-        "diarizer.batch_pipeline_runtime"
+        "diarizer.batch_pipeline_runtime",
+        "scripts.record_seal_sweep"
       ],
       "dependency_probe_smoke": true,
+      "dependency_probe_exclusions": {
+        "omi_plugin_sdk": "models.structured imports the SDK only in a full checkout and uses its built-in fallback in this worker image."
+      },
       "pull_request_smoke": false
     },
     {
