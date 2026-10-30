@@ -132,7 +132,22 @@ PORT=8080
 # If not set, the app will use file-based storage
 REDIS_URL=
 REDIS_PRIVATE_URL=
+
+# Required: secret used to sign the settings session cookie.
+# Checked in order: SESSION_SECRET, HIVE_SESSION_SECRET, OAUTH_STATE_SECRET, APP_SECRET
+SESSION_SECRET=
 ```
+
+#### Settings session (deployment note)
+
+The settings page, `POST /settings/api-key`, `POST /settings/default-project`, and
+`POST /disconnect` are protected by an HttpOnly session cookie signed with the secret
+above. If none of those variables is set, these routes fail closed with `503`.
+
+Users who connected before this change have no session cookie. They will see the
+connect form instead of their account details and can restore their session by
+re-entering an API key for the same Hive account; a key for a different Hive account
+is refused for an already-connected user. Disconnect requires an active session.
 
 ---
 
@@ -197,7 +212,7 @@ Update your app URLs in the Omi App Store:
 | `/health` | GET | Health check |
 | `/settings/api-key` | POST | Connect API key |
 | `/setup/hive` | GET | Check setup status |
-| `/disconnect` | GET | Disconnect account |
+| `/disconnect` | POST | Disconnect account (requires settings session) |
 | `/tools/get_projects` | POST | Chat tool: Get projects |
 | `/tools/get_tasks` | POST | Chat tool: Get tasks |
 | `/tools/create_task` | POST | Chat tool: Create task |

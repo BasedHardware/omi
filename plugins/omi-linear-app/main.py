@@ -6,7 +6,10 @@ and chat tools for managing issues, projects, and workflows.
 """
 import os
 import base64
+import hashlib
+import hmac
 import re
+import secrets
 import urllib.parse
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
@@ -413,6 +416,165 @@ def get_user_profile(uid: str) -> Optional[LinearUser]:
 
 
 # ============================================
+# Setup Session & OAuth State Authentication
+# ============================================
+
+SESSION_COOKIE_NAME = "omi_linear_session"
+OAUTH_NONCE_COOKIE_NAME = "omi_linear_oauth_nonce"
+SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+OAUTH_NONCE_MAX_AGE = 60 * 10  # 10 minutes
+
+
+def _configured_session_secret() -> Optional[str]:
+    # Session signing uses a dedicated secret only. It deliberately does not fall back
+    # to LINEAR_CLIENT_SECRET, so rotating or leaking the OAuth client secret does not
+    # invalidate or forge settings sessions. Unset means fail closed (503).
+    for env_name in ("SESSION_SECRET", "LINEAR_SESSION_SECRET", "OAUTH_STATE_SECRET", "APP_SECRET"):
+        value = os.getenv(env_name)
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
+def _require_session_secret() -> str:
+    secret = _configured_session_secret()
+    if not secret:
+        raise HTTPException(status_code=503, detail="Session authentication is not configured")
+    return secret
+
+
+def _create_session_token(uid: str) -> str:
+    secret = _require_session_secret()
+    return hmac.new(secret.encode("utf-8"), f"linear-session:{uid}".encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _has_valid_session(request: Optional[Request], uid: str) -> bool:
+    if not uid or request is None:
+        return False
+    secret = _configured_session_secret()
+    if not secret:
+        return False
+    cookies = getattr(request, "cookies", None) or {}
+    token = cookies.get(SESSION_COOKIE_NAME)
+    if not token or not isinstance(token, str):
+        return False
+    expected = hmac.new(secret.encode("utf-8"), f"linear-session:{uid}".encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(token, expected)
+
+
+def _require_valid_session(request: Optional[Request], uid: str) -> None:
+    _require_session_secret()
+    if not _has_valid_session(request, uid):
+        raise HTTPException(status_code=403, detail="Forbidden: valid settings session required")
+
+
+def _create_oauth_state(uid: str) -> Tuple[str, str]:
+    secret = _require_session_secret()
+    nonce = secrets.token_urlsafe(24)
+    sig = hmac.new(
+        secret.encode("utf-8"),
+        f"linear-oauth:{uid}:{nonce}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{uid}:{nonce}:{sig}", nonce
+
+
+def _verify_oauth_state(state: Optional[str], request: Optional[Request]) -> Optional[str]:
+    secret = _configured_session_secret()
+    if not secret or not state or not isinstance(state, str):
+        return None
+    prefix, sep1, sig = state.rpartition(":")
+    if not sep1 or not prefix or not sig:
+        return None
+    uid, sep2, nonce = prefix.rpartition(":")
+    if not sep2 or not uid or not nonce:
+        return None
+    cookies = (getattr(request, "cookies", None) or {}) if request is not None else {}
+    cookie_nonce = cookies.get(OAUTH_NONCE_COOKIE_NAME)
+    if not cookie_nonce or not isinstance(cookie_nonce, str):
+        return None
+    if not hmac.compare_digest(cookie_nonce, nonce):
+        return None
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        f"linear-oauth:{uid}:{nonce}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, sig):
+        return None
+    return uid
+
+
+LINEAR_IDENTITY_QUERY = "query { viewer { id organization { id } } }"
+
+
+def _fetch_linear_identity(access_token: Optional[str]) -> Optional[Dict[str, str]]:
+    """Return the Linear viewer id and organization id for an access token, or None."""
+    if not access_token:
+        return None
+    try:
+        response = requests.post(
+            LINEAR_API_URL,
+            headers=get_auth_header(access_token),
+            json={"query": LINEAR_IDENTITY_QUERY, "variables": {}},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            return None
+        payload = response.json() or {}
+    except Exception:
+        return None
+    if not isinstance(payload, dict) or payload.get("errors"):
+        return None
+    viewer = (payload.get("data") or {}).get("viewer") or {}
+    viewer_id = str(viewer.get("id") or "").strip()
+    org_id = str((viewer.get("organization") or {}).get("id") or "").strip()
+    if not viewer_id or not org_id:
+        return None
+    return {"user_id": viewer_id, "organization_id": org_id}
+
+
+def _is_same_linear_account(uid: str, new_access_token: Optional[str]) -> bool:
+    """True when a new OAuth token belongs to the same Linear user and workspace already stored for uid.
+
+    Fails closed: if either identity cannot be resolved, the rebind is refused.
+    """
+    current = _fetch_linear_identity(get_valid_access_token(uid))
+    incoming = _fetch_linear_identity(new_access_token)
+    if not current or not incoming:
+        return False
+    return hmac.compare_digest(current["user_id"], incoming["user_id"]) and hmac.compare_digest(
+        current["organization_id"], incoming["organization_id"]
+    )
+
+
+def _is_secure_request(request: Optional[Request]) -> bool:
+    if request is None:
+        return False
+    headers = getattr(request, "headers", None) or {}
+    proto = headers.get("x-forwarded-proto", "")
+    if isinstance(proto, str) and proto.split(",")[0].strip().lower() == "https":
+        return True
+    url = getattr(request, "url", None)
+    return getattr(url, "scheme", "") == "https"
+
+
+def _set_session_cookie(response: Any, uid: str, request: Optional[Request] = None) -> None:
+    token = _create_session_token(uid)
+    set_cookie = getattr(response, "set_cookie", None)
+    if callable(set_cookie):
+        set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            secure=_is_secure_request(request),
+            max_age=SESSION_COOKIE_MAX_AGE,
+            path="/",
+        )
+
+
+# ============================================
 # OAuth Endpoints
 # ============================================
 
@@ -427,9 +589,9 @@ async def home(request: Request, uid: Optional[str] = None):
         })
     
     tokens = get_linear_tokens(uid)
-    authenticated = tokens is not None
+    authenticated = tokens is not None and _has_valid_session(request, uid)
     
-    # Get user profile if authenticated
+    # Only expose user profile, teams, and default team when caller holds a valid session for uid
     user_profile = None
     teams = []
     default_team = None
@@ -451,22 +613,42 @@ async def home(request: Request, uid: Optional[str] = None):
 
 
 @app.get("/auth/linear")
-async def linear_auth(uid: str):
+async def linear_auth(uid: str, request: Request = None):
     """Initiate Linear OAuth flow."""
     if not uid:
         raise HTTPException(status_code=400, detail="User ID is required")
+
+    _require_session_secret()
+
+    # Starting the flow is allowed without a session so a connected user who lost the
+    # session cookie can re-authenticate. The callback only rebinds an already-connected
+    # uid for its session holder or for the same Linear user and workspace.
+
+    signed_state, nonce = _create_oauth_state(uid)
     
     params = {
         "client_id": LINEAR_CLIENT_ID,
         "response_type": "code",
         "redirect_uri": LINEAR_REDIRECT_URI,
         "scope": ",".join(LINEAR_SCOPES),
-        "state": uid,
+        "state": signed_state,
         "prompt": "consent",
     }
     
     auth_url = f"{LINEAR_AUTH_URL}?{urllib.parse.urlencode(params)}"
-    return RedirectResponse(url=auth_url)
+    response = RedirectResponse(url=auth_url)
+    set_cookie = getattr(response, "set_cookie", None)
+    if callable(set_cookie):
+        set_cookie(
+            key=OAUTH_NONCE_COOKIE_NAME,
+            value=nonce,
+            httponly=True,
+            samesite="lax",
+            secure=_is_secure_request(request),
+            max_age=OAUTH_NONCE_MAX_AGE,
+            path="/",
+        )
+    return response
 
 
 @app.get("/auth/linear/callback", response_class=HTMLResponse)
@@ -486,8 +668,22 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
             "error": "Invalid callback parameters"
         })
     
-    uid = state
-    
+    uid = _verify_oauth_state(state, request)
+    if not uid:
+        resp = templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid or expired OAuth state"
+        })
+        try:
+            resp.status_code = 400
+        except Exception:
+            pass
+        return resp
+
+    already_connected = get_linear_tokens(uid) is not None
+    has_session = _has_valid_session(request, uid)
+
     # Exchange code for tokens
     response = requests.post(
         LINEAR_TOKEN_URL,
@@ -510,6 +706,19 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
         })
     
     token_data = response.json()
+
+    if already_connected and not has_session and not _is_same_linear_account(uid, token_data.get("access_token")):
+        resp = templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Forbidden: sign in with the Linear account that is already connected, or reconnect from an active settings session"
+        })
+        try:
+            resp.status_code = 403
+        except Exception:
+            pass
+        return resp
+
     # Linear tokens are long-lived (10 years), but we set a reasonable expiry
     expires_at = int(datetime.utcnow().timestamp()) + token_data.get("expires_in", 315360000)
     
@@ -520,8 +729,13 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
         expires_at
     )
     
-    # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
+    # Redirect to home with uid and set session cookie
+    redirect_resp = RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
+    _set_session_cookie(redirect_resp, uid, request)
+    delete_cookie = getattr(redirect_resp, "delete_cookie", None)
+    if callable(delete_cookie):
+        delete_cookie(key=OAUTH_NONCE_COOKIE_NAME, path="/")
+    return redirect_resp
 
 
 @app.get("/setup/linear", tags=["setup"])
@@ -532,17 +746,29 @@ async def check_setup(uid: str):
 
 
 @app.post("/settings/default-team")
-async def set_default_team(uid: str, team_id: str, team_name: str):
+async def set_default_team(
+    uid: str,
+    team_id: str,
+    team_name: str,
+    request: Request = None,
+):
     """Set the default team for a user."""
+    _require_valid_session(request, uid)
     store_default_team(uid, team_id, team_name)
     return {"success": True, "message": f"Default team set to: {team_name}"}
 
 
-@app.get("/disconnect")
-async def disconnect_linear(uid: str):
-    """Disconnect Linear account."""
+@app.post("/disconnect")
+async def disconnect_linear(uid: str, request: Request = None):
+    """Disconnect Linear account.
+
+    Requires a valid settings session for uid so a caller who only knows the uid
+    cannot delete stored tokens and then bind a different Linear workspace. This
+    is a POST so the SameSite=Lax session cookie is not sent on cross-site requests.
+    """
+    _require_valid_session(request, uid)
     delete_linear_tokens(uid)
-    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}", status_code=303)
 
 
 # ============================================

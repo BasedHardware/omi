@@ -181,7 +181,24 @@ LINEAR_CLIENT_SECRET=your_client_secret
 LINEAR_REDIRECT_URI=https://your-domain.com/auth/linear/callback
 PORT=8080
 REDIS_URL=  # Optional: for production use
+# Required: dedicated secret for the settings session cookie and OAuth state.
+# Checked in order: SESSION_SECRET, LINEAR_SESSION_SECRET, OAUTH_STATE_SECRET, APP_SECRET.
+# LINEAR_CLIENT_SECRET is never used for session signing.
+SESSION_SECRET=
 ```
+
+#### Settings session (deployment note)
+
+The settings page, `GET /auth/linear`, the OAuth callback, `POST /settings/default-team`,
+and `POST /disconnect` depend on a session secret that is separate from
+`LINEAR_CLIENT_SECRET`. If none of the variables above is set, these routes fail
+closed with `503`.
+
+Users who connected before this change have no session cookie, so the settings page
+shows them as not connected. They can restore their session by running Connect again
+with the same Linear account; connecting a different Linear user to an already-connected
+uid is refused unless the request carries a valid session. Disconnect requires an
+active session.
 
 ### Hermetic issue-lookup regression tests
 
@@ -235,6 +252,7 @@ Go to your service's **Variables** tab and add:
 | `LINEAR_CLIENT_ID`     | Your Linear OAuth Client ID                          |
 | `LINEAR_CLIENT_SECRET` | Your Linear OAuth Client Secret                      |
 | `LINEAR_REDIRECT_URI`  | `https://YOUR-APP.up.railway.app/auth/linear/callback` |
+| `SESSION_SECRET`       | Long random string used only to sign settings sessions |
 
 > **Note:** Replace `YOUR-APP` with your actual Railway app domain (shown in Settings → Domains)
 
@@ -294,7 +312,7 @@ Update your app URLs in the Omi App Store:
 | `/auth/linear`               | GET    | Start OAuth flow               |
 | `/auth/linear/callback`      | GET    | OAuth callback                 |
 | `/setup/linear`              | GET    | Check setup status             |
-| `/disconnect`                | GET    | Disconnect account             |
+| `/disconnect`                | POST   | Disconnect account (requires settings session) |
 | `/tools/create_issue`        | POST   | Chat tool: Create issue        |
 | `/tools/list_my_issues`      | POST   | Chat tool: List my issues      |
 | `/tools/update_issue_status` | POST   | Chat tool: Update status       |
