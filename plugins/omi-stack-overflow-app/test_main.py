@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 import sys
 import types
@@ -109,6 +110,7 @@ PLUGIN_DIR = Path(__file__).resolve().parent
 if str(PLUGIN_DIR) not in sys.path:
     sys.path.insert(0, str(PLUGIN_DIR))
 
+import httpx
 import main
 
 
@@ -404,16 +406,6 @@ class ToolEndpointsTests(unittest.TestCase):
             loop.close()
 
     @patch("main._request_json", new_callable=AsyncMock)
-    def test_get_question_error_handling(self, mock_request):
-        mock_request.side_effect = ValueError("Rate limit exceeded")
-        loop = asyncio.new_event_loop()
-        try:
-            resp = loop.run_until_complete(main.get_question({"question_id": 123}))
-            self.assertIn("Rate limit exceeded", resp.error)
-        finally:
-            loop.close()
-
-    @patch("main._request_json", new_callable=AsyncMock)
     def test_get_top_answers_empty_results(self, mock_request):
         mock_request.return_value = {"items": []}
         loop = asyncio.new_event_loop()
@@ -442,6 +434,60 @@ class ToolEndpointsTests(unittest.TestCase):
             self.assertIn("unknown | 5 score", resp.result)
         finally:
             loop.close()
+
+
+INTERNAL_HOST = "stack-proxy.internal:3128"
+FAILED = "{label} failed. Please try again later."
+
+TOOL_CALLS = (
+    ("search_questions", {"query": "python"}, "Stack Exchange search"),
+    ("get_question", {"question_id": 123}, "Stack Exchange question request"),
+    ("get_top_answers", {"question_id": 123}, "Stack Exchange answers request"),
+)
+
+
+class ToolFailureResponseTests(unittest.TestCase):
+    def call_tool(self, tool_name, payload, error):
+        with patch("main._request_json", new_callable=AsyncMock, side_effect=error):
+            return asyncio.run(getattr(main, tool_name)(payload))
+
+    def assert_every_tool_reports(self, error, expected_message):
+        for tool_name, payload, label in TOOL_CALLS:
+            with self.subTest(tool=tool_name):
+                response = self.call_tool(tool_name, payload, error)
+                self.assertIsNone(response.result)
+                self.assertEqual(response.error, expected_message.format(label=label))
+
+    def test_transport_error_text_is_not_returned(self):
+        error = httpx.HTTPError(f"connection via {INTERNAL_HOST} refused")
+        self.assert_every_tool_reports(error, FAILED)
+
+    def test_transport_error_without_message_still_explains_failure(self):
+        self.assert_every_tool_reports(httpx.HTTPError(""), FAILED)
+
+    def test_api_error_message_is_not_returned(self):
+        error = ValueError(f"throttle violation from {INTERNAL_HOST}")
+        self.assert_every_tool_reports(error, FAILED)
+
+    def test_malformed_json_error_is_not_returned(self):
+        error = json.JSONDecodeError("Expecting value", "<html>captive portal</html>", 0)
+        self.assert_every_tool_reports(error, FAILED)
+
+    def test_http_status_error_reports_only_the_status_code(self):
+        error = httpx.HTTPStatusError(
+            f"Server error for url https://{INTERNAL_HOST}/search",
+            request=None,
+            response=types.SimpleNamespace(status_code=503),
+        )
+        self.assert_every_tool_reports(error, "{label} failed with status 503.")
+
+    def test_failure_log_names_exception_class_without_its_text(self):
+        error = httpx.HTTPError(f"connection via {INTERNAL_HOST} refused")
+        with self.assertLogs("main", level="WARNING") as captured:
+            self.call_tool("get_question", {"question_id": 123}, error)
+        output = "\n".join(captured.output)
+        self.assertIn("HTTPError", output)
+        self.assertNotIn(INTERNAL_HOST, output)
 
 
 if __name__ == "__main__":
