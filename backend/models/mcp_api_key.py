@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class McpApiKey(BaseModel):
@@ -20,8 +20,16 @@ class McpApiKeyDB(McpApiKey):
 
 
 class McpApiKeyCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
     scopes: Optional[list[str]] = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('Key name cannot be empty')
+        return v
 
 
 class McpApiKeyCreated(McpApiKey):
