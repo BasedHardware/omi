@@ -165,7 +165,7 @@ def _facts(
                 kind='conversation',
                 label=_title(conversation),
                 conversation_id=source_id,
-                at=conversation.get('started_at') or row.created_at,
+                at=_coerce_utc_datetime(conversation.get('started_at')) or _coerce_utc_datetime(row.created_at),
             )
         else:
             source_type = evidence[0].get('source_type', '') if evidence and isinstance(evidence[0], dict) else ''
@@ -186,6 +186,18 @@ def _facts(
 
 def _title(conversation: dict) -> str:
     return conversation.get('user_title') or (conversation.get('structured') or {}).get('title') or ''
+
+
+def _coerce_utc_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
 
 
 def _entity_page_conversation_page(uid: str) -> dict[str, dict]:
@@ -331,9 +343,11 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
         conversation = conversation_cache.get(cid)
         if not conversation or not conversations.is_visible_conversation(conversation):
             continue
-        start = conversation.get('started_at') or conversation.get('created_at')
-        end = conversation.get('finished_at') or start
-        if start:
+        start = _coerce_utc_datetime(conversation.get('started_at')) or _coerce_utc_datetime(
+            conversation.get('created_at')
+        )
+        end = _coerce_utc_datetime(conversation.get('finished_at')) or start
+        if start and end:
             recent.append(
                 ConversationRef(
                     conversation_id=cid,
