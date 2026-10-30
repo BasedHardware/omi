@@ -2370,6 +2370,9 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+          PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
+            value: 'false'
+            category: ops_kill
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
