@@ -221,6 +221,10 @@ class PostgresStore:
                 oldest_hold = oldest_hold if oldest_hold is not None else enqueued_at
                 continue
             return enqueued_at
+        # If the prefix was truncated (scanned > 500 rows, all holds), fall closed
+        # by reporting the oldest hold. If there were exactly <= 500 holds in the
+        # queue, None (fresh zero) is returned, faithfully mirroring the Firestore
+        # query stream contract in batch_pipeline_store.py.
         if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
             return oldest_hold
         return None
