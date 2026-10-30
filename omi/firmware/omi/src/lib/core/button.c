@@ -84,17 +84,9 @@ K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
-static uint32_t inc_count_1 = 0;
-static uint32_t inc_count_0 = 0;
 
 static int final_button_state[2] = {0, 0};
-const static int threshold = 10;
 
-static void reset_count()
-{
-    inc_count_0 = 0;
-    inc_count_1 = 0;
-}
 static inline void notify_press()
 {
     final_button_state[0] = BUTTON_PRESS;
