@@ -14949,4 +14949,12 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Kortet ditt ble avvist';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Oppdater kortet for å få $plan tilbake';
+  }
 }

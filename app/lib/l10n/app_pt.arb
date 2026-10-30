@@ -4550,5 +4550,7 @@
     "yearlySwitchUnavailable": "A cobrança anual não está disponível para seu plano no momento.",
     "yearlySwitchDoneTitle": "Agora você está no plano anual",
     "yearlySwitchDoneBody": "{amount} cobrados hoje. Renova em {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} partes} one{{count} parte} two{{count} partes} few{{count} partes} many{{count} partes} other{{count} partes}}"
+    "episodePartsCount": "{count, plural, zero{{count} partes} one{{count} parte} two{{count} partes} few{{count} partes} many{{count} partes} other{{count} partes}}",
+    "paymentDeclinedTitle": "Seu cartão foi recusado",
+    "paymentDeclinedMessage": "Atualize o cartão para recuperar {plan}"
 }

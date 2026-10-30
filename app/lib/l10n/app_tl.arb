@@ -11941,5 +11941,7 @@
     "yearlySwitchUnavailable": "Hindi pa available ang taunang bayad para sa plan mo ngayon.",
     "yearlySwitchDoneTitle": "Taunan ka na",
     "yearlySwitchDoneBody": "{amount} ang siningil ngayon. Magre-renew sa {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} bahagi} one{{count} bahagi} two{{count} bahagi} few{{count} bahagi} many{{count} bahagi} other{{count} bahagi}}"
+    "episodePartsCount": "{count, plural, zero{{count} bahagi} one{{count} bahagi} two{{count} bahagi} few{{count} bahagi} many{{count} bahagi} other{{count} bahagi}}",
+    "paymentDeclinedTitle": "Tinanggihan ang iyong card",
+    "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}"
 }

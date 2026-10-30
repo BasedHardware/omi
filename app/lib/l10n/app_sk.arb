@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "Ročná platba teraz nie je pre váš plán dostupná.",
     "yearlySwitchDoneTitle": "Teraz platíte ročne",
     "yearlySwitchDoneBody": "Dnes účtované {amount}. Obnovenie {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} častí} one{{count} časť} two{{count} častí} few{{count} časti} many{{count} častí} other{{count} častí}}"
+    "episodePartsCount": "{count, plural, zero{{count} častí} one{{count} časť} two{{count} častí} few{{count} časti} many{{count} častí} other{{count} častí}}",
+    "paymentDeclinedTitle": "Vaša karta bola zamietnutá",
+    "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}"
 }

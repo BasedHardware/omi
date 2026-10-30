@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "अभी आपके प्लान के लिए सालाना बिलिंग उपलब्ध नहीं है।",
     "yearlySwitchDoneTitle": "अब आप सालाना प्लान पर हैं",
     "yearlySwitchDoneBody": "आज {amount} चार्ज किए गए। नवीनीकरण {date} को।",
-    "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}"
+    "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}",
+    "paymentDeclinedTitle": "आपका कार्ड अस्वीकार हो गया",
+    "paymentDeclinedMessage": "{plan} वापस पाने के लिए कार्ड अपडेट करें"
 }

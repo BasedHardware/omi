@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "Metinis mokėjimas jūsų planui šiuo metu negalimas.",
     "yearlySwitchDoneTitle": "Dabar mokate kas metus",
     "yearlySwitchDoneBody": "Šiandien nuskaičiuota {amount}. Atnaujinama {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} dalių} one{{count} dalis} two{{count} dalių} few{{count} dalys} many{{count} dalies} other{{count} dalių}}"
+    "episodePartsCount": "{count, plural, zero{{count} dalių} one{{count} dalis} two{{count} dalių} few{{count} dalys} many{{count} dalies} other{{count} dalių}}",
+    "paymentDeclinedTitle": "Jūsų kortelė atmesta",
+    "paymentDeclinedMessage": "Atnaujinkite kortelę, kad vėl naudotumėte {plan}"
 }

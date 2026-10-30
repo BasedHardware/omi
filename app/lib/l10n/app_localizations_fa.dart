@@ -14940,4 +14940,12 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'کارت شما رد شد';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'برای بازگرداندن $plan کارت را به‌روزرسانی کنید';
+  }
 }

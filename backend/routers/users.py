@@ -60,7 +60,7 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
-from utils import screen_vector_entitlements
+from utils import billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
@@ -1403,8 +1403,10 @@ def _user_subscription_response(
             phone_call_quota=unlimited_phone_quota,
         )
     # First, reconcile any "basic but actually unlimited" inconsistencies against Stripe once.
+    is_mobile = x_app_platform in ('ios', 'android')
     raw_subscription = get_user_subscription(uid)
-    reconcile_basic_plan_with_stripe(uid, raw_subscription)
+    stripe_snapshot = {} if is_mobile else None
+    reconcile_basic_plan_with_stripe(uid, raw_subscription, stripe_snapshot=stripe_snapshot)
 
     # Then re-evaluate using our normal "valid subscription" semantics.
     subscription = get_user_valid_subscription(uid)
@@ -1432,7 +1434,6 @@ def _user_subscription_response(
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
-    is_mobile = x_app_platform in ('ios', 'android')
     subscription.features = get_plan_features(subscription.plan, simplified=is_mobile)
 
     new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
@@ -1569,7 +1570,6 @@ def _user_subscription_response(
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
-    chat_allowed = chat_snapshot['allowed']
 
     # Grandfather is read from the true plan before the label is remapped for
     # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
@@ -1590,10 +1590,15 @@ def _user_subscription_response(
         chat_quota_used=round(chat_snapshot['used'], 4),
         chat_quota_unit=chat_snapshot['unit'],
         chat_quota_percent=chat_percent,
-        chat_quota_allowed=chat_allowed,
+        chat_quota_allowed=chat_snapshot['allowed'],
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
         desktop_grandfather_until=desktop_grandfather_until,
+        payment_issue=(
+            billing_recovery.payment_issue_for(uid, subscription, stripe_snapshot)
+            if is_mobile and show_subscription_ui
+            else None
+        ),
     )
 
 

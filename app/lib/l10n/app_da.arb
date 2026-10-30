@@ -4557,5 +4557,7 @@
     "yearlySwitchUnavailable": "Årlig betaling er ikke tilgængelig for dit abonnement lige nu.",
     "yearlySwitchDoneTitle": "Du betaler nu årligt",
     "yearlySwitchDoneBody": "{amount} trukket i dag. Fornyes {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} dele} one{{count} del} two{{count} dele} few{{count} dele} many{{count} dele} other{{count} dele}}"
+    "episodePartsCount": "{count, plural, zero{{count} dele} one{{count} del} two{{count} dele} few{{count} dele} many{{count} dele} other{{count} dele}}",
+    "paymentDeclinedTitle": "Dit kort blev afvist",
+    "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage"
 }

@@ -14857,4 +14857,12 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'تم رفض بطاقتك';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'حدّث بطاقتك لاستعادة $plan';
+  }
 }

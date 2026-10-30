@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "Η ετήσια χρέωση δεν είναι διαθέσιμη για το πρόγραμμά σας αυτή τη στιγμή.",
     "yearlySwitchDoneTitle": "Είστε πλέον σε ετήσια χρέωση",
     "yearlySwitchDoneBody": "Χρεώθηκαν σήμερα {amount}. Ανανέωση στις {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} μέρη} one{{count} μέρος} two{{count} μέρη} few{{count} μέρη} many{{count} μέρη} other{{count} μέρη}}"
+    "episodePartsCount": "{count, plural, zero{{count} μέρη} one{{count} μέρος} two{{count} μέρη} few{{count} μέρη} many{{count} μέρη} other{{count} μέρη}}",
+    "paymentDeclinedTitle": "Η κάρτα σας απορρίφθηκε",
+    "paymentDeclinedMessage": "Ενημερώστε την κάρτα για να αποκτήσετε ξανά το {plan}"
 }
