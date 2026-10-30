@@ -39,6 +39,8 @@ spec:
   failedJobsHistoryLimit: 2
   jobTemplate:
     spec:
+      # Runtime cancels IO after 150s (maximum 180s), leaving import/startup
+      # headroom while staying below the five-minute producer-proof window.
       activeDeadlineSeconds: 240
       backoffLimit: 0
       template:
@@ -72,6 +74,9 @@ spec:
               env:
                 - {name: RECORD_SEAL_SWEEPER_ENABLED, value: {{ .Values.recordSealSweeper.runtimeEnabled | quote }}}
                 - {name: RECORD_SEAL_SWEEPER_MODE, value: {{ .Values.recordSealSweeper.mode | quote }}}
+                - {name: RECORD_SEAL_SWEEPER_BUDGET_SECONDS, value: "150"}
+                - {name: RECORD_SEAL_SWEEPER_DISCOVERY_LIMIT, value: "32"}
+                - {name: RECORD_SEAL_SWEEPER_SEAL_LIMIT, value: "4"}
                 - {name: OMI_ENV_STAGE, value: prod}
                 - {name: OMI_LOG_FORMAT, value: json}
                 - {name: OMI_FIRESTORE_DATA_PLANE_PROJECT, value: {{ .Values.dataPlaneProject | quote }}}

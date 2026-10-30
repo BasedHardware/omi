@@ -71,7 +71,7 @@ def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False):
     return None
 
 
-def retained_tail_proof(job, row, storage_client, artifacts):
+def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lambda: None):
     """Shared retained-object and frozen/current-finish proof for operator seals."""
     uid, cid = job['owner_id'], job['conversation_id']
     seed = WorkItem(
@@ -84,12 +84,16 @@ def retained_tail_proof(job, row, storage_client, artifacts):
         conversation_id=cid,
         privacy_generation=job['privacy_generation'],
     )
+    check_budget()
     artifacts.authorize(seed)
+    check_budget()
     chunks = list_audio_chunks(uid, cid, max_count=4096, require_archive=True)
+    check_budget()
     units = []
     iterator = retained_record_units(uid, cid, chunks, storage_client, artifacts.key_for_owner(uid))
     try:
         for unit in iterator:
+            check_budget()
             units.append(unit)
             if len(units) > 128:
                 raise ValueError('retained capture unit budget exceeded')
@@ -97,26 +101,41 @@ def retained_tail_proof(job, row, storage_client, artifacts):
         iterator.close()
     validate_record_tail(units, row.get('finished_at'), require_finish=True)
     validate_record_tail(units, (job.get('record_snapshot') or {}).get('finished_at'), require_finish=True)
+    check_budget()
     return plan_digest(units)
 
 
-def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None, producers_stopped=False):
+def plan_seals(
+    store,
+    job_ids,
+    storage_client,
+    artifacts,
+    *,
+    producer_proof=None,
+    producers_stopped=False,
+    check_budget=lambda: None,
+):
     entries = []
     for job_id in sorted(job_ids):
+        check_budget()
         entry = {'job_id': job_id, 'disposition': 'unavailable'}
         try:
             job = _job_state(store.run(lambda tx: tx.get('jobs', job_id)))
+            check_budget()
             uid, cid = job.get('owner_id'), job.get('conversation_id')
             if not uid or not cid or '/' in uid or '/' in cid:
                 entries.append(entry)
                 continue
             row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
+            check_budget()
             entry.update(job=job, row=seal_row_state(row))
             refusal = seal_refusal(job, row, producer_proof=producer_proof, producers_stopped=producers_stopped)
             if refusal:
                 entry['disposition'] = refusal
             else:
-                proof = retained_tail_proof({**job, 'segment_id': job_id}, row, storage_client, artifacts)
+                proof = retained_tail_proof(
+                    {**job, 'segment_id': job_id}, row, storage_client, artifacts, check_budget=check_budget
+                )
                 entry.update(disposition='eligible', proof_sha256=proof)
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_refused'
@@ -125,6 +144,7 @@ def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None
         except Exception:
             entry['disposition'] = 'read_error'
         entries.append(entry)
+    check_budget()
     plan = {
         'version': 1,
         'namespace': store.namespace,
@@ -135,14 +155,15 @@ def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None
     return {**plan, 'plan_sha256': plan_digest(plan)}
 
 
-def apply_seals(store, plan, approved_digest):
+def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outcomes=None):
     body = {key: value for key, value in plan.items() if key != 'plan_sha256'}
     if approved_digest != plan['plan_sha256'] or plan_digest(body) != approved_digest:
         raise ValueError('fresh dry-run plan approval required')
     if store.namespace != plan['namespace']:
         raise ValueError('plan namespace changed')
-    outcomes = Counter()
+    outcomes = Counter() if outcomes is None else outcomes
     for entry in plan['entries']:
+        check_budget()
         if entry['disposition'] != 'eligible':
             outcomes[entry['disposition']] += 1
             continue
@@ -153,6 +174,7 @@ def apply_seals(store, plan, approved_digest):
 
         @firestore.transactional
         def commit(tx):
+            check_budget()
             current_job = job_ref.get(transaction=tx).to_dict() or {}
             row = ref.get(transaction=tx).to_dict() or {}
             if _job_state(current_job) != job or seal_row_state(row) != entry['row']:
@@ -168,6 +190,7 @@ def apply_seals(store, plan, approved_digest):
             patch: dict[str, Any] = {'record_audio_closed': True}
             if row.get('record_upload_sessions'):
                 patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
+            check_budget()
             tx.update(ref, patch)
             return 'sealed'
 
