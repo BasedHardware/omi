@@ -34,7 +34,6 @@ static bool is_first_measurement = true;
 static uint8_t ema_init_counter = 0;
 
 static const struct device *const adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
-static const struct gpio_dt_spec power_pin = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(power_pin), gpios, {0});
 static const struct gpio_dt_spec bat_read_pin = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(bat_read_pin), gpios, {0});
 static const struct gpio_dt_spec bat_chg_pin = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(bat_chg_pin), gpios, {0});
 
