@@ -36,6 +36,7 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
         'no_progress_stop': 'off',
         'history_compact': 'shadow',
         'hunt_backoff': 'shadow',
+        'prescan': 'shadow',
     }
     monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
     monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '100')

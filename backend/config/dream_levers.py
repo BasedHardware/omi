@@ -33,6 +33,9 @@ PAYOFF_ORDER_MODE_ENV = 'DREAM_PAYOFF_ORDER_MODE'
 # Back off an owner's hunt cadence after dry hunts (David 2026-10-30: replaces the idle-skip hunt floor).
 HUNT_BACKOFF_MODE_ENV = 'DREAM_HUNT_BACKOFF_MODE'
 HUNT_BACKOFF_SERVE_PERCENT_ENV = 'DREAM_HUNT_BACKOFF_MODE_SERVE_PERCENT'
+# Deterministic no-LLM pre-scan handing hunts concrete people/task cleanup targets.
+PRESCAN_MODE_ENV = 'DREAM_PRESCAN_MODE'
+PRESCAN_SERVE_PERCENT_ENV = 'DREAM_PRESCAN_MODE_SERVE_PERCENT'
 
 # Defaults when the mode env is unset. 10-29 shadow day: idle-skip would have cut 79% of
 # applied edits and the no-progress stop 31%, so both are retired (off); payoff ordering
@@ -49,6 +52,7 @@ PER_OWNER = (
     NO_PROGRESS_STOP_MODE_ENV,
     HISTORY_COMPACT_MODE_ENV,
     HUNT_BACKOFF_MODE_ENV,
+    PRESCAN_MODE_ENV,
 )
 SHORT_NAMES = {
     IDLE_SKIP_MODE_ENV: 'idle_skip',
@@ -57,6 +61,7 @@ SHORT_NAMES = {
     HISTORY_COMPACT_MODE_ENV: 'history_compact',
     PAYOFF_ORDER_MODE_ENV: 'payoff_order',
     HUNT_BACKOFF_MODE_ENV: 'hunt_backoff',
+    PRESCAN_MODE_ENV: 'prescan',
 }
 
 
