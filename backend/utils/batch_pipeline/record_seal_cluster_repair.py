@@ -12,9 +12,11 @@ import json
 import logging
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
+from typing import Any
 
 from config import record_seal_repair as config
 
@@ -72,15 +74,16 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     """Fresh proof for every row, singleton canonical plan and same-digest apply."""
     from utils.batch_pipeline import record_seal_nojob as nojob, record_seal_repair as repair
     from utils.batch_pipeline.live import record_identity
-    from utils.batch_pipeline.record_seal_sweeper import _fresh
+    from utils.batch_pipeline.record_seal_sweeper import require_fresh_proof
 
     budget.check()
     proof = inventory()
-    _fresh(proof)  # Required even for token-free rows.
+    require_fresh_proof(proof)  # Required even for token-free rows.
     uid, cid = nojob.conversation_path(path)
     _, job_id = record_identity(uid, cid)
     job = store.run(lambda tx: tx.get('jobs', job_id))
     budget.check()
+    plan: dict[str, Any]
     if job:
         plan = repair.plan_seals(store, [job_id], storage, artifacts, producer_proof=proof, check_budget=budget.check)
         apply = repair.apply_seals
@@ -94,7 +97,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     disposition = entries[0].get('disposition')
     if disposition != 'eligible' or mode == 'plan':
         return disposition if disposition in DISPOSITIONS else 'unknown'
-    _fresh(proof)  # Tail downloads can exhaust the five-minute inventory window.
+    require_fresh_proof(proof)  # Tail downloads can exhaust the five-minute inventory window.
     budget.check()
     result = apply(store, plan, plan['plan_sha256'])
     if sum(result.values()) != 1 or len(result) != 1:
@@ -145,25 +148,43 @@ def discover(client, *, budget, max_rows=MAX_ROWS, max_scan=MAX_SCAN):
     return rows, scanned >= max_scan or len(rows) >= max_rows
 
 
+class RowProcess(subprocess.Popen):
+    """Own the row's session, including any ffmpeg decoder descendants."""
+
+    def kill(self) -> None:
+        try:
+            os.killpg(self.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 def launch_row(path, seconds, mode):
     script = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
-    process = subprocess.Popen(
-        [sys.executable, str(script), '--row'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+    process = RowProcess(
+        [sys.executable, str(script), '--row'],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
+    stdin = process.stdin
+    if stdin is None:
+        stop(process)
+        raise RuntimeError('row input pipe unavailable')
     try:
         payload = json.dumps({'path': path, 'seconds': seconds, 'mode': mode}).encode()
-        process.stdin.write(payload)
-        process.stdin.close()
+        stdin.write(payload)
+        stdin.close()
     except BaseException:
         stop(process)
-        process.stdin.close()
+        stdin.close()
         raise
     return process
 
 
 def stop(process):
-    if process.poll() is None:
-        process.kill()
+    # Also reap decoder descendants if the row leader already exited.
+    process.kill()
     process.wait()
     process.stdout.close()
 
@@ -286,10 +307,10 @@ def run(*, progress=lambda _: None):
     with silent_dependencies():
         from database._client import get_firestore_client
         from utils.batch_pipeline.record_seal_budget import SweepBudget
-        from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof, _fresh
+        from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof, require_fresh_proof
 
         config.server_flags()  # No cloud access if the explicit policy map is absent.
-        _fresh(read_pusher_pod_proof())
+        require_fresh_proof(read_pusher_pod_proof())
         budget = SweepBudget(60)
         with budget.interrupt_io():
             rows, saturated = discover(get_firestore_client(), budget=budget)

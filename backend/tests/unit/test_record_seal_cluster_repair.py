@@ -262,6 +262,28 @@ def test_real_hung_subprocess_is_killed_and_reaped(tmp_path):
     assert children[0].returncode is not None and children[0].stdout.closed
 
 
+def test_row_process_kills_decoder_descendant_even_after_leader_exit(tmp_path):
+    sleeper, leader, pid_file = tmp_path / 'sleeper.py', tmp_path / 'leader.py', tmp_path / 'decoder-pid'
+    sleeper.write_text('import time\ntime.sleep(30)\n')
+    leader.write_text(
+        'import subprocess, sys\nfrom pathlib import Path\n'
+        f'child = subprocess.Popen([sys.executable, {str(sleeper)!r}], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n'
+        f'Path({str(pid_file)!r}).write_text(str(child.pid))\n'
+    )
+    process = cluster.RowProcess(
+        [sys.executable, str(leader)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True
+    )
+    try:
+        assert process.wait(timeout=5) == 0
+        descendant = int(pid_file.read_text())
+        cluster.stop(process)
+        # A killed orphan may briefly remain a zombie until init reaps it.
+        state = subprocess.run(['ps', '-o', 'stat=', '-p', str(descendant)], capture_output=True, text=True)
+        assert not state.stdout.strip() or state.stdout.strip().startswith('Z')
+    finally:
+        cluster.stop(process)
+
+
 def test_callback_failure_also_reaps_every_live_child():
     clock, children = [0], []
 

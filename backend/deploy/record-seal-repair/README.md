@@ -10,7 +10,8 @@ Default on, eight disposable row processes, 240 seconds per row (configurable
 minutes with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
 and skipped; all other rows continue. A timed-out transaction might have
 committed: the next canonical plan reconciles the row instead of blindly
-replaying a write. The controller kills/reaps hung children, including on TERM.
+replaying a write. The controller kills/reaps each row's process group, including
+decoder descendants, even when the row leader already exited and on TERM.
 
 Discovery pages completed `batch_live_v1` / `batch_sync_v1` metadata by
 `finished_at, __name__` ascending, skipping already-closed rows, with hard caps
@@ -70,6 +71,9 @@ worker Deployments, sweeper and RBAC. No rollout/restart is needed per rung.
 Existing repair Jobs retain their startup map for at most 1680 seconds; new Jobs
 use the refreshed map. Lead should settle/stop the old repair Job before the
 next rung if that overlap is unacceptable.
+
+When live `_ramp` values override revision env defaults, use those effective
+percentages in the repair map. Copying only revision env fallbacks is stale.
 
 `register_recording` forces batch/live admission enabled for an already-owned
 capture. Tests prove registration succeeds at both 0% and 100%; however its
