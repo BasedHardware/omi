@@ -37,6 +37,8 @@ west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always \
   -- -DBOARD_ROOT=..
 ```
 
+> **Note:** A subsequent `west update` resets modified files inside downstream modules (including `bootloader/mcuboot/boot/zephyr/main.c`), so re-run the `cp` command if you run `west update`.
+
 - Board: `omi/nrf5340/cpuapp` (custom board in `omi/firmware/boards/omi/`, registered via
   `-DBOARD_ROOT`). Do **not** use `xiao_ble/nrf52840/sense` — that is the
   DevKit (nRF52840) target.
