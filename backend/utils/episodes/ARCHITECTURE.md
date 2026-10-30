@@ -240,18 +240,28 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   `people` and `moments` (1-8 chapters with real start/end times; placeholder
   or out-of-span chapters are dropped). Member ends move `member_activity`, so a
   late member extends the episode's end.
-- `composed_fingerprint` covers retained members, their transcript size and end,
-  and their own summaries. Unchanged evidence never spends a second call; a late
-  member, a sync upgrade or a discard recomposes. `summary_needs_regeneration`
-  forces it.
+- `composed_fingerprint` covers retained members, every member's transcript text
+  and timing, and its own summary and action items. Unchanged evidence never
+  spends a second call; a late member, a sync upgrade, a transcript edit or a
+  discard recomposes. `summary_needs_regeneration` forces it. An episode with no
+  speech is stamped once instead of retried.
 - `composed_notes` hashes the composed title, notes and moment headings. A later
   per-moment write over them (a closing conversation's tail, a sync replay) still
   records membership as before, and the next compose sees the drift and rewrites
-  the notes.
+  the notes. `composed_member_ids` lets a read notice a member discarded or
+  deleted directly on its conversation after the compose.
+- One paid call per evidence across replicas: a `compose_lease` (fingerprint,
+  150 s) is claimed by CAS before the model call. After the call the members are
+  re-read; changed evidence returns `superseded` without writing (its own trigger
+  composes again). Failures count `compose_failures`; the read-side net backs off
+  10/20/40 minutes and stops after four until the evidence changes.
+- Chapter clock times are mapped on the same clock as the transcript labels and
+  must fall inside the episode's transcript span (two-minute slack).
 - Triggers: close, every member finalize (including `sync_update`), and a
-  read-side safety net on `GET /v1/episodes` for a closed episode that is
-  uncomposed or drifted and closed over a minute ago (at most two per read). Runs
-  on a small background pool, one run per episode at a time; never raises.
+  read-side safety net in `home_read.project_episodes` for a closed episode that
+  is uncomposed, drifted or whose visible members changed, closed over a minute
+  ago (at most two per read, each episode at most every ten minutes per process).
+  Runs on a small background pool, one run per episode at a time; never raises.
 - Kill switch `EPISODE_COMPOSER` (on unless set off): off restores the live
   notes as the final notes. Telemetry: `omi_episode_compose_total{outcome}` and
   `omi_episode_compose_seconds`; usage adds `composer_*` counters.

@@ -136,7 +136,19 @@ EPISODE_LIVE_SESSIONS_TOTAL = _reuse_or_create(
     ['client_seen'],
 )
 COMPOSE_OUTCOMES = frozenset(
-    {'composed', 'unchanged', 'waiting', 'live', 'empty', 'no_episode', 'superseded', 'conflict', 'disabled', 'error'}
+    {
+        'composed',
+        'unchanged',
+        'leased',
+        'waiting',
+        'live',
+        'empty',
+        'no_episode',
+        'superseded',
+        'conflict',
+        'disabled',
+        'error',
+    }
 )
 EPISODE_COMPOSE_TOTAL = _reuse_or_create(
     Counter,

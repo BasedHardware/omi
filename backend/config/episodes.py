@@ -237,3 +237,13 @@ COMPOSER_MAX_TRANSCRIPT_CHARS = 240_000
 COMPOSER_MAX_CHAPTERS = 8
 # Read-side safety net: at most this many closed, uncomposed episodes queued per list read.
 COMPOSER_MAX_SCHEDULED_PER_READ = 2
+# A read-side caller re-queues the same episode at most this often per process.
+COMPOSER_READ_THROTTLE_SECONDS = 600
+# One paid call per evidence across replicas: the in-flight claim outlives the model timeout.
+COMPOSER_LEASE_SECONDS = 150
+# After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
+# the evidence changes (a member finalize still composes).
+COMPOSER_RETRY_MINUTES = 10
+COMPOSER_MAX_FAILURES = 4
+# Wire budget per composed paragraph (to_wire serves bullets up to this length).
+COMPOSER_MAX_PARAGRAPH_CHARS = 1200

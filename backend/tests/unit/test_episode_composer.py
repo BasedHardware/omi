@@ -201,7 +201,10 @@ def test_model_failure_never_raises_and_writes_nothing(store):
     assert (
         composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: SimpleNamespace(content='nope'))) == 'error'
     )
-    assert store.writes == []
+    assert not any("bullets" in w for w in store.writes)
+    # Failures are counted and the lease released, so the read-side net backs off.
+    assert store.episode["compose_failures"] == 2 and store.episode["compose_lease"] is None
+    assert composer.needs_compose(store.episode) is False
 
 
 def test_membership_change_during_the_call_is_not_overwritten(store):
@@ -210,7 +213,7 @@ def test_membership_change_during_the_call_is_not_overwritten(store):
         return _reply()
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
-    assert store.writes == []
+    assert not any("bullets" in w for w in store.writes) and store.episode["compose_lease"] is None
 
 
 def test_long_transcripts_keep_the_densest_windows_in_order():
@@ -238,27 +241,91 @@ def test_needs_compose_read_check(monkeypatch):
     assert composer.needs_compose({'status': 'live', 'started_at': T0}) is False
 
 
-def test_router_safety_net_schedules_old_uncomposed_episodes(monkeypatch):
-    import routers.episodes as router
+def test_home_read_safety_net_schedules_uncomposed_and_changed_episodes(monkeypatch):
+    from utils.episodes import home_read
 
     queued = []
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
-    monkeypatch.setattr(router.composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
     now = datetime.now(timezone.utc)
+    old = now - timedelta(minutes=5)
+    done = {'status': 'closed', 'started_at': now, 'closed_at': old, 'composed_fingerprint': 'x'}
+    done['composed_notes'] = composer.notes_hash(done)
     rows = [
         {'id': 'fresh', 'status': 'closed', 'started_at': now, 'closed_at': now},
-        {'id': 'old1', 'status': 'closed', 'started_at': now, 'closed_at': now - timedelta(minutes=5)},
-        {
-            'id': 'done',
-            'status': 'closed',
-            'started_at': now,
-            'closed_at': now - timedelta(minutes=5),
-            'composed_fingerprint': 'x',
-            'composed_notes': composer.notes_hash({}),
-        },
-        {'id': 'old2', 'status': 'closed', 'started_at': now, 'closed_at': now - timedelta(minutes=9)},
-        {'id': 'old3', 'status': 'closed', 'started_at': now, 'closed_at': now - timedelta(minutes=9)},
+        {'id': 'old1', 'status': 'closed', 'started_at': now, 'closed_at': old},
+        {**done, 'id': 'done', 'composed_member_ids': ['a']},
+        # A member discarded directly on its conversation after the compose.
+        {**done, 'id': 'shrunk', 'composed_member_ids': ['a', 'b']},
+        {'id': 'old3', 'status': 'closed', 'started_at': now, 'closed_at': old},
         {'id': 'live', 'status': 'live', 'started_at': now},
     ]
-    router._schedule_missed_composes(UID, rows)
-    assert queued == ['old1', 'old2']
+    wires = [{'id': r['id'], 'members': [{'id': 'a'}]} for r in rows]
+    home_read._schedule_missed_composes(UID, rows, wires)
+    assert queued == ['old1', 'shrunk']
+
+
+def test_a_second_replica_does_not_pay_for_the_same_evidence(store):
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(1)
+        # Another replica starts while this call is in flight: the lease stops it before any spend.
+        assert (
+            composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: calls.append(2) or _reply())) == 'leased'
+        )
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert calls == [1] and store.episode['compose_lease'] is None
+
+
+def test_discard_during_the_call_is_superseded_not_written(store):
+    def invoke(uid, messages):
+        store.rows['c2']['discarded'] = True
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
+    assert not any('bullets' in w for w in store.writes)
+    assert store.episode['compose_lease'] is None
+
+
+def test_same_shape_transcript_edit_recomposes(store):
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    store.rows['c1']['transcript_segments'][0]['text'] = 'We cancelled the launch.'
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 2
+
+
+def test_chapters_just_outside_the_episode_are_dropped(store):
+    reply = _reply(
+        chapters=[
+            {'start': '14:20', 'end': '14:30', 'title': 'Before it began', 'summary': 'x'},
+            {'start': '15:00', 'end': '15:05', 'title': 'Inside', 'summary': 'y'},
+        ]
+    )
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: reply)) == 'composed'
+    assert [m['heading'] for m in store.writes[-1]['moments']] == ['Inside']
+
+
+def test_episode_with_no_speech_is_stamped_once(store):
+    for row in store.rows.values():
+        row['transcript_segments'] = []
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'empty'
+    assert calls == [] and store.episode['composed_fingerprint']
+    assert composer.needs_compose(store.episode, visible_member_ids=['c1', 'c2']) is False
+
+
+def test_long_paragraphs_survive_the_wire():
+    from utils.episodes import service as svc
+
+    paragraph = 'word ' * 200
+    updates = composer.to_updates(
+        {'title': 't', 'overview': paragraph, 'chapters': []},
+        [_row('c1', T0, 10)],
+        ZoneInfo('UTC'),
+    )
+    wire = svc.to_wire({'id': 'e', 'status': 'closed', 'started_at': T0, 'last_activity_at': T0, **updates})
+    assert wire['bullets'][0] == paragraph.strip()
