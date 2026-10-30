@@ -1082,6 +1082,13 @@ async def run_pass(
                     'arm': idle_arm,
                     'would_skip': bool(lease.get('hunt')) and trigger == 'schedule' and not backlog,
                 }
+            backoff_arm = arms.get('hunt_backoff', 'off')
+            if backoff_arm != 'off' and lease.get('hunt'):
+                pass_levers['hunt_backoff'] = {
+                    'arm': backoff_arm,
+                    'dry_hunts': int(lease.get('dry_hunts', 0) or 0),
+                    'would_defer': bool(lease.get('backoff_would_defer')) and trigger == 'schedule',
+                }
         if not dry_run and not canary:
             assert lease is not None
             intake_scope = ACTIVE_RUN.set((uid, lease['run_id']))
@@ -1208,7 +1215,9 @@ RESERVED_RECHECKS = (PROBE_SECONDS + PROBE_TIMEOUT_SECONDS) // RESERVED_RECHECK_
 # A pass starting late in the drain gets only the drain's remaining budget, so
 # it ends through its own deadline (and finish) instead of being cancelled by the
 # drain's outer timeout; below this floor the owner waits for the next sweep.
-MIN_PASS_SECONDS = 300
+# 10-29: passes started with under 5 minutes left made 20 edits in 116 passes (most of
+# that window is gateway wait), so an owner waits for the next half-hour sweep instead.
+MIN_PASS_SECONDS = 600
 
 
 async def drain(*, limit=5000, sweep=None):

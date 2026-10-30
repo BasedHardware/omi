@@ -81,6 +81,19 @@ def _paid_cohort(uid):
     return in_paid_ramp(uid) or uid in allowlist_uids()
 
 
+# A dry hunt (nothing applied) doubles the owner's next hunt interval, up to 8x.
+HUNT_BACKOFF_MAX_DOUBLINGS = 3
+
+
+def backed_off_hunt_interval(size_bucket, dry_hunts):
+    """Hunt interval after consecutive dry hunts; a hunt that applies anything resets the streak."""
+    try:
+        streak = max(0, min(HUNT_BACKOFF_MAX_DOUBLINGS, int(dry_hunts or 0)))
+    except (TypeError, ValueError):
+        streak = 0
+    return hunt_interval(size_bucket) * (2**streak)
+
+
 def hunt_interval(size_bucket):
     """Idle time before a pass with no dirty work hunts again; 24h (6h heavy) unless overridden."""
     default = 6.0 if size_bucket == 'heavy' else 24.0
