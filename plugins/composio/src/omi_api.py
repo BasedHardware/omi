@@ -1,8 +1,7 @@
 import os
-import json
 import requests
-from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, Request, status
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 import logging
 from dotenv import load_dotenv
