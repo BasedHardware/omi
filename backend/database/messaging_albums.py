@@ -74,6 +74,21 @@ def append_album(tx, batch: AlbumBatch, part, payload, identity_id, now, channel
     return batch.tail.path
 
 
+def _coerce_utc_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw.endswith('Z'):
+            raw = raw[:-1] + '+00:00'
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
+
+
 def seal_album(db, path, attachment_count, *, stale_seconds):
     """Seal only the exact prepared snapshot. Admission contends on this same row."""
     ref = db.document(path)
@@ -82,14 +97,16 @@ def seal_album(db, path, attachment_count, *, stale_seconds):
     def apply(tx):
         row = ref.get(transaction=tx).to_dict() or {}
         now = datetime.now(timezone.utc)
+        stamp = _coerce_utc_datetime(row.get('started_at') or row.get('created_at'))
         if (
             row.get('status') != 'running'
             or row.get('fifo_settled_at')
-            or (now - (row.get('started_at') or row['created_at'])).total_seconds() >= stale_seconds
+            or stamp is None
+            or (now - stamp).total_seconds() >= stale_seconds
         ):
             raise PermissionError('Inbox turn expired')
         payload = json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
-        if len(payload['attachments']) != attachment_count:
+        if len(payload.get('attachments') or ()) != attachment_count:
             return payload
         tx.update(ref, {'generation_started_at': now})
         return None
