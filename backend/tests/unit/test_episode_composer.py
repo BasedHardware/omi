@@ -1,0 +1,264 @@
+"""Closed-episode composer: one whole-episode summary once every member is done."""
+
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
+
+import pytest
+
+os.environ.setdefault(
+    'ENCRYPTION_SECRET',
+    'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
+)
+os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
+
+from config import episodes as config
+from utils.episodes import composer, service
+
+UID = 'composer-uid'
+T0 = datetime(2026, 10, 30, 7, 56, tzinfo=timezone.utc)  # 14:56 in Asia/Bangkok
+
+
+def _row(cid, start, minutes, *, status='completed', title='T', overview='O', lines=None):
+    lines = lines if lines is not None else [(0, 'We planned the launch.'), (60 * minutes - 30, 'Done.')]
+    return {
+        'id': cid,
+        'status': status,
+        'started_at': start,
+        'finished_at': start + timedelta(minutes=minutes),
+        'recorded_start': start,
+        'recorded_end': start + timedelta(minutes=minutes),
+        'structured': {'title': title, 'overview': overview, 'action_items': [{'description': 'Ship it'}]},
+        'transcript_segments': [
+            {'start': s, 'end': s + 5, 'text': t, 'is_user': i % 2 == 0, 'speaker': 'SPEAKER_01'}
+            for i, (s, t) in enumerate(lines)
+        ],
+    }
+
+
+class Store:
+    def __init__(self, episode, rows):
+        self.episode = dict(episode)
+        self.rows = {r['id']: r for r in rows}
+        self.writes = []
+
+    def get_episode(self, uid, episode_id, firestore_client=None):
+        return dict(self.episode)
+
+    def update_episode(self, uid, episode_id, *, expected_version, updates, firestore_client=None, **_):
+        assert expected_version == self.episode['state_version']
+        self.writes.append(dict(updates))
+        self.episode.update(updates)
+        self.episode['state_version'] += 1
+        return self.episode
+
+    def get_conversation(self, uid, cid, firestore_client=None, **_):
+        row = self.rows.get(cid)
+        return dict(row) if row else None
+
+
+def _episode(**over):
+    base = {
+        'id': 'ep1',
+        'status': 'closed',
+        'started_at': T0,
+        'closed_at': T0 + timedelta(hours=3, minutes=10),
+        'conversation_ids': ['c1', 'c2'],
+        'discarded_conversation_ids': [],
+        'state_version': 5,
+        'title': 'old',
+        'bullets': ['David: Yeah.'],
+        'moments': [],
+        'usage': {'calls': 132},
+    }
+    base.update(over)
+    return base
+
+
+def _reply(**over):
+    data = {
+        'title': 'Omi app bugs and labeling tool',
+        'emoji': '🛠️',
+        'overview': 'David found two app regressions.\n\nHe explained the labeling tool.',
+        'chapters': [
+            {'start': '15:38', 'end': '15:39', 'title': 'Labeling tool', 'summary': 'Tool explained.'},
+            {'start': '15:00', 'end': '15:01', 'title': 'App regressions', 'summary': 'Two bugs.'},
+            {'start': '15:10', 'end': '15:11', 'title': 'New moment detected', 'summary': 'noise'},
+            {'start': '03:00', 'end': '03:05', 'title': 'Far outside', 'summary': 'x'},
+            {'start': '17:58', 'end': '18:01', 'title': 'Working at Muji', 'summary': 'Calm.'},
+        ],
+        'people': ['Arjan'],
+    }
+    data.update(over)
+    return SimpleNamespace(content=json.dumps(data), usage_metadata={'input_tokens': 8000, 'output_tokens': 500})
+
+
+@pytest.fixture
+def store(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    rows = [_row('c1', T0, 180), _row('c2', T0 + timedelta(minutes=181), 8)]
+    s = Store(_episode(), rows)
+    monkeypatch.setattr(composer.episodes_db, 'get_episode', s.get_episode)
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', s.update_episode)
+    monkeypatch.setattr(composer.conversations_db, 'get_conversation', s.get_conversation)
+    return s
+
+
+def _c(invoke=None, calls=None):
+    def default(uid, messages):
+        if calls is not None:
+            calls.append(messages)
+        return _reply()
+
+    return service.Collaborators(
+        tz_name='Asia/Bangkok',
+        owner_name=lambda uid: 'David',
+        people_names=lambda uid, ids: {},
+        extras={'compose_invoke': invoke or default},
+    )
+
+
+def test_composes_a_closed_episode_into_summary_and_real_chapters(store):
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    written = store.writes[-1]
+    assert written['title'] == 'Omi app bugs and labeling tool'
+    assert written['bullets'] == ['David found two app regressions.', 'He explained the labeling tool.']
+    headings = [m['heading'] for m in written['moments']]
+    # Placeholder and out-of-span chapters are dropped; the rest are in time order.
+    assert headings == ['App regressions', 'Labeling tool', 'Working at Muji']
+    first = written['moments'][0]
+    assert first['started_at'] == datetime(2026, 10, 30, 8, 0, tzinfo=timezone.utc)
+    assert first['conversation_id'] == 'c1'
+    assert written['moments'][-1]['conversation_id'] == 'c2'
+    assert written['summary_needs_regeneration'] is False
+    assert written['composed_fingerprint']
+    assert written['usage']['calls'] == 132 and written['usage']['composer_calls'] == 1
+    # The late member's end moves the episode's activity forward (the 1h46m lunch bug).
+    assert written['member_activity']['c2'] == T0 + timedelta(minutes=189)
+    system, human = calls[0]
+    assert 'David' in system[1] and 'Existing summary: O' in human[1] and '[14:56] David: We planned' in human[1]
+
+
+def test_waits_for_members_still_processing(store):
+    store.rows['c2']['status'] = 'processing'
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    assert store.writes == []
+
+
+def test_live_episode_is_left_to_the_live_notes(store):
+    store.episode['status'] = 'live'
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'live'
+
+
+def test_unchanged_evidence_does_not_spend_a_second_call(store):
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
+    assert len(calls) == 1
+    # A sync upgrade of a member transcript changes the fingerprint and recomposes.
+    store.rows['c2']['transcript_segments'].append({'start': 600, 'end': 610, 'text': 'More words.', 'is_user': True})
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 2
+
+
+def test_a_later_per_moment_write_over_composed_notes_is_recomposed(store):
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    store.episode['bullets'] = ['David: Yeah.']  # a closing tail or sync replay after the compose
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 2 and store.episode['bullets'][0].startswith('David found')
+
+
+def test_discarded_and_hidden_members_are_excluded(store):
+    store.episode['discarded_conversation_ids'] = ['c2']
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert 'Recording 2' not in calls[0][1][1]
+    store.episode['discarded_conversation_ids'] = []
+    store.rows['c2']['deleted'] = True
+    calls.clear()
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls), force=True) == 'composed'
+    assert 'Recording 2' not in calls[0][1][1]
+
+
+def test_kill_switch_off_does_nothing(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'false')
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'disabled'
+    assert composer.schedule(UID, 'ep1') is False
+    assert store.writes == []
+
+
+def test_model_failure_never_raises_and_writes_nothing(store):
+    def boom(uid, messages):
+        raise TimeoutError('slow')
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'error'
+    assert (
+        composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: SimpleNamespace(content='nope'))) == 'error'
+    )
+    assert store.writes == []
+
+
+def test_membership_change_during_the_call_is_not_overwritten(store):
+    def invoke(uid, messages):
+        store.episode['conversation_ids'] = ['c1', 'c2', 'c3']
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
+    assert store.writes == []
+
+
+def test_long_transcripts_keep_the_densest_windows_in_order():
+    tz = ZoneInfo('UTC')
+    lines = []
+    for minute in range(0, 240, 2):
+        text = ('busy ' * 40) if 60 <= minute < 80 else 'hm'
+        lines.append((T0 + timedelta(minutes=minute), f'[{minute}] {text}'))
+    kept = composer._fit(lines, budget=3000)
+    assert any('quieter minutes left out' in line for line in kept)
+    busy = [line for line in kept if 'busy' in line]
+    assert busy and busy == sorted(busy, key=lambda l: int(l[1:].split(']')[0]))
+    assert sum(len(l) + 1 for l in kept if 'left out' not in l) <= 3000
+
+
+def test_needs_compose_read_check(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    assert composer.needs_compose({'status': 'closed', 'started_at': T0}) is True
+    done = {'status': 'closed', 'started_at': T0, 'composed_fingerprint': 'x', 'title': 'T', 'bullets': ['b']}
+    done['composed_notes'] = composer.notes_hash(done)
+    assert composer.needs_compose(done) is False
+    assert composer.needs_compose({**done, 'summary_needs_regeneration': True}) is True
+    # A later per-moment write over composed notes is drift: compose again.
+    assert composer.needs_compose({**done, 'bullets': ['David: Yeah.']}) is True
+    assert composer.needs_compose({'status': 'live', 'started_at': T0}) is False
+
+
+def test_router_safety_net_schedules_old_uncomposed_episodes(monkeypatch):
+    import routers.episodes as router
+
+    queued = []
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.setattr(router.composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    now = datetime.now(timezone.utc)
+    rows = [
+        {'id': 'fresh', 'status': 'closed', 'started_at': now, 'closed_at': now},
+        {'id': 'old1', 'status': 'closed', 'started_at': now, 'closed_at': now - timedelta(minutes=5)},
+        {
+            'id': 'done',
+            'status': 'closed',
+            'started_at': now,
+            'closed_at': now - timedelta(minutes=5),
+            'composed_fingerprint': 'x',
+            'composed_notes': composer.notes_hash({}),
+        },
+        {'id': 'old2', 'status': 'closed', 'started_at': now, 'closed_at': now - timedelta(minutes=9)},
+        {'id': 'old3', 'status': 'closed', 'started_at': now, 'closed_at': now - timedelta(minutes=9)},
+        {'id': 'live', 'status': 'live', 'started_at': now},
+    ]
+    router._schedule_missed_composes(UID, rows)
+    assert queued == ['old1', 'old2']

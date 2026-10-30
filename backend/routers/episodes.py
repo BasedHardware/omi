@@ -16,12 +16,18 @@ and the finalizer require before spending anything.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from config.episodes import APP_CHANNEL_HEADER, app_channel, client_channel_admitted, episodes_enabled_for
+from config.episodes import (
+    APP_CHANNEL_HEADER,
+    COMPOSER_MAX_SCHEDULED_PER_READ,
+    app_channel,
+    client_channel_admitted,
+    episodes_enabled_for,
+)
 from utils.episodes import home_read
 from models.episode import (
     EpisodeListResponse,
@@ -30,7 +36,7 @@ from models.episode import (
     EpisodeLookupResponse,
     EpisodeWrapUpRequest,
 )
-from utils.episodes import client_gate, metrics, service
+from utils.episodes import client_gate, composer, metrics, service
 from utils.other import endpoints as auth
 
 router = APIRouter(tags=['episodes'])
@@ -67,11 +73,31 @@ def list_episodes(
         rows, next_cursor = home_read.list_episode_window(uid, start, end, limit=limit, cursor=cursor)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    _schedule_missed_composes(uid, rows)
     return {
         'enabled': True,
         'episodes': home_read.project_episodes(uid, rows),
         'next_cursor': next_cursor,
     }
+
+
+def _schedule_missed_composes(uid: str, rows) -> None:
+    """Safety net: a closed episode whose compose never ran (a lost worker) gets one now."""
+    try:
+        queued = 0
+        now = datetime.now(timezone.utc)
+        for row in rows or []:
+            if queued >= COMPOSER_MAX_SCHEDULED_PER_READ:
+                return
+            closed_at = row.get('closed_at') if isinstance(row, dict) else None
+            if not composer.needs_compose(row) or not isinstance(closed_at, datetime):
+                continue
+            if (now - closed_at).total_seconds() < 60:
+                continue
+            if composer.schedule(uid, str(row.get('id'))):
+                queued += 1
+    except Exception:
+        pass
 
 
 @router.get('/v1/episodes/live', response_model=EpisodeLiveResponse, response_model_exclude_unset=True)

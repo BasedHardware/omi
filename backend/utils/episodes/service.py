@@ -413,6 +413,10 @@ def _close(
             carried_items.extend(transferred)
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
+        from utils.episodes import composer
+
+        # Waits for members still processing; their finalizers schedule it again.
+        composer.schedule(uid, str(episode['id']), collaborators=c)
     return closed is not None
 
 
@@ -1139,10 +1143,26 @@ def on_conversation_finalized(
             # No app of this user can show episodes: no tail update, no reconciliation reads.
             metrics.record_moment_skipped_no_client('finalize')
             return 'skipped_no_client'
-        return _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c)
+        outcome = _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c)
+        _schedule_compose_for(uid, conversation_id, c)
+        return outcome
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
         return 'error'
+
+
+def _schedule_compose_for(uid: str, conversation_id: str, c: Collaborators) -> None:
+    """A member finished: once its episode is closed and every member is done, compose it."""
+    from utils.episodes import composer
+
+    if not composer.episode_composer_enabled():
+        return
+    try:
+        episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+        if episode and not policy.is_live(episode):
+            composer.schedule(uid, str(episode['id']), collaborators=c)
+    except Exception as error:
+        logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
 
 
 def close_on_finalize(

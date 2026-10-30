@@ -227,6 +227,35 @@ The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
   (`idle`), dated when the quiet reached the gap rather than when the read
   happened. No scheduler is involved.
 
+## Composed summary (David, 2026-10-31)
+
+The live notes above are a preview. Once an episode is closed and every retained
+member conversation has finished processing, `composer.compose` writes the
+episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
+- Input: each member's own summary (title, overview, action items) plus the
+  episode's full transcript with clock times. Above `COMPOSER_MAX_TRANSCRIPT_CHARS`
+  (about 60k tokens; the 4h cap makes this rare) the densest 10-minute windows
+  are kept in time order and the gaps are marked.
+- Output replaces `title`, `emoji`, `bullets` (the overview's paragraphs),
+  `people` and `moments` (1-8 chapters with real start/end times; placeholder
+  or out-of-span chapters are dropped). Member ends move `member_activity`, so a
+  late member extends the episode's end.
+- `composed_fingerprint` covers retained members, their transcript size and end,
+  and their own summaries. Unchanged evidence never spends a second call; a late
+  member, a sync upgrade or a discard recomposes. `summary_needs_regeneration`
+  forces it.
+- `composed_notes` hashes the composed title, notes and moment headings. A later
+  per-moment write over them (a closing conversation's tail, a sync replay) still
+  records membership as before, and the next compose sees the drift and rewrites
+  the notes.
+- Triggers: close, every member finalize (including `sync_update`), and a
+  read-side safety net on `GET /v1/episodes` for a closed episode that is
+  uncomposed or drifted and closed over a minute ago (at most two per read). Runs
+  on a small background pool, one run per episode at a time; never raises.
+- Kill switch `EPISODE_COMPOSER` (on unless set off): off restores the live
+  notes as the final notes. Telemetry: `omi_episode_compose_total{outcome}` and
+  `omi_episode_compose_seconds`; usage adds `composer_*` counters.
+
 ## Kill switch, cohort and client capability
 
 `config/episodes.py`:
