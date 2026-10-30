@@ -11,6 +11,15 @@ def entries():
     return (
         DriverEntry(
             'utils.batch_pipeline.record_seal_cluster_repair.discover',
+            domains={
+                'after': [
+                    None,
+                    {
+                        'path': 'users/synthetic/conversations/old',
+                        'finished_at': datetime(2026, 10, 1, tzinfo=timezone.utc),
+                    },
+                ]
+            },
             neutrals={
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (1024, 'in-memory candidate cap only'),

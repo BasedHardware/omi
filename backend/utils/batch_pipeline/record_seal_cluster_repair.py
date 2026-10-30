@@ -1,8 +1,8 @@
 """Independent repair coordinator; private row inputs, aggregate outputs only.
 
 Each row uses a disposable process. A stuck SDK/native call cannot consume a
-slot indefinitely or share cloud clients with another row. No private state is
-persisted and no planner/apply semantics are reimplemented here.
+slot indefinitely or share cloud clients with another row. Only an encrypted
+maintenance frontier persists; no planner/apply semantics are reimplemented here.
 """
 
 from collections import Counter, deque
@@ -106,8 +106,8 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     return disposition if disposition in DISPOSITIONS else 'unknown'
 
 
-def discover(client, *, budget, max_rows=MAX_ROWS, max_scan=MAX_SCAN):
-    """Page past closed rows; globally oldest finished capture first.
+def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN):
+    """Page past closed rows; oldest finished first within each bounded pass.
 
     Both owners use the canonical record identity. Sync rows without a job are
     refused by the existing no-job planner (which only registers batch_live).
@@ -116,7 +116,7 @@ def discover(client, *, budget, max_rows=MAX_ROWS, max_scan=MAX_SCAN):
     """
     from google.cloud.firestore_v1 import FieldFilter
 
-    rows, scanned, cursor = [], 0, None
+    rows, scanned, cursor = [], 0, after
     while scanned < max_scan and len(rows) < max_rows:
         budget.check()
         query = (
@@ -129,23 +129,27 @@ def discover(client, *, budget, max_rows=MAX_ROWS, max_scan=MAX_SCAN):
             .limit(min(128, max_scan - scanned))
         )
         if cursor is not None:
-            query = query.start_after(cursor)
+            query = query.start_after(
+                {'finished_at': cursor['finished_at'], '__name__': client.document(cursor['path'])}
+            )
         page = list(query.stream(timeout=budget.timeout(), retry=None))
         budget.check()
         if not page:
+            cursor = None  # Full pass exhausted: revisit refused rows on wrap.
             break
         for doc in page:
             scanned += 1
             data = doc.to_dict() or {}
             finished = data.get('finished_at')
+            cursor = {'path': doc.reference.path, 'finished_at': finished}
             if not data.get('record_audio_closed') and isinstance(finished, datetime) and finished.tzinfo is not None:
                 rows.append((doc.reference.path, max(0, int(time.time() - finished.timestamp()))))
                 if len(rows) == max_rows:
                     break
-        cursor = page[-1]
-        if len(page) < 128:
+        if len(page) < 128 and len(rows) < max_rows and scanned < max_scan:
+            cursor = None
             break
-    return rows, scanned >= max_scan or len(rows) >= max_rows
+    return rows, scanned >= max_scan or len(rows) >= max_rows, cursor
 
 
 class RowProcess(subprocess.Popen):
@@ -307,13 +311,21 @@ def run(*, progress=lambda _: None):
     with silent_dependencies():
         from database._client import get_firestore_client
         from utils.batch_pipeline.record_seal_budget import SweepBudget
+        from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
         from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof, require_fresh_proof
 
         config.server_flags()  # No cloud access if the explicit policy map is absent.
         require_fresh_proof(read_pusher_pod_proof())
         budget = SweepBudget(60)
         with budget.interrupt_io():
-            rows, saturated = discover(get_firestore_client(), budget=budget)
+            client = get_firestore_client()
+            frontier = RepairCursor(client, os.environ['ENCRYPTION_SECRET'].encode())
+            rows, saturated, cursor = discover(client, budget=budget, after=frontier.read(budget))
+            # Advance before slow proofs: refused, hung, deferred or killed rows
+            # cannot monopolize the next run. Wrap revisits them on a later pass.
+            # A preview never writes even this maintenance frontier.
+            if mode == 'apply':
+                frontier.write(cursor, budget)
     report = coordinate(
         rows, workers=workers, row_seconds=row_seconds, run_seconds=run_seconds, mode=mode, progress=progress
     )

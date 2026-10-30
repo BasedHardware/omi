@@ -14,10 +14,19 @@ replaying a write. The controller kills/reaps each row's process group, includin
 decoder descendants, even when the row leader already exited and on TERM.
 
 Discovery pages completed `batch_live_v1` / `batch_sync_v1` metadata by
-`finished_at, __name__` ascending, skipping already-closed rows, with hard caps
+`finished_at, __name__` ascending within each pass, skipping already-closed rows, with hard caps
 of 10,000 metadata reads / 1024 unsealed candidates and 60 seconds. The added
 collection-group composite index must be READY before deployment. Discovery
-reads only finish/closed metadata; private paths stay in memory/child stdin.
+reads only finish/closed metadata. Lead ruling `f79d45` authorizes one maintenance
+read/write per apply cycle at
+`batch_pipeline_prod_maintenance/record_seal_repair_cursor_v1`. The cursor's
+finish time and private path are authenticated/encrypted with a domain-separated
+key derived from the existing job encryption secret; no plaintext identities or
+cursor payloads are logged. Firestore nanoseconds round-trip without truncation.
+It advances **before** slow work and wraps at the end of the pass, so a refused
+prefix or closed-row scan cap cannot monopolize every run. Interrupted/deferred
+rows are revisited on a later pass. `mode=plan` reads but never advances state.
+No new IAM, secret or index is required for the maintenance point read/write.
 Both absent and explicit-false seals are discovered. Each row gets a fresh,
 complete, TLS-verified in-cluster pusher PodList, then canonical singleton
 `plan_backfill/apply_backfill` (no job) or `plan_seals/apply_seals` (canonical
@@ -33,8 +42,8 @@ These caps do not prove the 30-minute SLO: long/failed proofs, live producers,
 refused privacy or an over-budget backlog can still leave old rows. Lead must
 measure actual in-cluster plan/apply throughput and the full age census before
 the batch ramp. `discovery_saturated`, `deferred`, `budget_exhausted` and error
-counts must be investigated, including whether repeatedly slow oldest rows
-consume the cycle. Oldest-first priority alone is no guarantee of settlement.
+counts must be investigated. Cursor fairness avoids permanent prefix starvation;
+oldest-first priority within a pass is still no guarantee of settlement.
 
 ## Deploy and refresh policy without restarting workers
 
