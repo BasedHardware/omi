@@ -244,6 +244,11 @@ class PusherRecordBarrier:
 
     async def fail_recording(self, conversation_id: str) -> None:
         self.hold_recording(conversation_id)
+        # Terminal loss must not become recoverable if its durable failure
+        # marker is unavailable. The persisted producer remains the fence.
+        token = self.upload_sessions.get(conversation_id)
+        if token is not None:
+            _process_record_tokens().forget(self.uid, conversation_id, token)
         # Await the durable refusal when available, but never let its failure
         # terminate the audio uploader or discard its remaining ready lane.
         try:

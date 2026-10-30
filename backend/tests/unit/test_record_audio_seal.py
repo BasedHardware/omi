@@ -388,6 +388,19 @@ async def test_later_success_never_erases_permanent_failure(records):
     assert not records.rows[PATH]['record_audio_closed']
 
 
+async def test_failure_marker_outage_preserves_terminal_token_across_later_success(records, monkeypatch):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    held = earlier.upload_sessions['record']
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', Mock(side_effect=OSError('synthetic outage')))
+    await earlier.fail_recording('record')
+    later = PusherRecordBarrier('uid-at')
+    await later.begin_recording('record')
+    assert await later.finish_recording('record')
+    assert set(records.rows[PATH]['record_upload_sessions']) == {held}
+    assert not records.rows[PATH]['record_audio_closed']
+
+
 async def test_reclear_failure_keeps_retry_state_after_own_token_clears(records, monkeypatch):
     earlier = PusherRecordBarrier('uid-at')
     await earlier.begin_recording('record')
