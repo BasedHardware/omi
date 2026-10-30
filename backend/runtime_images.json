@@ -544,12 +544,14 @@
       "workdir": "/app",
       "entrypoints": [
         "diarizer.batch_pipeline_runtime",
-        "scripts.record_seal_sweep"
+        "scripts.record_seal_sweep",
+        "scripts.record_seal_repair_job"
       ],
       "image_import_smoke": false,
       "smoke_entrypoints": [
         "diarizer.batch_pipeline_runtime",
-        "scripts.record_seal_sweep"
+        "scripts.record_seal_sweep",
+        "scripts.record_seal_repair_job"
       ],
       "dependency_probe_smoke": true,
       "dependency_probe_exclusions": {
