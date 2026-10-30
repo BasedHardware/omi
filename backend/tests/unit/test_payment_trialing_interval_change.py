@@ -1,5 +1,6 @@
 import time
 from types import SimpleNamespace
+from models.users import PlanType
 from unittest.mock import MagicMock, patch
 import pytest
 
@@ -74,7 +75,7 @@ def test_trialing_interval_switch_modifies_subscription_directly_without_schedul
     with patch.object(router, "_validate_price_id"), \
          patch.object(router.users_db, "get_user_subscription", return_value=current_sub), \
          patch.object(router, "is_paid_plan", return_value=True), \
-         patch.object(router, "get_plan_type_from_price_id", return_value=SimpleNamespace(value="unlimited")), \
+         patch.object(router, "get_plan_type_from_price_id", return_value=PlanType.unlimited), \
          patch.object(router.stripe.Price, "retrieve", return_value=mock_target_price), \
          patch.object(router.stripe.Subscription, "retrieve", return_value=MagicMock(to_dict=lambda: stripe_sub_dict)), \
          patch.object(router.stripe.Subscription, "modify", return_value=mock_updated_sub) as mock_sub_modify, \
@@ -151,7 +152,7 @@ def test_non_trialing_interval_switch_still_uses_subscription_schedule(payment_r
     with patch.object(router, "_validate_price_id"), \
          patch.object(router.users_db, "get_user_subscription", return_value=current_sub), \
          patch.object(router, "is_paid_plan", return_value=True), \
-         patch.object(router, "get_plan_type_from_price_id", return_value=SimpleNamespace(value="unlimited")), \
+         patch.object(router, "get_plan_type_from_price_id", return_value=PlanType.unlimited), \
          patch.object(router.stripe.Price, "retrieve", return_value=mock_target_price), \
          patch.object(router.stripe.Subscription, "retrieve", return_value=MagicMock(to_dict=lambda: stripe_sub_dict)), \
          patch.object(router.stripe.SubscriptionSchedule, "create", return_value=mock_schedule_obj) as mock_sched_create, \
@@ -208,7 +209,7 @@ def test_trialing_interval_switch_with_promo_code_passes_discounts(payment_route
     with patch.object(router, "_validate_price_id"), \
          patch.object(router.users_db, "get_user_subscription", return_value=current_sub), \
          patch.object(router, "is_paid_plan", return_value=True), \
-         patch.object(router, "get_plan_type_from_price_id", return_value=SimpleNamespace(value="unlimited")), \
+         patch.object(router, "get_plan_type_from_price_id", return_value=PlanType.unlimited), \
          patch.object(router.stripe.Price, "retrieve", return_value=mock_target_price), \
          patch.object(router.stripe.PromotionCode, "list", return_value=MagicMock(data=[mock_promo])), \
          patch.object(router.stripe.Subscription, "retrieve", return_value=MagicMock(to_dict=lambda: stripe_sub_dict)), \
@@ -307,7 +308,7 @@ def test_subscription_interval_switch_during_trial_preserves_end_date(
     with patch.object(router, "_validate_price_id"), \
          patch.object(router.users_db, "get_user_subscription", return_value=current_sub), \
          patch.object(router, "is_paid_plan", return_value=True), \
-         patch.object(router, "get_plan_type_from_price_id", return_value=SimpleNamespace(value="unlimited")), \
+         patch.object(router, "get_plan_type_from_price_id", return_value=PlanType.unlimited), \
          patch.object(router.stripe.Price, "retrieve", return_value=mock_target_price), \
          patch.object(router.stripe.Subscription, "retrieve", return_value=MagicMock(to_dict=lambda: stripe_sub_dict)), \
          patch.object(router.stripe.Subscription, "modify", return_value=mock_updated_sub) as mock_sub_modify, \
