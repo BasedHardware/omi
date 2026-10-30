@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-30 -->
+<!-- feature-flag-registry as-of: 2026-10-31 -->
 
 # Feature-flag authority registry
 
@@ -107,7 +107,7 @@ entries are exempt: they are queued for removal, not running.
 
 | key | terminal | owner | prereg | review_by |
 | --- | --- | --- | --- | --- |
-| `DAY3_REENGAGEMENT_EMAIL_ENABLED` | undecided | dazheng | [backend/docs/experiments/EXP-001-day3-reengagement.md](../../backend/docs/experiments/EXP-001-day3-reengagement.md) | 2026-10-30 |
+| `DAY3_REENGAGEMENT_EMAIL_ENABLED` | undecided | dazheng | [backend/docs/experiments/EXP-001-day3-reengagement.md](../../backend/docs/experiments/EXP-001-day3-reengagement.md) | 2026-10-30 OVERDUE |
 | `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | undecided | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
 | `onboarding-variant` | undecided | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
 | `paywall-variant` | undecided | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
@@ -135,6 +135,7 @@ exception is recorded for David.
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
 - `CONVERSATION_NOTES_AGENT_PERCENT` — review_by 2026-10-27 (dazheng)
 - `CONVERSATION_NOTES_AGENT_UID_ALLOWLIST` — review_by 2026-10-27 (dazheng)
+- `DAY3_REENGAGEMENT_EMAIL_ENABLED` — review_by 2026-10-30 (dazheng)
 - `DREAM_REQUIRED_INTAKE_BACKLOG_COHORT` — review_by 2026-10-28 (dazheng)
 - `DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED` — review_by 2026-10-28 (dazheng)
 - `EPISODE_BOUNDARIES_MODE` — review_by 2026-10-26 (dazheng)
@@ -159,7 +160,6 @@ exception is recorded for David.
 - `STT_CAP_DISPATCH_COHORT` — review_by 2026-10-27 (dazheng)
 - `STT_CAP_DISPATCH_ENFORCEMENT` — review_by 2026-10-27 (dazheng)
 - `STT_CAP_DISPATCH_LANES` — review_by 2026-10-27 (dazheng)
-- `STT_CAP_RECOVERY_COHORT` — review_by 2026-10-23 (dazheng)
 - `STT_LANGUAGE_HINTS_MODE` — review_by 2026-10-26 (dazheng)
 - `STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
 - `STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
@@ -370,7 +370,7 @@ and an explicit empty literal renders as `''`.
 | `STT_CAP_DISPATCH_COHORT` | Fallback environment cohort tokens uid:<uid>,pct:<0-100> or explicit all; empty/unset/malformed admits nobody for either dispatch or ladder execution | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | kill | off | 2026-10-27 | dazheng |
 | `STT_CAP_DISPATCH_ENFORCEMENT` | Default-off funded STT dispatch admission; requires explicit cohort membership and original lane selection | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend-integration, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-sync) | — | keep | keep | 2026-10-27 | dazheng |
 | `STT_CAP_DISPATCH_LANES` | Comma-separated live,sync,batch; unset/blank defaults live only; unknown/empty list tokens deny all; batch code-fenced until lane8 writes provider_reason=byok into binding.policy at batch admission; recovery retains original encrypted custody origin | backend | env | closed | {value: 'live', category: rollout} | live (backend-listen (chart), pusher (chart)); {value: 'live', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | live (backend-listen (chart), pusher (chart)); {value: 'live', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | keep | keep | 2026-10-27 | dazheng |
-| `STT_CAP_RECOVERY_COHORT` | Optional recovery-only cohort intersection; unset preserves dispatch scope, malformed denies all recovery | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-23 | dazheng |
+| `STT_CAP_RECOVERY_COHORT` | Optional recovery-only cohort intersection; unset preserves dispatch scope, malformed denies all recovery | backend | env | closed | — | — | — | — | keep | keep | 2026-11-06 | two-lane rollout lead |
 | `STT_FAILOVER_RECOVERY_ENABLED` | Enable live-STT failover recovery on prod listen | backend | env | closed | declared | false (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | graduate | on | 2026-11-04 | backend |
 | `STT_LANGUAGE_HINTS_MODE` | Single-language Soniox hint overlay; preserves existing learned/multi-language policy and all prerecorded gates; default shadow | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT` | Serve cohort percentage; default 0 | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
