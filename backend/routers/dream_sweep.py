@@ -29,7 +29,7 @@ async def sweep_dream_agent(request: Request, _retry_count: int = Depends(verify
     sweep = {
         'retry_count': _retry_count,
         'caller': 'scheduler' if job == SWEEP_JOB else 'other' if job else 'none',
-        'scheduled_at': request.headers.get('x-cloudscheduler-scheduletime', '')[:25],
+        'scheduled_at': request.headers.get('x-cloudscheduler-scheduletime', '')[:64],
     }
     reports = await dream_agent.drain(sweep=sweep)
     # Structured twin (owner-level counts, reasons, retry count); fails open.

@@ -270,3 +270,9 @@ class TestReleaseProbeSkipsTheEmptyTitleFallback:
 
         assert result.discarded is True
         assert result.structured.title == ''
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

@@ -13,6 +13,8 @@ import time
 from config.batch_pipeline_shadow import paid_recovery_limit, shadow_percent
 from config.policy import resolve_stage_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_store import is_allowance_policy_hold
+from database.batch_pipeline_transaction_labels import shadow_operation
 from utils.batch_pipeline.contracts import (
     WorkItem,
     RecoveryWork,
@@ -24,6 +26,8 @@ from utils.batch_pipeline.contracts import (
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
+BUSY_HOLD_SCAN_LIMIT = 500
+RECORD_PENDING_BUSY_SECONDS = 120.0
 OFFER_SECONDS = 6
 STAGING_SECONDS = 120
 logger = logging.getLogger(__name__)
@@ -33,11 +37,46 @@ def identity(uid, content_id):
     return 'sh_' + hashlib.sha256(f'{uid}\0{content_id}'.encode()).hexdigest()
 
 
-def pool_busy(client, namespace):
+def _has_dispatchable(rows):
+    for index, document in enumerate(rows):
+        if index >= BUSY_HOLD_SCAN_LIMIT:
+            return True  # A held prefix cannot certify an unmeasured tail idle.
+        if not is_allowance_policy_hold(document.to_dict()):
+            return True  # Missing/unknown authority remains ordinary-work priority.
+    return False
+
+
+def pool_busy(client, namespace, *, now=None):
+    """Yield to runnable ordinary work, rather than durable parked obligations.
+
+    A future retry, expired lease or old recording placeholder cannot occupy a
+    GPU now. Use the scheduler's existing state/time indexes; no age-based
+    exclusion of due retries. Local GPU/normal-flight checks remain mandatory.
+    """
+    now = time.time() if now is None else now
+    jobs = client.collection(f'{namespace}_jobs')
+    if list(jobs.where('state', '==', 'leased').where('lease_until', '>', now).limit(1).stream()):
+        return True
+    # Preserve nonempty unknown decisions: a subfield mask could turn one into
+    # an absent decision and incorrectly revive a stale allowance hold.
+    fields = ('compute_decision', 'last_policy_hold.reason')
+    if _has_dispatchable(jobs.where('state', '==', 'ready').select(fields).limit(BUSY_HOLD_SCAN_LIMIT + 1).stream()):
+        return True
+    # Scheduler.recover promotes every due retry, including one whose attempt
+    # counter reached the cap outside the serving retry-cap cohort. Only the
+    # authoritative terminal state releases its ordinary-work priority.
+    if _has_dispatchable(
+        jobs.where('state', '==', 'retry')
+        .where('available_at', '<=', now)
+        .select(fields)
+        .limit(BUSY_HOLD_SCAN_LIMIT + 1)
+        .stream()
+    ):
+        return True
     return bool(
         list(
-            client.collection(f'{namespace}_jobs')
-            .where('state', 'in', ['ready', 'leased', 'retry', 'record_pending'])
+            jobs.where('state', '==', 'record_pending')
+            .where('enqueued_at', '>', now - RECORD_PENDING_BUSY_SECONDS)
             .limit(1)
             .stream()
         )
@@ -54,9 +93,13 @@ class ShadowStore:
         self.busy = busy or self._busy
 
     def _busy(self):
-        # Single-field index, no new production index or scan. Any admitted
+        # Existing scheduler indexes; bounded held-prefix scans. Runnable
         # ordinary GPU work wins, including a flight prefetched by another lane.
-        return pool_busy(self.store.client, self.store.namespace)
+        return pool_busy(self.store.client, self.store.namespace, now=self.clock())
+
+    def _run(self, operation, body):
+        with shadow_operation(operation):
+            return self.store.run(body)
 
     def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
         job = tx.get('shadow_jobs', segment)
@@ -96,7 +139,8 @@ class ShadowStore:
             'created_at': job.get('created_at'),
             **({'projection_status': projection_status} if projection_status is not None else {}),
             'vad': vad,
-            **({'recognizers': recognizers, 'paid_providers': job.get('paid', [])} if recognizers is not None else {}),
+            'paid_providers': job.get('paid', []),
+            **({'recognizers': recognizers} if recognizers is not None else {}),
             **({'reason_code': 'shadow_paid_skipped'} if outcome == 'paid_skipped' else {}),
             'speech_seconds': float(speech),
             'speech_loss_seconds': float(speech) if outcome != 'recovered' else 0.0,
@@ -118,7 +162,8 @@ class ShadowStore:
             'error',
         }:
             raise ValueError('closed shadow projection status required')
-        row = self.store.run(
+        row = self._run(
+            'finish',
             lambda tx: self._finish(
                 tx,
                 segment,
@@ -127,7 +172,7 @@ class ShadowStore:
                 vad=vad,
                 recognizers=recognizers,
                 projection_status=projection_status,
-            )
+            ),
         )
         if row:
             record(row)
@@ -167,7 +212,7 @@ class ShadowStore:
             )
             return row
 
-        row = self.store.run(update)
+        row = self._run('offer', update)
         if row:
             record(row)
 
@@ -224,7 +269,7 @@ class ShadowStore:
             )
             return (segment, str(index)), None
 
-        reservation, row = self.store.run(claim)
+        reservation, row = self._run('reserve', claim)
         if row:
             record(row)
         return reservation
@@ -266,7 +311,7 @@ class ShadowStore:
             tx.put('shadow_slots', index, {**slot, 'state': 'ready', 'until': now + OFFER_SECONDS})
             return True
 
-        return self.store.run(publish)
+        return self._run('ready', publish)
 
     def projection_input(self, segment):
         """Use the intake reservation once, even across an hour rollover."""
@@ -278,7 +323,7 @@ class ShadowStore:
             job = tx.get('shadow_jobs', segment)
             if (
                 job.get('shadow') is not True
-                or job.get('state') != 'running'
+                or job.get('state') not in {'running', 'recovering'}
                 or 'projection_attempted_at' in job
                 or 'projection_reserved_at' not in job
             ):
@@ -290,7 +335,7 @@ class ShadowStore:
             tx.put('shadow_jobs', segment, {**job, 'projection_attempted_at': now})
             return job
 
-        return self.store.run(reserve)
+        return self._run('projection_input', reserve)
 
     def take(self, worker):
         if not shadow_percent() or self.busy():
@@ -320,7 +365,7 @@ class ShadowStore:
             tx.put('shadow_slots', str(index), {'worker': worker, 'state': 'closed', 'until': now})
             return item
 
-        return self.store.run(claim)
+        return self._run('take', claim)
 
     def paid(self, segment, provider):
         """Each provider is reserved once, across replicas/retries and hour rollover."""
@@ -355,7 +400,7 @@ class ShadowStore:
             return job['item']['duration_seconds']
 
         try:
-            seconds = self.store.run(reserve)
+            seconds = self._run('paid', reserve)
         except BatchPrivacyBlocked:
             raise
         except Exception as error:
@@ -389,7 +434,7 @@ class ShadowStore:
             tx.put('shadow_jobs', segment, {**job, **evidence_fields, 'state': 'recovery_ready'})
             return True
 
-        return self.store.run(prepare)
+        return self._run('handoff', prepare)
 
     def start_recovery(self, segment):
         def pin_shadow_recovery(tx):
@@ -411,7 +456,7 @@ class ShadowStore:
             tx.put('shadow_jobs', segment, updated)
             return updated
 
-        return self.store.run(pin_shadow_recovery)
+        return self._run('start_recovery', pin_shadow_recovery)
 
     def recovery_transport_failed(self, segment):
         def settle(tx):
@@ -420,7 +465,7 @@ class ShadowStore:
                 return None  # An active backend request owns settlement.
             return self._finish(tx, segment, 'error' if shadow_percent() else 'dropped')
 
-        row = self.store.run(settle)
+        row = self._run('recovery_transport_failed', settle)
         if row:
             record(row)
 
@@ -439,6 +484,6 @@ class ShadowStore:
                     return None
                 return self._finish(tx, row.id, 'error')
 
-            settled = self.store.run(reap_one)
+            settled = self._run('reap', reap_one)
             if settled:
                 record(settled)

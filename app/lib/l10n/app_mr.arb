@@ -11940,5 +11940,6 @@
     "yearlySwitchPreviewFailed": "तुमची किंमत लोड करता आली नाही.",
     "yearlySwitchUnavailable": "सध्या तुमच्या प्लॅनसाठी वार्षिक बिलिंग उपलब्ध नाही.",
     "yearlySwitchDoneTitle": "तुम्ही आता वार्षिक प्लॅनवर आहात",
-    "yearlySwitchDoneBody": "आज {amount} आकारले. नूतनीकरण {date} रोजी."
+    "yearlySwitchDoneBody": "आज {amount} आकारले. नूतनीकरण {date} रोजी.",
+    "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}"
 }

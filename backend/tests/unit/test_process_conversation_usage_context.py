@@ -2051,6 +2051,35 @@ def test_held_budget_denial_never_reports_superseded_persistence(monkeypatch, la
     assert completed.structured.overview == 'Previous revision'
 
 
+def test_held_budget_denial_at_max_hold_is_terminal(monkeypatch):
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+
+    completed = Conversation(
+        id='c',
+        status=ConversationStatus.completed,
+        source=ConversationSource.omi,
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(title='Prior notes', overview='Previous revision'),
+        transcript_segments=[],
+    )
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    observer = MagicMock()
+    context = {'sync_hold': True, 'hold_outcome': 'max_hold'}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        result = process_conversation.process_conversation('uid', 'en', completed, persistence_observer=observer)
+    finally:
+        PROCESS_CONTEXT.reset(token)
+
+    assert result is completed
+    assert context['hold_budget_denied_at_max']
+    observer.assert_called_once_with(False)
+    assert completed.structured.overview == 'Previous revision'
+
+
 @pytest.mark.parametrize('late_dispatch', [False, True])
 def test_held_raw_budget_denial_preserves_backlog_choice_authority(monkeypatch, late_dispatch):
     from utils.conversations.summary_delivery import PROCESS_CONTEXT
@@ -2087,3 +2116,9 @@ def test_held_raw_budget_denial_preserves_backlog_choice_authority(monkeypatch, 
     assert result.processing_deferred
     store.assert_called_once()
     observer.assert_called_once_with(True)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

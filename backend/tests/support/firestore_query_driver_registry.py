@@ -143,9 +143,10 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
+    'database.batch_pipeline_projection_release.release_page': '9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
-    'database.batch_pipeline_shadow.ShadowStore._busy': '3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
-    'database.batch_pipeline_shadow.ShadowStore.reap': 'e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
+    'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
+    'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
     'database.batch_ramp.ramp_admission_policy': 'af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
     'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
@@ -190,7 +191,8 @@ BODY_DIGEST = {
     # refresh a document read, while post-commit bridge logging adds no query.
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
-    'database.smart_merge.absorb_conversation': 'fdf7e55e3f9795791e5abcf02752dcbe2c9d04d978ae22921cf5d35434fc6b23',
+    # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
+    'database.smart_merge.absorb_conversation': '531806c3dc28aa6d728effd0a0ff8037b7621128037ed7350cf06beb3bd5674b',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.
@@ -1040,6 +1042,55 @@ _add(
         neutrals={'diagnostics': (None, 'caller-owned diagnostic sink; no filter, order or projection effect')},
     )
 )
+_add(DriverEntry('database.episode_timeline.between', base={'uid': UID, 'start': T0, 'end': T1}))
+_add(
+    DriverEntry(
+        'database.episode_timeline.check_window',
+        base={
+            'transaction': ref_transaction(),
+            'uid': UID,
+            'episode': {'id': 'recorded-1', 'started_at': T0, 'last_activity_at': T1},
+        },
+        neutrals={'rows': (None, 'preloaded rows reuse the recorded_candidates query shape')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.episode_timeline.recorded_candidates',
+        base={'uid': UID, 'started': T0, 'finished': T1},
+        neutrals={'transaction': (None, 'same query shape inside or outside a transaction')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.episode_timeline.attach_recorded',
+        base={
+            'uid': UID,
+            'conversation_id': 'recorded-1',
+            'source': 'omi',
+            'started': T0,
+            'finished': T1,
+            'choose': lambda rows, start, end: None,
+            'new_episode': {'id': 'recorded-1'},
+        },
+        patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.episode_timeline._attach_recorded_window',
+        base={
+            'uid': UID,
+            'conversation_id': 'recorded-1',
+            'source': 'omi',
+            'started': T0,
+            'finished': T1,
+            'choose': lambda rows, start, end: None,
+            'new_episode': {'id': 'recorded-1'},
+        },
+        patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
+    )
+)
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
 _add(DriverEntry('database.conversations.get_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
@@ -1072,7 +1123,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_finished_after',
         base={'uid': UID, 'status': 'completed', 'finished_after': T0},
-        neutrals={'limit': _LIMIT},
+        neutrals={'limit': _LIMIT, 'include_hidden': (True, 'result filtering only; same serving query')},
     )
 )
 _add(DriverEntry('database.conversations.get_conversations_to_migrate', base={'uid': UID, 'target_level': 'level-2'}))
@@ -2855,6 +2906,12 @@ _add(
     )
 )
 _add(DriverEntry('database.person_aliases.find_person_by_name', base={'uid': UID, 'name': 'shape-name'}))
+_add(
+    DriverEntry(
+        'database.people.get_or_create_person_by_name',
+        base={'uid': UID, 'data': {'id': 'person-1', 'name': 'shape-name'}},
+    )
+)
 _add(DriverEntry('database.users.get_task_integrations', base={'uid': UID}))
 _add(DriverEntry('database.users.get_user_by_stripe_customer_id', base={'customer_id': 'cus_1'}))
 _add(DriverEntry('database.users.resolve_deletion_wipe_job_id', base={'wipe_job_id': 'job-1'}))

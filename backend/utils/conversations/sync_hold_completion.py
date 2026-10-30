@@ -1,10 +1,11 @@
 """Explicit processing satisfies an outstanding sync hold without another paid run."""
 
 from typing import Any
+import time
 
 from database import conversations as conversations_db
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.summary_delivery import present
+from utils.conversations.summary_delivery import present, PROCESS_CONTEXT
 from utils.sync import processing_hold
 
 EXPLICIT = frozenset(
@@ -39,3 +40,17 @@ def complete_explicit(uid: str, conversation: Any, trigger: ProcessingTrigger) -
         processing_hold.content_snapshot(conversation.model_dump()) if present(conversation.structured) else None,
         automatic=False,
     )
+
+
+def defer_held_budget_denial() -> None:
+    context = PROCESS_CONTEXT.get()
+    if context and context.get('sync_hold'):
+        if context.get('hold_outcome') == 'max_hold':
+            # The one-hour cap is terminal even when the funded refresh cannot
+            # run. The callback settles the hold and merge ledger without
+            # re-arming another quiet window.
+            context['hold_budget_denied_at_max'] = True
+            return
+        # A prior summary is not a receipt for this revision. Keep the outbox
+        # wake through resets/upgrades, including a denial at a later dispatch.
+        raise processing_hold.ProcessingDeferred('processing_budget', time.time() + processing_hold.QUIET_SECONDS)

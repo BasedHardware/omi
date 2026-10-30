@@ -60,7 +60,12 @@ def _normalize(value):
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, dict):
-        return {str(key): _normalize(item) for key, item in value.items()}
+        # Phase A globally adds timing metadata even while lineage features are off.
+        # Its values and placement are asserted by test_recorded_span; compare the
+        # retained lineage payload here against the immutable pre-span snapshot.
+        from utils.conversations.recorded_time import SPAN_FIELDS
+
+        return {str(key): _normalize(item) for key, item in value.items() if key not in SPAN_FIELDS}
     if isinstance(value, (list, tuple)):
         return [_normalize(item) for item in value]
     if isinstance(value, (set, frozenset)):
@@ -160,6 +165,8 @@ def _drive(module, patch, store, texts, assignment_module, capture_enabled):
 def off(monkeypatch, request):
     # This immutable pre-hold snapshot specifies the rollback/eager behavior.
     monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+    monkeypatch.setenv('LATE_AUDIO_SYNC_INTAKE_ENABLED', 'false')
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     for flag in FLAGS:
         monkeypatch.setenv(flag, request.param)
 
@@ -390,3 +397,23 @@ def test_excluded_cohort_stays_main_even_with_both_flags_on(frozen, monkeypatch)
         outputs.append(_bytes({'result': result, 'rows': _rows(store)}))
     assert outputs[0] == outputs[1]
     assert recording_lineage.lineage_resolution_requested('u', ORIGIN, 1500, 1510) is False
+
+
+@pytest.fixture(autouse=True)
+def stable_recording_arrival(monkeypatch):
+    from datetime import datetime, timezone
+    from database import conversation_recorded_time
+
+    class ArrivalType(type):
+        def __instancecheck__(cls, value):
+            return isinstance(value, datetime)
+
+    class FixedArrival(datetime, metaclass=ArrivalType):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 20, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(conversation_recorded_time, 'datetime', FixedArrival)
+    from database import conversations
+
+    monkeypatch.setattr(conversations, 'datetime', FixedArrival)

@@ -47,7 +47,7 @@ const makeMediaQuery = (matches: boolean): MediaQueryList =>
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
-  }) as unknown as MediaQueryList;
+  } as unknown as MediaQueryList);
 
 const geometry = (circles: SVGCircleElement[]) =>
   circles.map((circle) => [
@@ -74,7 +74,7 @@ describe('ChatComposer recording control', () => {
     const onStop = vi.fn();
     const { rerender } = render(
       <ChatComposer
-        onSend={vi.fn(async () => {})}
+        onSend={vi.fn(async () => true)}
         isStreaming={false}
         recording={{ isActive: false, level: 0, onStart, onStop }}
       />,
@@ -93,7 +93,7 @@ describe('ChatComposer recording control', () => {
 
     rerender(
       <ChatComposer
-        onSend={vi.fn(async () => {})}
+        onSend={vi.fn(async () => true)}
         isStreaming={false}
         recording={{ isActive: true, level: 1, onStart, onStop }}
       />,
@@ -123,7 +123,7 @@ describe('ChatComposer recording control', () => {
 
     render(
       <ChatComposer
-        onSend={vi.fn(async () => {})}
+        onSend={vi.fn(async () => true)}
         isStreaming={false}
         recording={{
           isActive: true,
@@ -157,7 +157,7 @@ describe('ChatComposer attachments', () => {
   it('sends uploaded metadata for an attachment-only message', async () => {
     const attachment = uploadedFile('file-1', 'notes.txt');
     vi.mocked(uploadChatFiles).mockResolvedValue([attachment]);
-    const onSend = vi.fn(async () => {});
+    const onSend = vi.fn(async () => true);
     const { container } = render(<ChatComposer onSend={onSend} isStreaming={false} />);
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -176,7 +176,7 @@ describe('ChatComposer attachments', () => {
   it('blocks Enter while an attachment upload is pending', async () => {
     const upload = deferred<MessageFile[]>();
     vi.mocked(uploadChatFiles).mockReturnValue(upload.promise);
-    const onSend = vi.fn(async () => {});
+    const onSend = vi.fn(async () => true);
     const { container } = render(<ChatComposer onSend={onSend} isStreaming={false} />);
     const textarea = screen.getByPlaceholderText('Ask anything...');
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -207,7 +207,7 @@ describe('ChatComposer attachments', () => {
     vi.mocked(uploadChatFiles)
       .mockReturnValueOnce(firstUpload.promise)
       .mockReturnValueOnce(secondUpload.promise);
-    const onSend = vi.fn(async () => {});
+    const onSend = vi.fn(async () => true);
     const { container } = render(<ChatComposer onSend={onSend} isStreaming={false} />);
     const textarea = screen.getByPlaceholderText('Ask anything...');
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -265,7 +265,7 @@ describe('ChatComposer IME composition', () => {
   });
 
   const typed = () => {
-    const onSend = vi.fn(async () => {});
+    const onSend = vi.fn(async () => true);
     render(<ChatComposer onSend={onSend} isStreaming={false} />);
     const textarea = screen.getByPlaceholderText('Ask anything...');
     fireEvent.change(textarea, { target: { value: '漢字' } });

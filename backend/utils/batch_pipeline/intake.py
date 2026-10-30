@@ -533,27 +533,8 @@ async def accept_upload(
             if len(items) >= 128:
                 raise ValueError('capture bundle exceeds bounded conversation-unit limit')
             from utils.stt.batch_language import resolve_language
-            from config.stt_cap_dispatch import execution_admission_enabled
-            from utils.stt_cap_dispatch import sync_allowed
+            from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
 
-            # Classification runs on the CPU intake host, never under the GPU
-            # lock or with vendor credentials on a worker. Cap refusal does not
-            # license a probe; the worker retains uncertain speech for recovery.
-            language_decision = await run_blocking(
-                sync_executor,
-                resolve_language,
-                input_language,
-                unit.wav,
-                surface='batch',
-                cohort_key=uid,
-                before_probe=lambda duration=unit.duration_seconds: not execution_admission_enabled(uid, 'batch')
-                or sync_allowed(uid, duration, 'modulate', lane='batch'),
-            )
-            frozen_language = (
-                language_decision.language
-                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
-                else 'und' if language_guard_enabled() else input_language
-            )
             item = replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{len(items)}'.encode()).hexdigest(),
@@ -563,6 +544,25 @@ async def accept_upload(
                 conversation_id=conversation_id
                 or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
                 privacy_generation=context.generation,
+            )
+            probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
+            # Every self/vendor classification gets fresh dispatch authority on CPU.
+            language_decision = await run_blocking(
+                sync_executor,
+                resolve_language,
+                input_language,
+                unit.wav,
+                surface='batch',
+                cohort_key=uid,
+                before_probe=probe_guard,
+                before_self_probe=probe_guard,
+            )
+            # Refusal preserves the caller's source; never acknowledge or admit it.
+            probe_guard.raise_if_denied()
+            frozen_language = (
+                language_decision.language
+                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
+                else 'und' if language_guard_enabled() else input_language
             )
             frozen = await run_blocking(
                 sync_executor,

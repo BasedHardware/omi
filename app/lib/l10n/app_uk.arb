@@ -4514,5 +4514,6 @@
     "yearlySwitchPreviewFailed": "Не вдалося завантажити ціну.",
     "yearlySwitchUnavailable": "Річна оплата зараз недоступна для вашого плану.",
     "yearlySwitchDoneTitle": "Тепер ви платите раз на рік",
-    "yearlySwitchDoneBody": "Сьогодні списано {amount}. Поновлення {date}."
+    "yearlySwitchDoneBody": "Сьогодні списано {amount}. Поновлення {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} частини} one{{count} частина} two{{count} частини} few{{count} частини} many{{count} частин} other{{count} частини}}"
 }

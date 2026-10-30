@@ -610,6 +610,12 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'updated_at',
         'started_at',
         'finished_at',
+        # Server-computed recording and episode metadata, not display projections.
+        'recorded_start',
+        'recorded_end',
+        'arrival_at',
+        'clock',
+        'episode_id',
         'source',
         'language',
         'uses_custom_stt',

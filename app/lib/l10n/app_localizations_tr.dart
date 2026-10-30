@@ -14943,4 +14943,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Bugün $amount tahsil edildi. Yenilenme: $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bölüm',
+      many: '$count bölüm',
+      few: '$count bölüm',
+      two: '$count bölüm',
+      one: '$count bölüm',
+      zero: '$count bölüm',
+    );
+    return '$_temp0';
+  }
 }

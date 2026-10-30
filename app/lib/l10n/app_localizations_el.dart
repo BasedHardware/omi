@@ -15029,4 +15029,19 @@ class AppLocalizationsEl extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Χρεώθηκαν σήμερα $amount. Ανανέωση στις $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count μέρη',
+      many: '$count μέρη',
+      few: '$count μέρη',
+      two: '$count μέρη',
+      one: '$count μέρος',
+      zero: '$count μέρη',
+    );
+    return '$_temp0';
+  }
 }

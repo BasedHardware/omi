@@ -1146,6 +1146,12 @@ class SharedPreferencesUtil {
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
 
+  /// Composer text kept across app close/kill. Cleared only after a send is
+  /// accepted, so a failed or interrupted send still restores on reopen.
+  String get chatMessageDraft => getString('chatMessageDraft', defaultValue: '');
+
+  set chatMessageDraft(String value) => saveString('chatMessageDraft', value);
+
   String get lastUsedSummarizationAppId => getString('lastUsedSummarizationAppId');
 
   set lastUsedSummarizationAppId(String value) => saveString('lastUsedSummarizationAppId', value);

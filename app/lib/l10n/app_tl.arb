@@ -11940,5 +11940,6 @@
     "yearlySwitchPreviewFailed": "Hindi ma-load ang presyo mo.",
     "yearlySwitchUnavailable": "Hindi pa available ang taunang bayad para sa plan mo ngayon.",
     "yearlySwitchDoneTitle": "Taunan ka na",
-    "yearlySwitchDoneBody": "{amount} ang siningil ngayon. Magre-renew sa {date}."
+    "yearlySwitchDoneBody": "{amount} ang siningil ngayon. Magre-renew sa {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} bahagi} one{{count} bahagi} two{{count} bahagi} few{{count} bahagi} many{{count} bahagi} other{{count} bahagi}}"
 }

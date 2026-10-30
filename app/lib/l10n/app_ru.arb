@@ -4549,5 +4549,6 @@
     "yearlySwitchPreviewFailed": "Не удалось загрузить цену.",
     "yearlySwitchUnavailable": "Годовая оплата сейчас недоступна для вашего плана.",
     "yearlySwitchDoneTitle": "Теперь вы платите раз в год",
-    "yearlySwitchDoneBody": "Сегодня списано {amount}. Продление {date}."
+    "yearlySwitchDoneBody": "Сегодня списано {amount}. Продление {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} части} one{{count} часть} two{{count} части} few{{count} части} many{{count} частей} other{{count} части}}"
 }

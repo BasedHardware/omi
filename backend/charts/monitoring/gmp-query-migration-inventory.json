@@ -2023,6 +2023,22 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "(100 * (sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\",verdict=\"discard\"}[1h])) or on (service_name, trigger) (0 * sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h])))) / sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h]))) and on (service_name, trigger) (sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h])) > 0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_conversation_relevance_decision_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 77,
+        "title": "Rolling 1h discard share by service / trigger"
+      },
+      "pointer": "/panels/19/panels/4/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
       "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=~\"success|failure\"}[$__range]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -3144,8 +3160,8 @@
     }
   ],
   "counts": {
-    "explicit_bridge": 23,
-    "query_consumers": 207
+    "explicit_bridge": 24,
+    "query_consumers": 208
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

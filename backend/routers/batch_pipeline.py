@@ -37,8 +37,7 @@ ENRICHMENT_RETRIES = Counter(
 EXPECTED_RETRIES = {
     # Keyed by the defining module: utils.sync.reprocess is only an alias of utils.enrichment.outbox (#22431).
     ('utils.enrichment.outbox', 'FirstSummaryCallbackPending'): 'callback_pending',
-    ('utils.enrichment.callback', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
-    ('utils.sync.pipeline', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
+    ('utils.enrichment.admission', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
 }
 
 

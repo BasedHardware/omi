@@ -9,13 +9,58 @@ from contextvars import copy_context
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime, timezone
+from functools import lru_cache
 import hashlib
+import importlib.util
 import json
 import logging
 import os
 from pathlib import Path
 import sys
 from unittest.mock import patch
+
+TRANSACTION_FIXTURE = Path(__file__).resolve().parents[2] / 'tests/unit/fixtures/strict_firestore_transaction.py'
+
+
+@lru_cache(maxsize=1)
+def fixed_transaction_fixture():
+    """Load fixed-tool bytes, never the selected product snapshot's fixture."""
+    spec = importlib.util.spec_from_file_location('_fixed_batch_replay_transaction', TRANSACTION_FIXTURE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class ResultTransactionLog:
+    """Single-attempt, single-threaded result transactions for offline replay.
+
+    Keep this facade in the fixed runner so its implementation is covered by
+    adapter_sha256 and exists even when the product snapshot predates it.
+    Retry/contention are not simulated.
+    """
+
+    def run(self, operation):
+        if getattr(self, '_result_transaction', None) is not None:
+            raise RuntimeError('nested replay result transaction is unsupported')
+        database = fixed_transaction_fixture().StrictFirestore(
+            {('results', key): row for key, row in self.results.items()}
+        )
+        self._result_transaction = database
+        try:
+            result = operation(database.transaction())
+        finally:
+            self._result_transaction = None
+        # Failed callbacks cannot publish their private partial mutations.
+        self.results.update({key: deepcopy(row) for (table, key), row in database.rows.items() if table == 'results'})
+        return result
+
+    def ref(self, table, sid):
+        database = getattr(self, '_result_transaction', None)
+        if database is not None:
+            if table != 'results':
+                raise NotImplementedError('replay transactions support only result metadata')
+            return database.collection('results').document(sid)
+        return super().ref(table, sid)
 
 
 def geometry_boundaries(units, validate_spans, source_audio, item_type, priority):
@@ -154,7 +199,8 @@ def _replay(corpus):
     from utils.batch_pipeline.scheduler import owner_key
     from utils.sync import bridge
     from utils.sync.assignment import assign_in_transaction
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    StrictFirestore = fixed_transaction_fixture().StrictFirestore
 
     exceptions = Counter()
     issues = defaultdict(set)
@@ -183,7 +229,7 @@ def _replay(corpus):
             if error is not None and ('outcome=error' in event.msg or 'outcome=retry' in event.msg):
                 record(error, 'followup' if event.name.endswith('projection_followup') else 'walk')
 
-    class ReplayLog(ChainLog):
+    class ReplayLog(ResultTransactionLog, ChainLog):
         namespace = 'batch_pipeline_test_replay'
 
         def policy(self, sid):
