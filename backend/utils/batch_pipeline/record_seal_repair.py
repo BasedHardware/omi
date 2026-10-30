@@ -10,7 +10,7 @@ from google.cloud import firestore
 from database._client import run_transactional
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import Priority, WorkItem
-from utils.batch_pipeline.live import _units
+from utils.batch_pipeline.live import retained_record_units
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.other.storage import list_audio_chunks
 
@@ -31,6 +31,12 @@ ROW_FIELDS = (
 
 def _row_state(row):
     return {key: row.get(key) for key in ROW_FIELDS}
+
+
+def _job_state(job):
+    # The pending drainer advances this retry wake every minute. It grants no
+    # seal authority and must not invalidate an otherwise identical approval.
+    return {key: value for key, value in job.items() if key != 'available_at'}
 
 
 def _digest(value):
@@ -65,7 +71,7 @@ def plan_seals(store, job_ids, storage_client, artifacts):
     for job_id in sorted(job_ids):
         entry = {'job_id': job_id, 'disposition': 'unavailable'}
         try:
-            job = store.run(lambda tx: tx.get('jobs', job_id))
+            job = _job_state(store.run(lambda tx: tx.get('jobs', job_id)))
             uid, cid = job.get('owner_id'), job.get('conversation_id')
             if not uid or not cid or '/' in uid or '/' in cid:
                 entries.append(entry)
@@ -89,7 +95,7 @@ def plan_seals(store, job_ids, storage_client, artifacts):
                 artifacts.authorize(seed)
                 chunks = list_audio_chunks(uid, cid, max_count=4096, require_archive=True)
                 units = []
-                iterator = _units(uid, cid, chunks, storage_client, artifacts.key_for_owner(uid))
+                iterator = retained_record_units(uid, cid, chunks, storage_client, artifacts.key_for_owner(uid))
                 try:
                     for unit in iterator:
                         units.append(unit)
@@ -133,7 +139,7 @@ def apply_seals(store, plan, approved_digest):
         def commit(tx):
             current_job = job_ref.get(transaction=tx).to_dict() or {}
             row = ref.get(transaction=tx).to_dict() or {}
-            if current_job != job or _row_state(row) != entry['row']:
+            if _job_state(current_job) != job or _row_state(row) != entry['row']:
                 return 'state_changed'
             refusal = _refused(current_job, row)
             if refusal:

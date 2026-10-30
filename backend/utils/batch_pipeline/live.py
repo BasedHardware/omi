@@ -126,7 +126,7 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
     return store.run(commit)
 
 
-def _units(
+def retained_record_units(
     uid, conversation_id, chunks, client, key
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
     """Bounded one-hour units, preserving capture clocks and verified overlaps."""
@@ -243,7 +243,7 @@ async def admit_recording(store, pending, *, now=None):
         privacy_generation=pending['privacy_generation'],
     )
     protection = await run_blocking(db_executor, artifacts.authorize, seed)
-    iterator = _units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
+    iterator = retained_record_units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
     units = []
     try:
         while unit := await run_blocking(sync_executor, next, iterator, None):

@@ -45,7 +45,7 @@ def source(monkeypatch):
     artifacts = SimpleNamespace(authorize=Mock(), key_for_owner=lambda _: b'x' * 32)
     monkeypatch.setattr(repair, 'list_audio_chunks', lambda *a, **kw: ['retained'])
     monkeypatch.setattr(
-        repair, '_units', lambda *a: (u for u in [(100, 2, [{'generation': 1, 'pcm_sha256': 'proof'}])])
+        repair, 'retained_record_units', lambda *a: (u for u in [(100, 2, [{'generation': 1, 'pcm_sha256': 'proof'}])])
     )
 
     def allowed(client, tx, uid, **kwargs):
@@ -102,7 +102,7 @@ def test_refuses_unsafe_conversation_states(source, change, disposition):
 
 @pytest.mark.parametrize('units', [[], [(100, 1, [])], [(100, float('nan'), [])]])
 def test_missing_short_or_nonfinite_tail_refused(source, monkeypatch, units):
-    monkeypatch.setattr(repair, '_units', lambda *a: (u for u in units))
+    monkeypatch.setattr(repair, 'retained_record_units', lambda *a: (u for u in units))
     assert plan(source)['entries'][0]['disposition'] == 'proof_refused'
 
 
@@ -131,7 +131,7 @@ def test_plan_digest_binds_source_generations_and_refuses_stale_approval(source,
     store, client, _ = source
     old = plan(source)
     monkeypatch.setattr(
-        repair, '_units', lambda *a: (u for u in [(100, 2, [{'generation': 2, 'pcm_sha256': 'proof'}])])
+        repair, 'retained_record_units', lambda *a: (u for u in [(100, 2, [{'generation': 2, 'pcm_sha256': 'proof'}])])
     )
     new = plan(source)
     assert old['plan_sha256'] != new['plan_sha256']
@@ -169,6 +169,16 @@ def test_apply_rechecks_privacy_in_write_transaction(source, monkeypatch):
     monkeypatch.setattr(repair, 'assert_batch_write_allowed', blocked)
     assert repair.apply_seals(store, result, result['plan_sha256']) == {'privacy_refused': 1}
     assert all(not tx.updates for tx in client.transactions)
+
+
+def test_scheduler_retry_wake_does_not_invalidate_approval_or_get_overwritten(source):
+    store, client, _ = source
+    result = plan(source)
+    client.rows[JOB_PATH]['available_at'] = 1000
+    refreshed = plan(source)
+    assert result['plan_sha256'] == refreshed['plan_sha256']
+    assert repair.apply_seals(store, refreshed, result['plan_sha256']) == {'sealed': 1}
+    assert client.rows[JOB_PATH]['available_at'] == 1000
 
 
 def test_private_exact_id_input_refuses_scans_duplicates_and_unbounded_lists(tmp_path):
