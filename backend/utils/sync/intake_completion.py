@@ -26,6 +26,7 @@ from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionOutcome
 from utils.sync.assignment_telemetry import CREATED_UNKNOWN_REASONS
 from utils.sync.bridge_observation import log_bridge_observation
+from utils.sync.absorption_metrics import record_assignment_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ def log_assignment_observations(conversation: dict, *, lineage_eligible: bool) -
     """Consume only the successful assignment result, before external effects."""
     for row, _ in conversation.get('_sync_size_rollover_rows', []):
         log_assignment_observations(row, lineage_eligible=lineage_eligible)
+    record_assignment_metrics(conversation)
     log_append_observations(conversation)
     bridge = conversation.pop('_sync_lineage_bridge', None)
     if bridge is not None:

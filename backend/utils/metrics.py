@@ -17,9 +17,9 @@ from prometheus_client import (
     start_http_server,
 )
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
-# All backend, backend-listen, and pusher metrics endpoints import this module.
-# The pinned prometheus_client (0.21.1) otherwise exports a second _created
+# All metrics endpoints import this module. prometheus_client otherwise exports a second _created
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 

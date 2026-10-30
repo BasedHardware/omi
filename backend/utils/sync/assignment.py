@@ -64,6 +64,7 @@ from utils.sync.live_speech_dedupe import (
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
 from utils.sync.bridge_observation import bridge_observation
+from utils.sync.absorption_metrics import capture_assignment_metrics
 from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
 from utils.sync.assignment_telemetry import created_sync_row_observation
 from utils.capture.dedupe import choose_segments
@@ -1307,8 +1308,7 @@ def assign_in_transaction(
     if chosen.bridge is not None:
         result['_sync_lineage_bridge'] = chosen.bridge
     if created and lineage_eligible and sync_lineage_resolve_enabled():
-        # The adapter emits only the final successful transaction's observation,
-        # after commit. Neither this marker nor eligibility enters the write codec.
+        # Only the final successful transaction's observation is emitted after commit.
         candidates_read = all(cid in read for cid in live_candidate_ids)
         result['_sync_lineage_created'] = created_sync_row_observation(
             [row for row in read.values() if row is not None],
@@ -1319,7 +1319,6 @@ def assign_in_transaction(
             candidates_read=candidates_read,
         )
     if chosen.append_stats is not None:
-        # Transient telemetry only: the encoded plan already committed above.
         result['_sync_lineage_dedupe'] = chosen.append_stats
     if stamp_fallback_live and canonical == target_id and not created and result.get('sync_live_target'):
         result['_sync_lineage_stamp_append'] = _lineage_span_delta_bucket(
@@ -1330,6 +1329,7 @@ def assign_in_transaction(
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
     result['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
+    capture_assignment_metrics(result, [chosen, *extra_plans])
     return result, created, survivors
 
 
