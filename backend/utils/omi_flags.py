@@ -82,7 +82,8 @@ EMPTY = Snapshot()
 
 
 def rollout_hash(key: str, uid: str) -> float:
-    digest = hashlib.sha1(f'{key}.{uid}'.encode('utf-8')).hexdigest()[:15]
+    # Bucketing, not security: must match PostHog's SHA-1 bit for bit so imported cohorts do not move.
+    digest = hashlib.sha1(f'{key}.{uid}'.encode('utf-8'), usedforsecurity=False).hexdigest()[:15]
     return int(digest, 16) / _LONG_SCALE
 
 
