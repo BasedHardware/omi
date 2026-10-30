@@ -16,6 +16,7 @@ test_github_client.py.
 """
 import asyncio
 import importlib.util
+import os
 import sys
 import types
 import unittest
@@ -23,6 +24,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 PLUGIN_DIR = Path(__file__).resolve().parent
+
+# The settings routes now require a signed session; unit tests are not the place
+# to exercise that guard (test_github_settings_auth.py does). A fixed test secret
+# lets the success paths mint one.
+os.environ.setdefault("GITHUB_SETTINGS_SECRET", "test-settings-secret")
 
 
 # ---- Third-party stubs -------------------------------------------------
@@ -44,9 +50,16 @@ class _HTTPException(Exception):
 class _Request:
     def __init__(self, payload=None):
         self._payload = payload or {}
+        self.cookies = {}
 
     async def json(self):
         return self._payload
+
+
+def _settings_request(uid="u1", payload=None):
+    request = _Request(payload)
+    request.cookies = {main.COOKIE_NAME: main.session_value(uid)}
+    return request
 
 
 def _Query(default=None, **kwargs):
@@ -90,6 +103,9 @@ class _StubResponse:
         self.status_code = kwargs.get("status_code", 200)
         self.content = kwargs.get("content", args[0] if args else "")
         self.body = self.content.encode("utf-8") if isinstance(self.content, str) else self.content
+
+    def set_cookie(self, *args, **kwargs):
+        self.cookie = kwargs
 
 
 _responses.HTMLResponse = _StubResponse
@@ -778,14 +794,14 @@ class OwnerRepoValidationTests(unittest.TestCase):
 class UpdateRepoEndpointTests(unittest.TestCase):
     def test_update_repo_user_not_found(self):
         with patch.object(main.SimpleUserStorage, "get_user", return_value=None):
-            resp = asyncio.run(main.update_repo(uid="nonexistent", repo="owner/repo"))
+            resp = asyncio.run(main.update_repo(_settings_request("nonexistent"), uid="nonexistent", repo="owner/repo"))
             self.assertFalse(resp["success"])
             self.assertEqual(resp["error"], "User not found")
 
     def test_update_repo_invalid_format(self):
         user = {"uid": "u1", "available_repos": []}
         with patch.object(main.SimpleUserStorage, "get_user", return_value=user):
-            resp = asyncio.run(main.update_repo(uid="u1", repo="invalid..format//bad"))
+            resp = asyncio.run(main.update_repo(_settings_request("u1"), uid="u1", repo="invalid..format//bad"))
             self.assertFalse(resp["success"])
             self.assertIn("Invalid repository", resp["error"])
 
@@ -796,7 +812,7 @@ class UpdateRepoEndpointTests(unittest.TestCase):
         }
         with patch.object(main.SimpleUserStorage, "get_user", return_value=user), \
              patch.object(main.SimpleUserStorage, "update_repo_selection", return_value=True) as mock_update:
-            resp = asyncio.run(main.update_repo(uid="u1", repo="omi"))
+            resp = asyncio.run(main.update_repo(_settings_request("u1"), uid="u1", repo="omi"))
             self.assertTrue(resp["success"])
             self.assertIn("BasedHardware/omi", resp["message"])
             mock_update.assert_called_once_with("u1", "BasedHardware/omi")
@@ -805,7 +821,7 @@ class UpdateRepoEndpointTests(unittest.TestCase):
         user = {"uid": "u1", "available_repos": []}
         with patch.object(main.SimpleUserStorage, "get_user", return_value=user), \
              patch.object(main.SimpleUserStorage, "update_repo_selection", return_value=True) as mock_update:
-            resp = asyncio.run(main.update_repo(uid="u1", repo="org/my-project"))
+            resp = asyncio.run(main.update_repo(_settings_request("u1"), uid="u1", repo="org/my-project"))
             self.assertTrue(resp["success"])
             mock_update.assert_called_once_with("u1", "org/my-project")
 
@@ -1068,41 +1084,100 @@ class OAuthAndHtmlSinkSanitizationTests(unittest.TestCase):
             self.assertNotIn('"><script>alert("auth_uid")</script>', resp.content)
 
 
+class OAuthCallbackRebindTests(unittest.TestCase):
+    """Already-linked users must recover, while other identities stay blocked."""
+
+    EXISTING = {
+        "uid": "u1",
+        "access_token": "old-token",
+        "github_username": "Octocat",
+        "available_repos": [],
+        "selected_repo": "",
+    }
+
+    def tearDown(self):
+        main.oauth_states.clear()
+
+    def _run_callback(self, login, user=None, request=None, state="rebind_state"):
+        main.oauth_states[state] = "u1"
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user), patch.object(
+            main.github_client, "exchange_code_for_token", return_value={"access_token": "new-token"}
+        ), patch.object(
+            main.github_client, "get_user_info", return_value={"login": login}
+        ), patch.object(
+            main.github_client, "list_user_repos", return_value=[]
+        ), patch.object(
+            main.SimpleUserStorage, "save_user"
+        ) as save_user:
+            resp = asyncio.run(main.auth_callback(request or _Request(), code="c", state=state))
+        return resp, save_user
+
+    def test_same_identity_reauth_recovers_a_linked_user_without_a_session(self):
+        resp, save_user = self._run_callback("octocat", user=self.EXISTING)
+        self.assertEqual(resp.status_code, 200)
+        save_user.assert_called_once()
+        self.assertEqual(resp.cookie["key"], main.COOKIE_NAME)
+
+    def test_different_identity_cannot_rebind_without_a_session(self):
+        resp, save_user = self._run_callback("attacker", user=self.EXISTING)
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("Already Connected", resp.content)
+        save_user.assert_not_called()
+        self.assertFalse(hasattr(resp, "cookie"))
+
+    def test_valid_session_can_rebind_a_different_identity(self):
+        request = _Request()
+        request.cookies = {main.COOKIE_NAME: main.session_value("u1")}
+        resp, save_user = self._run_callback("attacker", user=self.EXISTING, request=request)
+        self.assertEqual(resp.status_code, 200)
+        save_user.assert_called_once()
+
+    def test_first_link_for_an_unlinked_uid_is_still_allowed(self):
+        resp, save_user = self._run_callback("octocat", user=None)
+        self.assertEqual(resp.status_code, 200)
+        save_user.assert_called_once()
+
+
 class JsonEndpointErrorHandlingTests(unittest.TestCase):
     def test_update_repo_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.update_repo(uid="u1", repo="owner/repo"))
+            resp = asyncio.run(main.update_repo(_settings_request("u1"), uid="u1", repo="owner/repo"))
             self.assertEqual(resp, {"success": False, "error": "Failed to update repository"})
 
     def test_refresh_repos_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.refresh_repos(uid="u1"))
+            resp = asyncio.run(main.refresh_repos(_settings_request("u1"), uid="u1"))
             self.assertEqual(resp, {"success": False, "error": "Failed to refresh repositories"})
 
     def test_check_repo_access_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.check_repo_access(uid="u1", repo="owner/repo"))
+            resp = asyncio.run(main.check_repo_access(_settings_request("u1"), uid="u1", repo="owner/repo"))
             self.assertEqual(resp, {"success": False, "error": "Failed to check repository access"})
 
     def test_save_agent_provider_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.save_agent_provider(uid="u1", provider="cursor"))
+            resp = asyncio.run(main.save_agent_provider(_settings_request("u1"), uid="u1", provider="cursor"))
             self.assertEqual(resp, {"success": False, "error": "Failed to save agent provider"})
 
     def test_save_agent_key_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.save_agent_key(uid="u1", provider="cursor", key="secret-key"))
+            resp = asyncio.run(main.save_agent_key(_settings_request("u1"), uid="u1", provider="cursor", key="secret-key"))
             self.assertEqual(resp, {"success": False, "error": "Failed to save agent key"})
 
     def test_delete_agent_key_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "delete_agent_api_key", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.delete_agent_key(uid="u1", provider="cursor"))
+            resp = asyncio.run(main.delete_agent_key(_settings_request("u1"), uid="u1", provider="cursor"))
             self.assertEqual(resp, {"success": False, "error": "Failed to delete agent key"})
 
     def test_test_agent_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.test_agent(_Request({"uid": "u1", "prompt": "hello"})))
+            resp = asyncio.run(main.test_agent(_settings_request("u1", {"uid": "u1", "prompt": "hello"})))
             self.assertEqual(resp, {"success": False, "error": "Failed to execute agent test"})
+
+    def test_test_agent_missing_session_surfaces_401(self):
+        with self.assertRaises(main.HTTPException) as ctx:
+            asyncio.run(main.test_agent(_Request({"uid": "u1", "prompt": "hello"})))
+        self.assertEqual(ctx.exception.status_code, 401)
 
 
 if __name__ == "__main__":
