@@ -6365,6 +6365,12 @@ vocabulary is shared with the STT policy; this switch never changes the live
 provider wire.
 
 Finalization registers a `record_pending` job before completing its durable job.
+For batch-live records, the transactional privacy fence uses the canonical
+user setting semantics: an absent user-level `private_cloud_sync_enabled`
+field means enabled, matching `get_user_private_cloud_sync_enabled` and pusher
+capture. An explicit user opt-out still refuses processing. The recording must
+also explicitly retain row-level cloud sync permission and cannot use custom
+STT; deletion, data-protection and privacy-generation checks still apply.
 The pusher flushes the final buffered audio on finalize, conversation switch or
 disconnect, then conditionally writes `record_audio_closed` only after every
 queued upload succeeds. The transaction resolves `record_lane_owner` from the
