@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -422,14 +422,17 @@ def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
     assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
 
 
-def test_ops_kill_without_reader_still_fails(results: Results, tmp_path: Path) -> None:
+def test_ops_kill_without_reader_still_fails(results: Results) -> None:
     key = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'
-
-    def declare_unread_switch(manifest: dict) -> None:
-        _prod(manifest)['gke']['backend-listen']['env'][key] = {'value': 'false', 'category': 'ops_kill'}
-
-    source = OverlaySource(tmp_path, _manifest_mutation(declare_unread_switch)())
-    context = contract.build_context(source, readers=results.baseline.readers)
+    # This check reads manifest entries and the reader inventory only; reuse
+    # the rendered fixture instead of rebuilding every deployment in the call.
+    manifest = {
+        'environments': {
+            'prod': {'gke': {'backend-listen': {'env': {key: {'value': 'false', 'category': 'ops_kill'}}}}}
+        }
+    }
+    model = replace(results.baseline.models['prod'], manifest=manifest)
+    context = replace(results.baseline, models={'prod': model})
     violations = contract.check_kill_switches(context)
     assert any(violation.key == f'kill-switch-reader|prod|gke/backend-listen/{key}' for violation in violations)
 
