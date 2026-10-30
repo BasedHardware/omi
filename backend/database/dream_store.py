@@ -20,7 +20,6 @@ from config.dream_agent import (
     canary_uid,
     backed_off_hunt_interval,
     eligible,
-    hunt_interval,
     may_be_eligible,
     mode,
     DRAIN_TIMEOUT_SECONDS,

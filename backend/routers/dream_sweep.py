@@ -34,12 +34,13 @@ async def sweep_dream_agent(request: Request, _retry_count: int = Depends(verify
     # Scheduler identity, not request data: the job name is allowlisted and the
     # schedule time is a timestamp, so a redelivered tick shows a repeated time.
     job = request.headers.get('x-cloudscheduler-jobname', '')
+    scheduled_at = request.headers.get('x-cloudscheduler-scheduletime', '')[:64]
     sweep = {
         'retry_count': _retry_count,
         'caller': 'scheduler' if job == SWEEP_JOB else 'other' if job else 'none',
-        'scheduled_at': request.headers.get('x-cloudscheduler-scheduletime', '')[:64],
+        'scheduled_at': scheduled_at,
     }
-    if _half_hour_tick(sweep['scheduled_at']) and not refactor_modes.default_on(HALF_HOUR_SWEEP_ENV):
+    if _half_hour_tick(scheduled_at) and not refactor_modes.default_on(HALF_HOUR_SWEEP_ENV):
         logger.info('Dream sweep skipped: half-hour tick disabled')
         return {'skipped': 'half_hour_disabled'}
     reports = await dream_agent.drain(sweep=sweep)

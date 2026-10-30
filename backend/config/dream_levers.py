@@ -37,7 +37,7 @@ HUNT_BACKOFF_SERVE_PERCENT_ENV = 'DREAM_HUNT_BACKOFF_MODE_SERVE_PERCENT'
 # Defaults when the mode env is unset. 10-29 shadow day: idle-skip would have cut 79% of
 # applied edits and the no-progress stop 31%, so both are retired (off); payoff ordering
 # serves (David 2026-10-30: payoff first). Every other lever measures in shadow.
-DEFAULT_MODES = {
+DEFAULT_MODES: dict[str, Arm] = {
     IDLE_SKIP_MODE_ENV: 'off',
     NO_PROGRESS_STOP_MODE_ENV: 'off',
     PAYOFF_ORDER_MODE_ENV: 'serve',
@@ -63,7 +63,7 @@ SHORT_NAMES = {
 def arm(name: str, uid: str | None) -> Arm:
     """This owner's arm for one lever; any configuration error fails open to ``off``."""
     try:
-        default = DEFAULT_MODES.get(name, 'shadow')
+        default: Arm = DEFAULT_MODES.get(name, 'shadow')
         current = refactor_modes.mode(name, default)
         if current == 'off':
             return 'off'
