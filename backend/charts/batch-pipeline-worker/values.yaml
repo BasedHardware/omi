@@ -100,3 +100,10 @@ autoscaling:
   targetQueuedUnitsPerWorker: 16
 podMonitoring:
   enabled: true
+recordSealSweeper:
+  # Ship on with the worker release; false removes the CronJob and its pods-list RBAC.
+  enabled: true
+  # Runtime kill switch affects new Jobs; terminate an active Job for an immediate stop.
+  runtimeEnabled: true
+  # Lead can observe one in-cluster plan cycle before the apply train.
+  mode: apply
