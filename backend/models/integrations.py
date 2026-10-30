@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone
@@ -13,8 +13,14 @@ def _serialize_datetime(value: datetime) -> str:
 
 
 class ConversationTimestampRange(BaseModel):
-    start: int
-    end: int
+    start: int = Field(ge=0, description="Start timestamp (must be non-negative)")
+    end: int = Field(ge=0, description="End timestamp (must be non-negative)")
+
+    @model_validator(mode="after")
+    def validate_range(self) -> "ConversationTimestampRange":
+        if self.start > self.end:
+            raise ValueError("start timestamp must not exceed end timestamp")
+        return self
 
 
 class ScreenPipeCreateConversation(BaseModel):
@@ -31,11 +37,21 @@ class ExternalIntegrationMemorySource(str, Enum):
 
 
 class ExternalIntegrationMemory(BaseModel):
-    content: str = Field(description="The content of the memory (fact)")
+    content: str = Field(min_length=1, description="The content of the memory (fact)")
     tags: Optional[List[str]] = Field(description="Tags associated with the memory (fact)", default=None)
     source_id: Optional[str] = Field(description="External source object id for provenance", default=None)
     source_url: Optional[str] = Field(description="External source URL for provenance", default=None)
     artifact_ref: Optional[Dict[str, Any]] = Field(description="Source-specific provenance pointer", default=None)
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def _validate_content(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise ValueError("content must be a string")
+        value = value.strip()
+        if not value:
+            raise ValueError("content must not be blank")
+        return value
 
 
 class ExternalIntegrationCreateMemory(BaseModel):
@@ -92,7 +108,7 @@ class Event(BaseModel):
     duration: int = Field(description="The duration of the event in minutes", default=30)
     created: bool = False
 
-    def as_dict_cleaned_dates(self) -> dict[str, Any]:
+    def as_dict_cleaned_dates(self) -> Dict[str, Any]:
         event_dict = self.model_dump()
         start_time = event_dict['start']
         if start_time.tzinfo is None:
@@ -152,9 +168,9 @@ class ConversationsResponse(BaseModel):
 
 class SearchConversationsResponse(BaseModel):
     conversations: List[ConversationItem] = Field(description="List of user conversations")
-    total_pages: int = Field(description="Total number of pages")
-    current_page: int = Field(description="Current page number")
-    per_page: int = Field(description="Number of items per page")
+    total_pages: int = Field(ge=0, description="Total number of pages")
+    current_page: int = Field(ge=0, description="Current page number")
+    per_page: int = Field(ge=1, description="Number of items per page")
 
 
 class TaskItem(BaseModel):
