@@ -15,8 +15,13 @@ logger = logging.getLogger(__name__)
 
 def all_day_date(value: Any, clock: DisplayClock) -> Optional[Tuple[date, str]]:
     """Interpret a Calendar all-day date in the user's calendar zone, not UTC midnight."""
+    if value is None:
+        return None
+    val_str = str(value).strip()
+    if not val_str:
+        return None
     try:
-        day = date.fromisoformat(str(value))
+        day = date.fromisoformat(val_str)
     except (TypeError, ValueError):
         return None
     local_midnight = datetime.combine(day, time.min).replace(tzinfo=clock.tz)
@@ -25,15 +30,21 @@ def all_day_date(value: Any, clock: DisplayClock) -> Optional[Tuple[date, str]]:
 
 def render_calendar_event(event: Dict[str, Any], index: int, clock: DisplayClock) -> str:
     """Format one event, fencing text supplied by event owners and attendees."""
+    if not isinstance(event, dict):
+        event = {}
+
     summary = event.get('summary') or 'No title'
     result = f"{index}. Title: {untrusted_block('calendar title', str(summary))}\n"
 
-    start = event.get('start', {})
-    end = event.get('end', {})
+    start_raw = event.get('start')
+    end_raw = event.get('end')
+    start: Dict[str, Any] = start_raw if isinstance(start_raw, dict) else {}
+    end: Dict[str, Any] = end_raw if isinstance(end_raw, dict) else {}
+
     if 'dateTime' in start:
         try:
-            start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-            end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
+            start_dt = datetime.fromisoformat(str(start['dateTime']).replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(str(end['dateTime']).replace('Z', '+00:00'))
             result += f"   When: {format_span(start_dt, end_dt, clock)}\n"
         except (ValueError, TypeError, KeyError):
             result += "   When: unknown time (event timestamp could not be parsed)\n"
@@ -54,6 +65,8 @@ def render_calendar_event(event: Dict[str, Any], index: int, clock: DisplayClock
                 result += f"   When: all day, {start_day[1]} – {inclusive_end_label[1]}\n"
             else:
                 result += f"   When: all day, {start_day[1]}\n"
+    else:
+        result += "   When: unknown time (event timestamp could not be parsed)\n"
 
     location = event.get('location')
     if location:
@@ -63,16 +76,22 @@ def render_calendar_event(event: Dict[str, Any], index: int, clock: DisplayClock
     if isinstance(attendees, list) and attendees:
         attendee_text: List[str] = []
         for attendee in attendees:
+            if attendee is None:
+                continue
             if isinstance(attendee, dict):
                 display_name = attendee.get('displayName')
                 email = attendee.get('email')
-                label = (
-                    ' <'.join([str(display_name), str(email)]) + '>'
-                    if display_name and email
-                    else str(display_name or email or '')
-                )
+                if display_name and email:
+                    label = f"{display_name} <{email}>"
+                elif display_name:
+                    label = str(display_name)
+                elif email:
+                    label = str(email)
+                else:
+                    label = ''
             else:
-                label = str(attendee)
+                s = str(attendee).strip()
+                label = s if s and s.lower() != 'none' else ''
             if label:
                 attendee_text.append(label)
         if attendee_text:
