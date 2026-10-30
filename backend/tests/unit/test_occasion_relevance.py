@@ -15,6 +15,14 @@ from tests.unit.test_sync_cross_job_assignment import chunk, intake
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
+@pytest.fixture(autouse=True)
+def admitted_episode_client(monkeypatch):
+    from utils.episodes import client_gate
+
+    monkeypatch.setattr(client_gate, 'client_seen', lambda uid: True)
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'true')
+
+
 def decide(*, member=None, neighbor=None, text='Mm-hmm.', model=None):
     return decide_relevance(
         trigger=ProcessingTrigger.SYNC_UPDATE,
@@ -31,7 +39,7 @@ def decide(*, member=None, neighbor=None, text='Mm-hmm.', model=None):
     )
 
 
-@pytest.mark.parametrize('context', ['occasion_member', 'occasion_neighbor'])
+@pytest.mark.parametrize('context', ['occasion_member', 'occasion_neighbor', 'occasion_context'])
 @pytest.mark.parametrize('text', ['Mm-hmm.', 'Coming over there in a second.'])
 def test_related_content_never_has_an_independent_rule_or_model_discard(context, text):
     model = Mock(return_value=True)
@@ -265,3 +273,50 @@ def test_neighbor_discovery_retains_recorded_adjacency_despite_skew_and_delayed_
     )
     assert relevance_io.adjacent_conversation('u', conversation, 'new') == Neighbor('kept', 10, 'before')
     assert relevance_io.occasion_retention('u', conversation) == 'occasion_neighbor'
+
+
+@pytest.mark.parametrize('gate', ['kill_switch', 'cohort', 'client', 'recorded_time', 'admitted'])
+def test_relevance_context_does_not_bypass_episode_write_admission(timeline_store, monkeypatch, gate):
+    from database import episodes, episode_timeline
+    from utils.episodes import client_gate
+
+    store = timeline_store
+    _attach(store, 'other', T0, T0 + timedelta(minutes=20))
+    store.rows[('users', 'u', 'conversations', 'other')] = dict(
+        id='other',
+        source='omi',
+        started_at=T0,
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=20),
+        status='completed',
+    )
+    clip = dict(
+        id='clip',
+        source='desktop',
+        started_at=T0 + timedelta(minutes=10),
+        recorded_start=T0 + timedelta(minutes=10),
+        recorded_end=T0 + timedelta(minutes=12),
+    )
+    store.rows[('users', 'u', 'conversations', 'clip')] = clip
+    monkeypatch.setattr(episodes, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(episode_timeline, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(relevance_io.conversations_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setenv('EPISODES_UID_ALLOWLIST', '')
+    if gate == 'kill_switch':
+        monkeypatch.setenv('EPISODES_ENABLED', 'off')
+    elif gate == 'cohort':
+        monkeypatch.setenv('EPISODES_PERCENT', '0')
+    elif gate == 'client':
+        monkeypatch.setattr(client_gate, 'client_seen', lambda uid: False)
+    elif gate == 'recorded_time':
+        monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
+    before = dict(store.rows)
+    assert relevance_io.occasion_retention('u', SimpleNamespace(**clip)) == (
+        'occasion_member' if gate == 'admitted' else 'occasion_context'
+    )
+    if gate == 'admitted':
+        assert store.rows[('users', 'u', 'episode_links', 'clip')]['episode_id'] == clip['episode_id']
+    else:
+        assert store.rows == before
+        assert ('users', 'u', 'episode_links', 'clip') not in store.rows
+        assert 'episode_id' not in clip

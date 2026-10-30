@@ -135,6 +135,13 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
                     continue
                 evidence = dict(episode, started_at=other_span.recorded_start, last_activity_at=other_span.recorded_end)
                 if choose_recorded_episode([evidence], start, end):
+                    from config.recorded_time import recorded_episodes_enabled
+                    from utils.episodes.client_gate import episode_work_enabled
+
+                    # Context remains useful outside episode admission, but a
+                    # keep receipt must not claim membership we cannot write.
+                    if not recorded_episodes_enabled() or not episode_work_enabled(uid):
+                        return 'occasion_context'
                     if not cid:
                         return 'occasion_lookup_unavailable'
                     source = (

@@ -385,7 +385,11 @@ recorded-timeline transaction claims that exact episode and writes both
 runs inside relevance, before desktop `client_finalize` fanout can delay or
 skip its post-finalization hook. A changed owner or failed claim retains the
 clip as `occasion_lookup_unavailable`; it never reports uncommitted membership.
-The normal desktop and pendant finalize hooks remain idempotent safety nets.
+The write requires episode cohort admission, the capable-client marker and the
+recorded-time switch. Without admission, read-only proof still keeps content as
+`occasion_context`, without claiming membership. The normal desktop and pendant
+finalize hooks remain idempotent safety nets. A changed past-cap owner is rejected
+before the immutable-owner shortcut can report success.
 Claims into automatic historical episodes also update `recorded_members` in the
 same transaction, so later canonical repartition retains the claimed capture.
 
@@ -395,8 +399,24 @@ Episode attachment, recorded activity, finalization and API visibility use the
 shared final-discard predicate (`fragment_visibility.is_relevance_discarded`),
 including restore authority, instead of interpreting that hint as visibility.
 A discard CAS re-reads retained members' recorded spans and recomputes the
-start and end for live and closed episodes, retrying with a fresh episode after
+start and end for live and closed episodes, applying the cap from the retained
+start. Recompute only when the discarded set changes or membership changes in an
+episode with discarded members; notes-only updates reuse the repaired bounds.
+Discard repair retries with a fresh episode after
 a notes CAS wins the race. Legacy compressed/encrypted transcript evidence is
 decoded before deriving spans; processing `finished_at` is never used to
-reconstruct a legacy member's end. Hidden memberships remain for
+reconstruct a legacy member's end. Reconstruction uses the new attachment's
+clipped recorded boundary, so retained spans cannot extend it across the next
+episode. Hidden memberships remain for
 recovery and single ownership; they contribute no clocks or visible row.
+
+Recorded attachment preserves a cross-source overlap cutoff before adding the
+new member/source. Both recovered content and the desktop finalization tail skip
+segments already covered by the original device, even when relevance attached
+first. Later segments beyond that cutoff remain eligible for notes; confirmed
+capture groups continue to use their canonical member.
+
+A historical episode whose start advanced after discard keeps its original ID.
+Canonical partitioning checks every destination document before writing and uses
+a deterministic displaced ID when an unrelated episode or redirect occupies it.
+It never overwrites that episode's retained members, notes or reverse links.

@@ -108,6 +108,8 @@ def _attach_recorded_window(
             existing = episodes.unseal(uid, snapshot.to_dict())
             if existing is None:
                 raise episodes.EpisodeConflict('recorded_owner_missing')
+            if expected_episode_id is not None and existing.get('id') != expected_episode_id:
+                raise episodes.EpisodeConflict('recorded_owner_changed')
             if started >= existing['started_at'] + timedelta(seconds=MAX_EPISODE_SECONDS):
                 return {**existing, '_window_end': finished}
         if existing is None and selected:
@@ -141,6 +143,19 @@ def _attach_recorded_window(
                 dict.fromkeys([*(existing.get('recovered_conversation_ids') or []), conversation_id])
             )
             result['sources'] = list(dict.fromkeys([*(existing.get('sources') or []), *([source] if source else [])]))
+            if (
+                source
+                and existing.get('sources')
+                and source not in (existing.get('sources') or [])
+                and existing.get('conversation_ids')
+                and started < existing['last_activity_at']
+            ):
+                # Preserve the parallel-content decision before membership and
+                # sources make the finalizer look like a same-member continue.
+                result['parallel_content_until'] = {
+                    **(existing.get('parallel_content_until') or {}),
+                    conversation_id: existing['last_activity_at'],
+                }
             result['started_at'] = min(existing['started_at'], started)
             result['last_activity_at'] = max(existing['last_activity_at'], window_end)
             result['member_activity'] = {**(existing.get('member_activity') or {}), conversation_id: window_end}
@@ -160,6 +175,7 @@ def _attach_recorded_window(
                     result['close_reason'] = (
                         'hard_cap' if window_end == lo + timedelta(seconds=MAX_EPISODE_SECONDS) else 'boundary'
                     )
+                result['recorded_end'] = result['last_activity_at']
             result['state_version'] = int(existing.get('state_version') or 0) + 1
         else:
             result = dict(new_episode)
@@ -179,7 +195,7 @@ def _attach_recorded_window(
                 member_activity={conversation_id: window_end},
                 recovered_conversation_ids=[conversation_id],
             )
-        if existing and result.get('discarded_conversation_ids'):
+        if existing and episodes.retained_bounds_changed(existing, result):
             result = episodes.retained_bounds(transaction, client, uid, existing, result)
         check_window(transaction, client, uid, result, rows=rows)
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))

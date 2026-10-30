@@ -207,6 +207,7 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
     silence makes two conversations; the 30m episode gap makes one occasion.
     """
     store = timeline_store
+    monkeypatch.setattr(service.client_gate, 'client_seen', lambda uid: True)
     monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', lambda uid, incoming: intake(store, incoming))
     monkeypatch.setattr(late_audio.outbox, 'mark', lambda *a, **kw: None)
     c = service.Collaborators(firestore_client=store, now=lambda: NOW)

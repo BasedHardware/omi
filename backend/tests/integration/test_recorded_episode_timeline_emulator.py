@@ -478,3 +478,156 @@ def test_occasion_claim_preserves_member_facts_through_later_repartition(store):
     assert set(joined['recorded_members']) == {'first', 'desktop', 'later'}
     assert episodes.get_episode_for_conversation(uid, 'desktop', firestore_client=client)['id'] == joined['id']
     assert root.collection('conversations').document('desktop').get().to_dict()['episode_id'] == joined['id']
+
+
+@pytest.mark.parametrize('has_discarded', [False, True])
+def test_crossing_recorded_attachment_keeps_its_clipped_boundary(store, has_discarded):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    for cid, start, end in [
+        ('kept', T0, T0 + timedelta(minutes=10)),
+        ('crossing', T0 + timedelta(minutes=15), T0 + timedelta(minutes=25)),
+    ]:
+        root.collection('conversations').document(cid).set(
+            {'id': cid, 'started_at': start, 'recorded_start': start, 'recorded_end': end, 'clock': 'live_capture'}
+        )
+    old = dict(
+        id='old',
+        status='closed',
+        close_reason='gap',
+        started_at=T0,
+        last_activity_at=T0 + timedelta(minutes=10),
+        recorded_end=T0 + timedelta(minutes=10),
+        closed_at=T0 + timedelta(minutes=10),
+        state_version=1,
+        conversation_ids=['kept'],
+        member_activity={'kept': T0 + timedelta(minutes=10)},
+    )
+    if has_discarded:
+        old.update(conversation_ids=['kept', 'noise'], discarded_conversation_ids=['noise'])
+        root.collection('conversations').document('noise').set({'id': 'noise', 'discarded': True})
+    following = dict(
+        id='following',
+        status='live',
+        started_at=T0 + timedelta(minutes=20),
+        last_activity_at=T0 + timedelta(minutes=22),
+        state_version=1,
+        conversation_ids=['next'],
+    )
+    for episode in (old, following):
+        root.collection('episodes').document(episode['id']).set(episodes.seal(uid, episode))
+    root.collection('episode_links').document('current').set({'episode_id': 'following'})
+    joined = episode_timeline.attach_recorded(
+        uid,
+        'crossing',
+        'desktop',
+        T0 + timedelta(minutes=15),
+        T0 + timedelta(minutes=25),
+        choose=choose_recorded_episode,
+        new_episode={},
+        firestore_client=client,
+    )
+    assert joined['id'] == 'old'
+    assert joined['recorded_end'] == joined['last_activity_at'] == T0 + timedelta(minutes=20)
+    assert joined['member_activity']['crossing'] == T0 + timedelta(minutes=20)
+    assert episodes.get_episode_for_conversation(uid, 'crossing', firestore_client=client)['id'] == 'old'
+    assert episodes.get_current_episode(uid, firestore_client=client)['id'] == 'following'
+
+
+def test_discard_and_notes_contend_on_real_firestore_without_restoring_noise(store, monkeypatch):
+    from threading import Barrier, Lock
+    from utils.episodes import service
+
+    client, uid = store
+    root = client.collection('users').document(uid)
+    start = T0 + timedelta(minutes=21)
+    end = start + timedelta(minutes=6)
+    episode = dict(
+        id='occasion',
+        status='live',
+        started_at=T0,
+        last_activity_at=end,
+        conversation_ids=['noise', 'speech'],
+        state_version=1,
+        member_activity={'noise': T0 + timedelta(minutes=2), 'speech': end},
+    )
+    root.collection('episodes').document('occasion').set(episodes.seal(uid, episode))
+    for cid, lo, hi in [('noise', T0, T0 + timedelta(minutes=2)), ('speech', start, end)]:
+        root.collection('conversations').document(cid).set(
+            dict(id=cid, source='omi', recorded_start=lo, recorded_end=hi, discarded=cid == 'noise')
+        )
+        root.collection('episode_links').document(cid).set({'episode_id': 'occasion'})
+    root.collection('episode_links').document('current').set({'episode_id': 'occasion'})
+    gate, lock = Barrier(2), Lock()
+    update, attempts = episodes.update_episode, []
+
+    def simultaneous(*args, **kwargs):
+        with lock:
+            attempts.append(kwargs['expected_version'])
+            first = len(attempts) <= 2
+        if first:
+            gate.wait(timeout=15)
+        return update(*args, **kwargs)
+
+    monkeypatch.setattr(episodes, 'update_episode', simultaneous)
+    c = service.Collaborators(firestore_client=client, now=lambda: end)
+
+    def notes():
+        for _ in range(3):
+            row = episodes.get_episode(uid, 'occasion', firestore_client=client)
+            try:
+                episodes.update_episode(
+                    uid,
+                    'occasion',
+                    expected_version=row['state_version'],
+                    updates={'title': 'Speech notes'},
+                    firestore_client=client,
+                )
+                return
+            except episodes.EpisodeConflict:
+                continue
+        pytest.fail('notes did not retry the competing discard CAS')
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        discard = pool.submit(service._end_discarded, uid, 'noise', {}, 'sync_update', c)
+        note = pool.submit(notes)
+        discard.result(timeout=60)
+        note.result(timeout=60)
+    clean = episodes.get_episode(uid, 'occasion', firestore_client=client)
+    assert attempts[:2] == [1, 1] and len(attempts) >= 3
+    assert clean['state_version'] == 3
+    assert clean['started_at'] == start
+    assert clean['last_activity_at'] == end
+    assert clean['discarded_conversation_ids'] == ['noise']
+    assert clean['member_activity'] == {'speech': end}
+
+
+def test_discarded_anchor_keeps_occupied_canonical_id_and_retained_notes(store):
+    client, uid = store
+    root = client.collection('users').document(uid)
+
+    def attach(cid, lo, hi):
+        root.collection('conversations').document(cid).set(dict(id=cid, recorded_start=lo, recorded_end=hi))
+        return episode_timeline.attach_recorded(
+            uid, cid, 'omi', lo, hi, choose=choose_recorded_episode, new_episode={}, firestore_client=client
+        )
+
+    attach('noise', T0, T0 + timedelta(minutes=20))
+    speech = attach('speech', T0 + timedelta(minutes=40), T0 + timedelta(minutes=45))
+    repaired = episodes.update_episode(
+        uid,
+        speech['id'],
+        expected_version=speech['state_version'],
+        updates={
+            'discarded_conversation_ids': ['noise'],
+            'moments': [{'id': 'speech-note', 'conversation_id': 'speech'}],
+        },
+        firestore_client=client,
+    )
+    fresh = attach('fresh', T0, T0 + timedelta(minutes=1))
+    assert fresh['id'] != repaired['id']
+    assert episodes.get_episode(uid, repaired['id'], firestore_client=client) == repaired
+    assert root.collection('episode_links').document('speech').get().to_dict()['episode_id'] == repaired['id']
+    replay = attach('fresh', T0, T0 + timedelta(minutes=2))
+    assert replay['id'] == fresh['id']
+    assert episodes.get_episode(uid, repaired['id'], firestore_client=client) == repaired

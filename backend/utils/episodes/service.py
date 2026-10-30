@@ -830,8 +830,19 @@ def _record_moment_once(
         if recovered
         else (set(), False)
     )
+    parallel_until = policy.utc(((episode or {}).get('parallel_content_until') or {}).get(moment.conversation_id))
+    candidates = moment.segments
+    if parallel_until is not None:
+        # Recorded attachment already joined this overlapping device. Keep the
+        # established primary's content, but admit any later speech from this one.
+        candidates = [
+            segment
+            for segment in candidates
+            if _segment_end(segment) < 0
+            or moment.started_at + timedelta(seconds=_segment_end(segment)) > parallel_until
+        ]
     segments, selected_ids, selected_content = recovery.select_segments(
-        moment.segments,
+        candidates,
         consumed,
         consumed_content,
         applied_until,

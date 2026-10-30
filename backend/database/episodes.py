@@ -182,6 +182,15 @@ def _member_links(before, after, requested):
     return links
 
 
+def retained_bounds_changed(raw, merged):
+    """Notes-only CAS updates reuse the bounds already repaired by the discard CAS."""
+    before = set(raw.get('discarded_conversation_ids') or [])
+    after = set(merged.get('discarded_conversation_ids') or [])
+    return before != after or bool(
+        after and set(raw.get('conversation_ids') or []) != set(merged.get('conversation_ids') or [])
+    )
+
+
 def retained_bounds(transaction, client, uid, raw, merged):
     """Re-read recorded evidence in the discard CAS, including legacy members.
 
@@ -227,11 +236,13 @@ def retained_bounds(transaction, client, uid, raw, merged):
         end = span.recorded_end if span else fact.get('end', known)
         if isinstance(end, datetime):
             starts[cid] = start
-            activity[cid] = _bounded_activity(raw, max(end, known) if isinstance(known, datetime) else end)
+            activity[cid] = max(end, known) if isinstance(known, datetime) else end
     merged['discarded_conversation_ids'] = sorted(hidden)
-    merged['member_activity'] = activity
     if starts:
         merged['started_at'] = min(starts.values())
+        # Apply the cap from the retained start, while keeping explicit closes
+        # and the caller's next-episode fence authoritative.
+        activity = {cid: _bounded_activity(merged, at) for cid, at in activity.items()}
         merged['last_activity_at'] = max(merged['started_at'], max(activity.values()))
         if merged.get('status') == 'closed':
             merged['recorded_end'] = merged['last_activity_at']
@@ -239,6 +250,7 @@ def retained_bounds(transaction, client, uid, raw, merged):
         merged['last_activity_at'] = merged['started_at']
         if merged.get('status') == 'closed':
             merged['recorded_end'] = merged['started_at']
+    merged['member_activity'] = activity
     for field in ('moments', 'provisional_items'):
         merged[field] = [
             item for item in merged.get(field) or [] if item.get('conversation_id') not in hidden | duplicates
@@ -452,7 +464,7 @@ def _commit(
         if new_episode is not None
         else _merge_state(unseal(uid, current_raw) or {}, updates)
     )
-    if new_episode is None and target.get('discarded_conversation_ids'):
+    if new_episode is None and retained_bounds_changed(current_raw, target):
         target = retained_bounds(transaction, client, uid, current_raw, target)
     links = _member_links(None if new_episode is not None else current_raw, target, link_conversation_ids)
     _check_membership(transaction, client, uid, target['id'], [*links, *(target.get('conversation_ids') or [])])
@@ -715,7 +727,7 @@ def _update(
     if not raw or raw.get('state_version') != expected_version:
         raise EpisodeConflict('state_version_changed')
     merged = _merge_state(unseal(uid, raw) or {}, updates)
-    if merged.get('discarded_conversation_ids'):
+    if retained_bounds_changed(raw, merged):
         merged = retained_bounds(transaction, client, uid, raw, merged)
     _drop_legacy_receipts(merged, segment_receipts)
     merged['state_version'] = expected_version + 1

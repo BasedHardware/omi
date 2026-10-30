@@ -93,6 +93,12 @@ def _state(template, window, previous, facts):
     result['recovered_conversation_ids'] = sorted(
         {cid for row in overlapping for cid in row.get('recovered_conversation_ids') or [] if cid in members}
     )
+    result['parallel_content_until'] = {
+        cid: at
+        for row in overlapping
+        for cid, at in (row.get('parallel_content_until') or {}).items()
+        if cid in members
+    }
     for field in ('bullets', 'people', 'open_questions'):
         result[field] = list(dict.fromkeys(value for row in overlapping for value in row.get(field) or []))
     if not result.get('title'):
@@ -186,10 +192,24 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
         windows = partition(uid, facts)
         if len(windows) > page_limit:
             raise episodes.EpisodeConflict('recorded_capture_window_exhausted')
-        targets = {
-            window['id']: collection.document(window['id']).get(transaction=transaction).to_dict() or {}
-            for window in windows
-        }
+        targets = {}
+        for window in windows:
+            # A discard can advance a fixed episode's start without changing
+            # its original deterministic ID. Never reuse that occupied ID (or
+            # a redirect) for a disconnected component at the former start.
+            for attempt in range(page_limit):
+                target = collection.document(window['id']).get(transaction=transaction).to_dict() or {}
+                if not target or window['id'] in previous:
+                    targets[window['id']] = target
+                    break
+                window['id'] = str(
+                    uuid5(
+                        NAMESPACE_URL,
+                        f"recorded-window-displaced:{uid}:{window['started_at'].isoformat()}:{attempt}",
+                    )
+                )
+            else:
+                raise episodes.EpisodeConflict('recorded_window_id_exhausted')
         members: dict[str, tuple[bool, dict[str, Any]]] = {}
         member_ids = sorted(facts)
         # A connected component may contain many short captures. Keep each

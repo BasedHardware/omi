@@ -449,8 +449,25 @@ def test_desktop_client_finalize_inside_pendant_occasion_claims_one_membership(l
     c.now = lambda: T0 + timedelta(minutes=44)
     service.attach_conversation('u', 'pendant', 'omi', started_at=c.now(), collaborators=c)
     owner = episodes.get_current_episode('u', firestore_client=store)
+    shared_text = (
+        'We agreed to ship the release on Friday after reviewing the remaining deployment checks together. '
+        'Maya will verify the migration against the staging database and send the results before lunch. '
+        'Alex will prepare the customer announcement once those checks pass. We also reviewed the support '
+        'schedule and agreed that someone should monitor the rollout for the first hour. If the error '
+        'rate rises we will pause the rollout and investigate before adding any more customers.'
+    )
+    pendant['transcript_segments'] = [dict(id='pendant-s', start=41 * 60, end=44 * 60, text=shared_text, is_user=True)]
+    assert (
+        service.record_moment(
+            'u', MomentInput('pendant', 'omi', pendant['transcript_segments'], T0, c.now(), 'interval'), c
+        )
+        == 'applied'
+    )
+    content_before = episodes.get_current_episode('u', firestore_client=store)
+    calls_before = len(calls)
     at = T0 + timedelta(minutes=41)
-    desktop = row('desktop', at, seconds=0, recorded_start=at, recorded_end=at, clock='imported')
+    desktop = row('desktop', at, seconds=180, recorded_start=at, recorded_end=c.now(), clock='imported')
+    desktop['transcript_segments'][0]['text'] = shared_text
     desktop['source'] = 'desktop'
     desktop['has_photos'] = False
     store.rows[('users', 'u', 'conversations', 'desktop')] = desktop
@@ -463,7 +480,7 @@ def test_desktop_client_finalize_inside_pendant_occasion_claims_one_membership(l
         # The relevance result itself proves durable membership, before fanout or notes.
         assert episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)['id'] == owner['id']
         assert desktop['episode_id'] == owner['id']
-        assert not calls
+        assert len(calls) == calls_before
     desktop['relevance_decision'] = dict(
         verdict='keep', reason='occasion_member', trigger='client_finalize', decided_by='policy'
     )
@@ -474,6 +491,10 @@ def test_desktop_client_finalize_inside_pendant_occasion_claims_one_membership(l
         )
         assert episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)['id'] == owner['id']
     assert sum(e['conversation_ids'].count('desktop') for e in all_episodes(store)) == 1
+    result = episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)
+    assert result['moments'] == content_before['moments']
+    assert result['bullets'] == content_before['bullets']
+    assert len(calls) == calls_before
     assert_timeline(store)
 
 
@@ -627,6 +648,7 @@ def test_relevance_claim_survives_historical_repartition(lane):
         firestore_client=store,
     )
     assert set(joined['conversation_ids']) == {'first', 'desktop', 'later'}
+    assert joined['parallel_content_until'] == {'desktop': T0 + timedelta(minutes=2)}
     assert {m['id'] for m in joined['moments']} == {'desktop-m'}
     assert episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)['id'] == joined['id']
 
@@ -666,3 +688,228 @@ def test_discard_rebuilds_legacy_encoded_speech_without_processing_end(lane, lev
     clean = episodes.get_episode('u', owner['id'], firestore_client=store)
     assert clean['started_at'] == origin + timedelta(seconds=30)
     assert clean['last_activity_at'] == origin + timedelta(seconds=75 if wal_tail else 60)
+
+
+@pytest.mark.parametrize('has_discarded', [False, True])
+def test_crossing_attachment_preserves_the_next_recorded_boundary(lane, has_discarded):
+    store, _, _ = lane
+    for cid, start, seconds in [
+        ('kept', T0, 600),
+        ('crossing', T0 + timedelta(minutes=15), 600),
+        ('next', T0 + timedelta(minutes=20), 120),
+    ]:
+        capture = row(cid, start, seconds=seconds)
+        store.rows[('users', 'u', 'conversations', cid)] = capture
+    old = dict(
+        id='old',
+        status='closed',
+        close_reason='gap',
+        started_at=T0,
+        last_activity_at=T0 + timedelta(minutes=10),
+        recorded_end=T0 + timedelta(minutes=10),
+        closed_at=T0 + timedelta(minutes=10),
+        state_version=1,
+        conversation_ids=['kept'],
+        member_activity={'kept': T0 + timedelta(minutes=10)},
+    )
+    if has_discarded:
+        old.update(conversation_ids=['kept', 'noise'], discarded_conversation_ids=['noise'])
+        store.rows[('users', 'u', 'conversations', 'noise')] = row('noise', discarded=True)
+    following = dict(
+        id='following',
+        status='live',
+        started_at=T0 + timedelta(minutes=20),
+        last_activity_at=T0 + timedelta(minutes=22),
+        state_version=1,
+        conversation_ids=['next'],
+    )
+    for episode in (old, following):
+        store.rows[('users', 'u', 'episodes', episode['id'])] = episodes.seal('u', episode)
+    joined = episode_timeline.attach_recorded(
+        'u',
+        'crossing',
+        'desktop',
+        T0 + timedelta(minutes=15),
+        T0 + timedelta(minutes=25),
+        choose=timeline.choose_recorded_episode,
+        new_episode={},
+        firestore_client=store,
+    )
+    assert joined['id'] == 'old'
+    assert joined['last_activity_at'] == joined['recorded_end'] == T0 + timedelta(minutes=20)
+    assert joined['member_activity']['crossing'] == T0 + timedelta(minutes=20)
+    assert episodes.get_episode_for_conversation('u', 'crossing', firestore_client=store)['id'] == 'old'
+    assert_timeline(store)
+
+
+@pytest.mark.parametrize('status', ['live', 'closed'])
+def test_discard_rebases_four_hour_cap_on_retained_start(lane, status):
+    store, c, _ = lane
+    at = T0 + timedelta(minutes=21)
+    end = T0 + timedelta(hours=4, minutes=8)
+    for capture in [row('noise', seconds=120), row('speech', at, seconds=(end - at).total_seconds())]:
+        store.rows[('users', 'u', 'conversations', capture['id'])] = capture
+    base = dict(
+        id='owner',
+        status=status,
+        close_reason='gap' if status == 'closed' else None,
+        started_at=T0,
+        last_activity_at=T0 + timedelta(hours=4),
+        state_version=1,
+        conversation_ids=['noise', 'speech'],
+        member_activity={'noise': T0 + timedelta(minutes=2), 'speech': T0 + timedelta(hours=4)},
+    )
+    if status == 'closed':
+        base.update(closed_at=T0 + timedelta(hours=4), recorded_end=T0 + timedelta(hours=4))
+    store.rows[('users', 'u', 'episodes', 'owner')] = episodes.seal('u', base)
+    clean = episodes.update_episode(
+        'u', 'owner', expected_version=1, updates={'discarded_conversation_ids': ['noise']}, firestore_client=store
+    )
+    assert clean['started_at'] == at
+    assert clean['last_activity_at'] == clean['member_activity']['speech'] == end
+    if status == 'closed':
+        assert clean['recorded_end'] == end
+
+
+@pytest.mark.parametrize('writer', ['commit', 'update'])
+def test_notes_after_discard_reuse_repaired_bounds_without_member_reads(lane, monkeypatch, writer):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    store, c, _ = lane
+    for cid, start in [('noise', T0), ('speech', T0 + timedelta(minutes=21))]:
+        store.rows[('users', 'u', 'conversations', cid)] = row(cid, start)
+        c.now = lambda start=start: start
+        service.attach_conversation('u', cid, 'omi', started_at=start, collaborators=c)
+    owner = episodes.get_current_episode('u', firestore_client=store)
+    clean = episodes.update_episode(
+        'u',
+        owner['id'],
+        expected_version=owner['state_version'],
+        updates={'discarded_conversation_ids': ['noise']},
+        firestore_client=store,
+    )
+    get = StrictFirestoreDocument.get
+    reads = []
+
+    def track(ref, *args, **kwargs):
+        if ref.path[2] == 'conversations':
+            reads.append(ref.path)
+        return get(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', track)
+    monkeypatch.setattr(
+        episodes, 'decode_transcript_segments_verified', lambda *a: pytest.fail('notes decoded member transcript')
+    )
+    for i in range(3):
+        kwargs = dict(expected_version=clean['state_version'], updates={'title': f'Notes {i}'}, firestore_client=store)
+        if writer == 'commit':
+            clean = episodes.commit_moment('u', expected_episode_id=owner['id'], **kwargs)
+        else:
+            clean = episodes.update_episode('u', owner['id'], **kwargs)
+    assert reads == []
+    assert clean['started_at'] == T0 + timedelta(minutes=21)
+
+
+def test_exact_occasion_claim_rejects_different_past_cap_owner(lane):
+    store, _, _ = lane
+    old = dict(
+        id='old',
+        status='closed',
+        close_reason='hard_cap',
+        started_at=T0,
+        last_activity_at=T0 + timedelta(hours=4),
+        recorded_end=T0 + timedelta(hours=4),
+        state_version=1,
+        conversation_ids=['desktop'],
+    )
+    new = dict(
+        old,
+        id='new',
+        status='live',
+        started_at=T0 + timedelta(hours=5),
+        last_activity_at=T0 + timedelta(hours=5, minutes=10),
+        conversation_ids=['pendant'],
+    )
+    for item in [old, new]:
+        store.rows[('users', 'u', 'episodes', item['id'])] = episodes.seal('u', item)
+    store.rows[('users', 'u', 'episode_links', 'desktop')] = {'episode_id': 'old'}
+    before = dict(store.rows)
+    with pytest.raises(episodes.EpisodeConflict, match='recorded_owner_changed'):
+        episode_timeline.attach_existing_recorded(
+            'u',
+            'desktop',
+            'desktop',
+            new['started_at'],
+            new['last_activity_at'],
+            episode_id='new',
+            choose=timeline.choose_recorded_episode,
+            firestore_client=store,
+        )
+    assert store.rows == before
+
+
+def test_parallel_desktop_keeps_new_speech_after_the_pendant_overlap(lane):
+    store, c, calls = lane
+    primary = row('pendant', seconds=180, has_photos=False)
+    store.rows[('users', 'u', 'conversations', 'pendant')] = primary
+    service.attach_conversation('u', 'pendant', 'omi', started_at=T0, collaborators=c)
+    c.now = lambda: T0 + timedelta(minutes=3)
+    service.attach_conversation('u', 'pendant', 'omi', started_at=T0, ended_at=c.now(), collaborators=c)
+    desktop = row('desktop', T0 + timedelta(minutes=2), seconds=180, has_photos=False)
+    desktop['source'] = 'desktop'
+    desktop['transcript_segments'] = [
+        dict(id='overlap', start=0, end=60, text='The pendant already captured this discussion.', is_user=True),
+        dict(
+            id='new',
+            start=61,
+            end=180,
+            text=' '.join(['We also agreed to meet on Monday to review the migration results.'] * 8),
+            is_user=True,
+        ),
+    ]
+    store.rows[('users', 'u', 'conversations', 'desktop')] = desktop
+    c.now = lambda: T0 + timedelta(minutes=5)
+    assert (
+        service.on_conversation_finalized('u', 'desktop', desktop, trigger='client_finalize', collaborators=c)
+        != 'error'
+    )
+    owner = episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)
+    assert owner['moments'] and {m['conversation_id'] for m in owner['moments']} == {'desktop'}
+    assert len(calls) == 1
+    assert 'pendant already captured' not in str(calls)
+    assert 'meet on Monday' in str(calls)
+
+
+def test_discarded_anchor_cannot_let_a_later_component_overwrite_its_old_id(lane):
+    store, _, _ = lane
+
+    def attach(cid, lo, hi):
+        store.rows[('users', 'u', 'conversations', cid)] = dict(id=cid, recorded_start=lo, recorded_end=hi)
+        return episode_timeline.attach_recorded(
+            'u', cid, 'omi', lo, hi, choose=timeline.choose_recorded_episode, new_episode={}, firestore_client=store
+        )
+
+    attach('noise', T0, T0 + timedelta(minutes=20))
+    speech = attach('speech', T0 + timedelta(minutes=40), T0 + timedelta(minutes=45))
+    repaired = episodes.update_episode(
+        'u',
+        speech['id'],
+        expected_version=speech['state_version'],
+        updates={
+            'discarded_conversation_ids': ['noise'],
+            'moments': [{'id': 'speech-note', 'conversation_id': 'speech'}],
+        },
+        firestore_client=store,
+    )
+    assert repaired['started_at'] == T0 + timedelta(minutes=40)
+    fresh = attach('fresh', T0, T0 + timedelta(minutes=1))
+    assert fresh['id'] != repaired['id']
+    retained = episodes.get_episode('u', repaired['id'], firestore_client=store)
+    assert retained == repaired
+    assert episodes.get_episode_for_conversation('u', 'speech', firestore_client=store)['id'] == repaired['id']
+    assert episodes.get_episode_for_conversation('u', 'noise', firestore_client=store)['id'] == repaired['id']
+    assert episodes.get_episode_for_conversation('u', 'fresh', firestore_client=store)['id'] == fresh['id']
+    replay = attach('fresh', T0, T0 + timedelta(minutes=2))
+    assert replay['id'] == fresh['id']
+    assert episodes.get_episode('u', repaired['id'], firestore_client=store) == repaired
+    assert_timeline(store)
