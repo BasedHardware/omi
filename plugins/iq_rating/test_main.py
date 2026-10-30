@@ -67,6 +67,16 @@ if "fastapi" not in sys.modules:
         sys.modules["fastapi.responses"] = responses
         fastapi.responses = responses
 
+        class Request:
+            pass
+
+        class Depends:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        fastapi.Request = Request
+        fastapi.Depends = Depends
+
 if "requests" not in sys.modules:
     try:
         import requests  # type: ignore
@@ -88,6 +98,15 @@ if "requests" not in sys.modules:
         sys.modules["requests"] = requests
 
 PLUGIN_DIR = Path(__file__).resolve().parent
+# main.py's auth import falls back to `from iq_rating.iq_auth import ...` when
+# this file execs main.py outside a package (ImportError on the relative
+# import). That fallback needs the plugin's parent dir importable as the
+# "iq_rating" namespace package, which the manifest's standalone invocation
+# (`python3 plugins/iq_rating/test_main.py` from the repo root) does not put
+# on sys.path.
+_PARENT = str(PLUGIN_DIR.parent)
+if _PARENT not in sys.path:
+    sys.path.insert(0, _PARENT)
 spec = importlib.util.spec_from_file_location("iq_rating_main", PLUGIN_DIR / "main.py")
 main = importlib.util.module_from_spec(spec)
 sys.modules["iq_rating_main"] = main
