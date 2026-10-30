@@ -40,7 +40,7 @@ async def sweep_dream_agent(request: Request, _retry_count: int = Depends(verify
         'caller': 'scheduler' if job == SWEEP_JOB else 'other' if job else 'none',
         'scheduled_at': scheduled_at,
     }
-    if _half_hour_tick(scheduled_at) and not refactor_modes.default_on(HALF_HOUR_SWEEP_ENV):
+    if job == SWEEP_JOB and _half_hour_tick(scheduled_at) and not refactor_modes.default_on(HALF_HOUR_SWEEP_ENV):
         logger.info('Dream sweep skipped: half-hour tick disabled')
         return {'skipped': 'half_hour_disabled'}
     reports = await dream_agent.drain(sweep=sweep)

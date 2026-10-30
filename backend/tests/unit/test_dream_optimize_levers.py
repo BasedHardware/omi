@@ -619,6 +619,29 @@ def test_finish_counts_dry_hunts_and_yield_resets_them(queue):
     assert queue.rows[('dream_users', QUEUE_UID)]['dry_hunts'] == 0
 
 
+def test_serve_dry_hunt_due_row_uses_the_incremented_streak(queue, monkeypatch):
+    from config.dream_agent import hunt_interval
+
+    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'serve')
+    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0, 'dry_hunts': 1, 'size_bucket': 'light'}
+    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
+    dream_store.finish(QUEUE_UID, lease, {'tokens': 5, 'size_bucket': 'light'}, success=True, now=NOW)
+    assert queue.rows[('dream_users', QUEUE_UID)]['dry_hunts'] == 2
+    assert queue.rows[('dream_due', QUEUE_UID)]['due_at'] == NOW + 4 * hunt_interval('light')
+
+
+@pytest.mark.parametrize('case', ['failed', 'manual', 'canary'])
+def test_dry_hunts_ignore_failed_manual_and_canary_passes(queue, case):
+    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0, 'dry_hunts': 1}
+    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
+    if case == 'manual':
+        lease = {**lease, 'trigger': 'manual'}
+    if case == 'canary':
+        lease = {**lease, 'canary': True}
+    dream_store.finish(QUEUE_UID, lease, {'tokens': 5}, success=case != 'failed', now=NOW)
+    assert queue.rows[('dream_users', QUEUE_UID)].get('dry_hunts', 1) == 1
+
+
 def test_hunt_backoff_serve_delays_the_next_hunt_and_shadow_only_records(queue, monkeypatch):
     from config.dream_agent import hunt_interval
 

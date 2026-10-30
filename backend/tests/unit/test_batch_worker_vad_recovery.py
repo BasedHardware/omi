@@ -60,7 +60,11 @@ def test_terminal_empty_policy_cannot_dispose_positive_worker_speech_without_cpu
         assert row(client)['recovery'] == prior
     artifacts.persist_recovery_result.assert_not_called()
     modulate.assert_called_once()
-    soniox.assert_not_called()
+    if route == 'automatic':
+        soniox.assert_called_once()
+        assert intent['recognizers']['soniox']['outcome'] == 'empty'
+    else:
+        soniox.assert_not_called()
 
 
 @pytest.mark.parametrize('seconds', [0.032, 1.5, 4.384])
@@ -202,7 +206,9 @@ def test_reviewed_ordinary_redrive_uses_worker_proof_and_preserves_paid_intent(
     soniox.assert_not_called()
 
 
-def test_ordinary_empty_response_keeps_worker_speech_and_spends_only_once(setup, monkeypatch, legacy_dependencies):
+def test_ordinary_empty_response_keeps_worker_speech_and_spends_each_provider_once(
+    setup, monkeypatch, legacy_dependencies
+):
     client, _, binding, artifacts, modulate, soniox, recovery, _ = ordinary(setup, monkeypatch, legacy_dependencies)
     worker_receipt(client, 1.5)
     modulate.return_value = ([], 'vi')
@@ -213,7 +219,8 @@ def test_ordinary_empty_response_keeps_worker_speech_and_spends_only_once(setup,
     assert recovery.recover('bad', binding.owner_id) == 'held'
     artifacts.persist_recovery_result.assert_not_called()
     modulate.assert_called_once()
-    soniox.assert_not_called()
+    soniox.assert_called_once()
+    assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'empty'
 
 
 @pytest.mark.parametrize('outcome', ['words', 'error', 'privacy'])

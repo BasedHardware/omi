@@ -19,7 +19,6 @@ from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (
-    LONG_SPEECH_HANDOFF_SECONDS,
     recovery_dispatch_batch_size,
     recovery_wake_lease_seconds,
     empty_asr_disposition_enabled,
@@ -65,9 +64,9 @@ from utils.batch_pipeline.recovery_disposition import (
     MultilingualEmpty,
     WordsWithoutVad,
     padded_empty,
-    padded_long_speech,
     terminal_empty_payload,
     TWO_PROVIDER_EMPTY_EVIDENCE,
+    SECOND_CHANCE_EMPTY_EVIDENCE,
     independent_silence_payload,
 )
 
@@ -82,7 +81,6 @@ REWAKE_AFTER_HELD_SECONDS = 120
 # Consecutive failed custody probes before a new wake is minted regardless.
 MAX_WAKE_PROBE_ERRORS = 3
 # Billing label from config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER.
-# None keeps the historical long-speech hook disabled (Deepgram retired).
 # Language-guarded units use the separately bounded Soniox recovery policy.
 SECOND_PROVIDER = HELD_RECOVERY_SECOND_PROVIDER
 SECOND_PROVIDER_CALLS = Counter(
@@ -130,8 +128,7 @@ def second_provider_eligible(job, empty):
         return independent_allowed(empty.duration)
     if SECOND_PROVIDER is None:
         return False
-    speech = sum(span['end'] - span['start'] for span in empty.spans)
-    return second_multilingual_enabled() and padded_long_speech(job) and speech >= LONG_SPEECH_HANDOFF_SECONDS
+    return second_multilingual_enabled()
 
 
 class QuarantineRecovery:
@@ -154,7 +151,7 @@ class QuarantineRecovery:
         return second_provider_eligible(job, empty)
 
     def _second_multilingual(
-        self, item, owner_id, audio, empty, policy, *, guarded=False, byok=False, token=None, first_empty=True, job=None
+        self, item, owner_id, audio, empty, policy, *, guarded=False, token=None, first_empty=True, job=None
     ):
         """At most one independent call inside the running intent; None leaves custody held."""
         payload, outcome, word_count = None, 'refused', None
@@ -164,12 +161,11 @@ class QuarantineRecovery:
         measured = sum(span['end'] - span['start'] for span in empty.spans)
         try:
             # The allowance and consent are rechecked before spending the extra call.
-            ready = not guarded or self.second_stt is not second_transcribe or independent_ready()
-            if ready and (
-                (byok and not guarded)
-                or sync_allowed(owner_id, item.duration_seconds, provider, lane='batch', path=DispatchPath.QUARANTINE)
+            ready = self.second_stt is not second_transcribe or independent_ready()
+            if ready and sync_allowed(
+                owner_id, item.duration_seconds, provider, lane='batch', path=DispatchPath.QUARANTINE
             ):
-                if guarded and not record_recognizer(
+                if not record_recognizer(
                     self.store, item.segment_id, token, 'recovery', provider, 'started', None, measured, claim=True
                 ):
                     return None
@@ -183,7 +179,7 @@ class QuarantineRecovery:
                 )
                 reply = yield ProviderStep(
                     self.second_stt,
-                    (item, audio, empty),
+                    (item, audio, empty, not guarded) if self.second_stt is second_transcribe else (item, audio, empty),
                     second_transcribe_async if self.second_stt is second_transcribe else None,
                 )
                 payload, outcome, word_count = recognizer_attempt(reply.result)
@@ -191,7 +187,7 @@ class QuarantineRecovery:
             raise
         except Exception:
             payload, outcome = None, 'error'
-        if guarded and outcome in {'words', 'empty', 'error'}:
+        if outcome in {'words', 'empty', 'error'}:
             record_recognizer(
                 self.store,
                 item.segment_id,
@@ -202,7 +198,7 @@ class QuarantineRecovery:
                 word_count,
                 measured,
             )
-        elif guarded and outcome == 'refused':
+        elif outcome == 'refused':
             record_recognizer(self.store, item.segment_id, token, 'recovery', provider, 'refused', None, measured)
         SECOND_PROVIDER_CALLS.labels(provider, outcome).inc()
         try:
@@ -221,8 +217,26 @@ class QuarantineRecovery:
             ):
                 return independent_silence_payload(empty.duration, empty.spans)
             return payload
-        if outcome == 'empty' and policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans):
-            return terminal_empty_payload(empty.duration, empty.spans, TWO_PROVIDER_EMPTY_EVIDENCE)
+        if (
+            outcome == 'empty'
+            and bool(empty.spans)
+            and policy.terminal_empty_disposition
+            and terminal_empty_allowed(empty.spans)
+        ):
+            evidence = (
+                TWO_PROVIDER_EMPTY_EVIDENCE
+                if (job or {}).get('worker_empty_evidence') == {'padded_retry': 'skipped_long_speech', 'version': 1}
+                else SECOND_CHANCE_EMPTY_EVIDENCE
+            )
+            return terminal_empty_payload(
+                empty.duration,
+                empty.spans,
+                evidence,
+                recognizer_receipts={
+                    name: {'provider': name, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': measured}
+                    for name in ('modulate', provider)
+                },
+            )
         return payload
 
     def recover(self, segment_id, owner_id):
@@ -481,7 +495,6 @@ class QuarantineRecovery:
                         empty,
                         policy,
                         guarded=(job.get('worker_failure') or {}).get('reason') == 'unsupported_language',
-                        byok=byok,
                         token=token,
                         first_empty=first_empty,
                         job=job,

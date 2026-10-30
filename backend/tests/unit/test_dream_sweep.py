@@ -107,7 +107,11 @@ def test_half_hour_tick_kill_switch(client, monkeypatch):
     )
     drain = AsyncMock(return_value=[])
     monkeypatch.setattr(dream_agent, 'drain', drain)
-    half = {'Authorization': 'Bearer valid', 'X-CloudScheduler-ScheduleTime': '2026-10-30T09:30:00.123456+00:00'}
+    half = {
+        'Authorization': 'Bearer valid',
+        'X-CloudScheduler-JobName': dream_sweep.SWEEP_JOB,
+        'X-CloudScheduler-ScheduleTime': '2026-10-30T09:30:00.123456+00:00',
+    }
     monkeypatch.setenv('DREAM_HALF_HOUR_SWEEP_ENABLED', 'false')
     assert client.post('/v2/dream-agent/sweep', headers=half).json() == {'skipped': 'half_hour_disabled'}
     drain.assert_not_called()

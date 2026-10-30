@@ -13,6 +13,7 @@ from tests.unit.test_batch_pipeline_shadow import repository, running, row as sh
 from tests.unit.test_batch_pipeline_empty_disposition import wav
 from utils.batch_pipeline.recovery_disposition import MultilingualEmpty
 from utils.batch_pipeline.shadow_recovery import recover_async as shadow_recover_async
+from tests.unit.test_batch_pipeline_second_provider import second_setup
 
 
 @pytest.mark.asyncio
@@ -105,6 +106,47 @@ async def test_cancelled_provider_keeps_running_claim_and_cannot_spend_again(set
     assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'started'
     assert await recovery.recover_async('bad', binding.owner_id) == 'held'
     alternate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('answer', ['words', 'empty', 'timeout', 'cancel'])
+async def test_ordinary_second_chance_uses_async_client_and_never_reissues(
+    setup, monkeypatch, legacy_dependencies, answer
+):
+    client, binding, artifacts, modulate, sync_client, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    row(client).pop('worker_empty_evidence')
+    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+    entered = asyncio.Event()
+
+    async def respond(*args, **kwargs):
+        assert kwargs == {'second_chance': True}
+        assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'started'
+        if answer == 'cancel':
+            entered.set()
+            await asyncio.Event().wait()
+        if answer == 'timeout':
+            raise TimeoutError('synthetic')
+        return (WORDS if answer == 'words' else [], 'vi')
+
+    alternate = AsyncMock(side_effect=respond)
+    monkeypatch.setattr('utils.stt.soniox_batch.transcribe_async', alternate)
+    if answer == 'cancel':
+        task = asyncio.create_task(recovery.recover_async('bad', binding.owner_id))
+        await asyncio.wait_for(entered.wait(), 10)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert row(client)['recovery_state'] == 'running'
+    else:
+        expected = 'failed_held' if answer == 'timeout' else 'recovered'
+        assert await recovery.recover_async('bad', binding.owner_id) == expected
+        assert row(client)['recovery']['recognizers']['soniox']['outcome'] == (
+            'error' if answer == 'timeout' else answer
+        )
+    assert await recovery.recover_async('bad', binding.owner_id) == 'held'
+    alternate.assert_awaited_once()
+    sync_client.assert_not_called()
+    modulate.assert_called_once()
 
 
 def test_failed_queue_keeps_guarded_obligation_out_of_inline_executor(setup, monkeypatch, legacy_dependencies):
