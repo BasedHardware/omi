@@ -24,6 +24,7 @@ def entries():
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (1024, 'in-memory candidate cap only'),
                 'max_scan': (10000, 'aggregate scan bound only'),
+                'advance_rows': (1024, 'resume checkpoint only; no filter or ordering change'),
             },
         ),
         DriverEntry(

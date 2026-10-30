@@ -429,13 +429,17 @@ def test_encrypted_cursor_passes_1024_refused_rows_then_eligible_and_wraps():
     )
     budget = SweepBudget(60)
     frontier = RepairCursor(client, b'synthetic-local-key' * 2)
-    rows, saturated, cursor = cluster.discover(client, budget=budget, after=frontier.read(budget))
+    rows, saturated, cursor = cluster.discover(client, budget=budget, after=frontier.read(budget), advance_rows=8)
     assert saturated and len(rows) == 1024 and all('refused-' in path for path, _ in rows)
     frontier.write(cursor, budget)  # Durable before the entire prefix is refused.
     assert b'synthetic' not in client.state['cursor'] and 'path' not in client.state
-    rows, saturated, cursor = cluster.discover(client, budget=budget, after=frontier.read(budget))
-    assert not saturated and [path for path, _ in rows] == [paths[-1]]
-    assert cursor is None  # End of pass wraps, so refused rows are revisited.
+    rows, saturated, cursor = cluster.discover(client, budget=budget, after=frontier.read(budget), advance_rows=8)
+    assert not saturated and paths[-1] in [path for path, _ in rows]
+    # Once the frontier reaches the tail, exhaustion wraps to revisit refusals.
+    rows, saturated, cursor = cluster.discover(
+        client, budget=budget, after={'path': paths[-1], 'finished_at': finished}, advance_rows=8
+    )
+    assert not rows and not saturated and cursor is None
     frontier.write(cursor, budget)
     assert frontier.read(budget) is None
 
@@ -497,6 +501,35 @@ def test_frontier_advances_before_work_and_plan_never_writes(source, proof, monk
 
     monkeypatch.setattr(cluster, 'coordinate', work)
     assert cluster.run()['outcome'] == 'ok' and client.writes == writes
+
+
+def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, monkeypatch):
+    from database import _client
+    from utils.batch_pipeline import record_seal_sweeper
+
+    finished = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    paths = [f'users/synthetic/conversations/{i:04d}' for i in range(10)]
+    client = CursorClient(
+        [
+            SimpleNamespace(reference=SimpleNamespace(path=path), to_dict=lambda: {'finished_at': finished})
+            for path in paths
+        ]
+    )
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'settings', lambda: (2, 240, 1500, 'apply'))
+    attempted = []
+
+    def time_limited(rows, **kwargs):
+        attempted.extend(path for path, _ in rows[:2])
+        return {'rows': len(rows), 'dispositions': {'budget_exhausted': len(rows[:2]), 'deferred': len(rows[2:])}}
+
+    monkeypatch.setattr(cluster, 'coordinate', time_limited)
+    for _ in range(5):
+        cluster.run()
+    assert attempted == paths
 
 
 def test_admitted_registration_succeeds_at_zero_and_full_ramp_but_policy_changes(source):

@@ -106,7 +106,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     return disposition if disposition in DISPOSITIONS else 'unknown'
 
 
-def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN):
+def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN, advance_rows=MAX_ROWS):
     """Page past closed rows; oldest finished first within each bounded pass.
 
     Both owners use the canonical record identity. Sync rows without a job are
@@ -117,6 +117,7 @@ def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN
     from google.cloud.firestore_v1 import FieldFilter
 
     rows, scanned, cursor = [], 0, after
+    resume = None
     while scanned < max_scan and len(rows) < max_rows:
         budget.check()
         query = (
@@ -144,12 +145,16 @@ def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN
             cursor = {'path': doc.reference.path, 'finished_at': finished}
             if not data.get('record_audio_closed') and isinstance(finished, datetime) and finished.tzinfo is not None:
                 rows.append((doc.reference.path, max(0, int(time.time() - finished.timestamp()))))
+                if len(rows) <= advance_rows:
+                    resume = cursor
                 if len(rows) == max_rows:
                     break
         if len(page) < 128 and len(rows) < max_rows and scanned < max_scan:
             cursor = None
             break
-    return rows, scanned >= max_scan or len(rows) >= max_rows, cursor
+    # Only the first worker group is guaranteed a turn before a global deadline.
+    # Never wrap past a larger selected-but-deferred tail, even at end of scan.
+    return rows, scanned >= max_scan or len(rows) >= max_rows, resume if len(rows) > advance_rows else cursor
 
 
 class RowProcess(subprocess.Popen):
@@ -320,7 +325,7 @@ def run(*, progress=lambda _: None):
         with budget.interrupt_io():
             client = get_firestore_client()
             frontier = RepairCursor(client, os.environ['ENCRYPTION_SECRET'].encode())
-            rows, saturated, cursor = discover(client, budget=budget, after=frontier.read(budget))
+            rows, saturated, cursor = discover(client, budget=budget, after=frontier.read(budget), advance_rows=workers)
             # Advance before slow proofs: refused, hung, deferred or killed rows
             # cannot monopolize the next run. Wrap revisits them on a later pass.
             # A preview never writes even this maintenance frontier.

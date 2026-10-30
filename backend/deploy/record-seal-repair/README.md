@@ -25,7 +25,9 @@ key derived from the existing job encryption secret; no plaintext identities or
 cursor payloads are logged. Firestore nanoseconds round-trip without truncation.
 It advances **before** slow work and wraps at the end of the pass, so a refused
 prefix or closed-row scan cap cannot monopolize every run. Interrupted/deferred
-rows are revisited on a later pass. `mode=plan` reads but never advances state.
+rows are revisited. The checkpoint covers the first worker group, so a larger
+selected-but-deferred tail remains ahead of the next scan even when discovery
+reached the end. `mode=plan` reads but never advances state.
 No new IAM, secret or index is required for the maintenance point read/write.
 Both absent and explicit-false seals are discovered. Each row gets a fresh,
 complete, TLS-verified in-cluster pusher PodList, then canonical singleton
