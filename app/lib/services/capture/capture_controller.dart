@@ -1046,8 +1046,25 @@ class CaptureController extends ChangeNotifier
   final LiveFinalizeGate _finalizeGate = LiveFinalizeGate();
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
-  DateTime? _lastButtonActionTime; // Debounce timestamp for button operations
-  static const _buttonActionDebounce = Duration(milliseconds: 400);
+
+  /// Firmware multi-tap window (MULTI_TAP_WINDOW_MS in omi/firmware/{omi/src/lib/core,devkit/src}/button.c):
+  /// a single/double press is reported once the button has stayed released this long after the
+  /// last short tap; a triple press is reported on the third release.
+  @visibleForTesting
+  static const firmwareMultiTapWindow = Duration(milliseconds: 350);
+
+  /// Firmware button poll interval (BUTTON_CHECK_INTERVAL in the same files).
+  @visibleForTesting
+  static const firmwareButtonPollInterval = Duration(milliseconds: 40);
+
+  /// Drops a repeat of the *same* press type arriving faster than the firmware can produce two
+  /// distinct ones (e.g. a duplicated BLE notification). Distinct presses of one type are at least
+  /// [firmwareMultiTapWindow] apart for single/double and at least six poll ticks (240 ms) apart for
+  /// triple, so this must stay below both. Different press types are never debounced against each
+  /// other: a single that resolves just before a fast triple must not swallow the triple.
+  @visibleForTesting
+  static const buttonActionDebounce = Duration(milliseconds: 200);
+  final Map<String, DateTime> _lastButtonActionTimeByType = {};
 
   RecordingState recordingState = RecordingState.stop;
 
@@ -2173,13 +2190,23 @@ class CaptureController extends ChangeNotifier
   Future<void> _executeButtonAction(int action, String deviceId, {required String eventType}) async {
     final now = _now();
     final isEndingVoiceSession = action == 3 && _voiceCommandSession != null;
-    if (!isEndingVoiceSession &&
-        _lastButtonActionTime != null &&
-        now.difference(_lastButtonActionTime!) < _buttonActionDebounce) {
+    final lastSameType = _lastButtonActionTimeByType[eventType];
+    if (!isEndingVoiceSession && lastSameType != null && now.difference(lastSameType) < buttonActionDebounce) {
       Logger.debug("Button action debounce active ($eventType), ignoring event");
       return;
     }
-    _lastButtonActionTime = now;
+    _lastButtonActionTimeByType[eventType] = now;
+
+    // Ask Question never waited on other button work before this change (single tap ignored the
+    // processing guard), so keep it responsive while e.g. a mute toggle is in flight.
+    if (action == 3) {
+      if (_voiceCommandSession == null) {
+        _startVoiceCommandSession(deviceId);
+      } else {
+        _endVoiceCommandSession(deviceId);
+      }
+      return;
+    }
 
     if (_isProcessingButtonEvent) {
       Logger.debug("Button action: already processing another action, ignoring $eventType");
@@ -2197,10 +2224,9 @@ class CaptureController extends ChangeNotifier
           Logger.debug("Button action: processing conversation");
           HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
-          await forceProcessingCurrentConversation().timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => Logger.debug("forceProcessingCurrentConversation timed out"),
-          );
+          // Fire-and-forget, as before: processing must not hold the button guard and block the
+          // next press. The finalize gate above already rejects a repeat while it runs.
+          unawaited(forceProcessingCurrentConversation());
           break;
         case 1:
           // Pause/resume recording (Mute/Unmute)
@@ -2219,20 +2245,11 @@ class CaptureController extends ChangeNotifier
           if (!_starOngoingConversation) {
             markConversationForStarring();
             PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-            HapticFeedback.lightImpact();
+            HapticFeedback.mediumImpact();
           } else {
             unmarkConversationForStarring();
             PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
             HapticFeedback.lightImpact();
-          }
-          break;
-        case 3:
-          // Ask Question (Toggle voice question mode)
-          Logger.debug("Button action: toggle voice question session");
-          if (_voiceCommandSession == null) {
-            _startVoiceCommandSession(deviceId);
-          } else {
-            _endVoiceCommandSession(deviceId);
           }
           break;
         case 4:
