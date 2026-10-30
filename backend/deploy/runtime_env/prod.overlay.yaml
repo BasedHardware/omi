@@ -82,6 +82,10 @@ overlay:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '16'
+        # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
+        PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
+          value: 'false'
+          category: ops_kill
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
           value: '3'
         STT_SERVICE_MODELS:

@@ -588,6 +588,9 @@ env:
     value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
     value: "16"
+  # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
+  - name: PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED
+    value: "false"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
