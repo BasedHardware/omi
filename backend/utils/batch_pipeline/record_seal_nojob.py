@@ -14,14 +14,14 @@ from database._client import run_transactional
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreTransaction
 from utils.batch_pipeline.live import record_identity, register_recording
-from utils.batch_pipeline.record_seal_repair import _digest, _refused, _row_state, retained_tail_proof
+from utils.batch_pipeline.record_seal_repair import plan_digest, seal_refusal, seal_row_state, retained_tail_proof
 
 OPERATION = 'record-seal-nojob-v1'
 REGISTRATION_FIELDS = ('source', 'language', 'client_device_id', 'client_platform', 'uses_custom_stt', 'external_data')
 
 
 def row_state(row):
-    return {**_row_state(row), **{key: row.get(key) for key in REGISTRATION_FIELDS}}
+    return {**seal_row_state(row), **{key: row.get(key) for key in REGISTRATION_FIELDS}}
 
 
 def conversation_path(value):
@@ -78,7 +78,9 @@ def refusal(row, producer_proof):
     if tokens and (not isinstance(tokens, dict) or len(tokens) > 128):
         return 'upload_pending'
     # Never offer a producers-stopped escape hatch: token rows need pod proof.
-    return _refused({'state': 'record_pending', 'record_content_id': 'candidate'}, row, producer_proof=producer_proof)
+    return seal_refusal(
+        {'state': 'record_pending', 'record_content_id': 'candidate'}, row, producer_proof=producer_proof
+    )
 
 
 def registration(tx, uid, cid, row, server_flags):
@@ -110,10 +112,11 @@ def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, prod
         try:
             uid, cid = conversation_path(path)
             _, job_id = record_identity(uid, cid)
+            job_ref = store.client.collection(f'{store.namespace}_jobs').document(job_id)
 
             def read(tx):
                 row = tx.get('conversations', f'{uid}/{cid}')
-                if tx._ref('jobs', job_id).get(transaction=tx.transaction).exists:
+                if job_ref.get(transaction=tx.transaction).exists:
                     return row, None, 'already_registered'
                 reason = refusal(row, producer_proof)
                 if reason:
@@ -141,12 +144,12 @@ def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, prod
         'producer_proof': producer_proof,
         'server_flags': server_flags,
     }
-    return {**body, 'plan_sha256': _digest(body)}
+    return {**body, 'plan_sha256': plan_digest(body)}
 
 
 def apply_backfill(store, plan, approved_digest):
     body = {key: value for key, value in plan.items() if key != 'plan_sha256'}
-    if approved_digest != plan['plan_sha256'] or _digest(body) != approved_digest:
+    if approved_digest != plan['plan_sha256'] or plan_digest(body) != approved_digest:
         raise ValueError('fresh dry-run plan approval required')
     if plan['namespace'] != store.namespace or plan['operation'] != OPERATION:
         raise ValueError('plan target changed')
@@ -157,13 +160,15 @@ def apply_backfill(store, plan, approved_digest):
             continue
         uid, cid = conversation_path(entry['path'])
         job_id = entry['job']['segment_id']
+        job_ref = store.client.collection(f'{store.namespace}_jobs').document(job_id)
+        row_ref = store.client.collection('users').document(uid).collection('conversations').document(cid)
         now = time.time()
 
         @firestore.transactional
         def commit(raw):
             tx = FirestoreTransaction(store.client, store.namespace, raw)
             row = tx.get('conversations', f'{uid}/{cid}')
-            if tx._ref('jobs', job_id).get(transaction=tx.transaction).exists:
+            if job_ref.get(transaction=raw).exists:
                 return 'already_registered'
             if row_state(row) != entry['row']:
                 return 'state_changed'
@@ -177,7 +182,7 @@ def apply_backfill(store, plan, approved_digest):
             tx.put('jobs', job_id, {**job, 'enqueued_at': now, 'available_at': now})
             tx.flush()  # Includes the canonical privacy fence, before any writes.
             raw.update(
-                tx._ref('conversations', f'{uid}/{cid}'),
+                row_ref,
                 {
                     'record_upload_sessions': {},
                     'record_audio_closed': True,

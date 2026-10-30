@@ -132,7 +132,10 @@ def register_recording(
 
     # Operator seal backfill joins registration to the row's existing transaction.
     # The caller owns flushing buffered writes after all privacy reads complete.
-    return commit(transaction) if transaction is not None else store.run(commit)
+    if transaction is not None:
+        return commit(transaction)
+    assert store is not None
+    return store.run(commit)
 
 
 def retained_record_units(

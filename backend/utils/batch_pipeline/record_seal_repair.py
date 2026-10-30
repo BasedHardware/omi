@@ -32,7 +32,7 @@ ROW_FIELDS = (
 )
 
 
-def _row_state(row):
+def seal_row_state(row):
     return {key: row.get(key) for key in ROW_FIELDS}
 
 
@@ -42,7 +42,7 @@ def _job_state(job):
     return {key: value for key, value in job.items() if key != 'available_at'}
 
 
-def _digest(value):
+def plan_digest(value):
     def encode(obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
@@ -51,7 +51,7 @@ def _digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=encode, separators=(',', ':')).encode()).hexdigest()
 
 
-def _refused(job, row, *, producer_proof=None, producers_stopped=False):
+def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False):
     if job.get('state') != 'record_pending' or not job.get('record_content_id'):
         return 'not_pending'
     if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
@@ -97,7 +97,7 @@ def retained_tail_proof(job, row, storage_client, artifacts):
         iterator.close()
     validate_record_tail(units, row.get('finished_at'), require_finish=True)
     validate_record_tail(units, (job.get('record_snapshot') or {}).get('finished_at'), require_finish=True)
-    return _digest(units)
+    return plan_digest(units)
 
 
 def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None, producers_stopped=False):
@@ -111,8 +111,8 @@ def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None
                 entries.append(entry)
                 continue
             row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
-            entry.update(job=job, row=_row_state(row))
-            refusal = _refused(job, row, producer_proof=producer_proof, producers_stopped=producers_stopped)
+            entry.update(job=job, row=seal_row_state(row))
+            refusal = seal_refusal(job, row, producer_proof=producer_proof, producers_stopped=producers_stopped)
             if refusal:
                 entry['disposition'] = refusal
             else:
@@ -132,12 +132,12 @@ def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None
         'producer_proof': producer_proof,
         'producers_stopped': producers_stopped,
     }
-    return {**plan, 'plan_sha256': _digest(plan)}
+    return {**plan, 'plan_sha256': plan_digest(plan)}
 
 
 def apply_seals(store, plan, approved_digest):
     body = {key: value for key, value in plan.items() if key != 'plan_sha256'}
-    if approved_digest != plan['plan_sha256'] or _digest(body) != approved_digest:
+    if approved_digest != plan['plan_sha256'] or plan_digest(body) != approved_digest:
         raise ValueError('fresh dry-run plan approval required')
     if store.namespace != plan['namespace']:
         raise ValueError('plan namespace changed')
@@ -155,9 +155,9 @@ def apply_seals(store, plan, approved_digest):
         def commit(tx):
             current_job = job_ref.get(transaction=tx).to_dict() or {}
             row = ref.get(transaction=tx).to_dict() or {}
-            if _job_state(current_job) != job or _row_state(row) != entry['row']:
+            if _job_state(current_job) != job or seal_row_state(row) != entry['row']:
                 return 'state_changed'
-            refusal = _refused(
+            refusal = seal_refusal(
                 current_job, row, producer_proof=plan['producer_proof'], producers_stopped=plan['producers_stopped']
             )
             if refusal:
