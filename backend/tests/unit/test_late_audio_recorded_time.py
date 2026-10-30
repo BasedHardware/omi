@@ -350,6 +350,11 @@ def test_listen_persistence_uses_late_intake_before_live_writes(monkeypatch, tra
     from routers.listen.transcripts import TranscriptProcessor
 
     store = StrictFirestore()
+    monkeypatch.setattr(
+        transcript_module.conversations_db,
+        'get_conversation',
+        lambda uid, cid, **kw: dict(store.rows[('users', uid, 'conversations', cid)]),
+    )
     monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', lambda uid, incoming: intake(store, incoming))
     monkeypatch.setattr(late_audio.outbox, 'mark', lambda *a, **kw: None)
     monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: None)
