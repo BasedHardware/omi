@@ -1139,6 +1139,16 @@ async def root(
             </div>
 
             <script>
+                function checkAuth(response) {{
+                    if (response.status === 401) {{
+                        if (confirm('Session expired or unauthorized. Would you like to reconnect your GitHub account?')) {{
+                            window.location.href = '/auth?uid={safe_uid}';
+                        }}
+                        return false;
+                    }}
+                    return true;
+                }}
+
                 async function updateRepo() {{
                     const select = document.getElementById('repoSelect');
                     const repo = select.value;
@@ -1152,6 +1162,8 @@ async def root(
                         const response = await fetch('/update-repo?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
 
                         const data = await response.json();
 
@@ -1172,6 +1184,8 @@ async def root(
                         const response = await fetch('/refresh-repos?uid={safe_uid}', {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
 
                         const data = await response.json();
 
@@ -1199,6 +1213,9 @@ async def root(
                         const response = await fetch('/check-repo-access?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
+
                         const data = await response.json();
 
                         if (data.success) {{
@@ -1233,6 +1250,9 @@ async def root(
                         const response = await fetch('/save-agent-provider?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
+
                         const data = await response.json();
 
                         if (data.success) {{
@@ -1256,9 +1276,11 @@ async def root(
                     }}
 
                     try {{
-                        await fetch('/save-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
+                        const response = await fetch('/save-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
 
                         alert('API key saved successfully!');
                     }} catch (error) {{
@@ -1271,9 +1293,11 @@ async def root(
                     if (!confirm('Remove the API key for this provider?')) return;
 
                     try {{
-                        await fetch('/delete-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
+                        const response = await fetch('/delete-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
 
                         document.getElementById('agentKey').value = '';
                         alert('API key removed successfully!');
@@ -1310,6 +1334,12 @@ async def root(
                                 all: sendAll
                             }})
                         }});
+
+                        if (!checkAuth(response)) {{
+                            logsEl.value = 'Error 401: Session expired or unauthorized. Please reconnect your GitHub account.';
+                            return;
+                        }}
+
                         const data = await response.json();
 
                         if (data.success) {{
@@ -1771,7 +1801,7 @@ async def delete_agent_key(
         return {"success": False, "error": "Failed to delete agent key"}
 
 
-@app.post("/test-agent", dependencies=[Depends(require_settings_session)])
+@app.post("/test-agent")
 async def test_agent(request: Request = None):
     """Send a direct test command to the selected agent provider."""
     try:
@@ -1884,6 +1914,8 @@ async def test_agent(request: Request = None):
 
         return {"success": True, "logs": logs}
 
+    except HTTPException:
+        raise
     except Exception as e:
         log(f"Error testing agent: {e}")
         return {"success": False, "error": "Failed to execute agent test"}

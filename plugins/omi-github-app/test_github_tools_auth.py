@@ -25,6 +25,8 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 APP_DIR = Path(__file__).resolve().parent
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 TOOLS_SECRET = "test-github-tools-secret"
 SETTINGS_SECRET = "test-github-settings-secret"
 
@@ -47,6 +49,15 @@ SETTINGS_PATHS = {
     "/save-agent-key",
     "/delete-agent-key",
     "/test-agent",
+}
+
+SETTINGS_DECORATOR_PATHS = {
+    "/update-repo",
+    "/refresh-repos",
+    "/check-repo-access",
+    "/save-agent-provider",
+    "/save-agent-key",
+    "/delete-agent-key",
 }
 
 BROWSER_SETUP_PATHS = {
@@ -221,15 +232,24 @@ class TestGitHubRouteWiring(unittest.TestCase):
                 f"Chat tool route {path} missing require_github_tools_auth dependency",
             )
 
-    def test_all_settings_routes_guarded_by_settings_session(self):
+    def test_settings_routes_guarded_by_settings_session_decorator(self):
         routes = self._extract_routes()
-        for path in SETTINGS_PATHS:
+        for path in SETTINGS_DECORATOR_PATHS:
             self.assertIn(path, routes, f"Settings route {path} not found in main.py")
             self.assertIn(
                 "require_settings_session",
                 routes[path],
                 f"Settings route {path} missing require_settings_session dependency",
             )
+
+    def test_test_agent_route_not_decorated_with_query_session_dependency(self):
+        routes = self._extract_routes()
+        self.assertIn("/test-agent", routes, "/test-agent route not found in main.py")
+        self.assertNotIn(
+            "require_settings_session",
+            routes["/test-agent"],
+            "/test-agent must NOT have query dependency decorator because uid is in JSON body",
+        )
 
     def test_browser_setup_routes_not_guarded(self):
         routes = self._extract_routes()
@@ -245,6 +265,10 @@ class TestGitHubRouteWiring(unittest.TestCase):
                     routes[path],
                     f"Browser route {path} must NOT carry require_settings_session",
                 )
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":
