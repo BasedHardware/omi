@@ -29,9 +29,13 @@ logger = logging.getLogger(__name__)
 
 API_BASE = 'https://onkeiki.com/api/v1'
 SIGNATURE_TOLERANCE_SECONDS = 300
-# The service name each Omi channel accepts from the turn's channel envelope. Keiki-bought
-# iMessage lines run on Photon; an unknown service is logged by name and never answered.
-CHANNEL_SERVICES = {'imessage': frozenset({'imessage', 'photon', 'linq'}), 'whatsapp': frozenset({'whatsapp'})}
+# The service name each Omi channel accepts from the turn's channel envelope. Keiki labels
+# turns on its phone lines `sms` even when they arrive over iMessage (seen in prod 2026-10-31);
+# an unknown service is logged by name and never answered.
+CHANNEL_SERVICES = {
+    'imessage': frozenset({'imessage', 'sms', 'photon', 'linq'}),
+    'whatsapp': frozenset({'whatsapp'}),
+}
 FILES_UNAVAILABLE = 'I can’t send files in this chat yet. Open Omi to see it.'
 TAPBACKS = {'love': '❤️', 'like': '👍', 'dislike': '👎', 'laugh': '😂', 'emphasize': '‼️', 'question': '❓'}
 _ATTACHMENT = re.compile(r'attachment_id=')

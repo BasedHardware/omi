@@ -138,6 +138,12 @@ def test_link_code_and_commands(adapter):
     assert adapter.parse(json.dumps(attachment).encode())[0].command == 'unsupported'
 
 
+@pytest.mark.parametrize('service', ['imessage', 'sms', 'SMS', 'photon'])
+def test_phone_line_services_reach_the_imessage_channel(adapter, service):
+    (message,) = adapter.parse(json.dumps(turn(channel={'channel': service, 'isDm': True})).encode())
+    assert (message.channel, message.external_chat_id) == ('imessage', '+15555550123')
+
+
 @pytest.mark.parametrize(
     'overrides',
     [
@@ -146,6 +152,7 @@ def test_link_code_and_commands(adapter):
         {'quietLoop': True},
         {'channel': {'channel': 'imessage', 'isGroup': True}},
         {'channel': {'channel': 'slack'}},
+        {'channel': {'channel': 'whatsapp'}},
         {'messages': [{'text': 'platform notice', 'silent': True}]},
     ],
 )
