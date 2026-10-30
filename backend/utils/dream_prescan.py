@@ -36,13 +36,14 @@ MAX_TEXT_COMPARISONS = 2000
 COMMON_WORDS = frozenset({'thanks', 'okay', 'yeah', 'hello', 'canadian', 'sorry', 'welcome'})
 SPEAKER_LABEL = re.compile(r'^(speaker|person)\s*\d+$')
 
-# Projection for require_unprotected_person: name signal plus every protected field.
+# Name signal plus the small protected fields. Voice data (speech_samples,
+# speaker_embedding) is deliberately not read: 500 embeddings per pass is the bulk
+# read the seed avoids. A voiced person can still become a candidate; staging's
+# require_unprotected_person rejects it, so the cost is one wasted target, not an edit.
 PEOPLE_FIELDS = (
     'name',
     'aliases',
     'is_dismissed',
-    'speech_samples',
-    'speaker_embedding',
     'user_confirmed',
     'is_user_created',
     'pinned',

@@ -132,8 +132,6 @@ def test_people_dupes_exclude_protected_and_dismissed_people():
         ('created', person('Dana Nguyen', is_user_created=True)),
         ('pinned', person('Dana Nguyen', pinned=True)),
         ('evidence', person('Dana Nguyen', label_evidence={'manual': 1})),
-        ('speech', person('Dana Nguyen', speech_samples=['users/x/people/s/blob'])),
-        ('embedding', person('Dana Nguyen', speaker_embedding=[0.1])),
         ('dismissed', person('Dana Nguyen', is_dismissed=True)),
     ]
     result = dream_prescan.scan(UID, firestore_client=FakeClient({'people': rows}))
@@ -419,3 +417,11 @@ def test_prescan_serve_prepends_targets_and_counts_hits(runtime, monkeypatch):
     assert targets[0] == 'people/prescan-a'
     assert targets.count('people/junk') == 1
     assert targets[-1] != 'people/prescan-a'
+
+
+def test_people_projection_never_reads_voice_data():
+    client = FakeClient({'people': [('p1', person('Dana Nguyen'))]})
+    dream_prescan.scan(UID, firestore_client=client)
+    people_projection = client.projections[0]
+    assert 'speaker_embedding' not in people_projection and 'speech_samples' not in people_projection
+    assert {'name', 'user_confirmed', 'is_user_created', 'pinned', 'label_evidence'} <= set(people_projection)
