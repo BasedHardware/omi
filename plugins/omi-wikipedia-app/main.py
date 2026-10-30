@@ -5,6 +5,7 @@ Provides chat tools for searching Wikipedia, reading concise article summaries,
 and finding a random article for exploration.
 """
 
+from contextlib import asynccontextmanager
 from html import unescape
 import re
 from typing import Any, Optional
@@ -22,10 +23,19 @@ DEFAULT_LANGUAGE = "en"
 USER_AGENT = "omi-wikipedia-app/1.0 (https://omi.me)"
 
 
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
+        app_instance.state.http_client = client
+        yield
+
+
 app = FastAPI(
     title="Omi Wikipedia Integration",
     description="Search and read Wikipedia from Omi chat tools",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -106,10 +116,17 @@ def _encode_title(title: str) -> str:
 
 async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
+    client = getattr(getattr(app, "state", None), "http_client", None)
+    if client is not None and not getattr(client, "is_closed", False):
         response = await client.get(url, params=params)
+    else:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as fallback_client:
+            response = await fallback_client.get(url, params=params)
     response.raise_for_status()
-    return response.json()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid JSON response from Wikipedia: expected object")
+    return payload
 
 
 def _article_url(language: str, title: str) -> str:
@@ -130,7 +147,11 @@ def _format_summary(data: dict[str, Any], language: str) -> str:
     title = data.get("title") or "Untitled"
     extract = data.get("extract") or "No summary was returned for this article."
     description = data.get("description")
-    page_url = data.get("content_urls", {}).get("desktop", {}).get("page") or _article_url(language, title)
+    content_urls = data.get("content_urls")
+    desktop = content_urls.get("desktop") if isinstance(content_urls, dict) else None
+    page_url = desktop.get("page") if isinstance(desktop, dict) else None
+    if not page_url:
+        page_url = _article_url(language, title)
 
     lines = [title]
     if description:
@@ -256,12 +277,16 @@ async def search_articles(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        results = data.get("query", {}).get("search", [])[:limit]
+        query_dict = data.get("query")
+        search_list = query_dict.get("search") if isinstance(query_dict, dict) else None
+        results = search_list[:limit] if isinstance(search_list, list) else []
         if not results:
             return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
 
         lines = [f"Wikipedia search results for '{query}':"]
         for index, item in enumerate(results, start=1):
+            if not isinstance(item, dict):
+                continue
             title = item.get("title") or "Untitled"
             snippet = _clean_snippet(item.get("snippet"))
             lines.append(f"\n{index}. {title}")
@@ -320,11 +345,13 @@ async def get_random_article(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        random_items = data.get("query", {}).get("random", [])
-        if not random_items:
+        query_dict = data.get("query")
+        random_items = query_dict.get("random") if isinstance(query_dict, dict) else None
+        if not isinstance(random_items, list) or not random_items:
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 
-        title = random_items[0].get("title")
+        first_item = random_items[0]
+        title = first_item.get("title") if isinstance(first_item, dict) else None
         if not title:
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 
