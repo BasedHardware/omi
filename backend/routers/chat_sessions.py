@@ -12,7 +12,7 @@ import logging
 from typing import Any, Callable, List, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 import database.chat as chat_db
 import database.llm_usage as llm_usage_db
@@ -54,10 +54,26 @@ class CreateChatSessionRequest(BaseModel):
     title: str | None = Field(None, max_length=500)
     app_id: str | None = Field(None, max_length=200)
 
+    @model_validator(mode='after')
+    def validate_title(self):
+        if self.title is not None:
+            stripped = self.title.strip()
+            self.title = stripped if stripped else None
+        return self
+
 
 class UpdateChatSessionRequest(BaseModel):
     title: str | None = Field(None, max_length=500)
     starred: bool | None = None
+
+    @model_validator(mode='after')
+    def validate_title(self):
+        if self.title is not None:
+            stripped = self.title.strip()
+            if not stripped:
+                raise ValueError('title cannot be blank')
+            self.title = stripped
+        return self
 
 
 class SaveMessageRequest(BaseModel):
@@ -143,7 +159,16 @@ def get_chat_sessions(
     starred: bool | None = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return chat_db.get_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
+    sessions = chat_db.get_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
+    return ChatSessionResponse.deserialize_many_safe(
+        sessions,
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed chat session %s for uid=%s: %s',
+            record.get('id') if isinstance(record, dict) else 'unknown',
+            uid,
+            type(exc).__name__,
+        ),
+    )
 
 
 @router.get('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=ChatSessionResponse)
@@ -154,7 +179,11 @@ def get_chat_session(
     result = chat_db.get_chat_session_by_id(uid, session_id)
     if result is None:
         raise HTTPException(status_code=404, detail='Chat session not found')
-    return result
+    try:
+        return ChatSessionResponse.model_validate(result)
+    except Exception as exc:
+        logger.warning('Malformed chat session %s for uid=%s: %s', session_id, uid, type(exc).__name__)
+        raise HTTPException(status_code=404, detail='Chat session not found') from exc
 
 
 @router.patch('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=ChatSessionResponse)
