@@ -4,3 +4,4 @@ python-dotenv==1.2.2
 requests==2.34.2
 pydantic==2.5.2
 redis==5.0.1
+httpx==0.28.1
