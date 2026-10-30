@@ -31,6 +31,7 @@ from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
 from config.episodes import MAX_EPISODE_SECONDS, episode_hard_cap_across_conversations_enabled
 from utils.conversations.recorded_time import conversation_span
+from utils.conversations.fragment_visibility import is_relevance_discarded
 
 from database import episode_receipts, episode_timeline
 from database._client import get_firestore_client, run_transactional
@@ -180,6 +181,58 @@ def _member_links(before, after, requested):
     return links
 
 
+def retained_bounds(transaction, client, uid, raw, merged):
+    """Re-read recorded evidence in the discard CAS, including legacy members.
+
+    The timeline fence serializes this shrink with live activity and attachment.
+    Missing live stubs retain their known clocks; missing data is not a discard.
+    """
+    hidden = set(merged.get('discarded_conversation_ids') or [])
+    duplicates = set(merged.get('duplicate_conversation_ids') or [])
+    starts, activity = {}, {}
+    for cid in merged.get('conversation_ids') or []:
+        if cid in hidden | duplicates:
+            continue
+        member = (
+            client.collection('users')
+            .document(uid)
+            .collection('conversations')
+            .document(cid)
+            .get(transaction=transaction)
+            .to_dict()
+        )
+        if member and (is_relevance_discarded(member) or member.get('deleted') or member.get('sync_merged_into')):
+            hidden.add(cid)
+            continue
+        span = conversation_span(member) if member else None
+        known = (merged.get('member_activity') or {}).get(cid)
+        fact = (raw.get('recorded_members') or {}).get(cid) or {}
+        fallback_start = raw['started_at'] if cid in (raw.get('conversation_ids') or []) else known
+        start = span.recorded_start if span else fact.get('start', fallback_start)
+        end = span.recorded_end if span else fact.get('end', known)
+        if isinstance(end, datetime):
+            starts[cid] = start
+            activity[cid] = _bounded_activity(raw, max(end, known) if isinstance(known, datetime) else end)
+    merged['discarded_conversation_ids'] = sorted(hidden)
+    merged['member_activity'] = activity
+    if starts:
+        merged['started_at'] = min(starts.values())
+        merged['last_activity_at'] = max(merged['started_at'], max(activity.values()))
+        if merged.get('status') == 'closed':
+            merged['recorded_end'] = merged['last_activity_at']
+    else:
+        merged['last_activity_at'] = merged['started_at']
+        if merged.get('status') == 'closed':
+            merged['recorded_end'] = merged['started_at']
+    for field in ('moments', 'provisional_items'):
+        merged[field] = [
+            item for item in merged.get(field) or [] if item.get('conversation_id') not in hidden | duplicates
+        ]
+    if hidden - set(raw.get('discarded_conversation_ids') or []):
+        merged.update(title='', bullets=[], people=[], open_questions=[], summary_needs_regeneration=True)
+    return merged
+
+
 def _check_membership(transaction, client, uid, episode_id, conversation_ids):
     """Check ownership in the same read phase as the link write, on every writer."""
     for cid in dict.fromkeys(conversation_ids):
@@ -227,7 +280,7 @@ def _record_activity(
         .to_dict()
         or {}
     )
-    if any(conversation.get(key) for key in ('discarded', 'deleted', 'sync_merged_into')):
+    if is_relevance_discarded(conversation) or any(conversation.get(key) for key in ('deleted', 'sync_merged_into')):
         return None
     last = raw.get('last_activity_at')
     member_at = _bounded_activity(raw, at)
@@ -299,18 +352,24 @@ def _drop_legacy_receipts(merged: dict[str, Any], segment_receipts: Optional[Map
         merged.pop('applied_segment_ids', None)
 
 
-def read_memberships(transaction, client, uid, conversation_ids):
+def read_memberships(transaction, client, uid, conversation_ids, *, admit_conversation_id=None):
     ids = [cid for cid in dict.fromkeys(conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}]
     if len(ids) > MEMBERSHIP_BATCH_LIMIT:
         raise EpisodeConflict('membership_batch_exhausted')
     root = client.collection('users').document(uid)
-    return {
-        cid: (
-            root.collection('conversations').document(cid).get(transaction=transaction).exists,
+    members = {}
+    for cid in ids:
+        snapshot = root.collection('conversations').document(cid).get(transaction=transaction)
+        row = snapshot.to_dict() or {}
+        if cid == admit_conversation_id and (
+            is_relevance_discarded(row) or row.get('deleted') or row.get('sync_merged_into')
+        ):
+            raise EpisodeConflict('conversation_hidden')
+        members[cid] = (
+            snapshot.exists,
             _links(client, uid).document(cid).get(transaction=transaction).to_dict() or {},
         )
-        for cid in ids
-    }
+    return members
 
 
 def write_memberships(transaction, client, uid, episode_id, members, arrival_at):
@@ -378,6 +437,8 @@ def _commit(
         if new_episode is not None
         else _merge_state(unseal(uid, current_raw) or {}, updates)
     )
+    if new_episode is None and target.get('discarded_conversation_ids'):
+        target = retained_bounds(transaction, client, uid, current_raw, target)
     links = _member_links(None if new_episode is not None else current_raw, target, link_conversation_ids)
     _check_membership(transaction, client, uid, target['id'], [*links, *(target.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
@@ -395,7 +456,7 @@ def _commit(
     else:
         if current_ref is None or current_raw is None:
             raise EpisodeConflict('no_open_episode')
-        merged = _merge_state(unseal(uid, current_raw) or {}, updates)
+        merged = target
         _drop_legacy_receipts(merged, segment_receipts)
         merged['state_version'] = int(current_raw.get('state_version') or 0) + 1
         transaction.set(current_ref, seal(uid, merged))
@@ -560,7 +621,11 @@ def _close(
             .to_dict()
             or {}
         )
-        if cid in hidden or any(member.get(k) for k in ('discarded', 'deleted', 'sync_merged_into')):
+        if (
+            cid in hidden
+            or is_relevance_discarded(member)
+            or any(member.get(k) for k in ('deleted', 'sync_merged_into'))
+        ):
             continue
         span = conversation_span(member)
         end = span.recorded_end if span else (raw.get('member_activity') or {}).get(cid)
@@ -635,6 +700,8 @@ def _update(
     if not raw or raw.get('state_version') != expected_version:
         raise EpisodeConflict('state_version_changed')
     merged = _merge_state(unseal(uid, raw) or {}, updates)
+    if merged.get('discarded_conversation_ids'):
+        merged = retained_bounds(transaction, client, uid, raw, merged)
     _drop_legacy_receipts(merged, segment_receipts)
     merged['state_version'] = expected_version + 1
     links = _member_links(raw, merged, link_conversation_ids)

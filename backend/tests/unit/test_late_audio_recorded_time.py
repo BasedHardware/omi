@@ -141,7 +141,9 @@ def timeline_store(monkeypatch):
         episode_timeline,
         'recorded_candidates',
         lambda uid, start, finish, **kw: [
-            dict(v, id=k[-1]) for k, v in store.rows.items() if len(k) == 4 and k[2] == 'episodes'
+            dict(v, id=k[-1])
+            for k, v in store.rows.items()
+            if len(k) == 4 and k[2] == 'episodes' and not v.get('recorded_merged_into')
         ],
     )
     return store
@@ -295,6 +297,7 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
     from utils.conversations.relevance_io import occasion_retention
 
     monkeypatch.setattr(episodes, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(episode_timeline, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(service.conversations_db, 'get_firestore_client', lambda: store)
     for row in kept:
         reason = occasion_retention('u', SimpleNamespace(**row))

@@ -20,6 +20,7 @@ from database import episodes
 def _automatic(row):
     return (
         row.get('recorded_members') is not None
+        and not row.get('discarded_conversation_ids')
         and row.get('status') == 'closed'
         and row.get('close_reason') in {'gap', 'idle', 'hard_cap'}
     )
@@ -195,7 +196,7 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
         # membership read bounded, with every chunk in the transaction's read phase.
         for index in range(0, len(member_ids), episodes.MEMBERSHIP_BATCH_LIMIT):
             chunk = member_ids[index : index + episodes.MEMBERSHIP_BATCH_LIMIT]
-            members.update(episodes.read_memberships(transaction, client, uid, chunk))
+            members.update(episodes.read_memberships(transaction, client, uid, chunk, admit_conversation_id=cid))
         result = [_state(template, window, list(previous.values()), facts) for window in windows]
         for row in result:
             row['state_version'] = max(row['state_version'], int(targets[row['id']].get('state_version') or 0) + 1)

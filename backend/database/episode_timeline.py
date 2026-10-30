@@ -22,6 +22,7 @@ FIELDS = (
     'state_version',
     'recorded_merged_into',
     'recorded_members',
+    'discarded_conversation_ids',
 )
 
 
@@ -82,6 +83,7 @@ def _attach_recorded_window(
     choose: Callable,
     new_episode: dict[str, Any],
     firestore_client: Any = None,
+    expected_episode_id: str | None = None,
 ) -> dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
 
@@ -93,7 +95,9 @@ def _attach_recorded_window(
         fence_row = fence.get(transaction=transaction).to_dict() or {}
         member = links.document(conversation_id)
         member_row = member.get(transaction=transaction).to_dict() or {}
-        members = episodes.read_memberships(transaction, client, uid, [conversation_id])
+        members = episodes.read_memberships(
+            transaction, client, uid, [conversation_id], admit_conversation_id=conversation_id
+        )
         rows = recorded_candidates(uid, started, finished, firestore_client=client, transaction=transaction)
         selected = choose(rows, started, started)
         # A conversation belongs to the episode it started in, even past a cap.
@@ -109,6 +113,8 @@ def _attach_recorded_window(
         if existing is None and selected:
             snapshot = root.collection('episodes').document(selected['id']).get(transaction=transaction)
             existing = episodes.unseal(uid, snapshot.to_dict())
+        if expected_episode_id is not None and (existing or {}).get('id') != expected_episode_id:
+            raise episodes.EpisodeConflict('recorded_owner_changed')
         lo = min(existing['started_at'], started) if existing else started
         window_end = min(finished, lo + timedelta(seconds=MAX_EPISODE_SECONDS))
         if existing and existing.get('status') != 'live' and existing.get('close_reason') not in {'gap', 'idle'}:
@@ -164,6 +170,8 @@ def _attach_recorded_window(
                 member_activity={conversation_id: window_end},
                 recovered_conversation_ids=[conversation_id],
             )
+        if existing and result.get('discarded_conversation_ids'):
+            result = episodes.retained_bounds(transaction, client, uid, existing, result)
         check_window(transaction, client, uid, result, rows=rows)
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))
         episodes.write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
@@ -172,6 +180,27 @@ def _attach_recorded_window(
         return {**result, '_window_end': window_end}
 
     return run_transactional(client, attach, transient=True)
+
+
+def attach_existing_recorded(
+    uid, conversation_id, source, started, finished, *, episode_id, choose, firestore_client=None
+):
+    """Claim the occasion proved by relevance, or fail before any write.
+
+    No new episode, repartition, notes generation or live navigation change.
+    Membership and the conversation's reverse field share the timeline CAS.
+    """
+    return _attach_recorded_window(
+        uid,
+        conversation_id,
+        source,
+        started,
+        finished,
+        choose=choose,
+        new_episode={},
+        expected_episode_id=episode_id,
+        firestore_client=firestore_client,
+    )
 
 
 def attach_recorded(

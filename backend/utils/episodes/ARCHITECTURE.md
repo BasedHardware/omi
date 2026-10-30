@@ -376,3 +376,22 @@ all overlap guards use `recorded_end` for explicit closes. The existing hard-cap
 kill switch also disables the live activity clamp and automatic cap close.
 A late discard removes that member's moments and items, clears the mixed summary,
 and marks it for regeneration before later valid speech can reuse it.
+
+### Occasion membership and late discard repair
+
+`occasion_retention` returns `occasion_member` only after a metadata-only,
+recorded-timeline transaction claims that exact episode and writes both
+`episode_links/{conversation_id}` and the conversation's `episode_id`. This
+runs inside relevance, before desktop `client_finalize` fanout can delay or
+skip its post-finalization hook. A changed owner or failed claim retains the
+clip as `occasion_lookup_unavailable`; it never reports uncommitted membership.
+The normal desktop and pendant finalize hooks remain idempotent safety nets.
+
+`sync_relevance` is intake's `keep`/`review` hint, not the final keep/discard
+verdict. It can remain `keep` when a later model assessment discards content.
+Episode attachment, recorded activity, finalization and API visibility use the
+shared final-discard predicate (`fragment_visibility.is_relevance_discarded`),
+including restore authority, instead of interpreting that hint as visibility.
+A discard CAS re-reads retained members' recorded spans and recomputes the
+start and end for live and closed episodes. Hidden memberships remain for
+recovery and single ownership; they contribute no clocks or visible row.

@@ -38,6 +38,19 @@ def is_user_curated(data: Mapping[str, Any]) -> bool:
     )
 
 
+def is_relevance_discarded(data: Mapping[str, Any]) -> bool:
+    """Final visibility verdict; sync_relevance is only intake's keep/review hint.
+
+    A restore outranks an older assessment. The stored discarded flag also
+    covers explicit discards without a relevance receipt.
+    """
+    decision = data.get('relevance_decision')
+    return bool(
+        data.get('discarded')
+        or (isinstance(decision, Mapping) and decision.get('verdict') == 'discard' and not is_user_curated(data))
+    )
+
+
 _RULE_DISCARD_REASONS = frozenset({'no_content_words', 'filler_only', 'mic_check', 'empty_transcript'})
 
 

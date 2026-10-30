@@ -343,3 +343,102 @@ def test_more_than_fifty_captures_repartition_with_atomic_reverse_membership(sto
     assert len(snapshots) == 2 * len(result['conversation_ids'])
     for snapshot in snapshots:
         assert snapshot.to_dict()['episode_id'] == result['id']
+
+
+@pytest.mark.parametrize('status', ['live', 'closed'])
+def test_occasion_claim_and_late_discard_recompute_retained_recorded_window(store, status):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    for cid, start, end in [
+        ('noise', T0, T0 + timedelta(minutes=2)),
+        ('speech', T0 + timedelta(minutes=21), T0 + timedelta(minutes=27)),
+    ]:
+        root.collection('conversations').document(cid).set(
+            {
+                'id': cid,
+                'started_at': start,
+                'recorded_start': start,
+                'recorded_end': end,
+                'clock': 'live_capture',
+                'discarded': False,
+                'sync_relevance': 'keep',
+            }
+        )
+    owner = {
+        'id': 'occasion',
+        'status': status,
+        'close_reason': 'gap' if status == 'closed' else None,
+        'started_at': T0,
+        'last_activity_at': T0 + timedelta(minutes=27),
+        'recorded_end': T0 + timedelta(minutes=27),
+        'state_version': 1,
+        'conversation_ids': ['noise', 'speech'],
+        'member_activity': {'noise': T0 + timedelta(minutes=2), 'speech': T0 + timedelta(minutes=27)},
+    }
+    if status == 'closed':
+        owner['recorded_members'] = {
+            'noise': {'start': T0, 'end': T0 + timedelta(minutes=2), 'source': 'omi'},
+            'speech': {'start': T0 + timedelta(minutes=21), 'end': T0 + timedelta(minutes=27), 'source': 'omi'},
+        }
+    root.collection('episodes').document('occasion').set(episodes.seal(uid, owner))
+    for cid in owner['conversation_ids']:
+        root.collection('episode_links').document(cid).set({'episode_id': 'occasion'})
+    at = T0 + timedelta(minutes=25)
+    desktop = root.collection('conversations').document('desktop')
+    desktop.set({'id': 'desktop', 'source': 'desktop', 'recorded_start': at, 'recorded_end': at, 'clock': 'imported'})
+    for _ in range(2):
+        episode_timeline.attach_existing_recorded(
+            uid,
+            'desktop',
+            'desktop',
+            at,
+            at,
+            episode_id='occasion',
+            choose=choose_recorded_episode,
+            firestore_client=client,
+        )
+    assert desktop.get().to_dict()['episode_id'] == 'occasion'
+    assert root.collection('episode_links').document('desktop').get().to_dict()['episode_ids'] == ['occasion']
+    assert episodes.get_episode(uid, 'occasion', firestore_client=client)['conversation_ids'].count('desktop') == 1
+    root.collection('conversations').document('noise').update(
+        {'relevance_decision': {'verdict': 'discard', 'decided_by': 'model'}}
+    )
+    before = episodes.get_episode(uid, 'occasion', firestore_client=client)
+    after = episodes.update_episode(
+        uid,
+        'occasion',
+        expected_version=before['state_version'],
+        updates={'discarded_conversation_ids': ['noise']},
+        firestore_client=client,
+    )
+    assert after['started_at'] == T0 + timedelta(minutes=21)
+    assert after['last_activity_at'] == T0 + timedelta(minutes=27)
+    assert set(after['member_activity']) == {'speech', 'desktop'}
+    if status == 'closed':
+        assert after['recorded_end'] == T0 + timedelta(minutes=27)
+    later = T0 + timedelta(minutes=28)
+    root.collection('conversations').document('later').set(
+        {'id': 'later', 'started_at': later, 'recorded_start': later, 'recorded_end': later, 'clock': 'imported'}
+    )
+    joined = episode_timeline.attach_recorded(
+        uid, 'later', 'desktop', later, later, choose=choose_recorded_episode, new_episode={}, firestore_client=client
+    )
+    assert joined['id'] == 'occasion' and joined['started_at'] == T0 + timedelta(minutes=21)
+
+
+def test_occasion_claim_refuses_changed_owner_before_writing_any_membership(store):
+    client, uid = store
+    with pytest.raises(episodes.EpisodeConflict, match='recorded_owner_changed'):
+        episode_timeline.attach_existing_recorded(
+            uid,
+            'desktop',
+            'desktop',
+            T0,
+            T0,
+            episode_id='missing',
+            choose=choose_recorded_episode,
+            firestore_client=client,
+        )
+    root = client.collection('users').document(uid)
+    assert not root.collection('episode_links').document('desktop').get().exists
+    assert list(root.collection('episodes').stream()) == []

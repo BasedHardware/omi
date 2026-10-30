@@ -71,11 +71,13 @@ def test_kill_switch_restores_independent_rules_and_intake(monkeypatch):
     ],
 )
 def test_production_context_reads_recorded_ownership_and_neighbors(monkeypatch, membership, covering, neighbor, reason):
-    from database import episodes
+    from database import episodes, episode_timeline
     from utils.episodes import timeline
 
     monkeypatch.setattr(episodes, 'get_episode_for_conversation', lambda *a: membership)
     monkeypatch.setattr(timeline, 'episode_owning_recorded_time', lambda *a, **kw: covering)
+    attach = Mock()
+    monkeypatch.setattr(episode_timeline, 'attach_existing_recorded', attach)
     monkeypatch.setattr(
         relevance_io.conversations_db,
         'get_conversation_raw_snapshot',
@@ -84,16 +86,18 @@ def test_production_context_reads_recorded_ownership_and_neighbors(monkeypatch, 
     monkeypatch.setattr(relevance_io, 'adjacent_conversation', lambda *a, **kw: neighbor)
     conversation = SimpleNamespace(id='c', started_at=T0, finished_at=T0 + timedelta(seconds=18))
     assert relevance_io.occasion_retention('u', conversation) == reason
+    assert attach.call_count == (1 if reason == 'occasion_member' else 0)
 
 
 @pytest.mark.parametrize('order', ['attach_first', 'relevance_first'])
 @pytest.mark.parametrize('context', ['isolated', 'adjacent', 'discarded_neighbor', 'outside_gap'])
 def test_attachment_order_cannot_supply_its_own_retention(monkeypatch, timeline_store, order, context):
-    from database import episodes
+    from database import episodes, episode_timeline
     from utils.episodes import service
 
     store = timeline_store
     monkeypatch.setattr(episodes, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(episode_timeline, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(relevance_io.conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(relevance_io.conversations_db, 'get_conversations_finished_after', lambda *a, **kw: [])
     start, end = T0, T0 + timedelta(seconds=5)
@@ -107,7 +111,8 @@ def test_attachment_order_cannot_supply_its_own_retention(monkeypatch, timeline_
             status='completed',
         )
         store.rows[('users', 'u', 'conversations', 'real')] = other
-        _attach(store, 'real', other['started_at'], other['finished_at'])
+        if context != 'discarded_neighbor':
+            _attach(store, 'real', other['started_at'], other['finished_at'])
     clip = dict(id='clip', started_at=start, finished_at=end, discarded=False, status='completed')
     store.rows[('users', 'u', 'conversations', 'clip')] = clip
     if order == 'attach_first':
@@ -121,12 +126,15 @@ def test_attachment_order_cannot_supply_its_own_retention(monkeypatch, timeline_
     )
     assert result.discard == (context != 'adjacent')
     clip['discarded'] = result.discard
-    if order == 'relevance_first':
+    if order == 'relevance_first' and not result.discard:
         _attach(store, 'clip', start, end)
     c = service.Collaborators(firestore_client=store, now=lambda: NOW)
     episode = service.episode_for_conversation('u', 'clip', collaborators=c)
     assert (episode is not None) == (context == 'adjacent')
     stored = episodes.get_episode_for_conversation('u', 'clip', firestore_client=store)
+    if stored is None:
+        assert result.discard
+        return
     assert (service.episode_by_id('u', stored['id'], collaborators=c) is not None) == (context == 'adjacent')
     # The poll cache must re-check member visibility after relevance commits.
     store.rows[('users', 'u', 'episode_links', 'last_closed')] = {'episode_id': stored['id']}
@@ -146,6 +154,30 @@ def test_missing_ownership_read_is_not_proof_of_isolation(monkeypatch):
     monkeypatch.setattr(episodes, 'get_episode_for_conversation', Mock(side_effect=RuntimeError('offline')))
     assert (
         relevance_io.occasion_retention('u', SimpleNamespace(id='c', started_at=T0, finished_at=T0))
+        == 'occasion_lookup_unavailable'
+    )
+
+
+def test_failed_membership_claim_cannot_report_occasion_member(monkeypatch):
+    from database import episode_timeline, episodes
+    from utils.episodes import timeline
+
+    monkeypatch.setattr(episodes, 'get_episode_for_conversation', lambda *a: None)
+    monkeypatch.setattr(
+        timeline, 'episode_owning_recorded_time', lambda *a, **kw: {'id': 'owner', 'conversation_ids': ['other']}
+    )
+    monkeypatch.setattr(
+        relevance_io.conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda *a, **kw: {'started_at': T0, 'finished_at': T0 + timedelta(seconds=20)},
+    )
+    monkeypatch.setattr(
+        episode_timeline,
+        'attach_existing_recorded',
+        Mock(side_effect=episodes.EpisodeConflict('recorded_owner_changed')),
+    )
+    assert (
+        relevance_io.occasion_retention('u', SimpleNamespace(id='clip', started_at=T0, finished_at=T0))
         == 'occasion_lookup_unavailable'
     )
 
