@@ -253,8 +253,14 @@ def test_merge_rule_validates_and_copies_registry_surfaces():
         cli.merge_rule(None, ENTRY, {'payload': 'not json'})
 
 
-def test_registry_refuses_unknown_keys_and_experiments():
-    registry = cli.load_registry()
+@pytest.fixture(scope='module')
+def registry_rows():
+    # Real manifest loading is setup; the call-phase guard measures refusal logic.
+    return cli.load_registry()
+
+
+def test_registry_refuses_unknown_keys_and_experiments(registry_rows):
+    registry = registry_rows
     assert registry['proactivity_v2']['surfaces'] == ['backend', 'llm-gateway']
     with pytest.raises(cli.FlagCliError):
         cli.registry_entry(registry, 'paywall-variant')
