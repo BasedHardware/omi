@@ -16,6 +16,14 @@ from models.product_memory import (
 logger = logging.getLogger(__name__)
 
 
+def _is_destructive_operation_fence(exc: BaseException) -> bool:
+    """The account gate refused this provider write on purpose."""
+
+    # Match by type name: route tests stub database.legal_holds without the
+    # exception types (see the import guard in database/vector_db.py).
+    return type(exc).__name__ == "DestructiveOperationInProgress"
+
+
 def delete_canonical_memory_vector(uid: str, memory_id: str) -> bool:
     """Delete all provider identities for one user's canonical memory."""
     try:
@@ -60,7 +68,19 @@ def sync_canonical_memory_vector(
 
         # upsert_canonical_memory_vector carries its own external-write fence.
         result = upsert_canonical_memory_vector(item, projection_commit_id=projection_commit_id)
-    except Exception:
+    except Exception as exc:
+        if _is_destructive_operation_fence(exc):
+            # A running destructive operation owns the account gate and the
+            # fence refuses this provider write until it lifts. The durable
+            # outbox retries the projection later, so report the deferral
+            # without a traceback — exc_info here is what Error Reporting
+            # groups as a crash at legal_holds.py.
+            logger.info(
+                "canonical vector sync deferred by destructive operation memory_id=%s uid=%s",
+                item.memory_id,
+                item.uid,
+            )
+            return False
         logger.exception(
             "canonical vector sync failed memory_id=%s uid=%s",
             item.memory_id,
