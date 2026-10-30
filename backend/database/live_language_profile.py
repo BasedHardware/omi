@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -9,6 +10,8 @@ from google.cloud.firestore_v1 import transactional
 
 from database._client import get_data_plane_firestore_client
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+
+logger = logging.getLogger(__name__)
 
 FIELD = 'live_stt_language_sessions'
 MAX_SESSIONS = 20
@@ -48,8 +51,9 @@ def get_live_language_sessions(uid: str, *, firestore_client: Any = None) -> lis
                 return []
             data = snapshot.to_dict() if callable(getattr(snapshot, 'to_dict', None)) else None
             return _clean_sessions((data or {}).get(FIELD))
-        except Exception:
-            return []
+        except Exception as exc:
+            logger.warning("Failed to fetch live language sessions for user %s: %s", clean_uid, exc)
+            raise
 
     if firestore_client is not None:
         return fetch()
@@ -79,5 +83,6 @@ def append_live_language_session(uid: str, counts: dict[str, int], *, firestore_
         if updated and firestore_client is None:
             invalidate(_CACHE, clean_uid)
         return bool(updated)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to append live language session for user %s: %s", clean_uid, exc)
         return False
