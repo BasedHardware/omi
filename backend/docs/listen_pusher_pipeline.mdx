@@ -6426,6 +6426,13 @@ It never clears upload failures or admits privacy-excluded rows. The normal
 drainer independently proves the tail again before admission. No production run
 is implied by merging this tool; the rollout lead owns dry-run and apply.
 
+Finalization retains native audio obligations before terminal fanout. A server
+capture with an explicitly closed archive and an explicitly false audio-received
+marker has no audio registration obligation only when it also has no upload
+failure, pending producer or durable audio bounds. Such photo-only captures keep
+ordinary photo finalization; silent backfill keeps its existing processing fence.
+Unknown or unclosed audio remains retryable rather than being silently dropped.
+
 One-time stuck-job repair: `backend/scripts/repair_record_audio_seals.py
 --ids-file PRIVATE_JSON` takes 1..128 exact pending job IDs, with no discovery scan.
 Default dry-run requires `ro-prod`; output is only counts, closed dispositions and

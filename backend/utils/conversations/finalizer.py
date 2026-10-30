@@ -201,6 +201,18 @@ class ConversationFinalizationDisposition(str, Enum):
     deferred = 'deferred'
 
 
+def _record_registration_required(row: dict[str, Any]) -> bool:
+    """Retain native audio obligations unless a closed archive proves no input."""
+    return row.get('record_lane_owner') == 'batch_live_v1' and not (
+        server_batch_owned(row)
+        and row.get('server_batch_audio_closed') is True
+        and row.get('server_batch_audio_received') is False
+        and not row.get('record_upload_failed')
+        and not row.get('record_upload_sessions')
+        and not server_batch_has_audio(row)
+    )
+
+
 async def finalize_persisted_conversation(
     uid: str,
     conversation_id: str,
@@ -417,7 +429,7 @@ async def finalize_persisted_conversation(
 
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
-        if conversation_data.get('record_lane_owner') == 'batch_live_v1':
+        if _record_registration_required(conversation_data):
             stage = 'record_registration'
             if not await run_blocking(
                 db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
@@ -746,7 +758,7 @@ async def _load_admitted_conversation(
     if trigger is ProcessingTrigger.SILENT_BACKFILL and conversation_data.get('record_lane_owner'):
         # Historical enrichment must not process a batch-owned row. Preserve
         # that fence, but first retain its deterministic batch obligation.
-        if conversation_data.get('record_lane_owner') == 'batch_live_v1' and not await run_blocking(
+        if _record_registration_required(conversation_data) and not await run_blocking(
             db_executor, register_recording, uid, conversation_data
         ):
             raise ConversationFinalizationError('record_registration_refused')
