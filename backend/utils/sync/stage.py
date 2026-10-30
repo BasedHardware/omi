@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import HTTPException
-
 from utils.env_loader import VALID_STAGES
 
 logger = logging.getLogger(__name__)
@@ -46,4 +44,5 @@ def require_http_stage() -> None:
     try:
         current_stage()
     except InvalidSyncStage as error:
+        from fastapi import HTTPException
         raise HTTPException(status_code=503, detail='Sync runtime stage is unavailable') from error
