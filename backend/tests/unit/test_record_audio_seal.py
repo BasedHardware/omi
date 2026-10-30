@@ -338,7 +338,7 @@ async def test_cancelled_finish_retains_token_for_background_retry(records, monk
 async def test_held_token_then_later_successful_socket_seals(records, caplog):
     earlier = PusherRecordBarrier('uid-at')
     await earlier.begin_recording('record')
-    earlier.hold_recording('record')
+    earlier.hold_recording('record', tail_committed=True)
     held_token = earlier.upload_sessions['record']
     assert await earlier.finish_recording('record')
     assert held_token in records.rows[PATH]['record_upload_sessions']
@@ -360,13 +360,56 @@ async def test_empty_reconnect_cannot_certify_held_tail(records):
     assert not records.rows[PATH]['record_audio_closed']
 
 
+async def test_later_new_audio_never_certifies_an_uncommitted_held_tail(records):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    earlier.hold_recording('record')
+    held = dict(records.rows[PATH]['record_upload_sessions'])
+    await _run(FakeWebSocket([_conversation('record'), _audio(200, b'\x01\x00' * RATE), _finalize()]))
+    assert records.rows[PATH]['record_upload_sessions'] == held
+    assert not records.rows[PATH]['record_audio_closed']
+
+
+async def test_recovery_uses_mint_order_when_registration_returns_out_of_order(records, monkeypatch):
+    earlier, later = PusherRecordBarrier('uid-at'), PusherRecordBarrier('uid-at')
+    registered = asyncio.Event()
+    release = asyncio.Event()
+    original = barrier_module.run_blocking
+    pending_calls = 0
+
+    async def delayed(executor, function, *args, **kwargs):
+        nonlocal pending_calls
+        first = False
+        if function is record_audio_db.set_record_upload_pending and args[3] is True:
+            pending_calls += 1
+            first = pending_calls == 1
+        result = await original(executor, function, *args, **kwargs)
+        if first:
+            registered.set()
+            await release.wait()
+        return result
+
+    monkeypatch.setattr(barrier_module, 'run_blocking', delayed)
+    first = asyncio.create_task(earlier.begin_recording('record'))
+    try:
+        await asyncio.wait_for(registered.wait(), 5)
+        await later.begin_recording('record')
+    finally:
+        release.set()
+        await asyncio.wait_for(first, 5)
+    earlier.hold_recording('record', tail_committed=True)
+    assert await later.finish_recording('record')
+    assert records.rows[PATH]['record_upload_sessions'] == {}
+    assert records.rows[PATH]['record_audio_closed']
+
+
 @pytest.mark.parametrize('other_process', [False, True])
 async def test_later_success_preserves_active_and_foreign_producers(records, other_process):
     earlier = PusherRecordBarrier('uid-at')
     await earlier.begin_recording('record')
     token = earlier.upload_sessions['record']
     if other_process:
-        earlier.hold_recording('record')
+        earlier.hold_recording('record', tail_committed=True)
         # Same hostname/start metadata alone is not ownership; an independent
         # process has no minting receipt in this process-local registry.
         barrier_module._process_record_tokens().forget('uid-at', 'record', token)
@@ -404,7 +447,7 @@ async def test_failure_marker_outage_preserves_terminal_token_across_later_succe
 async def test_reclear_failure_keeps_retry_state_after_own_token_clears(records, monkeypatch):
     earlier = PusherRecordBarrier('uid-at')
     await earlier.begin_recording('record')
-    earlier.hold_recording('record')
+    earlier.hold_recording('record', tail_committed=True)
     held = earlier.upload_sessions['record']
     later = PusherRecordBarrier('uid-at')
     await later.begin_recording('record')
@@ -430,7 +473,7 @@ async def test_registry_eviction_only_forgets_hint_and_never_clears_durable_toke
     registry = barrier_module._process_record_tokens()
     earlier = PusherRecordBarrier('uid-at')
     await earlier.begin_recording('record')
-    earlier.hold_recording('record')
+    earlier.hold_recording('record', tail_committed=True)
     held = earlier.upload_sessions['record']
     if eviction == 'capacity':
         registry.max_tokens = 1

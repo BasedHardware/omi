@@ -6387,11 +6387,17 @@ measure both Firestore write rate and Typesense extension invocation rate after
 deployment (ruling 9bc674).
 The successful drain removes that token before attempting closure. A bounded
 process-local registry (4096 token hints, one-hour idle TTL) also remembers
-held tails and successful drains whose metadata clear failed. A later socket
+receipt-proven held tails and successful drains whose metadata clear failed. A later socket
 that registered its own token and successfully drained the same user's same
 conversation re-clears those earlier tokens before sealing. Empty reconnects,
 still-active producers, newer tokens and tokens minted by other processes are
-never certified by this recovery. Registry eviction only forgets hints; durable
+never certified by this recovery. A held tail is recoverable only when its
+immutable media and manifest returned a commit receipt before ACK/queue delivery
+failed. A storage commit failure without a receipt remains held even after a
+later socket finishes; pod-recycle proof and operator repair remain its exit.
+Token order is allocated before dispatching registration, so out-of-order
+metadata responses cannot hide an earlier held producer.
+Registry eviction only forgets hints; durable
 tokens never expire. The registry holds no socket references and removes hints
 after successful clears. Re-clears emit `event=record_tokens_recleared count=1`
 without identifiers. Sticky upload-failure markers still refuse closure.

@@ -73,8 +73,9 @@ class _ProcessRecordTokens:
         self.max_tokens = max_tokens
         self.ttl_seconds = ttl_seconds
         self.pid = os.getpid()
-        self.tokens: OrderedDict[tuple[str, str], tuple[float, dict[str, bool]]] = OrderedDict()
+        self.tokens: OrderedDict[tuple[str, str], tuple[float, dict[str, tuple[int, bool]]]] = OrderedDict()
         self.size = 0
+        self.order = 0
 
     def _prune(self):
         if self.pid != os.getpid():
@@ -87,36 +88,36 @@ class _ProcessRecordTokens:
             _, (_, tokens) = self.tokens.popitem(last=False)
             self.size -= len(tokens)
 
-    def remember(self, uid, cid, token):
+    def mint_order(self):
+        self._prune()
+        self.order += 1
+        return self.order
+
+    def remember(self, uid, cid, token, *, mint_order=None):
         self._prune()
         key = (uid, cid)
         _, tokens = self.tokens.pop(key, (0, {}))
         if token not in tokens:
-            tokens[token] = False
+            tokens[token] = (self.mint_order() if mint_order is None else mint_order, False)
             self.size += 1
         self.tokens[key] = (time.monotonic(), tokens)
         while self.size > self.max_tokens:
             _, (_, evicted) = self.tokens.popitem(last=False)
             self.size -= len(evicted)
 
-    def ready(self, uid, cid, token):
+    def ready(self, uid, cid, token, *, committed=True):
         self._prune()
         entry = self.tokens.get((uid, cid))
         if entry is not None and token in entry[1]:
-            entry[1][token] = True
+            entry[1][token] = (entry[1][token][0], committed)
 
     def recoverable_before(self, uid, cid, successful_token):
         self._prune()
         entry = self.tokens.get((uid, cid))
         if entry is None or successful_token not in entry[1]:
             return []
-        result = []
-        for token, ready in entry[1].items():
-            if token == successful_token:
-                break
-            if ready:
-                result.append(token)
-        return result
+        successful_order = entry[1][successful_token][0]
+        return [token for token, (order, ready) in entry[1].items() if ready and order < successful_order]
 
     def forget(self, uid, cid, token):
         self._prune()
@@ -167,6 +168,10 @@ class PusherRecordBarrier:
         # reconnect may not certify this session's uncommitted tail.
         try:
             token = uuid.uuid4().hex
+            registry = _process_record_tokens()
+            # Allocate before dispatch: registration responses can return in
+            # the reverse order of producer minting.
+            mint_order = registry.mint_order()
             if await run_blocking(
                 record_barrier_executor,
                 record_audio_db.set_record_upload_pending,
@@ -177,7 +182,7 @@ class PusherRecordBarrier:
                 producer=producer_identity(),
             ):
                 self.upload_sessions[conversation_id] = token
-                _process_record_tokens().remember(self.uid, conversation_id, token)
+                registry.remember(self.uid, conversation_id, token, mint_order=mint_order)
         except record_audio_db.RecordUploadCapacityExceeded:
             _record_failure('capacity')
             await self.fail_recording(conversation_id)
@@ -232,11 +237,11 @@ class PusherRecordBarrier:
         self.close_failures.pop(conversation_id, None)
         return True
 
-    def hold_recording(self, conversation_id: str) -> None:
-        """Keep this socket's token without asserting permanent custody loss."""
+    def hold_recording(self, conversation_id: str, *, tail_committed: bool = False) -> None:
+        """Keep the token; only a proven durable tail may later be re-cleared."""
         token = self.upload_sessions.get(conversation_id)
         if token is not None:
-            _process_record_tokens().ready(self.uid, conversation_id, token)
+            _process_record_tokens().ready(self.uid, conversation_id, token, committed=tail_committed)
         if len(self.failed_recordings) < 128:
             self.failed_recordings.add(conversation_id)
         else:
