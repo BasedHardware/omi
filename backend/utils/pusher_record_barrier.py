@@ -9,7 +9,7 @@ from pathlib import Path
 from prometheus_client import Counter
 
 from database import record_audio as record_audio_db
-from utils.executors import db_executor, run_blocking
+from utils.executors import record_barrier_executor, run_blocking
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ class PusherRecordBarrier:
         try:
             token = uuid.uuid4().hex
             if await run_blocking(
-                db_executor,
+                record_barrier_executor,
                 record_audio_db.set_record_upload_pending,
                 self.uid,
                 conversation_id,
@@ -111,7 +111,12 @@ class PusherRecordBarrier:
                 if cid != conversation_id:
                     continue
                 await run_blocking(
-                    db_executor, record_audio_db.set_record_upload_pending, self.uid, conversation_id, token, False
+                    record_barrier_executor,
+                    record_audio_db.set_record_upload_pending,
+                    self.uid,
+                    conversation_id,
+                    token,
+                    False,
                 )
                 self.pending_clears.discard((conversation_id, token))
                 if self.upload_sessions.get(conversation_id) == token:
@@ -119,7 +124,7 @@ class PusherRecordBarrier:
         except Exception:
             return self._close_failed(conversation_id, 'finish')
         try:
-            await run_blocking(db_executor, record_audio_db.seal_record_audio, self.uid, conversation_id)
+            await run_blocking(record_barrier_executor, record_audio_db.seal_record_audio, self.uid, conversation_id)
         except Exception:
             return self._close_failed(conversation_id, 'seal')
         self.close_failures.pop(conversation_id, None)
@@ -133,6 +138,8 @@ class PusherRecordBarrier:
         # Await the durable refusal when available, but never let its failure
         # terminate the audio uploader or discard its remaining ready lane.
         try:
-            await run_blocking(db_executor, record_audio_db.mark_record_upload_failed, self.uid, conversation_id)
+            await run_blocking(
+                record_barrier_executor, record_audio_db.mark_record_upload_failed, self.uid, conversation_id
+            )
         except Exception:
             _record_failure('failure_marker')
