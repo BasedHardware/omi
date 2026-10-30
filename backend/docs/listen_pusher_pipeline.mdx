@@ -6461,6 +6461,18 @@ failure, pending producer or durable audio bounds. Such photo-only captures keep
 ordinary photo finalization; silent backfill keeps its existing processing fence.
 Unknown or unclosed audio remains retryable rather than being silently dropped.
 
+Pusher dispatches begin, clear, seal and failure-marker transactions through
+`record_barrier_executor`, separate from the shared DB pool used by integrations
+and webhook consumers. It defaults to 16 workers
+(`PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS`) and 64 queued calls; saturated callers
+wait asynchronously for capacity. Shared DB capacity defaults to 32 workers
+(`PUSHER_DB_EXECUTOR_WORKERS`). Both pools publish the existing
+`omi_executor_task_active{executor,task}` and queued gauges, plus
+`omi_executor_max_workers{executor}`. The pusher DB saturation alert sums task
+kinds per scrape target and fires at configured capacity for 10 minutes.
+Transaction arguments, await ordering, close retries and durable custody fences
+are unchanged. Tuning details: [pusher runbook](runbooks/pusher-degraded.md).
+
 The ship-on `record-seal-sweeper` CronJob in the batch worker chart reuses the
 existing worker image and identity, with only namespaced `pods: list` RBAC.
 Every five minutes it discovers at most 128 existing pending jobs and reuses the

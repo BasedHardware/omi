@@ -274,7 +274,8 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
   - **Long-running pipelines must be async coordinators.** Each blocking step uses `await run_blocking(pool, fn)`, borrowing a thread only for that step. Never hold a thread pool slot across await points or for >60s.
   - **Pool assignment** (match work type to pool):
     - `critical_executor` (8w) — auth gates only: `_verify_ws_auth`, `validate_byok_websocket`, `check_rate_limit`, `is_hard_restricted`, session/code Redis ops in `auth.py`
-    - `db_executor` (24w) — Firestore/Redis CRUD, vector DB queries
+    - `db_executor` (32w; `PUSHER_DB_EXECUTOR_WORKERS`) — Firestore/Redis CRUD, vector DB queries
+    - `record_barrier_executor` (16w; `PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS`) — pusher custody transactions; 64 queued, async capacity wait
     - `llm_executor` (6w) — LLM API calls (`get_llm().invoke()`, `get_app_result()`, persona generation, KG rebuild with cap 4)
     - `stripe_executor` (4w) — Stripe API calls
     - `sync_executor` (16w) — sync endpoint pipeline work, parent calls that fan out to storage_executor

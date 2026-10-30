@@ -1061,6 +1061,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum without (task) (omi_executor_task_active{job=\"pusher-metrics\",executor=\"db\"}) / omi_executor_max_workers{job=\"pusher-metrics\",executor=\"db\"}",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_executor_max_workers",
+        "omi_executor_task_active"
+      ],
+      "owner_title": "Pusher - DB executor saturated",
+      "owner_uid": "omi-pusher-db-executor-saturated",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
       "file": "alerts/resilience.json",
       "issues": [],
@@ -3161,7 +3175,7 @@
   ],
   "counts": {
     "explicit_bridge": 24,
-    "query_consumers": 208
+    "query_consumers": 209
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
