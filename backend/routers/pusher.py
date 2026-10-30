@@ -11,9 +11,12 @@ from utils.pusher_record_barrier import PusherRecordBarrier
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
+from google.cloud.exceptions import NotFound
 
 import database.conversations as conversations_db
+from database import conversation_tombstones
 from database import users as users_db
+from database._client import get_firestore_client
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
@@ -108,6 +111,41 @@ PROJECTION_RETRY_BUDGET = 2
 # overlap is trimmed (or an exact replay ignored); conflicting bytes for the
 # same range fail closed and are never overwritten.
 AUDIO_TIMELINE_CONTINUITY_TOLERANCE = 0.001
+
+
+def _projection_raising_frame(exc: BaseException) -> str:
+    """Innermost raising frame name, for RCA attribution of projection failures.
+
+    Only the code object's name is ever returned — the exception message and
+    args can carry user-identifying object paths and must not reach logs.
+    """
+    frame_name = 'unknown'
+    tb = exc.__traceback__
+    while tb is not None:
+        frame_name = tb.tb_frame.f_code.co_name
+        tb = tb.tb_next
+    return frame_name
+
+
+def _projection_owner_gone(uid: str, conversation_id: str) -> bool:
+    """Deletion-intent read for a projection NotFound: owner gone, or live?
+
+    Same tombstone read as the custody write gate (utils/other/storage.py);
+    a missing conversation doc covers hard-deleted rows without a tombstone.
+    Runs only on the NotFound arm, so live conversations pay no extra reads.
+    """
+    if conversation_tombstones.is_deleted(uid, conversation_id):
+        return True
+    doc = (
+        get_firestore_client()
+        .collection('users')
+        .document(uid)
+        .collection('conversations')
+        .document(conversation_id)
+        .get()
+    )
+    return not doc.exists
+
 
 # Queue size limits
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
@@ -376,6 +414,7 @@ async def _websocket_util_trigger(
             queued_at.pop(conv_id, None)
             if not refs:
                 return
+
             try:
                 chunks: List[Dict[str, Any]] = []
                 for ref in refs:
@@ -442,46 +481,76 @@ async def _websocket_util_trigger(
                     log=logger,
                 )
                 logger.warning('Durable audio projection conflict; archive receipt retained')
-            except Exception as exc:
-                # Transient projection failure: while the session is live the
-                # receipts requeue for one bounded retry pass instead of
-                # dropping the projection outright; the drain loop's age and
-                # duration scans re-flush them without a new scheduler. At
-                # teardown there is no later pass, so the tail keeps today's
-                # drop semantics. Only the deterministic conflict above is
-                # exempt — plain ValueError upload wrappers (probe/read
-                # errors) and custody read-back mismatches retry here.
-                # The exception class (never its message, which can carry
-                # user-identifying object paths) is logged on both arms so an
-                # RCA can split read-back mismatches from transport timeouts
-                # without redeploying.
-                logger.warning('Durable audio projection failure class: %s', type(exc).__name__)
-                if (
-                    websocket_active
-                    and projection_retries.get(conv_id, 0) < PROJECTION_RETRY_BUDGET
-                    and len(projection_retries) < 128
-                ):
-                    projection_retries[conv_id] = projection_retries.get(conv_id, 0) + 1
-                    pending_refs[conv_id] = refs
-                    queued_at[conv_id] = time.monotonic()
-                    logger.warning('Durable audio projection failure; receipts requeued for retry')
+            except NotFound as exc:
+                # A pinned-generation 404 during projection means the objects
+                # were purged. Conversation deletion (user delete, merge,
+                # empty-recording cleanup) removes the conversation's whole
+                # audio prefix, so a gone owner has nothing left to project:
+                # the receipts drop without a custody failure or a
+                # failed_recordings entry, which also keeps deleted
+                # conversations out of the session's 128-cap fail-closed
+                # budget. A live conversation that 404s is never hidden as a
+                # gone owner — it keeps the transient retry/terminal path.
+                # If the deletion-intent read itself fails, treat the owner
+                # as live rather than propagate out of the drain loop.
+                gone = False
+                try:
+                    gone = await run_blocking(db_executor, _projection_owner_gone, uid, conv_id)
+                except Exception:
+                    logger.warning('Durable audio projection gone-owner check failed; treating as transient')
+                if gone:
+                    projection_retries.pop(conv_id, None)
+                    logger.info('Durable audio projection skipped; conversation gone')
                     return
-                # Terminal for this batch: a later independent batch for the
-                # same conversation starts with a fresh budget instead of
-                # inheriting this one's exhaustion, and the entry stops
-                # counting toward the bounded retry map.
-                projection_retries.pop(conv_id, None)
-                await record_barrier.fail_recording(conv_id)
-                record_failure('projection', reason='transient')
-                record_fallback(
-                    component='pusher',
-                    from_mode='private_cloud_sync',
-                    to_mode='raw_audio',
-                    reason='other',
-                    outcome='degraded',
-                    log=logger,
-                )
-                logger.warning('Durable audio projection deferred after retries; archive receipt retained')
+                await _transient_projection_failure(exc, conv_id, refs)
+            except Exception as exc:
+                await _transient_projection_failure(exc, conv_id, refs)
+
+        async def _transient_projection_failure(exc: Exception, conv_id: str, refs: List[AudioProjection]) -> None:
+            # Transient projection failure: while the session is live the
+            # receipts requeue for one bounded retry pass instead of
+            # dropping the projection outright; the drain loop's age and
+            # duration scans re-flush them without a new scheduler. At
+            # teardown there is no later pass, so the tail keeps today's
+            # drop semantics. Only the deterministic conflict above is
+            # exempt — plain ValueError upload wrappers (probe/read
+            # errors) and custody read-back mismatches retry here.
+            # The exception class and the innermost raising frame name
+            # (never the message or args, which can carry user-identifying
+            # object paths) are logged on both arms so an RCA can split
+            # read-back mismatches from transport timeouts without
+            # redeploying.
+            logger.warning(
+                'Durable audio projection failure class: %s raised by %s',
+                type(exc).__name__,
+                _projection_raising_frame(exc),
+            )
+            if (
+                websocket_active
+                and projection_retries.get(conv_id, 0) < PROJECTION_RETRY_BUDGET
+                and len(projection_retries) < 128
+            ):
+                projection_retries[conv_id] = projection_retries.get(conv_id, 0) + 1
+                pending_refs[conv_id] = refs
+                queued_at[conv_id] = time.monotonic()
+                logger.warning('Durable audio projection failure; receipts requeued for retry')
+                return
+            # Terminal for this batch: a later independent batch for the
+            # same conversation starts with a fresh budget instead of
+            # inheriting this one's exhaustion, and the entry stops
+            # counting toward the bounded retry map.
+            projection_retries.pop(conv_id, None)
+            await record_barrier.fail_recording(conv_id)
+            record_failure('projection', reason='transient')
+            record_fallback(
+                component='pusher',
+                from_mode='private_cloud_sync',
+                to_mode='raw_audio',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            logger.warning('Durable audio projection deferred after retries; archive receipt retained')
 
         while websocket_active or not durable_queue.empty() or pending_refs or record_close_requests:
             await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
