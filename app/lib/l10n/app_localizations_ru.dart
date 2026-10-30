@@ -14978,4 +14978,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Сегодня списано $amount. Продление $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count части',
+      many: '$count частей',
+      few: '$count части',
+      two: '$count части',
+      one: '$count часть',
+      zero: '$count части',
+    );
+    return '$_temp0';
+  }
 }

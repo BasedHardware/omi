@@ -11940,5 +11940,6 @@
     "yearlySwitchPreviewFailed": "Не ўдалося загрузіць цану.",
     "yearlySwitchUnavailable": "Гадавая аплата зараз недаступная для вашага плана.",
     "yearlySwitchDoneTitle": "Цяпер у вас гадавая аплата",
-    "yearlySwitchDoneBody": "Сёння спісана {amount}. Падаўжэнне {date}."
+    "yearlySwitchDoneBody": "Сёння спісана {amount}. Падаўжэнне {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} часткі} one{{count} частка} two{{count} часткі} few{{count} часткі} many{{count} частак} other{{count} часткі}}"
 }

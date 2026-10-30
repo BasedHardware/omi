@@ -14945,4 +14945,19 @@ class AppLocalizationsId extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return '$amount ditagih hari ini. Diperpanjang $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bagian',
+      many: '$count bagian',
+      few: '$count bagian',
+      two: '$count bagian',
+      one: '$count bagian',
+      zero: '$count bagian',
+    );
+    return '$_temp0';
+  }
 }

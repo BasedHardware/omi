@@ -13,6 +13,7 @@ import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'package:omi/pages/episodes/episode_content.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/episodes/start_trimmed_text.dart';
@@ -508,17 +509,17 @@ class _LiveSummaryTab extends StatelessWidget {
         _SoFarCard(episode: episode, now: now, unavailable: unavailable, preview: preview),
         _LiveCard(preview: preview, onOpenTranscript: onOpenTranscript),
         if (items.isNotEmpty) ...[
-          _SectionTitle(l10n.tasks, count: items.length),
-          _Card(
-            children: [for (final item in items) _ItemRow(item: item, now: now, onDismiss: onDismiss)],
+          EpisodeSectionTitle(l10n.tasks, count: items.length),
+          EpisodeContentCard(
+            children: [for (final item in items) EpisodeItemRow(item: item, now: now, onDismiss: onDismiss)],
           ),
         ],
         if (moments.isNotEmpty) ...[
-          _SectionTitle(l10n.episodeMoments, count: moments.length > 1 ? moments.length : null),
-          _Card(
+          EpisodeSectionTitle(l10n.episodeMoments, count: moments.length > 1 ? moments.length : null),
+          EpisodeContentCard(
             children: [
               for (var i = 0; i < moments.length; i++)
-                _MomentRow(
+                EpisodeMomentRow(
                   moment: moments[i],
                   current: listening && i == moments.length - 1 && moments[i].conversationId == conversationId,
                 ),
@@ -526,59 +527,6 @@ class _LiveSummaryTab extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.count});
-
-  final String title;
-  final int? count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, OmiSpacing.lg, 0, OmiSpacing.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                text: title,
-                style: OmiType.headline,
-                children: [
-                  if (count != null)
-                    TextSpan(
-                      text: '  $count',
-                      style: OmiType.headline.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w400),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  const _Card({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = <Widget>[];
-    for (var i = 0; i < children.length; i++) {
-      if (i > 0) rows.add(Container(height: 1, color: OmiColors.surface2));
-      rows.add(children[i]);
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
     );
   }
 }
@@ -640,7 +588,7 @@ class _SoFarCard extends StatelessWidget {
             ),
             const SizedBox(height: OmiSpacing.sm),
             // The newest notes: a long episode's earlier ones return with the full notes.
-            _Bullets(bullets.length > maxBullets ? bullets.sublist(bullets.length - maxBullets) : bullets),
+            EpisodeBullets(bullets.length > maxBullets ? bullets.sublist(bullets.length - maxBullets) : bullets),
           ] else if (preview != null) ...[
             // Notes drafted on this phone from the preview text; the quiet line while
             // there is nothing to draft (no engine, Apple Intelligence off, or the
@@ -664,7 +612,7 @@ class _SoFarCard extends StatelessWidget {
                   key: const Key('episode_on_device_notes'),
                   children: [
                     const SizedBox(height: OmiSpacing.sm),
-                    _Bullets(notes.bullets.take(maxBullets).toList()),
+                    EpisodeBullets(notes.bullets.take(maxBullets).toList()),
                     const SizedBox(height: OmiSpacing.xxs),
                     Text(
                       l10n.episodeOnDeviceNotesFootnote,
@@ -684,33 +632,6 @@ class _SoFarCard extends StatelessWidget {
   }
 }
 
-class _Bullets extends StatelessWidget {
-  const _Bullets(this.bullets);
-
-  final List<String> bullets;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final bullet in bullets)
-          Padding(
-            padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('•  ', style: OmiType.callout.copyWith(color: OmiColors.textTertiary, height: 1.4)),
-                Expanded(child: Text(bullet, style: OmiType.callout.copyWith(height: 1.4))),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// A card's title with something small at its trailing edge; the two stack when a large text
 /// size leaves no room for both on one line.
 class _CardHeader extends StatelessWidget {
   const _CardHeader({required this.title, this.trailing});
@@ -827,73 +748,6 @@ class _LiveCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ItemRow extends StatelessWidget {
-  const _ItemRow({required this.item, required this.now, required this.onDismiss});
-
-  final EpisodeItem item;
-  final DateTime now;
-  final ValueChanged<EpisodeItem> onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final saved = item.status == EpisodeItemStatus.kept;
-    final fresh = now.difference(item.createdAt).inMinutes < 2;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: Row(
-        children: [
-          Icon(
-            saved ? Icons.check_circle_rounded : (item.isReminder ? Icons.alarm_rounded : Icons.radio_button_unchecked),
-            size: 22,
-            color: saved ? OmiColors.textPrimary : OmiColors.textTertiary,
-          ),
-          const SizedBox(width: OmiSpacing.sm),
-          Expanded(child: Text(item.text, style: OmiType.callout)),
-          const SizedBox(width: OmiSpacing.xs),
-          Text(
-            fresh ? context.l10n.episodeNow : OmiDateFormat.of(context).time(item.createdAt),
-            style: OmiType.footnote.copyWith(color: fresh ? OmiColors.success : OmiColors.textTertiary),
-          ),
-          if (!saved)
-            OmiIconButton(
-              key: ValueKey('episode_item_dismiss_${item.id}'),
-              icon: Icon(Icons.close_rounded, size: 18, color: OmiColors.textTertiary),
-              label: context.l10n.undo,
-              onPressed: () => onDismiss(item),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MomentRow extends StatelessWidget {
-  const _MomentRow({required this.moment, required this.current});
-
-  final EpisodeMoment moment;
-  final bool current;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final when = current ? l10n.episodeNow : OmiDateFormat.of(context).time(moment.startedAt);
-    final tint = current ? OmiColors.success : OmiColors.textTertiary;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 46),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(when, style: OmiType.footnote.copyWith(color: tint)),
-          ),
-          Expanded(child: Text(moment.heading.isEmpty ? '—' : moment.heading, style: OmiType.callout)),
-          Text(EpisodePresentation.runningLength(moment.duration, l10n), style: OmiType.footnote.copyWith(color: tint)),
-        ],
       ),
     );
   }

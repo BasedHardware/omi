@@ -4514,5 +4514,6 @@
     "yearlySwitchPreviewFailed": "Neizdevās ielādēt cenu.",
     "yearlySwitchUnavailable": "Gada maksa jūsu plānam pašlaik nav pieejama.",
     "yearlySwitchDoneTitle": "Tagad jūs maksājat par gadu",
-    "yearlySwitchDoneBody": "Šodien iekasēti {amount}. Atjaunojas {date}."
+    "yearlySwitchDoneBody": "Šodien iekasēti {amount}. Atjaunojas {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} daļu} one{{count} daļa} two{{count} daļas} few{{count} daļas} many{{count} daļas} other{{count} daļas}}"
 }
