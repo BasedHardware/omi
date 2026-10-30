@@ -71,7 +71,18 @@ def test_existing_notes_v2_shadow_serve_cohort_retains_floor(monkeypatch):
 
 
 @pytest.mark.parametrize('mode', ['off', 'serve'])
-@pytest.mark.parametrize('text', ['remind me to call mom', "don't forget milk", 'note to self: buy bread'])
+@pytest.mark.parametrize(
+    'text',
+    [
+        'remind me to call mom',
+        "don't forget milk",
+        'don’t forget milk',
+        'don‘t forget milk',
+        'don`t forget milk',
+        'Ｒｅｍｉｎｄ ｍｅ to call mom',
+        'note to self: buy bread',
+    ],
+)
 def test_explicit_reminders_bypass_both_floor_measures(monkeypatch, mode, text):
     monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
     assert notes_short_clip.quiet_minimum('synthetic-account', capture(text)) is None
@@ -117,6 +128,8 @@ def test_real_structure_boundary_serves_floor_before_any_notes_or_relevance_call
     [
         ('reminder', 'CAPTURE_END'),
         ('reminder', 'SERVER_RECOVERY'),
+        ('reminder_curly', 'CAPTURE_END'),
+        ('reminder_curly', 'SERVER_RECOVERY'),
         ('user_kept', 'CAPTURE_END'),
         ('user_kept', 'SERVER_RECOVERY'),
         ('switch_off', 'CAPTURE_END'),
@@ -133,7 +146,11 @@ def test_real_structure_boundary_reaches_real_notes_admission_when_exempt(pc, mo
     monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *_a, **_k: False)
     if reason == 'switch_off':
         monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
-    row = capture('remind me to call mom' if reason == 'reminder' else 'A tiny recording')
+    row = capture(
+        'don’t forget milk'
+        if reason == 'reminder_curly'
+        else 'remind me to call mom' if reason == 'reminder' else 'A tiny recording'
+    )
     with pytest.raises(RuntimeError, match='notes boundary reached'):
         pc._get_structured(
             'synthetic-account',

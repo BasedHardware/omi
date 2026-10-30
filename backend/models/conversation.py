@@ -616,10 +616,10 @@ class Conversation(BaseModel):
 
     user_corrections: List[Dict] = Field(default_factory=list)
     user_overview: Optional[str] = None
+    user_title: SkipJsonSchema[Any] = Field(default=None, exclude=True)  # Read authority only.
 
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
-    # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
     capture_group: Optional[CaptureGroup] = None
     # Ephemeral server-side context; persistence writes its separate raw field
     # explicitly and it never becomes a Conversation API/model field.

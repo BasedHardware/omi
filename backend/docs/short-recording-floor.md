@@ -10,7 +10,9 @@ gets the existing deterministic minimum: a nonempty title, deterministic emoji,
 empty overview, no tasks/events, and `structured.title_provenance=server_minimum`.
 It remains retained with its original transcript and audio. Photos, explicit
 user-kept authority, user titles, and explicit reminder phrasing bypass the floor.
-Reminder matching joins segments, including a phrase split across segment boundaries.
+Reminder matching joins segments and uses the existing Unicode/apostrophe normalization,
+including a phrase split across segment boundaries. Stored manual titles survive model
+deserialization as excluded read-only metadata, preserving the exemption during reprocessing.
 
 Consumers use the persisted minimum marker rather than re-evaluating the switch:
 memory extraction (both L1 and L2), summary apps, automatic folder assignment and
@@ -18,6 +20,12 @@ goal intelligence are skipped. Minimums do not queue lazy enrichment. Capture au
 work, creation webhooks and external integration delivery retain their normal path.
 Recovery-only terminal minimum behavior remains scoped to recovery triggers.
 A later enriched replacement without the marker admits derived work normally.
+
+Only an audited `keep/rule/content_below_floor` minimum waives the first-summary
+obligation. It clears pending summary debt and prevents repair retries without setting
+`terminal_no_derived_effects`, so creation delivery remains admitted. Empty provider
+outputs retain their summary debt; banked summaries and later meaningful enrichment
+keep the existing summary guarantees.
 
 The deterministic title algorithm is unchanged. Its desktop mirror remains
 `desktop/macos/Desktop/Sources/LocalInference/DeterministicConversationMinimum.swift`.

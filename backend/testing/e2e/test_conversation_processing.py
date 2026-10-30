@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
+import pytest
+
 from fakes.firestore import read_action_items, read_conversation, seed_conversation
 from models.structured import ActionItem, Structured
 from models.transcript_segment import TranscriptSegment
@@ -150,15 +152,21 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert kg_calls == []
 
 
-def test_short_recording_minimum_survives_api_readback_without_paid_intelligence(client, auth_headers, monkeypatch):
+@pytest.mark.parametrize('existing_debt', [False, True])
+def test_short_recording_minimum_survives_api_readback_without_paid_intelligence(
+    client, auth_headers, monkeypatch, existing_debt
+):
     import utils.conversations.process_conversation as process_module
-    from models.conversation import CreateConversation
+    from models.conversation import Conversation, CreateConversation
+    from utils.conversations.factory import deserialize_conversation
 
     app_boundary = process_module.trigger_conversation_apps
     _patch_process_conversation_boundaries(monkeypatch)
     monkeypatch.setattr(process_module, 'trigger_conversation_apps', app_boundary)
     monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     paid = Mock(side_effect=AssertionError('minimum attempted paid intelligence'))
     monkeypatch.setattr(process_module, 'get_conversation_notes', paid)
     monkeypatch.setattr(process_module, 'extract_canonical_l1_memory_candidates', paid)
@@ -190,7 +198,25 @@ def test_short_recording_minimum_survives_api_readback_without_paid_intelligence
             )
         ],
     )
-    minimum = process_module.process_conversation('123', 'en', capture)
+    if existing_debt:
+        row = Conversation(
+            id='short-debt',
+            created_at=started,
+            structured=Structured(title='Pending recording', title_provenance='server_minimum'),
+            **capture.model_dump(),
+        ).model_dump()
+        row.update(
+            status='processing',
+            summary_first_pending_at=started.timestamp(),
+            summary_due_at=started.timestamp() + 120,
+            summary_title_provenance='server_minimum',
+            summary_output_present=False,
+        )
+        seed_conversation('123', row)
+        capture = deserialize_conversation(row)
+    minimum = process_module.process_conversation(
+        '123', 'en', capture, trigger=process_module.ProcessingTrigger.CLIENT_FINALIZE
+    )
     response = client.get(f'/v1/conversations/{minimum.id}', headers=auth_headers)
     assert response.status_code == 200, response.text
     saved = response.json()
@@ -202,8 +228,45 @@ def test_short_recording_minimum_survives_api_readback_without_paid_intelligence
     assert read_action_items('123') == []
     memories = client.get('/v3/memories', headers=auth_headers)
     assert memories.status_code == 200 and memories.json() == []
+    stored = read_conversation('123', minimum.id)
+    assert stored['summary_due_at'] is None
+    assert stored['summary_blocked_reason'] == 'content_below_floor'
+    assert not stored.get('terminal_no_derived_effects')
     paid.assert_not_called()
     webhook.assert_awaited_once()
+
+
+def test_user_renamed_short_row_still_reaches_notes_on_reprocess(client, auth_headers, monkeypatch):
+    import utils.conversations.process_conversation as process_module
+
+    _patch_process_conversation_boundaries(monkeypatch)
+    notes = Mock(wraps=process_module.get_conversation_notes)
+    monkeypatch.setattr(process_module, 'get_conversation_notes', notes)
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    seed_conversation(
+        '123',
+        {
+            'id': 'renamed-short',
+            'created_at': '2026-10-31T12:00:00Z',
+            'started_at': '2026-10-31T12:00:00Z',
+            'finished_at': '2026-10-31T12:00:02Z',
+            'source': 'omi',
+            'language': 'en',
+            'status': 'completed',
+            'discarded': False,
+            'user_title': 'My chosen title',
+            'structured': Structured(title='Old notes').model_dump(),
+            'transcript_segments': [
+                dict(id='curated-source', text='A tiny recording', speaker='SPEAKER_00', is_user=True, start=0, end=2)
+            ],
+            'data_protection_level': 'standard',
+        },
+    )
+    response = client.post('/v1/conversations/renamed-short/reprocess', headers=auth_headers)
+    assert response.status_code == 200, response.text
+    notes.assert_called_once()
+    assert read_conversation('123', 'renamed-short')['user_title'] == 'My chosen title'
 
 
 def test_transactional_create_exposes_recorded_span_and_preexisting_episode_membership(

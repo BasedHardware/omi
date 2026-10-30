@@ -10,7 +10,7 @@ from config.notes_short_clip import floor_serving
 from config.refactor_modes import shadow_or_serve
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.recovery import recovery_transcript_word_count
-from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE
+from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE, normalize_relevance_text
 from utils.llm.notes_language_inputs import in_profile_segments
 from utils.llm.notes_refactor_metrics import shadow, result
 
@@ -63,7 +63,7 @@ def has_explicit_reminder(segments: Any) -> bool:
         str((row.get('text') if isinstance(row, Mapping) else getattr(row, 'text', '')) or '').strip()
         for row in segments or ()
     )
-    return bool(EXPLICIT_REMINDER_RE.search(text))
+    return bool(EXPLICIT_REMINDER_RE.search(normalize_relevance_text(text)))
 
 
 def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None, user_kept: bool = False) -> Any:
