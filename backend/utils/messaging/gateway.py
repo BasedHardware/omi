@@ -106,6 +106,17 @@ class Gateway:
                 getattr(error, 'status_code', None),
             )
 
+    async def _settle_unhandled(self, body):
+        try:
+            await self.adapter.unhandled(body)
+        except Exception:
+            from utils.messaging.metrics import FAILURES
+
+            # Already acknowledged, so the provider will not redeliver: count it like any
+            # other settle failure so an open turn can alarm.
+            FAILURES.labels(self.adapter.channel, 'settle_failed').inc()
+            raise
+
     def _reply_sink(self, message, **kwargs):
         async def reply_target():
             return await run_blocking(db_executor, self.store.reply_target, message)
@@ -124,7 +135,7 @@ class Gateway:
             )
             if hasattr(self.adapter, 'unhandled'):
                 # Settling a declined turn is a provider call: never hold the acknowledgement on it.
-                start_background_task(self.adapter.unhandled(body), name='messaging-provider-unhandled')
+                start_background_task(self._settle_unhandled(body), name='messaging-provider-unhandled')
         paths = []
         for message in messages:
             if (message.channel, message.provider) != (self.adapter.channel, self.adapter.provider):

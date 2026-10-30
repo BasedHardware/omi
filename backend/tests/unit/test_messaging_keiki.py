@@ -346,3 +346,14 @@ def test_expired_rows_settle_their_turn(adapter, monkeypatch):
     monkeypatch.setattr(store, 'claim_expired', lambda channel, provider: [payload])
     asyncio.run(gateway.expired_notices())
     assert calls(adapter, '/turns/turn-old/complete')[-1][2]['json'] == {'status': 'failed'}
+
+
+def test_failed_declined_settle_is_counted(adapter):
+    from utils.messaging.metrics import FAILURES
+
+    gateway = Gateway(adapter, store=MemoryStore())
+    before = FAILURES.labels('imessage', 'settle_failed')._value.get()
+    adapter.transport.responses = [(500, {'error': 'x'}, {})] * 4
+    with pytest.raises(ProviderError):
+        asyncio.run(gateway._settle_unhandled(signed(turn(heldBack=True))[0]))
+    assert FAILURES.labels('imessage', 'settle_failed')._value.get() == before + 1
