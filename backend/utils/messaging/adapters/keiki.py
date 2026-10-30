@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from utils.messaging.adapters.base import BaseAdapter
-from utils.messaging.adapters.linq import IMessageAdapter, _link_code
+from utils.messaging.adapters.linq import IMessageAdapter, link_code
 from utils.messaging.adapters.modalities import emoji_only
 from utils.messaging.adapters.rendering import valid_item_link
 from utils.messaging.adapters.transport import ProviderError, request_json
@@ -151,7 +151,9 @@ class KeikiAdapter(BaseAdapter):
         return event
 
     def _answerable(self, turn):
-        envelope = turn.get('channel') if isinstance(turn.get('channel'), dict) else {}
+        envelope = turn.get('channel')
+        if not isinstance(envelope, dict):
+            envelope = {}
         service = str(envelope.get('channel', '')).lower()
         if service not in CHANNEL_SERVICES[self.channel]:
             logger.info('Messaging ignored provider=keiki reason=channel_mismatch service=%s', service[:24])
@@ -177,7 +179,9 @@ class KeikiAdapter(BaseAdapter):
         command = text.lower()
         last = spoken[-1]
         message_id = last.get('messageId') if isinstance(last.get('messageId'), str) else None
-        quoted = last.get('replyTo') if isinstance(last.get('replyTo'), dict) else {}
+        quoted = last.get('replyTo')
+        if not isinstance(quoted, dict):
+            quoted = {}
         quoted_text = quoted.get('text')
         return (
             ChannelMessage(
@@ -191,7 +195,7 @@ class KeikiAdapter(BaseAdapter):
                 text,
                 datetime.now(timezone.utc),
                 reply_to=message_id,
-                link_proof=_link_code(text),
+                link_proof=link_code(text),
                 unlink=command in ('unlink', '/unlink'),
                 command=(
                     'unsupported'
@@ -255,7 +259,9 @@ class KeikiAdapter(BaseAdapter):
             result = await self.client.call(message.provider_message_id, '/messages', body)
         # A 2xx is Keiki's delivery acknowledgement (a duplicate key answers 2xx without an ID).
         # Failing here would apologise for a reply the contact already has.
-        data = result.get('data') if isinstance(result.get('data'), dict) else {}
+        data = result.get('data')
+        if not isinstance(data, dict):
+            data = {}
         provider_id = result.get('messageId') or data.get('messageId') or result.get('id')
         await self.ledger.commit(message, operation, str(provider_id or operation), message_sent=True)
 
