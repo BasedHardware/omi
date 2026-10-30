@@ -45,7 +45,7 @@ def _key() -> Optional[bytes]:
     """Derive the cache-signing key, or ``None`` when no secret is configured.
     The HKDF derivation is memoized per distinct secret, so a changed
     ``ENCRYPTION_SECRET`` still switches keys while the hot path derives once."""
-    secret = os.getenv(_SECRET_ENV) or ""
+    secret = (os.getenv(_SECRET_ENV) or "").strip()
     if not secret:
         return None
     return _derive_key(secret)
@@ -67,8 +67,13 @@ def dumps_signed(payload: Any, type_tag: str) -> Optional[str]:
     if key is None:
         return None
     envelope = {"v": _ENVELOPE_VERSION, "type": type_tag, "data": payload}
-    mac = hmac.new(key, _canonical(envelope), hashlib.sha256).hexdigest()
-    return json.dumps({**envelope, "mac": mac})
+    try:
+        canonical_bytes = _canonical(envelope)
+        mac = hmac.new(key, canonical_bytes, hashlib.sha256).hexdigest()
+        return json.dumps({**envelope, "mac": mac})
+    except (TypeError, ValueError, OverflowError):
+        logger.warning("mcp cache envelope serialization failed for type_tag=%s", type_tag)
+        return None
 
 
 def loads_verified(raw: Optional[str], type_tag: str) -> Optional[Any]:
@@ -79,7 +84,7 @@ def loads_verified(raw: Optional[str], type_tag: str) -> Optional[Any]:
     returns ``None``; cross-type reuse and unsigned attacker writes can never
     serve cache content.
     """
-    if raw is None:
+    if raw is None or not isinstance(raw, str):
         return None
     key = _key()
     if key is None:
@@ -96,11 +101,14 @@ def loads_verified(raw: Optional[str], type_tag: str) -> Optional[Any]:
         or not isinstance(envelope.get("mac"), str)
     ):
         return None
-    expected = hmac.new(
-        key,
-        _canonical({"v": envelope["v"], "type": envelope["type"], "data": envelope["data"]}),
-        hashlib.sha256,
-    ).hexdigest()
+    try:
+        expected = hmac.new(
+            key,
+            _canonical({"v": envelope["v"], "type": envelope["type"], "data": envelope["data"]}),
+            hashlib.sha256,
+        ).hexdigest()
+    except (TypeError, ValueError, OverflowError):
+        return None
     if not hmac.compare_digest(envelope["mac"], expected):
         return None
     return envelope["data"]
