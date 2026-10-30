@@ -21,7 +21,11 @@ from utils.batch_pipeline import (
 PATH = ('users', 'synthetic', 'conversations', 'capture')
 SCOPE = ['/'.join(PATH)]
 JOB_PATH = ('batch_pipeline_dev_jobs', live.record_identity('synthetic', 'capture')[1])
-SERVER = {'K_SERVICE': 'synthetic-serving-role', 'BATCH_PIPELINE_PERCENT': '5'}
+SERVER = {
+    'K_SERVICE': 'synthetic-serving-role',
+    'BATCH_PIPELINE_PERCENT': '5',
+    'BATCH_LIVE_STT_RETIRE_PERCENT': '0',
+}
 
 
 @pytest.fixture
@@ -214,6 +218,8 @@ def test_discovery_bound_and_cursor_contract():
     query.order_by.assert_called_once_with('__name__')
     query.select.assert_called_once_with(())
     query.start_after.assert_called_once_with({'__name__': client.document.return_value})
+    query.stream.return_value = []
+    assert backfill.discover(client, limit=128, after=SCOPE[0]) == ([], None)
     for limit in (0, 129, True):
         with pytest.raises(ValueError):
             backfill.discover(client, limit=limit)
@@ -310,6 +316,29 @@ def test_server_flag_file_filters_unrelated_values_and_requires_role(tmp_path):
         path.write_text(json.dumps(value))
         with pytest.raises(ValueError):
             module.read_server_flags(path)
+
+
+@pytest.mark.parametrize(
+    'flags',
+    [
+        {'K_SERVICE': 'role'},
+        {'K_SERVICE': 'role', 'BATCH_PIPELINE_PERCENT': '5'},
+        {**SERVER, 'BATCH_PIPELINE_PERCENT': 'NaN'},
+        {**SERVER, 'BATCH_PIPELINE_PERCENT': '-1'},
+        {**SERVER, 'BATCH_PIPELINE_PERCENT': '101'},
+        {**SERVER, 'BATCH_PIPELINE_PERCENT': 'invalid'},
+        {**SERVER, 'BATCH_LIVE_STT_RETIRE_PERCENT': '6'},
+    ],
+)
+def test_incomplete_or_invalid_serving_ramps_refuse_before_planning(source, flags, tmp_path):
+    module = cli()
+    path = tmp_path / 'flags.json'
+    path.write_text(json.dumps(flags))
+    with pytest.raises(ValueError):
+        module.read_server_flags(path)
+    with pytest.raises(ValueError):
+        backfill.plan_backfill(source[0], SCOPE, object(), source[2], server_flags=flags)
+    assert no_writes(source[1])
 
 
 def test_private_cursor_permissions_and_rejects_public_directory(tmp_path, monkeypatch):

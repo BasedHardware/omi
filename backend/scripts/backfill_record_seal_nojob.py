@@ -7,6 +7,9 @@ Use ro-prod OR prod-operator for dry-run; apply requires prod-operator and
 PRIVATE next-page cursor. Keep the input unchanged between dry-run and apply.
 Advance to the output cursor only after settling the page. Refusals need a
 separate pass from the beginning after remediation. Never commit cursor files.
+An empty page ends one pass and resets the output cursor to the beginning; it
+does not prove the live backlog is empty. Repeat complete passes and reconcile
+the aggregate no-job backlog before declaring settlement.
 """
 
 import argparse
@@ -22,7 +25,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from database._client import get_firestore_client
 from database.batch_pipeline_store import FirestoreStore
 from utils.batch_pipeline.artifact_policy import artifacts_for
-from utils.batch_pipeline.record_seal_nojob import discover, plan_backfill, apply_backfill, summary
+from utils.batch_pipeline.record_seal_nojob import (
+    discover,
+    plan_backfill,
+    apply_backfill,
+    summary,
+    validate_server_flags,
+)
 from utils.batch_pipeline.record_producer_proof import load_pusher_pod_proof
 from utils.other.local_storage import create_storage_client
 
@@ -72,10 +81,7 @@ def read_server_flags(path):
     if not isinstance(raw, dict):
         raise ValueError('explicit serving-role flags required')
     flags = {key: value for key, value in raw.items() if key in keys}
-    if any(not isinstance(value, str) for value in flags.values()) or not (
-        flags.get('K_SERVICE') or flags.get('OMI_SYNC_STACK_ROLE')
-    ):
-        raise ValueError('explicit serving-role flags required')
+    validate_server_flags(flags)
     return flags
 
 

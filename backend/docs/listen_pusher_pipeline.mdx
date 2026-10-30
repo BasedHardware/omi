@@ -6406,11 +6406,17 @@ dispositions and `plan_sha256`. Apply requires `prod-operator` plus
 Keep cursor files in an operator-owned 0700 directory under Ephemeral scratch;
 the tool writes the next cursor atomically as 0600. For later pages pass the
 previous output as `--after-file` and a different `--next-file`. Keep that input
-unchanged between dry-run and apply; stop on an empty page. Advance only after
-settling the page, and revisit refused rows from the beginning after remediation.
+unchanged between dry-run and apply. Advance only after settling the page.
+An empty page ends that pass and resets the output cursor to the beginning;
+continued bounded invocations revisit rows that became matches behind the cursor.
+An empty page alone does not prove settlement: run complete new passes until a
+whole pass has no eligible rows, then reconcile the aggregate no-job backlog.
+Changing rows can require further passes; revisit refused rows after remediation.
 The flags file is a string map of the serving role's admission settings (including
-`K_SERVICE` or `OMI_SYNC_STACK_ROLE`, and the current ramp percent rather than a
-stale environment fallback). Only admission inputs are read. The plan binds them;
+`K_SERVICE` or `OMI_SYNC_STACK_ROLE`, and both current `BATCH_PIPELINE_PERCENT`
+and `BATCH_LIVE_STT_RETIRE_PERCENT` rather than stale environment fallbacks).
+Missing, nonfinite, out-of-range or non-nested ramps are refused before planning.
+Only admission inputs are read. The plan binds them;
 the operator laptop's environment never becomes the stored job policy.
 Token rows require the same fresh `--pusher-pods-file` and capture time as the
 repair below; bare tokens are refused. The tool shares the retained-tail proof

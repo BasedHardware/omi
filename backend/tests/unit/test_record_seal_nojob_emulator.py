@@ -41,7 +41,15 @@ def source(monkeypatch):
 
 def make_plan(source, paths):
     return backfill.plan_backfill(
-        source[1], paths, object(), SimpleNamespace(), server_flags={'K_SERVICE': 'synthetic-serving-role'}
+        source[1],
+        paths,
+        object(),
+        SimpleNamespace(),
+        server_flags={
+            'K_SERVICE': 'synthetic-serving-role',
+            'BATCH_PIPELINE_PERCENT': '0',
+            'BATCH_LIVE_STT_RETIRE_PERCENT': '0',
+        },
     )
 
 
@@ -50,7 +58,11 @@ def test_real_discovery_resumes_and_seal_registration_is_idempotent(source):
     first, cursor = backfill.discover(client, limit=1)
     second, end = backfill.discover(client, limit=1, after=cursor)
     assert first + second == paths
-    assert backfill.discover(client, limit=1, after=end)[0] == []
+    empty, wrapped = backfill.discover(client, limit=1, after=end)
+    assert empty == [] and wrapped is None
+    late = client.document(paths[0].rsplit('/', 1)[0] + '/aaa-late-match')
+    late.set({'record_lane_owner': 'batch_live_v1'})
+    assert backfill.discover(client, limit=1, after=wrapped)[0] == [late.path]
     result = make_plan(source, paths)
     assert backfill.summary(result)['dispositions'] == {'eligible': 2}
     assert backfill.apply_backfill(store, result, result['plan_sha256']) == {'sealed_registered': 2}

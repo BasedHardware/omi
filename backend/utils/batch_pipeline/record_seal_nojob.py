@@ -5,6 +5,7 @@ Discovery scans at most 128 batch-live rows per page, including refused rows.
 """
 
 from collections import Counter
+import math
 import time
 
 from google.cloud import firestore
@@ -18,6 +19,20 @@ from utils.batch_pipeline.record_seal_repair import plan_digest, seal_refusal, s
 
 OPERATION = 'record-seal-nojob-v1'
 REGISTRATION_FIELDS = ('source', 'language', 'client_device_id', 'client_platform', 'uses_custom_stt', 'external_data')
+
+
+def validate_server_flags(flags):
+    if not isinstance(flags, dict) or any(not isinstance(value, str) for value in flags.values()):
+        raise ValueError('explicit serving-role flags required')
+    if not (flags.get('K_SERVICE', '').strip() or flags.get('OMI_SYNC_STACK_ROLE', '').strip()):
+        raise ValueError('explicit serving-role flags required')
+    try:
+        batch = float(flags['BATCH_PIPELINE_PERCENT'])
+        retire = float(flags['BATCH_LIVE_STT_RETIRE_PERCENT'])
+    except (KeyError, ValueError, TypeError):
+        raise ValueError('explicit current serving ramps required') from None
+    if not math.isfinite(batch) or not math.isfinite(retire) or not 0 <= retire <= batch <= 100:
+        raise ValueError('explicit current serving ramps required')
 
 
 def row_state(row):
@@ -47,7 +62,9 @@ def discover(client, *, limit=128, after=None):
     paths = [snapshot.reference.path for snapshot in query.stream()]
     for path in paths:
         conversation_path(path)
-    return paths, paths[-1] if paths else after
+    # End of a pass resets the private cursor. Continued bounded invocations
+    # revisit matches that appeared behind the previous keyset cursor.
+    return paths, paths[-1] if paths else None
 
 
 class RegistrationPlan:
@@ -100,10 +117,7 @@ def registration(tx, uid, cid, row, server_flags):
 
 
 def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, producer_proof=None):
-    if not isinstance(server_flags, dict) or not (
-        server_flags.get('K_SERVICE') or server_flags.get('OMI_SYNC_STACK_ROLE')
-    ):
-        raise ValueError('explicit serving-role flags required')
+    validate_server_flags(server_flags)
     if len(paths) > 128 or len(set(paths)) != len(paths):
         raise ValueError('bounded unique discovery page required')
     entries = []
