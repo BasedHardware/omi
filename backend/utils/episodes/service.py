@@ -941,6 +941,7 @@ def _record_moment_once(
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'
 
+    compose_owns = closed is not None and composer.owns_closed_notes(uid, closed, moment.conversation_id, c)
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     output_language, repair = '', None
     conversation_language = moment.language or ''
@@ -952,7 +953,7 @@ def _record_moment_once(
         if prior and not episode_language.languages_match(prior, output_language):
             repair = episode_language.repair_instruction(prior, output_language)
     try:
-        result = incremental.run_incremental_update(
+        result = (composer.notes_free if compose_owns else incremental.run_incremental_update)(
             uid,
             render_state(base),
             text.text,
@@ -987,7 +988,7 @@ def _record_moment_once(
 
     end_offset = max((_segment_end(s) for s in segments), default=0.0)
     start_offset = min((_segment_start(s) for s in segments), default=0.0)
-    changes = apply_update(
+    changes = (composer.no_changes if compose_owns else apply_update)(
         base, result.update, conversation_id=moment.conversation_id, segment_offset=end_offset, now=now
     )
     detected_output_language = (
@@ -999,13 +1000,14 @@ def _record_moment_once(
     heading = result.update.moment_heading or clean_text(result.update.title, 48)
     last = moments[-1] if moments else None
     if (
-        last
+        not compose_owns
+        and last
         and last.get('conversation_id') == moment.conversation_id
         and heading
         and str(last.get('heading') or '').casefold() == heading.casefold()
     ):
         last.update({'ended_at': moment.current_ended_at or moment.ended_at, 'end_offset': end_offset})
-    else:
+    elif not compose_owns:
         moments.append(
             {
                 'id': uuid4().hex[:12],
@@ -1070,7 +1072,9 @@ def _record_moment_once(
         # A prompt instruction does not prove the model followed it. Only stamp
         # observed state text; otherwise the next update detects and repairs it.
         updates['output_language'] = (
-            output_language if episode_language.languages_match(detected_output_language, output_language) else None
+            output_language
+            if compose_owns or episode_language.languages_match(detected_output_language, output_language)
+            else None
         )
     if pending is not None:
         updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
@@ -1105,7 +1109,7 @@ def _record_moment_once(
         )
     metrics.record_moment_update(
         trigger=moment.trigger,
-        outcome='applied',
+        outcome='composer_owned' if compose_owns else 'applied',
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         latency_seconds=result.latency_seconds,

@@ -46,6 +46,8 @@ MOMENT_OUTCOMES = frozenset(
         'skipped_short',
         'skipped_applied',
         'skipped_closed',
+        # A write into a closed episode the composer owns: bookkeeping only, no model call.
+        'composer_owned',
         'rate_limited',
         'llm_error',
         'parse_error',
