@@ -10,7 +10,12 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from database import conversations as db
+from models.conversation_enums import ConversationSource
 from tests.unit.test_sync_bridge_lifecycle import dependencies as dependencies, system as system
+from tests.unit.test_sync_cross_job_assignment import chunk
+from tests.unit.test_sync_live_overlap import live_row
+from utils.sync import bridge
 from utils.sync import absorption_metrics as metrics
 
 
@@ -58,10 +63,6 @@ def test_default_policy_preserves_enriched_row_without_counting_it(system, monke
 
 
 def test_pending_live_resolution_uses_the_same_committed_counter(system):
-    from tests.unit.test_sync_live_overlap import live_row
-    from tests.unit.test_sync_cross_job_assignment import chunk
-    from utils.sync import bridge
-
     store, _, _, _ = system
     store.rows[('users', 'u', 'conversations', 'live')] = live_row('completed')
     store.rows[('users', 'u', 'conversations', 'wal')] = dict(
@@ -96,8 +97,6 @@ def test_cleanup_failure_and_retry_do_not_double_count(system):
 
 @pytest.mark.parametrize('commit_fails', [False, True])
 def test_only_successful_transaction_result_emits(system, monkeypatch, commit_fails):
-    from database import conversations as db
-
     store, ingest, _, _ = system
     ingest(0)
     ingest(4)
@@ -145,8 +144,6 @@ def test_processed_definition(patch, expected):
 
 
 def test_labels_are_bounded_and_observations_exclude_ancestry_and_tombstones():
-    from models.conversation_enums import ConversationSource
-
     assert metrics.donor_labels({'source': ConversationSource.omi}) == ('omi', 'false', 'false')
     row = {'source': 'private-unbounded-value', 'status': 'completed', 'id': 'never-exported'}
     plan = SimpleNamespace(
