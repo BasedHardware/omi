@@ -11,6 +11,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/validators.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookOnConversationCreated = TextEditingController();
@@ -243,6 +244,7 @@ class DeveloperModeProvider extends BaseProvider {
         _savedCustomBackendUrl = normalizedBackendUrl;
         customBackendUrl.text = normalizedBackendUrl;
         BackendUrlOverride.restore(normalizedBackendUrl);
+        if (OutboundPolicy.backendChanged()) await PlatformManager.stopThirdPartyServices();
       } on FormatException catch (error) {
         AppSnackbar.showSnackbarError(error.message);
         setIsLoading(false);

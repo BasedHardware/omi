@@ -47,6 +47,10 @@ Future<CrashlyticsRecorder> installCrashlyticsRecorder() async {
       if (call.method == 'Crashlytics#recordError' && recorder.recordErrorFailure != null) {
         throw recorder.recordErrorFailure!;
       }
+      // The plugin reads the resulting state back from the reply.
+      if (call.method == 'Crashlytics#setCrashlyticsCollectionEnabled') {
+        return {'isCrashlyticsCollectionEnabled': (call.arguments as Map)['enabled']};
+      }
       return null;
     },
   );

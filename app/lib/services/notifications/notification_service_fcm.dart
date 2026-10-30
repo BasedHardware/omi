@@ -25,6 +25,7 @@ import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 /// Firebase Cloud Messaging enabled notification service
 /// Supports iOS, Android, macOS, web, and Linux with full FCM functionality
@@ -50,7 +51,7 @@ class _FCMNotificationService implements NotificationInterface {
       ledColor: Colors.white,
     );
     await _initializeAwesomeNotifications();
-    if (PhysicalQualification.enabled) return;
+    if (PhysicalQualification.enabled || !OutboundPolicy.thirdPartyServicesAllowed) return;
     // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
     // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
     await _firebaseMessaging.getAPNSToken();
@@ -137,7 +138,8 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<void> saveFcmToken(String? token) async {
-    if (token == null) return;
+    // Also covers a token refresh after a live switch away from Omi's backend.
+    if (token == null || !OutboundPolicy.thirdPartyServicesAllowed) return;
     String timeZone = await getTimeZone();
     if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
       await saveFcmTokenServer(token: token, timeZone: timeZone);
@@ -152,7 +154,7 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   void saveNotificationToken() async {
-    if (PhysicalQualification.enabled) return;
+    if (PhysicalQualification.enabled || !OutboundPolicy.thirdPartyServicesAllowed) return;
     try {
       if (Platform.isIOS) {
         String? apnsToken;
@@ -206,7 +208,7 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<void> listenForMessages() async {
-    if (PhysicalQualification.enabled) return;
+    if (PhysicalQualification.enabled || !OutboundPolicy.thirdPartyServicesAllowed) return;
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;

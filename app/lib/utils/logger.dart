@@ -7,19 +7,20 @@ import 'package:talker_flutter/talker_flutter.dart';
 
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 class CrashlyticsTalkerObserver extends TalkerObserver {
   CrashlyticsTalkerObserver();
 
   @override
   void onError(err) {
-    if (PhysicalQualification.enabled) return;
+    if (PhysicalQualification.enabled || !OutboundPolicy.thirdPartyServicesAllowed) return;
     FirebaseCrashlytics.instance.recordError(err.error, err.stackTrace, reason: err.message);
   }
 
   @override
   void onException(err) {
-    if (PhysicalQualification.enabled) return;
+    if (PhysicalQualification.enabled || !OutboundPolicy.thirdPartyServicesAllowed) return;
     FirebaseCrashlytics.instance.recordError(err.exception, err.stackTrace, reason: err.message);
   }
 }
