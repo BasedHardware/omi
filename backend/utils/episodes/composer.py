@@ -107,6 +107,7 @@ def fingerprint(members: Sequence[Mapping[str, Any]]) -> str:
                 bool(s.get('is_user')),
                 s.get('speaker'),
                 s.get('person_id'),
+                s.get('person_name'),
             )
             for s in _segments(row)
         ]
@@ -344,6 +345,14 @@ def compose(uid: str, episode_id: str, *, collaborators: Any = None, force: bool
     return outcome
 
 
+def _named(uid: str, row: Mapping[str, Any], c: Any) -> list[dict[str, Any]]:
+    """Segments with stored person names, so a rename changes the evidence fingerprint too."""
+    from utils.episodes import service
+
+    owner: Any = service  # the same seam the live notes use (people lookup, owner gate)
+    return owner._named_segments(uid, _segments(row), c)
+
+
 def _members(uid: str, episode: Mapping[str, Any], c: Any) -> tuple[str, list[dict[str, Any]]]:
     """('ok' | 'waiting', retained visible members sorted by start)."""
     members = []
@@ -353,7 +362,7 @@ def _members(uid: str, episode: Mapping[str, Any], c: Any) -> tuple[str, list[di
             continue
         if str(row.get('status') or '') not in _DONE:
             return 'waiting', []
-        members.append({**row, 'id': cid})
+        members.append({**row, 'id': cid, 'transcript_segments': _named(uid, row, c)})
     members.sort(key=lambda row: _span(row)[0] or datetime.max.replace(tzinfo=timezone.utc))
     return 'ok', members
 
@@ -502,7 +511,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
     except Exception:
         tz = ZoneInfo('UTC')
     owner = service._owner_name(uid, c)
-    named = [{**row, 'transcript_segments': service._named_segments(uid, _segments(row), c)} for row in members]
+    named = members  # already carry stored person names (``_members``)
     language = str(episode.get('output_language') or 'English')
     language = {'en': 'English'}.get(language, language)
     messages = build_messages(named, owner=owner, tz=tz, language=language)

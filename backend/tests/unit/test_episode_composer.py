@@ -254,6 +254,23 @@ def test_a_superseded_run_keeps_a_newer_lease(store):
     assert store.episode['compose_lease'] == newer
 
 
+def test_person_rename_recomposes(store):
+    calls = []
+    names = {'p1': 'Arjan'}
+    store.rows['c1']['transcript_segments'][1]['person_id'] = 'p1'
+
+    def c():
+        col = _c(calls=calls)
+        col.people_names = lambda uid, ids: {i: names[i] for i in ids if i in names}
+        return col
+
+    assert composer.compose(UID, 'ep1', collaborators=c()) == 'composed'
+    assert composer.compose(UID, 'ep1', collaborators=c()) == 'unchanged'
+    names['p1'] = 'Arjan V.'
+    assert composer.compose(UID, 'ep1', collaborators=c()) == 'composed'
+    assert len(calls) == 2
+
+
 def test_speaker_correction_recomposes(store):
     calls = []
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
