@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from database.conversations import seal_record_audio, mark_record_upload_failed, set_record_upload_pending
+from database.record_audio import seal_record_audio, mark_record_upload_failed, set_record_upload_pending
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_pusher_audio_timeline import (
     env,
@@ -20,6 +20,7 @@ from tests.unit.test_pusher_audio_timeline import (
     RATE,
 )
 import routers.pusher as pusher
+from database import record_audio as record_audio_db
 
 PATH = ('users', 'uid-at', 'conversations', 'record')
 
@@ -28,10 +29,10 @@ PATH = ('users', 'uid-at', 'conversations', 'record')
 def records(env, monkeypatch):
     client = StrictFirestore()
     client.rows[PATH] = {'record_lane_owner': 'batch_live_v1', 'status': 'completed', 'opaque_content': 'preserved'}
-    monkeypatch.setattr(pusher.conversations_db, 'get_firestore_client', lambda: client)
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', seal_record_audio)
-    monkeypatch.setattr(pusher.conversations_db, 'mark_record_upload_failed', mark_record_upload_failed)
-    monkeypatch.setattr(pusher.conversations_db, 'set_record_upload_pending', set_record_upload_pending)
+    monkeypatch.setattr(record_audio_db, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal_record_audio)
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', mark_record_upload_failed)
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', set_record_upload_pending)
     monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
     monkeypatch.setattr(pusher, 'start_background_task', lambda coro, **kwargs: coro.close())
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')

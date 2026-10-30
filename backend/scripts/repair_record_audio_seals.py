@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# LIFECYCLE: one-off
 """Repair exact record_pending jobs after retained-tail proof; dry-run by default.
 
 Input: private JSON array of exact pending job IDs (1..128, no discovery scan).

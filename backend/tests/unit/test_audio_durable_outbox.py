@@ -41,6 +41,7 @@ from utils.pusher_protocol import (
     extend_bounded,
 )
 import routers.pusher as pusher
+from database import record_audio as record_audio_db
 
 
 class Blob:
@@ -97,9 +98,9 @@ class Bucket:
 @pytest.fixture
 def remote(monkeypatch):
     bucket = Bucket()
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock(return_value=False))
-    monkeypatch.setattr(pusher.conversations_db, 'mark_record_upload_failed', MagicMock(return_value=True))
-    monkeypatch.setattr(pusher.conversations_db, 'set_record_upload_pending', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=False))
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', MagicMock(return_value=True))
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
     monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', bucket.name)
@@ -1305,7 +1306,7 @@ async def test_transient_projection_failure_requeues_and_then_lands(remote, monk
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=flaky_upload))
     audio_files_calls = MagicMock(return_value=[])
     monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', audio_files_calls)
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
     sock = Socket(_audio_frames('conversation', payloads))
     monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
     task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
@@ -1333,7 +1334,7 @@ async def test_conflict_projection_failure_never_retries_and_withholds_close(rem
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=conflict_upload))
     seal = MagicMock()
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', seal)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     payloads = [struct.pack('<160h', *[n] * 160) for n in range(5)]
     sock = Socket(_audio_frames('conversation', payloads))
     # v2 keeps one span per receipt, so every projected window stays
@@ -1365,7 +1366,7 @@ async def test_transient_projection_failure_drops_after_the_retry_budget(remote,
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=always_unavailable))
     seal = MagicMock()
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', seal)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     frames = [struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm]
     sock = Socket(frames)
     real_receive = sock.receive_bytes
@@ -1439,7 +1440,7 @@ async def test_wrapped_probe_valueerror_is_transient_and_retries(remote, monkeyp
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=probe_error_then_success))
     monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[]))
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
     sock = Socket(_audio_frames('conversation', payloads))
     monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
     task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
@@ -1475,7 +1476,7 @@ async def test_projection_retry_budget_resets_after_a_dropped_batch(remote, monk
         return []
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=fail_five_then_succeed))
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
     frames = [struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm]
     sock = Socket(frames)
     real_receive = sock.receive_bytes
