@@ -18,6 +18,7 @@ import re
 import statistics
 import time
 import unicodedata
+from html import escape
 from typing import Any, Callable, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, Field
@@ -39,6 +40,7 @@ EndingStyle = Literal['none', 'period', 'exclamation', 'question']
 
 # Fallback in-process cache, opt-in state, contact handle map, and last turn profile.
 _MEMORY_CACHE: Dict[str, Tuple[float, str]] = {}
+_MEMORY_CACHE_LIMIT = 1024
 _MEMORY_OPT_IN: Dict[str, Any] = {}
 _CONTACT_HANDLE_TO_PERSON: Dict[Tuple[str, str], str] = {}
 _DISABLED_OPT_IN_UNTIL: Dict[str, float] = {}
@@ -358,11 +360,18 @@ def cache_user_voice_profile(
             keys.add(str(alias).strip())
 
     payload = profile.model_dump_json()
-    expires_at = now_fn() + ttl_seconds
+    now = now_fn()
+    expires_at = now + ttl_seconds
+    # Reclaim profiles even when their recipients are never looked up again.
+    for key, (expiry, _) in list(_MEMORY_CACHE.items()):
+        if expiry <= now:
+            _MEMORY_CACHE.pop(key, None)
     for raw_key in keys:
         if not raw_key:
             continue
         key = user_voice_cache_key(uid, raw_key)
+        if key not in _MEMORY_CACHE and len(_MEMORY_CACHE) >= _MEMORY_CACHE_LIMIT:
+            _MEMORY_CACHE.pop(next(iter(_MEMORY_CACHE)))
         _MEMORY_CACHE[key] = (expires_at, payload)
         if redis_client is not None:
             try:
@@ -1020,7 +1029,7 @@ def format_user_voice_prompt(profile: Optional[UserVoiceProfile]) -> str:
     if profile is None or profile.sample_count <= 0:
         return ''
 
-    target_label = profile.person_name or profile.recipient or profile.person_id or 'this recipient'
+    target_label = escape(profile.person_name or profile.recipient or profile.person_id or 'this recipient', quote=True)
     ending_desc = {
         'none': 'no trailing period (leave the end of the line bare)',
         'period': 'a period (.)',
