@@ -4514,5 +4514,6 @@
     "yearlySwitchPreviewFailed": "Hintaa ei voitu ladata.",
     "yearlySwitchUnavailable": "Vuosimaksu ei ole juuri nyt saatavilla tilauksellesi.",
     "yearlySwitchDoneTitle": "Maksat nyt vuosittain",
-    "yearlySwitchDoneBody": "Tänään veloitettiin {amount}. Uusiutuu {date}."
+    "yearlySwitchDoneBody": "Tänään veloitettiin {amount}. Uusiutuu {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} osaa} one{{count} osa} two{{count} osaa} few{{count} osaa} many{{count} osaa} other{{count} osaa}}"
 }

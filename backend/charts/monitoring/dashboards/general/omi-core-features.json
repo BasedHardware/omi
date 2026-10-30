@@ -2812,6 +2812,48 @@
           ],
           "title": "Conversations per day (completed, by source)",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Rolling one-hour share of all relevance decisions that ended in discard for backend, backend-sync, backend-sync-backfill, and backend-integration, split by service and trigger. Evaluated at the dashboard end time; move the time range to compare before and after PR #23963. Sync-service rows appear after the metrics-egress workflow applies the sync exporter values; allow for its 10-minute collection interval.",
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 1,
+              "max": 100,
+              "min": 0,
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 24,
+            "x": 0,
+            "y": 36
+          },
+          "id": 77,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "(100 * (sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\",verdict=\"discard\"}[1h])) or on (service_name, trigger) (0 * sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h])))) / sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h]))) and on (service_name, trigger) (sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h])) > 0)",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Rolling 1h discard share by service / trigger",
+          "type": "table"
         }
       ],
       "title": "Conversation shape \u2014 whole conversations vs fragments",

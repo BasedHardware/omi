@@ -94,6 +94,11 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         ):
             raise reprocess.FirstSummaryCallbackPending('canonical custody binding changed')
         pending = dict(previous)
+        if previous.get('dormant'):
+            pending.pop('merge_hold', None)
+            pending.pop('sync_hold_requested', None)
+        elif previous.get('sync_hold') and not previous.get('merge_hold'):
+            pending['sync_hold_requested'] = True
         prior_due = previous.get('due_at')
         pending.update(
             document_id=target_id,
@@ -110,6 +115,10 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         )
         if donor.get('sync_hold'):
             pending['sync_hold'] = True
+            if donor.get('sync_hold_requested') or not donor.get('merge_hold'):
+                pending['sync_hold_requested'] = True
+            if donor.get('merge_hold'):
+                pending['merge_hold'] = True
         if donor.get('summary_deadline_at') is not None:
             prior_deadline = previous.get('summary_deadline_at')
             pending['summary_deadline_at'] = min(

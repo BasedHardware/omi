@@ -4549,5 +4549,6 @@
     "yearlySwitchPreviewFailed": "Impossible de charger votre prix.",
     "yearlySwitchUnavailable": "La facturation annuelle n'est pas disponible pour votre forfait pour le moment.",
     "yearlySwitchDoneTitle": "Vous êtes passé à l'annuel",
-    "yearlySwitchDoneBody": "{amount} débités aujourd'hui. Renouvellement le {date}."
+    "yearlySwitchDoneBody": "{amount} débités aujourd'hui. Renouvellement le {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} parties} one{{count} partie} two{{count} parties} few{{count} parties} many{{count} parties} other{{count} parties}}"
 }

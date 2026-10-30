@@ -26276,6 +26276,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{amount} charged today. Renews {date}.'**
   String yearlySwitchDoneBody(String amount, String date);
+
+  /// Number of retained conversations in a closed episode Home row; shown for two or more parts.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}'**
+  String episodePartsCount(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

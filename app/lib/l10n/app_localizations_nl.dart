@@ -14969,4 +14969,19 @@ class AppLocalizationsNl extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Vandaag $amount afgeschreven. Verlengt op $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count delen',
+      many: '$count delen',
+      few: '$count delen',
+      two: '$count delen',
+      one: '$count deel',
+      zero: '$count delen',
+    );
+    return '$_temp0';
+  }
 }

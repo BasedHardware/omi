@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/live_start_anchor.dart';
+import 'package:omi/providers/conversation_provider.dart';
 
 typedef EpisodeLiveFetcher = Future<ApiResult<EpisodeRead>> Function();
 typedef EpisodeLookupFetcher = Future<ApiResult<EpisodeRead>> Function(String conversationId);
@@ -21,15 +22,122 @@ typedef EpisodeDismissCall = Future<ApiResult<Episode>> Function(String episodeI
 class EpisodeProvider extends ChangeNotifier {
   EpisodeProvider({
     EpisodeLiveFetcher? fetchLive,
+    Future<ApiResult<EpisodePageRead>> Function(DateTime, DateTime, {String? cursor})? fetchPage,
     EpisodeLookupFetcher? lookup,
     EpisodeWrapUpCall? wrapUp,
     EpisodeDismissCall? dismiss,
     DateTime Function()? clock,
   })  : _fetchLive = fetchLive ?? api.getLiveEpisode,
+        _fetchPage = fetchPage ?? api.getEpisodes,
         _lookup = lookup ?? api.getEpisodeForConversation,
         _wrapUp = wrapUp ?? api.wrapUpEpisode,
         _dismiss = dismiss ?? api.dismissEpisodeItem,
         _clock = clock ?? DateTime.now;
+
+  final Future<ApiResult<EpisodePageRead>> Function(DateTime, DateTime, {String? cursor}) _fetchPage;
+  List<Episode> _homeEpisodes = const [];
+  List<Episode> get homeEpisodes => enabled && _ownerUid == SharedPreferencesUtil().uid ? _homeEpisodes : const [];
+  String? _homeKey;
+  DateTime? _homeReadAt;
+  int _homeGeneration = 0;
+
+  ConversationProvider? _homeConversations;
+  Set<String> _hiddenHomeMembers = {};
+  Object? _homeVisibilityRows;
+  int _homeVisibilityCount = -1;
+  int _homePendingCount = -1;
+  Set<String> get hiddenHomeMembers => _ownerUid == SharedPreferencesUtil().uid ? _hiddenHomeMembers : const {};
+
+  /// Retain the local delete fence after the conversation provider retires its in-flight
+  /// tombstone. An older episode snapshot must not resurrect that member. Undo/failure
+  /// restores it to the conversation list, which releases this projection-only fence.
+  void observeHomeConversations(ConversationProvider provider) {
+    if (identical(provider, _homeConversations)) return;
+    _homeConversations?.removeListener(_syncHomeVisibility);
+    _homeConversations = provider;
+    _homeVisibilityRows = null;
+    provider.addListener(_syncHomeVisibility);
+    _syncHomeVisibility();
+  }
+
+  void _syncHomeVisibility() {
+    final provider = _homeConversations;
+    if (provider == null || _disposed) return;
+    // Delete/settlement/Undo changes pending or loaded length; refreshes replace the list.
+    // Every unrelated high-frequency notify returns before walking membership.
+    if (identical(_homeVisibilityRows, provider.conversations) &&
+        _homeVisibilityCount == provider.conversations.length &&
+        _homePendingCount == provider.memoriesToDelete.length) {
+      return;
+    }
+    _homeVisibilityRows = provider.conversations;
+    _homeVisibilityCount = provider.conversations.length;
+    _homePendingCount = provider.memoriesToDelete.length;
+    _ensureOwner();
+    if (_hiddenHomeMembers.isEmpty && provider.memoriesToDelete.isEmpty) return;
+    final pending = provider.memoriesToDelete.keys.toSet();
+    final restored = provider.conversations.map((c) => c.id).toSet();
+    final hidden = {..._hiddenHomeMembers, ...pending}
+      ..removeWhere((id) => !pending.contains(id) && restored.contains(id));
+    if (setEquals(hidden, _hiddenHomeMembers)) return;
+    _hiddenHomeMembers = hidden;
+    notifyListeners();
+  }
+
+  void invalidateHome() {
+    _homeReadAt = null;
+    _homeGeneration++;
+  }
+
+  void _closedOnHome(String episodeId) {
+    // Keep the just-closed row grouped while the authoritative read catches up.
+    _homeEpisodes = [for (final e in _homeEpisodes) e.id == episodeId ? e.copyWith(live: false) : e];
+    invalidateHome();
+  }
+
+  /// Load all pages atomically so partially loaded membership never splits an episode on Home.
+  Future<void> refreshHome(DateTime from, DateTime to, {bool force = false}) async {
+    _ensureOwner();
+    if (!_enabled) return;
+    final key = '${from.toIso8601String()}|${to.toIso8601String()}';
+    if (!force && key == _homeKey && _homeReadAt != null && _clock().difference(_homeReadAt!) < pollInterval) return;
+    _homeKey = key;
+    _homeReadAt = _clock();
+    final generation = ++_homeGeneration;
+    final uid = _ownerUid;
+    final collected = <String, Episode>{};
+    final cursors = <String>{};
+    String? cursor;
+    do {
+      final result = await _fetchPage(from, to, cursor: cursor);
+      if (_disposed || generation != _homeGeneration || uid != SharedPreferencesUtil().uid || !_enabled) return;
+      if (result case ApiSuccess(:final data)) {
+        if (!data.enabled) {
+          _enabled = false;
+          _live = null;
+          _homeEpisodes = const [];
+          notifyListeners();
+          return;
+        }
+        for (final episode in data.episodes) {
+          collected[episode.id] = _ended.contains(episode.id) ? episode.copyWith(live: false) : episode;
+        }
+        cursor = data.nextCursor;
+        if (cursor != null && !cursors.add(cursor)) return;
+      } else {
+        return;
+      }
+    } while (cursor != null);
+    _homeEpisodes = collected.values.toList();
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void debugSetHomeEpisodes(List<Episode> episodes) {
+    _homeEpisodes = episodes;
+    _homeReadAt = _clock();
+    notifyListeners();
+  }
 
   final EpisodeLiveFetcher _fetchLive;
   final EpisodeLookupFetcher _lookup;
@@ -52,7 +160,7 @@ class EpisodeProvider extends ChangeNotifier {
   final LiveStartAnchor liveAnchor = LiveStartAnchor();
 
   bool _enabled = false;
-  bool get enabled => _enabled;
+  bool get enabled => _enabled && _ownerUid == SharedPreferencesUtil().uid;
 
   Episode? _live;
   Episode? get live => _ownerUid == SharedPreferencesUtil().uid ? _live : null;
@@ -62,8 +170,8 @@ class EpisodeProvider extends ChangeNotifier {
   Episode? _previous;
 
   /// "Open previous" is the shortcut to the episode just closed, not a standing bookmark:
-  /// past this window from the episode's last activity its members are ordinary history
-  /// rows again, so Home's link retires instead of pointing at yesterday.
+  /// past this window from the episode's last activity the shortcut retires. Closed
+  /// episodes remain in the Home history projection.
   static const previousExpiry = Duration(hours: 12);
 
   Episode? get previous {
@@ -89,6 +197,12 @@ class EpisodeProvider extends ChangeNotifier {
     _waitingSince = _clock();
     _captureId = null;
     _previousBeforeCapture = null;
+    _homeEpisodes = const [];
+    _hiddenHomeMembers = {};
+    _homeVisibilityRows = null;
+    _homeKey = null;
+    _homeReadAt = null;
+    _homeGeneration++;
     _byConversation.clear();
     _cachedAt.clear();
     _lookups.clear();
@@ -193,6 +307,7 @@ class EpisodeProvider extends ChangeNotifier {
     final old = _live;
     final next = episode != null && episode.live && !_ended.contains(episode.id) ? episode : null;
     if (old != null && old.id != next?.id) {
+      _closedOnHome(old.id);
       _remember(old);
       if (recover && old.conversationIds.isNotEmpty) unawaited(recoverPrevious(old.conversationIds.last));
     }
@@ -279,7 +394,7 @@ class EpisodeProvider extends ChangeNotifier {
     _poll = Timer.periodic(_interval, (_) => unawaited(refreshLive()));
   }
 
-  /// The conversations a live episode stands for on Home; they reappear as rows once it closes.
+  /// The conversations the existing live row stands for on Home.
   Set<String> get liveConversationIds => _enabled && live != null ? live!.conversationIds.toSet() : const {};
 
   /// The episode [conversationId] belongs to. Coalesce reads and keep only a short-lived cache:
@@ -344,8 +459,8 @@ class EpisodeProvider extends ChangeNotifier {
       final result = await _wrapUp(episode.id, conversationId: conversationId);
       if (_disposed || uid != SharedPreferencesUtil().uid) return false;
       if (result case ApiSuccess(:final data)) {
+        _acceptLive(data.live && conversationId == null ? data : null, recover: false);
         _remember(data);
-        _live = data.live && conversationId == null ? data : null;
         return true;
       }
       return false;
@@ -366,6 +481,7 @@ class EpisodeProvider extends ChangeNotifier {
     if (episode != null) {
       _remember(episode);
       _ended.add(episode.id);
+      _closedOnHome(episode.id);
       _live = null;
       // Without a conversation id the server closes the episode immediately; a repeat is a no-op.
       unawaited(_wrapUp(episode.id));
@@ -411,6 +527,7 @@ class EpisodeProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _homeConversations?.removeListener(_syncHomeVisibility);
     _poll?.cancel();
     super.dispose();
   }

@@ -494,3 +494,12 @@ _driver(
     patchers=(_completed_status_enabled,),
     profile='expired-legacy-handle',
 )
+
+
+_driver(
+    'utils.episodes.home_read.list_episode_window',
+    base={'uid': UID, 'start': T0},
+    domains={'end': (T0, T1)},
+    neutrals={'limit': LIMIT, 'cursor': (None, 'snapshot continuation changes the position only')},
+    profile='request-episode-home',
+)

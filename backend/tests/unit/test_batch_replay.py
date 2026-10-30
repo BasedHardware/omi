@@ -174,6 +174,19 @@ def test_current_incident_shapes_clear(backend_tree):
     assert healthy['coverage']['source_validated'] == len(corpus['units'])
 
 
+def test_selected_snapshot_cannot_replace_replay_transaction_rules(backend_tree, monkeypatch):
+    from tests.unit.fixtures import strict_firestore_transaction as selected_fixture
+
+    def refuse_selected_fixture(*args, **kwargs):
+        raise AssertionError('selected product snapshot must not supply replay transaction rules')
+
+    monkeypatch.setattr(selected_fixture, 'StrictFirestore', refuse_selected_fixture)
+    corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
+    result = replay(corpus, backend_tree)
+    assert result['persisted'] == len(corpus['units'])
+    assert not result['exceptions'] and not result['chain_blocks']
+
+
 def test_invalid_source_slice_is_detected(backend_tree):
     corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
     corpus['units'] = [corpus['units'][0]]

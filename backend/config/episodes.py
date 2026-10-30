@@ -169,13 +169,17 @@ MOMENT_MIN_INTERVAL_SECONDS = 60
 
 # Below this gap a new conversation simply continues the episode (it is the
 # live split itself, ``models/conversation_continuity.DEFAULT_GAP_SECONDS``).
-CONTINUE_GAP_SECONDS = 120
+from config.recorded_time_tolerances import (
+    CONTINUE_GAP_SECONDS as CONTINUE_GAP_SECONDS,
+    CLOSE_GAP_SECONDS as CLOSE_GAP_SECONDS,
+    MAX_EPISODE_SECONDS as MAX_EPISODE_SECONDS,
+    FALLBACK_CLOSE_GAP_SECONDS as FALLBACK_CLOSE_GAP_SECONDS,
+)
+
 # At or above this gap the episode is over without asking: the next speech opens
 # a new episode (reason ``gap``), and a read that finds an episode this idle
 # closes it (reason ``idle``). In between, Jev decides whether the user moved on.
-CLOSE_GAP_SECONDS = 30 * 60
-# Hard cap on one episode's wall-clock span (smart merge's conservative cap).
-MAX_EPISODE_SECONDS = 3 * 60 * 60
+# Hard cap on one episode's recorded span (David, 2026-10-29).
 MAX_MOMENTS = 48
 
 # Jev answers P(same occasion); below this the user moved on. Deliberately low:
@@ -185,7 +189,6 @@ MOVED_ON_THRESHOLD = 0.2
 JEV_LANE = 'episode_boundary'
 JEV_TIMEOUT_SECONDS = 2.5
 # Without a Jev answer, a source change or a gap this long still closes.
-FALLBACK_CLOSE_GAP_SECONDS = 15 * 60
 
 # --------------------------------------------------------------------------- compact state budget
 

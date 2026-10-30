@@ -14842,4 +14842,19 @@ class AppLocalizationsAr extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'تم خصم $amount اليوم. يتجدد في $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count جزء',
+      many: '$count جزءًا',
+      few: '$count أجزاء',
+      two: '$count جزءان',
+      one: '$count جزء',
+      zero: '$count أجزاء',
+    );
+    return '$_temp0';
+  }
 }
