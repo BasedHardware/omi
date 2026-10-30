@@ -22,7 +22,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -248,7 +248,9 @@ def to_updates(
     """``spans`` are (member id, first line, last line) on the transcript clock the model saw."""
     if spans is None:
         spans = [(str(row.get('id')), *line_span(transcript_lines(row, '', tz))) for row in members]
-    known = [(cid, a, b) for cid, a, b in spans if a and b]
+    known: list[tuple[str, datetime, datetime]] = [
+        (cid, a, b) for cid, a, b in spans if a is not None and b is not None
+    ]
     moments = []
     if known:
         lo, hi = min(a for _, a, _ in known), max(b for _, _, b in known)
@@ -265,12 +267,11 @@ def to_updates(
             owner = next(
                 (cid for cid, a, b in known if a - timedelta(minutes=1) <= start <= b + timedelta(minutes=1)), None
             )
-            owner = (
-                owner
-                or min(
-                    known, key=lambda s: min(abs((s[1] - start).total_seconds()), abs((s[2] - start).total_seconds()))
+            if owner is None:
+                at: datetime = start
+                owner = min(
+                    known, key=lambda s: min(abs((s[1] - at).total_seconds()), abs((s[2] - at).total_seconds()))
                 )[0]
-            )
             moments.append(
                 {
                     'id': uuid4().hex[:12],
@@ -348,7 +349,17 @@ def _members(uid: str, episode: Mapping[str, Any], c: Any) -> tuple[str, list[di
     return 'ok', members
 
 
-def _write(uid: str, episode_id: str, c: Any, updates: Mapping[str, Any], *, guard=None) -> str:
+_Updates = Union[Mapping[str, Any], Callable[[Mapping[str, Any]], Mapping[str, Any]]]
+
+
+def _write(
+    uid: str,
+    episode_id: str,
+    c: Any,
+    updates: _Updates,
+    *,
+    guard: Optional[Callable[[Mapping[str, Any]], Optional[str]]] = None,
+) -> str:
     """CAS write with bounded retries. ``guard(current)`` returns an outcome to stop, or None."""
     for _attempt in range(3):
         current = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
