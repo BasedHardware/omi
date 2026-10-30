@@ -2041,6 +2041,13 @@ environments:
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+        OMI_FLAGS_FIRESTORE_PROJECT:
+          value: based-hardware
+          category: service_discovery
+        OMI_FLAGS_FIRESTORE_DATABASE:
+          value: omi-flags
+          category: service_discovery
+        OMI_FLAGS_SOURCE: {value: dual, category: rollout}
         OMI_VERTEX_RESERVATION_STATES:
           value: '{"gemini-2.5-flash":"inactive"}'
           category: ops_kill
@@ -2369,6 +2376,13 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          OMI_FLAGS_FIRESTORE_PROJECT:
+            value: based-hardware
+            category: service_discovery
+          OMI_FLAGS_FIRESTORE_DATABASE:
+            value: omi-flags
+            category: service_discovery
+          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
             value: 'false'
@@ -2553,6 +2567,13 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          OMI_FLAGS_FIRESTORE_PROJECT:
+            value: based-hardware
+            category: service_discovery
+          OMI_FLAGS_FIRESTORE_DATABASE:
+            value: omi-flags
+            category: service_discovery
+          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
@@ -2750,6 +2771,13 @@ environments:
           value: desktop-backend
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+        OMI_FLAGS_FIRESTORE_PROJECT:
+          value: based-hardware
+          category: service_discovery
+        OMI_FLAGS_FIRESTORE_DATABASE:
+          value: omi-flags
+          category: service_discovery
+        OMI_FLAGS_SOURCE: {value: dual, category: rollout}
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
@@ -3074,6 +3102,13 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_FLAGS_FIRESTORE_PROJECT:
+              value: based-hardware
+              category: service_discovery
+            OMI_FLAGS_FIRESTORE_DATABASE:
+              value: omi-flags
+              category: service_discovery
+            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
             FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
@@ -3457,6 +3492,13 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_FLAGS_FIRESTORE_PROJECT:
+              value: based-hardware
+              category: service_discovery
+            OMI_FLAGS_FIRESTORE_DATABASE:
+              value: omi-flags
+              category: service_discovery
+            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
             SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
