@@ -6397,6 +6397,25 @@ the extra producer transaction runs only on its first accepted audio per drain.
 CPU reconciliation waits for a successful receipt and the completed, retained
 conversation. This is a durability barrier, not an upload-grace timer.
 
+One-time no-job backfill: `backend/scripts/backfill_record_seal_nojob.py --next-file PRIVATE_CURSOR`
+discovers at most 128 `batch_live_v1` conversation references per page using the
+existing owner collection-group index, including refused/already registered rows.
+Default dry-run accepts `ro-prod` or `prod-operator`; it prints only counts,
+dispositions and `plan_sha256`. Apply requires `prod-operator` plus
+`--apply --approve-plan-sha256 DIGEST` from a fresh dry-run of the same page.
+Keep cursor files in an operator-owned 0700 directory under Ephemeral scratch;
+the tool writes the next cursor atomically as 0600. For later pages pass the
+previous output as `--after-file` and a different `--next-file`. Keep that input
+unchanged between dry-run and apply; stop on an empty page. Advance only after
+settling the page, and revisit refused rows from the beginning after remediation.
+Token rows require the same fresh `--pusher-pods-file` and capture time as the
+repair below; bare tokens are refused. The tool shares the retained-tail proof
+and registers the canonical deterministic `record_pending` job in the same
+transaction that clears proven-dead tokens and sets `record_audio_closed=true`.
+It never clears upload failures or admits privacy-excluded rows. The normal
+drainer independently proves the tail again before admission. No production run
+is implied by merging this tool; the rollout lead owns dry-run and apply.
+
 One-time stuck-job repair: `backend/scripts/repair_record_audio_seals.py
 --ids-file PRIVATE_JSON` takes 1..128 exact pending job IDs, with no discovery scan.
 Default dry-run requires `ro-prod`; output is only counts, closed dispositions and

@@ -417,8 +417,12 @@ async def finalize_persisted_conversation(
 
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
-        if not silent_backfill and conversation_data.get('record_lane_owner') == 'batch_live_v1':
-            await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
+        if conversation_data.get('record_lane_owner') == 'batch_live_v1':
+            stage = 'record_registration'
+            if not await run_blocking(
+                db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
+            ):
+                raise ConversationFinalizationError('record_registration_refused')
 
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
@@ -740,6 +744,12 @@ async def _load_admitted_conversation(
         return ConversationFinalizationDisposition.fenced, None, None
 
     if trigger is ProcessingTrigger.SILENT_BACKFILL and conversation_data.get('record_lane_owner'):
+        # Historical enrichment must not process a batch-owned row. Preserve
+        # that fence, but first retain its deterministic batch obligation.
+        if conversation_data.get('record_lane_owner') == 'batch_live_v1' and not await run_blocking(
+            db_executor, register_recording, uid, conversation_data
+        ):
+            raise ConversationFinalizationError('record_registration_refused')
         return ConversationFinalizationDisposition.fenced, None, None
     for _ in range(3):
         try:

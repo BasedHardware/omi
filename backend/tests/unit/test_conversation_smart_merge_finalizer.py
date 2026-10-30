@@ -111,6 +111,48 @@ async def _finalize(trigger=ProcessingTrigger.CAPTURE_END):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('trigger', [ProcessingTrigger.CAPTURE_END, ProcessingTrigger.SILENT_BACKFILL])
+@pytest.mark.parametrize('registered', [True, False])
+async def test_record_registration_precedes_terminal_fanout_even_for_silent_backfill(
+    harness, monkeypatch, trigger, registered
+):
+    calls, row = harness
+    row['record_lane_owner'] = 'batch_live_v1'
+    conversation = _Conversation()
+    conversation.model_dump = lambda: {'id': 'n', 'status': 'completed'}
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _: conversation)
+    original = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            assert args[1]['record_lane_owner'] == 'batch_live_v1'
+            calls.append(function)
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    async def absorbed(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    monkeypatch.setattr(finalizer, 'smart_merge_step', absorbed)
+    if registered:
+        if trigger is ProcessingTrigger.SILENT_BACKFILL:
+            assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.fenced
+            assert finalizer.register_recording in calls
+            assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+        else:
+            assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.completed
+            assert calls.index(finalizer.register_recording) < calls.index(
+                finalizer.lifecycle_service.claim_finalization_fanout
+            )
+    else:
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await _finalize(trigger)
+        assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+        assert finalizer.lifecycle_service.complete_finalization_fanout not in calls
+
+
+@pytest.mark.asyncio
 async def test_completed_minimum_reaches_processing_under_its_existing_job(harness, monkeypatch):
     calls, row = harness
     row.update(summary_title_provenance='server_minimum', summary_output_present=False)

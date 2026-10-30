@@ -71,6 +71,35 @@ def _refused(job, row, *, producer_proof=None, producers_stopped=False):
     return None
 
 
+def retained_tail_proof(job, row, storage_client, artifacts):
+    """Shared retained-object and frozen/current-finish proof for operator seals."""
+    uid, cid = job['owner_id'], job['conversation_id']
+    seed = WorkItem(
+        job['segment_id'],
+        uid,
+        0,
+        'record:pending',
+        1,
+        Priority.FRESH,
+        conversation_id=cid,
+        privacy_generation=job['privacy_generation'],
+    )
+    artifacts.authorize(seed)
+    chunks = list_audio_chunks(uid, cid, max_count=4096, require_archive=True)
+    units = []
+    iterator = retained_record_units(uid, cid, chunks, storage_client, artifacts.key_for_owner(uid))
+    try:
+        for unit in iterator:
+            units.append(unit)
+            if len(units) > 128:
+                raise ValueError('retained capture unit budget exceeded')
+    finally:
+        iterator.close()
+    validate_record_tail(units, row.get('finished_at'), require_finish=True)
+    validate_record_tail(units, (job.get('record_snapshot') or {}).get('finished_at'), require_finish=True)
+    return _digest(units)
+
+
 def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None, producers_stopped=False):
     entries = []
     for job_id in sorted(job_ids):
@@ -87,32 +116,8 @@ def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None
             if refusal:
                 entry['disposition'] = refusal
             else:
-                seed = WorkItem(
-                    job_id,
-                    uid,
-                    0,
-                    'record:pending',
-                    1,
-                    Priority.FRESH,
-                    conversation_id=cid,
-                    privacy_generation=job['privacy_generation'],
-                )
-                artifacts.authorize(seed)
-                chunks = list_audio_chunks(uid, cid, max_count=4096, require_archive=True)
-                units = []
-                iterator = retained_record_units(uid, cid, chunks, storage_client, artifacts.key_for_owner(uid))
-                try:
-                    for unit in iterator:
-                        units.append(unit)
-                        if len(units) > 128:
-                            raise ValueError('retained capture unit budget exceeded')
-                finally:
-                    iterator.close()
-                # Require both the current finish and the pending admission's
-                # frozen finish. No missing timestamp can certify an old tail.
-                validate_record_tail(units, row.get('finished_at'), require_finish=True)
-                validate_record_tail(units, (job.get('record_snapshot') or {}).get('finished_at'), require_finish=True)
-                entry.update(disposition='eligible', proof_sha256=_digest(units))
+                proof = retained_tail_proof({**job, 'segment_id': job_id}, row, storage_client, artifacts)
+                entry.update(disposition='eligible', proof_sha256=proof)
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_refused'
         except (ValueError, TypeError, AttributeError, KeyError):

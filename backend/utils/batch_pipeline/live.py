@@ -64,7 +64,7 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
     return OWNER
 
 
-def register_recording(uid: str, conversation: dict, *, store=None, now=None) -> bool:
+def register_recording(uid: str, conversation: dict, *, store=None, now=None, transaction=None) -> bool:
     if conversation.get('record_lane_owner') != OWNER:
         return False
     if server_batch_owned(conversation) and not server_batch_has_audio(conversation):
@@ -73,7 +73,8 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
         return False
     if not conversation.get('private_cloud_sync_enabled'):
         return False
-    store = store or shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
+    if transaction is None:
+        store = store or shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
     now = time.time() if now is None else now
     content, segment = record_identity(uid, conversation['id'])
     # The immutable native owner is main's earlier admission receipt. A later
@@ -124,7 +125,9 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
         )
         return True
 
-    return store.run(commit)
+    # Operator seal backfill joins registration to the row's existing transaction.
+    # The caller owns flushing buffered writes after all privacy reads complete.
+    return commit(transaction) if transaction is not None else store.run(commit)
 
 
 def retained_record_units(
