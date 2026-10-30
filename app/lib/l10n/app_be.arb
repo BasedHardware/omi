@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Уключыць / Выключыць",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Завяршыць і перапрацаваць размову",
     "@endAndProcess": {
         "description": "End and process action"
@@ -11850,12 +11857,5 @@
     "recapInTheBackground": "У фоне",
     "retentionOfferAccept": "Застацца са зніжкай {percent}%",
     "retentionOfferBody": "Застаньцеся і плаціце {price} у месяц на працягу {months} месяцаў.",
-    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Уключыць / Выключыць",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы."
 }

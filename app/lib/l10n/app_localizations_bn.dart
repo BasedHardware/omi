@@ -578,6 +578,27 @@ class AppLocalizationsBn extends AppLocalizations {
   String get doubleTapAction => 'দ্বিগুণ ট্যাপ ক্রিয়া';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'চালু করুন / বন্ধ করুন';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'কথোপকথন শেষ এবং প্রক্রিয়া করুন';
 
   @override
@@ -14548,25 +14569,4 @@ class AppLocalizationsBn extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'হয়ে গেছে। $percent% ছাড়, পরের $months মাস।';
   }
-
-  @override
-  String get singlePress => 'Single Press';
-
-  @override
-  String get triplePress => 'Triple Press';
-
-  @override
-  String get longPress => 'Long Press';
-
-  @override
-  String get singlePressAction => 'Single Press Action';
-
-  @override
-  String get triplePressAction => 'Triple Press Action';
-
-  @override
-  String get turnOnOff => 'চালু করুন / বন্ধ করুন';
-
-  @override
-  String get triplePressSubtitle => 'Requires updated firmware';
 }

@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Вклучи / Исклучи",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Крај и обработи разговор",
     "@endAndProcess": {
         "description": "End and process action"
@@ -11850,12 +11857,5 @@
     "recapInTheBackground": "Во позадина",
     "retentionOfferAccept": "Остани со {percent}% попуст",
     "retentionOfferBody": "Остани и плаќај {price} месечно во следните {months} месеци.",
-    "retentionOfferApplied": "Готово. {percent}% попуст за следните {months} месеци.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Вклучи / Исклучи",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Готово. {percent}% попуст за следните {months} месеци."
 }

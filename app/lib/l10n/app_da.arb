@@ -184,6 +184,13 @@
     "pauseResume": "Pause/Genoptag",
     "starConversation": "Stjernemarkér samtale",
     "doubleTapAction": "Dobbelttryk-handling",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Tænd / Sluk",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Afslut og behandl samtale",
     "pauseResumeRecording": "Pause/Genoptag optagelse",
     "starOngoing": "Stjernemarkér igangværende samtale",
@@ -4466,12 +4473,5 @@
     "recapInTheBackground": "I baggrunden",
     "retentionOfferAccept": "Bliv for {percent}% rabat",
     "retentionOfferBody": "Bliv og betal {price} om måneden de næste {months} måneder.",
-    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Tænd / Sluk",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder."
 }

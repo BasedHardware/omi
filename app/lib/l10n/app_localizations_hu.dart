@@ -582,6 +582,27 @@ class AppLocalizationsHu extends AppLocalizations {
   String get doubleTapAction => 'Dupla érintés művelet';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Bekapcsolás / Kikapcsolás';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Beszélgetés befejezése és feldolgozása';
 
   @override
@@ -14610,25 +14631,4 @@ class AppLocalizationsHu extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Kész. $percent% kedvezmény a következő $months hónapban.';
   }
-
-  @override
-  String get singlePress => 'Single Press';
-
-  @override
-  String get triplePress => 'Triple Press';
-
-  @override
-  String get longPress => 'Long Press';
-
-  @override
-  String get singlePressAction => 'Single Press Action';
-
-  @override
-  String get triplePressAction => 'Triple Press Action';
-
-  @override
-  String get turnOnOff => 'Bekapcsolás / Kikapcsolás';
-
-  @override
-  String get triplePressSubtitle => 'Requires updated firmware';
 }

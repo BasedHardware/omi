@@ -184,6 +184,13 @@
     "pauseResume": "Pozastavit/Obnovit",
     "starConversation": "Označit konverzaci hvězdičkou",
     "doubleTapAction": "Akce dvojitého klepnutí",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Zapnutí / Vypnutí",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Ukončit a zpracovat konverzaci",
     "pauseResumeRecording": "Pozastavit/Obnovit nahrávání",
     "starOngoing": "Označit probíhající konverzaci hvězdičkou",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "Na pozadí",
     "retentionOfferAccept": "Zůstat se slevou {percent} %",
     "retentionOfferBody": "Zůstaňte a plaťte {price} měsíčně po dobu dalších {months} měsíců.",
-    "retentionOfferApplied": "Hotovo. Sleva {percent} % na dalších {months} měsíců.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Zapnutí / Vypnutí",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Hotovo. Sleva {percent} % na dalších {months} měsíců."
 }

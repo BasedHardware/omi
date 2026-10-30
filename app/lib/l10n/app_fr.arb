@@ -184,6 +184,13 @@
     "pauseResume": "Pause/Reprendre",
     "starConversation": "Marquer la conversation comme favorite",
     "doubleTapAction": "Action double appui",
+    "singlePress": "Un appui",
+    "triplePress": "Triple appui",
+    "longPress": "Appui long",
+    "singlePressAction": "Action pour un appui",
+    "triplePressAction": "Action pour triple appui",
+    "turnOnOff": "Allumer / Éteindre",
+    "triplePressSubtitle": "Firmware récent requis",
     "endAndProcess": "Terminer et traiter la conversation",
     "pauseResumeRecording": "Pause/Reprendre l'enregistrement",
     "starOngoing": "Marquer la conversation en cours comme favorite",
@@ -4459,12 +4466,5 @@
     "recapInTheBackground": "En arrière-plan",
     "retentionOfferAccept": "Rester avec {percent} % de réduction",
     "retentionOfferBody": "Restez et payez {price} par mois pendant les {months} prochains mois.",
-    "retentionOfferApplied": "C'est fait. {percent} % de réduction pendant les {months} prochains mois.",
-    "singlePress": "Un appui",
-    "triplePress": "Triple appui",
-    "longPress": "Appui long",
-    "singlePressAction": "Action pour un appui",
-    "triplePressAction": "Action pour triple appui",
-    "turnOnOff": "Allumer / Éteindre",
-    "triplePressSubtitle": "Firmware récent requis"
+    "retentionOfferApplied": "C'est fait. {percent} % de réduction pendant les {months} prochains mois."
 }

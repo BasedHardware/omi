@@ -186,6 +186,13 @@
     "pauseResume": "रोकें/दोबारा शुरू करें",
     "starConversation": "बातचीत को तारांकित करें",
     "doubleTapAction": "डबल टैप क्रिया",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "चालू करें / बंद करें",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "समाप्त करें और संसाधित करें",
     "pauseResumeRecording": "रिकॉर्डिंग रोकें/दोबारा शुरू करें",
     "starOngoing": "चल रही बातचीत को तारांकित करें",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "पृष्ठभूमि में",
     "retentionOfferAccept": "{percent}% छूट के साथ बने रहें",
     "retentionOfferBody": "बने रहें और हर महीने {price} दें, अगले {months} महीनों तक।",
-    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "चालू करें / बंद करें",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।"
 }

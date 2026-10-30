@@ -579,6 +579,27 @@ class AppLocalizationsId extends AppLocalizations {
   String get doubleTapAction => 'Aksi Ketuk Ganda';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Nyalakan / Matikan';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Akhiri & Proses Percakapan';
 
   @override
@@ -14566,25 +14587,4 @@ class AppLocalizationsId extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Selesai. Diskon $percent% untuk $months bulan ke depan.';
   }
-
-  @override
-  String get singlePress => 'Single Press';
-
-  @override
-  String get triplePress => 'Triple Press';
-
-  @override
-  String get longPress => 'Long Press';
-
-  @override
-  String get singlePressAction => 'Single Press Action';
-
-  @override
-  String get triplePressAction => 'Triple Press Action';
-
-  @override
-  String get turnOnOff => 'Nyalakan / Matikan';
-
-  @override
-  String get triplePressSubtitle => 'Requires updated firmware';
 }

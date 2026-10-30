@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "चालू करा / बंद करा",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "संभाषण समाप्त आणि प्रक्रिया करा",
     "@endAndProcess": {
         "description": "End and process action"
@@ -11850,12 +11857,5 @@
     "recapInTheBackground": "पार्श्वभूमीवर",
     "retentionOfferAccept": "{percent}% सवलतीसह सुरू ठेवा",
     "retentionOfferBody": "सुरू ठेवा आणि दरमहा {price} भरा, पुढील {months} महिने.",
-    "retentionOfferApplied": "झाले. {percent}% सवलत, पुढील {months} महिने.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "चालू करा / बंद करा",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "झाले. {percent}% सवलत, पुढील {months} महिने."
 }

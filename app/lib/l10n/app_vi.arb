@@ -184,6 +184,13 @@
     "pauseResume": "Tạm dừng/Tiếp tục",
     "starConversation": "Gắn sao cuộc trò chuyện",
     "doubleTapAction": "Hành động nhấn đúp",
+    "singlePress": "Nhấn một lần",
+    "triplePress": "Nhấn ba lần",
+    "longPress": "Nhấn giữ",
+    "singlePressAction": "Hành động nhấn một lần",
+    "triplePressAction": "Hành động nhấn ba lần",
+    "turnOnOff": "Bật thiết bị / Tắt thiết bị",
+    "triplePressSubtitle": "Yêu cầu firmware mới",
     "endAndProcess": "Kết thúc & Xử lý cuộc trò chuyện",
     "pauseResumeRecording": "Tạm dừng/Tiếp tục ghi âm",
     "starOngoing": "Gắn sao cuộc trò chuyện đang diễn ra",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "Trong nền",
     "retentionOfferAccept": "Ở lại với ưu đãi giảm {percent}%",
     "retentionOfferBody": "Ở lại và chỉ trả {price} mỗi tháng trong {months} tháng tới.",
-    "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới.",
-    "singlePress": "Nhấn một lần",
-    "triplePress": "Nhấn ba lần",
-    "longPress": "Nhấn giữ",
-    "singlePressAction": "Hành động nhấn một lần",
-    "triplePressAction": "Hành động nhấn ba lần",
-    "turnOnOff": "Bật thiết bị / Tắt thiết bị",
-    "triplePressSubtitle": "Yêu cầu firmware mới"
+    "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới."
 }

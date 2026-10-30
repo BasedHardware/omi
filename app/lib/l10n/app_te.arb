@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "ఆన్ చేయండి / ఆఫ్ చేయండి",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "సంభాషణను ముగించండి & ప్రక్రియ చేయండి",
     "@endAndProcess": {
         "description": "End and process action"
@@ -11850,12 +11857,5 @@
     "recapInTheBackground": "నేపథ్యంలో",
     "retentionOfferAccept": "{percent}% తగ్గింపుతో కొనసాగండి",
     "retentionOfferBody": "కొనసాగండి, నెలకు {price} చెల్లించండి, తదుపరి {months} నెలలు.",
-    "retentionOfferApplied": "పూర్తైంది. {percent}% తగ్గింపు, తదుపరి {months} నెలలు.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "ఆన్ చేయండి / ఆఫ్ చేయండి",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "పూర్తైంది. {percent}% తగ్గింపు, తదుపరి {months} నెలలు."
 }

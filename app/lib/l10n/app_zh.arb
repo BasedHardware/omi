@@ -186,6 +186,13 @@
     "pauseResume": "暂停/恢复",
     "starConversation": "星标对话",
     "doubleTapAction": "双击操作",
+    "singlePress": "单击",
+    "triplePress": "三击",
+    "longPress": "长按",
+    "singlePressAction": "单击操作",
+    "triplePressAction": "三击操作",
+    "turnOnOff": "开机 / 关机",
+    "triplePressSubtitle": "需要更新固件",
     "endAndProcess": "结束并处理",
     "pauseResumeRecording": "暂停/恢复录音",
     "starOngoing": "星标当前对话",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "背景中",
     "retentionOfferAccept": "享受 {percent}% 折扣继续使用",
     "retentionOfferBody": "继续使用，每月只需 {price}，持续 {months} 个月。",
-    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。",
-    "singlePress": "单击",
-    "triplePress": "三击",
-    "longPress": "长按",
-    "singlePressAction": "单击操作",
-    "triplePressAction": "三击操作",
-    "turnOnOff": "开机 / 关机",
-    "triplePressSubtitle": "需要更新固件"
+    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。"
 }

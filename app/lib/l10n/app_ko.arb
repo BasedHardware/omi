@@ -184,6 +184,13 @@
     "pauseResume": "일시정지/재개",
     "starConversation": "대화 즐겨찾기",
     "doubleTapAction": "더블 탭 동작",
+    "singlePress": "한 번 누르기",
+    "triplePress": "세 번 누르기",
+    "longPress": "길게 누르기",
+    "singlePressAction": "한 번 누르기 동작",
+    "triplePressAction": "세 번 누르기 동작",
+    "turnOnOff": "전원 켜기 / 전원 끄기",
+    "triplePressSubtitle": "최신 펌웨어 필요",
     "endAndProcess": "대화 종료 및 처리",
     "pauseResumeRecording": "녹음 일시정지/재개",
     "starOngoing": "진행 중인 대화 즐겨찾기",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "배경에서",
     "retentionOfferAccept": "{percent}% 할인받고 계속 쓰기",
     "retentionOfferBody": "계속 쓰시면 월 {price}, 앞으로 {months}개월 동안.",
-    "retentionOfferApplied": "완료되었습니다. {percent}% 할인이 {months}개월 동안 적용됩니다.",
-    "singlePress": "한 번 누르기",
-    "triplePress": "세 번 누르기",
-    "longPress": "길게 누르기",
-    "singlePressAction": "한 번 누르기 동작",
-    "triplePressAction": "세 번 누르기 동작",
-    "turnOnOff": "전원 켜기 / 전원 끄기",
-    "triplePressSubtitle": "최신 펌웨어 필요"
+    "retentionOfferApplied": "완료되었습니다. {percent}% 할인이 {months}개월 동안 적용됩니다."
 }

@@ -569,6 +569,27 @@ class AppLocalizationsKo extends AppLocalizations {
   String get doubleTapAction => '더블 탭 동작';
 
   @override
+  String get singlePress => '한 번 누르기';
+
+  @override
+  String get triplePress => '세 번 누르기';
+
+  @override
+  String get longPress => '길게 누르기';
+
+  @override
+  String get singlePressAction => '한 번 누르기 동작';
+
+  @override
+  String get triplePressAction => '세 번 누르기 동작';
+
+  @override
+  String get turnOnOff => '전원 켜기 / 전원 끄기';
+
+  @override
+  String get triplePressSubtitle => '최신 펌웨어 필요';
+
+  @override
   String get endAndProcess => '대화 종료 및 처리';
 
   @override
@@ -14354,25 +14375,4 @@ class AppLocalizationsKo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '완료되었습니다. $percent% 할인이 $months개월 동안 적용됩니다.';
   }
-
-  @override
-  String get singlePress => '한 번 누르기';
-
-  @override
-  String get triplePress => '세 번 누르기';
-
-  @override
-  String get longPress => '길게 누르기';
-
-  @override
-  String get singlePressAction => '한 번 누르기 동작';
-
-  @override
-  String get triplePressAction => '세 번 누르기 동작';
-
-  @override
-  String get turnOnOff => '전원 켜기 / 전원 끄기';
-
-  @override
-  String get triplePressSubtitle => '최신 펌웨어 필요';
 }

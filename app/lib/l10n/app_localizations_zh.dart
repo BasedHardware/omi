@@ -569,6 +569,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTapAction => '双击操作';
 
   @override
+  String get singlePress => '单击';
+
+  @override
+  String get triplePress => '三击';
+
+  @override
+  String get longPress => '长按';
+
+  @override
+  String get singlePressAction => '单击操作';
+
+  @override
+  String get triplePressAction => '三击操作';
+
+  @override
+  String get turnOnOff => '开机 / 关机';
+
+  @override
+  String get triplePressSubtitle => '需要更新固件';
+
+  @override
   String get endAndProcess => '结束并处理';
 
   @override
@@ -14328,25 +14349,4 @@ class AppLocalizationsZh extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '完成。$percent% 折扣，持续 $months 个月。';
   }
-
-  @override
-  String get singlePress => '单击';
-
-  @override
-  String get triplePress => '三击';
-
-  @override
-  String get longPress => '长按';
-
-  @override
-  String get singlePressAction => '单击操作';
-
-  @override
-  String get triplePressAction => '三击操作';
-
-  @override
-  String get turnOnOff => '开机 / 关机';
-
-  @override
-  String get triplePressSubtitle => '需要更新固件';
 }

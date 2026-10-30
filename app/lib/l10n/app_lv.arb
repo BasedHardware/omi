@@ -184,6 +184,13 @@
     "pauseResume": "Pauze/Atsākt",
     "starConversation": "Atzīmēt sarunu ar zvaigznīti",
     "doubleTapAction": "Dubultklikšķa darbība",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Ieslēgt / Izslēgt",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Beigt un apstrādāt sarunu",
     "pauseResumeRecording": "Apturēt/atsākt ierakstīšanu",
     "starOngoing": "Atzīmēt notiekošo sarunu ar zvaigznīti",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "Fonā",
     "retentionOfferAccept": "Palikt ar {percent}% atlaidi",
     "retentionOfferBody": "Paliec un maksā {price} mēnesī nākamos {months} mēnešus.",
-    "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Ieslēgt / Izslēgt",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus."
 }

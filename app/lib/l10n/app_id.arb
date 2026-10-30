@@ -184,6 +184,13 @@
     "pauseResume": "Jeda/Lanjutkan",
     "starConversation": "Beri Bintang Percakapan",
     "doubleTapAction": "Aksi Ketuk Ganda",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Nyalakan / Matikan",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Akhiri & Proses Percakapan",
     "pauseResumeRecording": "Jeda/Lanjutkan Perekaman",
     "starOngoing": "Beri Bintang Percakapan yang Sedang Berlangsung",
@@ -4459,12 +4466,5 @@
     "recapInTheBackground": "Di latar belakang",
     "retentionOfferAccept": "Tetap dengan diskon {percent}%",
     "retentionOfferBody": "Tetap dan bayar {price} per bulan selama {months} bulan ke depan.",
-    "retentionOfferApplied": "Selesai. Diskon {percent}% untuk {months} bulan ke depan.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Nyalakan / Matikan",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Selesai. Diskon {percent}% untuk {months} bulan ke depan."
 }

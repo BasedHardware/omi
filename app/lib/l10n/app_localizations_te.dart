@@ -581,6 +581,27 @@ class AppLocalizationsTe extends AppLocalizations {
   String get doubleTapAction => 'డబల్ ట్యాప్ చర్య';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'ఆన్ చేయండి / ఆఫ్ చేయండి';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'సంభాషణను ముగించండి & ప్రక్రియ చేయండి';
 
   @override
@@ -14612,25 +14633,4 @@ class AppLocalizationsTe extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'పూర్తైంది. $percent% తగ్గింపు, తదుపరి $months నెలలు.';
   }
-
-  @override
-  String get singlePress => 'Single Press';
-
-  @override
-  String get triplePress => 'Triple Press';
-
-  @override
-  String get longPress => 'Long Press';
-
-  @override
-  String get singlePressAction => 'Single Press Action';
-
-  @override
-  String get triplePressAction => 'Triple Press Action';
-
-  @override
-  String get turnOnOff => 'ఆన్ చేయండి / ఆఫ్ చేయండి';
-
-  @override
-  String get triplePressSubtitle => 'Requires updated firmware';
 }

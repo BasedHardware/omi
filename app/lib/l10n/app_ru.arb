@@ -184,6 +184,13 @@
     "pauseResume": "Пауза/Возобновить",
     "starConversation": "Добавить разговор в избранное",
     "doubleTapAction": "Действие при двойном нажатии",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Включить / Выключить",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Завершить и обработать разговор",
     "pauseResumeRecording": "Пауза/Возобновить запись",
     "starOngoing": "Добавить текущий разговор в избранное",
@@ -4459,12 +4466,5 @@
     "recapInTheBackground": "На фоне",
     "retentionOfferAccept": "Остаться со скидкой {percent}%",
     "retentionOfferBody": "Оставайтесь и платите {price} в месяц следующие {months} месяца.",
-    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Включить / Выключить",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца."
 }

@@ -184,6 +184,13 @@
     "pauseResume": "Szünet/folytatás",
     "starConversation": "Beszélgetés csillagozása",
     "doubleTapAction": "Dupla érintés művelet",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Bekapcsolás / Kikapcsolás",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Beszélgetés befejezése és feldolgozása",
     "pauseResumeRecording": "Felvétel szüneteltetése/folytatása",
     "starOngoing": "Folyamatban lévő beszélgetés csillagozása",
@@ -4520,12 +4527,5 @@
     "recapInTheBackground": "A háttérben",
     "retentionOfferAccept": "Maradj {percent}% kedvezménnyel",
     "retentionOfferBody": "Maradj, és fizess havi {price} összeget a következő {months} hónapban.",
-    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Bekapcsolás / Kikapcsolás",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban."
 }

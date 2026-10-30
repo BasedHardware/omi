@@ -184,6 +184,13 @@
     "pauseResume": "Pause/Fortsett",
     "starConversation": "Favorittmerk samtale",
     "doubleTapAction": "Dobbelttrykk-handling",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Slå på / Slå av",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Avslutt og behandle samtale",
     "pauseResumeRecording": "Pause/Fortsett opptak",
     "starOngoing": "Favorittmerk pågående samtale",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "I bakgrunnen",
     "retentionOfferAccept": "Bli med {percent} % rabatt",
     "retentionOfferBody": "Bli og betal {price} i måneden de neste {months} månedene.",
-    "retentionOfferApplied": "Ferdig. {percent} % rabatt de neste {months} månedene.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Slå på / Slå av",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Ferdig. {percent} % rabatt de neste {months} månedene."
 }

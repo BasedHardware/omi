@@ -583,6 +583,27 @@ class AppLocalizationsTa extends AppLocalizations {
   String get doubleTapAction => 'இரட்டை தட்டு நடவடிக்கை';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'இயக்கவும் / அணைக்கவும்';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'முடிக்கவும் & உரையாடல் செயல்படுத்தவும்';
 
   @override
@@ -14651,25 +14672,4 @@ class AppLocalizationsTa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'முடிந்தது. $percent% தள்ளுபடி, அடுத்த $months மாதங்களுக்கு.';
   }
-
-  @override
-  String get singlePress => 'Single Press';
-
-  @override
-  String get triplePress => 'Triple Press';
-
-  @override
-  String get longPress => 'Long Press';
-
-  @override
-  String get singlePressAction => 'Single Press Action';
-
-  @override
-  String get triplePressAction => 'Triple Press Action';
-
-  @override
-  String get turnOnOff => 'இயக்கவும் / அணைக்கவும்';
-
-  @override
-  String get triplePressSubtitle => 'Requires updated firmware';
 }

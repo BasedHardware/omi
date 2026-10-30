@@ -184,6 +184,13 @@
     "pauseResume": "Pausar/Reprendre",
     "starConversation": "Destacar conversa",
     "doubleTapAction": "Acció de doble toc",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Engega / Apaga",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Finalitzar i processar conversa",
     "pauseResumeRecording": "Pausar/Reprendre enregistrament",
     "starOngoing": "Destacar conversa en curs",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "En segon pla",
     "retentionOfferAccept": "Queda't amb un {percent}% de descompte",
     "retentionOfferBody": "Queda't i paga {price} al mes durant els propers {months} mesos.",
-    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Engega / Apaga",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos."
 }

@@ -573,6 +573,27 @@ class AppLocalizationsAr extends AppLocalizations {
   String get doubleTapAction => 'إجراء النقر المزدوج';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'تشغيل / إيقاف التشغيل';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'إنهاء ومعالجة المحادثة';
 
   @override
@@ -14472,25 +14493,4 @@ class AppLocalizationsAr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'تم. خصم $percent% لمدة $months أشهر قادمة.';
   }
-
-  @override
-  String get singlePress => 'Single Press';
-
-  @override
-  String get triplePress => 'Triple Press';
-
-  @override
-  String get longPress => 'Long Press';
-
-  @override
-  String get singlePressAction => 'Single Press Action';
-
-  @override
-  String get triplePressAction => 'Triple Press Action';
-
-  @override
-  String get turnOnOff => 'تشغيل / إيقاف التشغيل';
-
-  @override
-  String get triplePressSubtitle => 'Requires updated firmware';
 }

@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "הפעלה / כיבוי",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "סיים ועבד שיחה",
     "@endAndProcess": {
         "description": "End and process action"
@@ -11850,12 +11857,5 @@
     "recapInTheBackground": "ברקע",
     "retentionOfferAccept": "הישארו עם {percent}% הנחה",
     "retentionOfferBody": "הישארו ושלמו {price} לחודש ב-{months} החודשים הבאים.",
-    "retentionOfferApplied": "בוצע. {percent}% הנחה ב-{months} החודשים הבאים.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "הפעלה / כיבוי",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "בוצע. {percent}% הנחה ב-{months} החודשים הבאים."
 }

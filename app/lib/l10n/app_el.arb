@@ -184,6 +184,13 @@
     "pauseResume": "Παύση/Συνέχιση",
     "starConversation": "Αγαπημένη Συνομιλία",
     "doubleTapAction": "Ενέργεια Διπλού Πατήματος",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Ενεργοποίηση / Απενεργοποίηση",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Τερματισμός & Επεξεργασία Συνομιλίας",
     "pauseResumeRecording": "Παύση/Συνέχιση Εγγραφής",
     "starOngoing": "Αγαπημένη Τρέχουσα Συνομιλία",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "Στο παρασκήνιο",
     "retentionOfferAccept": "Μείνε με {percent}% έκπτωση",
     "retentionOfferBody": "Μείνε και πλήρωνε {price} τον μήνα για τους επόμενους {months} μήνες.",
-    "retentionOfferApplied": "Έγινε. {percent}% έκπτωση για τους επόμενους {months} μήνες.",
-    "singlePress": "Single Press",
-    "triplePress": "Triple Press",
-    "longPress": "Long Press",
-    "singlePressAction": "Single Press Action",
-    "triplePressAction": "Triple Press Action",
-    "turnOnOff": "Ενεργοποίηση / Απενεργοποίηση",
-    "triplePressSubtitle": "Requires updated firmware"
+    "retentionOfferApplied": "Έγινε. {percent}% έκπτωση για τους επόμενους {months} μήνες."
 }

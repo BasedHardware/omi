@@ -186,6 +186,13 @@
     "pauseResume": "Pause/Fortsetzen",
     "starConversation": "Unterhaltung favorisieren",
     "doubleTapAction": "Doppeltippen-Aktion",
+    "singlePress": "Einmal drücken",
+    "triplePress": "Dreimal drücken",
+    "longPress": "Lange drücken",
+    "singlePressAction": "Aktion für einmal drücken",
+    "triplePressAction": "Aktion für dreimal drücken",
+    "turnOnOff": "Einschalten / Ausschalten",
+    "triplePressSubtitle": "Erfordert neue Firmware",
     "endAndProcess": "Beenden & Verarbeiten",
     "pauseResumeRecording": "Aufnahme pausieren/fortsetzen",
     "starOngoing": "Laufende Unterhaltung favorisieren",
@@ -4424,12 +4431,5 @@
     "recapInTheBackground": "Im Hintergrund",
     "retentionOfferAccept": "Bleiben mit {percent}% Rabatt",
     "retentionOfferBody": "Bleib und zahle {price} pro Monat für die nächsten {months} Monate.",
-    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate.",
-    "singlePress": "Einmal drücken",
-    "triplePress": "Dreimal drücken",
-    "longPress": "Lange drücken",
-    "singlePressAction": "Aktion für einmal drücken",
-    "triplePressAction": "Aktion für dreimal drücken",
-    "turnOnOff": "Einschalten / Ausschalten",
-    "triplePressSubtitle": "Erfordert neue Firmware"
+    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate."
 }
