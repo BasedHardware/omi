@@ -207,8 +207,8 @@ def _prime() -> None:
         for seen in ('true', 'false'):
             EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen=seen)
         for outcome in COMPOSE_OUTCOMES:
-            EPISODE_COMPOSE_TOTAL.labels(outcome=outcome)
-            EPISODE_COMPOSE_SECONDS.labels(outcome=outcome)
+            EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+            EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
         for channel in CLIENT_CHANNELS:
             for outcome in CLIENT_REQUEST_OUTCOMES:
                 EPISODE_CLIENT_REQUESTS_TOTAL.labels(channel=channel, outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES))
