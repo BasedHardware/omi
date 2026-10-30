@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-29 -->
+<!-- feature-flag-registry as-of: 2026-10-30 -->
 
 # Feature-flag authority registry
 
@@ -163,6 +163,7 @@ exception is recorded for David.
 - `STT_LANGUAGE_HINTS_MODE` — review_by 2026-10-26 (dazheng)
 - `STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
 - `STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `STT_PRERECORDED_LANGUAGE_GATE_PERCENT` — review_by 2026-10-29 (dazheng)
 - `STT_VOCAB_MODE` — review_by 2026-10-26 (dazheng)
 - `STT_VOCAB_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
 - `STT_VOCAB_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
