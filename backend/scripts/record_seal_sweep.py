@@ -8,6 +8,10 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from omi_logging import configure_logging
+
+configure_logging('record-seal-sweeper', default_format='json')
+
 
 def main():
     # Suppress dependency diagnostics, including import-time errors containing IDs.
@@ -19,9 +23,6 @@ def main():
         report = run()
     except Exception:
         pass
-    from omi_logging import configure_logging
-
-    configure_logging('record-seal-sweeper', default_format='json')
     logging.disable(logging.NOTSET)
     failed = report['outcome'] not in {'ok', 'disabled'}
     logging.getLogger('record-seal-sweeper').log(
