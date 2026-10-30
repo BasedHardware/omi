@@ -139,6 +139,19 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertTrue(self.payload(result)["ok"])
 
+    def test_canonical_prevention_artifact_tracked_at_head_counts(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths; an
+        # artifact committed at HEAD but absent from the working tree stays valid.
+        self.set_definition_field(
+            "FC-malformed-doc-read", "canonical_prevention_artifact", ["backend/guards/sparse_guard.py"]
+        )
+        self.write("backend/guards/sparse_guard.py", "# guard\n")
+        self.commit("chore: add guard")
+        (self.root / "backend" / "guards" / "sparse_guard.py").unlink()
+        result = self.validate(self.body("## Summary\n"))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(self.payload(result)["ok"])
+
     def test_canonical_prevention_artifact_must_exist(self) -> None:
         self.set_definition_field(
             "FC-malformed-doc-read", "canonical_prevention_artifact", ["backend/guards/absent.py"]

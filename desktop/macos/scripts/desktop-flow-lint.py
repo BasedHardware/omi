@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -57,6 +58,42 @@ RETIRED_STATE_FIELDS = {
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def sparse_excluded(flows_dir: Path) -> bool:
+    """True when the flows directory is tracked but cone-excluded (skip-worktree).
+
+    A cone-mode sparse checkout legitimately excludes desktop/macos/e2e: the
+    lint has no signal there (none of its inputs can have changed in this
+    worktree) and the dense CI run enforces it. A user deletion keeps its
+    'H ' tag and keeps failing closed.
+    """
+    candidate = flows_dir
+    while not candidate.exists():
+        if candidate.parent == candidate:
+            return False
+        candidate = candidate.parent
+    top = subprocess.run(
+        ["git", "-C", str(candidate), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if top.returncode != 0:
+        return False
+    root = Path(top.stdout.strip())
+    try:
+        relative = flows_dir.relative_to(root).as_posix()
+    except ValueError:
+        return False
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-t", "--", relative],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    lines = result.stdout.splitlines()
+    return bool(lines) and all(line.startswith("S ") for line in lines)
 
 
 def registered_actions() -> set[str]:
@@ -212,6 +249,12 @@ def main() -> int:
 
     flows_dir = Path(args.flows_dir)
     if not flows_dir.is_dir():
+        if sparse_excluded(flows_dir):
+            print(
+                "desktop-flow-lint: skipped (flows directory is outside this "
+                "checkout's sparse scope; the dense CI run enforces it)"
+            )
+            return 0
         fail(f"flows directory missing: {flows_dir}")
 
     actions = registered_actions()

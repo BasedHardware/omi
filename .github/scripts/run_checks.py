@@ -170,8 +170,43 @@ def manifest_changed_check_ids(root: Path, base: str, head: str, *, include_work
     return changed
 
 
+def head_tree_paths(root: Path) -> frozenset[str] | None:
+    """Every path tracked at HEAD, or None when HEAD cannot be listed.
+
+    Cone-mode sparse checkouts do not materialise out-of-cone paths, so a
+    literal trigger or command path can be real at HEAD yet absent from the
+    working tree. Manifest validation counts "tracked at HEAD" as existing
+    for exactly that case; a path that is neither on disk nor in HEAD is
+    still an error, so typos keep failing closed.
+    """
+    try:
+        output = run_git(root, "ls-tree", "-r", "--name-only", "-z", "HEAD")
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return frozenset(entry for entry in output.split("\0") if entry)
+
+
+def _path_exists(root: Path, relative: str, tracked: frozenset[str] | None) -> bool:
+    if (root / relative).exists():
+        return True
+    return tracked is not None and relative in tracked
+
+
+def head_blob(root: Path, relative: str) -> str | None:
+    """Blob content of `relative` at HEAD, or None when HEAD lacks it.
+
+    Lets callers read files that a cone-mode sparse checkout keeps in the
+    index without materialising them.
+    """
+    try:
+        return run_git(root, "show", f"HEAD:{relative}")
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
     errors: list[str] = []
+    tracked = head_tree_paths(root)
     ids = [check.id for check in manifest.checks]
     duplicates = sorted({check_id for check_id in ids if ids.count(check_id) > 1})
     if duplicates:
@@ -183,7 +218,7 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
             errors.append(f"{check.id}: command must not be empty")
         elif len(check.command) > 1 and check.command[0].startswith("python"):
             script = check.command[1]
-            if not script.startswith("{") and not (root / script).is_file():
+            if not script.startswith("{") and not _path_exists(root, script, tracked):
                 errors.append(f"{check.id}: command path does not exist: {script}")
         if not check.triggers:
             errors.append(f"{check.id}: triggers must not be empty")
@@ -193,7 +228,7 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
             elif (
                 pattern not in {"all", "@firestore-index-guard"}
                 and not glob.has_magic(pattern)
-                and not (root / pattern).exists()
+                and not _path_exists(root, pattern, tracked)
             ):
                 errors.append(f"{check.id}: explicit trigger path does not exist: {pattern}")
         if not check.lanes:
