@@ -648,6 +648,9 @@ strategy:
     maxUnavailable: 1
     maxSurge: 2
 
+# Endpoint removal at T+0; SIGTERM follows the 15s preStop sleep. Uvicorn's
+# 90s graceful budget reaches T+105: LB drain (60s) + background drain (30s)
+# fit before it, with 15s left inside the pod's 120s termination grace.
 terminationGracePeriodSeconds: 120
 lifecycle:
   preStop:
