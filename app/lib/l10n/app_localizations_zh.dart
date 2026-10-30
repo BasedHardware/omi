@@ -14713,4 +14713,14 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '在“$app”中发送这条消息。Omi 一收到，此屏幕就会更新。';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return '获取新验证码，并从“$app”中发送。';
+  }
 }

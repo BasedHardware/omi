@@ -2831,6 +2831,12 @@ environments:
             LINQ_WEBHOOK_SECRET:
               secret: LINQ_WEBHOOK_SECRET
               version: latest
+            KEIKI_IMESSAGE_SIGNING_SECRET:
+              secret: KEIKI_IMESSAGE_SIGNING_SECRET
+              version: latest
+            KEIKI_WHATSAPP_SIGNING_SECRET:
+              secret: KEIKI_WHATSAPP_SIGNING_SECRET
+              version: latest
             DREAM_AGENT_FEEDBACK_SALT:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
@@ -3090,9 +3096,13 @@ environments:
             OMI_TELEGRAM_SHARED_PACING: {value: 'on', category: rollout}
             OMI_TELEGRAM_ENABLED: {value: 'on', category: rollout}
             OMI_IMESSAGE_ENABLED: {value: 'on', category: rollout}
-            OMI_IMESSAGE_PROVIDER: {value: linq, category: rollout}
+            OMI_IMESSAGE_PROVIDER: {value: keiki, category: rollout}
             OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO: {value: '3', category: rollout}
-            OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
+            KEIKI_IMESSAGE_AGENT_ID: {value: e836d13e-babd-44b8-aec2-57ff58dff729, category: rollout}
+            KEIKI_WHATSAPP_AGENT_ID: {value: ce208cdb-f08b-40ce-8817-bec102f072dc, category: rollout}
+            OMI_WHATSAPP_ENABLED: {value: 'on', category: rollout}
+            OMI_WHATSAPP_PROVIDER: {value: keiki, category: rollout}
+            OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967"}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}

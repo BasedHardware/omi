@@ -18254,5 +18254,23 @@
                 "type": "int"
             }
         }
+    },
+    "chatAppsWaitingMessageIn": "Send the message in {app}. This screen updates as soon as Omi gets it.",
+    "@chatAppsWaitingMessageIn": {
+        "description": "Waiting step after opening a chat app with the link code. app is a brand name such as WhatsApp.",
+        "placeholders": {
+            "app": {
+                "type": "String"
+            }
+        }
+    },
+    "chatAppsCodeExpiredMessageIn": "Get a new code and send it from {app}.",
+    "@chatAppsCodeExpiredMessageIn": {
+        "description": "The link code expired. app is a brand name such as WhatsApp.",
+        "placeholders": {
+            "app": {
+                "type": "String"
+            }
+        }
     }
 }

@@ -11941,5 +11941,7 @@
     "yearlySwitchUnavailable": "ಈಗ ನಿಮ್ಮ ಯೋಜನೆಗೆ ವಾರ್ಷಿಕ ಪಾವತಿ ಲಭ್ಯವಿಲ್ಲ.",
     "yearlySwitchDoneTitle": "ನೀವು ಈಗ ವಾರ್ಷಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
     "yearlySwitchDoneBody": "ಇಂದು {amount} ಶುಲ್ಕ ವಿಧಿಸಲಾಗಿದೆ. ನವೀಕರಣ {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} ಭಾಗಗಳು} one{{count} ಭಾಗಗಳು} two{{count} ಭಾಗಗಳು} few{{count} ಭಾಗಗಳು} many{{count} ಭಾಗಗಳು} other{{count} ಭಾಗಗಳು}}"
+    "episodePartsCount": "{count, plural, zero{{count} ಭಾಗಗಳು} one{{count} ಭಾಗಗಳು} two{{count} ಭಾಗಗಳು} few{{count} ಭಾಗಗಳು} many{{count} ಭಾಗಗಳು} other{{count} ಭಾಗಗಳು}}",
+    "chatAppsWaitingMessageIn": "{app} ನಲ್ಲಿ ಸಂದೇಶ ಕಳುಹಿಸಿ. Omi ಗೆ ಅದು ಸಿಕ್ಕ ತಕ್ಷಣ ಈ ಪರದೆ ನವೀಕರಣಗೊಳ್ಳುತ್ತದೆ.",
+    "chatAppsCodeExpiredMessageIn": "ಹೊಸ ಕೋಡ್ ಪಡೆದು {app} ನಿಂದ ಕಳುಹಿಸಿ."
 }

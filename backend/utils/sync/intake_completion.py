@@ -250,7 +250,7 @@ def complete_sync_intake(
     with lock:
         if not repeat_only:
             response['new_memories' if created else 'updated_memories'].add(conversation_id)
-            if assigned['sync_relevance'] == 'keep':
+            if assigned['sync_relevance'] == 'keep' or assigned.get('sync_bridge_pending'):
                 response.setdefault('_merged', {})[conversation_id] = language
         elif existing_completion:
             response.setdefault('_merged', {})[conversation_id] = language

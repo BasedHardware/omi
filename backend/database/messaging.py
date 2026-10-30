@@ -762,9 +762,9 @@ class MessagingStore:
 
     def prepare_launch(self, *, now=None):
         """One-time content-free metadata backfill; run only with admissions disabled."""
-        from config.messaging import channel_enabled
+        from config.messaging import MESSAGING_CHANNELS, channel_enabled
 
-        if any(channel_enabled(channel) for channel in ('telegram', 'imessage')):
+        if any(channel_enabled(channel) for channel in MESSAGING_CHANNELS):
             raise ValueError('Disable messaging admission before preparing launch')
         now = now or datetime.now(timezone.utc)
         members = {}

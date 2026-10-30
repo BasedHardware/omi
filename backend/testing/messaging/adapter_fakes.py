@@ -35,6 +35,13 @@ class FixtureTransport:
             ):
                 return httpx.Response(400, json={'error': 'invalid request'})
             return httpx.Response(200, json={'chat_id': 'fixture-chat', 'message': {'id': 'provider-receipt'}})
+        if urlparse(url).hostname == 'onkeiki.com':
+            # The turn API: every route needs a kts1 bearer; /messages returns its message ID.
+            if not kwargs.get('headers', {}).get('Authorization', '').startswith('Bearer kts1.'):
+                return httpx.Response(401, json={'error': 'unauthorized'})
+            if url.endswith('/messages'):
+                return httpx.Response(200, json={'ok': True, 'messageId': 'keiki-message'})
+            return httpx.Response(200, json={'ok': True})
         if url.endswith('/getFile'):
             return httpx.Response(200, json={'ok': True, 'result': {'file_path': 'documents/fixture.txt'}})
         if url.endswith('/attachments'):

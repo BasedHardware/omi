@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "अभी आपके प्लान के लिए सालाना बिलिंग उपलब्ध नहीं है।",
     "yearlySwitchDoneTitle": "अब आप सालाना प्लान पर हैं",
     "yearlySwitchDoneBody": "आज {amount} चार्ज किए गए। नवीनीकरण {date} को।",
-    "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}"
+    "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}",
+    "chatAppsWaitingMessageIn": "{app} ऐप में मैसेज भेजें। Omi को मिलते ही यह स्क्रीन अपडेट हो जाएगी।",
+    "chatAppsCodeExpiredMessageIn": "नया कोड लें और उसे {app} ऐप से भेजें।"
 }
