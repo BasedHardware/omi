@@ -7,6 +7,7 @@ USGS FDSN event API.
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 from contextlib import asynccontextmanager
@@ -15,6 +16,8 @@ from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from fastapi import FastAPI, Request
+
+logger = logging.getLogger("omi_usgs_earthquake_app")
 
 try:
     from .models import (
@@ -57,9 +60,7 @@ except ImportError:
             event_id: str
 
 
-USGS_QUERY_URL = os.getenv(
-    "USGS_QUERY_URL", "https://earthquake.usgs.gov/fdsnws/event/1/query"
-).strip()
+USGS_QUERY_URL = os.getenv("USGS_QUERY_URL", "https://earthquake.usgs.gov/fdsnws/event/1/query").strip()
 USGS_USER_AGENT = os.getenv(
     "USGS_USER_AGENT",
     "OmiUsgsEarthquakeApp/1.0 (https://github.com/BasedHardware/omi)",
@@ -263,10 +264,20 @@ async def _usgs_get(params: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(data, dict):
             return {"error": "USGS returned an invalid non-dict payload"}
         return data
-    except httpx.HTTPError as exc:
-        return {"error": f"USGS request failed: {exc}"}
-    except ValueError:
-        return {"error": "USGS returned a non-JSON response"}
+    except getattr(httpx, "HTTPStatusError", getattr(httpx, "HTTPError", Exception)) as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        status_msg = f" with status {status}" if status is not None else ""
+        logger.warning("USGS HTTP status error: %s", exc)
+        return {"error": f"USGS request failed{status_msg}."}
+    except getattr(httpx, "HTTPError", Exception) as exc:
+        logger.warning("USGS network error: %s", exc)
+        return {"error": "USGS request failed due to a network error."}
+    except ValueError as exc:
+        logger.warning("USGS invalid non-JSON response: %s", exc)
+        return {"error": "USGS request failed: invalid non-JSON response."}
+    except Exception as exc:
+        logger.error("USGS unexpected error: %s", exc, exc_info=True)
+        return {"error": "USGS request failed due to an internal error."}
     finally:
         if should_close:
             await client.aclose()
@@ -411,91 +422,117 @@ async def get_manifest_alias():
 
 @app.post("/tools/recent_earthquakes", response_model=ChatToolResponse)
 async def tool_recent_earthquakes(request: Request):
-    body, error = await _read_json_body(request)
-    if error:
-        return error
-    result = await _list_earthquakes(_query_params(body, default_hours=24))
-    if "error" in result:
-        return ChatToolResponse(success=False, message=result["error"], data=result)
+    try:
+        body, error = await _read_json_body(request)
+        if error:
+            return error
+        result = await _list_earthquakes(_query_params(body, default_hours=24))
+        if "error" in result:
+            return ChatToolResponse(success=False, message=result["error"], data=result)
 
-    count = result["count"]
-    message = (
-        f"Found {count} earthquake event(s)."
-        if count
-        else "No USGS earthquake events found for the requested filters."
-    )
-    return ChatToolResponse(success=True, message=message, data=result)
+        count = result["count"]
+        message = (
+            f"Found {count} earthquake event(s)."
+            if count
+            else "No USGS earthquake events found for the requested filters."
+        )
+        return ChatToolResponse(success=True, message=message, data=result)
+    except Exception as exc:
+        logger.error("Unexpected error in recent_earthquakes: %s", exc, exc_info=True)
+        return ChatToolResponse(
+            success=False,
+            message="An unexpected error occurred while fetching recent earthquakes.",
+            data={"error": "internal error"},
+        )
 
 
 @app.post("/tools/nearby_earthquakes", response_model=ChatToolResponse)
 async def tool_nearby_earthquakes(request: Request):
-    body, error = await _read_json_body(request)
-    if error:
-        return error
-    latitude = _parse_float(body.get("latitude"))
-    longitude = _parse_float(body.get("longitude"))
-    if latitude is None or longitude is None:
+    try:
+        body, error = await _read_json_body(request)
+        if error:
+            return error
+        latitude = _parse_float(body.get("latitude"))
+        longitude = _parse_float(body.get("longitude"))
+        if latitude is None or longitude is None:
+            return ChatToolResponse(
+                success=False,
+                message="latitude and longitude are required",
+                data={"error": "latitude and longitude are required"},
+            )
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            return ChatToolResponse(
+                success=False,
+                message="latitude must be between -90 and 90 and longitude between -180 and 180",
+                data={"error": "coordinates are out of range"},
+            )
+
+        params = _query_params(body, default_hours=168)
+        params.update(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "maxradiuskm": _safe_float(body.get("radius_km"), default=250.0, minimum=1.0, maximum=2000.0),
+            }
+        )
+        result = await _list_earthquakes(params)
+        if "error" in result:
+            return ChatToolResponse(success=False, message=result["error"], data=result)
+
+        count = result["count"]
+        message = (
+            f"Found {count} nearby earthquake event(s)."
+            if count
+            else "No nearby USGS earthquake events found for the requested filters."
+        )
+        return ChatToolResponse(success=True, message=message, data=result)
+    except Exception as exc:
+        logger.error("Unexpected error in nearby_earthquakes: %s", exc, exc_info=True)
         return ChatToolResponse(
             success=False,
-            message="latitude and longitude are required",
-            data={"error": "latitude and longitude are required"},
+            message="An unexpected error occurred while searching nearby earthquakes.",
+            data={"error": "internal error"},
         )
-    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
-        return ChatToolResponse(
-            success=False,
-            message="latitude must be between -90 and 90 and longitude between -180 and 180",
-            data={"error": "coordinates are out of range"},
-        )
-
-    params = _query_params(body, default_hours=168)
-    params.update(
-        {
-            "latitude": latitude,
-            "longitude": longitude,
-            "maxradiuskm": _safe_float(
-                body.get("radius_km"), default=250.0, minimum=1.0, maximum=2000.0
-            ),
-        }
-    )
-    result = await _list_earthquakes(params)
-    if "error" in result:
-        return ChatToolResponse(success=False, message=result["error"], data=result)
-
-    count = result["count"]
-    message = (
-        f"Found {count} nearby earthquake event(s)."
-        if count
-        else "No nearby USGS earthquake events found for the requested filters."
-    )
-    return ChatToolResponse(success=True, message=message, data=result)
 
 
 @app.post("/tools/earthquake_details", response_model=ChatToolResponse)
 async def tool_earthquake_details(request: Request):
-    body, error = await _read_json_body(request)
-    if error:
-        return error
-    event_id = str(body.get("event_id") or "").strip()
-    if not event_id:
+    try:
+        body, error = await _read_json_body(request)
+        if error:
+            return error
+        event_id = str(body.get("event_id") or "").strip()
+        if not event_id:
+            return ChatToolResponse(
+                success=False,
+                message="event_id is required",
+                data={"error": "event_id is required"},
+            )
+
+        payload = await _usgs_get({"format": "geojson", "eventid": event_id})
+        if "error" in payload:
+            return ChatToolResponse(success=False, message=payload["error"], data=payload)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("type") != "Feature"
+            or not isinstance(payload.get("properties"), dict)
+        ):
+            return ChatToolResponse(
+                success=False,
+                message=f"No USGS earthquake event found for {event_id}.",
+                data={"error": "event not found", "event_id": event_id, "data_note": DATA_NOTE},
+            )
+
+        event = _summarize_feature(payload)
+        return ChatToolResponse(
+            success=True,
+            message=f"Earthquake event {event['event_id'] or event_id} found.",
+            data={"earthquake": event, "data_note": DATA_NOTE},
+        )
+    except Exception as exc:
+        logger.error("Unexpected error in earthquake_details: %s", exc, exc_info=True)
         return ChatToolResponse(
             success=False,
-            message="event_id is required",
-            data={"error": "event_id is required"},
+            message="An unexpected error occurred while retrieving earthquake details.",
+            data={"error": "internal error"},
         )
-
-    payload = await _usgs_get({"format": "geojson", "eventid": event_id})
-    if "error" in payload:
-        return ChatToolResponse(success=False, message=payload["error"], data=payload)
-    if not isinstance(payload, dict) or payload.get("type") != "Feature" or not isinstance(payload.get("properties"), dict):
-        return ChatToolResponse(
-            success=False,
-            message=f"No USGS earthquake event found for {event_id}.",
-            data={"error": "event not found", "event_id": event_id, "data_note": DATA_NOTE},
-        )
-
-    event = _summarize_feature(payload)
-    return ChatToolResponse(
-        success=True,
-        message=f"Earthquake event {event['event_id'] or event_id} found.",
-        data={"earthquake": event, "data_note": DATA_NOTE},
-    )
