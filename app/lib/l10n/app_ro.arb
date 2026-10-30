@@ -4514,5 +4514,6 @@
     "yearlySwitchPreviewFailed": "Prețul nu a putut fi încărcat.",
     "yearlySwitchUnavailable": "Plata anuală nu este disponibilă acum pentru planul tău.",
     "yearlySwitchDoneTitle": "Acum plătești anual",
-    "yearlySwitchDoneBody": "Azi s-au încasat {amount}. Se reînnoiește pe {date}."
+    "yearlySwitchDoneBody": "Azi s-au încasat {amount}. Se reînnoiește pe {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} de părți} one{{count} parte} two{{count} de părți} few{{count} părți} many{{count} de părți} other{{count} de părți}}"
 }

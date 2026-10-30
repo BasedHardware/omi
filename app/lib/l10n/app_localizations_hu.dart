@@ -14989,4 +14989,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Ma terhelve: $amount. Megújul: $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rész',
+      many: '$count rész',
+      few: '$count rész',
+      two: '$count rész',
+      one: '$count rész',
+      zero: '$count rész',
+    );
+    return '$_temp0';
+  }
 }

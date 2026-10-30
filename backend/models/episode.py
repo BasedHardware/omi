@@ -47,6 +47,17 @@ class EpisodeProvisionalItem(BaseModel):
     action_item_id: Optional[str] = None
 
 
+class EpisodeMember(BaseModel):
+    """Retained member metadata; transcript is hydrated by the existing detail API."""
+
+    id: str
+    title: str = ''
+    emoji: str = ''
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    status: str = 'completed'
+
+
 class Episode(BaseModel):
     id: str
     status: EpisodeStatus
@@ -56,10 +67,13 @@ class Episode(BaseModel):
     closed_at: Optional[datetime] = None
     close_reason: Optional[EpisodeCloseReason] = None
     title: str = ''
+    emoji: str = ''
+    members: list[EpisodeMember] = Field(default_factory=list)
     bullets: list[str] = Field(default_factory=list)
     people: list[str] = Field(default_factory=list)
     provisional_items: list[EpisodeProvisionalItem] = Field(default_factory=list)
     moments: list[EpisodeMoment] = Field(default_factory=list)
+    # Complete extant membership for Delete, including discarded conversations; members is the visible list.
     conversation_ids: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     state_updated_at: Optional[datetime] = None
@@ -82,3 +96,9 @@ class EpisodeLookupResponse(BaseModel):
 class EpisodeWrapUpRequest(BaseModel):
     # The in-progress conversation the client is finishing alongside the wrap-up.
     conversation_id: Optional[str] = None
+
+
+class EpisodeListResponse(BaseModel):
+    enabled: bool
+    episodes: list[Episode] = Field(default_factory=list)
+    next_cursor: Optional[str] = None

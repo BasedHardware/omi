@@ -14958,4 +14958,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Danas naplaćeno $amount. Obnavlja se $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dijelova',
+      many: '$count dijelova',
+      few: '$count dijela',
+      two: '$count dijelova',
+      one: '$count dio',
+      zero: '$count dijelova',
+    );
+    return '$_temp0';
+  }
 }

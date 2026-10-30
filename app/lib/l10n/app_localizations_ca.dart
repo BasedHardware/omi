@@ -15005,4 +15005,19 @@ class AppLocalizationsCa extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Avui s\'han cobrat $amount. Es renova el $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count parts',
+      many: '$count parts',
+      few: '$count parts',
+      two: '$count parts',
+      one: '$count part',
+      zero: '$count parts',
+    );
+    return '$_temp0';
+  }
 }

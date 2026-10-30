@@ -14717,4 +14717,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return '本日$amountを請求しました。次回更新は$dateです。';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count パート',
+      many: '$count パート',
+      few: '$count パート',
+      two: '$count パート',
+      one: '$count パート',
+      zero: '$count パート',
+    );
+    return '$_temp0';
+  }
 }
