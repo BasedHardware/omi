@@ -24,7 +24,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final now = DateTime.now();
+      // Keep this lifecycle fixture outside the unrelated, wall-clock New badge window.
+      final now = DateTime.now().subtract(const Duration(hours: 1));
       ServerConversation member(String id, ConversationStatus status) => ServerConversation(
             id: id,
             createdAt: now,
