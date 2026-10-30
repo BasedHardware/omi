@@ -123,7 +123,9 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     clear_summary_retryable,
     client_processing_mutation,
+    complete_exhausted_custom_stt_conversation,
     omit_null_processing_state,
+    should_skip_custom_stt_postprocessing,
     strip_client_processing,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -2146,7 +2148,9 @@ def _save_action_items(
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
     # Backlog consent outlives a reset: even a fresh available balance must not
     # embed the raw placeholder or change its vector metadata while waiting.
-    if getattr(conversation, 'processing_deferred', False) is True:
+    if getattr(conversation, 'processing_deferred', False) is True or should_skip_custom_stt_postprocessing(
+        uid, conversation, should_skip_omi_paid_postprocessing, strict_bool=True
+    ):
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
         return False
     if not update_only and conversation.discarded:
@@ -2769,25 +2773,20 @@ def process_conversation(
     # never consult this gate — they are already bounded by STT credits at
     # listen connect. Keep that contract at the call site so a stubbed/truthy
     # helper cannot abort memory/task/goal fan-out.
-    custom_stt = bool(getattr(conversation, 'uses_custom_stt', False))
-    source_token = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
-    if custom_stt and should_skip_omi_paid_postprocessing(
-        uid,
-        uses_custom_stt=custom_stt,
-        source=source_token if isinstance(source_token, str) else None,
-    ):
-        logger.info(
-            "custom-STT processing budget exhausted: skipping Omi-paid post-processing uid=%s conv=%s",
+    if should_skip_custom_stt_postprocessing(uid, conversation, should_skip_omi_paid_postprocessing):
+        if silent_backfill:
+            raise RecoveryStructureUnavailableError('silent backfill processing budget unavailable')
+        return complete_exhausted_custom_stt_conversation(
             uid,
-            getattr(conversation, 'id', '?'),
+            conversation,
+            generated_conversation_id=generated_conversation_id,
+            client_projection=client_projection,
+            has_refresh_fence=smart_merge_refresh is not None or capture_group_refresh_fence is not None,
+            hooks=(_build_deferred_structured, _get_conversation_obj, lifecycle_service, logger),
+            on_persisted=lambda ok, done: report_persistence(
+                ok, completed=done, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+            ),
         )
-        if isinstance(conversation, Conversation):
-            try:
-                conversation.status = ConversationStatus.completed
-            except Exception:
-                pass
-        report_persistence(False)
-        return cast(Conversation, conversation)
 
     meeting_context_override = None
     if not silent_backfill:

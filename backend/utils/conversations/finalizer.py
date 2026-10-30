@@ -90,6 +90,15 @@ def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
     if getattr(conversation, 'processing_deferred', False) is True:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
         return
+    if getattr(conversation, 'uses_custom_stt', False) is True:
+        from utils.conversations.projection_payload import should_skip_custom_stt_postprocessing
+        from utils.subscription import should_skip_omi_paid_postprocessing
+
+        if should_skip_custom_stt_postprocessing(
+            uid, conversation, should_skip_omi_paid_postprocessing, strict_bool=True
+        ):
+            OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
+            return
     try:
         if save_structured_vector(uid, conversation) is False:
             # The writer counts a missing index as error. Keep that bounded outcome.
