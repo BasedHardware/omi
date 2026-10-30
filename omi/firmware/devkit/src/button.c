@@ -156,9 +156,10 @@ static inline void notify_long_tap(void)
 #define BUTTON_PRESSED 1
 #define BUTTON_RELEASED 0
 
-#define TAP_THRESHOLD_MS 300     // 300 ms for short tap
-#define DOUBLE_TAP_WINDOW_MS 500 // 500 ms window to detect multi-tap sequence
-#define LONG_PRESS_TIME_MS 3000  // 3000 ms for long press (power off)
+#define TAP_THRESHOLD_MS 300 // 300 ms for short tap
+// Multi-tap window (see omi/src/lib/core/button.c): keep the two builds and the app in sync.
+#define MULTI_TAP_WINDOW_MS 350
+#define LONG_PRESS_TIME_MS 3000 // 3000 ms for long press (power off)
 
 typedef enum {
     BUTTON_EVENT_NONE,
@@ -188,7 +189,7 @@ void check_button_level(struct k_work *work_item)
         btn_press_start_time = now;
 
         // Expire any pending tap sequence if timeout window elapsed before this press
-        if (tap_count > 0 && (now - btn_last_tap_time > DOUBLE_TAP_WINDOW_MS)) {
+        if (tap_count > 0 && (now - btn_last_tap_time > MULTI_TAP_WINDOW_MS)) {
             if (tap_count == 1) {
                 event = BUTTON_EVENT_SINGLE_TAP;
             } else if (tap_count == 2) {
@@ -234,7 +235,7 @@ void check_button_level(struct k_work *work_item)
     if (tap_count > 0 && !btn_is_pressed) {
         uint32_t time_since_last_tap = now - btn_last_tap_time;
 
-        if (time_since_last_tap > DOUBLE_TAP_WINDOW_MS) {
+        if (time_since_last_tap > MULTI_TAP_WINDOW_MS) {
             if (tap_count == 1) {
                 event = BUTTON_EVENT_SINGLE_TAP;
             } else if (tap_count == 2) {
@@ -276,7 +277,7 @@ void check_button_level(struct k_work *work_item)
             is_off = true;
             bt_off();
             turnoff_all();
-            return; // Do not reschedule work item after power off
+            // No early return, matching the pre-existing behavior: keep polling the button.
         }
         break;
     default:
@@ -382,16 +383,12 @@ void turnoff_all()
     // Disable watchdog before entering system off
     int rc = watchdog_deinit();
     if (rc < 0) {
-        LOG_WRN("Failed to deinitialize watchdog (%d), feeding before poweroff", rc);
-        watchdog_feed();
+        LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
     }
 
     // maybe save something here to indicate success. next time the button is pressed we should know about it
     NRF_USBD->INTENCLR = 0xFFFFFFFF;
     NRF_POWER->SYSTEMOFF = 1;
-    while (1) {
-        k_cpu_idle();
-    }
 }
 
 void force_button_state(FSM_STATE_T state)

@@ -149,9 +149,12 @@ static inline void notify_long_tap(void)
 #define BUTTON_PRESSED 1
 #define BUTTON_RELEASED 0
 
-#define TAP_THRESHOLD_MS 300     // 300 ms for short tap
-#define DOUBLE_TAP_WINDOW_MS 500 // 500 ms window to detect multi-tap sequence
-#define LONG_PRESS_TIME_MS 3000  // 3000 ms for long press (power off)
+#define TAP_THRESHOLD_MS 300 // 300 ms for short tap
+// Multi-tap window: a tap sequence resolves once the button has stayed released for this long
+// after the last short tap (or immediately on the third tap). Keep in sync with devkit/src/button.c
+// and kOmiMultiTapWindow in app/lib/services/capture/capture_controller.dart.
+#define MULTI_TAP_WINDOW_MS 350
+#define LONG_PRESS_TIME_MS 3000 // 3000 ms for long press (power off)
 
 typedef enum {
     BUTTON_EVENT_NONE,
@@ -181,7 +184,7 @@ void check_button_level(struct k_work *work_item)
         btn_press_start_time = now;
 
         // Expire any pending tap sequence if timeout window elapsed before this press
-        if (tap_count > 0 && (now - btn_last_tap_time > DOUBLE_TAP_WINDOW_MS)) {
+        if (tap_count > 0 && (now - btn_last_tap_time > MULTI_TAP_WINDOW_MS)) {
             if (tap_count == 1) {
                 event = BUTTON_EVENT_SINGLE_TAP;
             } else if (tap_count == 2) {
@@ -227,7 +230,7 @@ void check_button_level(struct k_work *work_item)
     if (tap_count > 0 && !btn_is_pressed) {
         uint32_t time_since_last_tap = now - btn_last_tap_time;
 
-        if (time_since_last_tap > DOUBLE_TAP_WINDOW_MS) {
+        if (time_since_last_tap > MULTI_TAP_WINDOW_MS) {
             if (tap_count == 1) {
                 event = BUTTON_EVENT_SINGLE_TAP;
             } else if (tap_count == 2) {
@@ -265,7 +268,8 @@ void check_button_level(struct k_work *work_item)
             LOG_INF("long press detected - turning off");
             btn_last_event = event;
             turnoff_all();
-            return; // Do not reschedule work item after power off
+            // No early return: turnoff_all() can bail out (e.g. watchdog/GPIO errors), and the
+            // button must keep being polled in that case, matching the pre-existing behavior.
         }
         break;
     default:
@@ -441,8 +445,8 @@ void turnoff_all()
     }
     rc = watchdog_deinit();
     if (rc < 0) {
-        LOG_WRN("Watchdog deinit returned (%d), feeding before power off", rc);
-        watchdog_feed();
+        LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
+        return;
     }
 
     /* Persist an IMU timestamp base so we can estimate time across system_off. */
