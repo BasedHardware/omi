@@ -112,8 +112,11 @@ the prod overlay ships true with `DREAM_AGENT_ELIGIBILITY=all`. Eligibility also
 supports `paid` and `allowlist`; invalid settings deny admission. Release-channel
 metadata is informational and cannot exclude Store users.
 
-An hourly sweep drains a durable `dream_due` queue ordered by due time, which
-combines backlog and staleness. Product writes enqueue immediately. Independent
+A sweep at :00 and :30 (the :30 tick has the kill switch
+`DREAM_HALF_HOUR_SWEEP_ENABLED`) drains a durable `dream_due` queue. Payoff ordering
+ranks the oldest 1,000 due rows by new material, last yield and heavy size, and owners
+more than 30 days overdue go first. Hunts back off after dry hunts when
+`DREAM_HUNT_BACKOFF_MODE` serves the owner. Product writes enqueue immediately. Independent
 discovery scans 20 pages of 499 owners (9,980/hour), committing each page in
 100-owner transactions so a fully eligible page stays inside the 3 s RPC
 deadlines, without overwriting dirty work or waiting for model sessions. Each
@@ -230,7 +233,8 @@ check that switch before suspecting a missing writer.
 
 A pass that starts late in a sweep receives only the drain's remaining budget
 (minus `FINISH_MARGIN_SECONDS`), so it ends through its own deadline rather than
-being cancelled; below `MIN_PASS_SECONDS` the owner stays due for the next sweep.
+being cancelled; below `MIN_PASS_SECONDS` (600 s: on 10-29, 116 passes started with less than
+5 minutes left made 20 edits) the owner stays due for the next half-hour sweep.
 
 The evidence line is on the gateway; the caller intentionally remains
 `inconclusive` because it does not infer PT from HTTP success. The next check

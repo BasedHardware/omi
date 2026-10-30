@@ -313,7 +313,7 @@ def acquire(
             'daily_cap': caps.daily_usd,
             'passes_per_day': caps.passes,
             'hunt': not has_dirty,
-            'dry_hunts': int(data.get('dry_hunts', 0) or 0),
+            'dry_hunts': _dry_hunts(data),
             'backoff_would_defer': backoff_would_defer and not has_dirty,
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
@@ -463,6 +463,13 @@ def assert_lease(uid, run_id, *, firestore_client=None):
     data = state_ref(client(firestore_client), uid).get().to_dict() or {}
     if (data.get('lease') or {}).get('run_id') != run_id:
         raise RuntimeError('dream_lease_lost')
+
+
+def _dry_hunts(data):
+    try:
+        return max(0, int(data.get('dry_hunts', 0) or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def finish(
@@ -698,8 +705,8 @@ def finish(
             # Hunt backoff: consecutive hunts that applied nothing; any yield resets the streak.
             if patch['last_yield']:
                 patch['dry_hunts'] = 0
-            elif lease.get('hunt'):
-                patch['dry_hunts'] = min(16, int(data.get('dry_hunts', 0) or 0) + 1)
+            elif lease.get('hunt') and not lease.get('canary') and lease.get('trigger') == 'schedule':
+                patch['dry_hunts'] = min(16, _dry_hunts(data) + 1)
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
         for ref in sorted(deferred if release else ())[:8]:
