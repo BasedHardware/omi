@@ -666,6 +666,57 @@ def test_retrieve_in_progress_conversation_prefers_pointer_when_present(
     assert (pc.retrieve_in_progress_conversation('uid-1') or {}).get('id') == 'conv-redis'
 
 
+def test_retrieve_in_progress_conversation_rejects_soft_deleted_pointer_and_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A soft-deleted tombstone referenced by Redis pointer must be rejected and fall back to Firestore."""
+    from utils.conversations import process_conversation as pc
+
+    def _pointer(uid: str) -> str:
+        return 'conv-tombstone'
+
+    def _pointer_conversation(uid: str, conversation_id: str, **kwargs: Any):
+        return {
+            'id': 'conv-tombstone',
+            'status': 'in_progress',
+            'deleted': True,
+            'finished_at': datetime.now(timezone.utc),
+        }
+
+    def _firestore_in_progress(uid: str):
+        return {'id': 'conv-fs-valid', 'status': 'in_progress', 'finished_at': datetime.now(timezone.utc)}
+
+    monkeypatch.setattr(pc.redis_db, 'get_in_progress_conversation_id', _pointer)
+    monkeypatch.setattr(pc.conversations_db, 'get_conversation', _pointer_conversation)
+    monkeypatch.setattr(pc.conversations_db, 'get_in_progress_conversation', _firestore_in_progress)
+
+    assert (pc.retrieve_in_progress_conversation('uid-1') or {}).get('id') == 'conv-fs-valid'
+
+
+def test_retrieve_in_progress_conversation_rejects_soft_deleted_pointer_when_no_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A soft-deleted tombstone referenced by Redis pointer returns None when no fallback conversation exists."""
+    from utils.conversations import process_conversation as pc
+
+    def _pointer(uid: str) -> str:
+        return 'conv-tombstone'
+
+    def _pointer_conversation(uid: str, conversation_id: str, **kwargs: Any):
+        return {
+            'id': 'conv-tombstone',
+            'status': 'in_progress',
+            'deleted': True,
+            'finished_at': datetime.now(timezone.utc),
+        }
+
+    monkeypatch.setattr(pc.redis_db, 'get_in_progress_conversation_id', _pointer)
+    monkeypatch.setattr(pc.conversations_db, 'get_conversation', _pointer_conversation)
+    monkeypatch.setattr(pc.conversations_db, 'get_in_progress_conversation', lambda uid: None)
+
+    assert pc.retrieve_in_progress_conversation('uid-1') is None
+
+
 def test_meeting_context_reader_survives_raising_redis():
     """The meeting-pointer reader degrades on its own: a Redis that raises is
     caught inside _meeting_context_from_redis_mapping and enrichment falls
