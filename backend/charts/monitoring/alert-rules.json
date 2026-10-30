@@ -23697,6 +23697,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/c758b698-01a0-4b5c-b58c-e81e4ff33ccd",
       "runbook": "backend/docs/runbooks/pusher-degraded.md",
       "threshold": "All configured DB workers active for 10 minutes (per scrape target, summed across task kinds)",
       "summary": "Pusher shared DB executor has no spare worker capacity.",
