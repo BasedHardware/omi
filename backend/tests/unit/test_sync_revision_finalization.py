@@ -58,7 +58,9 @@ def test_revision_fence_replays_new_generation_and_completes_exactly_once():
     assert defer(store, job, conv)
     assert not defer(store, job, conv)
     assert store.rows[job.path]['worker_claim_count'] == 0
-    replay = jobs._claim_finalization_replay_txn(store.transaction(), job, timedelta(seconds=300), NOW)
+    quiet = NOW + timedelta(seconds=jobs.SYNC_REVISION_QUIET_SECONDS)
+    assert not jobs._claim_finalization_replay_txn(store.transaction(), job, timedelta(seconds=300), NOW)['created']
+    replay = jobs._claim_finalization_replay_txn(store.transaction(), job, timedelta(seconds=300), quiet)
     assert replay['created'] and replay['dispatch_generation'] == 2
     assert not jobs._claim_finalization_replay_txn(store.transaction(), job, timedelta(seconds=300), NOW)['created']
     claim = jobs._claim_finalization_job_txn(store.transaction(), job, 2, False, 1500, NOW)
@@ -144,3 +146,83 @@ def test_deleted_document_never_redispatches():
     assert not defer(store, job, conv)
     assert jobs._mark_finalization_fenced_txn(store.transaction(), job, 1, 2, NOW)
     assert conv.path not in store.rows
+
+
+def replay(store, job, conv, now):
+    return jobs._claim_finalization_replay_txn(
+        store.transaction(),
+        job,
+        timedelta(seconds=300),
+        now,
+        conversation_ref_for_job=lambda *_: conv,
+    )
+
+
+def test_repeated_revision_advances_stop_after_three_redispatches_and_allow_sweep():
+    store, job, conv = system()
+    now, generation, epoch = NOW, 1, 2
+    for attempt in range(jobs.SYNC_REVISION_MAX_REDISPATCHES):
+        store.rows[conv.path]['sync_content_revision'] = 19 + attempt
+        assert jobs._defer_sync_revision_fence_txn(
+            store.transaction(), job, lambda *_: conv, generation, epoch, 18 + attempt, now
+        )
+        # Even an old Cloud Task after the delay cannot bypass replay ownership.
+        now += timedelta(seconds=jobs.SYNC_REVISION_QUIET_SECONDS)
+        assert (
+            jobs._claim_finalization_job_txn(store.transaction(), job, generation, False, 1500, now)['status']
+            == 'not_actionable'
+        )
+        intent = replay(store, job, conv, now)
+        assert intent['created']
+        generation = intent['dispatch_generation']
+        claim = jobs._claim_finalization_job_txn(
+            store.transaction(), job, generation, False, 1500, now, count_worker_claim=True
+        )
+        epoch = claim['lease_epoch']
+    store.rows[conv.path]['sync_content_revision'] += 1
+    assert not jobs._defer_sync_revision_fence_txn(
+        store.transaction(), job, lambda *_: conv, generation, epoch, 21, now
+    )
+    assert jobs._mark_finalization_fenced_txn(store.transaction(), job, generation, epoch, now)
+    assert store.rows[job.path]['sync_revision_redispatch_count'] == 3
+    assert processing_recovery._complete_orphan_conversation_txn(
+        store.transaction(),
+        conv,
+        store.rows[conv.path]['processing_admitted_at'],
+        now,
+        job_ref_for_id=lambda _: job,
+    )
+    assert store.rows[conv.path]['status'] == 'completed'
+
+
+def test_advances_while_queued_restart_quiet_window_but_cannot_wait_forever():
+    store, job, conv = system()
+    assert defer(store, job, conv)
+    for seconds in range(30, jobs.SYNC_REVISION_MAX_WAIT_SECONDS, 30):
+        store.rows[conv.path]['sync_content_revision'] += 1
+        now = NOW + timedelta(seconds=seconds)
+        assert not replay(store, job, conv, now)['created']
+        assert store.rows[job.path]['sync_revision_not_before'] == now + timedelta(seconds=30)
+    intent = replay(store, job, conv, NOW + timedelta(seconds=jobs.SYNC_REVISION_MAX_WAIT_SECONDS))
+    assert not intent['created'] and intent['status'] == 'completed'
+    assert store.rows[job.path]['last_failure_code'] == 'sync_revision_wait_exhausted'
+    assert processing_recovery._complete_orphan_conversation_txn(
+        store.transaction(),
+        conv,
+        store.rows[conv.path]['processing_admitted_at'],
+        NOW,
+        job_ref_for_id=lambda _: job,
+    )
+
+
+def test_byok_revision_wait_resumes_with_live_credentials_after_quiet_period():
+    store, job, conv = system()
+    store.rows[job.path]['requires_byok'] = True
+    assert defer(store, job, conv)
+    assert jobs._claim_finalization_job_txn(store.transaction(), job, 1, True, 1500, NOW)['status'] == 'not_actionable'
+    now = NOW + timedelta(seconds=300)
+    assert replay(store, job, conv, now)['status'] == 'blocked_byok'
+    assert jobs._resume_blocked_byok_job_txn(store.transaction(), job, now)['status'] == 'queued'
+    assert jobs._claim_finalization_job_txn(store.transaction(), job, 1, False, 1500, now)['status'] == 'blocked_byok'
+    assert jobs._claim_finalization_job_txn(store.transaction(), job, 1, True, 1500, now)['status'] == 'claimed'
+    assert not store.rows[job.path]['sync_revision_waiting']

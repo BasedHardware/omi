@@ -69,6 +69,9 @@ TERMINAL_JOB_STATUSES = frozenset({'completed', 'dead_letter'})
 NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok'})
 DEFAULT_LEASE_SECONDS = 1500
 DEFAULT_RECONCILE_STALE_SECONDS = 300
+SYNC_REVISION_QUIET_SECONDS = 30
+SYNC_REVISION_MAX_REDISPATCHES = 3
+SYNC_REVISION_MAX_WAIT_SECONDS = 600
 # Conservative: the synchronous legacy route admits processing with no durable
 # job, and its request thread is not killed by the HTTP timeout, so the orphan
 # window must exceed any plausible live synchronous process_conversation run.
@@ -886,6 +889,14 @@ def _claim_finalization_job_txn(
         return _claim_result('blocked_byok')
     if int(job.get('dispatch_generation') or 1) != dispatch_generation:
         return _claim_result('stale_generation')
+    if job.get('sync_revision_waiting') and not (
+        # BYOK work resumes only in a live session holding credentials; it
+        # cannot use a credential-free Cloud Task generation for this replay.
+        allow_byok
+        and job.get('requires_byok')
+        and now >= job['sync_revision_not_before']
+    ):
+        return _claim_result('not_actionable')
     if status == 'leased':
         lease_expires_at = job.get('lease_expires_at')
         if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
@@ -914,6 +925,7 @@ def _claim_finalization_job_txn(
             # has reclaimed its expired lease. Terminal writes must present it.
             'lease_epoch': lease_epoch,
             'lease_counts_worker_attempt': count_worker_claim,
+            'sync_revision_waiting': False,
             **({'worker_claim_count': worker_claim_count} if count_worker_claim else {}),
             'reconcile_after_at': lease_expires_at,
             'updated_at': now,
@@ -1043,6 +1055,11 @@ def _defer_sync_revision_fence_txn(
         or int(row.get('sync_content_revision') or 0) <= int(expected_revision or 0)
     ):
         return False
+    redispatches = int(job.get('sync_revision_redispatch_count') or 0)
+    if redispatches >= SYNC_REVISION_MAX_REDISPATCHES:
+        # The caller terminally fences this attempt. The age-bounded orphan
+        # sweep can then finish the row without competing with a queued job.
+        return False
     transaction.update(
         job_ref,
         {
@@ -1050,8 +1067,13 @@ def _defer_sync_revision_fence_txn(
             'updated_at': now,
             'lease_expires_at': now,
             'dispatch_requested_at': now - get_finalization_reconcile_stale_after(),
-            'reconcile_after_at': now,
+            'reconcile_after_at': now + timedelta(seconds=SYNC_REVISION_QUIET_SECONDS),
             'last_failure_code': 'sync_revision_advanced',
+            'sync_revision_redispatch_count': redispatches + 1,
+            'sync_revision_observed': int(row.get('sync_content_revision') or 0),
+            'sync_revision_waiting': True,
+            'sync_revision_not_before': now + timedelta(seconds=SYNC_REVISION_QUIET_SECONDS),
+            'sync_revision_wait_started_at': job.get('sync_revision_wait_started_at') or now,
             **(
                 {'worker_claim_count': max(0, int(job.get('worker_claim_count') or 0) - 1)}
                 if job.get('lease_counts_worker_attempt')
@@ -1781,6 +1803,7 @@ def _claim_finalization_replay_txn(
     now: datetime,
     projection_collection: Any | None = None,
     byok_only: bool = False,
+    conversation_ref_for_job: Callable[[str, str], Any] | None = None,
 ) -> FinalizationIntent:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -1800,6 +1823,40 @@ def _claim_finalization_replay_txn(
         if 'reconcile_after_at' in job:
             transaction.update(job_ref, {'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': now})
         return _intent_from_job(snapshot.id, job)
+    if job.get('sync_revision_waiting') and status == 'queued':
+        started = parse_timestamp(job.get('sync_revision_wait_started_at'))
+        if started is not None and now >= started + timedelta(seconds=SYNC_REVISION_MAX_WAIT_SECONDS):
+            update = _fenced_finalization_update(now)
+            update['last_failure_code'] = 'sync_revision_wait_exhausted'
+            transaction.update(job_ref, update)
+            _record_projection_delta(transaction, projection_collection, job, queued=-1, completed=1, stale=1)
+            logging.getLogger(__name__).info(
+                'event=finalization_persistence_fence outcome=terminal reason=sync_revision_wait_exhausted'
+            )
+            return _intent_from_job(snapshot.id, {**job, **update})
+        # Re-observe the revision transactionally. Changes while queued restart
+        # the quiet window but cannot extend the absolute wait budget.
+        if conversation_ref_for_job is not None:
+            row = (
+                conversation_ref_for_job(job['uid'], job['conversation_id']).get(transaction=transaction).to_dict()
+                or {}
+            )
+            revision = int(row.get('sync_content_revision') or 0)
+            if revision != job.get('sync_revision_observed'):
+                due = now + timedelta(seconds=SYNC_REVISION_QUIET_SECONDS)
+                transaction.update(
+                    job_ref,
+                    {
+                        'sync_revision_observed': revision,
+                        'sync_revision_not_before': due,
+                        'reconcile_after_at': due,
+                        'updated_at': now,
+                    },
+                )
+                return _intent_from_job(snapshot.id, job)
+        not_before = parse_timestamp(job.get('sync_revision_not_before'))
+        if not_before is not None and now < not_before:
+            return _intent_from_job(snapshot.id, job)
     if status == 'leased':
         lease_expires_at = job.get('lease_expires_at')
         if bool(job.get('requires_byok')) and not isinstance(lease_expires_at, datetime):
@@ -1843,6 +1900,7 @@ def _claim_finalization_replay_txn(
         {
             'status': 'queued',
             'dispatch_generation': generation,
+            'sync_revision_waiting': False,
             'dispatch_requested_at': now,
             'updated_at': now,
             'lease_expires_at': now,
@@ -1872,6 +1930,7 @@ def claim_finalization_replay(
         _now(),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         byok_only,
+        lambda uid, cid: _conversation_ref(client, uid, cid),
     )
 
 

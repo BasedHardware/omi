@@ -65,10 +65,13 @@ def count_hidden(
     now = bridge_pending.current_time()
     queries = (collection.where(filter=FieldFilter('deleted', '==', True)),)
     if not include_discarded:
-        queries += (
-            collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')),
-            collection.where(filter=FieldFilter('sync_bridge_pending.expires_at', '>', now)),
-        )
+        queries += (collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')),)
+    # Most users have no active bridge holds. Pay one bounded probe
+    # rather than opening a second full document stream on every count call.
+    if not include_discarded:
+        pending = collection.where(filter=FieldFilter('sync_bridge_pending.expires_at', '>', now))
+        if next(iter(pending.limit(1).stream()), None) is not None:
+            queries += (pending,)
     for index, query in enumerate(queries):
         for doc in query.stream():
             data = doc.to_dict() or {}

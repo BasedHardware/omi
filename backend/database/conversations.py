@@ -1051,28 +1051,26 @@ def _collect_visible_conversation_page(
     except ListReadBudgetExhausted:
         return finish(conversations)
 
-    skipped = fetched - len(conversations)
+    refill_reads = 0
     while (
         len(conversations) < limit
+        and refill_reads < _RULE_DISCARD_PAGE_SKIP_CAP
         and fetched == batch_limit
         and last_doc is not None
-        and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP
         and hasattr(conversations_ref, 'start_after')
     ):
-        # A shortfall-sized follow-up lets one stale row end the scan while
-        # visible rows remain. Ask for another full window; the skip cap still
-        # bounds the walk.
+        # Refill only missing slots and bound all follow-up reads, including
+        # visible rows. Pending holds cannot multiply a large requested page.
+        batch_limit = min(limit - len(conversations), _RULE_DISCARD_PAGE_SKIP_CAP - refill_reads)
         follow = conversations_ref.start_after(last_doc).limit(batch_limit)
         fetched = 0
         try:
             for doc in budgeted_stream_iter(follow, budget):
                 fetched += 1
+                refill_reads += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
-                    skipped += 1
-                    if skipped > _RULE_DISCARD_PAGE_SKIP_CAP:
-                        return finish(conversations)
                     continue
                 conversations.append(conversation)
                 if len(conversations) >= limit:

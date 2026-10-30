@@ -195,3 +195,22 @@ def test_sync_enrichment_yields_to_a_bound_processing_finalizer(monkeypatch, pen
         PROCESS_CONTEXT.reset(token)
     assert context == {'defer_reason': 'open_live_target'}
     process.assert_not_called()
+
+
+def test_flags_off_preserve_standalone_intake_and_skip_target_recovery(monkeypatch):
+    monkeypatch.setenv('SYNC_LIVE_OVERLAP_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_FINALIZE_TARGET_RECOVERY_ENABLED', 'false')
+    live = live_row('in_progress')
+    live.update(has_content=False, transcript_segments=[])
+    store = seeded(live)
+    original = deepcopy(store.rows)
+    row, created, _ = assign(store, dict(chunk('wal', 1002), data_protection_level='standard'))
+    assert created and row['id'] == 'wal'
+    assert not row.get(bridge_pending.FIELD)
+    assert db.is_visible_conversation(row)
+    assert store.rows[('users', 'u', 'conversations', 'live')] == original[('users', 'u', 'conversations', 'live')]
+    monkeypatch.setattr(bridge, 'read_metadata', lambda *a, **kw: deepcopy(row))
+    recover = MagicMock(side_effect=AssertionError('flag-off must not recover a target'))
+    monkeypatch.setattr(bridge, '_finish_pending_live_bridge', recover)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    recover.assert_not_called()
