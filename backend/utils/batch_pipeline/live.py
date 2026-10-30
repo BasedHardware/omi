@@ -15,6 +15,7 @@ import os
 import time
 
 from config.policy import resolve_batch_policy
+from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -215,13 +216,7 @@ async def admit_recording(store, pending, *, now=None):
         )
 
     current = await run_blocking(db_executor, read_current)
-    if (
-        current.get('status') != 'completed'
-        or not current.get('record_audio_closed')
-        or current.get('record_upload_failed')
-        or current.get('record_upload_sessions')
-    ):
-        raise ValueError('capture upload/finalization barrier not closed')
+    record_barrier = require_record_audio_barrier(current)
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
@@ -255,6 +250,7 @@ async def admit_recording(store, pending, *, now=None):
     # Never claim a successful record whose final recognized speech is missing
     # from the durable upload. The pending obligation has no TTL.
     validate_record_tail(units, row.get('finished_at'))
+    validate_record_tail(units, current.get('finished_at'))
     items = [
         WorkItem(
             hashlib.sha256(f'{content}:{i}'.encode()).hexdigest(),
@@ -326,6 +322,7 @@ async def admit_recording(store, pending, *, now=None):
         namespace=store.namespace,
         policy=policy,
         require_artifacts=True,
+        record_barrier=record_barrier,
         intake={
             'owner_id': uid,
             'owner_key': owner_key(uid),

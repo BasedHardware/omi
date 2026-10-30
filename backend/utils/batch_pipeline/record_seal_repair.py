@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import datetime
 import hashlib
 import json
+from typing import Any
 
 from google.cloud import firestore
 
@@ -12,12 +13,14 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPri
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
 from utils.batch_pipeline.record_barrier import validate_record_tail
+from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
 from utils.other.storage import list_audio_chunks
 
 ROW_FIELDS = (
     'record_lane_owner',
     'record_upload_failed',
     'record_upload_sessions',
+    'record_upload_revision',
     'record_audio_closed',
     'status',
     'deleted',
@@ -48,14 +51,16 @@ def _digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=encode, separators=(',', ':')).encode()).hexdigest()
 
 
-def _refused(job, row):
+def _refused(job, row, *, producer_proof=None, producers_stopped=False):
     if job.get('state') != 'record_pending' or not job.get('record_content_id'):
         return 'not_pending'
     if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
         return 'not_batch_owned'
     if row.get('record_upload_failed'):
         return 'upload_failed'
-    if row.get('record_upload_sessions'):
+    if row.get('record_upload_sessions') and not producer_tokens_dead(
+        row['record_upload_sessions'], producer_proof, producers_stopped=producers_stopped
+    ):
         return 'upload_pending'
     if row.get('record_audio_closed'):
         return 'already_closed'
@@ -66,7 +71,7 @@ def _refused(job, row):
     return None
 
 
-def plan_seals(store, job_ids, storage_client, artifacts):
+def plan_seals(store, job_ids, storage_client, artifacts, *, producer_proof=None, producers_stopped=False):
     entries = []
     for job_id in sorted(job_ids):
         entry = {'job_id': job_id, 'disposition': 'unavailable'}
@@ -78,7 +83,7 @@ def plan_seals(store, job_ids, storage_client, artifacts):
                 continue
             row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
             entry.update(job=job, row=_row_state(row))
-            refusal = _refused(job, row)
+            refusal = _refused(job, row, producer_proof=producer_proof, producers_stopped=producers_stopped)
             if refusal:
                 entry['disposition'] = refusal
             else:
@@ -115,12 +120,18 @@ def plan_seals(store, job_ids, storage_client, artifacts):
         except Exception:
             entry['disposition'] = 'read_error'
         entries.append(entry)
-    plan = {'version': 1, 'namespace': store.namespace, 'entries': entries}
+    plan = {
+        'version': 1,
+        'namespace': store.namespace,
+        'entries': entries,
+        'producer_proof': producer_proof,
+        'producers_stopped': producers_stopped,
+    }
     return {**plan, 'plan_sha256': _digest(plan)}
 
 
 def apply_seals(store, plan, approved_digest):
-    body = {key: plan[key] for key in ('version', 'namespace', 'entries')}
+    body = {key: value for key, value in plan.items() if key != 'plan_sha256'}
     if approved_digest != plan['plan_sha256'] or _digest(body) != approved_digest:
         raise ValueError('fresh dry-run plan approval required')
     if store.namespace != plan['namespace']:
@@ -141,13 +152,18 @@ def apply_seals(store, plan, approved_digest):
             row = ref.get(transaction=tx).to_dict() or {}
             if _job_state(current_job) != job or _row_state(row) != entry['row']:
                 return 'state_changed'
-            refusal = _refused(current_job, row)
+            refusal = _refused(
+                current_job, row, producer_proof=plan['producer_proof'], producers_stopped=plan['producers_stopped']
+            )
             if refusal:
                 return refusal
             assert_batch_write_allowed(
                 store.client, tx, uid, conversation_ids=(cid,), expected_generation=job['privacy_generation']
             )
-            tx.update(ref, {'record_audio_closed': True})
+            patch: dict[str, Any] = {'record_audio_closed': True}
+            if row.get('record_upload_sessions'):
+                patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
+            tx.update(ref, patch)
             return 'sealed'
 
         try:

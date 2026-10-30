@@ -106,7 +106,7 @@ def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypa
     store = MemoryStore()
     register_recording('synthetic', recording(), store=store, now=0)
     content, segment = record_identity('synthetic', 'record')
-    store.rows['conversations', 'synthetic/record'] = recording()
+    store.rows['conversations', 'synthetic/record'] = recording(record_audio_closed=True)
     item = WorkItem(
         segment,
         'synthetic',
@@ -219,7 +219,8 @@ def test_reference_scope_and_generation_are_fail_closed(change):
 
 
 @pytest.mark.parametrize('server_only', [False, True])
-async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch, server_only):
+@pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed'])
+async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch, server_only, barrier_change):
     from types import SimpleNamespace
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
@@ -281,6 +282,16 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
             'owner_id': item.owner_id,
             'privacy_generation': 0,
         }
+        if barrier_change == 'pending':
+            current.update(record_upload_sessions={'new': True}, record_audio_closed=False)
+        elif barrier_change == 'failed':
+            current.update(record_upload_failed=True, record_audio_closed=False)
+        elif barrier_change == 'resealed':
+            # A producer can upload and seal again during staging. A closed
+            # boolean alone cannot prove that these manifests include it.
+            current.update(record_upload_revision=1, record_audio_closed=True)
+        if barrier_change:
+            store.rows['conversations', 'synthetic/record'].update(current)
         return uri
 
     monkeypatch.setattr(
@@ -293,6 +304,12 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
         ),
     )
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    if barrier_change:
+        with pytest.raises(ValueError, match='barrier'):
+            await live.admit_recording(store, pending, now=1)
+        assert store.rows['jobs', segment]['state'] == 'record_pending'
+        assert ('content', 'synthetic/' + content) not in store.rows
+        return
     result = await live.admit_recording(store, pending, now=1)
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     assert store.rows['jobs', segment]['state'] == 'ready'

@@ -128,7 +128,7 @@
     },
     {
       "path": "utils/batch_pipeline/live.py",
-      "function": "_units",
+      "function": "retained_record_units",
       "name": "BUCKET_AUDIO_DERIVED",
       "count": 1,
       "why": "pre-existing; unreviewed"

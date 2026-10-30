@@ -31,7 +31,9 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     return run_transactional(client, commit, transient=True)
 
 
-def set_record_upload_pending(uid: str, conversation_id: str, session: str, pending: bool, *, firestore_client=None):
+def set_record_upload_pending(
+    uid: str, conversation_id: str, session: str, pending: bool, *, producer=None, firestore_client=None
+):
     """Track a session's buffered/in-flight audio before accepting its first frame.
 
     No expiry: a dead producer cannot prove that its tail reached storage.
@@ -45,14 +47,23 @@ def set_record_upload_pending(uid: str, conversation_id: str, session: str, pend
         row = ref.get(transaction=tx).to_dict()
         if row is None:
             return False
+        if pending and row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
+            return False  # Legacy/unowned producers add no metadata writes.
         sessions = dict(row.get('record_upload_sessions') or {})
         if pending:
             if session in sessions:
                 return True
             if len(sessions) >= 128:
                 raise ValueError('record upload session budget exceeded')
-            sessions[session] = True
-            tx.update(ref, {'record_upload_sessions': sessions, 'record_audio_closed': False})
+            sessions[session] = producer or True
+            tx.update(
+                ref,
+                {
+                    'record_upload_sessions': sessions,
+                    'record_audio_closed': False,
+                    'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
+                },
+            )
         elif session in sessions:
             sessions.pop(session)
             tx.update(ref, {'record_upload_sessions': sessions})

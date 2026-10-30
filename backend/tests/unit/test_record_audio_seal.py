@@ -5,6 +5,7 @@ import json
 import struct
 import threading
 from unittest.mock import AsyncMock
+from unittest.mock import Mock
 
 import pytest
 
@@ -21,6 +22,8 @@ from tests.unit.test_pusher_audio_timeline import (
 )
 import routers.pusher as pusher
 from database import record_audio as record_audio_db
+from utils.pusher_record_barrier import PusherRecordBarrier
+from utils.pusher_record_barrier import RECORD_BARRIER_FAILURES
 
 PATH = ('users', 'uid-at', 'conversations', 'record')
 
@@ -145,3 +148,86 @@ async def test_real_overlapping_sessions_withhold_seal_until_old_upload_finishes
         await asyncio.wait_for(old, 10)
     assert bool(records.rows[PATH].get('record_upload_failed')) == late_failure
     assert records.rows[PATH]['record_audio_closed'] is (not late_failure)
+
+
+@pytest.mark.parametrize('phase', ['begin', 'finish', 'seal'])
+async def test_firestore_bookkeeping_failure_never_prevents_audio_upload(records, env, monkeypatch, phase):
+    real_pending = record_audio_db.set_record_upload_pending
+
+    def pending(uid, cid, token, active, **kwargs):
+        if active is (phase == 'begin'):
+            raise OSError('synthetic bookkeeping outage')
+        return real_pending(uid, cid, token, active, **kwargs)
+
+    if phase == 'seal':
+        monkeypatch.setattr(record_audio_db, 'seal_record_audio', Mock(side_effect=OSError('synthetic seal outage')))
+    else:
+        monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', pending)
+    before = RECORD_BARRIER_FAILURES.labels(stage=phase)._value.get()
+    ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
+    await _run(ws)
+    assert len(env) == 1 and len(env[0][1]['data']) == RATE * 2
+    assert ws.close_code == 1000
+    assert bool(records.rows[PATH].get('record_upload_failed')) is (phase == 'begin')
+    assert not records.rows[PATH]['record_audio_closed']
+    assert RECORD_BARRIER_FAILURES.labels(stage=phase)._value.get() == before + 1
+
+
+async def test_failure_marker_outage_does_not_abort_remaining_uploads(records, env, monkeypatch):
+    other_path = (*PATH[:-1], 'other')
+    records.rows[other_path] = {'record_lane_owner': 'batch_live_v1'}
+    original = pusher.upload_audio_chunks_batch
+
+    def upload(chunks, uid, cid, *args, **kwargs):
+        if cid == 'record':
+            raise OSError('synthetic upload failure')
+        return original(chunks, uid, cid, *args, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_MAX_RETRIES', 0)
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', Mock(side_effect=OSError('synthetic outage')))
+    before = RECORD_BARRIER_FAILURES.labels(stage='failure_marker')._value.get()
+    pcm = b'\x01\x00' * RATE
+    await _run(FakeWebSocket([_conversation('record'), _audio(100, pcm), _conversation('other'), _audio(200, pcm)]))
+    assert [cid for cid, _ in env] == ['other']
+    assert not records.rows[PATH].get('record_audio_closed')
+    assert records.rows[other_path]['record_audio_closed']
+    assert RECORD_BARRIER_FAILURES.labels(stage='failure_marker')._value.get() == before + 1
+
+
+@pytest.mark.parametrize('persisted_cap', [False, True])
+async def test_session_token_cap_never_drops_audio(records, env, monkeypatch, persisted_cap):
+    if persisted_cap:
+        records.rows[PATH]['record_upload_sessions'] = {str(i): True for i in range(128)}
+    else:
+        barrier = PusherRecordBarrier('uid-at')
+        barrier.checked_conversations = {str(i) for i in range(128)}
+        monkeypatch.setattr(pusher, 'PusherRecordBarrier', lambda _: barrier)
+    await _run(FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)]))
+    assert len(env) == 1
+    assert records.rows[PATH]['record_upload_failed']
+    assert not records.rows[PATH]['record_audio_closed']
+
+
+@pytest.mark.parametrize('owner', [None, 'legacy_final_pass_v1'])
+async def test_legacy_audio_adds_no_record_metadata_writes(records, env, owner):
+    records.rows[PATH]['record_lane_owner'] = owner
+    await _run(FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)]))
+    assert len(env) == 1
+    assert all(not tx.updates for tx in records.transactions)
+
+
+async def test_failed_token_clear_is_retained_and_can_retry_without_failure_marker(records, monkeypatch):
+    barrier = PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    token = barrier.upload_sessions['record']
+    original = record_audio_db.set_record_upload_pending
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', Mock(side_effect=OSError('synthetic outage')))
+    await barrier.finish_recording('record')
+    assert barrier.upload_sessions['record'] == token
+    assert ('record', token) in barrier.pending_clears
+    assert not records.rows[PATH].get('record_upload_failed')
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', original)
+    await barrier.finish_recording('record')
+    assert records.rows[PATH]['record_audio_closed']
+    assert not barrier.upload_sessions and not barrier.pending_clears

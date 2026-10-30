@@ -21,6 +21,7 @@ from database.batch_pipeline_store import FirestoreStore
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.record_seal_repair import apply_seals, plan_seals, plan_summary
 from utils.other.local_storage import create_storage_client
+from utils.batch_pipeline.record_producer_proof import load_pusher_pod_proof
 
 
 def read_job_ids(path):
@@ -40,6 +41,17 @@ def main():
     parser.add_argument('--ids-file', required=True)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
+    parser.add_argument(
+        '--pusher-pods-file', help='private kubectl pusher pod List JSON; no environment payload needed'
+    )
+    parser.add_argument(
+        '--pusher-pods-captured-at', help='RFC3339 capture time; inventory must be at most 5 minutes old'
+    )
+    parser.add_argument(
+        '--producers-stopped',
+        action='store_true',
+        help='explicit operator attestation for legacy identity-less tokens only',
+    )
     args = parser.parse_args()
     logging.disable(logging.CRITICAL)
     if os.getenv('FIRESTORE_EMULATOR_HOST') or os.getenv('GCP_AGENT_TIER') != (
@@ -48,10 +60,22 @@ def main():
         parser.error('wrong identity for requested operation')
     if args.apply and not args.approve_plan_sha256:
         parser.error('apply requires a dry-run plan digest')
+    if bool(args.pusher_pods_file) != bool(args.pusher_pods_captured_at):
+        parser.error('pod inventory file and capture time are required together')
     os.environ['OMI_ENV_STAGE'] = 'prod'
     job_ids = read_job_ids(args.ids_file)
     store = FirestoreStore('batch_pipeline_prod', firestore_client=get_firestore_client())
-    plan = plan_seals(store, job_ids, create_storage_client(), artifacts_for(store))
+    proof = (
+        load_pusher_pod_proof(args.pusher_pods_file, args.pusher_pods_captured_at) if args.pusher_pods_file else None
+    )
+    plan = plan_seals(
+        store,
+        job_ids,
+        create_storage_client(),
+        artifacts_for(store),
+        producer_proof=proof,
+        producers_stopped=args.producers_stopped,
+    )
     report = plan_summary(plan)
     report['apply'] = args.apply
     if args.apply:

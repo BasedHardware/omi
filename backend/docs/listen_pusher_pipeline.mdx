@@ -6357,15 +6357,30 @@ conversation itself (`batch_live_v1` or `batch_sync_v1`); a reconnect carrying o
 finalize can close an existing batch owner even with live admission disabled.
 Legacy and unowned conversations never receive a seal.
 
-Before accepting a conversation's first audio frame, each session registers an
-opaque `record_upload_sessions` token transactionally and invalidates any old seal.
+Before accepting a batch-owned conversation's first audio frame, each session
+registers a `record_upload_sessions` token transactionally and invalidates any old
+seal. Its value identifies the pusher pod (HOSTNAME) and process start time. A
+monotone `record_upload_revision` changes on every new producer; CPU admission
+rechecks that revision and the closed barrier in its final enqueue transaction,
+so a producer that starts and seals again during staging still invalidates the
+earlier source snapshot. Legacy/unowned producers perform one eligibility read
+per session/drain and add no normal-path record metadata writes.
 The successful drain removes only that token before attempting closure. The seal
 transaction refuses while any producer remains pending, including an older socket
 still uploading or retrying. Tokens have no TTL: process death cannot prove audio
 completeness. Terminal upload/projection failures and queue/buffer drops await a
 sticky `record_upload_failed=true` write, which also invalidates an earlier seal.
 A clean reconnect cannot clear that marker. CPU admission independently refuses
-both failure markers and pending producers. These metadata transactions do not
+both failure markers and pending producers. Metadata exceptions never terminate
+the audio upload queue: begin failures refuse sealing locally and attempt a
+persistent failure marker; finish/seal failures leave unsealed debt. Failed
+token clears retain local retry state. The closed-stage
+`omi_pusher_record_barrier_failures_total{stage}` counter distinguishes begin,
+finish, seal, failure_marker and capacity errors from audio custody failures. If
+both begin registration and its failure-marker write fail, durable failure
+knowledge is unavailable across reconnects; the lead must classify this signal
+before claiming the cross-session guarantee. Audio custody remains the priority.
+These metadata transactions do not
 touch transcript or lifecycle fields. Steady-state frames reuse the session token;
 the extra producer transaction runs only on its first accepted audio per drain.
 CPU reconciliation waits for a successful receipt and the completed, retained
@@ -6378,19 +6393,48 @@ Default dry-run requires `ro-prod`; output is only counts, closed dispositions a
 `--apply --approve-plan-sha256 DIGEST`. The fresh plan must match the approved
 digest, including source generation/digest proofs and conversation/job state.
 The tool requires `record_pending`, a completed batch-owned retained conversation,
-no failed/pending upload markers, and generation-pinned retained units whose last
+no failed upload marker, no live/unknown producer, and generation-pinned retained
+units whose last
 durable end covers both current and frozen `finished_at` (the same 100 ms tolerance
 as record admission). Missing finishes, privacy refusals, conflicting overlaps,
 read errors and missing tails stay pending. The final write transaction rechecks
-job/record state and privacy generation before patching only the seal. It never
-clears failed or abandoned producer markers, edits jobs or invokes processing.
+job/record state and privacy generation before patching the seal and any proven-dead
+producer map. It never
+clears a failed-upload marker, edits jobs or invokes processing. An abandoned
+producer can be cleared only with `--pusher-pods-file PRIVATE_JSON` and
+`--pusher-pods-captured-at RFC3339`: capture a current Kubernetes v1 PodList, filtering
+before persistence so the file contains no env/spec payload:
+
+```bash
+umask 077
+kubectl get --raw '/api/v1/namespaces/prod-omi-backend/pods?labelSelector=app.kubernetes.io%2Fname%3Dpusher' | \
+  jq '{apiVersion,kind,metadata:{resourceVersion:.metadata.resourceVersion},items:[.items[]|{metadata:{name:.metadata.name,namespace:.metadata.namespace,labels:{"app.kubernetes.io/name":.metadata.labels["app.kubernetes.io/name"]}},status:{containerStatuses:[.status.containerStatuses[]?|{state:{running:{startedAt:.state.running.startedAt}}}]}}]}' > PRIVATE_PODS_JSON
+```
+
+The List must carry resourceVersion; its file digest, capture time and normalized
+pod inventory join the approval digest. The inventory is limited to five minutes
+at plan/apply. Each token's pod must be absent, or every running container must
+have started after its recorded process epoch. Missing/unknown state is refused.
+Only bare pre-identity tokens accept `--producers-stopped`, an explicit operator
+attestation bound to their exact token map and approval digest. No TTL expires a
+producer. The write transaction rechecks the exact map, privacy and capture state,
+then atomically clears only proven-dead tokens and writes the seal.
+The parser accepts Kubernetes [PodList](https://kubernetes.io/docs/reference/kubernetes-api/core/pod-v1/#podlist)
+and kubectl's generic List form; missing list metadata is refused.
 Keep the exact-ID file private (0600); do not publish it or exception text.
 
-Deploy target: pusher, on the listen/pusher train. CPU recovery also consumes the
-independent admission refusal on its next source release. Rollback: revert;
+Deploy target: pusher, on the listen/pusher train, plus the CPU reconciliation
+consumer for the transactional admission guard. Both releases are required to
+claim the staging-race guarantee. Release the Cloud Run admission consumer first,
+verify it serving, then roll pusher in the listen/pusher train. Reversing that
+order leaves the older consumer's staging race unguarded and is unsafe for this
+rollout's custody guarantee. Rollback: revert;
 behavior returns to today's stuck-but-retained path. Drain old pusher sessions
 before evaluating the new producer-token guarantee: an old binary cannot register
-its outstanding audio. Existing failed/pending markers remain conservative.
+its outstanding audio. Producer identity and marker fields remain stored after
+rollback; older binaries
+do not enforce the new metadata refusal contract. The lead owns rollout/rollback
+and qualification of any unresolved metadata-outage or abandoned-producer debt.
 
 The coordinator lists the already retained audio, verifies overlaps, and freezes
 one-hour capture units as encrypted **reference manifests**, not copies of the
@@ -6471,7 +6515,7 @@ Existing provenance/privacy and audio-metadata reads are reused.
 | Path | Flag off, unowned: added reads / writes | Enabled or already-owned path |
 | --- | --- | --- |
 | Named sync ownership routing | 0 / 0 | Discovery: one conversation read, plus one session lookup if needed. Loaded owners skip discovery. New owner: one conditional field write. |
-| Pusher close | One transactional read; no seal write for unowned/legacy | One transactional owner/failure/pending check, with an idempotent seal write only when eligible. Audio producers also register and clear one token per session/drain. |
+| Pusher close | One transactional read; no seal write for unowned/legacy | One transactional owner/failure/pending check, with an idempotent seal write only when eligible. Native producers also register and clear one token per session/drain. Legacy/unowned normal paths write no tokens. |
 | Legacy final pass | 0 / 0 | One conditional owner write if unowned; each lost CAS adds one refresh read before a bounded retry. |
 | Integration pending scan | 0 / 0 | At 20-second ticks, nominally 4,320 queries/day/process plus returned documents; empty queries bill at least one read. |
 | Record admission | Existing sync protocol only | Patch only `record_lane_owner` once if missing; matching owners add no conversation write. Never set the conversation body. |

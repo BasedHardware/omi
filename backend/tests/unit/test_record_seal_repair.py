@@ -13,6 +13,7 @@ from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import record_seal_repair as repair
+from utils.batch_pipeline import record_producer_proof
 
 PATH = ('users', 'synthetic', 'conversations', 'record')
 JOB_PATH = ('batch_pipeline_dev_jobs', 'pending')
@@ -179,6 +180,37 @@ def test_scheduler_retry_wake_does_not_invalidate_approval_or_get_overwritten(so
     assert result['plan_sha256'] == refreshed['plan_sha256']
     assert repair.apply_seals(store, refreshed, result['plan_sha256']) == {'sealed': 1}
     assert client.rows[JOB_PATH]['available_at'] == 1000
+
+
+@pytest.mark.parametrize('identity', [True, {'pod': 'old', 'process_started_at': 900}])
+def test_proven_dead_producer_can_be_cleared_with_tail_proof_and_plan_digest(source, monkeypatch, identity):
+    store, client, artifacts = source
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 1000)
+    client.rows[PATH]['record_upload_sessions'] = {'token': identity}
+    proof = {'namespace': 'prod-omi-backend', 'captured_at': 999, 'pods': {}, 'file_sha256': 'proof'}
+    result = repair.plan_seals(
+        store, ['pending'], object(), artifacts, producer_proof=proof, producers_stopped=identity is True
+    )
+    assert result['entries'][0]['disposition'] == 'eligible'
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_upload_sessions'] == {}
+    assert client.rows[PATH]['record_audio_closed']
+
+
+def test_producer_proof_change_or_new_token_requires_fresh_plan(source, monkeypatch):
+    store, client, artifacts = source
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 1000)
+    client.rows[PATH]['record_upload_sessions'] = {'token': {'pod': 'old', 'process_started_at': 900}}
+    proof = {'namespace': 'prod-omi-backend', 'captured_at': 999, 'pods': {}, 'file_sha256': 'first'}
+    old = repair.plan_seals(store, ['pending'], object(), artifacts, producer_proof=proof)
+    updated = repair.plan_seals(
+        store, ['pending'], object(), artifacts, producer_proof={**proof, 'file_sha256': 'second'}
+    )
+    assert updated['plan_sha256'] != old['plan_sha256']
+    with pytest.raises(ValueError):
+        repair.apply_seals(store, updated, old['plan_sha256'])
+    client.rows[PATH]['record_upload_sessions']['new'] = {'pod': 'new', 'process_started_at': 990}
+    assert repair.apply_seals(store, old, old['plan_sha256']) == {'state_changed': 1}
 
 
 def test_private_exact_id_input_refuses_scans_duplicates_and_unbounded_lists(tmp_path):
