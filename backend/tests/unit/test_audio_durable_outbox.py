@@ -1562,7 +1562,9 @@ async def test_transient_projection_failure_drops_after_the_retry_budget(remote,
         for record in caplog.records
         if record.getMessage().startswith('Durable audio projection failure class:')
     ]
-    assert class_lines == ['Durable audio projection failure class: OSError raised by always_unavailable'] * (
+    assert class_lines == [
+        'Durable audio projection failure class: OSError raised by always_unavailable grpc_code=UNKNOWN'
+    ] * (
         1 + pusher.PROJECTION_RETRY_BUDGET
     ), 'every failed attempt logs the exception class name and the innermost raising frame, never the message'
     assert not any(
@@ -1727,9 +1729,9 @@ async def test_notfound_on_live_conversation_keeps_transient_retry_and_terminal_
         for record in caplog.records
         if record.getMessage().startswith('Durable audio projection failure class:')
     ]
-    assert class_lines == ['Durable audio projection failure class: NotFound raised by purged_read'] * (
-        1 + pusher.PROJECTION_RETRY_BUDGET
-    ), 'the class line names the innermost raising frame'
+    assert class_lines == [
+        'Durable audio projection failure class: NotFound raised by purged_read grpc_code=NOT_FOUND'
+    ] * (1 + pusher.PROJECTION_RETRY_BUDGET), 'the class line names the innermost raising frame'
     assert not any(
         'pinned generation missing' in record.getMessage() for record in caplog.records
     ), 'the exception message must never reach the projection failure logs'
