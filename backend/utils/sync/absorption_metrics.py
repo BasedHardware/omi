@@ -69,6 +69,13 @@ def absorption_observations(plans: Iterable[Any]) -> list[tuple[str, str, str]]:
     return observations
 
 
+def capture_absorptions(conversation: dict, plans: Iterable[Any]) -> None:
+    """Leave no-absorption assignment results unchanged, including empty retries."""
+    observations = absorption_observations(plans)
+    if observations:
+        conversation[OBSERVATIONS_FIELD] = observations
+
+
 def record_absorptions(conversation: dict) -> None:
     """Consume only the committed result, before retryable external effects."""
     for source_kind, pending, processed in conversation.pop(OBSERVATIONS_FIELD, []):
