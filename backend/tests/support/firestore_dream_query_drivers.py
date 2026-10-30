@@ -64,6 +64,8 @@ def entries():
             base={'uid': UID},
             neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
         ),
+        DriverEntry('utils.dream_prescan._scan_people', base={'uid': UID}),
+        DriverEntry('utils.dream_prescan._scan_tasks', base={'uid': UID}),
         DriverEntry(
             'database.dream_history.history_page',
             base={'uid': UID},
@@ -180,7 +182,7 @@ registry_extension = SimpleNamespace(
             expect_observed=False,
             # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
             body_digest='e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
-        )
+        ),
     },
     SKIPS={},
 )
