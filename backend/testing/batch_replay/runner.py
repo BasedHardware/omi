@@ -426,6 +426,9 @@ def _replay(corpus):
         if 'worker_words' in unit:
             if not corpus.get('source', '').startswith('synthetic-'):
                 raise ValueError('worker hypotheses require an explicitly synthetic corpus')
+            expected = unit.get('expected_worker_result')
+            if not isinstance(expected, dict):
+                raise ValueError('synthetic worker hypotheses require an expected result')
             results, saved = replay_worker_words(item, unit['worker_words'])
             coverage['worker_exercised'] += 1
             if len(results) == 1 and isinstance(results[0], WorkResult) and len(saved) == 1:
@@ -434,6 +437,17 @@ def _replay(corpus):
                     'persisted': True,
                     'word_timestamps': [word['timestamp'] for word in saved[0]['words']],
                 }
+                if worker_results[sid] != expected:
+                    key = 'worker_oracle:WorkerResultMismatch:expected_outcome_and_clocks'
+                    exceptions[key] += 1
+                    issues[sid].add(key)
+                    unit_counts[sid][key] += 1
+                    untestable.add(sid)
+                    continue
+                # The worker result, not the fixture's projection outcome,
+                # determines the branch exercised after worker persistence.
+                outcome = results[0].outcome
+                log.results[sid]['result']['outcome'] = outcome
             else:
                 failure = results[0] if len(results) == 1 else None
                 stage = failure.stage if isinstance(failure, ValidationFailureWork) else 'worker'

@@ -14,6 +14,7 @@
       "speech_seconds": 0.5,
       "spans": [{"start": 0.0, "end": 0.5}],
       "worker_words": [{"word": "synthetic.", "timestamp": [0.1, 0.54]}],
+      "expected_worker_result": {"persisted": true, "outcome": "success", "word_timestamps": [[0.1, 0.5]]},
       "references": [{"start_frame": 0, "offset_frame": 0, "frames": 8000, "source_frames": 8000}],
       "lane": "backfill",
       "record_origin": true,
