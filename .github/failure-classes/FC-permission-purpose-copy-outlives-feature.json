@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-permission-purpose-copy-outlives-feature",
+  "violated_contract": "iOS permission purpose strings (Info.plist NS*UsageDescription values and every localized InfoPlist.strings override) must describe what the shipped app does with that permission. They are static copy with no link to the code that requests the permission, so after Instabug bug reporting was removed the system prompts still asked for the microphone to record bug explanations, for Photos to share through Instabug and for the camera to report issues, and the Japanese overrides repeated the same retired text.",
+  "canonical_prevention": "Write each purpose string from the request sites that exist today, update Info.plist, Info-Dev.plist and every InfoPlist.strings override together, and keep a static content test that fails on retired wording, empty values, Info-Dev.plist drift from Info.plist, and localized overrides for keys Info.plist does not declare.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/ios_permission_purpose_strings_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/ios/Runner/Info.plist",
+    "app/ios/Runner/Info-Dev.plist",
+    "app/ios/Runner/*.lproj/InfoPlist.strings"
+  ],
+  "status": "open"
+}
