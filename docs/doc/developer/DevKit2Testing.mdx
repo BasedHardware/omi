@@ -118,15 +118,22 @@ The green banner only appears for DevKit 2 devices. DevKit 1 devices do not supp
 
 ## Button Events
 
-After connecting to the BLE notification service, these events fire:
+After connecting to the BLE notification service, these events fire on the legacy characteristic (`23ba7925`):
 
 | Event Code | Action |
 |------------|--------|
 | `1` | Single tap |
 | `2` | Double tap |
-| `3` | Long press (~3 seconds) |
-| `4` | Button pressed down |
-| `5` | Button released |
+| `3` | Long press (~3 seconds) — reserved; current firmware powers off without notifying |
+| `4` | Button pressed down — reserved |
+| `5` | Button released (also trails every tap) |
+
+Firmware that advertises feature bit 9 (`BUTTON_TAPS`) also notifies on `23ba7926` with progressive taps:
+
+| Payload | Meaning |
+|---------|---------|
+| `[1, n]` | Tap count `n` just released |
+| `[2, n]` | Sequence ended with count `n` (gap expired or press became a hold) |
 
 Verify that each physical action sends the correct BLE packet.
 

@@ -8931,6 +8931,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get voiceResponseAlways => 'همیشه';
 
   @override
+  String get voiceResponseOmiDevice => 'دستگاه Omi';
+
+  @override
   String get agreeAndContinue => 'موافقم و ادامه';
 
   @override
@@ -11169,6 +11172,18 @@ class AppLocalizationsFa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name و دیگران';
   }
+
+  @override
+  String get singleTap => 'تک ضربه';
+
+  @override
+  String get singleTapAction => 'عمل تک ضربه';
+
+  @override
+  String get tripleTap => 'سه ضربه';
+
+  @override
+  String get tripleTapAction => 'عمل سه ضربه';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'پاسخ‌های Omi را بشنوید';

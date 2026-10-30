@@ -8954,6 +8954,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get voiceResponseAlways => 'Vienmēr';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi ierīce';
+
+  @override
   String get agreeAndContinue => 'Piekrītu un turpināt';
 
   @override
@@ -11204,6 +11207,18 @@ class AppLocalizationsLv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
+
+  @override
+  String get singleTap => 'Viens klikšķis';
+
+  @override
+  String get singleTapAction => 'Viena klikšķa darbība';
+
+  @override
+  String get tripleTap => 'Trīskāršs klikšķis';
+
+  @override
+  String get tripleTapAction => 'Trīskārša klikšķa darbība';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Klausieties Omi atbildes';

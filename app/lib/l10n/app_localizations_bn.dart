@@ -8940,6 +8940,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get voiceResponseAlways => 'সর্বদা';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi ডিভাইস';
+
+  @override
   String get agreeAndContinue => 'সম্মত হই এবং চালিয়ে যান';
 
   @override
@@ -11175,6 +11178,18 @@ class AppLocalizationsBn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ও অন্যরা';
   }
+
+  @override
+  String get singleTap => 'একক ট্যাপ';
+
+  @override
+  String get singleTapAction => 'একক ট্যাপ ক্রিয়া';
+
+  @override
+  String get tripleTap => 'তিনবার ট্যাপ';
+
+  @override
+  String get tripleTapAction => 'তিনবার ট্যাপ ক্রিয়া';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi-এর উত্তর শুনুন';

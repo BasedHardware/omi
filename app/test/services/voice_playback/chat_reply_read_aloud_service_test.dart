@@ -27,7 +27,7 @@ void main() {
 
   void install({VoicePlaybackOutputSnapshot? snapshot, bool gateProbe = false}) {
     service.debugHooks = VoicePlaybackDebugHooks(
-      synthesize: ({required String text, String? voiceId}) async {
+      synthesize: ({required String text, String? voiceId, String outputFormat = 'mp3_44100_128'}) async {
         synthesized.add(text);
         return _mp3;
       },

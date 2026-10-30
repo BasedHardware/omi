@@ -53,24 +53,26 @@ sidebarTitle: "Omi Setup"
 
 ## Button Controls
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Single Tap" icon="microphone">
-    **Ask a Question**
+    **Ask a Question (Configurable)**
 
-    Tap once to start recording a voice question. Tap again when you're done speaking (or wait 15 seconds). Your answer will appear in Omi chat.
+    Tap once to start recording a voice question. Tap again when you're done speaking (or wait 15 seconds). Remap this in **Settings → Device Settings**.
   </Card>
   <Card title="Double Tap" icon="hand-peace">
     **Quick Action (Configurable)**
 
-    Double tap to trigger a quick action. You can choose what it does in **Settings → Device Settings → Double Tap Action**:
-    - End & save conversation (default)
-    - Pause / resume recording
-    - Star the current conversation
+    Default: Mute / Unmute. Also End & save, Star, or Off — pick in **Settings → Device Settings**.
+  </Card>
+  <Card title="Triple Tap" icon="hand">
+    **Second Action (Configurable)**
+
+    Default: End & save conversation. Requires firmware that advertises progressive button taps. Remap or turn Off in Device Settings.
   </Card>
   <Card title="Long Press (3s)" icon="power-off">
-    **Power Off**
+    **Power Off (Fixed)**
 
-    Press and hold for 3 seconds to turn the device off. Press the button once to turn it back on.
+    Press and hold for 3 seconds to turn the device off. This cannot be remapped. Press the button once to turn it back on.
   </Card>
 </CardGroup>
 
