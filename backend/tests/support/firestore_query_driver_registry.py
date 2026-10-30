@@ -1088,7 +1088,29 @@ _add(
             'choose': lambda rows, start, end: None,
             'new_episode': {'id': 'recorded-1'},
         },
+        neutrals={'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape')},
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.episode_timeline.attach_existing_recorded',
+        base={
+            'uid': UID,
+            'conversation_id': 'recorded-1',
+            'source': 'desktop',
+            'started': T0,
+            'finished': T1,
+            'episode_id': 'owner',
+            'choose': lambda rows, start, end: {'id': 'owner'},
+        },
+        patchers=(
+            _stub(
+                'database.episodes.unseal',
+                {'id': 'owner', 'started_at': T0, 'last_activity_at': T1, 'status': 'live', 'state_version': 1},
+            ),
+            _stub('database.episodes.seal', {'id': 'owner'}),
+        ),
     )
 )
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))

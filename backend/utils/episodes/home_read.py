@@ -13,6 +13,7 @@ from utils.episodes.timeline import ownership_end
 from utils.episodes.policy import utc
 from models.episode import EpisodeCloseReason
 from utils.episodes import service
+from utils.conversations.fragment_visibility import is_relevance_discarded
 
 
 def list_episode_window(
@@ -87,6 +88,11 @@ MEMBER_FIELDS = [
     'finished_at',
     'created_at',
     'status',
+    'sync_relevance_user_kept',
+    'has_photos',
+    'photos',
+    'starred',
+    'folder_user_set',
 ]
 
 
@@ -123,7 +129,12 @@ def project_episode(
     retained: list[dict[str, Any]] = []
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
-        if row is None or not conversations.is_visible_conversation(row) or row.get('sync_merged_into'):
+        if (
+            row is None
+            or not conversations.is_visible_conversation(row)
+            or is_relevance_discarded(row)
+            or row.get('sync_merged_into')
+        ):
             continue
         structured: dict[str, Any] = row.get('structured') or {}
         retained.append(

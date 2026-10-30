@@ -47,6 +47,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
 from utils.conversations.recorded_time import conversation_span, is_late, at_offset as _wall
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
@@ -830,7 +831,7 @@ def _record_moment_once(
         else (set(), False)
     )
     segments, selected_ids, selected_content = recovery.select_segments(
-        moment.segments,
+        recovery.uncovered_segments(moment, episode),
         consumed,
         consumed_content,
         applied_until,
@@ -1432,6 +1433,9 @@ def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapp
 def _attach_synced(
     uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
 ) -> str:
+    if is_relevance_discarded(row) or hidden_conversation(uid, conversation_id, firestore_client=c.firestore_client):
+        _end_discarded(uid, conversation_id, row, SYNC_UPDATE, c)
+        return 'skipped_discarded'
     if canonical := episode_groups.canonical_row(uid, conversation_id, row, firestore_client=c.firestore_client):
         primary = str(canonical.get('id') or episode_groups.primary_id(row))
         owner = episodes_db.get_episode_for_conversation(uid, primary, firestore_client=c.firestore_client)
@@ -1502,7 +1506,7 @@ def attach_synced_intake(
     try:
         if not client_gate.client_seen_cached(uid):
             return 'skipped_no_client'
-        if row.get('discarded') or row.get('deleted') or row.get('sync_merged_into'):
+        if is_relevance_discarded(row) or row.get('deleted') or row.get('sync_merged_into'):
             # Only isolated final verdicts skip intake; occasion-aware sync intake
             # defers fragment discards, so their content joins before finalization.
             return 'skipped_discarded'
@@ -1545,7 +1549,7 @@ def _on_finalized(
     absorbed_from: Optional[str],
     c: Collaborators,
 ) -> str:
-    if row.get('deleted') or row.get('discarded'):
+    if row.get('deleted') or is_relevance_discarded(row):
         _end_discarded(uid, conversation_id, row, trigger, c)
         return 'skipped_discarded'
     if episode_groups.canonical_row(uid, conversation_id, row, firestore_client=c.firestore_client):
@@ -1606,31 +1610,24 @@ def _on_finalized(
 
 def _end_discarded(uid: str, conversation_id: str, row: Mapping[str, Any], trigger: str, c: Collaborators) -> None:
     """Hide discarded members and remove their contribution to recorded activity."""
-    episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-    if not episode:
-        return
-    activity = dict(episode.get('member_activity') or {})
-    if any(cid not in activity for cid in episode.get('conversation_ids') or []):
-        # Legacy episodes lack per-member clocks. Reconstruct from recorded speech,
-        # never processing/upload finished_at, on this conversation's normal finalizer.
-        for cid in episode.get('conversation_ids') or []:
-            if cid == conversation_id or cid in activity:
-                continue
-            member = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
-            if member and not any(member.get(k) for k in ('discarded', 'deleted', 'sync_merged_into')):
-                span = conversation_span(member)
-                if span:
-                    activity[cid] = span.recorded_end
-    episode = episodes_db.update_episode(
-        uid,
-        str(episode['id']),
-        expected_version=int(episode.get('state_version') or 0),
-        updates={
-            'member_activity': activity,
-            'discarded_conversation_ids': [*(episode.get('discarded_conversation_ids') or []), conversation_id],
-        },
-        firestore_client=c.firestore_client,
-    )
+    for attempt in range(3):
+        episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+        if not episode:
+            return
+        try:
+            episodes_db.update_episode(
+                uid,
+                str(episode['id']),
+                expected_version=int(episode.get('state_version') or 0),
+                updates={
+                    'discarded_conversation_ids': [*(episode.get('discarded_conversation_ids') or []), conversation_id],
+                },
+                firestore_client=c.firestore_client,
+            )
+            return
+        except episodes_db.EpisodeConflict:
+            if attempt == 2:
+                raise
 
 
 def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survivor_id: str, c: Collaborators) -> None:
