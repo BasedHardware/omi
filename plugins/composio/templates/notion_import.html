@@ -81,6 +81,7 @@
 {% block scripts %}
 <script>
     const uid = "{{ uid }}";
+    const sessionToken = "{{ session_token|default('') }}";
     let selectedPageId = "";
     let selectedPageTitle = "";
     let extractedMemories = [];
@@ -95,10 +96,11 @@
         searchResults.innerHTML = '';
         
         try {
-            const response = await fetch('/api/notion/search', {
+            const response = await fetch('/api/notion/search?uid=' + encodeURIComponent(uid), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Composio-Session': sessionToken,
                 },
                 body: JSON.stringify({
                     uid: uid,
@@ -176,8 +178,11 @@
         formData.append('block_id', selectedPageId);
         
         try {
-            const response = await fetch('/api/notion/extract-memories', {
+            const response = await fetch('/api/notion/extract-memories?uid=' + encodeURIComponent(uid), {
                 method: 'POST',
+                headers: {
+                    'X-Composio-Session': sessionToken,
+                },
                 body: formData
             });
             
@@ -238,6 +243,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Composio-Session': sessionToken,
                 }
             });
             
@@ -272,7 +278,11 @@
         noMemories.style.display = 'none';
         
         try {
-            const response = await fetch('/api/omi/memories/' + uid);
+            const response = await fetch('/api/omi/memories/' + uid, {
+                headers: {
+                    'X-Composio-Session': sessionToken,
+                }
+            });
             const data = await response.json();
             
             if (data.memories && data.memories.length > 0) {

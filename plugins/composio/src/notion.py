@@ -14,7 +14,7 @@ import asyncio
 
 from .db import store_notion_credentials, get_notion_credentials, store_memory
 from .omi_api import store_fact
-from .tools_auth import require_composio_tools_auth
+from .tools_auth import require_composio_tools_auth, create_composio_session_token
 
 REQUEST_TIMEOUT = (5, 30)
 
@@ -269,31 +269,59 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         workspace_name = token_data.get("workspace_name", "Notion Workspace")
         store_notion_credentials(uid, access_token, workspace_id, workspace_name)
         background_tasks.add_task(extract_all_pages, access_token, uid)
-        return templates.TemplateResponse("notion_success.html", {"request": request})
     except Exception as e:
         logger.error(f"Error in notion_callback: {type(e).__name__}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to complete Notion OAuth")
 
+    session_token = create_composio_session_token(uid)
+    return templates.TemplateResponse(
+        "notion_success.html",
+        {
+            "request": request,
+            "uid": uid,
+            "session_token": session_token,
+        },
+    )
+
 
 @router.get("/import", response_class=HTMLResponse)
-async def import_page(request: Request, uid: str):
+async def import_page(
+    request: Request,
+    uid: str,
+    verified_uid: Optional[str] = Depends(require_composio_tools_auth),
+):
     """Render the Notion import page"""
     if not uid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing uid parameter")
+    if verified_uid and uid != verified_uid:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="UID mismatch")
     creds = get_notion_credentials(uid)
     if not creds or not creds.get("notion_access_token"):
         return RedirectResponse(url=f"/api/notion/auth?uid={uid}")
     workspace_name = creds.get("notion_workspace_name", "Notion Workspace")
+    session_token = create_composio_session_token(uid)
     return templates.TemplateResponse(
-        "notion_import.html", {"request": request, "uid": uid, "workspace_name": workspace_name}
+        "notion_import.html",
+        {
+            "request": request,
+            "uid": uid,
+            "workspace_name": workspace_name,
+            "session_token": session_token,
+        },
     )
 
 
 # Notion API routes
 @router.post("/search")
-async def search_notion(request: NotionSearchRequest):
+async def search_notion(
+    request: NotionSearchRequest,
+    verified_uid: Optional[str] = Depends(require_composio_tools_auth),
+):
     """Search the Notion workspace"""
-    creds = get_notion_credentials(request.uid)
+    if verified_uid and request.uid and request.uid != verified_uid:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="UID mismatch")
+    effective_uid = verified_uid or request.uid
+    creds = get_notion_credentials(effective_uid)
     if not creds or not creds.get("notion_access_token"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Notion credentials not found")
 
@@ -331,10 +359,13 @@ async def search_notion(request: NotionSearchRequest):
 async def get_blocks(
     block_id: str,
     request: NotionBlocksRequest,
-    _: None = Depends(require_composio_tools_auth),
+    verified_uid: Optional[str] = Depends(require_composio_tools_auth),
 ):
     """Get blocks from a Notion page or block"""
-    creds = get_notion_credentials(request.uid)
+    if verified_uid and request.uid and request.uid != verified_uid:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="UID mismatch")
+    effective_uid = verified_uid or request.uid
+    creds = get_notion_credentials(effective_uid)
     if not creds or not creds.get("notion_access_token"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Notion credentials not found")
 
@@ -396,9 +427,17 @@ async def get_page(
 
 
 @router.post("/extract-memories")
-async def extract_memories(uid: str, block_type: str = Form("page"), block_id: str = Form(...)):
+async def extract_memories(
+    uid: str,
+    block_type: str = Form("page"),
+    block_id: str = Form(...),
+    verified_uid: Optional[str] = Depends(require_composio_tools_auth),
+):
     """Extract memories from Notion content"""
-    creds = get_notion_credentials(uid)
+    if verified_uid and uid and uid != verified_uid:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="UID mismatch")
+    effective_uid = verified_uid or uid
+    creds = get_notion_credentials(effective_uid)
     if not creds or not creds.get("notion_access_token"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Notion credentials not found")
 
