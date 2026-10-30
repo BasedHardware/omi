@@ -420,6 +420,9 @@ class Simulation:
             (recovery_module, 'enqueue_named_task', self._enqueue_named_task),
             (recovery_module, 'named_task_exists', self._named_task_exists),
             (recovery_module, 'cancel_fenced_recovery', self._cancel_fenced_recovery),
+            # Only Modulate is modeled here. Refuse the unmodeled Soniox leg
+            # before touching its real client, even if the host has a key.
+            (recovery_module, 'independent_ready', lambda: False),
         ]
         originals = [(module, name, getattr(module, name)) for module, name, _ in patches]
         try:
