@@ -15064,4 +15064,12 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Tinanggihan ang iyong card';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'I-update ang card para maibalik ang $plan';
+  }
 }

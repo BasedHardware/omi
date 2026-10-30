@@ -15008,4 +15008,12 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'మీ కార్డ్ తిరస్కరించబడింది';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
+  }
 }

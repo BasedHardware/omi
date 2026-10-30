@@ -14928,4 +14928,12 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'आपका कार्ड अस्वीकार हो गया';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan वापस पाने के लिए कार्ड अपडेट करें';
+  }
 }

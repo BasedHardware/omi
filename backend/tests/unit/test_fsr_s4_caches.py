@@ -468,7 +468,7 @@ def test_real_users_endpoints_read_count_with_auth(env, monkeypatch, route, enab
         lambda uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=(time.time() - 3600) * 1000)),
     )
     monkeypatch.setattr(router, 'is_marketplace_reviewer', lambda uid: False)
-    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub: sub)
+    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub, **kwargs: sub)
     monkeypatch.setattr(router, 'get_paid_plan_definitions', lambda: [])
     monkeypatch.setattr(router, 'should_hide_subscription_ui', lambda *args: False)
     monkeypatch.setattr(

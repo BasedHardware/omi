@@ -14713,4 +14713,12 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => '您的银行卡被拒绝';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '更新银行卡以恢复使用 $plan';
+  }
 }

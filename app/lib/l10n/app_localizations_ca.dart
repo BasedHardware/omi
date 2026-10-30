@@ -15020,4 +15020,12 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Actualitza-la per recuperar $plan';
+  }
 }

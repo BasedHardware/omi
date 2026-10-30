@@ -14979,4 +14979,12 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Jūsu karte tika noraidīta';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Atjauniniet karti, lai atgūtu $plan';
+  }
 }

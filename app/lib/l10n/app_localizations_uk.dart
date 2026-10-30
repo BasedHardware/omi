@@ -14976,4 +14976,12 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Вашу картку відхилено';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Оновіть картку, щоб повернути $plan';
+  }
 }

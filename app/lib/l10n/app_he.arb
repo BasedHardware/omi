@@ -11941,5 +11941,7 @@
     "yearlySwitchUnavailable": "תשלום שנתי אינו זמין כרגע לתוכנית שלך.",
     "yearlySwitchDoneTitle": "עברת לתשלום שנתי",
     "yearlySwitchDoneBody": "חויבו היום {amount}. מתחדש ב-{date}.",
-    "episodePartsCount": "{count, plural, zero{{count} חלקים} one{{count} חלק} two{{count} חלקים} few{{count} חלקים} many{{count} חלקים} other{{count} חלקים}}"
+    "episodePartsCount": "{count, plural, zero{{count} חלקים} one{{count} חלק} two{{count} חלקים} few{{count} חלקים} many{{count} חלקים} other{{count} חלקים}}",
+    "paymentDeclinedTitle": "הכרטיס שלך נדחה",
+    "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}"
 }

@@ -11941,5 +11941,7 @@
     "yearlySwitchUnavailable": "এই মুহূর্তে আপনার প্ল্যানের জন্য বার্ষিক বিলিং উপলব্ধ নয়।",
     "yearlySwitchDoneTitle": "আপনি এখন বার্ষিক প্ল্যানে",
     "yearlySwitchDoneBody": "আজ {amount} চার্জ করা হয়েছে। নবায়ন {date}।",
-    "episodePartsCount": "{count, plural, zero{{count}টি অংশ} one{{count}টি অংশ} two{{count}টি অংশ} few{{count}টি অংশ} many{{count}টি অংশ} other{{count}টি অংশ}}"
+    "episodePartsCount": "{count, plural, zero{{count}টি অংশ} one{{count}টি অংশ} two{{count}টি অংশ} few{{count}টি অংশ} many{{count}টি অংশ} other{{count}টি অংশ}}",
+    "paymentDeclinedTitle": "আপনার কার্ড প্রত্যাখ্যাত হয়েছে",
+    "paymentDeclinedMessage": "আবার {plan} পেতে কার্ডটি আপডেট করুন"
 }

@@ -14994,4 +14994,12 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ';
+  }
 }

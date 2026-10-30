@@ -14982,4 +14982,12 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Kad anda ditolak';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Kemas kini kad untuk mendapatkan semula $plan';
+  }
 }

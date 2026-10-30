@@ -14732,4 +14732,12 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'カードが拒否されました';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$planを再開するにはカードを更新してください';
+  }
 }

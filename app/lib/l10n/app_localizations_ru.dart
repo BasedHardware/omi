@@ -14993,4 +14993,12 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Ваша карта отклонена';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Обновите карту, чтобы вернуть $plan';
+  }
 }

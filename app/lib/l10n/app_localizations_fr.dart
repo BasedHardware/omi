@@ -15068,4 +15068,12 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Votre carte a été refusée';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Mettez-la à jour pour retrouver $plan';
+  }
 }

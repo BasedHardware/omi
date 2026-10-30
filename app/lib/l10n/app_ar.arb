@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "الدفع السنوي غير متاح لخطتك حاليًا.",
     "yearlySwitchDoneTitle": "أصبحت على الدفع السنوي",
     "yearlySwitchDoneBody": "تم خصم {amount} اليوم. يتجدد في {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} أجزاء} one{{count} جزء} two{{count} جزءان} few{{count} أجزاء} many{{count} جزءًا} other{{count} جزء}}"
+    "episodePartsCount": "{count, plural, zero{{count} أجزاء} one{{count} جزء} two{{count} جزءان} few{{count} أجزاء} many{{count} جزءًا} other{{count} جزء}}",
+    "paymentDeclinedTitle": "تم رفض بطاقتك",
+    "paymentDeclinedMessage": "حدّث بطاقتك لاستعادة {plan}"
 }

@@ -15008,4 +15008,12 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Cardul dvs. a fost refuzat';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Actualizați cardul pentru a recupera $plan';
+  }
 }

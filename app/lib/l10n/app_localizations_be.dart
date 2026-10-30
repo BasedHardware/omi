@@ -14979,4 +14979,12 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Вашу картку адхілілі';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Абнавіце картку, каб вярнуць $plan';
+  }
 }

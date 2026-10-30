@@ -14973,4 +14973,12 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Seu cartão foi recusado';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Atualize o cartão para recuperar $plan';
+  }
 }

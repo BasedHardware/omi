@@ -14943,4 +14943,12 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'Vaše karta byla zamítnuta';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Aktualizujte kartu a obnovte $plan';
+  }
 }

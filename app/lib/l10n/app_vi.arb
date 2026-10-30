@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "Hiện chưa thể trả theo năm cho gói của bạn.",
     "yearlySwitchDoneTitle": "Bạn đã chuyển sang trả theo năm",
     "yearlySwitchDoneBody": "Đã thu {amount} hôm nay. Gia hạn vào {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} phần} one{{count} phần} two{{count} phần} few{{count} phần} many{{count} phần} other{{count} phần}}"
+    "episodePartsCount": "{count, plural, zero{{count} phần} one{{count} phần} two{{count} phần} few{{count} phần} many{{count} phần} other{{count} phần}}",
+    "paymentDeclinedTitle": "Thẻ của bạn đã bị từ chối",
+    "paymentDeclinedMessage": "Cập nhật thẻ để dùng lại {plan}"
 }

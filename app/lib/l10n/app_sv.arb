@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "Årsbetalning är inte tillgänglig för ditt abonnemang just nu.",
     "yearlySwitchDoneTitle": "Du betalar nu årsvis",
     "yearlySwitchDoneBody": "{amount} drogs i dag. Förnyas {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} delar} one{{count} del} two{{count} delar} few{{count} delar} many{{count} delar} other{{count} delar}}"
+    "episodePartsCount": "{count, plural, zero{{count} delar} one{{count} del} two{{count} delar} few{{count} delar} many{{count} delar} other{{count} delar}}",
+    "paymentDeclinedTitle": "Ditt kort nekades",
+    "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}"
 }

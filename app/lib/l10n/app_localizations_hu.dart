@@ -15004,4 +15004,12 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'A kártyáját elutasították';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Frissítse a kártyát a(z) $plan visszaállításához';
+  }
 }

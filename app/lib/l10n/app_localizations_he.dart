@@ -14835,4 +14835,12 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paymentDeclinedTitle => 'הכרטיס שלך נדחה';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'עדכנו את הכרטיס כדי לקבל שוב את $plan';
+  }
 }

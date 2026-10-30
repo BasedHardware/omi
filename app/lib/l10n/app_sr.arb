@@ -11941,5 +11941,7 @@
     "yearlySwitchUnavailable": "Годишње плаћање тренутно није доступно за ваш план.",
     "yearlySwitchDoneTitle": "Сада плаћате годишње",
     "yearlySwitchDoneBody": "Данас наплаћено {amount}. Обнавља се {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} делова} one{{count} део} two{{count} делова} few{{count} дела} many{{count} делова} other{{count} делова}}"
+    "episodePartsCount": "{count, plural, zero{{count} делова} one{{count} део} two{{count} делова} few{{count} дела} many{{count} делова} other{{count} делова}}",
+    "paymentDeclinedTitle": "Ваша картица је одбијена",
+    "paymentDeclinedMessage": "Ажурирајте картицу да бисте вратили {plan}"
 }
