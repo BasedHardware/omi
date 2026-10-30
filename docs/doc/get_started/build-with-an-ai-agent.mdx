@@ -1,5 +1,5 @@
 ---
-title: "Build with an AI Agent"
+title: "Build with an AI agent"
 icon: "wand-magic-sparkles"
 description: "Point Claude, Cursor, or Codex at Omi's llms.txt, MCP server, and Developer API to build on your own data."
 ---
@@ -8,9 +8,9 @@ Three things let a coding agent build on Omi:
 
 <CardGroup cols={3}>
   <Card title="llms.txt" icon="file-lines" href="https://docs.omi.me/llms.txt">
-    This whole site, indexed for LLMs — paste it into any agent
+    This whole site, indexed for LLMs. Paste it into any agent.
   </Card>
-  <Card title="Omi MCP Server" icon="robot" href="/doc/developer/mcp/setup">
+  <Card title="Omi MCP server" icon="robot" href="/doc/developer/mcp/setup">
     Give an agent live access to your memories and conversations
   </Card>
   <Card title="Developer API" icon="square-terminal" href="/doc/developer/api/overview">
@@ -50,7 +50,7 @@ conversations you used.
 
 ## Giving an agent your data
 
-The MCP server exposes read and write tools scoped to your account — memories, conversations, action items, goals, and people. Set it up once in your MCP client (Claude Desktop, Cursor, and anything speaking MCP) and the agent can query your data directly:
+The MCP server exposes read and write tools scoped to your account: memories, conversations, action items, goals, and people. Set it up once in your MCP client (Claude Desktop, Cursor, and anything else that speaks MCP), and the agent can query your data directly:
 
 ```bash
 claude mcp add --transport http omi https://api.omi.me/v1/mcp

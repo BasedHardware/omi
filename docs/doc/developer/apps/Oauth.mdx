@@ -1,12 +1,12 @@
 ---
-title: "OAuth Authentication"
+title: "OAuth authentication"
 icon: "shield-halved"
 description: "Integrate your application with Omi using OAuth 2.0 to securely access user data with explicit consent."
 ---
 
 ## Overview
 
-Omi uses an OAuth 2.0-like flow to allow third-party applications to access user data with explicit consent. This ensures users maintain control over their data and what applications can access.
+Omi uses an OAuth 2.0-like flow to let third-party applications access user data with explicit consent. Users stay in control of their data and of which applications can access it.
 
 ```mermaid
 sequenceDiagram
@@ -26,15 +26,13 @@ sequenceDiagram
 ```
 
 <CardGroup cols={2}>
-  <Card title="User Consent" icon="shield-check">
+  <Card title="User consent" icon="shield-check">
     Users explicitly approve what data your app can access
   </Card>
-  <Card title="Secure Token Exchange" icon="key">
+  <Card title="Secure token exchange" icon="key">
     Firebase authentication ensures secure identity verification
   </Card>
 </CardGroup>
-
----
 
 ## Mobile browser handoff
 
@@ -49,7 +47,7 @@ a retry rather than displaying a successful connection.
 Before implementing OAuth, ensure you have:
 
 <Steps>
-  <Step title="Register Your App" icon="id-card">
+  <Step title="Register your app" icon="id-card">
     Your app must be registered with Omi and have an **App ID**
   </Step>
   <Step title="Configure App Home URL" icon="link">
@@ -60,12 +58,10 @@ Before implementing OAuth, ensure you have:
   </Step>
 </Steps>
 
----
-
 ## OAuth Flow
 
 <Steps>
-  <Step title="Redirect User to Omi" icon="arrow-right">
+  <Step title="Redirect user to Omi" icon="arrow-right">
     Your app redirects the user to Omi's authorization endpoint:
 
     ```
@@ -81,7 +77,7 @@ Before implementing OAuth, ensure you have:
     Always use the `state` parameter to prevent CSRF attacks. Generate a random string and verify it when the user returns.
     </Tip>
   </Step>
-  <Step title="User Authenticates & Consents" icon="user-check">
+  <Step title="User authenticates and consents" icon="user-check">
     On the Omi authorization page, the user:
 
     1. Logs in with their Firebase credentials (Google or Apple)
@@ -95,7 +91,7 @@ Before implementing OAuth, ensure you have:
     - "Create new conversations on your behalf"
     - "Access and read your stored memories"
   </Step>
-  <Step title="Token Exchange" icon="arrows-rotate">
+  <Step title="Token exchange" icon="arrows-rotate">
     After user approval, Omi's authorization page handles the token exchange internally:
 
     ```http
@@ -118,7 +114,7 @@ Before implementing OAuth, ensure you have:
     This step is handled automatically by Omi's authorization page - you don't need to implement this yourself.
     </Note>
   </Step>
-  <Step title="User Redirected to Your App" icon="arrow-left">
+  <Step title="User redirected to your app" icon="arrow-left">
     The user's browser is redirected to your App Home URL with query parameters:
 
     ```
@@ -130,8 +126,6 @@ Before implementing OAuth, ensure you have:
     2. Store the `uid` for making API calls on behalf of the user
   </Step>
 </Steps>
-
----
 
 ## Handling the Callback
 
@@ -211,14 +205,12 @@ Example implementation for handling the OAuth callback:
   </Tab>
 </Tabs>
 
----
-
-## Automatic App Enablement
+## Automatic app enablement
 
 When a user completes the OAuth flow, Omi automatically attempts to enable your app for them.
 
 <AccordionGroup>
-  <Accordion title="Enablement Checks" icon="list-check">
+  <Accordion title="Enablement checks" icon="list-check">
     Omi performs several checks before enabling:
 
     | Check | Description |
@@ -229,7 +221,7 @@ When a user completes the OAuth flow, Omi automatically attempts to enable your 
 
     If any check fails, the OAuth flow halts and shows an error to the user.
   </Accordion>
-  <Accordion title="Setup Completion Check" icon="gear">
+  <Accordion title="Setup completion check" icon="gear">
     If your app requires setup (e.g., connecting to external services), configure a `setup_completed_url`:
 
     **Request from Omi:**
@@ -246,14 +238,12 @@ When a user completes the OAuth flow, Omi automatically attempts to enable your 
 
     Return `false` if the user hasn't completed setup yet. Omi will show an appropriate message.
   </Accordion>
-  <Accordion title="Install Count" icon="chart-line">
+  <Accordion title="Install count" icon="chart-line">
     When a user successfully enables your public app through OAuth, the public install count is incremented (if applicable).
   </Accordion>
 </AccordionGroup>
 
----
-
-## App Configuration
+## App configuration
 
 <CardGroup cols={2}>
   <Card title="App ID" icon="fingerprint">
@@ -272,21 +262,19 @@ Configure these settings in the Omi developer portal or during app submission:
 | App Home URL | `external_integration.app_home_url` | Callback URL after OAuth (HTTPS required) |
 | Setup Completed URL | `external_integration.setup_completed_url` | Optional endpoint to verify user setup |
 
----
-
-## Security Best Practices
+## Security best practices
 
 <CardGroup cols={2}>
-  <Card title="Always Use State" icon="shield">
+  <Card title="Always use state" icon="shield">
     Generate a cryptographically random `state` parameter and validate it on callback to prevent CSRF attacks
   </Card>
-  <Card title="Validate Origin" icon="globe">
+  <Card title="Validate origin" icon="globe">
     Ensure the `uid` came from a legitimate OAuth flow, not a forged request
   </Card>
-  <Card title="Secure Storage" icon="database">
+  <Card title="Secure storage" icon="database">
     Store user `uid` values securely, treating them as sensitive credentials
   </Card>
-  <Card title="HTTPS Only" icon="lock">
+  <Card title="HTTPS only" icon="lock">
     Always use HTTPS for your App Home URL and all API communications
   </Card>
 </CardGroup>
@@ -294,8 +282,6 @@ Configure these settings in the Omi developer portal or during app submission:
 <Warning>
 Never expose your App ID in client-side code where it could be extracted. While the App ID itself isn't secret, it should be treated as sensitive for your integration's integrity.
 </Warning>
-
----
 
 ## Troubleshooting
 
@@ -326,21 +312,19 @@ Never expose your App ID in client-side code where it could be extracted. While 
   </Accordion>
 </AccordionGroup>
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+  <Card title="Integration apps" icon="plug" href="/doc/developer/apps/Integrations">
     Build webhook-based integrations
   </Card>
-  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+  <Card title="Chat tools" icon="wrench" href="/doc/developer/apps/ChatTools">
     Add custom tools to Omi chat
   </Card>
   <Card title="Notifications" icon="bell" href="/doc/developer/apps/Notifications">
     Send push notifications to users
   </Card>
-  <Card title="Submit Your App" icon="rocket" href="/doc/developer/apps/Submitting">
+  <Card title="Submit your app" icon="rocket" href="/doc/developer/apps/Submitting">
     Publish your app to the store
   </Card>
 </CardGroup>

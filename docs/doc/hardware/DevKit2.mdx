@@ -5,7 +5,7 @@ description: "The second Omi dev kit: a Xiao nRF52840 necklace with a removable 
 ---
 
 <Warning>
-**Legacy device.** DevKit 2 is no longer the current development hardware — the consumer Omi (CV1) is. This page is kept for builders who already own a DevKit 2. It is not manufactured or supported as a product; hardware questions go to [Discord](https://discord.omi.me).
+**Legacy device.** DevKit 2 is no longer the current development hardware. The consumer Omi (CV1) is. This page is kept for builders who already own a DevKit 2. It is not manufactured or supported as a product; hardware questions go to [Discord](https://discord.omi.me).
 </Warning>
 
 ## Overview
@@ -21,19 +21,19 @@ DevKit 2 is a necklace-form-factor dev kit built on the Seeed Xiao nRF52840 (Sen
 | Button | Single multi-function button (see below) |
 
 <Note>
-Standalone recordings still need the Omi app for transcription — the device records audio; processing happens on the phone/backend.
+Standalone recordings still need the Omi app for transcription. The device records audio; processing happens on the phone or backend.
 </Note>
 
 ## Button, LEDs, and power
 
-The firmware source is the authority for this table (`omi/firmware/devkit/src/button.c`, `main.c`):
+The firmware source is the authority for device behavior in this table (`omi/firmware/devkit/src/button.c`, `main.c`):
 
 | Interaction | What happens |
 |-------------|--------------|
 | **Single tap** | Sends a BLE button event to the app. The app maps it to voice-question mode: tap to start asking, tap again to send. |
 | **Double tap** | Sends a BLE button event. The app's action is configurable in **Settings → Device Settings** (end & save conversation is the default). |
 | **Hold 3 seconds** | Device powers off (short haptic pulse, LEDs off). |
-| **Any press while off** | Powers the device on. Don't hold — a 3-second hold after waking turns it straight back off. |
+| **Any press while off** | Powers the device on. Don't hold it. A 3-second hold after waking turns the device straight back off. |
 
 There is no power switch and no push-to-talk mode: a long hold always means power off.
 
@@ -46,10 +46,10 @@ There is no power switch and no push-to-talk mode: a long hold always means powe
 
 Boot briefly blinks red, green, blue, then white.
 
-## Getting firmware on it
+## Install firmware
 
 <CardGroup cols={2}>
-  <Card title="OTA via the Omi App" icon="mobile">
+  <Card title="OTA via the Omi app" icon="mobile">
     The default path: pair the DevKit in the app and accept the update prompt (Nordic DFU over BLE)
   </Card>
   <Card title="UF2 drag-and-drop" icon="terminal" href="/doc/get_started/Flash_device">
@@ -100,7 +100,7 @@ Helper scripts for discovery, listing, downloading, decoding, and deleting live 
 
 DevKit 2 is no longer sold. For new hardware see [Omi (CV1)](/doc/hardware/OmiConsumer) or build a [DevKit 1](/doc/assembly/Build_the_device) from parts.
 
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
   <Card title="Omi (CV1)" icon="circle-dot" href="/doc/hardware/OmiConsumer">
@@ -109,7 +109,7 @@ DevKit 2 is no longer sold. For new hardware see [Omi (CV1)](/doc/hardware/OmiCo
   <Card title="DevKit 1" icon="circuit-board" href="/doc/hardware/DevKit1">
     The first dev kit (also legacy)
   </Card>
-  <Card title="Flash Firmware" icon="bolt" href="/doc/get_started/Flash_device">
+  <Card title="Flash firmware" icon="bolt" href="/doc/get_started/Flash_device">
     Update and recovery flows
   </Card>
   <Card title="BLE Protocol" icon="bluetooth" href="/doc/developer/Protocol">

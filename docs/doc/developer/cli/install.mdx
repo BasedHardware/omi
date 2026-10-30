@@ -15,8 +15,8 @@ Source lives in the [Omi monorepo](https://github.com/BasedHardware/omi/tree/mai
     pipx install omi-cli
     ```
 
-    `pipx` keeps `omi-cli` in its own isolated virtualenv so it can't conflict
-    with anything else on your system. If you don't have pipx yet:
+    `pipx` installs `omi-cli` in its own virtualenv, so it does not conflict
+    with other packages on your system. If you don't have pipx yet:
 
     ```bash
     brew install pipx        # macOS
@@ -39,7 +39,7 @@ Source lives in the [Omi monorepo](https://github.com/BasedHardware/omi/tree/mai
     pip install -e ".[dev]"
     ```
 
-    Useful if you want to hack on the CLI itself. The `[dev]` extra brings in
+    Use this if you want to change the CLI. The `[dev]` extra brings in
     `pytest`, `respx`, `black`, `mypy`, `isort`, and the build tooling.
   </Tab>
 </Tabs>
@@ -63,10 +63,10 @@ You should see the full command tree (`auth`, `config`, `memory`,
 
 ## Requirements
 
-- **Python 3.10+** — the package is tested on 3.10, 3.11, and 3.12.
-- **A network path to `https://api.omi.me`** — overridable via `--api-base` or
+- **Python 3.10+**: the package is tested on 3.10, 3.11, and 3.12.
+- **A network path to `https://api.omi.me`**. Override it with `--api-base` or
   `$OMI_API_BASE` for staging or local environments.
-- **A way to authenticate** — either a Google/Apple account (browser OAuth)
+- **A way to authenticate**: either a Google/Apple account (browser OAuth)
   or a developer API key from the Omi web app. The
   [Quickstart](/doc/developer/cli/quickstart) walks through both.
 

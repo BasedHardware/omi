@@ -1,10 +1,10 @@
 ---
-title: "How Omi Works"
+title: "How Omi works"
 icon: "sitemap"
 description: "The pieces of the Omi platform and how a conversation flows from a wearable to memory you can query."
 ---
 
-Omi has three planes: a **device** that captures audio, **apps** (mobile and desktop) that manage capture and show results, and a **backend** that transcribes, structures, stores, and serves the data. Everything in between is glue you can inspect in this repository.
+Omi has three planes: a **device** that captures audio, **apps** (mobile and desktop) that manage capture and show results, and a **backend** that transcribes, structures, stores, and serves the data. Everything in between is code you can read in this repository.
 
 ```mermaid
 flowchart TD
@@ -35,21 +35,21 @@ flowchart TD
 | Model-service routing | `backend/utils/llm/model_config.py` |
 | Device protocol implementations | `app/lib/services/devices/`, `omi/firmware/` |
 
-Details that churn — provider configurations, internal runbooks, operational checklists — live next to the code (for example `backend/docs/`), not on this site. Docs here describe the shape of the system; the repo is the source of truth for specifics.
+Details that change often, such as provider configurations, internal runbooks, and operational checklists, live next to the code (for example in `backend/docs/`), not on this site. Docs here describe the shape of the system; the repo is the source of truth for specifics.
 
 ## Read next
 
 <CardGroup cols={2}>
-  <Card title="Capture & Transcription" icon="microphone" href="/doc/how-omi-works/capture-and-transcription">
+  <Card title="Capture & transcription" icon="microphone" href="/doc/how-omi-works/capture-and-transcription">
     From microphone to transcript segments
   </Card>
-  <Card title="Conversations & Memories" icon="database" href="/doc/how-omi-works/conversations-and-memories">
+  <Card title="Conversations & memories" icon="database" href="/doc/how-omi-works/conversations-and-memories">
     The data model behind your history
   </Card>
   <Card title="Chat" icon="comments" href="/doc/how-omi-works/chat">
     How Omi answers questions with your data
   </Card>
-  <Card title="Privacy & Data Handling" icon="shield" href="/doc/how-omi-works/privacy-and-data">
+  <Card title="Privacy & data handling" icon="shield" href="/doc/how-omi-works/privacy-and-data">
     What is stored, where, and what you control
   </Card>
 </CardGroup>

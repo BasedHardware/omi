@@ -11,11 +11,11 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Get Started",
+        "tab": "Get started",
         "icon": "rocket",
         "groups": [
           {
-            "group": "Get Started",
+            "group": "Get started",
             "pages": [
               "doc/get_started/what-is-omi",
               "doc/get_started/open-source-and-omi-cloud",
@@ -110,13 +110,13 @@
         "icon": "microchip",
         "groups": [
           {
-            "group": "Omi Device",
+            "group": "Omi device",
             "pages": [
               "doc/hardware/OmiConsumer"
             ]
           },
           {
-            "group": "Flashing Firmware",
+            "group": "Flashing firmware",
             "pages": [
               "doc/get_started/Flash_device",
               "doc/developer/firmware/Compile_firmware"
@@ -131,7 +131,7 @@
             ]
           },
           {
-            "group": "Open Hardware Files",
+            "group": "Open hardware files",
             "pages": [
               "doc/hardware/consumer/index",
               "doc/hardware/consumer/electronics",
@@ -141,7 +141,7 @@
             ]
           },
           {
-            "group": "Legacy & Community",
+            "group": "Legacy and community",
             "pages": [
               "doc/hardware/DevKit2",
               "doc/hardware/DevKit1",
@@ -183,7 +183,7 @@
             ]
           },
           {
-            "group": "Development Setup",
+            "group": "Development setup",
             "pages": [
               "doc/developer/AppSetup",
               "doc/developer/backend/Backend_Setup",
@@ -197,7 +197,7 @@
         "icon": "square-terminal",
         "groups": [
           {
-            "group": "API Reference",
+            "group": "API reference",
             "openapi": "api-reference/openapi.json",
             "pages": [
               "api-reference/introduction",
@@ -229,7 +229,7 @@
                 ]
               },
               {
-                "group": "Action Items",
+                "group": "Action items",
                 "pages": [
                   "api-reference/endpoint/action-items/list",
                   "api-reference/endpoint/action-items/create",
@@ -239,7 +239,7 @@
                 ]
               },
               {
-                "group": "API Keys",
+                "group": "API keys",
                 "pages": [
                   "api-reference/endpoint/keys/current",
                   "api-reference/endpoint/keys/list",
@@ -250,7 +250,7 @@
             ]
           },
           {
-            "group": "Platform Reference",
+            "group": "Platform reference",
             "pages": [
               "doc/developer/cli/commands",
               "doc/developer/mcp/tools",

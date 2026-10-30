@@ -1,7 +1,7 @@
 ---
-title: "Privacy & Data Handling"
+title: "Privacy & data handling"
 icon: "shield"
-description: "What Omi stores, where it goes, and what you control — a builder's overview of the data model."
+description: "What Omi stores, where it goes, and what you control. A builder's overview of the data model."
 ---
 
 Omi records conversations. That is the product, and it makes the data model worth understanding before you build on it. This page is the short, stable version for builders; the formal documents are [Privacy](/doc/info/Privacy) and [Disclaimer](/doc/info/Disclaimer), and end-user controls are documented in the [help center](https://help.omi.me).
@@ -22,11 +22,11 @@ Apps you install can receive the data you grant them (for example conversation w
 
 ## Your controls
 
-- **Export** — the app exports your conversations as JSON.
-- **Delete** — delete individual conversations, or your whole account, from the app.
-- **Bring your own keys** — [BYOK and custom transcription](/doc/get_started/byok_and_custom_transcription) let you route transcription and models through providers you choose, including on-device and self-hosted transcription.
-- **Scoped API keys** — developer keys and MCP grants can be read-only and per-scope, and can be revoked at any time.
+- **Export**: the app exports your conversations as JSON.
+- **Delete**: delete individual conversations, or your whole account, from the app.
+- **Bring your own keys**: [BYOK and custom transcription](/doc/get_started/byok_and_custom_transcription) let you route transcription and models through providers you choose, including on-device and self-hosted transcription.
+- **Scoped API keys**: developer keys and MCP grants can be read-only and per-scope, and can be revoked at any time.
 
 ## If you build on Omi
 
-Treat webhook payloads and API responses as your users' sensitive data: transport it over TLS, keep it no longer than you need, and say clearly in your app listing what your app receives. The [app review guidelines](/doc/developer/apps/Submitting) enforce the basics.
+Treat webhook payloads and API responses as your users' sensitive data: send it over TLS, keep it no longer than you need, and say clearly in your app listing what your app receives. The [app review guidelines](/doc/developer/apps/Submitting) enforce the basics.

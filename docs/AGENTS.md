@@ -25,7 +25,7 @@ reviewer can check).
 
 ## Navigation, redirects, checks
 
-- Tabs: Get Started / Build / Hardware / How Omi works / Contribute / Reference.
+- Tabs: Get started / Build / Hardware / How Omi works / Contribute / Reference.
   Every MDX page appears in `docs.json`; after moving or deleting a page, add a
   `redirects` entry and fix in-repo links in the same change.
 - `check_docs_site.py` gates nav→file, orphans, internal links, image refs, and

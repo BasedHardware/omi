@@ -44,7 +44,7 @@ Starts the Windows desktop app from source using the public config in `.env.exam
 
 > **Requirements:** [Node.js](https://nodejs.org/)
 
-For development worktrees, run the baseline local setup once. It installs the Git hooks and syncs the pinned backend Python environment used by selected pre-push checks; mobile and desktop runtime environments remain opt-in.
+In a development worktree, run `make setup` once. It installs the Git hooks and syncs the pinned backend Python environment that some pre-push checks use. Mobile and desktop environments stay opt-in.
 
 ```bash
 make setup
@@ -140,7 +140,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 ## Documentation
 
-Everything for builders lives at **[docs.omi.me](https://docs.omi.me)** — apps and webhooks, the Developer API, the MCP server, the CLI, SDKs, hardware, and how Omi works. End-user guides live in the [help center](https://help.omi.me).
+Everything for builders lives at **[docs.omi.me](https://docs.omi.me)**: apps and webhooks, the Developer API, the MCP server, the CLI, SDKs, hardware, and how Omi works. End-user guides live in the [help center](https://help.omi.me).
 
 - [What is Omi](https://docs.omi.me/doc/get_started/what-is-omi) · [Choose your path](https://docs.omi.me/doc/get_started/choose-your-path)
 - [Developer API](https://docs.omi.me/doc/developer/api/overview) · [API reference](https://docs.omi.me/api-reference/introduction)
@@ -165,10 +165,10 @@ Open-source AI wearables that pair with the mobile app for continuous capture.
 
 ## Contributing
 
-Contributions are welcome — bug reports with reproductions, apps and integrations built on the platform, community ports, and core PRs. Read the [contribution guide](https://docs.omi.me/doc/developer/Contribution) and [`CONTRIBUTING.md`](CONTRIBUTING.md) first; [`PRODUCT.md`](PRODUCT.md) describes the product direction and invariants. Paid, team-posted [bounties](https://docs.omi.me/doc/contribute/bounties) appear on issues labeled "Paid Bounty 💰".
+Contributions are welcome: bug reports with reproductions, apps and integrations built on the platform, community ports, and core PRs. Read the [contribution guide](https://docs.omi.me/doc/developer/Contribution) and [`CONTRIBUTING.md`](CONTRIBUTING.md) first; [`PRODUCT.md`](PRODUCT.md) describes the product direction and invariants. Paid, team-posted [bounties](https://docs.omi.me/doc/contribute/bounties) appear on issues labeled "Paid Bounty 💰".
 
 Community: [Discord](http://discord.omi.me) · [Code of Conduct](CODE_OF_CONDUCT.md). User support: [help.omi.me](https://help.omi.me). Business and legal: [team@basedhardware.com](mailto:team@basedhardware.com).
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT. See [LICENSE](LICENSE).
