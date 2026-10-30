@@ -28,14 +28,14 @@ def render_calendar_event(event: Dict[str, Any], index: int, clock: DisplayClock
     summary = event.get('summary') or 'No title'
     result = f"{index}. Title: {untrusted_block('calendar title', str(summary))}\n"
 
-    start = event.get('start', {})
-    end = event.get('end', {})
-    if 'dateTime' in start:
+    start = event.get('start') if isinstance(event.get('start'), dict) else {}
+    end = event.get('end') if isinstance(event.get('end'), dict) else {}
+    if start.get('dateTime') is not None or ('dateTime' in start and 'date' not in start):
         try:
             start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
             result += f"   When: {format_span(start_dt, end_dt, clock)}\n"
-        except (ValueError, TypeError, KeyError):
+        except (ValueError, TypeError, KeyError, AttributeError):
             result += "   When: unknown time (event timestamp could not be parsed)\n"
     elif 'date' in start:
         start_day = all_day_date(start.get('date'), clock)
