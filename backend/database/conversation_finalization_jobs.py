@@ -1201,6 +1201,7 @@ def _claim_finalization_fanout_txn(
     now: datetime,
     conversation_ref_for_job: Callable[[str, str], Any],
     projection_collection: Any | None = None,
+    expected_discarded: bool = False,
 ) -> FinalizationFanoutClaim:
     """Claim fanout only if this job still owns the completed conversation.
 
@@ -1229,7 +1230,15 @@ def _claim_finalization_fanout_txn(
     conversation_ref = conversation_ref_for_job(uid, conversation_id)
     conversation_snapshot = conversation_ref.get(transaction=transaction)
     conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
-    if not isinstance(conversation, Mapping) or not _conversation_admits_fanout(conversation, job, job_ref.id):
+    if not isinstance(conversation, Mapping):
+        transaction.update(job_ref, _fenced_finalization_update(now))
+        _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
+        return _fanout_claim('fenced', fanout_key)
+
+    if expected_discarded and not conversation.get('discarded'):
+        return _fanout_claim('lease_conflict', fanout_key)
+
+    if not _conversation_admits_fanout(conversation, job, job_ref.id):
         transaction.update(job_ref, _fenced_finalization_update(now))
         _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
         return _fanout_claim('fenced', fanout_key)
@@ -1252,6 +1261,7 @@ def claim_finalization_fanout(
     dispatch_generation: int,
     lease_epoch: int,
     *,
+    expected_discarded: bool = False,
     firestore_client: Any = None,
 ) -> FinalizationFanoutClaim:
     client = _client(firestore_client)
@@ -1265,6 +1275,7 @@ def claim_finalization_fanout(
         _now(),
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        expected_discarded=expected_discarded,
     )
 
 
