@@ -1,0 +1,52 @@
+---
+title: "Conversations & memories"
+icon: "database"
+description: "The data model behind an Omi account: conversations, what gets extracted from them, and memories."
+---
+
+Omi keeps two kinds of records. **Conversations** hold everything about one stretch of talk. **Memories** are short facts about you, extracted from conversations and linked back to them.
+
+## Processing a conversation
+
+When a conversation ends, the backend:
+
+1. Generates a title, an overview, and a category from the transcript.
+2. Extracts action items and calendar events.
+3. Extracts memories worth keeping about you.
+4. Indexes the conversation for search and runs any apps you installed that act on finished conversations.
+
+Conversations that turn out to have no useful content are marked `discarded` rather than deleted.
+
+## Conversations
+
+| Field | Meaning |
+|-------|---------|
+| `started_at`, `finished_at` | When the conversation happened |
+| `source` | Where it was captured (wearable, phone, desktop, and so on) |
+| `transcript_segments` | The transcript ([segment fields](/doc/how-omi-works/capture-and-transcription#transcript-segments)) |
+| `structured` | Title, overview, category, action items, and events |
+| `apps_results` | Output from apps that processed it |
+| `photos`, `audio_files`, `geolocation` | Attachments, when captured |
+| `visibility` | `private`, `shared`, or `public` |
+
+Uploads that arrive out of order are merged by capture time, so a conversation recorded offline lands where it belongs. Very long recordings are split at segment boundaries into several conversations, each with its own summary.
+
+## Memories
+
+A memory is one short fact, such as a preference, a habit, or something you mentioned. Each memory records the conversation it came from, so you can always trace it back.
+
+| Category | Meaning |
+|----------|---------|
+| `interesting` | Notable facts: opinions, hobbies, stories |
+| `system` | Patterns and preferences: work habits, routines |
+| `manual` | Facts you added yourself |
+
+Extraction is deliberately selective: it skips mundane details and near-duplicates. You can review, edit, and delete memories in the app.
+
+## Reading this data
+
+Conversations, memories, action items, and goals are available through the [Developer API](/doc/developer/api/overview), the [MCP server](/doc/developer/mcp/introduction), and the [CLI](/doc/developer/cli/introduction), all scoped to your account.
+
+<Note>
+Storage layout, encryption levels, and indexing internals live next to the code in [`backend/docs/storing-conversations.md`](https://github.com/BasedHardware/omi/blob/main/backend/docs/storing-conversations.md).
+</Note>
