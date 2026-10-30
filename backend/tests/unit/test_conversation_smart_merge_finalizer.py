@@ -46,6 +46,9 @@ class _Conversation:
         self.geolocation = None
         self.client_device_id = None
 
+    def model_dump(self):
+        return {'id': self.id, 'status': self.status}
+
 
 @pytest.fixture
 def harness(monkeypatch):
@@ -108,6 +111,30 @@ async def _finalize(trigger=ProcessingTrigger.CAPTURE_END):
     return await finalizer.finalize_persisted_conversation(
         'u', 'n', finalization_job_id='job', dispatch_generation=1, lease_epoch=1, trigger=trigger
     )
+
+
+@pytest.mark.parametrize('registered', [True, False])
+async def test_generic_batch_registration_refusal_is_visible_and_blocks_fanout(
+    harness, monkeypatch, caplog, registered
+):
+    calls, row = harness
+    row['record_lane_owner'] = 'batch_live_v1'
+    original = finalizer.run_blocking
+    before = finalizer.RECORD_REGISTER_REFUSED._value.get()
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    with caplog.at_level('WARNING', logger=finalizer.logger.name):
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await _finalize()
+    assert (finalizer.lifecycle_service.claim_finalization_fanout in calls) is registered
+    assert finalizer.RECORD_REGISTER_REFUSED._value.get() == before + int(not registered)
+    messages = [r.getMessage() for r in caplog.records if 'register_refused' in r.getMessage()]
+    assert messages == ([] if registered else ['event=register_refused owner=batch_live_v1'])
 
 
 @pytest.mark.asyncio

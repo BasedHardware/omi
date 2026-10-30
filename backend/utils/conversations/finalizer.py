@@ -56,6 +56,7 @@ from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
+    RECORD_REGISTER_REFUSED,
     classify_finalization_failure,
     finalization_diagnostic_id,
     record_finalization_failure,
@@ -63,6 +64,7 @@ from utils.observability.finalization import (
 from utils.conversations.capture_group_notes_refresh import refresh_primary_notes
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
+
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
 from utils.batch_pipeline.live import register_recording, reserve_recording
@@ -434,6 +436,8 @@ async def finalize_persisted_conversation(
             if not await run_blocking(
                 db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
             ):
+                RECORD_REGISTER_REFUSED.inc()
+                logger.warning('event=register_refused owner=batch_live_v1')
                 raise ConversationFinalizationError('record_registration_refused')
 
         # Ownership fence before any canonical side effect.  The lifecycle

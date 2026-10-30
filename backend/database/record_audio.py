@@ -1,5 +1,7 @@
 """Transactional record-audio closure and cross-session upload custody metadata."""
 
+from typing import Literal
+
 from google.cloud import firestore
 
 from database._client import get_firestore_client, run_transactional
@@ -9,11 +11,15 @@ class RecordUploadCapacityExceeded(ValueError):
     """The persisted producer map cannot accept another token."""
 
 
-def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) -> bool:
+RecordSealRefusal = Literal['producer_pending', 'upload_failed', 'not_batch_owner', 'deleted']
+
+
+def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) -> RecordSealRefusal | None:
     """Resolve the persisted owner at closure, across websocket sessions.
 
     Upload failures are sticky across reconnects. A later clean session must
     never certify audio lost by an earlier session, even after a prior seal.
+    Return None on success, otherwise a closed, content-free refusal reason.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
@@ -21,16 +27,17 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     @firestore.transactional
     def commit(tx):
         row = ref.get(transaction=tx).to_dict() or {}
-        if (
-            row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}
-            or row.get('record_upload_failed')
-            or row.get('record_upload_sessions')
-            or row.get('deleted')
-        ):
-            return False
+        if row.get('deleted') or not row:
+            return 'deleted'
+        if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
+            return 'not_batch_owner'
+        if row.get('record_upload_failed'):
+            return 'upload_failed'
+        if row.get('record_upload_sessions'):
+            return 'producer_pending'
         if not row.get('record_audio_closed'):
             tx.update(ref, {'record_audio_closed': True})
-        return True
+        return None
 
     return run_transactional(client, commit, transient=True)
 
