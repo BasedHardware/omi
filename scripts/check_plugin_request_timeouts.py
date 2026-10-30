@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail plugin requests calls that carry no timeout; stdlib only."""
+"""Fail plugin and MCP server requests calls that carry no timeout; stdlib only."""
 
 import argparse
 import ast
@@ -7,6 +7,10 @@ import pathlib
 import sys
 
 HTTP_METHODS = {"get", "post", "put", "delete", "patch", "request", "head"}
+# Every tree whose Python makes outbound requests calls on behalf of a user.
+ROOTS = ("plugins", "mcp")
+# Installed third-party code under a root (mcp/ is a uv project) is not ours to bound.
+SKIPPED_PARTS = {".venv", "venv", "site-packages", "node_modules"}
 
 
 def session_names(tree: ast.Module) -> set:
@@ -63,21 +67,24 @@ def unbounded_calls(path: pathlib.Path):
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default="plugins")
+    parser.add_argument("--root", default=None)
     parser.add_argument("files", nargs="*")
     args = parser.parse_args()
 
     if args.files:
         paths = [pathlib.Path(f) for f in args.files if f.endswith(".py")]
     else:
-        paths = sorted(pathlib.Path(args.root).rglob("*.py"))
+        roots = [args.root] if args.root else ROOTS
+        paths = sorted(path for root in roots for path in pathlib.Path(root).rglob("*.py"))
 
     failures = []
     for path in paths:
-        if not path.exists() or not str(path).startswith("plugins/"):
+        if not path.exists() or not path.as_posix().startswith(tuple(f"{root}/" for root in ROOTS)):
+            continue
+        if SKIPPED_PARTS.intersection(path.parts):
             continue
         name = path.name
-        if name.startswith("test_") or name.endswith("_test.py") or "/tests/" in str(path):
+        if name.startswith("test_") or name.endswith("_test.py") or "/tests/" in path.as_posix():
             continue
         for lineno, method, on_loop in unbounded_calls(path):
             failures.append((path, lineno, method, on_loop))
@@ -90,7 +97,7 @@ def main() -> int:
         print("Pass timeout=<seconds> or timeout=(connect, read) to every call.", file=sys.stderr)
         return 1
 
-    print(f"plugin request timeouts: {len(paths)} file(s) checked, no unbounded calls")
+    print(f"request timeouts: {len(paths)} file(s) checked, no unbounded calls")
     return 0
 
 
