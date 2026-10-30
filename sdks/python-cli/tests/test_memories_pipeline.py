@@ -183,6 +183,42 @@ class TestMemoriesPipeline(unittest.TestCase):
             content = json.loads(dest.read_text(encoding="utf-8").strip())
             self.assertEqual(content["messages"][2]["content"], "User prefers dark mode and Python 3.12")
 
+    def test_deduplicate_before_privacy_filtering_does_not_leak_stale_public_record(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p1 = Path(tmp_dir) / "page1.json"
+            p2 = Path(tmp_dir) / "page2.json"
+            p1.write_text(json.dumps([{"id": "m1", "visibility": "public", "updated_at": "2026-09-20T10:00:00Z", "content": "secret"}]), encoding="utf-8")
+            p2.write_text(json.dumps([{"id": "m1", "visibility": "private", "updated_at": "2026-09-21T10:00:00Z", "content": "secret"}]), encoding="utf-8")
+
+            res = mp.load_and_deduplicate([str(p1), str(p2)], include_private=False)
+            self.assertEqual(res, [])
+
+    def test_deduplicate_before_category_filtering(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p1 = Path(tmp_dir) / "page1.json"
+            p2 = Path(tmp_dir) / "page2.json"
+            p1.write_text(json.dumps([{"id": "m2", "category": "work", "updated_at": "2026-09-20T10:00:00Z", "content": "task"}]), encoding="utf-8")
+            p2.write_text(json.dumps([{"id": "m2", "category": "personal", "updated_at": "2026-09-21T10:00:00Z", "content": "task"}]), encoding="utf-8")
+
+            res_work = mp.load_and_deduplicate([str(p1), str(p2)], categories={"work"})
+            self.assertEqual(res_work, [])
+
+            res_personal = mp.load_and_deduplicate([str(p1), str(p2)], categories={"personal"})
+            self.assertEqual(len(res_personal), 1)
+            self.assertEqual(res_personal[0]["id"], "m2")
+            self.assertEqual(res_personal[0]["category"], "personal")
+
+    def test_duplicate_without_timestamp_does_not_clobber_timestamped_record(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p1 = Path(tmp_dir) / "page1.json"
+            p2 = Path(tmp_dir) / "page2.json"
+            p1.write_text(json.dumps([{"id": "m3", "updated_at": "2026-09-20T10:00:00Z", "content": "canonical"}]), encoding="utf-8")
+            p2.write_text(json.dumps([{"id": "m3", "content": "stale_without_timestamp"}]), encoding="utf-8")
+
+            res = mp.load_and_deduplicate([str(p1), str(p2)])
+            self.assertEqual(len(res), 1)
+            self.assertEqual(res[0]["content"], "canonical")
+
 
 if __name__ == "__main__":
     unittest.main()
