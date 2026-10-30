@@ -352,6 +352,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
 
+  @visibleForTesting
+  Future<void> drainBufferQueueForTesting() => _enqueueBuffer(() async {});
+
   /// Whether the most recent [onFrameCaptured] kept the frame (false when a
   /// storage-blocked pendant buffer was full and the frame was dropped).
   /// Reporting only; capture behaviour is unchanged.

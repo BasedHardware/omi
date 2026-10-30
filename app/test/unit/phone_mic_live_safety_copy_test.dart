@@ -50,6 +50,7 @@ void main() {
     scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026, 10, 29)));
     sync = LocalWalSyncImpl(
       _Listener(),
+      now: scheduler.clock.now,
       periodic: scheduler.periodic,
       freeDiskBytes: () async => 1 << 40,
       persistWals: WalFileManager.saveWals,
@@ -70,6 +71,23 @@ void main() {
 
   FrameSyncKey key(int counter) => FrameSyncKey([counter & 0xFF, (counter >> 8) & 0xFF]);
 
+  Future<void> settleFlushes() async {
+    await scheduler.waitForCallbackIo();
+    await sync.drainBufferQueueForTesting();
+  }
+
+  Future<void> waitForDiskFlush() async {
+    await settleFlushes();
+    final deadline = DateTime.now().add(const Duration(milliseconds: 500));
+    while (DateTime.now().isBefore(deadline)) {
+      if (sync.testWals.isNotEmpty && sync.testWals.first.storage == WalStorage.disk) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await settleFlushes();
+    }
+  }
+
   Future<void> captureTransportSynced(int frames) async {
     for (var i = 0; i < frames; i++) {
       final frame = WalFrame(payload: [0xAA, i & 0xFF], syncKey: key(i));
@@ -77,7 +95,7 @@ void main() {
       // The socket-send path marks the frame synced without any server receipt.
       sync.markFrameSynced(frame.syncKey);
     }
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await settleFlushes();
   }
 
   test('fully transport-synced phone-mic chunks are stored as safety copies, not dropped', () async {
@@ -87,7 +105,7 @@ void main() {
     expect(sync.testWals, isEmpty, reason: 'nothing stored before a drain runs');
 
     scheduler.elapse(const Duration(seconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await waitForDiskFlush();
 
     expect(sync.testWals, isNotEmpty);
     final wal = sync.testWals.first;
@@ -104,7 +122,7 @@ void main() {
     expect(sync.testWals, isEmpty);
 
     sync.didChangeAppLifecycleState(AppLifecycleState.paused);
-    await Future<void>.delayed(const Duration(milliseconds: 60));
+    await waitForDiskFlush();
 
     expect(sync.testWals, hasLength(1));
     final wal = sync.testWals.single;
@@ -118,7 +136,7 @@ void main() {
     await captureTransportSynced(6000);
     // One 10-second drain produces exactly one durable safety copy.
     scheduler.elapse(const Duration(seconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await waitForDiskFlush();
     final wal = sync.testWals.single;
     expect(wal.syncedAt, 0);
     expect(wal.storage, WalStorage.disk);
