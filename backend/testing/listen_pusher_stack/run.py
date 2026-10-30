@@ -17,7 +17,6 @@ import signal
 import socket
 import subprocess
 import sys
-import secrets
 import tempfile
 import time
 import uuid
@@ -41,10 +40,10 @@ from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, L
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
 PYTHON = BACKEND / '.venv' / 'bin' / 'python'
-ADMIN_KEY = os.environ.get('ADMIN_KEY', secrets.token_urlsafe(32))
+ADMIN_KEY = 'omi-listen-pusher-stack-admin-'  # pragma: allowlist secret
 PROJECT = 'demo-omi-listen-stack'
-LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'
-METRICS_SECRET = os.environ.get('METRICS_SECRET', secrets.token_urlsafe(32))
+LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'  # pragma: allowlist secret
+METRICS_SECRET = 'listen-pusher-stack-metrics'  # pragma: allowlist secret
 REST_FINALIZATION_RACE_ENV = (
     'OMI_STACK_FINALIZATION_RACE_UID',
     'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID',
