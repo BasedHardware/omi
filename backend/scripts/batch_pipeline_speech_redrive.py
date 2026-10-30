@@ -26,7 +26,15 @@ from utils.rollout_cohorts import configure_rollout_runtime
 import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive, replaceable_modulate_intent
+from database.batch_pipeline_speech_redrive import (
+    SpeechRedriveStore,
+    independent_redrive,
+    replaceable_modulate_intent,
+    ordinary_empty_redrive,
+    ORDINARY_EMPTY_OPERATION,
+    ORDINARY_EMPTY_MAX_UNITS,
+    ORDINARY_EMPTY_MAX_AUDIO_SECONDS,
+)
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
     ESTIMATED_USD_PER_AUDIO_HOUR,
@@ -64,16 +72,21 @@ def paid_digest(
     prepared=False,
     max_seconds=None,
     usd_cap=None,
+    ordinary_empty=False,
 ):
     # The prepared take-over binds its scoped bound and spend cap into the plan
     # the approver signs; existing epochs keep their byte-stable digests.
     body = {
         'operation': (
-            PREPARED_OPERATION
-            if prepared
-            else REPAIR_OPERATION if repair else 'independent-language-recovery-v1' if independent else OPERATION
+            ORDINARY_EMPTY_OPERATION
+            if ordinary_empty
+            else (
+                PREPARED_OPERATION
+                if prepared
+                else REPAIR_OPERATION if repair else 'independent-language-recovery-v1' if independent else OPERATION
+            )
         ),
-        'provider': 'soniox' if (prepared or independent) else 'modulate',
+        'provider': 'soniox' if (prepared or independent or ordinary_empty) else 'modulate',
         'census_sha256': census_digest,
         'speech_count': speech_count,
         'paid_epoch': paid_epoch,
@@ -82,6 +95,9 @@ def paid_digest(
     if prepared:
         body['max_seconds'] = max_seconds
         body['usd_cap'] = usd_cap
+    if ordinary_empty:
+        body['max_units'] = ORDINARY_EMPTY_MAX_UNITS
+        body['max_total_audio_seconds'] = ORDINARY_EMPTY_MAX_AUDIO_SECONDS
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -93,7 +109,17 @@ def epoch1_failure(job):
     return f'{stage}/{reason}' if stage in STAGES and reason in REASONS else 'unrecorded'
 
 
-def eligible(job, after, cutoff, independent=False, repair=False):
+def eligible(job, after, cutoff, independent=False, repair=False, ordinary_empty=False):
+    if ordinary_empty:
+        return (
+            after <= job.get('quarantined_at', 0) <= cutoff
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') == 'failed_held'
+            and not job.get('result')
+            and not job.get('silence_disposition')
+            and not job.get('terminal_disposition')
+            and replaceable_modulate_intent(job, job.get('speech_redrive') or {}, ordinary_empty=True)
+        )
     if repair:
         return (
             after <= job.get('quarantined_at', 0) <= cutoff
@@ -146,7 +172,19 @@ def prepared_eligible(job, after, cutoff, max_seconds):
     )
 
 
-def fingerprint(job, independent=False, repair=False, prepared=False):
+def fingerprint(job, independent=False, repair=False, prepared=False, ordinary_empty=False):
+    if ordinary_empty:
+        marker = job.get('speech_redrive') or {}
+        prior = marker.get('prior_speech_redrive') or {} if marker.get('provider') == 'soniox' else marker
+        return scope.digest(
+            {
+                'unit': held.fingerprint(job),
+                'prior_paid_intent': prior,
+                'worker_vad_receipt': job.get('worker_vad_receipt'),
+                'worker_failure': job.get('worker_failure'),
+                'operation': ORDINARY_EMPTY_OPERATION,
+            }
+        )
     if prepared:
         # The take-over freezes the exact prepared intent. start()/settle() only
         # append fields, so a spent unit replays without a cohort_changed refusal.
@@ -175,6 +213,18 @@ def prepared_budget(durations, usd_cap):
     return total, estimated
 
 
+def ordinary_empty_budget(durations):
+    """Recorded-audio bound for one explicit, exact-ID ordinary-empty plan."""
+    require(1 <= len(durations) <= ORDINARY_EMPTY_MAX_UNITS, 'ordinary_empty_unit_budget')
+    require(
+        all(type(n) in (int, float) and math.isfinite(n) and 0 < n <= MAX_AUDIO_SECONDS for n in durations),
+        'ordinary_empty_duration_invalid',
+    )
+    total = sum(durations)
+    require(total <= ORDINARY_EMPTY_MAX_AUDIO_SECONDS, 'ordinary_empty_audio_budget')
+    return total
+
+
 def checked_prepared(store, sid, uid, key, after, cutoff, max_seconds):
     """Read-only revalidation: sealed identity, unspent epoch-1 intent, scoped bound."""
 
@@ -194,14 +244,18 @@ def checked_prepared(store, sid, uid, key, after, cutoff, max_seconds):
     return held.readonly_run(store, check)
 
 
-def checked_job(store, sid, uid, key, independent=False, repair=False):
+def checked_job(store, sid, uid, key, independent=False, repair=False, ordinary_empty=False):
 
     def check(tx):
         job, binding = RecoveryStore(store).checked(
             tx, sid, allow_completed_silence=True, allow_completed_speech_redrive=True
         )
         result = tx.get('results', sid)
-        require(binding.owner_id == uid and fingerprint(job, independent, repair) == key, 'cohort_changed')
+        require(
+            binding.owner_id == uid and fingerprint(job, independent, repair, ordinary_empty=ordinary_empty) == key,
+            'cohort_changed',
+        )
+        require(not ordinary_empty or ordinary_empty_redrive(job), 'ordinary_empty_not_eligible')
         if repair:
             # Never consults or resets the spent Soniox attempt; one repair intent per unit.
             require(words_repair_eligible(job), 'repair_not_eligible')
@@ -227,12 +281,15 @@ def checked_job(store, sid, uid, key, independent=False, repair=False):
             require(silence.get('state') in {'prepared', 'completed'}, 'invalid_silence_intent')
             return job
         if speech:
-            if independent and replaceable_modulate_intent(job, speech):
+            if (independent or ordinary_empty) and replaceable_modulate_intent(
+                job, speech, ordinary_empty=ordinary_empty
+            ):
                 require(SpeechRedriveStore.terminal(job, result, time.time()), 'not_failed_held')
                 return job
             require(
-                speech.get('paid_epoch') == (3 if independent else 2)
-                and speech.get('provider') == ('soniox' if independent else 'modulate')
+                speech.get('paid_epoch') == (3 if independent or ordinary_empty else 2)
+                and speech.get('provider') == ('soniox' if independent or ordinary_empty else 'modulate')
+                and (not ordinary_empty or speech.get('ordinary_empty_independent') is True)
                 and speech.get('prior_recovery') == job.get('recovery')
                 and speech.get('state') in {'prepared', 'running', 'completed', 'failed_held'},
                 'invalid_paid_intent',
@@ -248,7 +305,18 @@ def checked_job(store, sid, uid, key, independent=False, repair=False):
 
 
 def inspect_unit(
-    store, artifacts, sid, uid, key, independent=False, repair=False, prepared=False, after=0, cutoff=0, max_seconds=0.0
+    store,
+    artifacts,
+    sid,
+    uid,
+    key,
+    independent=False,
+    repair=False,
+    prepared=False,
+    after=0,
+    cutoff=0,
+    max_seconds=0.0,
+    ordinary_empty=False,
 ):
 
     if prepared:
@@ -256,12 +324,12 @@ def inspect_unit(
         # falls below one frame; its validated empty reply settles failed_held.
         checked_prepared(store, sid, uid, key, after, cutoff, max_seconds)
         return 'speech'
-    job = checked_job(store, sid, uid, key, independent, repair)
+    job = checked_job(store, sid, uid, key, independent, repair, ordinary_empty)
     # Independent-language plans always buy a recognizer, even if local VAD
     # falls below one frame. Only its validated empty reply can close silence.
     # Ordinary units and words repairs can use the same input-bound worker
     # acoustic receipt; a later zero CPU VAD must not label that speech silent.
-    if independent or repair or worker_vad_speech(job) is not None:
+    if independent or repair or ordinary_empty or worker_vad_speech(job) is not None:
         return 'speech'
     # Immutable intent attestations retain the original census on replay, even
     # after results have projected and audio has entered completion retention.
@@ -298,6 +366,11 @@ def main():
         help='Lead 7fa3d2: one Modulate call per guarded words unit, epoch 4; exact unit IDs required',
     )
     parser.add_argument(
+        '--ordinary-empty-independent',
+        action='store_true',
+        help='Explicit silent Soniox epoch3 for exact ordinary worker-empty units with spent empty Modulate epoch2',
+    )
+    parser.add_argument(
         '--prepared-independent',
         action='store_true',
         help='Operator take-over of sealed prepared epoch-1 intents above the 60s bound; exact unit IDs required',
@@ -317,6 +390,8 @@ def main():
     args = parser.parse_args()
     repair = args.language_guard_repair
     prepared = args.prepared_independent
+    ordinary_empty = args.ordinary_empty_independent
+    require(sum((repair, prepared, args.independent_language, ordinary_empty)) <= 1, 'conflicting_plans')
     require(not (repair and args.independent_language), 'conflicting_plans')
     require(not (prepared and (args.independent_language or repair)), 'conflicting_plans')
     if prepared:
@@ -331,11 +406,17 @@ def main():
         require(args.usd_cap is not None and math.isfinite(args.usd_cap) and args.usd_cap > 0, 'usd_cap_required')
     else:
         require(
-            args.paid_epoch == (REPAIR_EPOCH if repair else 3 if args.independent_language else 2),
+            args.paid_epoch == (REPAIR_EPOCH if repair else 3 if args.independent_language or ordinary_empty else 2),
             'provider_epoch_mismatch',
         )
     require(not args.independent_language or bool(args.unit_ids_file), 'exact_independent_units_required')
     require(not repair or bool(args.unit_ids_file), 'exact_repair_units_required')
+    require(not ordinary_empty or bool(args.unit_ids_file), 'exact_ordinary_empty_units_required')
+    require(not ordinary_empty or args.silent, 'ordinary_empty_requires_silent')
+    require(
+        not ordinary_empty or 1 <= args.expect_count == args.expect_speech_count <= ORDINARY_EMPTY_MAX_UNITS,
+        'ordinary_empty_unit_budget',
+    )
     logging.disable(logging.CRITICAL)
     require(not os.getenv('FIRESTORE_EMULATOR_HOST'), 'explicit_cloud_only')
     require(
@@ -415,11 +496,11 @@ def main():
                 selected_here = job.get('owner_id') == uid and prepared_eligible(job, after, cutoff, args.max_seconds)
             else:
                 selected_here = job.get('owner_id') == uid and eligible(
-                    job, after, cutoff, args.independent_language, repair
+                    job, after, cutoff, args.independent_language, repair, ordinary_empty
                 )
             require(ids is None or selected_here, 'unit_not_eligible')
             if selected_here:
-                selected.append((doc.id, fingerprint(job, args.independent_language, repair, prepared)))
+                selected.append((doc.id, fingerprint(job, args.independent_language, repair, prepared, ordinary_empty)))
                 require(len(selected) <= args.expect_count, 'cohort_count_changed')
         require(len(selected) == args.expect_count, 'cohort_count_changed')
         units = []
@@ -441,6 +522,7 @@ def main():
                     after,
                     cutoff,
                     args.max_seconds or 0.0,
+                    ordinary_empty,
                 )
                 for sid, key in group
             ]
@@ -461,21 +543,27 @@ def main():
         prepared=prepared,
         max_seconds=args.max_seconds,
         usd_cap=args.usd_cap,
+        ordinary_empty=ordinary_empty,
     )
     for sid, key, decision in units:
         if prepared:
             job = checked_prepared(read_store, sid, uid, key, after, cutoff, args.max_seconds)
         else:
-            job = checked_job(read_store, sid, uid, key, args.independent_language, repair)
+            job = checked_job(read_store, sid, uid, key, args.independent_language, repair, ordinary_empty)
         durations[sid] = job.get('duration_seconds') or 0
         marker = job.get('speech_redrive')
-        if marker and not (args.independent_language and replaceable_modulate_intent(job, marker)):
+        if marker and not (
+            (args.independent_language or ordinary_empty)
+            and replaceable_modulate_intent(job, marker, ordinary_empty=ordinary_empty)
+        ):
             require(
                 marker.get('plan_digest') == digest and marker.get('silent', False) is args.silent,
                 'paid_intent_changed',
             )
         elif not prepared:
-            require(eligible(job, after, cutoff, args.independent_language, repair), 'unit_not_eligible')
+            require(
+                eligible(job, after, cutoff, args.independent_language, repair, ordinary_empty), 'unit_not_eligible'
+            )
         require(
             inspect_unit(
                 read_store,
@@ -489,6 +577,7 @@ def main():
                 after,
                 cutoff,
                 args.max_seconds or 0.0,
+                ordinary_empty,
             )
             == decision,
             'speech_decision_changed',
@@ -496,6 +585,11 @@ def main():
         failures[sid] = epoch1_failure(job)
     counts = Counter(decision for _, _, decision in units)
     require(counts['speech'] == args.expect_speech_count, 'speech_count_changed')
+    ordinary_audio_seconds = (
+        ordinary_empty_budget([durations[sid] for sid, _, decision in units if decision == 'speech'])
+        if ordinary_empty
+        else None
+    )
     total_audio_seconds, estimated_usd_total = (
         prepared_budget([durations[sid] for sid, _, decision in units if decision == 'speech'], args.usd_cap)
         if prepared
@@ -506,21 +600,25 @@ def main():
     output = {
         'mode': 'apply' if args.apply else 'dry_run',
         'operation': (
-            PREPARED_OPERATION
-            if prepared
+            ORDINARY_EMPTY_OPERATION
+            if ordinary_empty
             else (
-                REPAIR_OPERATION
-                if repair
-                else 'independent-language-recovery-v1' if args.independent_language else OPERATION
+                PREPARED_OPERATION
+                if prepared
+                else (
+                    REPAIR_OPERATION
+                    if repair
+                    else 'independent-language-recovery-v1' if args.independent_language else OPERATION
+                )
             )
         ),
-        'provider': 'soniox' if (prepared or args.independent_language) else 'modulate',
+        'provider': 'soniox' if (prepared or args.independent_language or ordinary_empty) else 'modulate',
         'checked_at': datetime.now(timezone.utc).isoformat(),
         'owner_count': 1,
         'units': len(units),
         'strict_vad': (
             {'worker_vad_speech': counts['speech']}
-            if repair
+            if repair or ordinary_empty
             else {'unmeasured': counts['speech']} if args.independent_language or prepared else dict(counts)
         ),
         # Not in the digest: the approved census is unchanged by this report.
@@ -534,7 +632,7 @@ def main():
         'paid_stt_calls': 0,
         'firestore_writes': 0,
     }
-    if args.independent_language or repair:
+    if args.independent_language or repair or ordinary_empty:
         output['max_audio_seconds_per_unit'] = MAX_AUDIO_SECONDS
     if args.independent_language:
         # Soniox rate; a repair's Modulate call is metered by its own allowance.
@@ -546,6 +644,10 @@ def main():
         output['total_audio_seconds'] = total_audio_seconds
         output['estimated_usd_total'] = estimated_usd_total
         output['usd_cap'] = args.usd_cap
+    if ordinary_empty:
+        output['max_units_per_plan'] = ORDINARY_EMPTY_MAX_UNITS
+        output['max_total_recorded_audio_seconds'] = ORDINARY_EMPTY_MAX_AUDIO_SECONDS
+        output['total_recorded_audio_seconds'] = ordinary_audio_seconds
     if args.apply:
 
         # Per-unit mutation consumes its persisted recovery owner part.
@@ -566,7 +668,7 @@ def main():
                     server_flags=server_flags,
                 )
             else:
-                job = checked_job(read_store, sid, uid, key, args.independent_language, repair)
+                job = checked_job(read_store, sid, uid, key, args.independent_language, repair, ordinary_empty)
                 outcome = redrive_one(
                     store,
                     artifacts,
@@ -578,6 +680,7 @@ def main():
                     silent=args.silent,
                     independent_language=args.independent_language,
                     repair=repair,
+                    ordinary_empty_independent=ordinary_empty,
                 )
             outcomes[outcome] += 1
             if not scope.successful(outcome):
