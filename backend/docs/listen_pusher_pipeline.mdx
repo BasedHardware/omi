@@ -6439,10 +6439,24 @@ are unchanged. Tuning details: [pusher runbook](runbooks/pusher-degraded.md).
 
 The ship-on `record-seal-sweeper` CronJob in the batch worker chart reuses the
 existing worker image and identity, with only namespaced `pods: list` RBAC.
-Every five minutes it discovers at most 128 existing pending jobs and reuses the
-exact-state retained-tail repair for at most 64 token-bearing rows. Live/unknown
+Every five minutes it discovers at most 32 existing pending jobs and reuses the
+exact-state retained-tail repair for at most 4 token-bearing rows by default.
+`RECORD_SEAL_SWEEPER_DISCOVERY_LIMIT` / `RECORD_SEAL_SWEEPER_SEAL_LIMIT` can tune
+those bounds up to 128 / 64. Classification and planning use plain document gets
+with a 10-second maximum RPC timeout and no SDK retry; the final seal still uses
+the same exact-state and privacy transaction. Live/unknown
 producers, bare tokens, upload failures and stale/unavailable inventory never
-authorize a seal. It emits one content-free structured summary; sampled backlog,
+authorize a seal. It emits content-free phase progress (inventory, discovery,
+classification, plan, apply; elapsed milliseconds and counts) plus one final
+structured summary. `RECORD_SEAL_SWEEPER_BUDGET_SECONDS` defaults to 150 seconds
+(valid range 1..180), leaving startup headroom inside the unchanged 240-second
+Job deadline and five-minute proof window. The dedicated Unix entrypoint cancels
+blocking IO at that deadline, including tail iterators that have not yielded.
+`budget_exhausted` reports partial classification and completed apply counts;
+an incomplete plan never applies, and no further seal is attempted after expiry.
+An already dispatched commit may complete at the server after cancellation;
+its acknowledgment may be unknown until the next cycle rereads the row.
+Sampled backlog,
 age, bare-token and missing-cycle alerts are defined in
 `backend/deploy/record-seal-sweeper/`. The lead first observes a production
 `mode=plan` cycle (no writes), then ships `mode=apply`; dev stays disabled because
