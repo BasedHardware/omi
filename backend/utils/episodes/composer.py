@@ -664,6 +664,25 @@ def schedule_for_conversation(uid: str, conversation_id: str, *, collaborators: 
         logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
 
 
+def owns_closed_notes(uid: str, episode: Mapping[str, Any], conversation_id: str, c: Any) -> bool:
+    """Whether the composer will write this closed episode's notes, so a per-moment write may skip
+    its model call. Every other retained member must already be done (else compose would wait,
+    perhaps forever, and the skipped speech would never reach the notes) and the evidence must not
+    be backed off after failures."""
+    if not episode_composer_enabled() or policy.is_live(episode) or _backed_off(episode):
+        return False
+    try:
+        for cid in _retained_ids(episode):
+            if cid == conversation_id:
+                continue
+            row = conversations_db.get_conversation(uid, cid, firestore_client=getattr(c, 'firestore_client', None))
+            if row and not hidden_member(row) and str(row.get('status') or '') not in _DONE:
+                return False
+    except Exception:
+        return False
+    return True
+
+
 def notes_free(*_args: Any, **_kwargs: Any) -> Any:
     """Stands in for the per-moment model call on a closed episode the composer owns: no call,
     no notes change; membership, cursors, receipts and member activity are still recorded."""

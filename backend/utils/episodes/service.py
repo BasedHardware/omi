@@ -941,11 +941,11 @@ def _record_moment_once(
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'
 
-    compose_owns = closed is not None and composer.episode_composer_enabled()  # composer writes the notes
+    compose_owns = closed is not None and composer.owns_closed_notes(uid, closed, moment.conversation_id, c)
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     output_language, repair = '', None
     conversation_language = moment.language or ''
-    if episode_output_language_pinned() and not compose_owns:
+    if episode_output_language_pinned():
         session_id = str(base.get('primary_conversation_id') or moment.conversation_id)
         conversation_language, preference = _episode_language_inputs(uid, session_id, moment, c)
         output_language = episode_language.resolve_episode_language(uid, conversation_language, preference=preference)
@@ -1072,7 +1072,9 @@ def _record_moment_once(
         # A prompt instruction does not prove the model followed it. Only stamp
         # observed state text; otherwise the next update detects and repairs it.
         updates['output_language'] = (
-            output_language if episode_language.languages_match(detected_output_language, output_language) else None
+            output_language
+            if compose_owns or episode_language.languages_match(detected_output_language, output_language)
+            else None
         )
     if pending is not None:
         updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
@@ -1107,7 +1109,7 @@ def _record_moment_once(
         )
     metrics.record_moment_update(
         trigger=moment.trigger,
-        outcome='skipped_closed' if compose_owns else 'applied',
+        outcome='composer_owned' if compose_owns else 'applied',
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         latency_seconds=result.latency_seconds,
