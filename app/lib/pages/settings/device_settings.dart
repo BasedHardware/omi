@@ -87,6 +87,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
+  // Triple Press is only offered when the firmware advertises OmiFeatures.tripleTap.
+  bool _hasTripleTapFeature = false;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -134,10 +136,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final features = await connection.getFeatures();
     final hasDimming = (features & OmiFeatures.ledDimming) != 0;
     final hasMicGain = (features & OmiFeatures.micGain) != 0;
+    final hasTripleTap = OmiFeatures.supportsTriplePress(features);
     if (!mounted) return;
     setState(() {
       _hasDimmingFeature = hasDimming;
       _hasMicGainFeature = hasMicGain;
+      _hasTripleTapFeature = hasTripleTap;
     });
 
     final ratio = hasDimming ? await connection.getLedDimRatio() : null;
@@ -487,13 +491,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               showChevron: true,
             ),
             doubleTapRow,
-            OmiSettingsRow(
-              leading: const FaIcon(FontAwesomeIcons.handPointer),
-              title: l10n.triplePress,
-              value: _buttonActionLabel(SharedPreferencesUtil().triplePressAction),
-              onTap: _pickTriplePressAction,
-              showChevron: true,
-            ),
+            if (_hasTripleTapFeature)
+              OmiSettingsRow(
+                leading: const FaIcon(FontAwesomeIcons.handPointer),
+                title: l10n.triplePress,
+                value: _buttonActionLabel(SharedPreferencesUtil().triplePressAction),
+                onTap: _pickTriplePressAction,
+                showChevron: true,
+              ),
             OmiSettingsRow(
               leading: const FaIcon(FontAwesomeIcons.powerOff),
               title: l10n.longPress,

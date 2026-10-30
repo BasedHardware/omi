@@ -34,6 +34,14 @@ class OmiFeatures {
   static const int offlineStorage = 1 << 6;
   static const int ledDimming = 1 << 7;
   static const int micGain = 1 << 8;
+
+  /// Firmware's button FSM emits a triple tap (button state 6) and resolves multi-taps with
+  /// `CaptureController.firmwareMultiTapWindow` (350 ms). Mirrors OMI_FEATURE_TRIPLE_TAP in
+  /// omi/firmware/omi/src/lib/core/features.h. Older firmware never sets this bit, so a
+  /// triple press there still arrives as double + single.
+  static const int tripleTap = 1 << 9;
+
+  static bool supportsTriplePress(int features) => (features & tripleTap) != 0;
 }
 
 abstract class IDeviceServiceSubsciption {
