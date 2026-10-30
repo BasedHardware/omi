@@ -1026,6 +1026,29 @@ Grafana availability independently; it cannot prove query-path or delivery healt
 
 ### Metrics Contract
 
+Core Features keeps capture success / (success + failure) separate from the
+3-hour stale terminal count and share. Stale finalization includes deliberate
+lifecycle/discard fences; it cannot establish missing conversations or an
+accepted-cohort conversion rate. The dead-letter stat uses
+`delta((max(listen_finalization_jobs{status="dead_letter"}))[$__range:1m])`,
+clamped at zero and rounded: the Firestore projection survives pod churn and
+replicas must be collapsed before computing the change. It includes abandoned
+BYOK waits as well as exhausted retries, and excludes pre-projection history.
+The stat requires a current summary timestamp no older than 15 minutes, so
+cached history alone cannot paint a dead publisher green. The existing
+system-owned age gauge already excludes `blocked_byok`.
+
+`omi_client_journey_terminal_total` adds `reason` from the existing closed
+`CLIENT_JOURNEY_ISSUE_CLASSES` enum for failure/degraded/unknown, and `none` for
+success/cancelled. Unknown input collapses to `unknown`; no input text is
+exported. The 12 issue classes give at most 38 outcome/reason combinations
+per journey/client kind, or 3,420 counter children per process at the full
+9-by-10 bound (previously 450). Children are emitted only on real events;
+the histogram gains no dimension. During rolling deploys and historical
+queries the breakdown retains old series as `legacy_unlabeled`. Backend,
+listen and pusher emitter releases are required before reason coverage is
+complete; dashboard provisioning alone does not deploy the label.
+
 `omi_stt_stream_close_total{provider,reason}` pre-creates 55 zero-valued children:
 the four bounded providers plus the `unknown` fallback, crossed with the eleven
 bounded close reasons in `utils/stt/stream_close.py`. Initialization runs on that

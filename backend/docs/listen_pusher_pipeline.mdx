@@ -846,6 +846,13 @@ bounded `client_kind` resolved from the listen connection headers. Pusher forwar
 that bounded value to webhook delivery and inline finalization journey metrics;
 it never forwards a raw client header as a metric label.
 
+Client journey terminal counters carry a closed `reason`: the existing
+`CLIENT_JOURNEY_ISSUE_CLASSES` vocabulary for failure, degraded and unknown
+outcomes, or `none` for success and cancellation. Unrecognized caller values
+collapse to `unknown` before emission. The Core Features breakdown labels
+pre-deploy series without this label as `legacy_unlabeled`; the duration
+histogram keeps its existing journey/outcome dimensions.
+
 Transcript, speaker-sample, audio-webhook, and private-cloud queues are bounded.
 Buffered audio also shares a per-session byte budget, so variable-size payloads
 cannot bypass item-count limits. A failed or cancelled backend-to-Pusher send

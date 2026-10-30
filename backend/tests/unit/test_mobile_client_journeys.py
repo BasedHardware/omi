@@ -120,7 +120,7 @@ def _accepted_labels(client_kind):
 
 
 def _terminal_labels(client_kind, outcome):
-    return {**_accepted_labels(client_kind), 'outcome': outcome}
+    return {**_accepted_labels(client_kind), 'outcome': outcome, 'reason': 'none'}
 
 
 def _journeys_stubbed() -> bool:
