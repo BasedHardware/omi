@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from database.outbox import Claim, Outcome
+from database.outbox import Claim, EnqueueResult, Outcome
 from testing.store_fixtures import outbox_backend  # noqa: F401
 
 pytestmark = pytest.mark.integration
@@ -32,6 +32,7 @@ def test_pl042_committed_work_survives_task_create_failure(
     owner = ob.store_harness.uid('o')
     payload = ob.payload('retained')
     leaked_wake_error = False
+    queued = None
 
     # Strict xfail matches only the known no-raise defect, not an assertion,
     # import/setup failure, or a regression in the recovery path below.
@@ -63,11 +64,14 @@ def test_pl042_committed_work_survives_task_create_failure(
             ob.outbox.wake(queued.row_id, queued.wake_token)
     else:
         try:
-            enqueue()
+            queued = enqueue()
         except RuntimeError as exc:
             if str(exc) != 'task create failed':
                 raise
             leaked_wake_error = True
+    if not leaked_wake_error:
+        assert isinstance(queued, EnqueueResult)
+        assert not queued.coalesced and queued.wake_token
     assert ob.wakes == []
 
     # Repair attempts during the outage remain errors, never false progress.
@@ -82,7 +86,7 @@ def test_pl042_committed_work_survives_task_create_failure(
         assert (repaired.rewoken, repaired.errors) == (1, 0)
         ((row_id, token, available_at),) = ob.wakes
         assert available_at == T0
-        if transactional:
+        if queued is not None:
             assert (row_id, token) == (queued.row_id, queued.wake_token)
         settled = ob.outbox.sweep(now=T0 + 4)
         assert (settled.rewoken, settled.errors) == (0, 0)
@@ -96,6 +100,8 @@ def test_pl042_committed_work_survives_task_create_failure(
         assert ob.wakes == []
 
     assert (claim.owner_id, claim.policy_id, claim.attempt) == (owner, 'admitted-policy', 1)
+    if queued is not None:
+        assert claim.row_id == queued.row_id
     assert {key: claim.payload[key] for key in payload} == payload
     assert ob.outbox.claim(2, LEASE, now=T0 + 6) == []
     assert ob.outbox.ack(claim, 'done', now=T0 + 7)
