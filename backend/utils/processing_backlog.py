@@ -126,14 +126,24 @@ def allowance_increased(previous: Any, current: Any) -> bool:
         return dict(value) if isinstance(value, dict) else value.model_dump()
 
     old, new = fields(previous), fields(current)
-    if old.get('plan') == new.get('plan') and old.get('current_price_id') == new.get('current_price_id'):
+    old_active = old.get('status') in ('active', 'trialing')
+    new_active = new.get('status') in ('active', 'trialing')
+
+    # A calendar renewal of an already-active subscription is not an upgrade.
+    if (
+        old.get('plan') == new.get('plan')
+        and old.get('current_price_id') == new.get('current_price_id')
+        and old_active
+        and new_active
+    ):
         return False
 
     def limit(value):
+        active = value.get('status') in ('active', 'trialing')
         identity = {
             **value,
-            'status': 'active',
-            'current_period_end': int(datetime.now(timezone.utc).timestamp()) + 86400,
+            'status': 'active' if active else 'inactive',
+            'current_period_end': int(datetime.now(timezone.utc).timestamp()) + 86400 if active else 0,
         }
         entitlement = resolve_subscription_entitlements(identity)
         units = budget_units(entitlement)
@@ -143,4 +153,17 @@ def allowance_increased(previous: Any, current: Any) -> bool:
         return None if seconds is None else seconds * float(recording_units_per_hour('batch')) / 3600
 
     before, after = limit(old), limit(new)
-    return before is not None and (after is None or after > before)
+    if after is None:
+        if before is not None:
+            return True
+        # Both before and after have unlimited transcription.
+        # It represents an upgrade or reactivation intent if:
+        # 1. Old was not an active subscription
+        # 2. Plan changed (e.g. legacy unlimited -> unlimited_v2)
+        # 3. Price ID changed (e.g. interval change or tier migration)
+        return (
+            not old_active
+            or old.get('plan') != new.get('plan')
+            or old.get('current_price_id') != new.get('current_price_id')
+        )
+    return before is not None and after > before
