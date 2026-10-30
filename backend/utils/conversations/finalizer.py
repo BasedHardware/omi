@@ -40,6 +40,7 @@ from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
+from utils.conversations.minimum_derived import is_server_minimum
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -89,6 +90,9 @@ def _maybe_start_shadow(uid: str, conversation) -> None:
 
 def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
     """Provider errors are counted by the writer; never propagate to finalization."""
+    if is_server_minimum(conversation):
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_server_minimum').inc()
+        return
     if getattr(conversation, 'processing_deferred', False) is True:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
         return
@@ -547,13 +551,8 @@ async def finalize_persisted_conversation(
         if fanout['status'] != 'claimed':
             raise ConversationFinalizationError('fanout_lease_conflict')
 
-        # Ownership is now proven.  Emit every derived side effect — calendar,
-        # usage/app, action/goal, audio artifact/enqueue, webhook, and
-        # memory extraction — only behind the winning claim. Summary indexing
-        # also runs here, independently of the intelligence bundle.  A processing
-        # conversation hands the bundle back from process_conversation; an
-        # already-completed replay re-extracts memories behind the proven claim
-        # unless the durable terminal marker is set (free-tier minimum).
+        # Emit the processing bundle, or replay memory extraction, only behind
+        # the winning claim. Summary indexing is independent of intelligence.
         # TERMINAL_NO_DERIVED_EFFECTS suppresses only that intelligence bundle,
         # the empty-bundle memory fallback, and third-party app webhooks. Capture
         # receipt, keyframes, and arrival intent are not derived intelligence
@@ -562,17 +561,18 @@ async def finalize_persisted_conversation(
         stage = 'derived_effects'
         from utils.conversations.demand_processing import lazy_enrichment_enabled
 
-        lazy_effects = lazy_enrichment_enabled(uid) and not skip_derived_effects and not conversation.discarded
+        lazy_effects = (
+            lazy_enrichment_enabled(uid)
+            and not skip_derived_effects
+            and not conversation.discarded
+            and not is_server_minimum(conversation)
+        )
         if lazy_effects:
             from utils.sync.reprocess import mark_effects
 
             await run_blocking(db_executor, mark_effects, uid, conversation_id, resolved_language)
-        # Completed-row replays have no coordinator bundle. Summary indexing is
-        # independent of folder/apps receipts and terminal intelligence
-        # suppression, but must share the same winning fanout claim.
-        # Await inside a fail-soft boundary rather than detach a provider pipeline:
-        # the worker can exit after completion, so awaiting preserves write observability.
-        # A summary-vector failure never fails finalization, including terminal rows.
+        # Index enriched notes behind the winning claim, independently of apps.
+        # Await fail-soft so worker exit cannot strand an embedding request.
         episode_row = None
         try:
             latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
