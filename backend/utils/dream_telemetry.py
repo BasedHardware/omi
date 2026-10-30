@@ -50,10 +50,10 @@ VALUE_WEIGHTS = {
 }
 
 
-def value(outcomes: Iterable[Any]) -> int:
+def value(outcomes: Iterable[Any] | None) -> int:
     """Impact-weighted count of applied edits."""
     return sum(
-        VALUE_WEIGHTS.get(row.get('kind'), 1)
+        VALUE_WEIGHTS.get(str(row.get('kind')), 1)
         for row in outcomes or []
         if isinstance(row, dict) and row.get('status') == 'applied'
     )
