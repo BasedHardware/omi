@@ -381,7 +381,11 @@ No switch or deployment binding is activated.
 
 ## Windowed live transcription deadlines
 
-Live windows use default-on per-GPU replica recovery when the configured internal
+Prod listen explicitly sets `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED=false`
+pending censorship of deadline-capped POST timeouts; the rollout lead reviews
+this override by 2026-11-06 under the
+[window operations contract](operational/windowed-live-stt.md). The code default
+remains on. When enabled, live windows use per-GPU replica recovery when the configured internal
 HTTP family endpoint has fresh DNS and pressure samples. Each listener keeps a
 bounded replica quarantine: a failed POST opens only that GPU for 120 seconds,
 then 240/300 seconds after failed single half-open probes. Missing or stale
