@@ -19,7 +19,7 @@
   },
   {
     "name": "omi_record_seal_oldest_unsealed_seconds",
-    "description": "Bounded sampled unsealed record backlog; lower bound when discovery saturates. No identifiers.",
+    "description": "Oldest observed unsealed record age in seconds; lower bound when discovery saturates. No identifiers.",
     "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"sweeper\" AND jsonPayload.logger=\"record-seal-sweeper\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_sweep\\\"\" AND jsonPayload.message:\"\\\"outcome\\\": \\\"ok\\\"\"",
     "metricDescriptor": {
       "metricKind": "DELTA",

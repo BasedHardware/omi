@@ -73,8 +73,9 @@ so alert thresholds use exact cycle counters instead.
 
 Kill switch: set `recordSealSweeper.enabled=false` to remove its CronJob/RBAC,
 or `runtimeEnabled=false` (`RECORD_SEAL_SWEEPER_ENABLED=false`) for new Jobs.
-An already running Job retains its settings until its 240s deadline; the lead
-terminates that exact active Job if immediate cessation is required. Neither
+Runtime/mode changes do not alter an active Job's startup settings; its deadline
+still bounds it to 240 seconds. Removing the CronJob can cascade deletion to its
+owned Jobs. The lead verifies termination if immediate cessation is required. Neither
 switch undoes seals already written. Plan mode is an observation mode, not a
 rollback. No backend/listen/pusher or Cloud Run deployment is required; the lead
 owns the worker-image/chart train and monitoring provisioning.
