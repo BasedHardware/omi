@@ -1610,18 +1610,24 @@ def _on_finalized(
 
 def _end_discarded(uid: str, conversation_id: str, row: Mapping[str, Any], trigger: str, c: Collaborators) -> None:
     """Hide discarded members and remove their contribution to recorded activity."""
-    episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-    if not episode:
-        return
-    episode = episodes_db.update_episode(
-        uid,
-        str(episode['id']),
-        expected_version=int(episode.get('state_version') or 0),
-        updates={
-            'discarded_conversation_ids': [*(episode.get('discarded_conversation_ids') or []), conversation_id],
-        },
-        firestore_client=c.firestore_client,
-    )
+    for attempt in range(3):
+        episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+        if not episode:
+            return
+        try:
+            episodes_db.update_episode(
+                uid,
+                str(episode['id']),
+                expected_version=int(episode.get('state_version') or 0),
+                updates={
+                    'discarded_conversation_ids': [*(episode.get('discarded_conversation_ids') or []), conversation_id],
+                },
+                firestore_client=c.firestore_client,
+            )
+            return
+        except episodes_db.EpisodeConflict:
+            if attempt == 2:
+                raise
 
 
 def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survivor_id: str, c: Collaborators) -> None:

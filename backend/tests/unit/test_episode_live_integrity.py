@@ -552,3 +552,33 @@ def test_new_member_cannot_restore_a_discarded_anchor(lane, live):
     assert clean['started_at'] == at
     assert clean['last_activity_at'] == at + timedelta(minutes=6)
     assert set(clean['member_activity']) == {'speech'}
+
+
+def test_discard_repairs_bounds_after_losing_a_notes_cas(lane, monkeypatch):
+    store, c, _ = lane
+    for cid, start in [('noise', T0), ('speech', T0 + timedelta(minutes=21))]:
+        store.rows[('users', 'u', 'conversations', cid)] = row(cid, start)
+        c.now = lambda start=start: start
+        service.attach_conversation('u', cid, 'omi', started_at=start, collaborators=c)
+    noise = store.rows[('users', 'u', 'conversations', 'noise')]
+    noise['discarded'] = True
+    update = episodes.update_episode
+    versions = []
+
+    def race(uid, eid, **kwargs):
+        versions.append(kwargs['expected_version'])
+        if len(versions) == 1:
+            # A notes writer commits between the finalizer's read and discard CAS.
+            update(uid, eid, **{**kwargs, 'updates': {'title': 'Concurrent notes'}})
+        return update(uid, eid, **kwargs)
+
+    monkeypatch.setattr(episodes, 'update_episode', race)
+    assert (
+        service.on_conversation_finalized('u', 'noise', noise, trigger='sync_update', collaborators=c)
+        == 'skipped_discarded'
+    )
+    assert len(versions) == 2 and versions[1] == versions[0] + 1
+    clean = episodes.get_current_episode('u', firestore_client=store)
+    assert clean['started_at'] == T0 + timedelta(minutes=21)
+    assert clean['last_activity_at'] == T0 + timedelta(minutes=21, seconds=30)
+    assert set(clean['member_activity']) == {'speech'}

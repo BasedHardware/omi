@@ -393,5 +393,6 @@ Episode attachment, recorded activity, finalization and API visibility use the
 shared final-discard predicate (`fragment_visibility.is_relevance_discarded`),
 including restore authority, instead of interpreting that hint as visibility.
 A discard CAS re-reads retained members' recorded spans and recomputes the
-start and end for live and closed episodes. Hidden memberships remain for
+start and end for live and closed episodes, retrying with a fresh episode after
+a notes CAS wins the race. Hidden memberships remain for
 recovery and single ownership; they contribute no clocks or visible row.
