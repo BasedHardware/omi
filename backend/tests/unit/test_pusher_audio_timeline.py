@@ -120,6 +120,9 @@ def env(monkeypatch):
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock(return_value=False))
+    monkeypatch.setattr(pusher.conversations_db, 'mark_record_upload_failed', MagicMock(return_value=True))
+    monkeypatch.setattr(pusher.conversations_db, 'set_record_upload_pending', MagicMock(return_value=True))
 
     def upload(chunks, uid, cid, level=None, **_kwargs):
         uploads.extend((cid, chunk) for chunk in chunks)
@@ -787,11 +790,14 @@ async def test_record_upload_close_receipt_follows_successful_tail_flush(env, mo
 async def test_dark_unowned_close_adds_no_seal_and_failed_upload_never_seals(env, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     sealed = []
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda *args: sealed.append(args))
+    # Close now resolves persisted ownership transactionally even when dark.
+    # The database helper refuses unowned rows without writing a seal.
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda *args: False)
     ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
     await _run(ws)
     assert sealed == []
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda *args: sealed.append(args))
 
     def failed(*args, **kwargs):
         raise ValueError('synthetic storage failure')

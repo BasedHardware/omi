@@ -27,6 +27,7 @@ from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
+from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
@@ -214,7 +215,12 @@ async def admit_recording(store, pending, *, now=None):
         )
 
     current = await run_blocking(db_executor, read_current)
-    if current.get('status') != 'completed' or not current.get('record_audio_closed'):
+    if (
+        current.get('status') != 'completed'
+        or not current.get('record_audio_closed')
+        or current.get('record_upload_failed')
+        or current.get('record_upload_sessions')
+    ):
         raise ValueError('capture upload/finalization barrier not closed')
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
@@ -246,13 +252,9 @@ async def admit_recording(store, pending, *, now=None):
                 raise ValueError('retained capture unit budget exceeded')
     finally:
         iterator.close()
-    if not 1 <= len(units) <= 128:
-        raise ValueError('retained capture unit budget exceeded')
     # Never claim a successful record whose final recognized speech is missing
     # from the durable upload. The pending obligation has no TTL.
-    finish = row.get('finished_at')
-    if finish is not None and units[-1][0] + units[-1][1] + 0.1 < finish.timestamp():
-        raise ValueError('retained capture tail not durable yet')
+    validate_record_tail(units, row.get('finished_at'))
     items = [
         WorkItem(
             hashlib.sha256(f'{content}:{i}'.encode()).hexdigest(),

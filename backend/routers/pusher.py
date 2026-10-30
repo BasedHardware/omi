@@ -5,7 +5,6 @@ import time
 import uuid
 from collections import deque
 from typing import Any, Awaitable, Deque, Dict, List, Optional, Tuple, cast
-from config.batch_pipeline import live_record_admission_enabled
 from config.audio_outbox import enabled as audio_outbox_enabled
 
 from fastapi import APIRouter
@@ -418,7 +417,6 @@ async def _websocket_util_trigger(
                         uid,
                         conv_id,
                         {'audio_files': [af.model_dump() for af in audio_files]},
-                        record_owner_out=record_owners if len(record_owners) < 128 else None,
                     )
                     if applied:
                         schedule_person_voice_learning_retry(uid, conv_id)
@@ -432,7 +430,7 @@ async def _websocket_util_trigger(
                 # Projection is optional for custody: media AND its exact
                 # manifest survive in remote storage and are discoverable
                 # by raw-live playback after restart/reconnect.
-                fail_recording(conv_id)
+                await fail_recording(conv_id)
                 record_failure('projection', reason='conflict')
                 record_fallback(
                     component='pusher',
@@ -472,7 +470,7 @@ async def _websocket_util_trigger(
                 # inheriting this one's exhaustion, and the entry stops
                 # counting toward the bounded retry map.
                 projection_retries.pop(conv_id, None)
-                fail_recording(conv_id)
+                await fail_recording(conv_id)
                 record_failure('projection', reason='transient')
                 record_fallback(
                     component='pusher',
@@ -519,10 +517,12 @@ async def _websocket_util_trigger(
                 if (
                     conv_id not in failed_recordings
                     and not record_upload_failed
-                    and (live_record_admission_enabled() or conv_id in record_owners)
+                    and conv_id not in pending_refs
+                    and durable_queue.empty()
                 ):
-                    await run_blocking(db_executor, conversations_db.seal_record_audio, uid, conv_id)
-                record_owners.pop(conv_id, None)
+                    await finish_recording(conv_id)
+                elif conv_id in pending_refs or not durable_queue.empty():
+                    continue
                 record_close_requests.discard(conv_id)
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
@@ -554,16 +554,39 @@ async def _websocket_util_trigger(
     conversations_with_chunks: set[str] = set()
     v2_replay_seen: set[str] = set()
     record_close_requests: set[str] = set()
-    record_owners: dict[str, str] = {}
     record_upload_failed = False
     failed_recordings: set[str] = set()
+    upload_sessions: dict[str, str] = {}
 
-    def fail_recording(conversation_id: str) -> None:
+    async def begin_recording(conversation_id: str) -> None:
+        if conversation_id in upload_sessions:
+            return
+        if len(upload_sessions) >= 128:
+            raise ValueError('record upload session budget exceeded')
+        token = uuid.uuid4().hex
+        # Persist before accepting audio into a buffer: a concurrent empty
+        # reconnect may not certify this session's uncommitted tail.
+        if await run_blocking(
+            db_executor, conversations_db.set_record_upload_pending, uid, conversation_id, token, True
+        ):
+            upload_sessions[conversation_id] = token
+
+    async def finish_recording(conversation_id: str) -> None:
+        token = upload_sessions.pop(conversation_id, None)
+        if token is not None:
+            await run_blocking(
+                db_executor, conversations_db.set_record_upload_pending, uid, conversation_id, token, False
+            )
+        await run_blocking(db_executor, conversations_db.seal_record_audio, uid, conversation_id)
+
+    async def fail_recording(conversation_id: str) -> None:
         nonlocal record_upload_failed
         if len(failed_recordings) < 128:
             failed_recordings.add(conversation_id)
         else:
             record_upload_failed = True  # bounded fail-closed overflow, never forget a failed source
+        # No fire-and-forget write: reconnects must observe this refusal.
+        await run_blocking(db_executor, conversations_db.mark_record_upload_failed, uid, conversation_id)
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
@@ -599,7 +622,7 @@ async def _websocket_util_trigger(
         # of replaying the same fenced write every flush.
         upload_fenced: bool = False
 
-        def _add_to_batch(chunk_info: PrivateCloudChunk) -> None:
+        async def _add_to_batch(chunk_info: PrivateCloudChunk) -> None:
             nonlocal record_upload_failed
             conv_id = chunk_info['conversation_id']
             if conv_id in deleted_conversations or upload_fenced:
@@ -624,7 +647,7 @@ async def _websocket_util_trigger(
                 before = set(pending)
                 bound_private_pending(pending, audio_budget)
                 for dropped_id in before - set(pending):
-                    fail_recording(dropped_id)
+                    await fail_recording(dropped_id)
                 batch = {
                     'data': bytearray(),
                     'conversation_id': conv_id,
@@ -720,7 +743,6 @@ async def _websocket_util_trigger(
                             uid,
                             conv_id,
                             {'audio_files': files_payload},
-                            record_owner_out=record_owners if len(record_owners) < 128 else None,
                         )
                         if applied:
                             schedule_person_voice_learning_retry(uid, conv_id)
@@ -787,7 +809,7 @@ async def _websocket_util_trigger(
                     audio_budget.release(len(chunk_data))
                     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc()
                     application_failed = True
-                    fail_recording(conv_id)
+                    await fail_recording(conv_id)
                     logger.info(
                         f"Private cloud batch upload failed after {PRIVATE_CLOUD_SYNC_MAX_RETRIES} retries, dropping: {e} {uid} {conv_id}"
                     )
@@ -811,7 +833,7 @@ async def _websocket_util_trigger(
                 chunks_to_process = private_cloud_queue.copy()
                 private_cloud_queue.clear()
                 for chunk_info in chunks_to_process:
-                    _add_to_batch(chunk_info)
+                    await _add_to_batch(chunk_info)
 
             if upload_fenced:
                 # The fence latched mid-session: anything still held is dropped
@@ -854,9 +876,7 @@ async def _websocket_util_trigger(
                 is_shutdown = not websocket_active
                 is_size_ready = len(batch['data']) >= batch_size_threshold
                 is_age_ready = batch_age >= PRIVATE_CLOUD_BATCH_MAX_AGE
-                owned_close = conv_id in record_close_requests and (
-                    live_record_admission_enabled() or conv_id in record_owners
-                )
+                owned_close = conv_id in record_close_requests
                 # Leave one uploader tick for the boundary frame/close message
                 # to join a size-ready batch. Otherwise a scheduler tick between
                 # the full run and its final frame creates a second tiny object.
@@ -881,9 +901,7 @@ async def _websocket_util_trigger(
                     and not any(b['conversation_id'] == conv_id for b in ready_batches)
                     and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
                 ):
-                    if live_record_admission_enabled() or conv_id in record_owners:
-                        await run_blocking(db_executor, conversations_db.seal_record_audio, uid, conv_id)
-                    record_owners.pop(conv_id, None)
+                    await finish_recording(conv_id)
                     record_close_requests.discard(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
@@ -1066,7 +1084,7 @@ async def _websocket_util_trigger(
                     _reset_private_cloud_buffer()
                     return
             if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
-                fail_recording(private_cloud_queue[0]['conversation_id'])
+                await fail_recording(private_cloud_queue[0]['conversation_id'])
                 logger.warning(
                     f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
                     f"dropping oldest chunk to prevent OOM {uid}"
@@ -1263,9 +1281,7 @@ async def _websocket_util_trigger(
                     ):
                         raise ValueError('dispatch_generation must be an integer')
                     if conversation_id:
-                        if private_cloud_sync_enabled and (
-                            live_record_admission_enabled() or conversation_id in record_owners
-                        ):
+                        if private_cloud_sync_enabled:
                             await _queue_private_cloud_chunk()
                             _reset_private_cloud_buffer()
                             if len(record_close_requests) < 128:
@@ -1379,6 +1395,8 @@ async def _websocket_util_trigger(
                     # id, committed under 'unlinked' at the next flush boundary);
                     # the window itself commits in _queue_private_cloud_chunk.
                     if private_cloud_sync_enabled and (current_conversation_id or durable_audio):
+                        if current_conversation_id:
+                            await begin_recording(current_conversation_id)
                         if private_cloud_chunk_start_time is None:
                             # Use timestamp from first buffer of this 5-second chunk
                             private_cloud_chunk_start_time = buffer_start_timestamp
@@ -1394,7 +1412,7 @@ async def _websocket_util_trigger(
                         custody_sequence += 1
                         if not stored_capture:
                             if current_conversation_id:
-                                fail_recording(current_conversation_id)
+                                await fail_recording(current_conversation_id)
                         elif frame_checkpoint is not None:
                             durable_window_frames.append(frame_checkpoint)
                         # Queue chunk every PRIVATE_CLOUD_CHUNK_DURATION seconds

@@ -6351,10 +6351,46 @@ provider wire.
 
 Finalization registers a `record_pending` job before completing its durable job.
 The pusher flushes the final buffered audio on finalize, conversation switch or
-disconnect, then writes a blind `record_audio_closed` receipt only after every
-queued upload succeeds. Queue/buffer drops and exhausted uploads never certify
-completeness. CPU reconciliation waits for both that receipt and the completed,
-retained conversation. This is a durability barrier, not an upload-grace timer.
+disconnect, then conditionally writes `record_audio_closed` only after every
+queued upload succeeds. The transaction resolves `record_lane_owner` from the
+conversation itself (`batch_live_v1` or `batch_sync_v1`); a reconnect carrying only
+finalize can close an existing batch owner even with live admission disabled.
+Legacy and unowned conversations never receive a seal.
+
+Before accepting a conversation's first audio frame, each session registers an
+opaque `record_upload_sessions` token transactionally and invalidates any old seal.
+The successful drain removes only that token before attempting closure. The seal
+transaction refuses while any producer remains pending, including an older socket
+still uploading or retrying. Tokens have no TTL: process death cannot prove audio
+completeness. Terminal upload/projection failures and queue/buffer drops await a
+sticky `record_upload_failed=true` write, which also invalidates an earlier seal.
+A clean reconnect cannot clear that marker. CPU admission independently refuses
+both failure markers and pending producers. These metadata transactions do not
+touch transcript or lifecycle fields. Steady-state frames reuse the session token;
+the extra producer transaction runs only on its first accepted audio per drain.
+CPU reconciliation waits for a successful receipt and the completed, retained
+conversation. This is a durability barrier, not an upload-grace timer.
+
+One-time stuck-job repair: `backend/scripts/repair_record_audio_seals.py
+--ids-file PRIVATE_JSON` takes 1..128 exact pending job IDs, with no discovery scan.
+Default dry-run requires `ro-prod`; output is only counts, closed dispositions and
+`plan_sha256`. A separately authorized operator may use `prod-operator` with
+`--apply --approve-plan-sha256 DIGEST`. The fresh plan must match the approved
+digest, including source generation/digest proofs and conversation/job state.
+The tool requires `record_pending`, a completed batch-owned retained conversation,
+no failed/pending upload markers, and generation-pinned retained units whose last
+durable end covers both current and frozen `finished_at` (the same 100 ms tolerance
+as record admission). Missing finishes, privacy refusals, conflicting overlaps,
+read errors and missing tails stay pending. The final write transaction rechecks
+job/record state and privacy generation before patching only the seal. It never
+clears failed or abandoned producer markers, edits jobs or invokes processing.
+Keep the exact-ID file private (0600); do not publish it or exception text.
+
+Deploy target: pusher, on the listen/pusher train. CPU recovery also consumes the
+independent admission refusal on its next source release. Rollback: revert;
+behavior returns to today's stuck-but-retained path. Drain old pusher sessions
+before evaluating the new producer-token guarantee: an old binary cannot register
+its outstanding audio. Existing failed/pending markers remain conservative.
 
 The coordinator lists the already retained audio, verifies overlaps, and freezes
 one-hour capture units as encrypted **reference manifests**, not copies of the
@@ -6412,11 +6448,11 @@ The future sequence remains David, then 5%, then 100% jointly with sync, using t
 existing correctness gates and capacity model; this is not permission to start it.
 
 Future activation requires CPU/listen/pusher/integration to agree on the new flag.
-While enabled, pusher may seal any successfully uploaded retained recording,
-including a capture not yet stamped by the in-flight finalizer. When dark, it seals
-only owners observed through its existing audio-metadata update snapshot. An
-unowned close adds no lookup, close write or early buffer flush. Failed/dropped
-uploads never certify closure. Integration pending-record scans run only while
+Pusher resolves persisted batch ownership at every retained close, independently
+of this producer flag. A finalize-only reconnect performs one transactional owner
+read, with a seal write only for a batch owner without failed or pending uploads.
+Unowned/legacy closes may flush their pending buffer, but never gain a seal.
+Failed/dropped uploads never certify closure. Integration pending-record scans run only while
 the new flag is on; there is no per-tick query to discover whether owners exist.
 Already admitted ready GPU work continues through the existing serving path.
 
@@ -6424,8 +6460,8 @@ For rollback with pending registrations or first-WAL proofs to drain, close new
 admission with the existing batch master/percentage controls and private
 `batch-pipeline` cohort membership
 while retaining the live flag and serving/recovery paths. Set the new flag false
-after those obligations resolve. Flag-off drains already-loaded owners and existing
-content aliases, but does not discover unknown owners. Do not roll back to an image
+after those obligations resolve. Flag-off drains persisted owners and existing
+content aliases; pusher close discovers persisted owners across sessions. Do not roll back to an image
 lacking the persisted-owner/reference-manifest protocol. Unsetting producer flags
 never removes persisted label authority.
 
@@ -6435,7 +6471,7 @@ Existing provenance/privacy and audio-metadata reads are reused.
 | Path | Flag off, unowned: added reads / writes | Enabled or already-owned path |
 | --- | --- | --- |
 | Named sync ownership routing | 0 / 0 | Discovery: one conversation read, plus one session lookup if needed. Loaded owners skip discovery. New owner: one conditional field write. |
-| Pusher close | 0 / 0 | One blind close write per successful owned or explicitly enabled retained close; existing metadata read supplies owner hints. |
+| Pusher close | One transactional read; no seal write for unowned/legacy | One transactional owner/failure/pending check, with an idempotent seal write only when eligible. Audio producers also register and clear one token per session/drain. |
 | Legacy final pass | 0 / 0 | One conditional owner write if unowned; each lost CAS adds one refresh read before a bounded retry. |
 | Integration pending scan | 0 / 0 | At 20-second ticks, nominally 4,320 queries/day/process plus returned documents; empty queries bill at least one read. |
 | Record admission | Existing sync protocol only | Patch only `record_lane_owner` once if missing; matching owners add no conversation write. Never set the conversation body. |

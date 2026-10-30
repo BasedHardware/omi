@@ -97,6 +97,9 @@ class Bucket:
 @pytest.fixture
 def remote(monkeypatch):
     bucket = Bucket()
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock(return_value=False))
+    monkeypatch.setattr(pusher.conversations_db, 'mark_record_upload_failed', MagicMock(return_value=True))
+    monkeypatch.setattr(pusher.conversations_db, 'set_record_upload_pending', MagicMock(return_value=True))
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
     monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', bucket.name)
