@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import sys
-import time
+import threading
 from pathlib import Path
 
 import pytest
@@ -20,8 +21,8 @@ from omi_cli.main import app
 # write; it does not fail merely because the new transaction API is absent.
 _WRITER = r"""
 import json
+import os
 import sys
-import time
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -33,19 +34,19 @@ action = json.loads(sys.argv[1])
 role = sys.argv[2]
 barriers = Path(sys.argv[3])
 original_save = cfg.save
+# CliRunner replaces sys.stdout; retain the original subprocess pipe for signals.
+signals = os.fdopen(os.dup(sys.stdout.fileno()), 'w', buffering=1)
+commands = os.fdopen(os.dup(sys.stdin.fileno()), 'r')
 
 def controlled_save(config):
-    (barriers / (role + '.saving')).write_text('ready')
+    print(role + '.saving', file=signals, flush=True)
     if role == 'first':
-        deadline = time.monotonic() + 15
-        while not (barriers / 'release').exists():
-            if time.monotonic() >= deadline:
-                raise TimeoutError('parent did not release the writer')
-            time.sleep(0.01)
+        if commands.readline().strip() != 'release':
+            raise RuntimeError('parent did not release the writer')
     original_save(config)
 
 cfg.save = controlled_save
-(barriers / (role + '.entered')).write_text('ready')
+print(role + '.entered', file=signals, flush=True)
 kind = action[0]
 if kind == 'api-key':
     profile_name = action[1] if len(action) > 1 else 'default'
@@ -114,21 +115,27 @@ def _start_writer(action: list[str], role: str, barriers: Path, config_path: Pat
         [sys.executable, "-c", _WRITER, json.dumps(action), role, str(barriers)],
         cwd=source,
         env=env,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
 
 
-def _wait_for_marker(path: Path, process: subprocess.Popen[str]) -> None:
-    deadline = time.monotonic() + 10
-    while not path.exists():
-        if process.poll() is not None:
-            stdout, stderr = process.communicate(timeout=2)
-            pytest.fail(f"writer exited before {path.name}: {process.returncode}\n{stdout}\n{stderr}")
-        if time.monotonic() >= deadline:
-            pytest.fail(f"writer did not reach {path.name}")
-        time.sleep(0.01)
+def _wait_for_signal(expected: str, process: subprocess.Popen[str]) -> None:
+    # A reader thread works with subprocess pipes on Windows and POSIX. The
+    # queue timeout bounds a stuck child; caller cleanup kills it on failure.
+    assert process.stdout is not None
+    signals: queue.Queue[str] = queue.Queue()
+    threading.Thread(target=lambda: signals.put(process.stdout.readline()), daemon=True).start()
+    try:
+        line = signals.get(timeout=10)
+    except queue.Empty:
+        pytest.fail(f"writer did not signal {expected}")
+    if not line:
+        stdout, stderr = process.communicate(timeout=2)
+        pytest.fail(f"writer exited before {expected}: {process.returncode}\n{stdout}\n{stderr}")
+    assert line.rstrip("\r\n") == expected
 
 
 def _finish_writer(process: subprocess.Popen[str]) -> None:
@@ -150,10 +157,11 @@ def _run_competing_mutations(config_path: Path, first_action: list[str], second_
     try:
         first = _start_writer(first_action, "first", barriers, config_path)
         processes.append(first)
-        _wait_for_marker(barriers / "first.saving", first)
+        _wait_for_signal("first.entered", first)
+        _wait_for_signal("first.saving", first)
         second = _start_writer(second_action, "second", barriers, config_path)
         processes.append(second)
-        _wait_for_marker(barriers / "second.entered", second)
+        _wait_for_signal("second.entered", second)
 
         # On the old implementation the second command acknowledges its write
         # while the first still holds an older snapshot. With a transaction it
@@ -166,7 +174,9 @@ def _run_competing_mutations(config_path: Path, first_action: list[str], second_
         else:
             _finish_writer(second)
             assert (barriers / "second.done").exists()
-        (barriers / "release").write_text("release")
+        assert first.stdin is not None
+        first.stdin.write("release\n")
+        first.stdin.flush()
         _finish_writer(first)
         _finish_writer(second)
         assert (barriers / "first.done").exists()
@@ -270,7 +280,8 @@ def test_process_exit_releases_transaction_without_committing(config_path: Path)
     try:
         first = _start_writer(["api-key"], "first", barriers, config_path)
         processes.append(first)
-        _wait_for_marker(barriers / "first.saving", first)
+        _wait_for_signal("first.entered", first)
+        _wait_for_signal("first.saving", first)
         first.kill()
         first.communicate(timeout=5)
         second = _start_writer(

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import ctypes
 import os
+import queue
 import subprocess
 import sys
-import time
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -80,10 +81,10 @@ _NATIVE_WAITER = r"""
 import os, sys
 from pathlib import Path
 from omi_cli import config as cfg
-lock_path, started, acquired = map(Path, sys.argv[1:])
+lock_path, acquired = map(Path, sys.argv[1:])
 fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, 'O_BINARY', 0), 0o600)
 try:
-    started.write_text('started')
+    print('started', flush=True)
     cfg._acquire_config_lock(fd)
     try:
         acquired.write_text('acquired')
@@ -97,11 +98,11 @@ _NATIVE_HOLDER = r"""
 import os, sys
 from pathlib import Path
 from omi_cli import config as cfg
-lock_path, acquired = map(Path, sys.argv[1:])
+lock_path = Path(sys.argv[1])
 fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, 'O_BINARY', 0), 0o600)
 try:
     cfg._acquire_config_lock(fd)
-    acquired.write_text('acquired')
+    print('acquired', flush=True)
     sys.stdin.read()
 finally:
     os.close(fd)
@@ -139,15 +140,20 @@ def _child_env(tmp_path: Path) -> dict[str, str]:
     return env
 
 
-def _wait_for_file(path: Path, child: subprocess.Popen[str]) -> None:
-    deadline = time.monotonic() + 10
-    while not path.exists():
-        if child.poll() is not None:
-            stdout, stderr = child.communicate(timeout=2)
-            pytest.fail(f"child exited before {path.name}: {child.returncode}; {stdout}; {stderr}")
-        if time.monotonic() >= deadline:
-            pytest.fail(f"child did not produce {path.name}")
-        time.sleep(0.01)
+def _wait_for_signal(expected: str, child: subprocess.Popen[str]) -> None:
+    # Windows subprocess pipes cannot be waited on with select(); a reader
+    # thread and bounded queue wait provide a portable child-ready handshake.
+    assert child.stdout is not None
+    signals: queue.Queue[str] = queue.Queue()
+    threading.Thread(target=lambda: signals.put(child.stdout.readline()), daemon=True).start()
+    try:
+        line = signals.get(timeout=10)
+    except queue.Empty:
+        pytest.fail(f"child did not signal {expected}")
+    if not line:
+        stdout, stderr = child.communicate(timeout=2)
+        pytest.fail(f"child exited before {expected}: {child.returncode}; {stdout}; {stderr}")
+    assert line.rstrip("\r\n") == expected
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires native Windows byte-range locks")
@@ -155,7 +161,7 @@ def test_windows_waits_beyond_crt_timeout_and_interoperates_with_legacy_lock(tmp
     import msvcrt
 
     lock_path = tmp_path / "config.toml.lock"
-    started, acquired = tmp_path / "started", tmp_path / "acquired"
+    acquired = tmp_path / "acquired"
     fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
     child: subprocess.Popen[str] | None = None
     locked = False
@@ -164,13 +170,13 @@ def test_windows_waits_beyond_crt_timeout_and_interoperates_with_legacy_lock(tmp
         msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
         locked = True
         child = subprocess.Popen(
-            [sys.executable, "-c", _NATIVE_WAITER, str(lock_path), str(started), str(acquired)],
+            [sys.executable, "-c", _NATIVE_WAITER, str(lock_path), str(acquired)],
             env=_child_env(tmp_path),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
-        _wait_for_file(started, child)
+        _wait_for_signal("started", child)
         # The CRT's LK_LOCK gives up after about 10 one-second retries. Our
         # waiter must still be waiting while an older client holds that byte.
         with pytest.raises(subprocess.TimeoutExpired):
@@ -194,9 +200,9 @@ def test_windows_waits_beyond_crt_timeout_and_interoperates_with_legacy_lock(tmp
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires native Windows byte-range locks")
 def test_windows_legacy_client_observes_lock_and_process_exit_releases_it(tmp_path: Path) -> None:
-    lock_path, acquired = tmp_path / "config.toml.lock", tmp_path / "acquired"
+    lock_path = tmp_path / "config.toml.lock"
     child = subprocess.Popen(
-        [sys.executable, "-c", _NATIVE_HOLDER, str(lock_path), str(acquired)],
+        [sys.executable, "-c", _NATIVE_HOLDER, str(lock_path)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -204,7 +210,7 @@ def test_windows_legacy_client_observes_lock_and_process_exit_releases_it(tmp_pa
         env=_child_env(tmp_path),
     )
     try:
-        _wait_for_file(acquired, child)
+        _wait_for_signal("acquired", child)
         blocked = subprocess.run(
             [sys.executable, "-c", _LEGACY_PROBE, str(lock_path)],
             env=_child_env(tmp_path),
