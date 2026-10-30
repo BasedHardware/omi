@@ -15,6 +15,9 @@ extern uint8_t battery_percentage;
  */
 int transport_start();
 
+/** @brief Save the boot reset cause in the diagnostics v1 (Zephyr RESET_*) bit layout. */
+void transport_set_reset_cause(uint32_t reset_cause);
+
 /**
  * @brief Turn off the BLE transport
  *

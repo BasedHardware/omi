@@ -5,6 +5,7 @@
 #include <math.h> // For float conversion in logs
 #include <shell/shell_bt_nus.h>
 #include <stdint.h>
+#include <string.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci.h>
@@ -18,7 +19,9 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/ring_buffer.h>
+#include <zephyr/sys/util.h>
 
 #include "accel.h"
 #include "button.h"
@@ -26,6 +29,9 @@
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
+#ifdef CONFIG_OMI_ENABLE_BATTERY
+#include "lib/battery/battery.h"
+#endif
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
@@ -222,6 +228,61 @@ static struct bt_gatt_attr features_service_attr[] = {
 };
 
 static struct bt_gatt_service features_service = BT_GATT_SERVICE(features_service_attr);
+
+// --- Diagnostics Service (phone's append-only v1 contract) ---
+static struct bt_uuid_128 diagnostics_service_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10040, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 diagnostics_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10041, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static uint32_t boot_reset_cause = UINT32_MAX;
+
+void transport_set_reset_cause(uint32_t reset_cause)
+{
+    boot_reset_cause = reset_cause;
+}
+
+static ssize_t diagnostics_read_handler(struct bt_conn *conn,
+                                        const struct bt_gatt_attr *attr,
+                                        void *buf,
+                                        uint16_t len,
+                                        uint16_t offset)
+{
+    uint8_t diagnostics[30];
+    BUILD_ASSERT(sizeof(diagnostics) == 30, "diagnostics v1 plus SOC tail must be 30 bytes");
+    memset(diagnostics, 0xFF, sizeof(diagnostics));
+    diagnostics[0] = 1;
+    sys_put_le32(boot_reset_cause, &diagnostics[1]);
+    sys_put_le32((uint32_t) (k_uptime_get() / 1000), &diagnostics[5]);
+    diagnostics[12] = 0;
+    // No mic-overrun or BLE TX-drop counters exist. Leave their fields unknown.
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    sys_put_le32(sd_get_write_error_count(), &diagnostics[21]);
+#endif
+    diagnostics[29] = 0;
+#ifdef CONFIG_OMI_ENABLE_BATTERY
+    struct battery_diagnostics battery;
+    battery_get_diagnostics(&battery);
+    sys_put_le16(battery.millivolts, &diagnostics[9]);
+    diagnostics[11] = battery.charge_pin;
+    sys_put_le16(battery.last_off_charger_millivolts, &diagnostics[25]);
+    sys_put_le16(battery.charge_edge_count, &diagnostics[27]);
+    diagnostics[29] = battery.soc_frozen ? 1U : 0U;
+#endif
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, diagnostics, sizeof(diagnostics));
+}
+
+static struct bt_gatt_attr diagnostics_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&diagnostics_service_uuid),
+    BT_GATT_CHARACTERISTIC(&diagnostics_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           diagnostics_read_handler,
+                           NULL,
+                           NULL),
+};
+
+static struct bt_gatt_service diagnostics_service = BT_GATT_SERVICE(diagnostics_service_attr);
 
 // --- Time Sync Service ---
 // Service UUID: 19B10030-E8F2-537E-4F6C-D104768A1214
@@ -567,12 +628,11 @@ void broadcast_battery_level(struct k_work *work_item)
              * The old storage_transfer_active() early-return meant the app never
              * got a battery update for the whole (often long) duration of a sync. */
             (void) notify_charging_status(current_connection, false);
-
-            // Use the Zephyr BAS function to set (and notify) the battery level
-            int err = bt_bas_set_battery_level(battery_percentage);
-            if (err) {
-                LOG_ERR("Error updating battery level: %d", err);
-            }
+        }
+        // Keep the readable BAS byte current even when there is no connection.
+        int err = bt_bas_set_battery_level(battery_percentage);
+        if (err) {
+            LOG_ERR("Error updating battery level: %d", err);
         }
         if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
@@ -1391,6 +1451,7 @@ int transport_start()
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
     bt_gatt_service_register(&time_sync_service);
+    bt_gatt_service_register(&diagnostics_service);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // Register storage service for offline audio

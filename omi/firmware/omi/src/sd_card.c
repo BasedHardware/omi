@@ -185,7 +185,12 @@ static bool current_batch_loaded;
 static bool current_batch_dirty;
 static bool cached_read_batch_valid;
 static int64_t last_batch_activity_ms;
-static uint8_t writing_error_counter;
+static atomic_t writing_error_counter;
+
+uint32_t sd_get_write_error_count(void)
+{
+    return (uint32_t) atomic_get(&writing_error_counter);
+}
 
 static uint32_t write_drop_packets;
 static uint32_t write_drop_bytes;
@@ -502,9 +507,9 @@ static int flush_current_batch(bool sync_requested)
     uint32_t sector = batch_sector_for_base_seq(current_batch_base_seq);
     int ret = disk_access_write(DISK_DRIVE_NAME, current_batch, sector, RAW_BATCH_SECTORS);
     if (ret != 0) {
-        writing_error_counter++;
+        const atomic_val_t error_count = atomic_inc(&writing_error_counter) + 1;
         LOG_ERR("batch write failed at sector %u: %d", sector, ret);
-        if (writing_error_counter > ERROR_THRESHOLD) {
+        if (error_count > ERROR_THRESHOLD) {
             sd_write_blocked = true;
         }
         return -EIO;
@@ -538,7 +543,7 @@ static int flush_current_batch(bool sync_requested)
 
     current_batch_dirty = false;
     invalidate_read_batch_cache();
-    writing_error_counter = 0;
+    atomic_clear(&writing_error_counter);
 
     if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
         start_empty_batch(ring_state.write_seq);
