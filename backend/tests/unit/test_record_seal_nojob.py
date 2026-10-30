@@ -88,6 +88,7 @@ def test_dry_run_counts_only_and_atomic_idempotent_apply(source):
     [
         ({'record_upload_failed': True}, 'upload_failed'),
         ({'uses_custom_stt': True}, 'privacy_refused'),
+        ({'data_protection_level': 'e2ee'}, 'privacy_refused'),
         ({'deleted': True}, 'privacy_refused'),
         ({'discarded': True}, 'privacy_refused'),
         ({'private_cloud_sync_enabled': False}, 'privacy_refused'),
@@ -116,6 +117,15 @@ def test_live_pod_token_never_cleared_and_dead_pod_requires_fresh_proof(source):
     assert result['entries'][0]['disposition'] == 'eligible'
     assert apply(source, result) == {'sealed_registered': 1}
     assert source[1].rows[PATH]['record_upload_sessions'] == {}
+
+
+def test_token_capacity_limit_refuses_even_proven_dead_map(source):
+    source[1].rows[PATH]['record_upload_sessions'] = {
+        str(index): {'pod': 'producer', 'process_started_at': 900} for index in range(129)
+    }
+    result = plan(source, {'namespace': 'prod-omi-backend', 'captured_at': 999, 'pods': {}})
+    assert apply(source, result) == {'upload_pending': 1}
+    assert no_writes(source[1])
 
 
 def test_inventory_expiring_after_plan_refuses_apply(source, monkeypatch):

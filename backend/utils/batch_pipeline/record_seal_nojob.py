@@ -73,8 +73,11 @@ class RegistrationPlan:
 def refusal(row, producer_proof):
     if row.get('record_lane_owner') != 'batch_live_v1':
         return 'not_batch_owned'
-    if row.get('uses_custom_stt'):
+    if row.get('uses_custom_stt') or row.get('data_protection_level') not in {None, 'standard', 'enhanced'}:
         return 'privacy_refused'
+    tokens = row.get('record_upload_sessions')
+    if tokens and (not isinstance(tokens, dict) or len(tokens) > 128):
+        return 'upload_pending'
     # Never offer a producers-stopped escape hatch: token rows need pod proof.
     return _refused({'state': 'record_pending', 'record_content_id': 'candidate'}, row, producer_proof=producer_proof)
 
