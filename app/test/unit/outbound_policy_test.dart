@@ -9,6 +9,8 @@ import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/env/outbound_policy.dart';
+import 'package:omi/flavors.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/services/notifications/notification_service_fcm.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -90,6 +92,30 @@ void main() {
             profile: AppEnvironmentProfile.localProd, hasOverride: true, baseUrl: 'https://api.omi.me/'),
         isTrue,
       );
+    });
+  });
+
+  group('resolve at boot (production profile)', () {
+    late Environment flavor;
+
+    setUp(() {
+      flavor = F.env;
+      F.env = Environment.prod;
+    });
+    tearDown(() => F.env = flavor);
+
+    test('decides from the saved backend: none or Omi\'s keeps them on, another turns them off', () async {
+      SharedPreferences.setMockInitialValues({});
+      await OutboundPolicy.resolve();
+      expect(OutboundPolicy.thirdPartyServicesAllowed, isTrue);
+
+      SharedPreferences.setMockInitialValues({'customBackendUrl': 'https://api.omi.me'});
+      await OutboundPolicy.resolve();
+      expect(OutboundPolicy.thirdPartyServicesAllowed, isTrue);
+
+      SharedPreferences.setMockInitialValues({'customBackendUrl': 'https://omi.example.test'});
+      await OutboundPolicy.resolve();
+      expect(OutboundPolicy.thirdPartyServicesAllowed, isFalse);
     });
   });
 
@@ -201,6 +227,26 @@ void main() {
       expect(adapter.inits, 1);
     });
 
+    test("the SDK's persisted opt-out from a switch is undone at the next launch back on Omi", () async {
+      await AnalyticsManager.init();
+      AnalyticsManager.suspendForSession();
+      await pumpEventQueue();
+
+      AnalyticsManager.resetForTesting();
+      final next = _RecordingAdapter();
+      AnalyticsManager.configure(next);
+      await AnalyticsManager.init();
+
+      expect(next.enables, 1);
+      expect((await SharedPreferences.getInstance()).getBool('analytics_suspended_for_backend'), isNull);
+    });
+
+    test('a launch that was never suspended does not touch the SDK opt-out', () async {
+      await AnalyticsManager.init();
+
+      expect(adapter.enables, 0);
+    });
+
     test('a running session stops sending when the backend changes away from Omi', () async {
       await AnalyticsManager.init();
       final identities = <(String?, bool)>[];
@@ -284,6 +330,15 @@ void main() {
       expect(provider.savingSettingsLoading, isFalse);
     });
 
+    test('logged errors do not reach Crashlytics', () async {
+      OutboundPolicy.debugThirdPartyServicesAllowed = false;
+
+      Logger.instance.talker.handle(StateError('x'), StackTrace.current);
+      await pumpEventQueue();
+
+      expect(recorder.calls, isEmpty);
+    });
+
     test('stopping the services for a backend change deletes stored reports', () async {
       AnalyticsManager.resetForTesting();
       await PlatformManager.stopThirdPartyServices();
@@ -316,6 +371,14 @@ void main() {
     });
     setUp(messaging.clear);
 
+    test('a token refresh is not uploaded against a backend that is not Omi\'s', () async {
+      OutboundPolicy.debugThirdPartyServicesAllowed = false;
+
+      await createNotificationService().saveFcmToken('refreshed');
+
+      expect(messaging, isEmpty);
+    });
+
     test('no push token is requested against a backend that is not Omi\'s', () async {
       OutboundPolicy.debugThirdPartyServicesAllowed = false;
 
@@ -345,6 +408,7 @@ class _TestEnv implements EnvFields {
 class _RecordingAdapter implements AnalyticsAdapter {
   int inits = 0;
   int disables = 0;
+  int enables = 0;
   final events = <String>[];
 
   @override
@@ -369,7 +433,7 @@ class _RecordingAdapter implements AnalyticsAdapter {
   void registerSuperProperties(Map<String, Object> properties) {}
 
   @override
-  void enable() {}
+  void enable() => enables++;
 
   @override
   void disable() => disables++;
