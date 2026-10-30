@@ -100,7 +100,7 @@ class SweepReadStore:
         return snapshot.to_dict() or {}
 
 
-def _fresh(proof):
+def require_fresh_proof(proof):
     # The shared predicate also validates namespace and shape even with no tokens.
     if proof is None or not producer_tokens_dead({}, proof):
         raise ValueError('fresh authoritative inventory required')
@@ -164,7 +164,7 @@ def sweep(
             raise ValueError('invalid sweep limits')
         budget.check()
         proof = inventory()
-        _fresh(proof)
+        require_fresh_proof(proof)
         emit()
         phase = 'discovery'
         budget.check()
@@ -236,7 +236,7 @@ def sweep(
         if any(e['disposition'] in {'read_error', 'unavailable'} for e in plan['entries']):
             report['outcome'] = 'read_error'
             return report
-        _fresh(proof)  # Tail reads may have exhausted the five-minute proof window.
+        require_fresh_proof(proof)  # Tail reads may have exhausted the five-minute proof window.
         phase = 'apply'
         if mode == 'apply':
             applied = Counter()

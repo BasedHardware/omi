@@ -38,7 +38,7 @@ def test_ship_on_cpu_cron_reuses_worker_identity_and_image():
     result = render()
     assert result.returncode == 0, result.stderr
     docs = list(filter(None, yaml.safe_load_all(result.stdout)))
-    cron = next(doc for doc in docs if doc['kind'] == 'CronJob')
+    cron = next(doc for doc in docs if doc['kind'] == 'CronJob' and doc['metadata']['name'] == 'record-seal-sweeper')
     assert cron['metadata']['name'] == 'record-seal-sweeper'
     spec = cron['spec']
     assert spec['schedule'] == '*/5 * * * *' and spec['concurrencyPolicy'] == 'Forbid'
@@ -70,14 +70,18 @@ def test_ship_on_cpu_cron_reuses_worker_identity_and_image():
 
 
 def test_chart_kill_switch_removes_job_and_rbac_and_plan_mode_is_explicit():
-    result = render('--set', 'recordSealSweeper.enabled=false')
+    result = render('--set', 'recordSealSweeper.enabled=false,recordSealRepair.enabled=false')
     assert result.returncode == 0
     assert not any(
         doc and doc['kind'] in {'CronJob', 'Role', 'RoleBinding'} for doc in yaml.safe_load_all(result.stdout)
     )
     result = render('--set', 'recordSealSweeper.mode=plan,recordSealSweeper.runtimeEnabled=false')
     assert result.returncode == 0
-    cron = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'CronJob')
+    cron = next(
+        doc
+        for doc in yaml.safe_load_all(result.stdout)
+        if doc and doc['kind'] == 'CronJob' and doc['metadata']['name'] == 'record-seal-sweeper'
+    )
     env = {
         e['name']: e.get('value')
         for e in cron['spec']['jobTemplate']['spec']['template']['spec']['containers'][0]['env']

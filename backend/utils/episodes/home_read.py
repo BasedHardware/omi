@@ -1,12 +1,12 @@
 """Client read projection with only retained, extant episode members."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.episodes import MAX_EPISODE_SECONDS
+from config.episodes import COMPOSER_MAX_SCHEDULED_PER_READ, MAX_EPISODE_SECONDS
 from database import conversations, episodes
 from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
@@ -117,7 +117,32 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
 
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
     members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
-    return [wire for row in rows if (wire := project_episode(uid, row, members=members)) is not None]
+    wires = [wire for row in rows if (wire := project_episode(uid, row, members=members)) is not None]
+    _schedule_missed_composes(uid, rows, wires)
+    return wires
+
+
+def _schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> None:
+    """Safety net for the composer: a closed episode that is uncomposed, drifted, or whose visible
+    members changed since its compose (a direct discard or delete) gets one, at most a few per read."""
+    from utils.episodes import composer
+
+    try:
+        visible = {wire['id']: [m['id'] for m in wire.get('members') or []] for wire in wires}
+        now = datetime.now(timezone.utc)
+        queued = 0
+        for row in rows:
+            if queued >= COMPOSER_MAX_SCHEDULED_PER_READ:
+                return
+            closed_at = utc(row.get('closed_at'))
+            if closed_at is None or (now - closed_at).total_seconds() < 60:
+                continue
+            if not composer.needs_compose(row, visible_member_ids=visible.get(str(row.get('id')), [])):
+                continue
+            if composer.schedule(uid, str(row.get('id')), throttle=True):
+                queued += 1
+    except Exception:
+        pass
 
 
 def project_episode(

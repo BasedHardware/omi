@@ -249,7 +249,11 @@ def test_runtime_defaults_and_hard_limits(monkeypatch):
 def test_rendered_job_budget_keeps_deadline_and_concurrency_guards():
     rendered = render()
     assert rendered.returncode == 0
-    cron = next(doc for doc in yaml.safe_load_all(rendered.stdout) if doc and doc['kind'] == 'CronJob')
+    cron = next(
+        doc
+        for doc in yaml.safe_load_all(rendered.stdout)
+        if doc and doc['kind'] == 'CronJob' and doc['metadata']['name'] == 'record-seal-sweeper'
+    )
     spec = cron['spec']['jobTemplate']['spec']
     env = {item['name']: item.get('value') for item in spec['template']['spec']['containers'][0]['env']}
     assert float(env['RECORD_SEAL_SWEEPER_BUDGET_SECONDS']) == 150 < spec['activeDeadlineSeconds'] == 240 < 300

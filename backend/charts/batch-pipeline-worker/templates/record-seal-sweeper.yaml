@@ -1,8 +1,8 @@
-{{- if and .Values.enabled .Values.recordSealSweeper.enabled (eq .Values.stage "prod") }}
+{{- if and .Values.enabled (or .Values.recordSealSweeper.enabled .Values.recordSealRepair.enabled) (eq .Values.stage "prod") }}
 {{- if ne .Release.Namespace "prod-omi-backend" }}
 {{- fail "record seal sweeper requires prod-omi-backend; dev verification uses hermetic fixtures" }}
 {{- end }}
-{{- if not (has .Values.recordSealSweeper.mode (list "plan" "apply")) }}
+{{- if and .Values.recordSealSweeper.enabled (not (has .Values.recordSealSweeper.mode (list "plan" "apply"))) }}
 {{- fail "recordSealSweeper.mode must be plan or apply" }}
 {{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
@@ -27,6 +27,7 @@ roleRef:
   kind: Role
   name: record-seal-sweeper
 ---
+{{- if .Values.recordSealSweeper.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -102,4 +103,5 @@ spec:
           volumes:
             - name: tmp
               emptyDir: {sizeLimit: 64Mi}
+{{- end }}
 {{- end }}
