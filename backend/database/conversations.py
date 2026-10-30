@@ -1,7 +1,7 @@
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
-from utils.sync import processing_hold
+from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
 import hashlib
@@ -864,15 +864,14 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
 
 def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
-    if not conversation:
-        return False
-    if is_soft_deleted(conversation):
+    if not conversation or is_soft_deleted(conversation):
         return False
     if not include_discarded:
         # Dream duplicate captures are folded out of product reads, but the
         # preserved recordings stay visible to export/compliance readers.
         if (
             conversation.get('dream_duplicate_of')
+            or bridge_pending.hidden(conversation)
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):
@@ -1052,28 +1051,26 @@ def _collect_visible_conversation_page(
     except ListReadBudgetExhausted:
         return finish(conversations)
 
-    skipped = fetched - len(conversations)
+    refill_reads = 0
     while (
         len(conversations) < limit
+        and refill_reads < _RULE_DISCARD_PAGE_SKIP_CAP
         and fetched == batch_limit
         and last_doc is not None
-        and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP
         and hasattr(conversations_ref, 'start_after')
     ):
-        # A shortfall-sized follow-up lets one stale row end the scan while
-        # visible rows remain. Ask for another full window; the skip cap still
-        # bounds the walk.
+        # Refill only missing slots and bound all follow-up reads, including
+        # visible rows. Pending holds cannot multiply a large requested page.
+        batch_limit = min(limit - len(conversations), _RULE_DISCARD_PAGE_SKIP_CAP - refill_reads)
         follow = conversations_ref.start_after(last_doc).limit(batch_limit)
         fetched = 0
         try:
             for doc in budgeted_stream_iter(follow, budget):
                 fetched += 1
+                refill_reads += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
-                    skipped += 1
-                    if skipped > _RULE_DISCARD_PAGE_SKIP_CAP:
-                        return finish(conversations)
                     continue
                 conversations.append(conversation)
                 if len(conversations) >= limit:
@@ -1923,6 +1920,7 @@ def get_conversations_without_photos(
                 'user_corrections_compressed',
                 'deleted',
                 'dream_duplicate_of',
+                'sync_bridge_pending',
                 'relevance_decision',
                 'sync_relevance_user_kept',
                 'has_photos',

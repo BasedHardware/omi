@@ -8293,3 +8293,52 @@ capture surfaces as hidden duplicate members without repeating episode notes.
 An explicit episode close derives its recorded end from retained member spans,
 bounded by the next episode, rather than using delayed finalize arrival. A late
 discard removes its derived moments/items and invalidates the mixed summary.
+
+
+### Sync overlap visibility and revision-fenced finalization
+
+Sync/live overlap admission includes `in_progress`, `processing` and completed
+live targets in the same source/device/clock partition. Safe recorded overlap
+adopts the live identity in the assignment transaction; the live origin and
+lifecycle remain pinned. Sync enrichment yields to an open or processing live
+owner instead of prematurely completing it. None of this is gated by
+`EPISODES_CLIENT_CHANNELS`, episodes, or beta membership.
+
+When a coarse live hint lacks recorded proof (or the target cannot accept the
+append), intake persists `sync_bridge_pending: {target_id, expires_at}` on the
+standalone row before exposing it. This is separate from the enrichment quiet
+hold, `sync_processing_hold`, and from public/private `visibility`. Default
+list, by-id and count predicates exclude the pending row for at most 600 seconds;
+`include_discarded` and explicit user curation retain access. Appends and retries
+never extend that deadline. Expiry releases visibility even if workers are down.
+The existing enrichment obligation retries `finish_sync_bridges` via
+`SYNC_FINALIZE_TARGET_RECOVERY_ENABLED` (default on), which revalidates the live
+target and uses ordinary assignment plus donor cleanup. An open target continues
+to be retried after visibility expiry, so a longer capture still converges after
+it ends. A deleted/incompatible target or size refusal never authorizes a forced
+merge; the standalone recording remains recoverable.
+
+A finalizer losing its processing-result CAS checks the current job lease and
+conversation together. If the bound, undiscarded processing row has a newer
+`sync_content_revision`, it queues that job for the existing reconciler to mint
+a new dispatch generation. Duplicate losing attempts cannot yield twice; the
+loser emits no canonical effects and does not spend a worker failure slot.
+Deletion, discard and replacement ownership still terminally fence the attempt.
+Revision replay waits for a 30-second observed quiet window; another revision
+seen during reconciliation restarts that window. Each job allows three revision
+redispatches and at most 600 seconds of total waiting. Exhaustion terminally
+fences the job so the age-bounded orphan sweep can complete its processing row.
+Old task deliveries cannot claim a job while revision replay is waiting.
+
+MCP projected list/search hydration and single/batch detail reads carry and
+honor the pending marker. Default counts add one limit-1 pending-deadline probe;
+only users with active candidates open the exact-count stream (one document read
+per candidate, plus the probe). Archive counts add no pending query. Offset list
+refills read only missing slots, capped at 64 extra raw rows per request.
+
+`event=finalization_persistence_fence` distinguishes `outcome=redispatch`
+(`reason=sync_revision_advanced`) from `outcome=terminal`
+(`reason=lifecycle_changed`), with no identifiers. The age-bounded processing
+orphan sweep also covers rows whose durable job is terminal, rechecking the job
+and admission timestamp transactionally. Legacy unstamped rows first receive a
+server admission timestamp and wait the existing orphan age bound.
