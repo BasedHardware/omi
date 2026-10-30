@@ -26,7 +26,11 @@ void main() {
   });
   tearDown(() async {
     PathProviderPlatform.instance = previousProvider;
-    await directory.delete(recursive: true);
+    if (await directory.exists()) {
+      try {
+        await directory.delete(recursive: true);
+      } catch (_) {}
+    }
   });
 
   test('old and corrupt boot preferences quarantine originals and load defaults', () async {
