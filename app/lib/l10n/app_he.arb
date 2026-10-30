@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "תשלום שנתי אינו זמין כרגע לתוכנית שלך.",
     "yearlySwitchDoneTitle": "עברת לתשלום שנתי",
     "yearlySwitchDoneBody": "חויבו היום {amount}. מתחדש ב-{date}.",
+    "episodePartsCount": "{count, plural, zero{{count} חלקים} one{{count} חלק} two{{count} חלקים} few{{count} חלקים} many{{count} חלקים} other{{count} חלקים}}",
     "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
     "homeNewRecordingButton": "הקלטה חדשה",
     "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.",

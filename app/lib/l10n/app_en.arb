@@ -18246,6 +18246,15 @@
             }
         }
     },
+    "episodePartsCount": "{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}",
+    "@episodePartsCount": {
+        "description": "Number of retained conversations in a closed episode Home row; shown for two or more parts.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "voiceProfileCardDismissed": "You can set up Voice Profile anytime in Settings.",
     "@voiceProfileCardDismissed": {
         "description": "Toast after dismissing the Teach Omi your voice card on Home; points to Settings > Voice Profile."

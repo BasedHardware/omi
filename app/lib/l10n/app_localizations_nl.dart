@@ -14971,6 +14971,21 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count delen',
+      many: '$count delen',
+      few: '$count delen',
+      two: '$count delen',
+      one: '$count deel',
+      zero: '$count delen',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Je kunt je stemprofiel altijd instellen via Instellingen.';
 
   @override

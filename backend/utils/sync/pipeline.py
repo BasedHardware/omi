@@ -7,6 +7,10 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
+from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
+
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
@@ -108,10 +112,12 @@ from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
+from config.occasion_relevance import enabled as occasion_relevance_enabled
 from utils.sync import processing_hold
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import refresh_owed
+from utils.enrichment.admission import ConversationAbsorbed
 from utils.conversations.relevance import sync_intake_decision
 from utils.episodes.finalize import schedule_after_finalization, schedule_synced_intake_attach
 from utils.executors import (
@@ -672,16 +678,6 @@ async def _record_sync_segment_failure_async(
         errors.append(failure.error_code)
 
 
-class SyncConversationPersistenceFenced(RuntimeError):
-    """Conversation lifecycle rejected this worker's stale processing result."""
-
-
-def _require_current_conversation_persistence(persisted: bool) -> None:
-    """Turn a lifecycle fence into the worker's terminal supersession signal."""
-    if not persisted:
-        raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
-
-
 def _raise_sync_terminal_result(result: object) -> None:
     """Preserve lifecycle fences across ``asyncio.gather`` exception fan-in."""
     if isinstance(result, SyncConversationPersistenceFenced):
@@ -1044,13 +1040,6 @@ def retrieve_vad_segments(
         del aseg
 
 
-def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> None:
-    """Load the webhook surface only in the post-processing worker that uses it."""
-    from utils.webhooks import conversation_created_webhook
-
-    asyncio.run(conversation_created_webhook(uid, conversation))
-
-
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
     """
     Reprocess a conversation after new segments have been added.
@@ -1101,14 +1090,19 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
             processing_hold.admission(conversation_data, context, now=time.time())
-            if processing_hold.enabled()
+            if processing_hold.enabled_for(context)
             else ('ready', None)
         )
         processing_hold.record(outcome)
+        context['hold_outcome'] = outcome
         if due is not None:
             context.update(defer_reason=outcome, defer_until=due)
             return
         if outcome in {'unchanged', 'late_cap', 'immaterial'}:
+            if (conversation_data.get('smart_merge') or {}).get('role') == 'survivor' and refresh_owed(
+                conversation_data
+            ):
+                settle_survivor(uid, conversation_id, owner=context['owner'], skip_processing=True)
             if not conversations_db.complete_sync_processing_hold(
                 uid, conversation_id, conversation_data.get('sync_content_revision'), None
             ):
@@ -1124,6 +1118,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     status = getattr(conversation_data.get('status'), 'value', conversation_data.get('status'))
     if (
         status == 'completed'
+        and not occasion_relevance_enabled()
         and conversation_data.get('sync_relevance') == 'review'
         and not is_user_curated(conversation_data)
     ):
@@ -1158,6 +1153,13 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     ):
         # Preserve the smart-merge refresh lease/checkpoints and its vector work.
         settle_survivor(uid, conversation_id, owner=context['owner'])
+        if context.get('hold_budget_denied_at_max'):
+            if not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), None
+            ):
+                raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+            context['hold_skipped'] = True
+            return
         refreshed = conversations_db.get_conversation(uid, conversation_id)
         if (
             refreshed
@@ -1191,18 +1193,34 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
     started = time.monotonic()
-    processed_conversation = process_conversation(
-        uid=uid,
-        language_code=language or 'en',
-        conversation=conversation,
-        trigger=ProcessingTrigger.SYNC_UPDATE,
-        defer_derived_effects=silent_redrive,
-        user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
-        persistence_observer=_require_current_conversation_persistence,
-        # Deserialize drops relevance_decision. The raw row still has it:
-        # sync_update means a previous enrichment, sync_intake or absence does not.
-        prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
-    )
+    try:
+        processed_conversation = process_conversation(
+            uid=uid,
+            language_code=language or 'en',
+            conversation=conversation,
+            trigger=ProcessingTrigger.SYNC_UPDATE,
+            defer_derived_effects=silent_redrive,
+            user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
+            persistence_observer=_require_current_conversation_persistence,
+            # Deserialize drops relevance_decision. The raw row still has it:
+            # sync_update means a previous enrichment, sync_intake or absence does not.
+            prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
+        )
+    except ConversationAbsorbed as absorbed:
+        if context is not None:
+            context['redirect_to'] = absorbed.canonical_id
+            return
+        canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        return deserialize_conversation(canonical) if canonical else None
+
+    if context is not None and context.get('hold_budget_denied_at_max'):
+        if not conversations_db.complete_sync_processing_hold(
+            uid, conversation_id, conversation_data.get('sync_content_revision'), None
+        ):
+            raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+        context['hold_skipped'] = True
+        return None
+
     if (
         context is not None
         and context.get('hold_snapshot') is not None

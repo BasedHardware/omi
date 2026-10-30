@@ -14939,6 +14939,21 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count делова',
+      many: '$count делова',
+      few: '$count дела',
+      two: '$count делова',
+      one: '$count део',
+      zero: '$count делова',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Гласовни профил можете подесити било када у Подешавањима.';
 
   @override

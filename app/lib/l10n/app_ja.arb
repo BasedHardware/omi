@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "現在、お使いのプランでは年払いをご利用いただけません。",
     "yearlySwitchDoneTitle": "年払いに切り替わりました",
     "yearlySwitchDoneBody": "本日{amount}を請求しました。次回更新は{date}です。",
+    "episodePartsCount": "{count, plural, zero{{count} パート} one{{count} パート} two{{count} パート} few{{count} パート} many{{count} パート} other{{count} パート}}",
     "voiceProfileCardDismissed": "ボイスプロフィールは設定からいつでも設定できます。",
     "homeNewRecordingButton": "新規録音",
     "chatWelcomeMessage": "こんにちは、Omiです。話した内容なら何でも聞いてください。誰が何を言ったか、何を約束したか、一日のまとめなど。タスクの追加や、覚えておくこともできます。",

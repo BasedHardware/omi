@@ -14844,6 +14844,21 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count جزء',
+      many: '$count جزءًا',
+      few: '$count أجزاء',
+      two: '$count جزءان',
+      one: '$count جزء',
+      zero: '$count أجزاء',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.';
 
   @override

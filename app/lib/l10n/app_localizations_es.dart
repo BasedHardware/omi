@@ -14977,6 +14977,21 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count partes',
+      many: '$count partes',
+      few: '$count partes',
+      two: '$count partes',
+      one: '$count parte',
+      zero: '$count partes',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Puedes configurar tu perfil de voz cuando quieras en Ajustes.';
 
   @override

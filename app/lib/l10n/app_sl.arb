@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "Letno plačilo za vaš paket trenutno ni na voljo.",
     "yearlySwitchDoneTitle": "Zdaj plačujete letno",
     "yearlySwitchDoneBody": "Danes zaračunano {amount}. Podaljšanje {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} delov} one{{count} del} two{{count} dela} few{{count} deli} many{{count} delov} other{{count} delov}}",
     "voiceProfileCardDismissed": "Glasovni profil lahko kadar koli nastavite v Nastavitvah.",
     "homeNewRecordingButton": "Novo snemanje",
     "chatWelcomeMessage": "Živjo, sem Omi. Vprašaj me karkoli o tem, o čemer si govoril: kaj je kdo rekel, kaj si obljubil ali povzetek tvojega dne. Lahko tudi dodajam opravila in si zapomnim stvari namesto tebe.",

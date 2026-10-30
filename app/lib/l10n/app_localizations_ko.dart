@@ -14725,6 +14725,21 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count개 부분',
+      many: '$count개 부분',
+      few: '$count개 부분',
+      two: '$count개 부분',
+      one: '$count개 부분',
+      zero: '$count개 부분',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => '음성 프로필은 설정에서 언제든지 설정할 수 있어요.';
 
   @override

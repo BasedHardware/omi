@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/gen/episodes_wire.g.dart' as wire;
 
 /// One stretch of speech inside an episode's conversation, with Omi's short heading for it.
@@ -107,6 +109,8 @@ class Episode {
     this.closedAt,
     this.closeReason,
     this.title = '',
+    this.emoji = '',
+    this.members = const [],
     this.bullets = const [],
     this.people = const [],
     this.items = const [],
@@ -114,6 +118,7 @@ class Episode {
     this.conversationIds = const [],
     this.sources = const [],
     this.stateUpdatedAt,
+    this.timerStartedAt,
   });
 
   final String id;
@@ -123,20 +128,25 @@ class Episode {
   final DateTime? closedAt;
   final String? closeReason;
   final String title;
+  final String emoji;
+  final List<ServerConversation> members;
   final List<String> bullets;
   final List<String> people;
   final List<EpisodeItem> items;
   final List<EpisodeMoment> moments;
+
+  /// All extant members, including discarded ones for Delete. Use [members] for display/counts.
   final List<String> conversationIds;
   final List<String> sources;
   final DateTime? stateUpdatedAt;
+  final DateTime? timerStartedAt;
 
   List<EpisodeItem> get visibleItems => [
         for (final item in items)
           if (item.visible) item
       ];
 
-  Episode copyWith({List<EpisodeItem>? items, bool? live}) => Episode(
+  Episode copyWith({List<EpisodeItem>? items, bool? live, List<ServerConversation>? members}) => Episode(
         id: id,
         live: live ?? this.live,
         startedAt: startedAt,
@@ -144,6 +154,8 @@ class Episode {
         closedAt: closedAt,
         closeReason: closeReason,
         title: title,
+        emoji: emoji,
+        members: members ?? this.members,
         bullets: bullets,
         people: people,
         items: items ?? this.items,
@@ -151,6 +163,7 @@ class Episode {
         conversationIds: conversationIds,
         sources: sources,
         stateUpdatedAt: stateUpdatedAt,
+        timerStartedAt: timerStartedAt,
       );
 
   factory Episode.fromGenerated(wire.GeneratedEpisode e) => Episode(
@@ -161,6 +174,19 @@ class Episode {
         closedAt: e.closedAt?.toLocal(),
         closeReason: e.closeReason,
         title: e.title,
+        emoji: e.emoji,
+        members: [
+          for (final m in e.members ?? const <wire.GeneratedEpisodeMember>[])
+            ServerConversation(
+              id: m.id,
+              createdAt: m.startedAt.toLocal(),
+              startedAt: m.startedAt.toLocal(),
+              finishedAt: m.finishedAt?.toLocal(),
+              structured: Structured(m.title, '', emoji: m.emoji),
+              status: ConversationStatus.values
+                  .firstWhere((s) => s.name == m.status, orElse: () => ConversationStatus.completed),
+            )
+        ],
         bullets: e.bullets ?? const [],
         people: e.people ?? const [],
         items: [for (final item in e.provisionalItems ?? const []) EpisodeItem.fromGenerated(item)],
@@ -168,6 +194,7 @@ class Episode {
         conversationIds: e.conversationIds ?? const [],
         sources: e.sources ?? const [],
         stateUpdatedAt: e.stateUpdatedAt?.toLocal(),
+        timerStartedAt: e.timerStartedAt?.toLocal(),
       );
 }
 
@@ -180,4 +207,11 @@ class EpisodeRead {
   final Episode? episode;
 
   static const disabled = EpisodeRead(enabled: false);
+}
+
+class EpisodePageRead {
+  const EpisodePageRead({required this.enabled, this.episodes = const [], this.nextCursor});
+  final bool enabled;
+  final List<Episode> episodes;
+  final String? nextCursor;
 }

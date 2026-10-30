@@ -690,3 +690,9 @@ def test_ambiguous_contact_names_keep_both_spellings_without_choosing(monkeypatc
     from utils.speakers.evidence import project_labels
 
     assert project_labels(ambiguous, {}) == {}
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

@@ -14719,6 +14719,21 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count パート',
+      many: '$count パート',
+      few: '$count パート',
+      two: '$count パート',
+      one: '$count パート',
+      zero: '$count パート',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'ボイスプロフィールは設定からいつでも設定できます。';
 
   @override

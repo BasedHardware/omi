@@ -7,6 +7,8 @@ from unittest.mock import Mock
 import pytest
 
 from config.batch_pipeline import admit_or_legacy, enabled_for, priority_for, scheduler_control_key
+from database.batch_pipeline_shadow import pool_busy
+from tests.unit.fixtures.batch_shadow_metadata_query import metadata_client
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
@@ -223,6 +225,56 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 187)
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 999)
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
+def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
+    # Shadow idle admission must follow this actual scheduler behavior, rather
+    # than treating an attempt count as an authoritative terminal state.
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('at-cap'), 0)
+    lease = queue.pull(0)[0]
+    job = store.rows['jobs', 'at-cap']
+    job['attempt'] = job['policy_parts']['scheduler']['max_attempts']
+    cap = job['attempt']
+    assert queue.recover(LEASE_SECONDS + 1) == 1
+    retry = store.rows['jobs', 'at-cap']
+    assert retry['state'] == 'retry' and retry['attempt'] == cap
+    due = retry['available_at']
+    assert queue.recover(due) == 1
+    next_lease = queue.pull(due)[0]
+    assert next_lease.attempt == cap + 1
+    assert next_lease.token != lease.token
+
+
+def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held-shadow-probe'), 0)
+    lease = queue.pull(0)[0]
+    assert queue.defer(
+        'held-shadow-probe',
+        lease.token,
+        1,
+        retry_after=3600,
+        held_reason='allowance_exhausted',
+        admission_refused=True,
+    )
+
+    def busy_at(now):
+        rows = [row for (table, key), row in store.rows.items() if table == 'jobs']
+        return pool_busy(metadata_client(rows), 'batch_pipeline_dev', now=now)
+
+    due = store.rows['jobs', 'held-shadow-probe']['available_at']
+    assert not busy_at(due)
+    assert queue.recover(due) == 1
+    assert store.rows['jobs', 'held-shadow-probe']['state'] == 'ready'
+    assert not busy_at(due)
+    next_lease = queue.pull(due)[0]
+    assert next_lease.token != lease.token
+    assert busy_at(due)  # Live leases retain priority during re-evaluation/dispatch.
 
 
 def test_failures_stop_at_default_ceiling_without_fabricating_result():

@@ -14936,6 +14936,21 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count deler',
+      many: '$count deler',
+      few: '$count deler',
+      two: '$count deler',
+      one: '$count del',
+      zero: '$count deler',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Du kan sette opp stemmeprofilen når som helst i Innstillinger.';
 
   @override

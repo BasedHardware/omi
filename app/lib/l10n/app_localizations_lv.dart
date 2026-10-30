@@ -14966,6 +14966,21 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count daļas',
+      many: '$count daļas',
+      few: '$count daļas',
+      two: '$count daļas',
+      one: '$count daļa',
+      zero: '$count daļu',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Balss profilu varat iestatīt jebkurā laikā iestatījumos.';
 
   @override

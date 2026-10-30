@@ -318,3 +318,9 @@ class TestEverythingElseStillDiscards:
 
         assert discarded is False
         assert structure.call_count == 1
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

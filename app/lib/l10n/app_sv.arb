@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "Årsbetalning är inte tillgänglig för ditt abonnemang just nu.",
     "yearlySwitchDoneTitle": "Du betalar nu årsvis",
     "yearlySwitchDoneBody": "{amount} drogs i dag. Förnyas {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} delar} one{{count} del} two{{count} delar} few{{count} delar} many{{count} delar} other{{count} delar}}",
     "voiceProfileCardDismissed": "Du kan ställa in din röstprofil när som helst i Inställningar.",
     "homeNewRecordingButton": "Ny inspelning",
     "chatWelcomeMessage": "Hej, jag är Omi. Fråga mig om allt du har pratat om: vad någon sa, vad du lovade eller en sammanfattning av din dag. Jag kan också lägga till uppgifter och komma ihåg saker åt dig.",

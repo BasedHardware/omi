@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "सध्या तुमच्या प्लॅनसाठी वार्षिक बिलिंग उपलब्ध नाही.",
     "yearlySwitchDoneTitle": "तुम्ही आता वार्षिक प्लॅनवर आहात",
     "yearlySwitchDoneBody": "आज {amount} आकारले. नूतनीकरण {date} रोजी.",
+    "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}",
     "voiceProfileCardDismissed": "सेटिंग्जमध्ये कधीही व्हॉइस प्रोफाइल सेट करू शकता.",
     "homeNewRecordingButton": "नवीन रेकॉर्डिंग",
     "chatWelcomeMessage": "नमस्कार, मी Omi आहे. तुम्ही ज्याबद्दल बोललात त्याबद्दल काहीही विचारा: कोणी काय सांगितले, तुम्ही काय वचन दिले किंवा तुमच्या दिवसाचा सारांश. मी कामे जोडू शकतो आणि तुमच्यासाठी गोष्टी लक्षातही ठेवू शकतो.",

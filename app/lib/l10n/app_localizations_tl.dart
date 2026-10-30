@@ -15051,6 +15051,21 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bahagi',
+      many: '$count bahagi',
+      few: '$count bahagi',
+      two: '$count bahagi',
+      one: '$count bahagi',
+      zero: '$count bahagi',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Maaari mong i-set up ang Voice Profile anumang oras sa Settings.';
 
   @override

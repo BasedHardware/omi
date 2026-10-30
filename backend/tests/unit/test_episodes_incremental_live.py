@@ -201,41 +201,62 @@ def _segs(words, *, text='word'):
 
 def test_tracker_flushes_on_pause_and_word_budget_but_carries_conversation_changes():
     tracker = MomentTracker()
-    assert tracker.observe('u', _segs(30), 'c1', 'omi', now=1000) == []
+    assert tracker.observe('u', _segs(30), 'c1', 'omi', arrival_at=1000, recorded_at=1000) == []
     # A short gap keeps accumulating.
-    assert tracker.observe('u', _segs(5), 'c1', 'omi', now=1010) == []
-    paused = tracker.observe('u', _segs(5), 'c1', 'omi', now=1010 + config.MOMENT_PAUSE_SECONDS)
+    assert tracker.observe('u', _segs(5), 'c1', 'omi', arrival_at=1010, recorded_at=1010) == []
+    paused = tracker.observe(
+        'u',
+        _segs(5),
+        'c1',
+        'omi',
+        arrival_at=1010 + config.MOMENT_PAUSE_SECONDS,
+        recorded_at=1010 + config.MOMENT_PAUSE_SECONDS,
+    )
     assert [m.trigger for m in paused] == ['pause'] and len(paused[0].segments) == 2
     # The new batch starts the next moment.
-    moved = tracker.observe('u', _segs(5), 'c2', 'omi', now=1100)
+    moved = tracker.observe('u', _segs(5), 'c2', 'omi', arrival_at=1100, recorded_at=1100)
     assert moved == []
-    big = tracker.observe('u', _segs(config.MOMENT_MAX_WORDS), 'c2', 'omi', now=1110)
+    big = tracker.observe('u', _segs(config.MOMENT_MAX_WORDS), 'c2', 'omi', arrival_at=1110, recorded_at=1110)
     assert [m.trigger for m in big] == ['rollover'] and big[0].conversation_id == 'c2'
     assert [fragment.conversation_id for fragment in big[0].carried] == ['c1']
     assert len(big[0].segments) == 2 and len(big[0].carried[0].segments) == 1
-    assert tracker.observe('u', [], None, 'omi', now=1120) == []
+    assert tracker.observe('u', [], None, 'omi', arrival_at=1120, recorded_at=1120) == []
 
 
 def test_tracker_does_not_spend_a_call_on_a_short_or_too_soon_moment():
     tracker = MomentTracker()
-    tracker.observe('u', _segs(3), 'c1', 'omi', now=0)
+    tracker.observe('u', _segs(3), 'c1', 'omi', arrival_at=0, recorded_at=0)
     # Paused, but under the minimum words: still accumulating.
-    assert tracker.observe('u', _segs(3), 'c1', 'omi', now=100) == []
-    tracker.observe('u', _segs(30), 'c1', 'omi', now=110)
-    first = tracker.observe('u', _segs(30), 'c1', 'omi', now=200)
+    assert tracker.observe('u', _segs(3), 'c1', 'omi', arrival_at=100, recorded_at=100) == []
+    tracker.observe('u', _segs(30), 'c1', 'omi', arrival_at=110, recorded_at=110)
+    first = tracker.observe('u', _segs(30), 'c1', 'omi', arrival_at=200, recorded_at=200)
     assert len(first) == 1
     # Paused again within the minimum interval since the last flush: keep accumulating.
-    assert tracker.observe('u', _segs(30), 'c1', 'omi', now=200 + config.MOMENT_PAUSE_SECONDS) == []
+    assert (
+        tracker.observe(
+            'u',
+            _segs(30),
+            'c1',
+            'omi',
+            arrival_at=200 + config.MOMENT_PAUSE_SECONDS,
+            recorded_at=200 + config.MOMENT_PAUSE_SECONDS,
+        )
+        == []
+    )
 
 
 def test_tracker_evicts_stale_buffers():
     tracker = MomentTracker()
-    tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
-    tracker.observe('v', _segs(1), 'c9', 'omi', now=live.BUFFER_TTL_SECONDS + 10)
+    tracker.observe('u', _segs(30), 'c1', 'omi', arrival_at=0, recorded_at=0)
+    tracker.observe(
+        'v', _segs(1), 'c9', 'omi', arrival_at=live.BUFFER_TTL_SECONDS + 10, recorded_at=live.BUFFER_TTL_SECONDS + 10
+    )
     assert 'u' not in tracker._buffers
 
 
 def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
+    # Exercise rollback fan-out; recorded-time input is covered by the replay suite.
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     scheduled = []
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
@@ -248,7 +269,7 @@ def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
         coro.close()
 
     monkeypatch.setattr(live.executors, 'start_background_task', fake_start)
-    tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
+    tracker.observe('u', _segs(30), 'c1', 'omi', arrival_at=0, recorded_at=0)
     monkeypatch.setattr(live.time, 'time', lambda: 1000.0)
     monkeypatch.setattr(live.time, 'monotonic', lambda: 1000.0)
     asyncio.run(live.on_realtime_segments('u', _segs(3), 'c2', 'omi'))
@@ -269,11 +290,11 @@ def test_the_first_moment_comes_early_then_the_interval_holds():
     tracker = MomentTracker()
     ended = []
     for wall in range(0, 40, 10):
-        ended += tracker.observe('u', _segs(20), 'c1', 'omi', now=wall)
+        ended += tracker.observe('u', _segs(20), 'c1', 'omi', arrival_at=wall, recorded_at=wall)
     assert [m.trigger for m in ended] == ['interval']
     assert ended[0].segments and (ended[0].ended_at - ended[0].started_at).total_seconds() >= 30
     # After that first flush the ordinary interval applies.
-    assert tracker.observe('u', _segs(80), 'c1', 'omi', now=60) == []
+    assert tracker.observe('u', _segs(80), 'c1', 'omi', arrival_at=60, recorded_at=60) == []
 
 
 def test_steady_talk_ends_a_moment_on_the_interval():
@@ -283,7 +304,7 @@ def test_steady_talk_ends_a_moment_on_the_interval():
     ended = []
     # Twelve words every ten seconds: never a 45 s pause, 600 words only after eight minutes.
     while wall <= config.MOMENT_MAX_SECONDS + 10:
-        ended += tracker.observe('u', _segs(12), 'c1', 'omi', now=wall)
+        ended += tracker.observe('u', _segs(12), 'c1', 'omi', arrival_at=wall, recorded_at=wall)
         wall += 10
     assert [m.trigger for m in ended] == ['interval']
     assert (ended[0].ended_at - ended[0].started_at).total_seconds() >= config.MOMENT_MAX_SECONDS
@@ -291,7 +312,7 @@ def test_steady_talk_ends_a_moment_on_the_interval():
 
 def test_session_end_retains_the_buffer_until_next_moment_or_finalization(monkeypatch):
     tracker = MomentTracker()
-    tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
+    tracker.observe('u', _segs(30), 'c1', 'omi', arrival_at=0, recorded_at=0)
     # Another session's conversation (a parallel capture on this pod) keeps its buffer.
     assert tracker.flush('u', 'c-other') is None
 
@@ -305,11 +326,13 @@ def test_session_end_retains_the_buffer_until_next_moment_or_finalization(monkey
     asyncio.run(live.on_session_end('u', 'c1'))
     asyncio.run(live.on_session_end('u', 'c1'))
     assert scheduled == [] and tracker._buffers['u'].session_ended
-    resumed = tracker.observe('u', _segs(30), 'c1', 'omi', now=config.MOMENT_MAX_SECONDS)
+    resumed = tracker.observe(
+        'u', _segs(30), 'c1', 'omi', arrival_at=config.MOMENT_MAX_SECONDS, recorded_at=config.MOMENT_MAX_SECONDS
+    )
     assert [moment.trigger for moment in resumed] == ['interval']
     assert len(resumed[0].segments) == 2 and resumed[0].carried == ()
 
-    tracker.observe('u', _segs(10), 'c1', 'omi', now=500)
+    tracker.observe('u', _segs(10), 'c1', 'omi', arrival_at=500, recorded_at=500)
     pending = tracker.flush('u', 'c1')
     assert pending is not None and pending.trigger == 'finalize' and pending.conversation_id == 'c1'
     assert tracker.flush('u', 'c1') is None and tracker.flush('u', None) is None
@@ -317,7 +340,7 @@ def test_session_end_retains_the_buffer_until_next_moment_or_finalization(monkey
 
 def test_session_end_flushes_after_app_kill_when_the_session_is_gone(monkeypatch):
     tracker = MomentTracker()
-    tracker.observe('u', _segs(3), 'c1', 'omi', now=100)
+    tracker.observe('u', _segs(3), 'c1', 'omi', arrival_at=100, recorded_at=100)
     scheduled = []
     delivered = []
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
@@ -350,10 +373,10 @@ def test_session_end_flushes_after_app_kill_when_the_session_is_gone(monkeypatch
 
 def test_session_end_timeout_is_fenced_by_reconnect_and_later_end(monkeypatch):
     tracker = MomentTracker()
-    tracker.observe('u', _segs(3), 'c1', 'omi', now=100)
+    tracker.observe('u', _segs(3), 'c1', 'omi', arrival_at=100, recorded_at=100)
     first = tracker.mark_session_end('u', 'c1')
     assert first is not None
-    tracker.observe('u', _segs(3), 'c1', 'omi', now=110)
+    tracker.observe('u', _segs(3), 'c1', 'omi', arrival_at=110, recorded_at=110)
     assert tracker.flush_session_end('u', 'c1', first) is None
     second = tracker.mark_session_end('u', 'c1')
     assert second is not None and second != first

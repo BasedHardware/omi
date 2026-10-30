@@ -14930,6 +14930,21 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count částí',
+      many: '$count částí',
+      few: '$count části',
+      two: '$count částí',
+      one: '$count část',
+      zero: '$count částí',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Hlasový profil můžete kdykoli nastavit v Nastavení.';
 
   @override

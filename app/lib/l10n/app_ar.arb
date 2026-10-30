@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "الدفع السنوي غير متاح لخطتك حاليًا.",
     "yearlySwitchDoneTitle": "أصبحت على الدفع السنوي",
     "yearlySwitchDoneBody": "تم خصم {amount} اليوم. يتجدد في {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} أجزاء} one{{count} جزء} two{{count} جزءان} few{{count} أجزاء} many{{count} جزءًا} other{{count} جزء}}",
     "voiceProfileCardDismissed": "يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.",
     "homeNewRecordingButton": "تسجيل جديد",
     "chatWelcomeMessage": "مرحبًا، أنا Omi. اسألني عن أي شيء تحدثت عنه: ما قاله شخص ما، أو ما وعدت به، أو ملخص يومك. يمكنني أيضًا إضافة مهام وتذكّر الأشياء لك.",

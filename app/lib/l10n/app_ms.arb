@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.",
     "yearlySwitchDoneTitle": "Anda kini membayar tahunan",
     "yearlySwitchDoneBody": "{amount} dicaj hari ini. Diperbaharui pada {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} bahagian} one{{count} bahagian} two{{count} bahagian} few{{count} bahagian} many{{count} bahagian} other{{count} bahagian}}",
     "voiceProfileCardDismissed": "Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.",
     "homeNewRecordingButton": "Rakaman Baharu",
     "chatWelcomeMessage": "Hai, saya Omi. Tanya saya apa sahaja tentang perkara yang anda bualkan: apa yang dikatakan seseorang, apa yang anda janjikan atau ringkasan hari anda. Saya juga boleh menambah tugasan dan mengingati sesuatu untuk anda.",

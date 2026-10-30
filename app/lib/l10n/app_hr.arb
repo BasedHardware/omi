@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "Godišnje plaćanje trenutačno nije dostupno za vaš plan.",
     "yearlySwitchDoneTitle": "Sada plaćate godišnje",
     "yearlySwitchDoneBody": "Danas naplaćeno {amount}. Obnavlja se {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} dijelova} one{{count} dio} two{{count} dijelova} few{{count} dijela} many{{count} dijelova} other{{count} dijelova}}",
     "voiceProfileCardDismissed": "Glasovni profil možete postaviti bilo kada u Postavkama.",
     "homeNewRecordingButton": "Novo snimanje",
     "chatWelcomeMessage": "Bok, ja sam Omi. Pitaj me bilo što o čemu si razgovarao: što je netko rekao, što si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe.",

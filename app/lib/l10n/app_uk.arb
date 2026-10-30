@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "Річна оплата зараз недоступна для вашого плану.",
     "yearlySwitchDoneTitle": "Тепер ви платите раз на рік",
     "yearlySwitchDoneBody": "Сьогодні списано {amount}. Поновлення {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} частини} one{{count} частина} two{{count} частини} few{{count} частини} many{{count} частин} other{{count} частини}}",
     "voiceProfileCardDismissed": "Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.",
     "homeNewRecordingButton": "Новий запис",
     "chatWelcomeMessage": "Привіт, я Omi. Питайте про все, про що ви говорили: що хтось сказав, що ви пообіцяли або як минув ваш день. Я також можу додавати завдання й запам'ятовувати важливе за вас.",

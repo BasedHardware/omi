@@ -14981,6 +14981,21 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಭಾಗಗಳು',
+      many: '$count ಭಾಗಗಳು',
+      few: '$count ಭಾಗಗಳು',
+      two: '$count ಭಾಗಗಳು',
+      one: '$count ಭಾಗಗಳು',
+      zero: '$count ಭಾಗಗಳು',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.';
 
   @override

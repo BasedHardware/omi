@@ -4550,6 +4550,7 @@
     "yearlySwitchUnavailable": "Yıllık ödeme şu anda planınız için kullanılamıyor.",
     "yearlySwitchDoneTitle": "Artık yıllık ödüyorsunuz",
     "yearlySwitchDoneBody": "Bugün {amount} tahsil edildi. Yenilenme: {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} bölüm} one{{count} bölüm} two{{count} bölüm} few{{count} bölüm} many{{count} bölüm} other{{count} bölüm}}",
     "voiceProfileCardDismissed": "Ses profilini istediğin zaman Ayarlar'dan kurabilirsin.",
     "homeNewRecordingButton": "Yeni Kayıt",
     "chatWelcomeMessage": "Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim.",

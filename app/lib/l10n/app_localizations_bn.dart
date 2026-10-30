@@ -14927,6 +14927,21 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি অংশ',
+      many: '$countটি অংশ',
+      few: '$countটি অংশ',
+      two: '$countটি অংশ',
+      one: '$countটি অংশ',
+      zero: '$countটি অংশ',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।';
 
   @override

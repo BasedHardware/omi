@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "Гадавая аплата зараз недаступная для вашага плана.",
     "yearlySwitchDoneTitle": "Цяпер у вас гадавая аплата",
     "yearlySwitchDoneBody": "Сёння спісана {amount}. Падаўжэнне {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} часткі} one{{count} частка} two{{count} часткі} few{{count} часткі} many{{count} частак} other{{count} часткі}}",
     "voiceProfileCardDismissed": "Профіль голасу заўсёды можна наладзіць у Наладах.",
     "homeNewRecordingButton": "Новы запіс",
     "chatWelcomeMessage": "Прывітанне, я Omi. Пытайцеся пра ўсё, пра што вы размаўлялі: што хтосьці сказаў, што вы паабяцалі, ці як прайшоў ваш дзень. Я таксама магу дадаваць задачы і запамінаць рэчы за вас.",

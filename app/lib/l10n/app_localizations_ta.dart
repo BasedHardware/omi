@@ -15035,6 +15035,21 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பகுதிகள்',
+      many: '$count பகுதிகள்',
+      few: '$count பகுதிகள்',
+      two: '$count பகுதிகள்',
+      one: '$count பகுதிகள்',
+      zero: '$count பகுதிகள்',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.';
 
   @override

@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "Aastamaks pole sinu paketile praegu saadaval.",
     "yearlySwitchDoneTitle": "Maksad nüüd kord aastas",
     "yearlySwitchDoneBody": "Täna võeti {amount}. Uueneb {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} osa} one{{count} osa} two{{count} osa} few{{count} osa} many{{count} osa} other{{count} osa}}",
     "voiceProfileCardDismissed": "Häälprofiili saad seadistada igal ajal seadetes.",
     "homeNewRecordingButton": "Uus salvestus",
     "chatWelcomeMessage": "Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.",

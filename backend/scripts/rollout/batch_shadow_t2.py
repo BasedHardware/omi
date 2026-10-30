@@ -1,7 +1,9 @@
 # LIFECYCLE: permanent
 """Read-only shadow T2 census; no serving-denominator substitution or writes.
 
-Lead41be4b requires >=3600 measured shadow speech seconds. T1/T4 come from
+The T2 ratio arm still requires >=3600 measured shadow speech seconds;
+entry speech and normal-GPU success floors are separate qualification rules.
+Paid recovery remains in combined loss, never in normal-GPU evidence. T1/T4 come from
 the fresh serving observer, whose known hard harm is never erased. All reads
 use numeric/state masks, one Firestore readTime and bounded pages. No owner,
 job, transcript or artifact identifiers leave request memory.
@@ -32,11 +34,14 @@ MASK = (
     'vad',
     'settled_at',
     'created_at',
+    'paid_providers',
 )
 STATES = frozenset({'recovered', 'empty', 'failed_held', 'error', 'paid_skipped'})
 
 
 def value(raw):
+    if 'arrayValue' in raw:
+        return [value(item) for item in raw['arrayValue'].get('values', [])]
     for key in ('booleanValue', 'stringValue'):
         if key in raw:
             return raw[key]
@@ -47,11 +52,12 @@ def value(raw):
     return None
 
 
-def census(rows, overdue, since):
+def _measured_census(rows, overdue, since):
     """Only measured terminal units enter the speech denominator; drops do not."""
     speech = loss = maximum = 0.0
     unknown = 0
     dropped = 0
+    recovered_speech_units = 0
     for row in rows:
         if row.get('shadow') is not True:
             unknown += 1
@@ -92,6 +98,7 @@ def census(rows, overdue, since):
         speech += measured
         loss += lost
         maximum = max(maximum, lost)
+        recovered_speech_units += row['outcome'] == 'recovered' and measured > 0
     pending = [row for row in overdue if row.get('state') != 'settled']
     unknown += len(pending)
     return {
@@ -108,7 +115,35 @@ def census(rows, overdue, since):
         'sampled_terminal_units': len(rows),
         'dropped_units': dropped,
         'overdue_units': len(pending),
+        'recovered_speech_units': recovered_speech_units,
     }
+
+
+def census(rows, overdue, since):
+    """Combined loss remains authoritative; normal GPU proof is never paid recovery."""
+    combined = _measured_census(rows, overdue, since)
+    normal = [row for row in rows if row.get('paid_providers') == [] and row.get('vad') == 'worker']
+    paid = [
+        row
+        for row in rows
+        if isinstance(row.get('paid_providers'), list)
+        and row['paid_providers']
+        and all(
+            isinstance(provider, str) and provider in {'modulate', 'soniox', 'deepgram'}
+            for provider in row['paid_providers']
+        )
+    ]
+    normal_census = _measured_census(normal, [], since)
+    paid_census = _measured_census(paid, [], since)
+    combined.update(
+        normal_gpu_t2=normal_census,
+        paid_recovery_t2=paid_census,
+        normal_gpu_success_units=normal_census['recovered_speech_units'],
+        normal_gpu_speech_seconds=normal_census['terminal_unrecovered_speech_denominator_seconds'],
+        paid_recovery_speech_seconds=paid_census['terminal_unrecovered_speech_denominator_seconds'],
+        normal_gpu_proof='worker_vad_and_explicit_empty_paid_providers',
+    )
+    return combined
 
 
 def serving_clock(history, since, through):
