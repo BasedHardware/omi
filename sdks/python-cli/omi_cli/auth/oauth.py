@@ -32,14 +32,14 @@ import threading
 import time
 import urllib.parse
 import webbrowser
-from typing import Any, Mapping, Optional
+from typing import Any, Optional
 
 import httpx
 
 from omi_cli import config as cfg
 from omi_cli.auth.store import store_api_key, store_oauth_tokens, update_oauth_id_token
 from omi_cli.config import Profile
-from omi_cli.errors import AuthError, UsageError
+from omi_cli.errors import AuthError, TransportError, UsageError
 
 # Public Firebase API key for the ``based-hardware`` Firebase project.
 # Firebase API keys are *not* secrets — they identify which project a
@@ -82,6 +82,34 @@ _CLI_KEY_SCOPES = [
     "goals:read",
     "goals:write",
 ]
+
+
+def _parse_json_object(resp: httpx.Response, context: str) -> dict[str, Any]:
+    """Decode an HTTP response body as a JSON object, raising AuthError on malformed payloads."""
+    try:
+        payload = resp.json()
+    except ValueError as exc:
+        raise AuthError(
+            message=f"{context} returned invalid JSON",
+            detail="Expected a JSON object in the response body.",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise AuthError(
+            message=f"{context} returned an unexpected JSON shape",
+            detail=f"Expected a JSON object, got {type(payload).__name__}.",
+        )
+    return payload
+
+
+def _parse_expires_in(value: Any, default: int = 3600) -> int:
+    """Coerce an OAuth/Firebase expires_in field to a positive integer number of seconds."""
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return parsed if parsed > 0 else default
 
 
 # --- Browser flow ----------------------------------------------------------
@@ -217,21 +245,27 @@ def refresh_id_token(profile_name: str) -> str:
             ),
         )
 
-    with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
-        resp = client.post(
-            _FIREBASE_REFRESH_URL,
-            data={"grant_type": "refresh_token", "refresh_token": profile.refresh_token},
-        )
+    try:
+        with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+            resp = client.post(
+                _FIREBASE_REFRESH_URL,
+                data={"grant_type": "refresh_token", "refresh_token": profile.refresh_token},
+            )
+    except httpx.HTTPError as exc:
+        raise TransportError("Could not reach Firebase token service", detail=str(exc)) from exc
+
     if resp.status_code != 200:
         raise AuthError(
             message=f"Firebase refresh failed ({resp.status_code})",
             detail="Re-run `omi auth login --browser` to get fresh credentials.",
         )
 
-    data = resp.json()
-    new_id_token = data.get("id_token")
-    new_refresh_token = data.get("refresh_token")
-    expires_in = int(data.get("expires_in", 3600) or 3600)
+    data = _parse_json_object(resp, "Firebase refresh")
+    raw_id_token = data.get("id_token")
+    new_id_token = raw_id_token.strip() if isinstance(raw_id_token, str) else ""
+    raw_refresh_token = data.get("refresh_token")
+    new_refresh_token = raw_refresh_token.strip() if isinstance(raw_refresh_token, str) else ""
+    expires_in = _parse_expires_in(data.get("expires_in"), default=3600)
 
     if not new_id_token:
         raise AuthError(
@@ -261,7 +295,7 @@ def refresh_id_token(profile_name: str) -> str:
             expires_at=expires_at,
         )
 
-    return str(new_id_token)
+    return new_id_token
 
 
 def needs_refresh(profile: Profile, now: Optional[float] = None) -> bool:
@@ -311,17 +345,22 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
                 # gateway can answer with HTML or a scalar. Parsing and shape
                 # failures belong with the transport failures below, or this
                 # block stops being best-effort and fails the whole login.
-                for key in listing.json():
-                    if isinstance(key, dict) and key.get("name") == key_name and key.get("id"):
-                        client.delete(f"{base}{_DEV_KEYS_PATH}/{key['id']}", headers=headers)
+                existing_keys = listing.json()
+                if isinstance(existing_keys, list):
+                    for key in existing_keys:
+                        if isinstance(key, dict) and key.get("name") == key_name and key.get("id"):
+                            client.delete(f"{base}{_DEV_KEYS_PATH}/{key['id']}", headers=headers)
         except (httpx.HTTPError, ValueError, TypeError):
             pass
 
-        resp = client.post(
-            f"{base}{_DEV_KEYS_PATH}",
-            headers=headers,
-            json={"name": key_name, "scopes": _CLI_KEY_SCOPES},
-        )
+        try:
+            resp = client.post(
+                f"{base}{_DEV_KEYS_PATH}",
+                headers=headers,
+                json={"name": key_name, "scopes": _CLI_KEY_SCOPES},
+            )
+        except httpx.HTTPError as exc:
+            raise TransportError(f"Could not reach {base}{_DEV_KEYS_PATH}", detail=str(exc)) from exc
 
     if resp.status_code not in (200, 201):
         raise AuthError(
@@ -337,16 +376,23 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
     # to the caller as a missing field, so report it the same way instead of
     # raising ValueError/AttributeError past this function's error contract.
     try:
-        body = resp.json()
-    except ValueError:
-        body = None
-    raw_key = body.get("key") if isinstance(body, Mapping) else None
-    if not raw_key:
+        data = _parse_json_object(resp, "Developer key creation")
+    except AuthError as exc:
+        # An unusable body is reported exactly like a missing `key` field: the
+        # caller cannot mint a key either way, and the established contract for
+        # this endpoint is the "missing the API key" AuthError. Keep the parse
+        # detail so the underlying shape problem is still visible.
+        raise AuthError(
+            message="Key-mint response was missing the API key",
+            detail=f"Developer key creation: {exc.detail}",
+        ) from exc
+    raw_key = data.get("key")
+    if not isinstance(raw_key, str) or not raw_key.strip():
         raise AuthError(
             message="Key-mint response was missing the API key",
             detail="The /v1/dev/keys response did not include a `key` field.",
         )
-    return str(raw_key)
+    return raw_key.strip()
 
 
 def _generate_pkce_pair() -> tuple[str, str]:
@@ -359,49 +405,60 @@ def _generate_pkce_pair() -> tuple[str, str]:
 
 def _exchange_code_for_custom_token(api_base: str, code: str, redirect_uri: str, code_verifier: str) -> str:
     """Hit ``POST /v1/auth/token`` and pull the Firebase custom token out of the response."""
-    with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
-        resp = client.post(
-            f"{api_base.rstrip('/')}/v1/auth/token",
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "use_custom_token": "true",
-                "code_verifier": code_verifier,
-            },
-        )
+    token_url = f"{api_base.rstrip('/')}/v1/auth/token"
+    try:
+        with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+            resp = client.post(
+                token_url,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                    "use_custom_token": "true",
+                    "code_verifier": code_verifier,
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise TransportError(f"Could not reach {token_url}", detail=str(exc)) from exc
+
     if resp.status_code != 200:
         raise AuthError(
             message=f"Token exchange failed ({resp.status_code})",
             detail="The Omi auth server rejected the OAuth code. Try `omi auth login --browser` again.",
         )
 
-    body = resp.json()
+    body = _parse_json_object(resp, "OAuth token exchange")
     custom_token = body.get("custom_token")
-    if not custom_token:
+    if not isinstance(custom_token, str) or not custom_token.strip():
         raise AuthError(
             message="Server did not return a Firebase custom token",
             detail="The backend may not have FIREBASE_API_KEY configured.",
         )
-    return str(custom_token)
+    return custom_token.strip()
 
 
 def _firebase_signin_with_custom_token(custom_token: str) -> tuple[str, str, int]:
     """Sign into Firebase with the custom token and return ``(id_token, refresh_token, expires_in)``."""
-    with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
-        resp = client.post(
-            _FIREBASE_SIGNIN_URL,
-            json={"token": custom_token, "returnSecureToken": True},
-        )
+    try:
+        with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+            resp = client.post(
+                _FIREBASE_SIGNIN_URL,
+                json={"token": custom_token, "returnSecureToken": True},
+            )
+    except httpx.HTTPError as exc:
+        raise TransportError("Could not reach Firebase sign-in service", detail=str(exc)) from exc
+
     if resp.status_code != 200:
         raise AuthError(
             message=f"Firebase signInWithCustomToken failed ({resp.status_code})",
             detail="Verify the public Firebase API key matches the project this backend issues custom tokens for.",
         )
-    data = resp.json()
-    id_token = data.get("idToken")
-    refresh_token = data.get("refreshToken")
-    expires_in = int(data.get("expiresIn", 3600) or 3600)
+    data = _parse_json_object(resp, "Firebase signInWithCustomToken")
+    raw_id_token = data.get("idToken")
+    id_token = raw_id_token.strip() if isinstance(raw_id_token, str) else ""
+    raw_refresh_token = data.get("refreshToken")
+    refresh_token = raw_refresh_token.strip() if isinstance(raw_refresh_token, str) else ""
+    expires_in = _parse_expires_in(data.get("expiresIn"), default=3600)
 
     if not id_token or not refresh_token:
         raise AuthError(
