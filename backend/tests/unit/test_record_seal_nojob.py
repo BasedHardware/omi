@@ -81,6 +81,20 @@ def test_dry_run_counts_only_and_atomic_idempotent_apply(source):
     assert len([tx for tx in client.transactions if tx.sets]) == 1
 
 
+def test_active_refused_row_cannot_churn_approval_or_gain_write_authority(source):
+    store, client, artifacts = source
+    active = ('users', 'synthetic', 'conversations', 'active')
+    client.rows[active] = {**client.rows[PATH], 'status': 'processing', 'record_upload_revision': 1}
+    paths = [*SCOPE, '/'.join(active)]
+    previous = backfill.plan_backfill(store, paths, object(), artifacts, server_flags=SERVER)
+    client.rows[active]['record_upload_revision'] = 2
+    refreshed = backfill.plan_backfill(store, paths, object(), artifacts, server_flags=SERVER)
+    assert refreshed['plan_sha256'] == previous['plan_sha256']
+    assert apply(source, refreshed) == {'not_completed': 1, 'sealed_registered': 1}
+    assert 'record_audio_closed' not in client.rows[active]
+    assert client.transactions[-1].updates[0][0] == PATH
+
+
 @pytest.mark.parametrize(
     'change,reason',
     [

@@ -124,12 +124,13 @@ def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, prod
                 return row, registration(tx, uid, cid, row, server_flags), None
 
             row, job, reason = store.run(read)
-            entry['row'] = row_state(row)
             if reason:
                 entry['disposition'] = reason
             else:
                 proof = retained_tail_proof(job, row, storage_client, artifacts)
-                entry.update(job=job, disposition='eligible', proof_sha256=proof)
+                # Refusals grant no write authority. Do not bind their volatile
+                # upload revisions into approval for unrelated completed rows.
+                entry.update(row=row_state(row), job=job, disposition='eligible', proof_sha256=proof)
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_refused'
         except (ValueError, TypeError, AttributeError, KeyError):
