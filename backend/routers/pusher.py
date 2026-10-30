@@ -14,7 +14,7 @@ from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 from google.cloud.exceptions import NotFound
-from google.api_core.exceptions import GoogleAPICallError, InvalidArgument
+from google.api_core.exceptions import InvalidArgument
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
@@ -132,8 +132,9 @@ def _projection_raising_frame(exc: BaseException) -> str:
 
 def _projection_grpc_code(exc: BaseException) -> str:
     """Only the SDK's closed gRPC status enum; never message/metadata/reason text."""
-    if isinstance(exc, GoogleAPICallError) and isinstance(exc.grpc_status_code, StatusCode):
-        return exc.grpc_status_code.name
+    code = cast(object, getattr(exc, 'grpc_status_code', None))
+    if isinstance(code, StatusCode):
+        return code.name
     return 'UNKNOWN'
 
 
