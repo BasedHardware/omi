@@ -52,7 +52,7 @@ from utils.transcribe_decisions import (
     should_attach_to_existing_in_progress,
 )
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
-from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
+from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS, occasion_size_exceeded
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.lifecycle_clocks import speech_clock
 from utils.episodes import boundaries, boundary_runtime
@@ -90,6 +90,7 @@ class LiveConversationController:
         self.host = host
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self._last_recording_session_lease_renewal: datetime | None = None
+        self._size_estimate_state: dict[str, Any] = {}
 
     async def _persist_policy_and_arm_quiet_check(self, conversation_id: str) -> None:
         await persist_conversation_policy(self.host, conversation_id)
@@ -172,13 +173,17 @@ class LiveConversationController:
             existing = await self._continuity_row(existing)
         if existing and not server_batch_capture_compatible(self.host, existing):
             return False
-        if not existing or not resumable_continuation(
-            existing,
-            source=normalize_listen_source(self.host.request.source),
-            device_id=self.host.client_device_context.client_device_id,
-            arrival_at=self.clock(),
-            timeout=self.host.conversation_creation_timeout,
-            language=getattr(self.host, 'language', None),
+        if (
+            not existing
+            or self._conversation_size_exceeded(existing)
+            or not resumable_continuation(
+                existing,
+                source=normalize_listen_source(self.host.request.source),
+                device_id=self.host.client_device_context.client_device_id,
+                arrival_at=self.clock(),
+                timeout=self.host.conversation_creation_timeout,
+                language=getattr(self.host, 'language', None),
+            )
         ):
             return False
         self.host.recording_session_id = pointer['recording_session_id']
@@ -573,14 +578,18 @@ class LiveConversationController:
                 if not server_batch_capture_compatible(self.host, existing):
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
-                if not self.host.is_multi_channel and not resumable_continuation(
-                    existing,
-                    source=normalize_listen_source(request.source),
-                    device_id=self.host.client_device_context.client_device_id,
-                    arrival_at=self.clock(),
-                    timeout=self.host.conversation_creation_timeout,
+                size_exceeded = self._conversation_size_exceeded(existing)
+                if not self.host.is_multi_channel and (
+                    size_exceeded
+                    or not resumable_continuation(
+                        existing,
+                        source=normalize_listen_source(request.source),
+                        device_id=self.host.client_device_context.client_device_id,
+                        arrival_at=self.clock(),
+                        timeout=self.host.conversation_creation_timeout,
+                    )
                 ):
-                    if (
+                    if size_exceeded or (
                         existing.get('source') == normalize_listen_source(request.source)
                         and existing.get('client_device_id') == self.host.client_device_context.client_device_id
                         and not any(
@@ -842,8 +851,10 @@ class LiveConversationController:
         existing = await self._continuity_row(existing)
         finished_at = speech_clock(self.host.request.uid, existing) or self.clock()
         seconds = (self.clock() - finished_at).total_seconds()
+        size_exceeded = self._conversation_size_exceeded(existing)
         if (
-            decide_existing_conversation_action(
+            size_exceeded
+            or decide_existing_conversation_action(
                 seconds_since_last_segment=seconds,
                 conversation_creation_timeout=continuation_timeout(existing, self.host.conversation_creation_timeout),
             )
@@ -851,7 +862,9 @@ class LiveConversationController:
         ):
             # This runs before STT initialization: an outage cannot indefinitely
             # defer empty-generation cleanup. The transaction still lets content win.
-            if not (existing.get('transcript_segments') or existing.get('photos') or existing.get('has_content')):
+            if size_exceeded or not (
+                existing.get('transcript_segments') or existing.get('photos') or existing.get('has_content')
+            ):
                 await self._finalize_isolated(self.process_conversation, existing['id'], stage='prepare_rollover')
             await self.create_new_in_progress_conversation()
             return existing['id']
@@ -1007,9 +1020,17 @@ class LiveConversationController:
                 continue
             await self._finalize_isolated(self.process_conversation, conversation['id'], stage='stale_in_progress')
 
+    def _conversation_size_exceeded(self, conversation: dict[str, Any]) -> bool:
+        cid = conversation.get('id') or getattr(getattr(self.host, 'state', None), 'current_conversation_id', None)
+        uid = getattr(getattr(self.host, 'request', None), 'uid', None)
+        doc_path = f'users/{uid}/conversations/{cid}' if uid and cid else None
+        return occasion_size_exceeded(conversation, document_path=doc_path, state=self._size_estimate_state)
+
     def _occasion_span_exceeded(self, conversation: dict[str, Any]) -> bool:
         if not getattr(self.host, 'occasion_mode', False):
             return False
+        if self._conversation_size_exceeded(conversation):
+            return True
         span = conversation_span(conversation)
         return (
             span is not None and (span.recorded_end - span.recorded_start).total_seconds() >= OCCASION_MAX_SPAN_SECONDS
@@ -1064,7 +1085,7 @@ class LiveConversationController:
             if (
                 boundary_action != 'hold'
                 and action == ConversationLifecycleAction.continue_current
-                and self._occasion_span_exceeded(conversation)
+                and (self._occasion_span_exceeded(conversation) or self._conversation_size_exceeded(conversation))
             ):
                 # One occasion is capped like a smart-merged chain: all-day capture still rolls over.
                 logger.info('event=occasion_span_rollover conversation=%s', conversation_id)
