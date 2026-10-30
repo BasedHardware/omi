@@ -30,6 +30,10 @@ def _load():
         assert trace['schema'] == SCHEMA, path.name
         assert trace['name'] == path.stem, path.name
         assert set(trace['expect']) == set(EXPECT), path.name
+        audio = any(isinstance(f, dict) for session in trace['sessions'] for f in session['frames'])
+        # The durable outbox commits audio to storage this runner does not fake, so an audio trace there
+        # could pass without exercising custody (Luna #24106 r1). Finalize-only sessions upload nothing.
+        assert not (audio and True in trace['durable']), f'{path.name}: durable audio replay needs an outbox fake'
         for durable in trace['durable']:
             traces.append(pytest.param(trace, durable, id=f'{trace["name"]}[durable={durable}]'))
     return traces

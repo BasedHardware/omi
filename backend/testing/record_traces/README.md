@@ -16,7 +16,9 @@ cd backend && python -m pytest tests/unit/test_record_traces.py -q
 
 - `name`: equals the file stem. `source`: the incident, RCA or PR the trace pins.
 - `row`: seed fields on a completed conversation, limited to `record_lane_owner` and `record_upload_sessions`.
-- `durable`: the `AUDIO_DURABLE_OUTBOX_ENABLED` modes to replay.
+- `durable`: the `AUDIO_DURABLE_OUTBOX_ENABLED` modes to replay. Traces with audio frames replay only with
+  `false` for now: the durable outbox commits audio to storage this runner does not fake, so a `true` audio
+  replay could pass without exercising custody. Finalize-only traces run in both modes.
 - `sessions`: websocket sessions in order. `frames` is a list of `"conversation"` (103), `"finalize"` (104)
   and `{"audio_seconds": N}` (101, N seconds of non-silent PCM). `upload` is `ok` or `fail` (every upload in
   that session raises).
