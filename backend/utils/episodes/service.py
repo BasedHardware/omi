@@ -941,10 +941,11 @@ def _record_moment_once(
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'
 
+    compose_owns = closed is not None and composer.episode_composer_enabled()  # composer writes the notes
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     output_language, repair = '', None
     conversation_language = moment.language or ''
-    if episode_output_language_pinned():
+    if episode_output_language_pinned() and not compose_owns:
         session_id = str(base.get('primary_conversation_id') or moment.conversation_id)
         conversation_language, preference = _episode_language_inputs(uid, session_id, moment, c)
         output_language = episode_language.resolve_episode_language(uid, conversation_language, preference=preference)
@@ -952,7 +953,7 @@ def _record_moment_once(
         if prior and not episode_language.languages_match(prior, output_language):
             repair = episode_language.repair_instruction(prior, output_language)
     try:
-        result = incremental.run_incremental_update(
+        result = (composer.notes_free if compose_owns else incremental.run_incremental_update)(
             uid,
             render_state(base),
             text.text,
@@ -987,7 +988,7 @@ def _record_moment_once(
 
     end_offset = max((_segment_end(s) for s in segments), default=0.0)
     start_offset = min((_segment_start(s) for s in segments), default=0.0)
-    changes = apply_update(
+    changes = (composer.no_changes if compose_owns else apply_update)(
         base, result.update, conversation_id=moment.conversation_id, segment_offset=end_offset, now=now
     )
     detected_output_language = (
@@ -999,13 +1000,14 @@ def _record_moment_once(
     heading = result.update.moment_heading or clean_text(result.update.title, 48)
     last = moments[-1] if moments else None
     if (
-        last
+        not compose_owns
+        and last
         and last.get('conversation_id') == moment.conversation_id
         and heading
         and str(last.get('heading') or '').casefold() == heading.casefold()
     ):
         last.update({'ended_at': moment.current_ended_at or moment.ended_at, 'end_offset': end_offset})
-    else:
+    elif not compose_owns:
         moments.append(
             {
                 'id': uuid4().hex[:12],
@@ -1105,7 +1107,7 @@ def _record_moment_once(
         )
     metrics.record_moment_update(
         trigger=moment.trigger,
-        outcome='applied',
+        outcome='skipped_closed' if compose_owns else 'applied',
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         latency_seconds=result.latency_seconds,

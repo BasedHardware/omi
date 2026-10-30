@@ -662,3 +662,16 @@ def schedule_for_conversation(uid: str, conversation_id: str, *, collaborators: 
             schedule(uid, str(episode['id']), collaborators=collaborators)
     except Exception as error:
         logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
+
+
+def notes_free(*_args: Any, **_kwargs: Any) -> Any:
+    """Stands in for the per-moment model call on a closed episode the composer owns: no call,
+    no notes change; membership, cursors, receipts and member activity are still recorded."""
+    from utils.episodes.incremental import ModelResult
+    from utils.episodes.state import IncrementalUpdate
+
+    return ModelResult(IncrementalUpdate(), 0, 0, 0.0, model_calls=0)
+
+
+def no_changes(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+    return {}
