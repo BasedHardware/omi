@@ -64,6 +64,23 @@ def segment_end(segment: Mapping[str, Any]) -> float:
         return 0.0
 
 
+def uncovered_segments(moment: MomentInput, episode: Mapping[str, Any] | None):
+    """A parallel device adds later speech without replaying the original capture.
+
+    Attachment persists this cutoff before adding membership; both recovery and
+    finalization must honor it. Unplaced speech and crossing segments remain
+    eligible because their text cannot safely be split at the cutoff.
+    """
+    cutoff = policy.utc(((episode or {}).get('parallel_content_until') or {}).get(moment.conversation_id))
+    if cutoff is None:
+        return moment.segments
+    return [
+        segment
+        for segment in moment.segments
+        if segment_end(segment) < 0 or moment.started_at + timedelta(seconds=segment_end(segment)) > cutoff
+    ]
+
+
 def segment_start(segment: Mapping[str, Any]) -> float:
     try:
         return float(segment.get('start') or 0.0)
