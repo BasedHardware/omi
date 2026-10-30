@@ -298,8 +298,7 @@ def record_client_request(channel: str, outcome: str) -> None:
 
 def record_compose(outcome: str, seconds: float) -> None:
     try:
-        label = _label(outcome, COMPOSE_OUTCOMES)
-        EPISODE_COMPOSE_TOTAL.labels(outcome=label).inc()
-        EPISODE_COMPOSE_SECONDS.labels(outcome=label).observe(max(0.0, seconds))
+        EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
+        EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).observe(max(0.0, seconds))
     except Exception:
         pass
