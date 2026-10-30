@@ -442,3 +442,39 @@ def test_occasion_claim_refuses_changed_owner_before_writing_any_membership(stor
     root = client.collection('users').document(uid)
     assert not root.collection('episode_links').document('desktop').get().exists
     assert list(root.collection('episodes').stream()) == []
+
+
+def test_occasion_claim_preserves_member_facts_through_later_repartition(store):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    for cid in ('first', 'desktop', 'later'):
+        root.collection('conversations').document(cid).set({'id': cid})
+    first = episode_timeline.attach_recorded(
+        uid,
+        'first',
+        'omi',
+        T0,
+        T0 + timedelta(minutes=2),
+        choose=choose_recorded_episode,
+        new_episode={},
+        firestore_client=client,
+    )
+    at = T0 + timedelta(minutes=1)
+    episode_timeline.attach_existing_recorded(
+        uid,
+        'desktop',
+        'desktop',
+        at,
+        at,
+        episode_id=first['id'],
+        choose=choose_recorded_episode,
+        firestore_client=client,
+    )
+    later = T0 + timedelta(minutes=3)
+    joined = episode_timeline.attach_recorded(
+        uid, 'later', 'omi', later, later, choose=choose_recorded_episode, new_episode={}, firestore_client=client
+    )
+    assert set(joined['conversation_ids']) == {'first', 'desktop', 'later'}
+    assert set(joined['recorded_members']) == {'first', 'desktop', 'later'}
+    assert episodes.get_episode_for_conversation(uid, 'desktop', firestore_client=client)['id'] == joined['id']
+    assert root.collection('conversations').document('desktop').get().to_dict()['episode_id'] == joined['id']

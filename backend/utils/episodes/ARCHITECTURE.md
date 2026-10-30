@@ -386,6 +386,8 @@ runs inside relevance, before desktop `client_finalize` fanout can delay or
 skip its post-finalization hook. A changed owner or failed claim retains the
 clip as `occasion_lookup_unavailable`; it never reports uncommitted membership.
 The normal desktop and pendant finalize hooks remain idempotent safety nets.
+Claims into automatic historical episodes also update `recorded_members` in the
+same transaction, so later canonical repartition retains the claimed capture.
 
 `sync_relevance` is intake's `keep`/`review` hint, not the final keep/discard
 verdict. It can remain `keep` when a later model assessment discards content.
@@ -394,5 +396,7 @@ shared final-discard predicate (`fragment_visibility.is_relevance_discarded`),
 including restore authority, instead of interpreting that hint as visibility.
 A discard CAS re-reads retained members' recorded spans and recomputes the
 start and end for live and closed episodes, retrying with a fresh episode after
-a notes CAS wins the race. Hidden memberships remain for
+a notes CAS wins the race. Legacy compressed/encrypted transcript evidence is
+decoded before deriving spans; processing `finished_at` is never used to
+reconstruct a legacy member's end. Hidden memberships remain for
 recovery and single ownership; they contribute no clocks or visible row.

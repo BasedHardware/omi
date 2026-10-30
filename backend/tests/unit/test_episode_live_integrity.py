@@ -582,3 +582,87 @@ def test_discard_repairs_bounds_after_losing_a_notes_cas(lane, monkeypatch):
     assert clean['started_at'] == T0 + timedelta(minutes=21)
     assert clean['last_activity_at'] == T0 + timedelta(minutes=21, seconds=30)
     assert set(clean['member_activity']) == {'speech'}
+
+
+def test_relevance_claim_survives_historical_repartition(lane):
+    store, _, _ = lane
+    first = episode_timeline.attach_recorded(
+        'u',
+        'first',
+        'omi',
+        T0,
+        T0 + timedelta(minutes=2),
+        choose=timeline.choose_recorded_episode,
+        new_episode={},
+        firestore_client=store,
+    )
+    at = T0 + timedelta(minutes=1)
+    claimed = episode_timeline.attach_existing_recorded(
+        'u',
+        'desktop',
+        'desktop',
+        at,
+        at,
+        episode_id=first['id'],
+        choose=timeline.choose_recorded_episode,
+        firestore_client=store,
+    )
+    assert claimed['recorded_members']['desktop'] == {'start': at, 'end': at, 'source': 'desktop'}
+    episodes.update_episode(
+        'u',
+        first['id'],
+        expected_version=claimed['state_version'],
+        updates={'moments': [{'id': 'desktop-m', 'conversation_id': 'desktop', 'started_at': at}]},
+        firestore_client=store,
+    )
+    later = at + timedelta(minutes=2)
+    joined = episode_timeline.attach_recorded(
+        'u',
+        'later',
+        'omi',
+        later,
+        later,
+        choose=timeline.choose_recorded_episode,
+        new_episode={},
+        firestore_client=store,
+    )
+    assert set(joined['conversation_ids']) == {'first', 'desktop', 'later'}
+    assert {m['id'] for m in joined['moments']} == {'desktop-m'}
+    assert episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)['id'] == joined['id']
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('has_clocks', [False, True])
+@pytest.mark.parametrize('wal_tail', [False, True])
+def test_discard_rebuilds_legacy_encoded_speech_without_processing_end(lane, level, has_clocks, wal_tail):
+    from database.conversations import encode_conversation_for_write
+
+    store, c, _ = lane
+    noise = row('noise', seconds=120)
+    store.rows[('users', 'u', 'conversations', 'noise')] = noise
+    service.attach_conversation('u', 'noise', 'omi', started_at=T0, collaborators=c)
+    origin = T0 + timedelta(minutes=21)
+    speech = row('speech', origin, seconds=60)
+    speech['transcript_segments'][0]['start'] = 30
+    if wal_tail:
+        speech.update(sync_content_revision=1, sync_live_target=False, finished_at=origin + timedelta(seconds=75))
+    encoded = encode_conversation_for_write('u', speech, level)
+    for key in ('recorded_start', 'recorded_end', 'arrival_at', 'clock'):
+        encoded.pop(key, None)
+    encoded['data_protection_level'] = level
+    store.rows[('users', 'u', 'conversations', 'speech')] = encoded
+    c.now = lambda: origin
+    service.attach_conversation(
+        'u', 'speech', 'omi', started_at=origin, ended_at=origin + timedelta(seconds=60), collaborators=c
+    )
+    owner = episodes.get_current_episode('u', firestore_client=store)
+    if not has_clocks:
+        store.rows[('users', 'u', 'episodes', owner['id'])].pop('member_activity')
+    noise['discarded'] = True
+    assert (
+        service.on_conversation_finalized('u', 'noise', noise, trigger='sync_update', collaborators=c)
+        == 'skipped_discarded'
+    )
+    clean = episodes.get_episode('u', owner['id'], firestore_client=store)
+    assert clean['started_at'] == origin + timedelta(seconds=30)
+    assert clean['last_activity_at'] == origin + timedelta(seconds=75 if wal_tail else 60)

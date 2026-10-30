@@ -30,11 +30,12 @@ from typing import Any, Mapping, Optional, Sequence
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
 from config.episodes import MAX_EPISODE_SECONDS, episode_hard_cap_across_conversations_enabled
-from utils.conversations.recorded_time import conversation_span
+from utils.conversations.recorded_time import conversation_span, sync_recorded_end
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
 from database import episode_receipts, episode_timeline
 from database._client import get_firestore_client, run_transactional
+from database.conversations import decode_transcript_segments_verified
 from utils.encryption import decrypt, encrypt
 
 CURRENT = 'current'
@@ -204,7 +205,21 @@ def retained_bounds(transaction, client, uid, raw, merged):
         if member and (is_relevance_discarded(member) or member.get('deleted') or member.get('sync_merged_into')):
             hidden.add(cid)
             continue
-        span = conversation_span(member) if member else None
+        evidence = dict(member) if member else None
+        if evidence and not all(isinstance(evidence.get(key), datetime) for key in ('recorded_start', 'recorded_end')):
+            segments = evidence.get('transcript_segments')
+            if segments is not None and not isinstance(segments, list):
+                evidence['transcript_segments'] = decode_transcript_segments_verified(
+                    uid, segments, bool(evidence.get('transcript_segments_compressed'))
+                )
+            # Legacy completion is a processing clock. Only decoded speech,
+            # recording receipts or the persisted member clocks prove its end.
+            # Preserve the recording authority's legacy pure-WAL receipt first.
+            receipt_end = sync_recorded_end(evidence, None)
+            if receipt_end is not None:
+                evidence['sync_recorded_end_at'] = receipt_end
+            evidence['finished_at'] = None
+        span = conversation_span(evidence) if evidence else None
         known = (merged.get('member_activity') or {}).get(cid)
         fact = (raw.get('recorded_members') or {}).get(cid) or {}
         fallback_start = raw['started_at'] if cid in (raw.get('conversation_ids') or []) else known

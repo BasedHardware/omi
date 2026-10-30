@@ -144,6 +144,15 @@ def _attach_recorded_window(
             result['started_at'] = min(existing['started_at'], started)
             result['last_activity_at'] = max(existing['last_activity_at'], window_end)
             result['member_activity'] = {**(existing.get('member_activity') or {}), conversation_id: window_end}
+            if existing.get('recorded_members') is not None:
+                facts = dict(existing['recorded_members'])
+                prior = facts.get(conversation_id) or {}
+                facts[conversation_id] = {
+                    'start': min(prior.get('start') or started, started),
+                    'end': max(prior.get('end') or finished, finished),
+                    'source': source or prior.get('source'),
+                }
+                result['recorded_members'] = facts
             if result.get('status') != 'live':
                 if result.get('close_reason') in {'gap', 'idle'}:
                     result['closed_at'] = result['last_activity_at']
