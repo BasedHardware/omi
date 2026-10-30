@@ -224,3 +224,49 @@ class TestFileToolsCoercionAndGuards:
             assert call_kwargs["created_at"] is not None
             assert isinstance(call_kwargs["created_at"], datetime)
             assert call_kwargs["created_at"].tzinfo is not None
+    def test_whitespace_or_empty_after_cleaning_file_ids_falls_through_to_all_files(self):
+        """Empty-after-cleaning file_ids (e.g. whitespace only) intentionally falls through to search all session files."""
+        cfg = {"configurable": {"user_id": "u1", "chat_session_id": "s1"}}
+        mock_session = {"id": "s1", "file_ids": ["session_f1", "session_f2"]}
+
+        with (
+            patch.object(self.mod.chat_db, "get_chat_session_by_id", return_value=mock_session),
+            patch.object(self.mod, "FileChatTool") as mock_fc_class,
+        ):
+            mock_fc = MagicMock()
+            mock_fc.process_chat_with_file.return_value = "Searched all session files"
+            mock_fc_class.return_value = mock_fc
+
+            res = self.mod.search_files_tool.func(
+                "query files",
+                file_ids=["   ", "\t", None, 12345],  # type: ignore[arg-type]
+                config=cfg,
+            )
+            assert res == "Searched all session files"
+            called_files = mock_fc.process_chat_with_file.call_args.args[1]
+            assert called_files == ["session_f1", "session_f2"]
+
+    def test_uid_unresolved_while_chat_session_id_present(self):
+        """Verify behavior when uid is unresolved but chat_session_id is present."""
+        # 1. In configurable dictionary: uid is None, chat_session_id is present -> proceeds with None uid
+        cfg_configurable = {"configurable": {"chat_session_id": "s1"}}
+        mock_session = {"id": "s1", "file_ids": ["f1"]}
+
+        with (
+            patch.object(self.mod.chat_db, "get_chat_session_by_id", return_value=mock_session) as mock_get_session,
+            patch.object(self.mod, "FileChatTool") as mock_fc_class,
+        ):
+            mock_fc = MagicMock()
+            mock_fc.process_chat_with_file.return_value = "Answer with null uid"
+            mock_fc_class.return_value = mock_fc
+
+            res = self.mod.search_files_tool.func("summarize", config=cfg_configurable)
+            assert res == "Answer with null uid"
+            mock_get_session.assert_called_once_with(None, "s1")
+            mock_fc_class.assert_called_once_with(None, "s1")
+
+        # 2. In top-level dictionary (without configurable key): missing uid fails closed
+        cfg_top_level_no_uid = {"chat_session_id": "top_s1"}
+        res2 = self.mod.search_files_tool.func("summarize", config=cfg_top_level_no_uid)
+        assert res2 == "Error: Configuration error"
+
