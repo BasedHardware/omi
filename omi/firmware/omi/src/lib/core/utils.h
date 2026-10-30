@@ -11,7 +11,7 @@
     }
 
 #define ASSERT_TRUE(result)                                                                                            \
-    if (!result) {                                                                                                     \
+    if (!(result)) {                                                                                                   \
         LOG_ERR("Error at %s:%d:%d", __FILE__, __LINE__, result);                                                      \
         return -1;                                                                                                     \
     }
