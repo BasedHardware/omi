@@ -226,13 +226,11 @@ def cli():
     ],
 )
 def test_cli_tiers_before_any_client_access(monkeypatch, tier, apply_mode, allowed):
-    from database import _client
-
     monkeypatch.setenv('GCP_AGENT_TIER', tier)
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     reached = Mock(side_effect=RuntimeError('stop before network'))
-    monkeypatch.setattr(_client, 'get_firestore_client', reached)
     module = cli()
+    monkeypatch.setattr(module, 'get_firestore_client', reached)
     monkeypatch.setattr(module, 'read_server_flags', lambda _: SERVER)
     args = ['--next-file', '/unused', '--server-flags-file', '/flags'] + (
         ['--apply', '--approve-plan-sha256', 'digest'] if apply_mode else []
@@ -243,23 +241,19 @@ def test_cli_tiers_before_any_client_access(monkeypatch, tier, apply_mode, allow
 
 
 def test_cli_dry_run_outputs_only_counts_and_digest(source, monkeypatch, capsys):
-    from database import _client, batch_pipeline_store
-    from utils.batch_pipeline import artifact_policy
-    from utils.other import local_storage
-
     module = cli()
     monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
-    monkeypatch.setattr(_client, 'get_firestore_client', lambda: source[1])
+    monkeypatch.setattr(module, 'get_firestore_client', lambda: source[1])
 
     def store(*args, **kwargs):
         monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
         return source[0]
 
-    monkeypatch.setattr(batch_pipeline_store, 'FirestoreStore', store)
-    monkeypatch.setattr(backfill, 'discover', lambda *a, **kw: (SCOPE, SCOPE[0]))
-    monkeypatch.setattr(artifact_policy, 'artifacts_for', lambda _: source[2])
-    monkeypatch.setattr(local_storage, 'create_storage_client', object)
+    monkeypatch.setattr(module, 'FirestoreStore', store)
+    monkeypatch.setattr(module, 'discover', lambda *a, **kw: (SCOPE, SCOPE[0]))
+    monkeypatch.setattr(module, 'artifacts_for', lambda _: source[2])
+    monkeypatch.setattr(module, 'create_storage_client', object)
     cursor = Mock()
     monkeypatch.setattr(module, 'write_cursor', cursor)
     monkeypatch.setattr(module, 'read_server_flags', lambda _: SERVER)

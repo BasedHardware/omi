@@ -19,6 +19,13 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from database._client import get_firestore_client
+from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline.artifact_policy import artifacts_for
+from utils.batch_pipeline.record_seal_nojob import discover, plan_backfill, apply_backfill, summary
+from utils.batch_pipeline.record_producer_proof import load_pusher_pod_proof
+from utils.other.local_storage import create_storage_client
+
 
 class CountsOnlyParser(argparse.ArgumentParser):
     def error(self, message):
@@ -96,14 +103,6 @@ def main(argv=None):
     if args.after_file and Path(args.after_file).resolve() == Path(args.next_file).resolve():
         parser.error('input and output cursor files must differ')
     os.environ['OMI_ENV_STAGE'] = 'prod'
-    # Import customer-data clients only after checking the operator tier.
-    from database._client import get_firestore_client
-    from database.batch_pipeline_store import FirestoreStore
-    from utils.batch_pipeline.artifact_policy import artifacts_for
-    from utils.batch_pipeline.record_seal_nojob import discover, plan_backfill, apply_backfill, summary
-    from utils.batch_pipeline.record_producer_proof import load_pusher_pod_proof
-    from utils.other.local_storage import create_storage_client
-
     after = json.loads(Path(args.after_file).read_text())['after'] if args.after_file else None
     server_flags = read_server_flags(args.server_flags_file)
     client = get_firestore_client()
