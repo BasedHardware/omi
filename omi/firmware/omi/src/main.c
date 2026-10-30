@@ -90,45 +90,6 @@ static void mic_handler(int16_t *buffer)
     }
 }
 
-static void boot_led_sequence(void)
-{
-    // Quick blue pulse = "I'm alive, booting..."
-    set_led_blue(true);
-    k_msleep(300);
-    led_off();
-}
-
-static void boot_ready_sequence(void)
-{
-    const int steps = 50;
-    const int delay_ms = 10;
-
-    // Smooth green fade in/out 2 times = "Ready!"
-    for (int cycle = 0; cycle < 2; cycle++) {
-        // Fade in: ease-in-out
-        for (int i = 0; i <= steps; i++) {
-            float t = (float) i / steps;
-            // Ease-in-out quadratic
-            float eased = t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            uint8_t level = (uint8_t) (eased * 50.0f);
-            set_led_pwm(LED_GREEN, level);
-            k_msleep(delay_ms);
-        }
-
-        // Fade out: ease-in-out
-        for (int i = 0; i <= steps; i++) {
-            float t = (float) i / steps;
-            float eased = t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            uint8_t level = (uint8_t) ((1.0f - eased) * 70.0f);
-            set_led_pwm(LED_GREEN, level);
-            k_msleep(delay_ms);
-        }
-    }
-    k_msleep(10);
-    led_off();
-    k_msleep(10);
-}
-
 void set_led_state()
 {
     // If device is off, turn off all LEDs immediately
