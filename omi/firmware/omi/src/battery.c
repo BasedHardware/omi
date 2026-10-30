@@ -128,6 +128,8 @@ uint8_t update_ema_filter(uint32_t current_ema, uint8_t new_value)
     return (uint8_t)((new_ema + 32768) >> 16);
 }
 
+int battery_charging_state_read(void);
+
 static void battery_charging_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
     int err = battery_charging_state_read();
