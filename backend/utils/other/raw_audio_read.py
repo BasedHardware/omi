@@ -7,6 +7,31 @@ import time
 from utils import encryption
 from utils.other.raw_audio import decode_capture
 
+# The pack listing is the front door of the raw-archive read preference: the
+# merge's uncovered-pack union, the STOP_PCM coverage proof and the span read
+# all start from it. Issued single-shot (``retry=None``), one momentary
+# availability fault — a 503 ``ServiceUnavailable``, the storage SDK's own
+# retryable class — killed the whole listing, dropped every pack the caller
+# was about to prefer and turned the handled degrade into a logged traceback
+# (tests/unit/test_raw_archive_listing_blip.py). The listing rides the SDK's
+# own availability retry instead, bounded so a listed-prefix outage cannot
+# hold a merge worker past its budget; the object is immutable and built once.
+# The boundary classifier that mirrors this replay set lives in the caller
+# (``utils.other.storage._is_pack_listing_blip``).
+#
+# Import-tolerant like ``utils.other.audio_opus``: import-isolation tests stub
+# ``google.cloud.storage`` as a non-package mock before fresh-loading this
+# module, and a module-scope ``from google.cloud.storage.retry import ...``
+# would abort every one of those loads. Without the real SDK the listing keeps
+# its previous single-shot behavior instead of failing to import.
+try:  # pragma: no cover - exercised through the listing tests
+    from google.cloud.storage.retry import DEFAULT_RETRY as _SDK_DEFAULT_RETRY
+
+    _PACK_LIST_RETRY = _SDK_DEFAULT_RETRY.with_timeout(30.0)
+except Exception:  # pragma: no cover - import-isolation stub path
+    _PACK_LIST_RETRY = None
+    _SDK_DEFAULT_RETRY = None
+
 _index_lock = threading.Lock()
 _indexes: dict[tuple, tuple[float, list]] = {}
 _INDEX_TTL = 5
@@ -26,7 +51,7 @@ def list_packs(bucket, uid: str, conversation_id: str):
             return cached[1]
     packs = []
     for index, blob in enumerate(
-        bucket.list_blobs(prefix=f'raw-live/{uid}/{conversation_id}/', timeout=10, retry=None)
+        bucket.list_blobs(prefix=f'raw-live/{uid}/{conversation_id}/', timeout=10, retry=_PACK_LIST_RETRY)
     ):
         if index >= 10000:
             raise TimeoutError('raw capture index budget exhausted')

@@ -5248,6 +5248,31 @@ deletion purge live and noncurrent generations across configured buckets.
 The [archive runbook](runbooks/sync-ingest-archive.md) owns flag phases, bucket
 provisioning, C023 estimates, playback/byte/deletion canaries and David's
 ≤5%/≥12h ramp. No live deployment or deletion is part of this change.
+
+#### Raw-archive listing availability contract
+
+Failure-Class: FC-listing-blip-drops-coverage-and-logs-degrade-as-error —
+instance in `backend/utils/other/raw_audio_read.py` and
+`backend/utils/other/storage.py` (prod pusher 2026-10-30, `raw archive
+listing failed` ×36/30m): the pack listing that fronts every raw-archive
+read preference was issued single-shot (``retry=None``), so one momentary
+GCS 503 killed the whole listing for the conversation and dropped every
+pack the merge was about to prefer — audio coverage lost on a transient
+fault — while the handler logged the handled degrade with its full
+traceback, which the sensor counts as a true error.
+
+The pack listing that fronts every raw-archive read preference — the merge's
+uncovered-pack union (`list_audio_chunks`), the STOP_PCM coverage proof
+(`verified_pcm_paths`) and the span read (`pcm_for_span`) — now rides the
+storage SDK's own availability retry
+(`google.cloud.storage.retry.DEFAULT_RETRY`, bounded to a 30-second budget
+in `utils/other/raw_audio_read.py`), so one momentary 503/429/transport
+blip replays instead of killing the listing. When the budget still drains,
+the merge boundary classifies the fault: a member of the SDK's replayed
+set (pinned by test against `_RETRYABLE_TYPES`) is a quiet degrade —
+warning, shared `omi_fallback_total` event (`from=raw_archive
+to=legacy_chunks`), legacy chunks retained — and permanent refusals keep
+the loud traceback. Guards: `tests/unit/test_raw_archive_listing_blip.py`.
 ### Recent LEGACY offline-sync admission
 
 V2 resolves identity from `X-App-Platform` + `X-Device-Id-Hash`, but grants

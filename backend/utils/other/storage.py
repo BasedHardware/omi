@@ -21,7 +21,7 @@ from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
 from utils.other import audio_opus
 from utils.other.audio_opus import decode_opus_to_pcm, encode_pcm_to_opus
-from google.api_core.exceptions import PreconditionFailed
+from google.api_core.exceptions import PreconditionFailed, RetryError, TooManyRequests
 from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
 from database.redis_db import (
@@ -47,6 +47,7 @@ from utils.observability.fallback import record_fallback
 from utils.other.audio_chunk_replay import RECONCILE_MAX_ATTEMPTS, reconcile_committed_prefix
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
+from utils.storage_retry_types import STORAGE_RETRYABLE_TYPES, is_requests_transport_error
 from database import users as users_db, conversation_tombstones
 import logging
 
@@ -1055,9 +1056,78 @@ def list_audio_chunks(
             for pack in packs:
                 if not any(pack['timestamp'] <= item['timestamp'] < pack['raw_end'] for item in chunks):
                     chunks.append(pack)
-        except Exception:
-            logger.warning('raw archive listing failed; retaining legacy chunks', exc_info=True)
+        except Exception as error:
+            # The pack listing rides the storage SDK's own availability retry
+            # (raw_audio_read._PACK_LIST_RETRY), so reaching this arm means a
+            # budget of replays already drained. The listing is a read
+            # preference over the legacy chunks this call already carries:
+            # losing it degrades the merge to today's PCM-only coverage, and
+            # the next session lists again. A blip the SDK itself replays is
+            # therefore a quiet degrade — warning, shared fallback event, no
+            # traceback (the prod sensor counts every traceback as a true
+            # error, and this family burned ×36/30m as
+            # ``raw archive listing failed``); permanent refusals and unknown
+            # faults keep the loud classification.
+            if _is_pack_listing_blip(error):
+                logger.warning(
+                    'Raw archive pack listing degraded behind a storage blip; retaining legacy chunks uid=%s conversation_id=%s',
+                    uid,
+                    conversation_id,
+                )
+                record_fallback(
+                    component='other',
+                    from_mode='raw_archive',
+                    to_mode='legacy_chunks',
+                    reason=_listing_blip_reason(error),
+                    outcome='degraded',
+                )
+            else:
+                logger.exception(
+                    'Raw archive pack listing failed; retaining legacy chunks uid=%s conversation_id=%s',
+                    uid,
+                    conversation_id,
+                )
+                record_fallback(
+                    component='other',
+                    from_mode='raw_archive',
+                    to_mode='legacy_chunks',
+                    reason='other',
+                    outcome='exhausted',
+                )
     return sorted(chunks, key=lambda x: x['timestamp'])
+
+
+def _is_pack_listing_blip(error: BaseException) -> bool:
+    """Recognize the momentary faults the pack listing's own retry replays.
+
+    The boundary sheds exactly what ``raw_audio_read._PACK_LIST_RETRY`` —
+    the storage SDK's availability retry — replays: 429 quota pressure, the
+    5xx availability family, transport connection resets, and the
+    ``requests`` transport family (resets, chunked-encoding breaks, read
+    timeouts) the storage client raises from listing pages. The drained
+    ``google.api_core`` retry envelope follows its cause, one level deep,
+    like the Firestore writers' classifier. Permanent refusals (4xx policy,
+    permission, bad request, missing) and unknown faults stay loud.
+    """
+    if isinstance(error, STORAGE_RETRYABLE_TYPES):
+        return True
+    if isinstance(error, RetryError):
+        cause = getattr(error, 'cause', None)
+        return cause is not None and _is_pack_listing_blip(cause)
+    return is_requests_transport_error(error)
+
+
+def _listing_blip_reason(error: BaseException) -> str:
+    """Bucket a listing blip into the shared fallback reason enum."""
+    if isinstance(error, RetryError):
+        cause = getattr(error, 'cause', None)
+        if cause is not None:
+            return _listing_blip_reason(cause)
+    if isinstance(error, TooManyRequests):
+        return 'provider_429'
+    if is_requests_transport_error(error) or isinstance(error, ConnectionError):
+        return 'transport_error'
+    return 'provider_5xx'
 
 
 def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_into: str | None = None) -> None:
