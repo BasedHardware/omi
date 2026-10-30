@@ -477,6 +477,7 @@
         "backend/utils/conversations/process_conversation.py",
         "backend/config/notes_short_clip.py",
         "backend/utils/llm/notes_short_clip.py",
+        "backend/utils/llm/notes_short_clip_policy.py",
         "backend/utils/conversations/minimum_derived.py",
         "backend/utils/app_integrations.py",
         "backend/utils/conversations/merge_conversations.py",

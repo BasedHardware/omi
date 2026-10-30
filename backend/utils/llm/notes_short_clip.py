@@ -13,6 +13,7 @@ from utils.conversations.recovery import recovery_transcript_word_count
 from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE, normalize_relevance_text
 from utils.llm.notes_language_inputs import in_profile_segments
 from utils.llm.notes_refactor_metrics import shadow, result
+from utils.llm.notes_short_clip_policy import english_word_floor, has_existing_notes
 
 NOTES_MIN_WORDS = 12
 
@@ -51,9 +52,9 @@ def speech_seconds(segments: Any) -> float | None:
     return total if seen else None
 
 
-def below_short_clip_floor(*, words: int, speech_seconds: float | None) -> bool:
-    """The short-clip floor on either measure: few words, or speech too brief to carry them."""
-    if words < NOTES_MIN_WORDS:
+def below_short_clip_floor(*, words: int, speech_seconds: float | None, use_word_floor: bool = True) -> bool:
+    """Few English words, or speech too brief to carry a conversation in any language."""
+    if use_word_floor and words < NOTES_MIN_WORDS:
         return True
     return speech_seconds is not None and 0 <= speech_seconds < SHORT_CLIP_MAX_SPEECH_SECONDS
 
@@ -66,14 +67,20 @@ def has_explicit_reminder(segments: Any) -> bool:
     return bool(EXPLICIT_REMINDER_RE.search(normalize_relevance_text(text)))
 
 
-def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None, user_kept: bool = False) -> Any:
+def quiet_minimum(
+    uid: str,
+    conversation: Any,
+    *,
+    tz: str | None = None,
+    user_kept: bool = False,
+    summary_app_selected: bool = False,
+) -> Any:
     """A short nonempty speech capture is kept, without any paid notes.
 
-    Short is the floor on either measure (``below_short_clip_floor``): few
-    words, or a span of speech too brief to carry a conversation even when the
-    recognizer packed a dozen words into it. Either way the clip never reaches
-    the relevance tiers or the notes model, so no tier can keep it as a
-    standalone conversation with a generated title.
+    Known English captures use words or speech duration; other/unknown languages
+    use duration alone because reminder patterns only cover English. Existing
+    notes and user-selected apps always bypass the floor. Eligible clips skip
+    the relevance tiers and notes model.
 
     The emoji is the minimum's deterministic category emoji (💬): a blank value
     does not render blank in the app, it renders the client's random fallback.
@@ -86,6 +93,9 @@ def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None, user_ke
         or getattr(conversation, 'user_title', None)
         or getattr(conversation, 'photos', None)
         or getattr(conversation, 'has_photos', False)
+        or has_existing_notes(conversation)
+        or summary_app_selected
+        or getattr(conversation, 'app_id', None)
     ):
         return None
     segments = list(getattr(conversation, 'transcript_segments', None) or ())
@@ -105,7 +115,11 @@ def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None, user_ke
     ]
     view = SimpleNamespace(transcript_segments=selected, started_at=getattr(conversation, 'started_at', None))
     words = recovery_transcript_word_count(view)
-    eligible = bool(text.strip()) and below_short_clip_floor(words=words, speech_seconds=speech_seconds(selected))
+    eligible = bool(text.strip()) and below_short_clip_floor(
+        words=words,
+        speech_seconds=speech_seconds(selected),
+        use_word_floor=english_word_floor(conversation, normalize_relevance_text(text)),
+    )
     shadow('short_clip', 'disagree' if eligible else 'agree', words=words)
     if not eligible or not serving:
         return None

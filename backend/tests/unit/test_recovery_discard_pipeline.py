@@ -75,6 +75,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
     monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(pc, 'has_structural_wake_word_marker', lambda text: False)
     monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *args: False)
@@ -106,6 +107,7 @@ def _seed(pipeline, *, level='enhanced', transcript=None, **overrides):
         'id': CID,
         'status': 'processing',
         'source': 'omi',
+        'language': 'en',
         'created_at': NOW - timedelta(days=30),
         'started_at': NOW - timedelta(days=30),
         'finished_at': NOW - timedelta(days=30),

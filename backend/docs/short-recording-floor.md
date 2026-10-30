@@ -5,18 +5,36 @@
 The existing notes-v2 serve cohort still implies the floor when this switch is off;
 notes-v2 shadow comparisons continue when the independent floor is disabled.
 
-A nonempty audio transcript below 12 words **or** 4 seconds of transcript speech
-gets the existing deterministic minimum: a nonempty title, deterministic emoji,
+A nonempty audio transcript below 4 seconds of transcript speech gets the
+existing deterministic minimum. Known English captures also qualify below 12
+words; the word rule is disabled for every other/unknown/multilingual capture
+and for text containing non-ASCII letters, including mixed or mistagged unspaced
+scripts (Thai, Lao, Khmer, Burmese, Japanese, Chinese including CJK extensions,
+and Korean). Capture language controls this rule, never output-language preference.
+Missing duration alone cannot floor a non-English/unknown capture. The minimum
+has a nonempty title, deterministic emoji,
 empty overview, no tasks/events, and `structured.title_provenance=server_minimum`.
 It remains retained with its original transcript and audio. Photos, explicit
-user-kept authority, user titles, and explicit reminder phrasing bypass the floor.
-Reminder matching joins segments and uses the existing Unicode/apostrophe normalization,
+user-kept authority, user titles, existing non-minimum notes, user-selected summary
+apps (explicit request, stored selection or preferred app), and explicit English
+reminder phrasing bypass the floor. Existing notes include any non-minimum title
+or provenance, overview, sections, tasks or events. An explicit Omi-summary request
+also bypasses it. An unreadable app preference conservatively keeps full notes.
+Reminder matching only covers English. Other languages retain notes for short
+reminders of at least four seconds because they use duration only. All languages
+remain subject to the duration rule unless otherwise exempt. Matching joins
+segments and uses the existing Unicode/apostrophe normalization,
 including a phrase split across segment boundaries. Stored manual titles survive model
 deserialization as excluded read-only metadata, preserving the exemption during reprocessing.
 
 Consumers use the persisted minimum marker rather than re-evaluating the switch:
 memory extraction (both L1 and L2), summary apps, automatic folder assignment and
-goal intelligence are skipped. Minimums do not queue lazy enrichment. Capture audio
+goal intelligence and summary embeddings/vector indexing are skipped. Normal and
+completed-replay finalization both omit embedding work; the direct vector writer
+also no-ops for minimum rows, including metadata-only requests. Title search
+uses the separate Typesense title/overview index; minima need no semantic-summary
+vector. Enriched replacements can be embedded normally. Minimums do not queue
+lazy enrichment. Capture audio
 work, creation webhooks and external integration delivery retain their normal path.
 Recovery-only terminal minimum behavior remains scoped to recovery triggers.
 A later enriched replacement without the marker admits derived work normally.
@@ -27,7 +45,9 @@ obligation. It clears pending summary debt and prevents repair retries without s
 outputs retain their summary debt; banked summaries and later meaningful enrichment
 keep the existing summary guarantees.
 
-The deterministic title algorithm is unchanged. Its desktop mirror remains
+This is a **server-only** compute contract. The desktop local summarizer is out
+of scope and can still produce local notes before upload. The deterministic title
+algorithm is unchanged. Its desktop mirror remains
 `desktop/macos/Desktop/Sources/LocalInference/DeterministicConversationMinimum.swift`.
 
 ## Basis and monitoring

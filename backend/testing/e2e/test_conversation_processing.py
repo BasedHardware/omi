@@ -233,7 +233,8 @@ def test_short_recording_minimum_survives_api_readback_without_paid_intelligence
     webhook.assert_awaited_once()
 
 
-def test_user_renamed_short_row_still_reaches_notes_on_reprocess(client, auth_headers, monkeypatch):
+@pytest.mark.parametrize('authority', ['user_title', 'enriched', 'title_only'])
+def test_existing_short_row_notes_survive_user_reprocess(client, auth_headers, monkeypatch, authority):
 
     _patch_process_conversation_boundaries(monkeypatch)
     notes = Mock(wraps=process_module.get_conversation_notes)
@@ -251,8 +252,10 @@ def test_user_renamed_short_row_still_reaches_notes_on_reprocess(client, auth_he
             'language': 'en',
             'status': 'completed',
             'discarded': False,
-            'user_title': 'My chosen title',
-            'structured': Structured(title='Old notes').model_dump(),
+            **({'user_title': 'My chosen title'} if authority == 'user_title' else {}),
+            'structured': Structured(
+                title='Old notes', overview='Existing rich notes' if authority == 'enriched' else ''
+            ).model_dump(),
             'transcript_segments': [
                 dict(id='curated-source', text='A tiny recording', speaker='SPEAKER_00', is_user=True, start=0, end=2)
             ],
@@ -262,7 +265,13 @@ def test_user_renamed_short_row_still_reaches_notes_on_reprocess(client, auth_he
     response = client.post('/v1/conversations/renamed-short/reprocess', headers=auth_headers)
     assert response.status_code == 200, response.text
     notes.assert_called_once()
-    assert read_conversation('123', 'renamed-short')['user_title'] == 'My chosen title'
+    stored = read_conversation('123', 'renamed-short')
+    assert stored['structured'].get('title_provenance') != 'server_minimum'
+    assert stored['structured']['overview'] == 'A deterministic processing result created by the E2E harness.'
+    if authority == 'user_title':
+        assert stored['user_title'] == 'My chosen title'
+    else:
+        assert not stored.get('user_title')
 
 
 def test_transactional_create_exposes_recorded_span_and_preexisting_episode_membership(

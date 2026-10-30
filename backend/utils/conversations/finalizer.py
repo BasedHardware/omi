@@ -90,6 +90,9 @@ def _maybe_start_shadow(uid: str, conversation) -> None:
 
 def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
     """Provider errors are counted by the writer; never propagate to finalization."""
+    if is_server_minimum(conversation):
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_server_minimum').inc()
+        return
     if getattr(conversation, 'processing_deferred', False) is True:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
         return
@@ -568,11 +571,8 @@ async def finalize_persisted_conversation(
             from utils.sync.reprocess import mark_effects
 
             await run_blocking(db_executor, mark_effects, uid, conversation_id, resolved_language)
-        # Completed-row replays have no coordinator bundle. Summary indexing is
-        # independent of folder/apps receipts and terminal intelligence
-        # suppression, but must share the same winning fanout claim.
-        # Await inside a fail-soft boundary rather than detach a provider pipeline:
-        # the worker can exit after completion, so awaiting preserves write observability.
+        # Index enriched notes behind the winning claim, independently of apps.
+        # Await fail-soft so worker exit cannot strand an embedding request.
         episode_row = None
         try:
             latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)

@@ -33,7 +33,13 @@ def flags(monkeypatch):
     monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
 
 
+@pytest.fixture(autouse=True)
+def no_summary_app(pc, monkeypatch):
+    monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda _uid: None)
+
+
 def capture(text='A tiny recording', **kwargs):
+    kwargs.setdefault('language', 'en')
     return SimpleNamespace(
         transcript_segments=[SimpleNamespace(text=text, start=0.0, end=2.0)],
         started_at=START,
@@ -107,7 +113,7 @@ def test_user_authority_and_photos_bypass_floor(authority):
     assert notes_short_clip.quiet_minimum('synthetic-account', row, **kwargs) is None
 
 
-@pytest.mark.parametrize('text', ['...', '嗯', 'A tiny recording'])
+@pytest.mark.parametrize('text', ['...', 'A tiny recording'])
 def test_nonempty_capture_always_has_a_nonempty_title_even_without_selected_text(text, monkeypatch):
     monkeypatch.setattr(notes_short_clip, 'in_profile_segments', lambda _segments: [])
     result = notes_short_clip.quiet_minimum('synthetic-account', capture(text), tz='UTC')
@@ -185,7 +191,9 @@ def test_memory_boundary_skips_all_l1_l2_work_only_for_persisted_minimum(pc, mon
 
 
 @pytest.mark.parametrize('minimum', [True, False])
-def test_summary_app_boundary_skips_only_minimum_rows(pc, monkeypatch, minimum):
+@pytest.mark.parametrize('explicit', [True, False])
+@pytest.mark.parametrize('app_result', ['Summary result', ''])
+def test_summary_app_boundary_honors_explicit_selection_on_minimum_rows(pc, monkeypatch, minimum, explicit, app_result):
     row = capture()
     row.id, row.language, row.apps_results = 'synthetic-conversation', 'en', []
     row.started_at = None
@@ -194,7 +202,8 @@ def test_summary_app_boundary_skips_only_minimum_rows(pc, monkeypatch, minimum):
     available = MagicMock(return_value=[app])
     monkeypatch.setattr(pc, 'get_available_apps', available)
     monkeypatch.setattr(pc, 'conversation_transcript_for_llm', lambda *_args: 'Synthetic workshop discussion')
-    model = MagicMock(return_value='Summary result')
+    row.apps_results = [SimpleNamespace(app_id=app.id, content='Old app result')]
+    model = MagicMock(return_value=app_result)
     monkeypatch.setattr(pc, 'get_app_result', model)
 
     def inline(_executor, fn, *args):
@@ -203,8 +212,18 @@ def test_summary_app_boundary_skips_only_minimum_rows(pc, monkeypatch, minimum):
         return future
 
     monkeypatch.setattr(pc, 'submit_with_context', inline)
-    assert pc.trigger_conversation_apps('synthetic-account', row, app_id=app.id, explicit_app=app)
-    assert available.call_count == model.call_count == int(not minimum)
+    monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda _uid: app.id)
+    kwargs = dict(
+        app_id=app.id if explicit else None, explicit_app=app if explicit else None, replace_selected_result=True
+    )
+    if explicit and not app_result:
+        with pytest.raises(pc.ExplicitAppSelectionFailedError):
+            pc.trigger_conversation_apps('synthetic-account', row, **kwargs)
+    else:
+        assert pc.trigger_conversation_apps('synthetic-account', row, **kwargs)
+    assert available.call_count == model.call_count == int(explicit or not minimum)
+    expected = app_result if app_result and (explicit or not minimum) else 'Old app result'
+    assert row.apps_results[0].content == expected
 
 
 @pytest.mark.parametrize('deferred', [False, True])
@@ -258,6 +277,7 @@ def test_minimum_creation_preserves_webhook_and_audio_without_llm_derived_work(p
         webhook.assert_not_called()
         assert len(effects) == 1
         effects[0]()
+    assert 'save_structured_vector' not in submitted
     assert dispositions == [pc.DerivedEffectsDisposition.RUN]
     spies['assign_folder'].assert_not_called()
     pc.conversations_db.create_audio_files_from_chunks.assert_called()
@@ -271,3 +291,160 @@ def test_minimum_marker_supports_stored_dicts_and_enriched_replacement():
     assert is_server_minimum(row)
     row['structured'] = {'title_provenance': None}
     assert not is_server_minimum(row)
+
+
+@pytest.mark.parametrize(
+    'language,text',
+    [
+        ('th', 'วันนี้เราจะประชุมเรื่องแผนงานและกำหนดส่งโครงการในเดือนหน้า'),
+        ('lo', 'ມື້ນີ້ພວກເຮົາຈະປະຊຸມເພື່ອວາງແຜນວຽກໃນເດືອນໜ້າ'),
+        ('km', 'ថ្ងៃនេះយើងនឹងប្រជុំដើម្បីពិភាក្សាអំពីផែនការការងារសម្រាប់ខែក្រោយ'),
+        ('my', 'ဒီနေ့အစည်းအဝေးမှာနောက်လအတွက်စီမံကိန်းနဲ့အချိန်ဇယားကိုဆွေးနွေးမယ်'),
+        ('ja', '来月のプロジェクトの計画と納期について今日の会議で話し合います'),
+        ('zh', '今天我们讨论下个月的项目计划和交付时间然后确认每个人负责的工作'),
+        ('zh', '\U00020000\U00020001\U00020002\U00020003\U00020004'),
+        ('ko', '다음달프로젝트일정과담당업무를오늘회의에서논의하겠습니다'),
+    ],
+)
+@pytest.mark.parametrize('capture_tag', ['actual', 'en', 'multi'])
+def test_unspaced_scripts_use_duration_even_when_capture_is_mistagged(language, text, capture_tag):
+    row = capture(text, language=language if capture_tag == 'actual' else capture_tag)
+    row.transcript_segments[0].end = 60.0
+    assert notes_short_clip.quiet_minimum('synthetic-account', row) is None
+
+
+@pytest.mark.parametrize('language', ['fr', 'es', 'vi', 'th', 'ja', 'zh', 'multi', 'auto', None])
+@pytest.mark.parametrize('seconds,minimum', [(None, False), (3.9, True), (4.0, False), (60.0, False)])
+def test_word_rule_is_english_only_and_unknown_duration_never_floors_other_languages(language, seconds, minimum):
+    row = capture('Un court rappel', language=language)
+    row.transcript_segments[0].end = seconds
+    assert (notes_short_clip.quiet_minimum('synthetic-account', row) is not None) is minimum
+
+
+@pytest.mark.parametrize('language', ['en', 'en-US', 'en-GB'])
+def test_known_english_still_uses_word_rule(language):
+    row = capture(language=language)
+    row.transcript_segments[0].end = 60.0
+    assert notes_short_clip.quiet_minimum('synthetic-account', row) is not None
+
+
+def _notes_boundary(pc, monkeypatch):
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
+    # An English output preference must never enable the word rule on other speech.
+    monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda *_args: 'en')
+    monkeypatch.setattr(pc, 'should_discard_conversation', lambda *_a, **_k: False)
+    monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *_a, **_k: False)
+    notes = MagicMock(side_effect=RuntimeError('notes boundary reached'))
+    monkeypatch.setattr(pc, 'get_conversation_notes', notes)
+    return notes
+
+
+@pytest.mark.parametrize(
+    'language,text',
+    [
+        ('fr', 'Rappelle-moi de téléphoner à maman'),
+        ('ja', '明日母に電話するのを忘れないで'),
+        (None, 'Call mom tomorrow'),
+    ],
+)
+def test_non_english_reminder_reaches_full_notes_despite_english_output_preference(pc, monkeypatch, language, text):
+    notes = _notes_boundary(pc, monkeypatch)
+    row = capture(text, language=language)
+    row.transcript_segments[0].end = 5.0
+    with pytest.raises(RuntimeError, match='notes boundary reached'):
+        pc._get_structured('synthetic-account', language or 'en', row)
+    notes.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'structured',
+    [
+        Structured(title='Earlier model title'),
+        Structured(title='Earlier model title', overview='Previously enriched notes'),
+        Structured(title='Recording', title_provenance='server_minimum', overview='Preserved overview'),
+        Structured(
+            title='Recording',
+            title_provenance='server_minimum',
+            sections=[{'heading': 'Plan', 'body_markdown': 'Ship it'}],
+        ),
+    ],
+)
+def test_user_reprocess_of_enriched_short_row_reaches_notes_instead_of_replacing_with_minimum(
+    pc, monkeypatch, structured
+):
+    notes = _notes_boundary(pc, monkeypatch)
+    row = capture(structured=structured)
+    with pytest.raises(RuntimeError, match='notes boundary reached'):
+        pc._get_structured('synthetic-account', 'en', row, trigger=pc.ProcessingTrigger.USER_REPROCESS, user_kept=False)
+    notes.assert_called_once()
+    assert row.structured == structured
+
+
+def test_empty_structure_and_prior_minimum_remain_eligible():
+    for structured in (Structured(), Structured(title='Recording', title_provenance='server_minimum')):
+        assert notes_short_clip.quiet_minimum('synthetic-account', capture(structured=structured)) is not None
+
+
+@pytest.mark.parametrize('selection', ['app_id', 'preferred', 'omi', 'stored_app'])
+def test_selected_summary_app_bypasses_floor_and_reaches_full_notes(pc, monkeypatch, selection):
+    notes = _notes_boundary(pc, monkeypatch)
+    row = capture()
+    if selection == 'preferred':
+        monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda _uid: 'chosen-app')
+    if selection == 'stored_app':
+        row.app_id = 'chosen-app'
+    with pytest.raises(RuntimeError, match='notes boundary reached'):
+        pc._get_structured(
+            'synthetic-account',
+            'en',
+            row,
+            trigger=pc.ProcessingTrigger.USER_REPROCESS,
+            summary_app_selected=selection in ('app_id', 'omi'),
+        )
+    notes.assert_called_once()
+
+
+def test_explicit_app_request_is_passed_from_processing_to_floor_admission(pc, monkeypatch):
+    spies = _spy_managed_effects(monkeypatch, pc)
+    _stub_completed_for_normal_path(monkeypatch, pc)
+    pc.process_conversation(
+        'synthetic-account', 'en', _omi_create(), app_id='chosen-app', trigger=pc.ProcessingTrigger.USER_REPROCESS
+    )
+    assert spies['get_structured'].call_args.kwargs['summary_app_selected'] is True
+    assert spies['trigger_apps'].call_args.kwargs['app_id'] == 'chosen-app'
+
+
+def test_app_lookup_failure_preserves_full_notes_and_reports_fallback(monkeypatch):
+    from utils.llm import notes_short_clip_policy as policy
+
+    fallback = MagicMock()
+    monkeypatch.setattr(policy, 'record_fallback', fallback)
+    assert policy.selected_summary_app('synthetic-account', False, MagicMock(side_effect=ConnectionError()))
+    fallback.assert_called_once()
+
+
+def test_later_sync_speech_promotes_prior_minimum_to_full_notes_admission(pc, monkeypatch):
+    notes = _notes_boundary(pc, monkeypatch)
+    row = capture()
+    row.structured = notes_short_clip.quiet_minimum('synthetic-account', row)
+    row.transcript_segments.append(
+        SimpleNamespace(
+            text='We decided to deliver the updated project plan next Monday morning together', start=2.0, end=20.0
+        )
+    )
+    with pytest.raises(RuntimeError, match='notes boundary reached'):
+        pc._get_structured('synthetic-account', 'en', row, trigger=pc.ProcessingTrigger.SYNC_UPDATE)
+    notes.assert_called_once()
+
+
+@pytest.mark.parametrize('update_only', [False, True])
+def test_minimum_vector_writer_skips_embedding_and_index_work(pc, monkeypatch, update_only):
+    row = capture(structured=Structured(title='Recording', title_provenance='server_minimum'))
+    embedding, upsert, metadata = MagicMock(), MagicMock(), MagicMock()
+    monkeypatch.setattr(pc, 'generate_embedding', embedding)
+    monkeypatch.setattr(pc, 'upsert_vector2', upsert)
+    monkeypatch.setattr(pc, 'update_vector_metadata', metadata)
+    assert pc.save_structured_vector('synthetic-account', row, update_only=update_only)
+    embedding.assert_not_called()
+    upsert.assert_not_called()
+    metadata.assert_not_called()

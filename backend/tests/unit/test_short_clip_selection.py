@@ -10,6 +10,7 @@ from tests.unit.test_workflow_contracts import selector_and_all_tests
     [
         'backend/config/notes_short_clip.py',
         'backend/utils/llm/notes_short_clip.py',
+        'backend/utils/llm/notes_short_clip_policy.py',
         'backend/utils/conversations/minimum_derived.py',
     ],
 )

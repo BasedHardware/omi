@@ -17,7 +17,7 @@ def test_user_title_survives_deserialization_and_exempts_a_short_row(monkeypatch
         created_at=now,
         started_at=now,
         finished_at=now,
-        structured=Structured(title='Old title').model_dump(),
+        structured=Structured(title='Recording', title_provenance='server_minimum').model_dump(),
         user_title='My recording',
         transcript_segments=[dict(text='A tiny recording', start=0, end=2, speaker='SPEAKER_00', is_user=True)],
     )
