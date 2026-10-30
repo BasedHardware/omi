@@ -229,8 +229,10 @@ class AuthService {
   /// FirebaseAuth, so every identity read goes through the one seam.
   AuthUserSnapshot? get currentUser => _tokenGateway.currentUser;
 
-  /// Sign-in changes (sign-in, sign-out, a different account), as identity snapshots.
-  Stream<AuthUserSnapshot?> get userChanges =>
+  /// Sign-in and sign-out, as identity snapshots: FirebaseAuth's `authStateChanges` (not its
+  /// `userChanges`, which also fires on profile and token updates). Like [currentUser], callers
+  /// should listen here rather than to FirebaseAuth, so identity has one seam.
+  Stream<AuthUserSnapshot?> get authStateChanges =>
       FirebaseAuth.instance.authStateChanges().map(_FirebaseAuthTokenGateway.snapshotOf);
 
   static const _pkceCodeVerifierLength = 64;

@@ -105,7 +105,8 @@ class AuthenticationProvider extends BaseProvider {
     _startupUid = SharedPreferencesUtil().uid;
     // DEBUG: Log initial state
     Logger.debug(
-      'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}',
+      'DEBUG AuthProvider: Initial currentUser=${AuthService.instance.currentUser?.uid}, '
+      'isAnonymous=${AuthService.instance.currentUser?.isAnonymous}',
     );
 
     Future.microtask(() {
