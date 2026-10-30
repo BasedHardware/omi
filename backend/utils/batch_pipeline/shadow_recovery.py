@@ -138,7 +138,7 @@ def _recover_steps(repository, artifacts, segment, *, stt=None, second_stt=None,
                         try:
                             reply = yield ProviderStep(
                                 second_stt,
-                                (item, audio, empty),
+                                (item, audio, empty, True) if second_stt is second_transcribe else (item, audio, empty),
                                 second_transcribe_async if second_stt is second_transcribe else None,
                             )
                             payload = reply.result()
