@@ -125,10 +125,13 @@ def enabled(uid: str) -> bool:
 def _compare_omi(uid: str, served: bool) -> None:
     try:
         resolved = omi_flags.resolve(FLAG_KEY, uid)
-        outcome = 'omi_absent' if resolved is None else ('match' if resolved.enabled == served else 'mismatch')
     except Exception:
-        outcome = 'omi_error'
-    OMI_FLAG_DUAL_READ_TOTAL.labels(flag=FLAG_KEY, outcome=outcome).inc()
+        OMI_FLAG_DUAL_READ_TOTAL.labels(flag=FLAG_KEY, outcome='omi_error').inc()
+        return
+    OMI_FLAG_DUAL_READ_TOTAL.labels(
+        flag=FLAG_KEY,
+        outcome='omi_absent' if resolved is None else ('match' if resolved.enabled == served else 'mismatch'),
+    ).inc()
 
 
 def _posthog_enabled(uid: str) -> bool:
