@@ -1,9 +1,11 @@
 """Review v1 wire contract shared with the mobile client."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal, Optional, get_args
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator, model_serializer
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
 
 from models.dream_edit import Edit, MemoryHygieneEdit, Term
 from models.agent_edit import HarnessEdit
@@ -229,6 +231,18 @@ class SpeakerAnswer(BaseModel):
     new_person_name: Optional[str] = Field(default=None, min_length=2, max_length=40)
     is_me: bool = False
 
+    @field_validator('person_id', 'new_person_name', mode='before')
+    @classmethod
+    def _validate_speaker_strings(cls, v: object) -> object:
+        if v is None:
+            return v
+        if not isinstance(v, str):
+            raise ValueError('field must be a string')
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError('field must not be blank')
+        return cleaned
+
     @model_validator(mode='after')
     def single_identity(self):
         if sum([self.person_id is not None, self.new_person_name is not None, self.is_me]) != 1:
@@ -244,6 +258,18 @@ class TaskAnswer(BaseModel):
     due_at: Optional[AwareDatetime] = None
     workstream_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
+    @field_validator('edited_description', 'workstream_id', mode='before')
+    @classmethod
+    def _validate_task_strings(cls, v: object) -> object:
+        if v is None:
+            return v
+        if not isinstance(v, str):
+            raise ValueError('field must be a string')
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError('field must not be blank')
+        return cleaned
+
 
 class SamePersonAnswer(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -253,6 +279,16 @@ class SamePersonAnswer(BaseModel):
 class SpellingAnswer(BaseModel):
     model_config = ConfigDict(extra='forbid')
     value: str = Field(min_length=1, max_length=200)
+
+    @field_validator('value', mode='before')
+    @classmethod
+    def _validate_spelling_value(cls, v: object) -> object:
+        if not isinstance(v, str):
+            raise ValueError('value must be a string')
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError('value must not be blank')
+        return cleaned
 
 
 class AgentProposalAnswer(BaseModel):
@@ -301,7 +337,7 @@ class ReviewAnswerV2(BaseModel):
 class ReviewAnswerReceipt(BaseModel):
     item_id: str
     applied: bool
-    remaining_today: int
+    remaining_today: int = Field(ge=0)
 
 
 class ChangeRef(BaseModel):
