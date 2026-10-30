@@ -1,11 +1,12 @@
 """Hermetic sweeper: real repair transactions, fake pod inventory and bounded IO."""
 
 from datetime import datetime, timezone
+import builtins
 import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -180,8 +181,6 @@ def test_tls_api_read_is_scoped_and_does_not_persist_inventory(proof, monkeypatc
     response.read.return_value = json.dumps(inventory([])).encode()
     opener = Mock(return_value=SimpleNamespace(__enter__=lambda _: response, __exit__=lambda *args: False))
     # MagicMock owns context-manager special methods on its type.
-    from unittest.mock import MagicMock
-
     opener.return_value = MagicMock()
     opener.return_value.__enter__.return_value = response
     monkeypatch.setattr(sweeper, 'urlopen', opener)
@@ -234,6 +233,18 @@ def test_runtime_refuses_outside_approved_stage(monkeypatch, emulator, stage):
     reader.assert_not_called()
 
 
+def test_invalid_mode_refuses_before_inventory(monkeypatch):
+    monkeypatch.setenv('RECORD_SEAL_SWEEPER_ENABLED', 'true')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('RECORD_SEAL_SWEEPER_MODE', 'other')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    reader = Mock()
+    monkeypatch.setattr(sweeper, 'read_pusher_pod_proof', reader)
+    with pytest.raises(ValueError, match='invalid sweep mode'):
+        sweeper.run()
+    reader.assert_not_called()
+
+
 def test_one_nested_structured_log_and_no_error_payload(monkeypatch, capsys):
     path = Path(__file__).resolve().parents[2] / 'scripts/record_seal_sweep.py'
     spec = importlib.util.spec_from_file_location('sweeper_cli', path)
@@ -255,3 +266,25 @@ def test_one_nested_structured_log_and_no_error_payload(monkeypatch, capsys):
     assert outer['logger'] == 'record-seal-sweeper'
     assert json.loads(outer['message']) == {'event': 'record_seal_sweep', 'outcome': 'error'}
     assert 'example.invalid' not in out.out and 'object/private' not in out.out and 'AbC012' not in out.out
+
+
+def test_cli_import_failure_emits_only_generic_summary(monkeypatch, capsys):
+    original_import = builtins.__import__
+
+    def fail_import(name, *args, **kwargs):
+        if name == 'utils.batch_pipeline':
+            raise ImportError('private/object user@example.invalid AbC0123456789abcdefghijkLMNOP')
+        return original_import(name, *args, **kwargs)
+
+    path = Path(__file__).resolve().parents[2] / 'scripts/record_seal_sweep.py'
+    spec = importlib.util.spec_from_file_location('sweeper_import_failure', path)
+    cli = importlib.util.module_from_spec(spec)
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    with monkeypatch.context() as patcher:
+        patcher.setattr(builtins, '__import__', fail_import)
+        spec.loader.exec_module(cli)
+    assert cli.main() == 1
+    out = capsys.readouterr()
+    assert out.err == '' and len(out.out.splitlines()) == 1
+    assert json.loads(json.loads(out.out)['message']) == {'event': 'record_seal_sweep', 'outcome': 'error'}
+    assert 'example.invalid' not in out.out and 'private/object' not in out.out and 'AbC012' not in out.out

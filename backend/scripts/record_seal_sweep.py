@@ -12,15 +12,22 @@ from omi_logging import configure_logging
 
 configure_logging('record-seal-sweeper', default_format='json')
 
+# Imports stay at module scope; bootstrap diagnostics must not expose paths or
+# identifiers before the content-free error summary can be emitted.
+logging.disable(logging.CRITICAL)
+try:
+    from utils.batch_pipeline import record_seal_sweeper
+except Exception:
+    record_seal_sweeper = None
+
 
 def main():
     # Suppress dependency diagnostics, including import-time errors containing IDs.
     logging.disable(logging.CRITICAL)
     report = {'event': 'record_seal_sweep', 'outcome': 'error'}
     try:
-        from utils.batch_pipeline.record_seal_sweeper import run
-
-        report = run()
+        if record_seal_sweeper is not None:
+            report = record_seal_sweeper.run()
     except Exception:
         pass
     logging.disable(logging.NOTSET)

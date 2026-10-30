@@ -3,14 +3,20 @@
 from collections import Counter
 from datetime import datetime, timezone
 import math
-import os
 from pathlib import Path
 import ssl
 import time
 from typing import TypedDict
 from urllib.request import Request, urlopen
 
+from google.cloud.firestore_v1 import FieldFilter
+
+from config import record_seal_sweeper as sweeper_config
+from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline.artifact_policy import artifacts_for
+from utils.batch_pipeline import record_seal_repair
 from utils.batch_pipeline.record_producer_proof import NAMESPACE, parse_pusher_pod_proof, producer_tokens_dead
+from utils.other.local_storage import create_storage_client
 
 DISCOVERY_LIMIT = 128
 SEAL_LIMIT = 64
@@ -53,8 +59,6 @@ def read_pusher_pod_proof():
 
 def discover_pending(client, namespace):
     """Reuse the drainer's state/available_at index, with a hard read bound."""
-    from google.cloud.firestore_v1 import FieldFilter
-
     query = (
         client.collection(f'{namespace}_jobs')
         .where(filter=FieldFilter('state', '==', 'record_pending'))
@@ -76,8 +80,6 @@ def sweep(
     store, storage_client, artifacts, *, inventory=read_pusher_pod_proof, discover=discover_pending, mode: str = 'apply'
 ) -> SweepReport:
     """Fail closed before writes on any discovery, inventory or planning IO error."""
-    from utils.batch_pipeline.record_seal_repair import plan_seals, apply_seals
-
     report: SweepReport = {
         'event': 'record_seal_sweep',
         'outcome': 'error',
@@ -140,14 +142,14 @@ def sweep(
                 counts['seal_cap'] += 1
             else:
                 candidates.append(job_id)
-        plan = plan_seals(store, candidates, storage_client, artifacts, producer_proof=proof)
+        plan = record_seal_repair.plan_seals(store, candidates, storage_client, artifacts, producer_proof=proof)
         report['oldest_unsealed_over_four_hours'] = report['oldest_unsealed_seconds'] > 14400
         if any(e['disposition'] in {'read_error', 'unavailable'} for e in plan['entries']):
             report['outcome'] = 'read_error'
             return report
         _fresh(proof)  # Tail reads may have exhausted the five-minute proof window.
         if mode == 'apply':
-            counts.update(apply_seals(store, plan, plan['plan_sha256']))
+            counts.update(record_seal_repair.apply_seals(store, plan, plan['plan_sha256']))
         else:
             counts.update(entry['disposition'] for entry in plan['entries'])
         report['dispositions'] = dict(sorted(counts.items()))
@@ -159,18 +161,11 @@ def sweep(
 
 
 def run():
-    if os.getenv('RECORD_SEAL_SWEEPER_ENABLED', 'true').strip().lower() != 'true':
+    if not sweeper_config.enabled():
         return {'event': 'record_seal_sweep', 'outcome': 'disabled'}
     # Only the approved in-cluster production identity may perform ambient writes.
-    if os.getenv('FIRESTORE_EMULATOR_HOST') or os.getenv('OMI_ENV_STAGE') != 'prod':
-        raise ValueError('production in-cluster runtime required')
-    mode = os.getenv('RECORD_SEAL_SWEEPER_MODE', 'apply')
-    if mode not in {'plan', 'apply'}:
-        raise ValueError('invalid sweep mode')
+    sweeper_config.require_production_runtime()
+    mode = sweeper_config.mode()
     proof = read_pusher_pod_proof()  # Prove in-cluster scope before any cloud access.
-    from database.batch_pipeline_store import FirestoreStore
-    from utils.batch_pipeline.artifact_policy import artifacts_for
-    from utils.other.local_storage import create_storage_client
-
     store = FirestoreStore('batch_pipeline_prod')
     return sweep(store, create_storage_client(), artifacts_for(store), inventory=lambda: proof, mode=mode)
