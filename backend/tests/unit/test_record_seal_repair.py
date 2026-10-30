@@ -225,3 +225,74 @@ def test_private_exact_id_input_refuses_scans_duplicates_and_unbounded_lists(tmp
             module.read_job_ids(input_file)
     input_file.write_text(json.dumps(['exact']))
     assert module.read_job_ids(input_file) == ['exact']
+
+
+@pytest.fixture
+def cli(monkeypatch):
+    path = Path(__file__).resolve().parents[2] / 'scripts' / 'repair_record_audio_seals.py'
+    spec = importlib.util.spec_from_file_location('repair_seals_cli', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    monkeypatch.setattr(module.logging, 'disable', Mock())
+    for name in (
+        'read_job_ids',
+        'get_firestore_client',
+        'FirestoreStore',
+        'create_storage_client',
+        'artifacts_for',
+        'plan_seals',
+        'apply_seals',
+    ):
+        monkeypatch.setattr(module, name, Mock())
+    monkeypatch.setattr(module, 'plan_summary', Mock(return_value={'plan_sha256': 'synthetic-digest'}))
+    return module
+
+
+@pytest.mark.parametrize('tier', ['ro-prod', 'prod-operator'])
+def test_cli_dry_run_accepts_read_or_operator_tier_without_applying(cli, monkeypatch, capsys, tier):
+    monkeypatch.setenv('GCP_AGENT_TIER', tier)
+    monkeypatch.setattr(cli.sys, 'argv', ['repair', '--ids-file', 'synthetic.json'])
+    cli.main()
+    cli.plan_seals.assert_called_once_with(
+        cli.FirestoreStore.return_value,
+        cli.read_job_ids.return_value,
+        cli.create_storage_client.return_value,
+        cli.artifacts_for.return_value,
+        producer_proof=None,
+        producers_stopped=False,
+    )
+    cli.apply_seals.assert_not_called()
+    assert json.loads(capsys.readouterr().out) == {'apply': False, 'plan_sha256': 'synthetic-digest'}
+
+
+@pytest.mark.parametrize(
+    'tier,extra_args,emulator,error',
+    [
+        ('ro-prod', ['--apply', '--approve-plan-sha256', 'digest'], False, 'wrong identity'),
+        ('prod-operator', ['--apply'], False, 'apply requires a dry-run plan digest'),
+        ('ro-dev', [], False, 'wrong identity'),
+        ('', [], False, 'wrong identity'),
+        ('ro-prod', [], True, 'wrong identity'),
+        ('prod-operator', [], True, 'wrong identity'),
+        ('prod-operator', ['--apply', '--approve-plan-sha256', 'digest'], True, 'wrong identity'),
+    ],
+)
+def test_cli_refuses_unsafe_operation_before_cloud_access(cli, monkeypatch, capsys, tier, extra_args, emulator, error):
+    monkeypatch.setenv('GCP_AGENT_TIER', tier)
+    if emulator:
+        monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', 'localhost:8080')
+    monkeypatch.setattr(cli.sys, 'argv', ['repair', '--ids-file', 'synthetic.json', *extra_args])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 2
+    assert error in capsys.readouterr().err
+    for name in (
+        'read_job_ids',
+        'get_firestore_client',
+        'FirestoreStore',
+        'create_storage_client',
+        'plan_seals',
+        'apply_seals',
+    ):
+        getattr(cli, name).assert_not_called()
