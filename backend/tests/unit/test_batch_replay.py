@@ -172,6 +172,26 @@ def test_current_incident_shapes_clear(backend_tree):
     assert not healthy['exceptions'] and not healthy['chain_blocks']
     assert healthy['coverage']['followup_exercised'] == len(corpus['units'])
     assert healthy['coverage']['source_validated'] == len(corpus['units'])
+    assert healthy['worker_results']['word-clock-eof'] == {
+        'outcome': 'success',
+        'persisted': True,
+        'word_timestamps': [[0.1, 0.5]],
+    }
+
+
+def test_worker_clock_failure_is_recorded_and_blocks_projection(backend_tree):
+    corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
+    corpus['units'] = [unit for unit in corpus['units'] if 'worker_words' in unit]
+    corpus['units'][0]['worker_words'][0]['timestamp'] = [0.6, 0.7]
+    result = replay(corpus, backend_tree)
+    assert result['persisted'] == 0
+    assert result['worker_results']['word-clock-eof'] == {
+        'persisted': False,
+        'stage': 'word_clocks',
+        'reason': 'word_clock',
+    }
+    assert result['unit_issues']['word-clock-eof'] == ['word_clocks:ValidationFailureWork:word_clock']
+    assert result['chain_blocks'][0]['blocked_units'] == 1
 
 
 def test_selected_snapshot_cannot_replace_replay_transaction_rules(backend_tree, monkeypatch):
