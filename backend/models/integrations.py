@@ -138,7 +138,7 @@ class ConversationItem(BaseModel):
     transcript_segments: Optional[List[ConversationItemTranscriptSegment]] = None
     discarded: Optional[bool] = False
     app_id: Optional[str] = None
-    language: Optional[str] = None
+    language: Optional[str] = "en"
     external_data: Optional[Dict[str, Any]] = None
     geolocation: Optional[ConversationItemGeolocation] = None
     status: Optional[str] = None
