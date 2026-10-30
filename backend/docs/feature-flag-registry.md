@@ -520,6 +520,7 @@ and an explicit empty literal renders as `''`.
 | `DREAM_TELEMETRY_V2_ENABLED` | Default-on structured dream_pass/dream_sweep JSON records (counts, durations, uuid run/sweep ids, allowlisted labels); 0/false/off/no stops them, leaving the legacy text lines | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_COMPOSER` | Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` | Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_LIVE_TIMER_START_ENABLED` | Default on; send the authoritative live episode timer start to current apps | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_MOMENT_OUTPUT_VALIDATOR` | Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -999,6 +1000,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `EPISODE_CARRY_ON_SESSION_END` — Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives (fail: open)
+- `EPISODE_COMPOSER` — Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) (fail: open)
 - `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` — Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor (fail: open)
 - `EPISODE_LIVE_TIMER_START_ENABLED` — Default on; send the authoritative live episode timer start to current apps (fail: open)
 - `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)

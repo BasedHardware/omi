@@ -74,7 +74,7 @@ from database import users as users_db
 from database.auth import get_user_name
 from utils.episodes import moment_render, boundary_runtime
 from utils.episodes import output_language as episode_language
-from utils.episodes import client_gate, incremental, metrics, policy, recovery
+from utils.episodes import client_gate, composer, incremental, metrics, policy, recovery
 from utils.episodes import capture_groups as episode_groups
 from utils.episodes.capture_groups import calendar_identity as _calendar_identity
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
@@ -413,6 +413,7 @@ def _close(
             carried_items.extend(transferred)
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
+        composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
     return closed is not None
 
 
@@ -1139,7 +1140,9 @@ def on_conversation_finalized(
             # No app of this user can show episodes: no tail update, no reconciliation reads.
             metrics.record_moment_skipped_no_client('finalize')
             return 'skipped_no_client'
-        return _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c)
+        return composer.after_finalized(
+            uid, conversation_id, _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c), c
+        )
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
         return 'error'
@@ -1871,7 +1874,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'closed_at': episode.get('closed_at'),
         'close_reason': episode.get('close_reason'),
         'title': clean_text(episode.get('title'), 240),
-        'bullets': [clean_text(line, 400) for line in episode.get('bullets') or []],
+        'bullets': [clean_text(line, composer.COMPOSER_MAX_PARAGRAPH_CHARS) for line in episode.get('bullets') or []],
         'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [
             {
