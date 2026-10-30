@@ -537,3 +537,7 @@ tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_er
 # loaded local shard (2026-10-29) against the 1.00s guard; import-amortized
 # boundary shape as the entries above, assertions all pass.
 tests/unit/test_batch_pipeline_projection_release.py::test_redriven_reassignment_does_not_regress_the_watermark
+# 2026-10-30 #24139: parses config/feature-flags.yaml for flag registry verification;
+# measured 1.11s CPU on shard 4 (commit 40441503ca) under loaded runner conditions.
+# Keeps the refusal logic strictly verified in the fast unit suite without tripping the 1.00s guard.
+tests/unit/test_omi_flags.py::test_registry_refuses_unknown_keys_and_experiments
