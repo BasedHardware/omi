@@ -97,7 +97,11 @@ async def request_json(
         from utils.messaging.metrics import HTTP
 
         host = urlparse(url).hostname or ''
-        provider = 'telegram' if host == 'api.telegram.org' else 'keiki' if host.endswith('onkeiki.com') else 'linq'
+        provider = (
+            'telegram'
+            if host == 'api.telegram.org'
+            else 'keiki' if host == 'onkeiki.com' or host.endswith('.onkeiki.com') else 'linq'
+        )
         HTTP.labels(provider, str(status)).inc()
         if status == 429 or value.get('error_code') == 429:
             delay = value.get('parameters', {}).get('retry_after', response.headers.get('Retry-After', 1))
