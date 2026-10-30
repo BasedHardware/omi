@@ -1,5 +1,7 @@
 """Pure upload-barrier snapshot shared by staging and transactional admission."""
 
+PRODUCER_START_MARGIN_SECONDS = 2.0  # Integer boot seconds plus one user clock tick.
+
 
 def require_record_audio_barrier(row, *, expected=None):
     snapshot = {

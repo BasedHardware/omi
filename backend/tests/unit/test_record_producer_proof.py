@@ -43,6 +43,11 @@ def test_absent_pod_and_later_container_start_prove_dead(load):
     assert proof.producer_tokens_dead(token, load([pod('old', 950)]))
     assert not proof.producer_tokens_dead(token, load([pod('old', 800)]))
     assert not proof.producer_tokens_dead(token, load([pod('old', 900)]))
+    # btime integer seconds and start ticks can place the stored process epoch
+    # before its live container's timestamp. That is not a restart proof.
+    assert not proof.producer_tokens_dead(token, load([pod('old', 900.75)]))
+    assert not proof.producer_tokens_dead(token, load([pod('old', 902)]))
+    assert proof.producer_tokens_dead(token, load([pod('old', 902.01)]))
     assert not proof.producer_tokens_dead(token, load([pod('old', 950, extra_start=800)]))
 
 
@@ -98,6 +103,10 @@ def test_file_and_freshness_are_bound_and_wrong_scope_refuses(load, monkeypatch)
         load([pod('old', 800, namespace='other')])
     monkeypatch.setattr(proof.time, 'time', lambda: 1400)
     assert not proof.producer_tokens_dead({'t': {'pod': 'old', 'process_started_at': 900}}, first)
+
+
+def test_absence_inventory_must_postdate_process_start_uncertainty(load):
+    assert not proof.producer_tokens_dead({'t': {'pod': 'new', 'process_started_at': 998}}, load([]))
 
 
 @pytest.mark.parametrize('raw', [{}, {'kind': 'List', 'apiVersion': 'v1', 'items': []}])

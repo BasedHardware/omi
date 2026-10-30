@@ -3,12 +3,17 @@
 import uuid
 import os
 import time
+import logging
 from functools import lru_cache
 from pathlib import Path
 from prometheus_client import Counter
 
 from database import record_audio as record_audio_db
 from utils.executors import db_executor, run_blocking
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
+CLOSE_RETRY_BUDGET = 3
 
 RECORD_BARRIER_FAILURES = Counter(
     'omi_pusher_record_barrier_failures_total', 'Record barrier metadata failures; audio upload continues', ['stage']
@@ -19,6 +24,14 @@ for _stage in ('begin', 'finish', 'seal', 'failure_marker', 'capacity'):
 
 def _record_failure(stage):
     RECORD_BARRIER_FAILURES.labels(stage=stage).inc()
+    record_fallback(
+        component='pusher',
+        from_mode='record_barrier',
+        to_mode='raw_audio',
+        reason='other',
+        outcome='degraded',
+        log=logger,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -44,6 +57,18 @@ class PusherRecordBarrier:
         self.upload_sessions: dict[str, str] = {}
         self.checked_conversations: set[str] = set()
         self.pending_clears: set[tuple[str, str]] = set()
+        self.close_failures: dict[str, int] = {}
+
+    def _close_failed(self, conversation_id: str, stage: str) -> bool:
+        _record_failure(stage)
+        attempts = self.close_failures.get(conversation_id, 0) + 1
+        if attempts >= CLOSE_RETRY_BUDGET or (
+            conversation_id not in self.close_failures and len(self.close_failures) >= 128
+        ):
+            self.close_failures.pop(conversation_id, None)
+            return True  # Stop this bounded drain; leave durable repair debt.
+        self.close_failures[conversation_id] = attempts
+        return False
 
     async def begin_recording(self, conversation_id: str) -> None:
         if conversation_id in self.checked_conversations or conversation_id in self.failed_recordings:
@@ -67,12 +92,16 @@ class PusherRecordBarrier:
                 producer=producer_identity(),
             ):
                 self.upload_sessions[conversation_id] = token
+        except record_audio_db.RecordUploadCapacityExceeded:
+            _record_failure('capacity')
+            await self.fail_recording(conversation_id)
         except Exception:
             # Metadata outages must not interrupt the audio custody lane.
             _record_failure('begin')
             await self.fail_recording(conversation_id)
 
-    async def finish_recording(self, conversation_id: str) -> None:
+    async def finish_recording(self, conversation_id: str) -> bool:
+        """Return whether this close is settled or its retry budget exhausted."""
         token = self.upload_sessions.get(conversation_id)
         if token is not None:
             self.pending_clears.add((conversation_id, token))
@@ -88,12 +117,13 @@ class PusherRecordBarrier:
                 if self.upload_sessions.get(conversation_id) == token:
                     self.upload_sessions.pop(conversation_id, None)
         except Exception:
-            _record_failure('finish')
-            return
+            return self._close_failed(conversation_id, 'finish')
         try:
             await run_blocking(db_executor, record_audio_db.seal_record_audio, self.uid, conversation_id)
         except Exception:
-            _record_failure('seal')
+            return self._close_failed(conversation_id, 'seal')
+        self.close_failures.pop(conversation_id, None)
+        return True
 
     async def fail_recording(self, conversation_id: str) -> None:
         if len(self.failed_recordings) < 128:

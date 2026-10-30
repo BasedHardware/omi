@@ -521,7 +521,8 @@ async def _websocket_util_trigger(
                     and conv_id not in pending_refs
                     and durable_queue.empty()
                 ):
-                    await record_barrier.finish_recording(conv_id)
+                    if not await record_barrier.finish_recording(conv_id):
+                        continue
                 elif conv_id in pending_refs or not durable_queue.empty():
                     continue
                 record_close_requests.discard(conv_id)
@@ -869,8 +870,8 @@ async def _websocket_util_trigger(
                     and not any(b['conversation_id'] == conv_id for b in ready_batches)
                     and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
                 ):
-                    await record_barrier.finish_recording(conv_id)
-                    record_close_requests.discard(conv_id)
+                    if await record_barrier.finish_recording(conv_id):
+                        record_close_requests.discard(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
         # and eligibility precedes the eight-pass selection limit.

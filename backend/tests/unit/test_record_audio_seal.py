@@ -116,7 +116,11 @@ def test_one_session_cannot_clear_another_sessions_upload(records):
 
 
 @pytest.mark.parametrize('late_failure', [False, True])
-async def test_real_overlapping_sessions_withhold_seal_until_old_upload_finishes(records, monkeypatch, late_failure):
+@pytest.mark.parametrize('initial_owner', [None, 'batch_live_v1'])
+async def test_real_overlapping_sessions_withhold_seal_until_old_upload_finishes(
+    records, monkeypatch, late_failure, initial_owner
+):
+    records.rows[PATH]['record_lane_owner'] = initial_owner
     loop = asyncio.get_running_loop()
     uploading = asyncio.Event()
     disconnect = asyncio.Event()
@@ -140,6 +144,9 @@ async def test_real_overlapping_sessions_withhold_seal_until_old_upload_finishes
     )
     try:
         await asyncio.wait_for(uploading.wait(), 5)
+        # A finalizer may claim an unowned capture while the earlier upload is
+        # still outstanding. Its pre-ownership producer token must survive.
+        records.rows[PATH]['record_lane_owner'] = 'batch_live_v1'
         await _run(FakeWebSocket([_conversation('record'), _finalize()]))
         assert not records.rows[PATH]['record_audio_closed']
     finally:
@@ -170,7 +177,7 @@ async def test_firestore_bookkeeping_failure_never_prevents_audio_upload(records
     assert ws.close_code == 1000
     assert bool(records.rows[PATH].get('record_upload_failed')) is (phase == 'begin')
     assert not records.rows[PATH]['record_audio_closed']
-    assert RECORD_BARRIER_FAILURES.labels(stage=phase)._value.get() == before + 1
+    assert RECORD_BARRIER_FAILURES.labels(stage=phase)._value.get() == before + (1 if phase == 'begin' else 3)
 
 
 async def test_failure_marker_outage_does_not_abort_remaining_uploads(records, env, monkeypatch):
@@ -197,6 +204,7 @@ async def test_failure_marker_outage_does_not_abort_remaining_uploads(records, e
 
 @pytest.mark.parametrize('persisted_cap', [False, True])
 async def test_session_token_cap_never_drops_audio(records, env, monkeypatch, persisted_cap):
+    before = RECORD_BARRIER_FAILURES.labels(stage='capacity')._value.get()
     if persisted_cap:
         records.rows[PATH]['record_upload_sessions'] = {str(i): True for i in range(128)}
     else:
@@ -207,13 +215,15 @@ async def test_session_token_cap_never_drops_audio(records, env, monkeypatch, pe
     assert len(env) == 1
     assert records.rows[PATH]['record_upload_failed']
     assert not records.rows[PATH]['record_audio_closed']
+    assert RECORD_BARRIER_FAILURES.labels(stage='capacity')._value.get() == before + 1
 
 
-@pytest.mark.parametrize('owner', [None, 'legacy_final_pass_v1'])
-async def test_legacy_audio_adds_no_record_metadata_writes(records, env, owner):
-    records.rows[PATH]['record_lane_owner'] = owner
+async def test_legacy_audio_adds_no_record_metadata_writes(records, env):
+    records.rows[PATH]['record_lane_owner'] = 'legacy_final_pass_v1'
     await _run(FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)]))
     assert len(env) == 1
+    assert all(not tx.updates for tx in records.transactions)
+    assert not mark_record_upload_failed('uid-at', 'record', firestore_client=records)
     assert all(not tx.updates for tx in records.transactions)
 
 
@@ -223,11 +233,41 @@ async def test_failed_token_clear_is_retained_and_can_retry_without_failure_mark
     token = barrier.upload_sessions['record']
     original = record_audio_db.set_record_upload_pending
     monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', Mock(side_effect=OSError('synthetic outage')))
-    await barrier.finish_recording('record')
+    assert not await barrier.finish_recording('record')
     assert barrier.upload_sessions['record'] == token
     assert ('record', token) in barrier.pending_clears
     assert not records.rows[PATH].get('record_upload_failed')
     monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', original)
-    await barrier.finish_recording('record')
+    assert await barrier.finish_recording('record')
     assert records.rows[PATH]['record_audio_closed']
     assert not barrier.upload_sessions and not barrier.pending_clears
+
+
+async def test_close_retries_without_another_finalize_and_then_clears(records, env, monkeypatch):
+    original = record_audio_db.set_record_upload_pending
+    clears = []
+
+    def pending(uid, cid, token, active, **kwargs):
+        if not active:
+            clears.append(token)
+            if len(clears) < 3:
+                raise OSError('synthetic transient clear failure')
+        return original(uid, cid, token, active, **kwargs)
+
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', pending)
+    await _run(FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)]))
+    assert len(env) == 1 and len(clears) == 3
+    assert records.rows[PATH]['record_audio_closed']
+    assert records.rows[PATH]['record_upload_sessions'] == {}
+
+
+async def test_degraded_failure_persistence_uses_shared_fallback(records, monkeypatch):
+    import utils.pusher_record_barrier as module
+
+    fallback = Mock()
+    monkeypatch.setattr(module, 'record_fallback', fallback)
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', Mock(side_effect=OSError('synthetic outage')))
+    await PusherRecordBarrier('uid-at').fail_recording('record')
+    fallback.assert_called_once()
+    assert fallback.call_args.kwargs['component'] == 'pusher'
+    assert fallback.call_args.kwargs['outcome'] == 'degraded'

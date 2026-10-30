@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import time
+from config.record_audio import PRODUCER_START_MARGIN_SECONDS
 
 NAMESPACE = 'prod-omi-backend'
 
@@ -88,12 +89,13 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
             or not isinstance(started, (int, float))
             or isinstance(started, bool)
             or not math.isfinite(started)
-            or not 0 < started <= proof['captured_at']
+            or not 0 < started
+            or started + PRODUCER_START_MARGIN_SECONDS > proof['captured_at']
         ):
             return False
         if pod not in proof['pods']:
             continue
         current_start = proof['pods'][pod]
-        if current_start is None or current_start <= started:
+        if current_start is None or current_start <= started + PRODUCER_START_MARGIN_SECONDS:
             return False
     return True

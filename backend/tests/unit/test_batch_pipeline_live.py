@@ -20,6 +20,11 @@ from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_refer
 from utils.sync.assignment_errors import SyncAssignmentConflict
 
 
+@pytest.fixture(autouse=True)
+def protocol_ready(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+
+
 def recording(**changes):
     return {
         'id': 'record',
@@ -219,7 +224,7 @@ def test_reference_scope_and_generation_are_fail_closed(change):
 
 
 @pytest.mark.parametrize('server_only', [False, True])
-@pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed'])
+@pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
 async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch, server_only, barrier_change):
     from types import SimpleNamespace
     from utils.batch_pipeline import live
@@ -290,6 +295,8 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
             # A producer can upload and seal again during staging. A closed
             # boolean alone cannot prove that these manifests include it.
             current.update(record_upload_revision=1, record_audio_closed=True)
+        elif barrier_change == 'protocol_closed':
+            monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'false')
         if barrier_change:
             store.rows['conversations', 'synthetic/record'].update(current)
         return uri
@@ -318,6 +325,24 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     assert (store.rows['intakes', 'bp_' + content].get('server_batch_only') is True) is server_only
     # A slow raw-archive listing must raise and retry, never admit a short capture.
     assert listings == [{'max_count': 4096, 'require_archive': True}]
+
+
+@pytest.mark.parametrize('setting', [None, 'false', 'typo'])
+async def test_protocol_cutover_defers_without_reading_archive_or_expiring_obligation(monkeypatch, setting):
+    from utils.batch_pipeline import live
+
+    if setting is None:
+        monkeypatch.delenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY')
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', setting)
+    store = MemoryStore()
+    register_recording('synthetic', recording(), store=store, now=0)
+    _, segment = record_identity('synthetic', 'record')
+    pending = dict(store.rows['jobs', segment])
+    with pytest.raises(ValueError, match='cutover barrier closed'):
+        await live.admit_recording(store, pending, now=10**10)
+    assert store.rows['jobs', segment] == pending
+    assert pending['state'] == 'record_pending'
 
 
 @pytest.mark.parametrize('language,admitted', [('en', True), ('vi', False), ('multi', False)])

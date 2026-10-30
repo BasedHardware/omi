@@ -199,6 +199,9 @@ def retained_record_units(
 
 
 async def admit_recording(store, pending, *, now=None):
+    from config.batch_pipeline import require_record_protocol_ready
+
+    require_record_protocol_ready()
     now = time.time() if now is None else now
     uid, conversation_id = pending['owner_id'], pending['conversation_id']
     row = pending['record_snapshot']

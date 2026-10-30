@@ -5,6 +5,10 @@ from google.cloud import firestore
 from database._client import get_firestore_client, run_transactional
 
 
+class RecordUploadCapacityExceeded(ValueError):
+    """The persisted producer map cannot accept another token."""
+
+
 def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) -> bool:
     """Resolve the persisted owner at closure, across websocket sessions.
 
@@ -47,14 +51,14 @@ def set_record_upload_pending(
         row = ref.get(transaction=tx).to_dict()
         if row is None:
             return False
-        if pending and row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
-            return False  # Legacy/unowned producers add no metadata writes.
+        if pending and row.get('record_lane_owner') not in {None, 'batch_live_v1', 'batch_sync_v1'}:
+            return False  # Immutable legacy owners cannot later enter batch custody.
         sessions = dict(row.get('record_upload_sessions') or {})
         if pending:
             if session in sessions:
                 return True
             if len(sessions) >= 128:
-                raise ValueError('record upload session budget exceeded')
+                raise RecordUploadCapacityExceeded('record upload session budget exceeded')
             sessions[session] = producer or True
             tx.update(
                 ref,
@@ -82,6 +86,8 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
         row = ref.get(transaction=tx).to_dict()
         if row is None:
             return False  # Never recreate a deleted conversation.
+        if row.get('record_lane_owner') not in {None, 'batch_live_v1', 'batch_sync_v1'}:
+            return False  # Immutable legacy owners never enter this protocol.
         if not row.get('record_upload_failed') or row.get('record_audio_closed'):
             tx.update(ref, {'record_upload_failed': True, 'record_audio_closed': False})
         return True

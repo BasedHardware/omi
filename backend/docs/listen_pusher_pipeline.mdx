@@ -6357,14 +6357,19 @@ conversation itself (`batch_live_v1` or `batch_sync_v1`); a reconnect carrying o
 finalize can close an existing batch owner even with live admission disabled.
 Legacy and unowned conversations never receive a seal.
 
-Before accepting a batch-owned conversation's first audio frame, each session
+Before accepting an unowned or batch-owned conversation's first audio frame, each session
 registers a `record_upload_sessions` token transactionally and invalidates any old
 seal. Its value identifies the pusher pod (HOSTNAME) and process start time. A
 monotone `record_upload_revision` changes on every new producer; CPU admission
 rechecks that revision and the closed barrier in its final enqueue transaction,
 so a producer that starts and seals again during staging still invalidates the
-earlier source snapshot. Legacy/unowned producers perform one eligibility read
-per session/drain and add no normal-path record metadata writes.
+earlier source snapshot. Registering unowned captures covers ownership claimed by
+a finalizer while an earlier upload is outstanding. Immutable legacy owners add
+no normal-path record metadata writes. At the planning input of 3-4k sessions/h,
+unowned/native registration and clear add about 6-8k metadata writes/h; this is
+an estimate, not a measured Firestore or Typesense-extension cost. The lead will
+measure both Firestore write rate and Typesense extension invocation rate after
+deployment (ruling 9bc674).
 The successful drain removes only that token before attempting closure. The seal
 transaction refuses while any producer remains pending, including an older socket
 still uploading or retrying. Tokens have no TTL: process death cannot prove audio
@@ -6374,7 +6379,9 @@ A clean reconnect cannot clear that marker. CPU admission independently refuses
 both failure markers and pending producers. Metadata exceptions never terminate
 the audio upload queue: begin failures refuse sealing locally and attempt a
 persistent failure marker; finish/seal failures leave unsealed debt. Failed
-token clears retain local retry state. The closed-stage
+token clears retain local retry state. Close requests remain queued through three
+metadata attempts even without another finalize; exhaustion leaves durable repair
+debt. Metadata degradation uses the canonical `record_fallback` contract. The closed-stage
 `omi_pusher_record_barrier_failures_total{stage}` counter distinguishes begin,
 finish, seal, failure_marker and capacity errors from audio custody failures. If
 both begin registration and its failure-marker write fail, durable failure
@@ -6414,7 +6421,9 @@ kubectl get --raw '/api/v1/namespaces/prod-omi-backend/pods?labelSelector=app.ku
 The List must carry resourceVersion; its file digest, capture time and normalized
 pod inventory join the approval digest. The inventory is limited to five minutes
 at plan/apply. Each token's pod must be absent, or every running container must
-have started after its recorded process epoch. Missing/unknown state is refused.
+have started more than two seconds after its recorded process epoch. The same
+margin must elapse before an absence inventory can prove death, accounting for
+Linux boot-time/tick precision. Missing/unknown state is refused.
 Only bare pre-identity tokens accept `--producers-stopped`, an explicit operator
 attestation bound to their exact token map and approval digest. No TTL expires a
 producer. The write transaction rechecks the exact map, privacy and capture state,
@@ -6423,18 +6432,34 @@ The parser accepts Kubernetes [PodList](https://kubernetes.io/docs/reference/kub
 and kubectl's generic List form; missing list metadata is refused.
 Keep the exact-ID file private (0600); do not publish it or exception text.
 
-Deploy target: pusher, on the listen/pusher train, plus the CPU reconciliation
-consumer for the transactional admission guard. Both releases are required to
-claim the staging-race guarantee. Release the Cloud Run admission consumer first,
-verify it serving, then roll pusher in the listen/pusher train. Reversing that
-order leaves the older consumer's staging race unguarded and is unsafe for this
-rollout's custody guarantee. Rollback: revert;
-behavior returns to today's stuck-but-retained path. Drain old pusher sessions
-before evaluating the new producer-token guarantee: an old binary cannot register
-its outstanding audio. Producer identity and marker fields remain stored after
-rollback; older binaries
-do not enforce the new metadata refusal contract. The lead owns rollout/rollback
-and qualification of any unresolved metadata-outage or abandoned-producer debt.
+Required release procedure (lead rulings 34e19f and 5dbd80): deploy the Cloud Run
+CPU reconciliation/admission consumer first with
+`BATCH_PIPELINE_RECORD_PROTOCOL_READY=false` (also the code default), and verify
+the new release identity serving. Native record admission then defers before
+archive staging and again before the final enqueue transaction; `record_pending`
+obligations remain retained without expiry. Roll pusher in the listen/pusher train,
+prove rollout completion and every pusher pod on the new image digest with zero
+old pods, then the two-lane lead opens the control (`true`) for all native record
+admissions. Target open: **2026-10-30T06:00:00Z**; `review_by` **2026-11-01**.
+The lead retires the control in a follow-up PR within 48 hours of opening.
+Rollback of admission is to close the control again. Missing cutover proof blocks
+opening and must be reported, rather than leaving an unexpanded flag silently.
+
+Keep the batch percentage at 0 during this cutover and let the lead re-enter 5%
+after its proof, but do not use percentage as proof of quiescence: the private
+batch cohort remains eligible at 0, and desktop server-batch capture can reserve
+new batch owners independently of that cohort. Already admitted work also drains.
+The retained-archive tail check does refuse an old-pod tail that has not landed
+when the last durable end is earlier than frozen or current `finished_at` beyond
+100 ms. It cannot prove that all older producer audio is present (including gaps
+or audio beyond that finish), and does not replace the cutover hold.
+
+Both releases are required to claim the cross-session/staging guarantee; reversing
+the consumer-first order is unsafe. Code rollback: revert; behavior returns to
+today's stuck-but-retained path. Producer identity and marker fields remain stored
+after rollback; older binaries do not enforce the new metadata refusal contract.
+The lead owns rollout/rollback, opening and retirement of the cutover control, and
+qualification of unresolved metadata-outage or abandoned-producer debt.
 
 The coordinator lists the already retained audio, verifies overlaps, and freezes
 one-hour capture units as encrypted **reference manifests**, not copies of the
