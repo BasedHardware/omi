@@ -1,7 +1,7 @@
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
-from utils.sync import processing_hold
+from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
 import hashlib
@@ -864,15 +864,14 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
 
 def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
-    if not conversation:
-        return False
-    if is_soft_deleted(conversation):
+    if not conversation or is_soft_deleted(conversation):
         return False
     if not include_discarded:
         # Dream duplicate captures are folded out of product reads, but the
         # preserved recordings stay visible to export/compliance readers.
         if (
             conversation.get('dream_duplicate_of')
+            or bridge_pending.hidden(conversation)
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):
@@ -1923,6 +1922,7 @@ def get_conversations_without_photos(
                 'user_corrections_compressed',
                 'deleted',
                 'dream_duplicate_of',
+                'sync_bridge_pending',
                 'relevance_decision',
                 'sync_relevance_user_kept',
                 'has_photos',

@@ -24,7 +24,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.process_conversation import process_conversation
-from utils.sync import processing_hold
+from utils.sync import processing_hold, bridge_pending, bridge
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.smart_merge_policy import refresh_owed
 from utils.enrichment.admission import ConversationAbsorbed
@@ -53,12 +53,7 @@ _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 
 
 def enrich_conversation(uid: str, conversation_id: str, language: str):
-    """
-    Reprocess a conversation after new segments have been added.
-    This checks if the conversation should still be discarded and regenerates
-    the summary/structured data if it now has sufficient content.
-    """
-    # Fetch the updated conversation with all segments
+    """Reassess relevance and regenerate notes after sync appends."""
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
@@ -79,6 +74,11 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
         logger.info('event=sync_reprocess_callback outcome=unavailable')
         return
 
+    if conversation_data.get(bridge_pending.FIELD):
+        conversation_id, conversation_data = bridge.resume_pending(uid, conversation_id, conversation_data, context)
+        if conversation_data is None:
+            return
+
     if repair_fenced(conversation_data):
         raise SummaryRepairSuperseded(
             'summary repair ownership changed',
@@ -88,7 +88,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
                 else None
             ),
         )
-    if conversation_data.get('sync_live_target') and conversation_data.get('status') == 'in_progress':
+    if bridge_pending.live_finalization_owns(conversation_data):
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
         # finalizer skips processing that later content.

@@ -8,6 +8,8 @@ presents its request-scoped keys.
 
 from __future__ import annotations
 
+from database import conversation_processing_recovery as processing_recovery
+
 import logging
 import os
 import time
@@ -345,12 +347,14 @@ def reconcile_listen_finalization_jobs(
 
 
 def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
-    """Close bare-`processing` conversations stranded by a synchronous-route crash.
+    """Close processing conversations stranded without an active durable owner.
 
     The durable replay sweep (``reconcile_listen_finalization_jobs``) only covers
-    rows with a finalization job. A bare-`processing` row admitted by the
+    nonterminal finalization jobs. A bare-`processing` row admitted by the
     synchronous legacy route (or a server/merge create) and then lost to a hard
     crash has no job, so it is never replayed and the recording never resolves.
+    Rows bound to a terminal job are also orphans: the sweep checks that job
+    again inside the completion transaction before ending the lifecycle.
 
     Eligibility is bounded by the authoritative, server-owned admission fence
     ``processing_admitted_at`` (never caller-controlled ``created_at``), so a live
@@ -359,7 +363,7 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
     stamping the fence and deferred to a later sweep rather than completed on
     sight. Each aged orphan is driven through the truthful terminal ownership CAS
     (``complete_orphan_conversation``): a row already completed, discarded,
-    superseded by a newer generation, or since bound to a durable job is fenced
+    superseded by a newer generation, or since bound to an active durable job is fenced
     out, so the orphan reaches exactly one terminal and its recording stays
     retrievable. Re-enrichment is a separate follow-up; this safety net only ends
     the stuck lifecycle. It needs no durable dispatch, so it runs in every
@@ -415,7 +419,7 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
                 # ``migrated``; a CAS loss (already stamped / status changed /
                 # absent) is an expected ``skipped`` fencing, never a migration.
                 try:
-                    stamped = jobs_db.stamp_processing_admission_if_absent(
+                    stamped = processing_recovery.stamp_processing_admission_if_absent(
                         uid, conversation_id, firestore_client=firestore_client
                     )
                 except InvalidArgument as error:
@@ -435,7 +439,7 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
                         outcome='degraded',
                         log=logger,
                     )
-                    if jobs_db.complete_unstampable_orphan_conversation(
+                    if processing_recovery.complete_unstampable_orphan_conversation(
                         uid, conversation_id, stale_after=stale_after, firestore_client=firestore_client
                     ):
                         result['completed'] += 1
@@ -451,7 +455,7 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
                     result['skipped'] += 1
                     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='skipped').inc()
                 continue
-            completed = jobs_db.complete_orphan_conversation(
+            completed = processing_recovery.complete_orphan_conversation(
                 uid,
                 conversation_id,
                 expected_admitted_at=candidate.get('processing_admitted_at'),

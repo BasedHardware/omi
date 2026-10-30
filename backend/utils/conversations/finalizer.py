@@ -410,6 +410,17 @@ async def finalize_persisted_conversation(
         # reports this through the observer and returns without side effects;
         # the finalizer must honour that result before touching memories.
         if not persistence['owned']:
+            if conversation_data.get('finalization_job_id') == finalization_job_id and await run_blocking(
+                db_executor,
+                finalization_jobs_db.defer_sync_revision_fence,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+                conversation_data.get('sync_content_revision'),
+            ):
+                logger.info('event=finalization_persistence_fence outcome=redispatch reason=sync_revision_advanced')
+                return ConversationFinalizationDisposition.deferred
+            logger.info('event=finalization_persistence_fence outcome=terminal reason=lifecycle_changed')
             logger.info(
                 'persisted conversation finalization fenced: lifecycle persistence lost uid=%s conversation=%s',
                 uid,
