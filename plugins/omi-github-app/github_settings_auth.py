@@ -24,7 +24,17 @@ import hmac
 import os
 from typing import Any, Optional
 
-from fastapi import HTTPException, Request
+try:
+    from fastapi import HTTPException, Request
+except ImportError:
+    class HTTPException(Exception):  # type: ignore[no-redef]
+        def __init__(self, detail: Any = None, status_code: int = 500, **kwargs: Any) -> None:
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class Request:  # type: ignore[no-redef]
+        pass
 
 SECRET_ENV = "GITHUB_SETTINGS_SECRET"
 COOKIE_NAME = "omi_github_settings"

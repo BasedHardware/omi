@@ -193,14 +193,19 @@ with patch.dict(sys.modules, STUBS):
     github_client = _load("github_client")
     agent_providers = _load("agent_providers")
     github_tools_auth = _load("github_tools_auth")
+    github_settings_auth = _load("github_settings_auth")
     _real = {
         "models": models,
         "github_client": github_client,
         "agent_providers": agent_providers,
         "github_tools_auth": github_tools_auth,
+        "github_settings_auth": github_settings_auth,
     }
     with patch.dict(sys.modules, _real):
         main = _load("main")
+
+# Expose under importable name for test methods and references
+sys.modules["github_settings_auth"] = github_settings_auth
 
 
 # ---- Fakes and helpers --------------------------------------------------
@@ -1102,7 +1107,6 @@ class JsonEndpointErrorHandlingTests(unittest.TestCase):
             self.assertEqual(resp, {"success": False, "error": "Failed to delete agent key"})
 
     def test_test_agent_exception_returns_stable_error(self):
-        import github_settings_auth
         with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": "test-sec"}, clear=True):
             valid_cookie = github_settings_auth.session_value("u1")
             req = _Request({"uid": "u1", "prompt": "hello"}, {github_settings_auth.COOKIE_NAME: valid_cookie})
@@ -1111,7 +1115,6 @@ class JsonEndpointErrorHandlingTests(unittest.TestCase):
                 self.assertEqual(resp, {"success": False, "error": "Failed to execute agent test"})
 
     def test_test_agent_with_body_uid_and_valid_cookie_executes_past_auth(self):
-        import github_settings_auth
         with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": "test-sec"}, clear=True):
             valid_cookie = github_settings_auth.session_value("u1")
             req = _Request({"uid": "u1", "prompt": "hello"}, {github_settings_auth.COOKIE_NAME: valid_cookie})
@@ -1127,7 +1130,6 @@ class JsonEndpointErrorHandlingTests(unittest.TestCase):
             self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
 
     def test_test_agent_mismatched_cookie_raises_401(self):
-        import github_settings_auth
         with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": "test-sec"}, clear=True):
             attacker_cookie = github_settings_auth.session_value("attacker")
             req = _Request({"uid": "victim", "prompt": "hello"}, {github_settings_auth.COOKIE_NAME: attacker_cookie})
