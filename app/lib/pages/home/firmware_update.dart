@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -26,9 +28,24 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   bool shouldUpdate = false;
   String updateMessage = '';
   bool isLoading = false;
+  bool _hasTriggeredReconnect = false;
+
+  @visibleForTesting
+  void markInstalledForTesting() {
+    setState(() {
+      isInstalled = true;
+      isLoading = false;
+    });
+  }
 
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
+
+  void _reconnectUpdatedDevice(DeviceProvider provider, String caller) {
+    if (_hasTriggeredReconnect) return;
+    _hasTriggeredReconnect = true;
+    provider.initiateConnection(caller, boundDeviceOnly: true);
+  }
 
   @override
   void initState() {
@@ -80,10 +97,15 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   void dispose() {
     killMcuUpdateManager();
     final provider = _deviceProvider;
+    final installed = isInstalled;
+    final hasReconnected = _hasTriggeredReconnect;
     if (provider != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      scheduleMicrotask(() {
         provider.setOnFirmwareUpdatePage(false);
         provider.resetFirmwareUpdateState();
+        if (installed && !hasReconnected) {
+          provider.initiateConnection('FirmwareUpdateExit', boundDeviceOnly: true);
+        }
       });
     }
     super.dispose();
@@ -218,12 +240,16 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           key: const Key('firmware_update_done'),
           label: context.l10n.done,
           expand: true,
-          onPressed: () {
-            final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-            deviceProvider.resetFirmwareUpdateState();
-            // Back to the Home underneath, not a second Home on top of the stack.
-            HomeNavigation.returnHome(context);
-          },
+          onPressed: _hasTriggeredReconnect
+              ? null
+              : () {
+                  final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                  deviceProvider.resetFirmwareUpdateState();
+                  // Reconnect the updated device so Home resumes capture automatically (#20778).
+                  _reconnectUpdatedDevice(deviceProvider, 'FirmwareUpdateDone');
+                  // Back to the Home underneath, not a second Home on top of the stack.
+                  HomeNavigation.returnHome(context);
+                },
         ),
       ],
     );

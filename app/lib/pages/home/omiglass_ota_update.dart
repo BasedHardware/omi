@@ -36,6 +36,26 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   bool _isSuccess = false;
   bool _isFailed = false;
 
+  @visibleForTesting
+  bool get isSuccess => _isSuccess;
+  @visibleForTesting
+  set isSuccess(bool value) => _isSuccess = value;
+
+  @visibleForTesting
+  set isLoading(bool value) => _isLoading = value;
+
+  @visibleForTesting
+  set isUpdating(bool value) => _isUpdating = value;
+
+  @visibleForTesting
+  void markSuccessForTesting() {
+    setState(() {
+      _isSuccess = true;
+      _isLoading = false;
+      _isUpdating = false;
+    });
+  }
+
   /// What the page says under the progress ring or in the failed state. Resolved to localized text
   /// at build time ([_statusText]); raw exceptions are never shown.
   _OtaMessage _status = _OtaMessage.checking;
@@ -46,6 +66,13 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   StreamSubscription? _otaStatusSubscription;
   OmiGlassConnection? _connection;
   DeviceProvider? _deviceProvider;
+  bool _hasTriggeredReconnect = false;
+
+  void _reconnectUpdatedDevice(DeviceProvider provider, String caller) {
+    if (_hasTriggeredReconnect) return;
+    _hasTriggeredReconnect = true;
+    provider.initiateConnection(caller, boundDeviceOnly: true);
+  }
 
   // Track high progress for handling device reboot/disconnection
   bool _reachedHighProgress = false;
@@ -67,10 +94,15 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     _passwordController.text = SharedPreferencesUtil().otaWifiPassword;
     _currentVersion = widget.device?.firmwareRevision ?? '';
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-      _deviceProvider!.setOnFirmwareUpdatePage(true);
+      Provider.of<DeviceProvider>(context, listen: false).setOnFirmwareUpdatePage(true);
     });
     _initializeAndCheck();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
   }
 
   @override
@@ -80,10 +112,15 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     _ssidController.dispose();
     _passwordController.dispose();
     final provider = _deviceProvider;
+    final success = _isSuccess;
+    final hasReconnected = _hasTriggeredReconnect;
     if (provider != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      scheduleMicrotask(() {
         provider.setOnFirmwareUpdatePage(false);
         provider.resetFirmwareUpdateState();
+        if (success && !hasReconnected) {
+          provider.initiateConnection('OmiGlassOtaExit', boundDeviceOnly: true);
+        }
       });
     }
     super.dispose();
@@ -612,7 +649,14 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           label: context.l10n.done,
           expand: true,
           // Back to the Home underneath, not a second Home on top of the stack.
-          onPressed: () => HomeNavigation.returnHome(context),
+          onPressed: _hasTriggeredReconnect
+              ? null
+              : () {
+                  final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                  deviceProvider.resetFirmwareUpdateState();
+                  _reconnectUpdatedDevice(deviceProvider, 'OmiGlassOtaDone');
+                  HomeNavigation.returnHome(context);
+                },
         ),
       ],
     );
