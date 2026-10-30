@@ -15004,4 +15004,14 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Küldd el az üzenetet az $app alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Kérj új kódot, és küldd el az $app alkalmazásból.';
+  }
 }

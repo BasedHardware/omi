@@ -14947,4 +14947,14 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Gửi tin nhắn trong $app. Màn hình này sẽ cập nhật ngay khi Omi nhận được.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Lấy mã mới và gửi từ $app.';
+  }
 }

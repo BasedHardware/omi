@@ -4550,5 +4550,7 @@
     "yearlySwitchUnavailable": "Yıllık ödeme şu anda planınız için kullanılamıyor.",
     "yearlySwitchDoneTitle": "Artık yıllık ödüyorsunuz",
     "yearlySwitchDoneBody": "Bugün {amount} tahsil edildi. Yenilenme: {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} bölüm} one{{count} bölüm} two{{count} bölüm} few{{count} bölüm} many{{count} bölüm} other{{count} bölüm}}"
+    "episodePartsCount": "{count, plural, zero{{count} bölüm} one{{count} bölüm} two{{count} bölüm} few{{count} bölüm} many{{count} bölüm} other{{count} bölüm}}",
+    "chatAppsWaitingMessageIn": "Mesajı {app}'dan gönder. Omi'ye ulaşır ulaşmaz bu ekran güncellenir.",
+    "chatAppsCodeExpiredMessageIn": "Yeni bir kod al ve {app}'dan gönder."
 }

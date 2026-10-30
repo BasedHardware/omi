@@ -24,10 +24,14 @@ from utils.messaging.undo import UndoStore
 from utils.observability.fallback import record_fallback
 
 
+def channel_name(channel):
+    return {'imessage': 'iMessage', 'whatsapp': 'WhatsApp', 'telegram': 'Telegram'}.get(channel, 'This channel')
+
+
 def help_text(channel):
     """What Omi can do here, in the channel's own command words."""
-    imessage = channel == 'imessage'
-    new, unlink, undo = ('new chat', 'unlink', 'undo') if imessage else ('/new', '/unlink', 'the Undo button')
+    text_commands = channel in ('imessage', 'whatsapp')
+    new, unlink, undo = ('new chat', 'unlink', 'undo') if text_commands else ('/new', '/unlink', 'the Undo button')
     return (
         'Ask me anything about your conversations, tasks and memories. For example:\n'
         '• What did I talk about with Sam yesterday?\n'
@@ -80,6 +84,22 @@ class Gateway:
         self.adapter = adapter
         self.store = store or MessagingStore()
         self.turn, self.admission, self.wake = turn, admission, wake
+        # Turn-scoped providers (Keiki) settle an inbound turn once its row is done. An
+        # undo replies after its row completes, so its turn settles when the undo does.
+        self._settle_deferred = set()
+
+    async def _settle_provider_turn(self, message, ok):
+        if not hasattr(self.adapter, 'settled'):
+            return
+        try:
+            await self.adapter.settled(message, ok)
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'Messaging provider settle failed provider=%s error_type=%s status_code=%s',
+                self.adapter.provider,
+                type(error).__name__,
+                getattr(error, 'status_code', None),
+            )
 
     def _reply_sink(self, message, **kwargs):
         async def reply_target():
@@ -97,6 +117,8 @@ class Gateway:
             logging.getLogger(__name__).info(
                 'Messaging ignored provider=%s reason=non_turn_event', self.adapter.provider
             )
+            if hasattr(self.adapter, 'unhandled'):
+                await self.adapter.unhandled(body)
         paths = []
         for message in messages:
             if (message.channel, message.provider) != (self.adapter.channel, self.adapter.provider):
@@ -209,15 +231,22 @@ class Gateway:
         )
         try:
             async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
-                return await self._process_claimed(path, payload)
+                result = await self._process_claimed(path, payload)
         except BaseException as error:
             if not _worker_shutting_down() and isinstance(error, (Exception, asyncio.CancelledError)):
                 # Retain the running row and its reconciliation evidence, but a
                 # fully unwound failure must no longer block newer FIFO jobs.
                 await run_blocking(db_executor, self.store.settle, path)
                 self._log_failure(error)
+                await self._settle_provider_turn(inbox_message(payload), False)
                 return None  # settled failure: drain the next head, without replay
             raise
+        else:
+            # False is a lease miss: the row is pending again and its turn stays open.
+            message = inbox_message(payload)
+            if result is not False and message.provider_message_id not in self._settle_deferred:
+                await self._settle_provider_turn(message, True)
+            return result
         finally:
             # A lease miss puts this head back to pending. Waking it here spins
             # the worker until the lease disappears. The holder, or the periodic
@@ -259,7 +288,7 @@ class Gateway:
                 link = await run_blocking(db_executor, self.store.consume, message.link_proof, message)
             except SeatFull:
                 await self._reply_sink(message, guard=inbox_guard).finish(
-                    'iMessage is full — join the waitlist in Omi.'
+                    channel_name(message.channel) + ' is full — join the waitlist in Omi.'
                 )
                 await run_blocking(db_executor, self.store.complete, path)
                 return True
@@ -309,10 +338,10 @@ class Gateway:
                     'Your paid Omi plan has ended. Renew in Omi to chat here.'
                     if reason == 'paid_plan'
                     else (
-                        'iMessage requires Operator or Architect. Update your plan in Omi.'
+                        channel_name(message.channel) + ' requires Operator or Architect. Update your plan in Omi.'
                         if reason == 'channel_plan'
                         else (
-                            'Your iMessage seat is unavailable. Join the waitlist in Omi.'
+                            'Your ' + channel_name(message.channel) + ' seat is unavailable. Join the waitlist in Omi.'
                             if reason == 'seat_cap'
                             else 'This channel is currently unavailable for your account. Check Chat Apps in Omi.'
                         )
@@ -418,6 +447,8 @@ class Gateway:
                                 await run_blocking(db_executor, self._assert_link, message, link)
 
                             undo_sink = self._reply_sink(message, guard=undo_guard)
+                            if hasattr(self.adapter, 'settled'):
+                                self._settle_deferred.add(message.provider_message_id)
                             start_background_task(
                                 self._undo_action(uid, session, message, undo_sink), name='messaging-undo-action'
                             )
@@ -543,6 +574,10 @@ class Gateway:
                 logging.getLogger(__name__).error(
                     'Messaging undo error reply failed error_type=%s', type(send_error).__name__
                 )
+        finally:
+            if message.provider_message_id in self._settle_deferred:
+                self._settle_deferred.discard(message.provider_message_id)
+                await self._settle_provider_turn(message, True)
 
     async def reenter(self, message, event: ReentryEvent, *, principal: Principal):
         link = await run_blocking(db_executor, self.store.lookup, message)

@@ -14835,4 +14835,14 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'שלחו את ההודעה באפליקציית $app. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'קבלו קוד חדש ושלחו אותו מ$app.';
+  }
 }
