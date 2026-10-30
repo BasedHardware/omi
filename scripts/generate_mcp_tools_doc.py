@@ -69,7 +69,8 @@ def render(specs: list[dict[str, str]]) -> str:
     for spec in specs:
         if spec["name"] in EXCLUDED:
             continue
-        rows.append(f"| `{spec['name']}` | {spec.get('description', '')} | `{spec.get('scope', '')}` |")
+        description = spec.get('description', '').replace('|', '\\|')
+        rows.append(f"| `{spec['name']}` | {description} | `{spec.get('scope', '')}` |")
     excluded_note = (
         "\n\nExcluded from this table (feature-flagged off and not advertised in "
         "`tools/list` by default): "
