@@ -21,7 +21,7 @@ from config.batch_language_recovery import (
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
+from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive, ordinary_empty_redrive
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed, worker_vad_speech
 from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
@@ -61,6 +61,7 @@ def redrive_one(
     independent_stt=second_transcribe,
     independent_language=False,
     repair=False,
+    ordinary_empty_independent=False,
 ):
     """No automatic retry after dispatch, even on uncertain network/process loss.
 
@@ -78,7 +79,12 @@ def redrive_one(
         return 'policy_unpinned'
     if policy is None or not policy.recovery_enabled:
         return 'disabled'
-    if repair:
+    if ordinary_empty_independent:
+        if repair or independent_language or not silent or not ordinary_empty_redrive(original_job):
+            return 'ordinary_empty_not_eligible'
+        if not policy.speech_empty_multilingual:
+            return 'disabled'
+    elif repair:
         if independent_language or not words_repair_eligible(original_job):
             return 'repair_not_eligible'
     elif not policy.speech_empty_multilingual and not independent_redrive(original_job):
@@ -95,11 +101,12 @@ def redrive_one(
         gpu_padded_retry_empty=gpu_padded_retry_empty,
         silent=silent,
         repair=repair,
+        ordinary_empty_independent=ordinary_empty_independent,
     )
     marker = job['speech_redrive']
     token = marker['token']
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
-    independent = not repair and independent_redrive(job)
+    independent = not repair and (independent_redrive(job) or ordinary_empty_independent)
     provider = 'soniox' if independent else 'modulate'
     if marker['state'] == 'completed':
         return 'already_applied'
@@ -116,7 +123,9 @@ def redrive_one(
                 raise RecoveryFailure('payload_validation', 'invalid_payload')
             measured = result_vad_evidence(payload)
             independent_silence = payload.get('words_provider') == 'independent_empty_strict_vad'
-            if not held_result_allowed(job, outcome, measured, independent=independent_silence):
+            if not held_result_allowed(job, outcome, measured, independent=independent_silence) or (
+                ordinary_empty_independent and outcome != 'success'
+            ):
                 failure = {'stage': 'payload_validation', 'reason': 'invalid_payload'}
                 return (
                     'failed_held'
@@ -234,7 +243,13 @@ def redrive_one(
                 count,
                 measured,
             )
-            if independent and empty and first_empty and below_silence_threshold(held_vad_census(job, measured)):
+            if (
+                independent
+                and not ordinary_empty_independent
+                and empty
+                and first_empty
+                and below_silence_threshold(held_vad_census(job, measured))
+            ):
                 payload = independent_silence_payload(duration, spans)
                 failure = None
         if (

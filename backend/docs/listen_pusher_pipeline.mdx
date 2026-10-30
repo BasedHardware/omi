@@ -7205,6 +7205,15 @@ paid silent apply; CLI-only rollout cannot guarantee silence. See
 [the scoped redrive runbook](runbooks/scoped-batch-redrive.md) for digest approval,
 canary/remainder prefix semantics and stop conditions.
 
+An explicit `--ordinary-empty-independent` operator plan may buy one Soniox
+epoch-3 call for an exact ordinary worker-empty unit with settled empty Modulate
+epochs 1 and 2 and valid input-bound worker speech. It preserves both spent
+intents and requires silent mode, fresh census/plan approval, and all existing
+privacy, funding, policy and lease fences. Each owner-scoped plan is capped at
+two units and 47.6 recorded audio seconds; cross-owner execution still requires
+the lead's combined budget approval. Empty replies remain held. This does not
+change automatic recovery or grant a runtime provider fallback.
+
 ### Stale reconnect recovery
 
 Reconnect recovery claims at most ten `in_progress` rows older than one hour,
