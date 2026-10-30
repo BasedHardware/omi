@@ -324,6 +324,7 @@ def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum)
 
 
 def test_short_clip_shadow_does_not_serve_minimum(monkeypatch):
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     monkeypatch.setenv(packet.FLAG, 'shadow')
     conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='A brief synthetic remark')], photos=[])
     assert notes_short_clip.quiet_minimum('synthetic-account', conversation) is None
@@ -425,7 +426,8 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
         recovery_minimum_fallback_observer=lambda: minimum.append(True),
     )
     assert structured.title and structured.emoji == '💬' and not discarded
-    assert decisions[0].trigger == trigger and minimum == [True]
+    assert decisions[0].trigger == trigger
+    assert minimum == ([True] if trigger_name in ('SERVER_RECOVERY', 'SILENT_BACKFILL') else [])
 
 
 def test_no_names_when_whole_conversation_speaker_resolution_is_unavailable():

@@ -74,7 +74,8 @@ from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
-from utils.llm.notes_short_clip import quiet_minimum
+from utils.llm.notes_short_clip import quiet_minimum, has_explicit_reminder
+from utils.conversations.minimum_derived import is_server_minimum
 from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
@@ -376,7 +377,6 @@ def _get_structured(
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
-            # An unreadable stored blob is never evidence of an empty capture.
             return Structured(), False
 
         @cache
@@ -407,11 +407,11 @@ def _get_structured(
             or normalize_language(language_code)
             or 'en'
         )
-        minimum = quiet_minimum(uid, conversation, tz=tz)
+        minimum = quiet_minimum(uid, conversation, tz=tz, user_kept=user_kept)
         if minimum is not None:
             if relevance_observer is not None:
                 relevance_observer(RelevanceDecision('keep', 'rule', 'content_below_floor', trigger))
-            if recovery_minimum_fallback_observer is not None:
+            if is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
             return minimum, False
         prompt_conversation_id = (
@@ -576,6 +576,7 @@ def _get_structured(
                 and not is_release_probe_uid(uid)
                 and not user_kept
                 and not getattr(main_conv, 'photos', None)
+                and not has_explicit_reminder(main_conv.transcript_segments)
                 and recovery_transcript_below_content_floor(main_conv)
             ):
                 if relevance_observer is not None:
@@ -779,10 +780,10 @@ def trigger_conversation_apps(
 ) -> bool:
     """Run the selected summary app for ``conversation``.
 
-    ``first_party_only`` is the user asking for Omi's own notes ("Summarize with
-    Omi"): no preferred app and no suggestion runs, so no template result is
-    produced or paid for.
+    ``first_party_only`` ("Summarize with Omi") skips preferred apps and suggestions.
     """
+    if is_server_minimum(conversation):
+        return True
     if serving_for('NOTES_PACKET_V2_MODE', uid):
         language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
     else:
@@ -961,10 +962,10 @@ def update_goal_progress(
     idempotency_key_prefix: Optional[str] = None,
 ) -> bool:
     """Extract and update goal progress from conversation text."""
+    if is_server_minimum(conversation):
+        return True
     try:
-        # Legacy eager processing uses the bounded Redis lock. First-open work
-        # instead uses durable per-goal events below, so TTL expiry cannot
-        # duplicate a committed goal mutation.
+        # Eager uses a Redis lock; first-open uses durable per-goal events.
         if idempotency_key_prefix is None and not redis_db.try_acquire_conversation_goal_lock(uid, conversation.id):
             logger.info(f"[GOAL] Skipping already-processed conversation {conversation.id}")
             return True
@@ -1053,10 +1054,9 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
-    Finalization workers use this public boundary while holding their durable
-    lease. Keep the private helper below for existing in-module async callers.
+    Finalization workers and legacy async callers share this admission boundary.
     """
-    if exclude_from_derived(uid, conversation, consumer='memories'):
+    if is_server_minimum(conversation) or exclude_from_derived(uid, conversation, consumer='memories'):
         return
     # The deployment-wide capability fence is mandatory even when this
     # account's non-compatibility writer delegates formation to the sweep.
@@ -2982,7 +2982,7 @@ def process_conversation(
 
     from utils.conversations.demand_processing import lazy_enrichment_enabled
 
-    lazy_effects = lazy_enrichment_enabled(uid) and not discarded
+    lazy_effects = lazy_enrichment_enabled(uid) and not discarded and not is_server_minimum(conversation)
     if lazy_effects and not defer_derived_effects:
         from utils.sync.reprocess import mark_effects
 
@@ -3012,7 +3012,7 @@ def process_conversation(
     def _emit_derived_effects() -> None:
         # AI-based folder assignment
         assigned_folder_id = None
-        if not discarded and not is_reprocess and not conversation.folder_id:
+        if not discarded and not is_reprocess and not conversation.folder_id and not is_server_minimum(conversation):
             try:
                 # Get user's folders
                 user_folders = folders_db.get_folders(uid)

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-server-minimum-runs-derived-intelligence",
+  "violated_contract": "A deterministic server minimum must not spend on memory extraction or summary apps, while capture and conversation-creation webhooks must still complete.",
+  "canonical_prevention": "Gate intelligence consumers on persisted server-minimum provenance, independently of rollout switches; preserve normal creation delivery and scope recovery-only terminal suppression to recovery triggers.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_short_clip_rollout.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/process_conversation.py",
+    "backend/utils/conversations/minimum_derived.py",
+    "backend/utils/llm/notes_short_clip.py"
+  ],
+  "status": "open"
+}
