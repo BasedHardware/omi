@@ -13,6 +13,7 @@ from typing import Any
 from enum import Enum
 
 from fastapi import HTTPException
+from prometheus_client import Counter
 from config.batch_pipeline import RecordOwnerContention
 from config.merge_before_processing import enabled as merge_before_processing_enabled
 from utils.enrichment.admission import ConversationAbsorbed
@@ -63,11 +64,16 @@ from utils.observability.finalization import (
 from utils.conversations.capture_group_notes_refresh import refresh_primary_notes
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
+
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
 from utils.batch_pipeline.live import register_recording, reserve_recording
 
 logger = logging.getLogger(__name__)
+
+RECORD_REGISTER_REFUSED = Counter(
+    'omi_record_register_refused_total', 'Batch recording registration refused during conversation finalization'
+)
 
 
 def _maybe_start_shadow(uid: str, conversation) -> None:
@@ -418,7 +424,11 @@ async def finalize_persisted_conversation(
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
         if not silent_backfill and conversation_data.get('record_lane_owner') == 'batch_live_v1':
-            await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
+            if not await run_blocking(
+                db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
+            ):
+                RECORD_REGISTER_REFUSED.inc()
+                logger.warning('event=register_refused owner=batch_live_v1')
 
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job

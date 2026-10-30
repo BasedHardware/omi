@@ -21,6 +21,16 @@ RECORD_BARRIER_FAILURES = Counter(
 for _stage in ('begin', 'finish', 'seal', 'failure_marker', 'capacity'):
     RECORD_BARRIER_FAILURES.labels(stage=_stage).inc(0)
 
+RECORD_SEAL_REFUSED = Counter(
+    'omi_pusher_record_seal_refused_total', 'Record audio seals refused by persisted custody state', ['reason']
+)
+_SEAL_REFUSAL_COUNTERS = {
+    'producer_pending': RECORD_SEAL_REFUSED.labels(reason='producer_pending'),
+    'upload_failed': RECORD_SEAL_REFUSED.labels(reason='upload_failed'),
+    'not_batch_owner': RECORD_SEAL_REFUSED.labels(reason='not_batch_owner'),
+    'deleted': RECORD_SEAL_REFUSED.labels(reason='deleted'),
+}
+
 
 def _record_failure(stage):
     RECORD_BARRIER_FAILURES.labels(stage=stage).inc()
@@ -119,7 +129,10 @@ class PusherRecordBarrier:
         except Exception:
             return self._close_failed(conversation_id, 'finish')
         try:
-            await run_blocking(db_executor, record_audio_db.seal_record_audio, self.uid, conversation_id)
+            refused = await run_blocking(db_executor, record_audio_db.seal_record_audio, self.uid, conversation_id)
+            if refused is not None:
+                _SEAL_REFUSAL_COUNTERS[refused].inc()
+                logger.info('event=record_seal_refused reason=%s', refused)
         except Exception:
             return self._close_failed(conversation_id, 'seal')
         self.close_failures.pop(conversation_id, None)

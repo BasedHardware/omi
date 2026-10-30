@@ -1,8 +1,10 @@
 import hashlib
+import os
 import struct
 import asyncio
 import time
 import uuid
+from grpc import StatusCode
 from collections import deque
 from typing import Any, Awaitable, Deque, Dict, List, Optional, Tuple, cast
 from config.audio_outbox import enabled as audio_outbox_enabled
@@ -12,6 +14,7 @@ from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 from google.cloud.exceptions import NotFound
+from google.api_core.exceptions import GoogleAPICallError, InvalidArgument
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
@@ -127,6 +130,13 @@ def _projection_raising_frame(exc: BaseException) -> str:
     return frame_name
 
 
+def _projection_grpc_code(exc: BaseException) -> str:
+    """Only the SDK's closed gRPC status enum; never message/metadata/reason text."""
+    if isinstance(exc, GoogleAPICallError) and isinstance(exc.grpc_status_code, StatusCode):
+        return exc.grpc_status_code.name
+    return 'UNKNOWN'
+
+
 def _projection_owner_gone(uid: str, conversation_id: str) -> bool:
     """Deletion-intent read for a projection NotFound: owner gone, or live?
 
@@ -174,6 +184,7 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 # before being force-cancelled.  Prevents hung GCS uploads or webhook calls from
 # blocking cleanup indefinitely.
 BG_DRAIN_TIMEOUT = 30.0  # seconds
+RECORD_INLINE_FINISH_TIMEOUT = 20.0  # projection wait and metadata combined
 
 
 async def _dispatch_transcript_item(
@@ -397,6 +408,9 @@ async def _websocket_util_trigger(
     # A crash after commit but before queue.put is recoverable via raw-live's
     # existing per-conversation playback index, independent of this process.
     durable_queue: asyncio.Queue[AudioProjection] = asyncio.Queue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
+    inline_finish_conversation: Optional[str] = None
+    inline_projection_drained = asyncio.Event()
+    inline_finish_done = asyncio.Event()
     custody_root = uuid.uuid4().hex
     custody_sequence = 0
 
@@ -481,6 +495,27 @@ async def _websocket_util_trigger(
                     log=logger,
                 )
                 logger.warning('Durable audio projection conflict; archive receipt retained')
+            except InvalidArgument as exc:
+                # Custody and its generation-pinned manifest remain durable.
+                # Retrying a deterministic projection rejection cannot repair
+                # the payload, and a sticky custody failure would strand it.
+                projection_retries.pop(conv_id, None)
+                record_failure('projection', reason='invalid_argument')
+                record_fallback(
+                    component='pusher',
+                    from_mode='private_cloud_sync',
+                    to_mode='raw_audio',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
+                logger.warning(
+                    'Durable audio projection failure class: %s raised by %s grpc_code=%s',
+                    type(exc).__name__,
+                    _projection_raising_frame(exc),
+                    _projection_grpc_code(exc),
+                )
+                logger.info('Durable audio projection rejected; archive receipt retained')
             except NotFound as exc:
                 # A pinned-generation 404 during projection means the objects
                 # were purged. Conversation deletion (user delete, merge,
@@ -521,12 +556,14 @@ async def _websocket_util_trigger(
             # read-back mismatches from transport timeouts without
             # redeploying.
             logger.warning(
-                'Durable audio projection failure class: %s raised by %s',
+                'Durable audio projection failure class: %s raised by %s grpc_code=%s',
                 type(exc).__name__,
                 _projection_raising_frame(exc),
+                _projection_grpc_code(exc),
             )
             if (
                 websocket_active
+                and inline_finish_conversation is None
                 and projection_retries.get(conv_id, 0) < PROJECTION_RETRY_BUDGET
                 and len(projection_retries) < 128
             ):
@@ -584,6 +621,13 @@ async def _websocket_util_trigger(
                 ):
                     await flush_refs(conv_id)
             for conv_id in list(record_close_requests):
+                if conv_id == inline_finish_conversation and conv_id not in pending_refs and durable_queue.empty():
+                    # Wake even on projection failure so the receiver can
+                    # observe its sticky failure without waiting out the budget.
+                    inline_projection_drained.set()
+                    await inline_finish_done.wait()
+                    if conv_id not in record_close_requests:
+                        continue
                 if (
                     conv_id not in record_barrier.failed_recordings
                     and not record_barrier.record_upload_failed
@@ -1048,6 +1092,7 @@ async def _websocket_util_trigger(
 
     async def receive_tasks() -> None:
         nonlocal websocket_active
+        nonlocal inline_finish_conversation
         nonlocal websocket_close_code
         nonlocal application_failed
         nonlocal speaker_sample_queue
@@ -1516,8 +1561,10 @@ async def _websocket_util_trigger(
             # the close path with the commit failure.
             if len(private_cloud_sync_buffer) > 0:
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
+            tail_committed = False
             try:
                 await _queue_private_cloud_chunk()
+                tail_committed = durable_audio
             except Exception:
                 if durable_audio:
                     record_failure('window_tail')
@@ -1527,10 +1574,37 @@ async def _websocket_util_trigger(
                     # mid-session commit failure path uses.
                     websocket_close_code = 1011
                     logger.exception(f'Durable audio window tail commit failed at shutdown {uid}')
+                    if current_conversation_id:
+                        await record_barrier.fail_recording(current_conversation_id)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
-            websocket_active = False
-            audio_bytes_event.set()
+            if (
+                tail_committed
+                and current_conversation_id in record_close_requests
+                and current_conversation_id not in record_barrier.failed_recordings
+                and not record_barrier.record_upload_failed
+                and os.getenv('RECORD_BARRIER_INLINE_FINISH', 'true').strip().lower() != 'false'
+            ):
+                inline_finish_conversation = current_conversation_id
+                try:
+                    async with asyncio.timeout(RECORD_INLINE_FINISH_TIMEOUT):
+                        await inline_projection_drained.wait()
+                        if (
+                            current_conversation_id not in record_barrier.failed_recordings
+                            and not record_barrier.record_upload_failed
+                        ):
+                            if await record_barrier.finish_recording(current_conversation_id):
+                                record_close_requests.discard(current_conversation_id)
+                except TimeoutError:
+                    logger.info('event=record_inline_finish outcome=timeout')
+                finally:
+                    inline_finish_conversation = None
+                    inline_finish_done.set()
+                    websocket_active = False
+                    audio_bytes_event.set()
+            else:
+                websocket_active = False
+                audio_bytes_event.set()
 
     bg_main_tasks: List[asyncio.Task[Any]] = []
     try:

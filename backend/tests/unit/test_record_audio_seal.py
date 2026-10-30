@@ -4,6 +4,7 @@ import asyncio
 import json
 import struct
 import threading
+from typing import get_args
 from unittest.mock import AsyncMock
 from unittest.mock import Mock
 
@@ -24,6 +25,7 @@ import routers.pusher as pusher
 from database import record_audio as record_audio_db
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_record_barrier import RECORD_BARRIER_FAILURES
+from utils.pusher_record_barrier import RECORD_SEAL_REFUSED
 
 PATH = ('users', 'uid-at', 'conversations', 'record')
 
@@ -93,15 +95,15 @@ async def test_old_session_pending_upload_blocks_empty_reconnect(records):
 
 
 def test_failure_invalidates_prior_seal_and_is_sticky(records):
-    assert seal_record_audio('uid-at', 'record', firestore_client=records)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
     assert mark_record_upload_failed('uid-at', 'record', firestore_client=records)
-    assert not seal_record_audio('uid-at', 'record', firestore_client=records)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'upload_failed'
     assert records.rows[PATH]['record_upload_failed'] and not records.rows[PATH]['record_audio_closed']
 
 
 def test_missing_row_never_recreated(records):
     records.rows.clear()
-    assert not seal_record_audio('uid-at', 'record', firestore_client=records)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'deleted'
     assert not mark_record_upload_failed('uid-at', 'record', firestore_client=records)
     assert not set_record_upload_pending('uid-at', 'record', 'producer', True, firestore_client=records)
     assert not records.rows
@@ -111,7 +113,7 @@ def test_one_session_cannot_clear_another_sessions_upload(records):
     for token in ('producer-a', 'producer-b'):
         set_record_upload_pending('uid-at', 'record', token, True, firestore_client=records)
     set_record_upload_pending('uid-at', 'record', 'producer-a', False, firestore_client=records)
-    assert not seal_record_audio('uid-at', 'record', firestore_client=records)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'producer_pending'
     assert records.rows[PATH]['record_upload_sessions'] == {'producer-b': True}
 
 
@@ -271,3 +273,60 @@ async def test_degraded_failure_persistence_uses_shared_fallback(records, monkey
     fallback.assert_called_once()
     assert fallback.call_args.kwargs['component'] == 'pusher'
     assert fallback.call_args.kwargs['outcome'] == 'degraded'
+
+
+@pytest.mark.parametrize(
+    ('patch', 'reason'),
+    [
+        ({'record_upload_sessions': {'another': True}}, 'producer_pending'),
+        ({'record_upload_failed': True}, 'upload_failed'),
+        ({'record_lane_owner': 'legacy_final_pass_v1'}, 'not_batch_owner'),
+        ({'deleted': True}, 'deleted'),
+    ],
+)
+async def test_refused_seal_reason_is_counted_without_writes_or_identifiers(records, caplog, patch, reason):
+    records.rows[PATH].update(patch)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) == reason
+    before = RECORD_SEAL_REFUSED.labels(reason=reason)._value.get()
+    with caplog.at_level('INFO', logger='utils.pusher_record_barrier'):
+        assert await PusherRecordBarrier('uid-at').finish_recording('record')
+    assert RECORD_SEAL_REFUSED.labels(reason=reason)._value.get() == before + 1
+    assert [r.getMessage() for r in caplog.records] == [f'event=record_seal_refused reason={reason}']
+    assert all(not tx.updates for tx in records.transactions)
+
+
+def test_seal_refusal_vocabulary_is_closed():
+    assert set(get_args(record_audio_db.RecordSealRefusal)) == {
+        'producer_pending',
+        'upload_failed',
+        'not_batch_owner',
+        'deleted',
+    }
+
+
+async def test_cancelled_finish_retains_token_for_background_retry(records, monkeypatch):
+    import utils.pusher_record_barrier as module
+
+    barrier = PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    token = barrier.upload_sessions['record']
+    entered = asyncio.Event()
+    original = module.run_blocking
+
+    async def blocked(*args, **kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(module, 'run_blocking', blocked)
+    task = asyncio.create_task(barrier.finish_recording('record'))
+    await entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert set(records.rows[PATH]['record_upload_sessions']) == {token}
+    assert records.rows[PATH]['record_audio_closed'] is False
+    assert barrier.upload_sessions['record'] == token
+    assert ('record', token) in barrier.pending_clears
+    monkeypatch.setattr(module, 'run_blocking', original)
+    assert await barrier.finish_recording('record')
+    assert records.rows[PATH]['record_audio_closed']
