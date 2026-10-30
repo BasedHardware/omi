@@ -64,7 +64,7 @@ from utils.sync.live_speech_dedupe import (
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
 from utils.sync.bridge_observation import bridge_observation
-from utils.sync.absorption_metrics import capture_absorptions
+from utils.sync.absorption_metrics import capture_assignment_metrics
 from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
 from utils.sync.assignment_telemetry import created_sync_row_observation
 from utils.capture.dedupe import choose_segments
@@ -1329,7 +1329,7 @@ def assign_in_transaction(
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
     result['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
-    capture_absorptions(result, [chosen, *extra_plans])
+    capture_assignment_metrics(result, [chosen, *extra_plans])
     return result, created, survivors
 
 

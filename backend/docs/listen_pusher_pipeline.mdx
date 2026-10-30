@@ -8344,7 +8344,7 @@ to be retried after visibility expiry, so a longer capture still converges after
 it ends. A deleted/incompatible target or size refusal never authorizes a forced
 merge; the standalone recording remains recoverable.
 
-Donor absorption measurement is documented in [Sync bridge absorption](sync-bridge-absorption.md).
+Committed donor absorption and published-row counters are documented in [Sync bridge absorption](sync-bridge-absorption.md).
 
 A finalizer losing its processing-result CAS checks the current job lease and
 conversation together. If the bound, undiscarded processing row has a newer

@@ -32,7 +32,7 @@ spec:
         # are that fix's watch readout (stt-cap-dispatch.md) — closed enum labels only.
         # C5 exact-input reuse (2026-10-26): the dedupe hit/miss/checkpoint counters
         # are the soak readout for backend-sync/backfill/backend-integration.
-        # Bridge absorption: sync_.* includes omi_sync_bridge_absorbed_total.
+        # Bridge measurement: sync_.* includes absorbed and published-row counters.
         - action: keep
           sourceLabels:
             - __name__
