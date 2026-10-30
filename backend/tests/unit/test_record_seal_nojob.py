@@ -22,6 +22,7 @@ from utils.batch_pipeline import (
 PATH = ('users', 'synthetic', 'conversations', 'capture')
 SCOPE = ['/'.join(PATH)]
 JOB_PATH = ('batch_pipeline_dev_jobs', live.record_identity('synthetic', 'capture')[1])
+SERVER = {'K_SERVICE': 'synthetic-serving-role', 'BATCH_PIPELINE_PERCENT': '5'}
 
 
 @pytest.fixture
@@ -52,7 +53,7 @@ def source(monkeypatch):
 
 def plan(source, proof=None):
     store, _, artifacts = source
-    return backfill.plan_backfill(store, SCOPE, object(), artifacts, producer_proof=proof)
+    return backfill.plan_backfill(store, SCOPE, object(), artifacts, server_flags=SERVER, producer_proof=proof)
 
 
 def apply(source, result):
@@ -223,9 +224,13 @@ def test_cli_tiers_before_any_client_access(monkeypatch, tier, apply_mode, allow
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     reached = Mock(side_effect=RuntimeError('stop before network'))
     monkeypatch.setattr(_client, 'get_firestore_client', reached)
-    args = ['--next-file', '/unused'] + (['--apply', '--approve-plan-sha256', 'digest'] if apply_mode else [])
+    module = cli()
+    monkeypatch.setattr(module, 'read_server_flags', lambda _: SERVER)
+    args = ['--next-file', '/unused', '--server-flags-file', '/flags'] + (
+        ['--apply', '--approve-plan-sha256', 'digest'] if apply_mode else []
+    )
     with pytest.raises(RuntimeError if allowed else SystemExit):
-        cli().main(args)
+        module.main(args)
     assert reached.called is allowed
 
 
@@ -249,7 +254,8 @@ def test_cli_dry_run_outputs_only_counts_and_digest(source, monkeypatch, capsys)
     monkeypatch.setattr(local_storage, 'create_storage_client', object)
     cursor = Mock()
     monkeypatch.setattr(module, 'write_cursor', cursor)
-    module.main(['--next-file', '/private/cursor'])
+    monkeypatch.setattr(module, 'read_server_flags', lambda _: SERVER)
+    module.main(['--next-file', '/private/cursor', '--server-flags-file', '/flags'])
     output = capsys.readouterr()
     report = json.loads(output.out)
     assert report['dispositions'] == {'eligible': 1}
@@ -265,6 +271,29 @@ def test_cli_invalid_arguments_do_not_echo_sensitive_values(capsys):
     output = capsys.readouterr()
     assert json.loads(output.out)['outcome'] == 'invalid_arguments'
     assert 'synthetic-private-path' not in output.out + output.err
+
+
+def test_operator_registration_cannot_pin_laptop_policy(source, monkeypatch):
+    monkeypatch.setenv('K_SERVICE', 'operator-laptop')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    result = plan(source)
+    assert result['entries'][0]['job']['policy']['source_role'] == SERVER['K_SERVICE']
+    assert result['entries'][0]['job']['policy']['batch_percent'] == 5
+    assert apply(source, result) == {'sealed_registered': 1}
+    assert source[1].rows[JOB_PATH]['policy']['source_role'] == SERVER['K_SERVICE']
+    with pytest.raises(ValueError):
+        backfill.plan_backfill(source[0], SCOPE, object(), source[2], server_flags=None)
+
+
+def test_server_flag_file_filters_unrelated_values_and_requires_role(tmp_path):
+    module = cli()
+    path = tmp_path / 'flags.json'
+    path.write_text(json.dumps({**SERVER, 'SECRET': 'synthetic-secret'}))
+    assert module.read_server_flags(path) == SERVER
+    for value in ([], {}, {'K_SERVICE': True}, {'K_SERVICE': 'role', 'BATCH_PIPELINE_PERCENT': 5}):
+        path.write_text(json.dumps(value))
+        with pytest.raises(ValueError):
+            module.read_server_flags(path)
 
 
 def test_private_cursor_permissions_and_rejects_public_directory(tmp_path, monkeypatch):

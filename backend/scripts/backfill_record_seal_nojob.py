@@ -45,11 +45,39 @@ def write_cursor(path, after):
             temporary.unlink(missing_ok=True)
 
 
+def read_server_flags(path):
+    # Copy only admission inputs from the serving role, never credentials or
+    # unrelated workload configuration. An explicit map bypasses laptop env.
+    keys = {
+        'K_SERVICE',
+        'OMI_SYNC_STACK_ROLE',
+        'BATCH_PIPELINE_ENABLED',
+        'BATCH_PIPELINE_PERCENT',
+        'BATCH_PIPELINE_UID_ALLOWLIST',
+        'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED',
+        'BATCH_LIVE_STT_RETIRE_PERCENT',
+        'TRANSCRIPTION_FINAL_PASS_DIARIZER',
+        'TRANSCRIPTION_FINAL_PASS_PERCENT',
+        'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST',
+        'TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE',
+    }
+    raw = json.loads(Path(path).read_text())
+    if not isinstance(raw, dict):
+        raise ValueError('explicit serving-role flags required')
+    flags = {key: value for key, value in raw.items() if key in keys}
+    if any(not isinstance(value, str) for value in flags.values()) or not (
+        flags.get('K_SERVICE') or flags.get('OMI_SYNC_STACK_ROLE')
+    ):
+        raise ValueError('explicit serving-role flags required')
+    return flags
+
+
 def main(argv=None):
     parser = CountsOnlyParser(description=__doc__)
     parser.add_argument('--limit', type=int, default=128)
     parser.add_argument('--after-file')
     parser.add_argument('--next-file', required=True)
+    parser.add_argument('--server-flags-file', required=True, help='private admission flags from the serving role')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
     parser.add_argument('--pusher-pods-file')
@@ -77,13 +105,16 @@ def main(argv=None):
     from utils.other.local_storage import create_storage_client
 
     after = json.loads(Path(args.after_file).read_text())['after'] if args.after_file else None
+    server_flags = read_server_flags(args.server_flags_file)
     client = get_firestore_client()
     store = FirestoreStore('batch_pipeline_prod', firestore_client=client)
     proof = (
         load_pusher_pod_proof(args.pusher_pods_file, args.pusher_pods_captured_at) if args.pusher_pods_file else None
     )
     paths, next_after = discover(client, limit=args.limit, after=after)
-    plan = plan_backfill(store, paths, create_storage_client(), artifacts_for(store), producer_proof=proof)
+    plan = plan_backfill(
+        store, paths, create_storage_client(), artifacts_for(store), server_flags=server_flags, producer_proof=proof
+    )
     report = {**summary(plan), 'apply': args.apply}
     # Validate/write the private cursor before any data mutation. It does not
     # advance the input; operators choose when to start the next page.

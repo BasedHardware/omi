@@ -64,7 +64,9 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
     return OWNER
 
 
-def register_recording(uid: str, conversation: dict, *, store=None, now=None, transaction=None) -> bool:
+def register_recording(
+    uid: str, conversation: dict, *, store=None, now=None, transaction=None, admission_policy=None
+) -> bool:
     if conversation.get('record_lane_owner') != OWNER:
         return False
     if server_batch_owned(conversation) and not server_batch_has_audio(conversation):
@@ -80,7 +82,10 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None, tr
     # The immutable native owner is main's earlier admission receipt. A later
     # cohort rollback cannot cancel it before finalization registers the unit.
     policy = replace(
-        resolve_batch_policy(uid), batch_enabled=True, live_admission_enabled=True, live_record_enabled=True
+        admission_policy if admission_policy is not None else resolve_batch_policy(uid),
+        batch_enabled=True,
+        live_admission_enabled=True,
+        live_record_enabled=True,
     )
     snapshot = {
         key: conversation.get(key)

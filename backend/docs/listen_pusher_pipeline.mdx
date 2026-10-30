@@ -6397,7 +6397,7 @@ the extra producer transaction runs only on its first accepted audio per drain.
 CPU reconciliation waits for a successful receipt and the completed, retained
 conversation. This is a durability barrier, not an upload-grace timer.
 
-One-time no-job backfill: `backend/scripts/backfill_record_seal_nojob.py --next-file PRIVATE_CURSOR`
+One-time no-job backfill: `backend/scripts/backfill_record_seal_nojob.py --next-file PRIVATE_CURSOR --server-flags-file PRIVATE_FLAGS`
 discovers at most 128 `batch_live_v1` conversation references per page using the
 existing owner collection-group index, including refused/already registered rows.
 Default dry-run accepts `ro-prod` or `prod-operator`; it prints only counts,
@@ -6408,6 +6408,10 @@ the tool writes the next cursor atomically as 0600. For later pages pass the
 previous output as `--after-file` and a different `--next-file`. Keep that input
 unchanged between dry-run and apply; stop on an empty page. Advance only after
 settling the page, and revisit refused rows from the beginning after remediation.
+The flags file is a string map of the serving role's admission settings (including
+`K_SERVICE` or `OMI_SYNC_STACK_ROLE`, and the current ramp percent rather than a
+stale environment fallback). Only admission inputs are read. The plan binds them;
+the operator laptop's environment never becomes the stored job policy.
 Token rows require the same fresh `--pusher-pods-file` and capture time as the
 repair below; bare tokens are refused. The tool shares the retained-tail proof
 and registers the canonical deterministic `record_pending` job in the same

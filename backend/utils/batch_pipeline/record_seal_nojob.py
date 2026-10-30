@@ -10,6 +10,7 @@ import time
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from config.policy import resolve_batch_policy
 from database._client import run_transactional
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreTransaction
@@ -78,14 +79,27 @@ def refusal(row, producer_proof):
     return _refused({'state': 'record_pending', 'record_content_id': 'candidate'}, row, producer_proof=producer_proof)
 
 
-def registration(tx, uid, cid, row):
+def registration(tx, uid, cid, row, server_flags):
     capture = RegistrationPlan(tx)
-    if not register_recording(uid, {**row, 'id': cid}, now=0, transaction=capture) or capture.job is None:
+    if (
+        not register_recording(
+            uid,
+            {**row, 'id': cid},
+            now=0,
+            transaction=capture,
+            admission_policy=resolve_batch_policy(uid, flags=server_flags),
+        )
+        or capture.job is None
+    ):
         raise ValueError('registration refused')
     return capture.job
 
 
-def plan_backfill(store, paths, storage_client, artifacts, *, producer_proof=None):
+def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, producer_proof=None):
+    if not isinstance(server_flags, dict) or not (
+        server_flags.get('K_SERVICE') or server_flags.get('OMI_SYNC_STACK_ROLE')
+    ):
+        raise ValueError('explicit serving-role flags required')
     if len(paths) > 128 or len(set(paths)) != len(paths):
         raise ValueError('bounded unique discovery page required')
     entries = []
@@ -102,7 +116,7 @@ def plan_backfill(store, paths, storage_client, artifacts, *, producer_proof=Non
                 reason = refusal(row, producer_proof)
                 if reason:
                     return row, None, reason
-                return row, registration(tx, uid, cid, row), None
+                return row, registration(tx, uid, cid, row, server_flags), None
 
             row, job, reason = store.run(read)
             entry['row'] = row_state(row)
@@ -118,7 +132,13 @@ def plan_backfill(store, paths, storage_client, artifacts, *, producer_proof=Non
         except Exception:
             entry['disposition'] = 'read_error'
         entries.append(entry)
-    body = {'operation': OPERATION, 'namespace': store.namespace, 'entries': entries, 'producer_proof': producer_proof}
+    body = {
+        'operation': OPERATION,
+        'namespace': store.namespace,
+        'entries': entries,
+        'producer_proof': producer_proof,
+        'server_flags': server_flags,
+    }
     return {**body, 'plan_sha256': _digest(body)}
 
 
@@ -149,7 +169,7 @@ def apply_backfill(store, plan, approved_digest):
             if reason:
                 return reason
             tx.check_privacy(uid, (cid,), expected_generation=entry['job']['privacy_generation'])
-            job = registration(tx, uid, cid, row)
+            job = registration(tx, uid, cid, row, plan['server_flags'])
             if job != entry['job']:
                 return 'state_changed'
             tx.put('jobs', job_id, {**job, 'enqueued_at': now, 'available_at': now})
