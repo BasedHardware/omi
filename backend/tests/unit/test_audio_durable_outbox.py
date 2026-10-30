@@ -1278,11 +1278,31 @@ async def test_inline_projection_timeout_keeps_background_close(inline_session, 
     entered = asyncio.Event()
     release = threading.Event()
     loop = asyncio.get_running_loop()
+    timed_out = asyncio.Event()
+    timeouts = []
+    real_timeout = asyncio.timeout
+    real_info = pusher.logger.info
     finish_tasks = []
     original = barrier.finish_recording
 
+    def capture_timeout(delay):
+        timeout = real_timeout(delay)
+        timeouts.append(timeout)
+        return timeout
+
+    def expire_budget():
+        # The blocked projection expires its own handler budget explicitly;
+        # healthy CI work never races a tiny real-clock deadline.
+        timeouts[-1].reschedule(loop.time() - 1)
+
+    def info(message, *args, **kwargs):
+        if message == 'event=record_inline_finish outcome=timeout':
+            timed_out.set()
+        real_info(message, *args, **kwargs)
+
     def project(*args, **kwargs):
         loop.call_soon_threadsafe(entered.set)
+        loop.call_soon_threadsafe(expire_budget)
         assert release.wait(5)
         projected.append(args)
 
@@ -1292,13 +1312,14 @@ async def test_inline_projection_timeout_keeps_background_close(inline_session, 
         return await original(cid)
 
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
-    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.01)
+    monkeypatch.setattr(pusher.asyncio, 'timeout', capture_timeout)
+    monkeypatch.setattr(pusher.logger, 'info', info)
     monkeypatch.setattr(barrier, 'finish_recording', finish)
     sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
     task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
     try:
         await asyncio.wait_for(entered.wait(), 5)
-        await asyncio.sleep(0.03)
+        await asyncio.wait_for(timed_out.wait(), 5)
         assert client.rows[path]['record_upload_sessions']
         assert not finish_tasks
     finally:

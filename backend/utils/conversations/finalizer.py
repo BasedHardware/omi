@@ -13,7 +13,6 @@ from typing import Any
 from enum import Enum
 
 from fastapi import HTTPException
-from prometheus_client import Counter
 from config.batch_pipeline import RecordOwnerContention
 from config.merge_before_processing import enabled as merge_before_processing_enabled
 from utils.enrichment.admission import ConversationAbsorbed
@@ -57,6 +56,7 @@ from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
+    RECORD_REGISTER_REFUSED,
     classify_finalization_failure,
     finalization_diagnostic_id,
     record_finalization_failure,
@@ -70,10 +70,6 @@ from utils.observability.fallback import record_fallback
 from utils.batch_pipeline.live import register_recording, reserve_recording
 
 logger = logging.getLogger(__name__)
-
-RECORD_REGISTER_REFUSED = Counter(
-    'omi_record_register_refused_total', 'Batch recording registration refused during conversation finalization'
-)
 
 
 def _maybe_start_shadow(uid: str, conversation) -> None:
