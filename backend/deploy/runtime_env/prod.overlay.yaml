@@ -553,7 +553,7 @@ overlay:
             value: 'on'
             category: rollout
           OMI_IMESSAGE_PROVIDER:
-            value: linq
+            value: keiki
             category: rollout
           OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO:
             value: '3'
@@ -571,7 +571,7 @@ overlay:
             value: keiki
             category: rollout
           OMI_MESSAGING_LINK_TARGETS:
-            value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}'
+            value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967"}}'
             category: rollout
           DREAM_AGENT_ENABLED:
             value: 'true'
