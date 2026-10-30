@@ -57,9 +57,14 @@ is one Keiki agent with `harness: external`, push mode, its `dispatchUrl` set to
 - `queue` steering keeps the inbox FIFO authoritative: a newer message waits at Keiki
   until the open turn settles, so Keiki channels do not supersede a reply in progress.
 - Files are not sent or read yet: the turn API sends only Keiki sandbox paths. An inbound
-  attachment gets the unsupported-file reply, and an outbound file becomes a short text
-  saying to open Omi. Deferred replies and Omi-initiated messages are not delivered on
-  Keiki channels; a closed turn refuses them (`409 turn_closed`).
+  attachment gets the unsupported-file reply, and `media_out` is empty, so no file tool is
+  offered and the sink refuses files. Deferred replies and Omi-initiated messages are not
+  delivered on Keiki channels; a closed turn refuses them (`409 turn_closed`).
+- A declined turn is settled in the background after the webhook is acknowledged. A failed
+  settle increments `FAILURES{reason="settle_failed"}`; the turn then stays open until
+  Keiki's deadline (ten minutes), blocking that contact's next turn. Expired rows settle
+  their turn as failed. A turn whose reply was delivered but whose row then failed is
+  still settled `failed`; Keiki shows nothing to the contact for that.
 - Line health is Keiki's (fewer than 50 new conversations per line per day, about
   400–500 active users per line). Omi links one address per channel, so add lines and
   spread new links before that cap. The link target's `provider` in

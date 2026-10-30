@@ -32,8 +32,8 @@ SIGNATURE_TOLERANCE_SECONDS = 300
 # The service name each Omi channel accepts from the turn's channel envelope. Keiki-bought
 # iMessage lines run on Photon; an unknown service is logged by name and never answered.
 CHANNEL_SERVICES = {'imessage': frozenset({'imessage', 'photon', 'linq'}), 'whatsapp': frozenset({'whatsapp'})}
-TAPBACKS = {'love': '❤️', 'like': '👍', 'dislike': '👎', 'laugh': '😂', 'emphasize': '‼️', 'question': '❓'}
 FILES_UNAVAILABLE = 'I can’t send files in this chat yet. Open Omi to see it.'
+TAPBACKS = {'love': '❤️', 'like': '👍', 'dislike': '👎', 'laugh': '😂', 'emphasize': '‼️', 'question': '❓'}
 _ATTACHMENT = re.compile(r'attachment_id=')
 
 
@@ -228,6 +228,8 @@ class KeikiAdapter(BaseAdapter):
         if draft:
             return
         if artifact:
+            # Unreachable while media_out is empty (the sink refuses files first); kept so a
+            # capability change degrades to a notice rather than a failed turn.
             record_fallback(
                 component='other', from_mode='channel_file', to_mode='text_notice', reason='other', outcome='degraded'
             )

@@ -94,6 +94,11 @@ class Gateway:
         try:
             await self.adapter.settled(message, ok)
         except Exception as error:
+            from utils.messaging.metrics import FAILURES
+
+            # The row is already done, so nothing retries this; an open turn blocks the
+            # contact's next turn until the provider's deadline. Count it so it can alarm.
+            FAILURES.labels(self.adapter.channel, 'settle_failed').inc()
             logging.getLogger(__name__).warning(
                 'Messaging provider settle failed provider=%s error_type=%s status_code=%s',
                 self.adapter.provider,
@@ -118,7 +123,8 @@ class Gateway:
                 'Messaging ignored provider=%s reason=non_turn_event', self.adapter.provider
             )
             if hasattr(self.adapter, 'unhandled'):
-                await self.adapter.unhandled(body)
+                # Settling a declined turn is a provider call: never hold the acknowledgement on it.
+                start_background_task(self.adapter.unhandled(body), name='messaging-provider-unhandled')
         paths = []
         for message in messages:
             if (message.channel, message.provider) != (self.adapter.channel, self.adapter.provider):
@@ -879,16 +885,17 @@ class Gateway:
         ):
             message = inbox_message(payload)
             link = await run_blocking(db_executor, self.store.lookup, message)
-            if not link or not link.get('active'):
-                continue
+            if link and link.get('active'):
 
-            async def guard():
-                await run_blocking(db_executor, self._assert_link, message, link)
+                async def guard():
+                    await run_blocking(db_executor, self._assert_link, message, link)
 
-            try:
-                await self._reply_sink(message, guard=guard).finish('Sorry, that took too long — please resend.')
-            except Exception as error:
-                self._log_failure(error)
+                try:
+                    await self._reply_sink(message, guard=guard).finish('Sorry, that took too long — please resend.')
+                except Exception as error:
+                    self._log_failure(error)
+            # An expired row will never run: release the provider's turn too.
+            await self._settle_provider_turn(message, False)
 
     async def drain(self, *, limit=100):
         paths = await run_blocking(

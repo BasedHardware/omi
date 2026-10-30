@@ -151,7 +151,15 @@ def test_link_code_and_commands(adapter):
 )
 def test_unanswered_turns_settle_without_a_reply(adapter, overrides):
     gateway = Gateway(adapter, store=MemoryStore(), turn=lambda *a, **k: pytest.fail('turn ran'))
-    result = asyncio.run(gateway.webhook(*signed(turn(**overrides))))
+
+    async def run():
+        result = await gateway.webhook(*signed(turn(**overrides)))
+        # The acknowledgement does not wait for Keiki; the settle runs right after it.
+        assert not calls(adapter, '/complete')
+        await asyncio.sleep(0.05)
+        return result
+
+    result = asyncio.run(run())
     assert not result['jobs'] and not adapter.sent
     (complete,) = calls(adapter, '/turns/turn-1/complete')
     assert complete[2]['json'] == {'status': 'completed'}
@@ -315,3 +323,26 @@ def test_imessage_provider_switch(monkeypatch):
     monkeypatch.setenv('OMI_IMESSAGE_PROVIDER', 'sendblue')
     with pytest.raises(ValueError):
         runtime.configured_adapters()
+
+
+def test_failed_settle_is_counted(adapter):
+    from utils.messaging.metrics import FAILURES
+
+    gateway = Gateway(adapter, store=MemoryStore())
+    message = adapter.parse(json.dumps(turn()).encode())[0]
+    before = FAILURES.labels('imessage', 'settle_failed')._value.get()
+    adapter.transport.responses = [(500, {'error': 'x'}, {})] * 4
+    asyncio.run(gateway._settle_provider_turn(message, True))
+    assert FAILURES.labels('imessage', 'settle_failed')._value.get() == before + 1
+
+
+def test_expired_rows_settle_their_turn(adapter, monkeypatch):
+    store = MemoryStore()
+    gateway = Gateway(adapter, store=store)
+    message = adapter.parse(json.dumps(turn('turn-old')).encode())[0]
+    from dataclasses import asdict
+
+    payload = dict(asdict(message), received_at=message.received_at.isoformat())
+    monkeypatch.setattr(store, 'claim_expired', lambda channel, provider: [payload])
+    asyncio.run(gateway.expired_notices())
+    assert calls(adapter, '/turns/turn-old/complete')[-1][2]['json'] == {'status': 'failed'}
