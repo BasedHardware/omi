@@ -4,22 +4,25 @@ icon: "desktop"
 description: "Build and run the Omi macOS desktop app from source."
 ---
 
-The Omi desktop app for macOS lives in [`desktop/macos/`](https://github.com/BasedHardware/omi/tree/main/desktop/macos) in this repository. It is a Swift app (top-bar Chat, Memories, Tasks, Apps surfaces) with local storage and capture.
+The Omi desktop app for macOS lives in [`desktop/macos/`](https://github.com/BasedHardware/omi/tree/main/desktop/macos). It is a Swift Package Manager project, and `run.sh` builds and launches it. There is no Xcode project to open.
 
 ## Setup
 
 <Steps>
-  <Step title="Clone the Repository">
+  <Step title="Clone the repository">
     ```bash
     git clone https://github.com/BasedHardware/omi.git
-    cd omi
+    cd omi/desktop/macos
     ```
   </Step>
-  <Step title="Open the Project">
-    Open `desktop/macos/Omi.xcodeproj` (or the workspace) in Xcode. Swift Package Manager resolves dependencies on first open.
+  <Step title="Install the prerequisites">
+    Install the toolchain and code-signing identity listed in the [desktop README](https://github.com/BasedHardware/omi/blob/main/desktop/macos/README.md#development).
   </Step>
-  <Step title="Run a Dev Build">
-    Select the dev scheme and run. Use a dev or `omi-*` named bundle — never install over the production Omi or Omi Beta apps.
+  <Step title="Build and run a named bundle">
+    ```bash
+    OMI_APP_NAME="omi-dev" ./run.sh
+    ```
+    This builds the app, starts a local Python backend, and launches the bundle. Always use a named `omi-*` bundle, so you never install over the production Omi or Omi Beta apps.
   </Step>
 </Steps>
 

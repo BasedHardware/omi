@@ -322,6 +322,9 @@
     { "source": "/product-telemetry/README", "destination": "https://github.com/BasedHardware/omi/blob/main/scripts/product-telemetry/README.md" },
     { "source": "/archive/SPEC-meeting-receipt", "destination": "/doc/get_started/what-is-omi" },
     { "source": "/doc/developer/backend/transcription", "destination": "/doc/how-omi-works/capture-and-transcription" },
+    { "source": "/doc/developer/api", "destination": "/doc/developer/api/overview" },
+    { "source": "/doc/developer/Compile_firmware", "destination": "/doc/developer/firmware/Compile_firmware" },
+    { "source": "/developer/backend/Backend_Setup", "destination": "/doc/developer/backend/Backend_Setup" },
     { "source": "/doc/developer/backend/StoringConversations", "destination": "/doc/how-omi-works/conversations-and-memories" },
     { "source": "/doc/developer/backend/chat_system", "destination": "/doc/how-omi-works/chat" }
   ],

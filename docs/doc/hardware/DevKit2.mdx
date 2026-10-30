@@ -65,15 +65,34 @@ Boot briefly blinks red, green, blue, then white.
 
 ## Testing device storage over BLE
 
-Standalone recordings land on the microSD card as `audio/a01.txt`, `audio/a02.txt`, … (raw Opus-in-ADTS style bytes). The app imports them automatically when it reconnects (device storage support). To read or clear them yourself, write 6-byte commands to the storage characteristic and read 6-byte responses back (`[status, file_num, b2, b3, b4, b5]`):
+Standalone recordings land on the microSD card as `audio/a01.txt`, `audio/a02.txt`, and so on. The app imports them automatically when it reconnects. To read or clear them yourself, use the storage service:
 
-| Command | Bytes | Meaning |
-|---------|-------|---------|
-| Read | `0, n, off_1, off_2, off_3, off_4` | Read file `n` from big-endian byte offset (e.g. `0,1,0,0,0,255` = offset 255) |
-| Clear | `1, n, …` | Clear file 1 (the file number is ignored — firmware always clears file 1) |
-| Heartbeat | `50, …` | Keep the session alive while reading |
+| Characteristic | UUID | Use |
+|----------------|------|-----|
+| Command | `30295781-4301-EABD-2904-2849ADFEAE43` | Subscribe to notifications, then write commands |
+| File sizes | `30295782-4301-EABD-2904-2849ADFEAE43` | Read two little-endian 32-bit file sizes (8 bytes) |
 
-Response codes: `0` read OK · `100` write OK · `200` clear OK · `3` file out of range · `4` file has size 0 · `5` requested size too large · `6` invalid command.
+Commands are 6 bytes, `[command, file, offset_1, offset_2, offset_3, offset_4]`, with a big-endian byte offset. A 2-byte `[command, file]` form leaves the offset at zero. File numbers start at 1.
+
+| Command | Code | Meaning |
+|---------|------|---------|
+| Read | `0` | Stream file `n` from the offset, rounded down to a multiple of 440 bytes |
+| Clear | `1` | Clear file 1. The firmware ignores the file number. |
+| Clear all | `2` | Clear the audio directory |
+| Stop | `3` | Stop the current transfer |
+| Heartbeat | `50` | Keep the session alive while reading |
+
+Replies arrive as notifications on the command characteristic. A one-byte notification is a status. Anything longer is audio, up to 440 bytes per notification:
+
+| Status | Meaning |
+|--------|---------|
+| `0` | Command accepted |
+| `100` | Transfer finished |
+| `200` | File cleared |
+| `3` | File number out of range |
+| `4` | File is empty |
+| `5` | Offset is past the end of the file |
+| `6` | Invalid command |
 
 Helper scripts for discovery, listing, downloading, decoding, and deleting live in [`omi/firmware/scripts/devkit/`](https://github.com/BasedHardware/omi/tree/main/omi/firmware/scripts/devkit). Button events over the button characteristic are `1` single tap, `2` double tap, and `5` release. A long press powers the device off and is not reported.
 

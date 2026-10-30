@@ -10,6 +10,8 @@ Omi records conversations. That is the product, and it makes the data model wort
 
 Every account holds **conversations** (transcripts and, depending on settings, audio), **memories** (extracted facts), **action items**, **goals**, and **people** (recognized speakers). Every API surface (the app, Developer API, MCP, CLI, and installed apps) is scoped to the signed-in account.
 
+Sharing is the one exception, and you start it. A shared conversation or task link can be opened without signing in. It returns a limited view: for a conversation, its summary and transcript; for a task, its description and due date.
+
 Apps you install can receive the data you grant them (for example conversation webhooks or chat tools); app authors see only what flows to their endpoints.
 
 ## Where it lives

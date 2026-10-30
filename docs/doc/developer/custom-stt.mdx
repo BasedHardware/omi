@@ -17,7 +17,7 @@ flowchart LR
 
 | Message | Format | Meaning |
 |---------|--------|---------|
-| Audio frames | Binary | Raw audio in the codec the app is configured for (typically Opus, 16 kHz) |
+| Audio frames | Binary | Raw PCM: signed 16-bit little-endian, mono, no WAV header. The sample rate matches the device (16 kHz on current hardware). The app decodes Opus before sending, so your service never receives Opus packets. |
 | `{"type": "CloseStream"}` | JSON | The audio stream has ended |
 
 ## What your service sends
