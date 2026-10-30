@@ -6385,7 +6385,17 @@ unowned/native registration and clear add about 6-8k metadata writes/h; this is
 an estimate, not a measured Firestore or Typesense-extension cost. The lead will
 measure both Firestore write rate and Typesense extension invocation rate after
 deployment (ruling 9bc674).
-The successful drain removes only that token before attempting closure. The seal
+The successful drain removes that token before attempting closure. A bounded
+process-local registry (4096 token hints, one-hour idle TTL) also remembers
+held tails and successful drains whose metadata clear failed. A later socket
+that registered its own token and successfully drained the same user's same
+conversation re-clears those earlier tokens before sealing. Empty reconnects,
+still-active producers, newer tokens and tokens minted by other processes are
+never certified by this recovery. Registry eviction only forgets hints; durable
+tokens never expire. The registry holds no socket references and removes hints
+after successful clears. Re-clears emit `event=record_tokens_recleared count=1`
+without identifiers. Sticky upload-failure markers still refuse closure.
+The seal
 transaction refuses while any producer remains pending, including an older socket
 still uploading or retrying. Tokens have no TTL: process death cannot prove audio
 completeness. Terminal upload/projection failures and queue/buffer drops await a
