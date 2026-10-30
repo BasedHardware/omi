@@ -145,6 +145,8 @@ COMPOSE_OUTCOMES = frozenset(
         'empty',
         'no_episode',
         'superseded',
+        'stale',
+        'backoff',
         'conflict',
         'disabled',
         'error',

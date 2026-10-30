@@ -100,7 +100,16 @@ def fingerprint(members: Sequence[Mapping[str, Any]]) -> str:
             (item.get('description') if isinstance(item, Mapping) else str(item))
             for item in structured.get('action_items') or []
         ]
-        speech = [(round(float(s.get('start') or 0), 1), str(s.get('text')).strip()) for s in _segments(row)]
+        speech = [
+            (
+                round(float(s.get('start') or 0), 1),
+                str(s.get('text')).strip(),
+                bool(s.get('is_user')),
+                s.get('speaker'),
+                s.get('person_id'),
+            )
+            for s in _segments(row)
+        ]
         evidence = json.dumps(
             [structured.get('title'), structured.get('overview'), items, speech], default=str, ensure_ascii=False
         )
@@ -340,7 +349,7 @@ def _members(uid: str, episode: Mapping[str, Any], c: Any) -> tuple[str, list[di
     members = []
     for cid in _retained_ids(episode):
         row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
-        if not row or hidden_member(row):
+        if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
             continue
         if str(row.get('status') or '') not in _DONE:
             return 'waiting', []
@@ -385,21 +394,46 @@ def _write(
     return 'conflict'
 
 
-def _record_failure(uid: str, episode_id: str, c: Any) -> None:
-    """Back off the read-side safety net after a failed paid attempt."""
+def _record_failure(uid: str, episode_id: str, c: Any, print_: str) -> None:
+    """Back off after a failed paid attempt. The count is per evidence: new evidence starts at one."""
     try:
         _write(
             uid,
             episode_id,
             c,
             lambda current: {
-                'compose_failures': int(current.get('compose_failures') or 0) + 1,
+                'compose_failures': (
+                    int(current.get('compose_failures') or 0) + 1
+                    if current.get('compose_failed_fingerprint') == print_
+                    else 1
+                ),
+                'compose_failed_fingerprint': print_,
                 'compose_failed_at': datetime.now(timezone.utc),
-                'compose_lease': None,
+                **_release(current, print_),
             },
         )
     except Exception:
         pass
+
+
+def _release(current: Mapping[str, Any], print_: str) -> dict[str, Any]:
+    """Clear the lease only if it is still ours; a newer compose's lease stays."""
+    lease = current.get('compose_lease')
+    return {'compose_lease': None} if isinstance(lease, Mapping) and lease.get('fingerprint') == print_ else {}
+
+
+def _backed_off(episode: Mapping[str, Any], print_: Optional[str] = None) -> bool:
+    """Failed paid attempts on the same evidence back off 10/20/40 min, then stop until it changes."""
+    failures = int(episode.get('compose_failures') or 0)
+    if not failures:
+        return False
+    if print_ is not None and episode.get('compose_failed_fingerprint') != print_:
+        return False
+    if failures >= COMPOSER_MAX_FAILURES:
+        return True
+    failed_at = _utc(episode.get('compose_failed_at'))
+    backoff = timedelta(minutes=COMPOSER_RETRY_MINUTES * (2 ** (failures - 1)))
+    return bool(failed_at and datetime.now(timezone.utc) - failed_at < backoff)
 
 
 def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) -> str:
@@ -413,11 +447,14 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
     if not members or not any(_segments(row) for row in members):
-        # Nothing to say: stamp it so neither reads nor finalizers keep retrying.
+        # Nothing to say: clear notes that may describe a member since hidden, and stamp it so
+        # neither reads nor finalizers keep retrying.
+        cleared = {'title': '', 'bullets': [], 'moments': [], 'people': [], 'open_questions': []}
         stamp = {
+            **cleared,
             'composed_fingerprint': fingerprint(members),
             'composed_member_ids': member_ids,
-            'composed_notes': notes_hash(episode),
+            'composed_notes': notes_hash(cleared),
             'summary_needs_regeneration': False,
         }
         _write(uid, episode_id, c, stamp)
@@ -430,6 +467,8 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         and not episode.get('summary_needs_regeneration')
     ):
         return 'unchanged'
+    if not force and _backed_off(episode, print_):
+        return 'backoff'
     invoke = (c.extras or {}).get('compose_invoke')
     if invoke is None and getattr(c, 'invoke', None) is not None:
         # Collaborators that fake the incremental model never reach the real composer model.
@@ -474,7 +513,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
             content = ''.join(part.get('text', '') if isinstance(part, Mapping) else str(part) for part in content)
         data = parse(str(content))
     except Exception:
-        _record_failure(uid, episode_id, c)
+        _record_failure(uid, episode_id, c, print_)
         raise
     spans = [(str(row['id']), *line_span(transcript_lines(row, owner, tz))) for row in members]
     composed = to_updates(data, members, tz, spans)
@@ -486,7 +525,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         uid, episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode, c
     )
     if fresh_state != 'ok' or fingerprint(fresh) != print_:
-        _write(uid, episode_id, c, {'compose_lease': None})
+        _write(uid, episode_id, c, lambda current: _release(current, print_))
         return 'superseded'
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
@@ -503,8 +542,8 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
             'composed_at': datetime.now(timezone.utc),
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
-            'compose_lease': None,
             'compose_failures': 0,
+            **_release(current, print_),
         }
 
     def finish_guard(current: Mapping[str, Any]) -> Optional[str]:
@@ -514,8 +553,14 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
 
     written = _write(uid, episode_id, c, finish, guard=finish_guard)
     if written != 'written':
-        _write(uid, episode_id, c, {'compose_lease': None})
+        _write(uid, episode_id, c, lambda current: _release(current, print_))
         return written
+    # A transcript change that landed between the evidence re-read and the write: compose again.
+    after_state, after = _members(
+        uid, episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode, c
+    )
+    if after_state != 'ok' or fingerprint(after) != print_:
+        return 'stale'
     return 'composed'
 
 
@@ -523,29 +568,26 @@ def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: O
     """Cheap read-side check; the fingerprint decides for real inside ``compose``.
 
     ``visible_member_ids``, when the caller already read the members, catches a member
-    discarded or deleted directly on its conversation after the compose.
+    discarded or deleted directly on its conversation after the compose. A visible change
+    (members, notes drift, a regeneration request) always qualifies; the failure backoff
+    only holds back retries of an episode that was never composed.
     """
     if not episode or policy.is_live(episode) or not episode_composer_enabled():
         return False
-    failures = int(episode.get('compose_failures') or 0)
-    failed_at = _utc(episode.get('compose_failed_at'))
-    if failures >= COMPOSER_MAX_FAILURES and not episode.get('summary_needs_regeneration'):
-        return False
-    if failures and failed_at:
-        backoff = timedelta(minutes=COMPOSER_RETRY_MINUTES * (2 ** (failures - 1)))
-        if datetime.now(timezone.utc) - failed_at < backoff:
-            return False
-    if not episode.get('composed_fingerprint') or episode.get('summary_needs_regeneration'):
-        return True
-    if episode.get('composed_notes') != notes_hash(episode):
-        return True
     composed = episode.get('composed_member_ids')
-    return visible_member_ids is not None and composed is not None and sorted(composed) != sorted(visible_member_ids)
+    if visible_member_ids is not None and composed is not None and sorted(composed) != sorted(visible_member_ids):
+        return True
+    if episode.get('composed_fingerprint') and episode.get('composed_notes') != notes_hash(episode):
+        return True
+    if episode.get('summary_needs_regeneration'):
+        return True
+    return not episode.get('composed_fingerprint') and not _backed_off(episode)
 
 
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='episode-compose')
 _inflight: set[tuple[str, str]] = set()
 _recent: dict[tuple[str, str], float] = {}
+_rerun: set[tuple[str, str]] = set()
 _inflight_lock = threading.Lock()
 
 
@@ -561,6 +603,8 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
     now = time.monotonic()
     with _inflight_lock:
         if key in _inflight:
+            if not throttle:
+                _rerun.add(key)  # Evidence may have changed under the running compose.
             return False
         if throttle and now - _recent.get(key, -1e9) < COMPOSER_READ_THROTTLE_SECONDS:
             return False
@@ -571,10 +615,17 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
 
     def run() -> None:
         try:
-            compose(uid, str(episode_id), collaborators=collaborators)
+            for _attempt in range(3):
+                outcome = compose(uid, str(episode_id), collaborators=collaborators)
+                with _inflight_lock:
+                    again = key in _rerun or outcome in {'stale', 'superseded'}
+                    _rerun.discard(key)
+                if not again:
+                    break
         finally:
             with _inflight_lock:
                 _inflight.discard(key)
+                _rerun.discard(key)
 
     try:
         _executor.submit(run)

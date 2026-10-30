@@ -193,18 +193,90 @@ def test_kill_switch_off_does_nothing(store, monkeypatch):
     assert store.writes == []
 
 
-def test_model_failure_never_raises_and_writes_nothing(store):
+def test_model_failure_never_raises_and_backs_off_on_the_same_evidence(store):
+    calls = []
+
     def boom(uid, messages):
+        calls.append(1)
         raise TimeoutError('slow')
 
     assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'error'
-    assert (
-        composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: SimpleNamespace(content='nope'))) == 'error'
-    )
-    assert not any("bullets" in w for w in store.writes)
-    # Failures are counted and the lease released, so the read-side net backs off.
-    assert store.episode["compose_failures"] == 2 and store.episode["compose_lease"] is None
+    # The same evidence is not retried inside the backoff, from any trigger.
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'backoff'
+    assert calls == [1]
+    assert not any('bullets' in w for w in store.writes)
+    assert store.episode['compose_failures'] == 1 and store.episode['compose_lease'] is None
     assert composer.needs_compose(store.episode) is False
+    # After the cap, the same evidence stops for good.
+    store.episode.update(compose_failures=4, compose_failed_at=T0)
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=boom)) == 'backoff'
+    # New evidence (a sync upgrade) is a fresh attempt, and succeeds.
+    store.rows['c1']['transcript_segments'].append({'start': 900, 'end': 905, 'text': 'More.', 'is_user': True})
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    assert store.episode['compose_failures'] == 0
+
+
+def test_a_visible_change_after_capped_failures_still_recomposes(store):
+    done = {
+        'status': 'closed',
+        'started_at': T0,
+        'composed_fingerprint': 'x',
+        'composed_member_ids': ['c1', 'c2'],
+        'title': 'T',
+        'bullets': ['b'],
+        'compose_failures': 4,
+        'compose_failed_at': datetime.now(timezone.utc),
+    }
+    done['composed_notes'] = composer.notes_hash(done)
+    assert composer.needs_compose(done, visible_member_ids=['c1', 'c2']) is False
+    # A member discarded directly on its conversation must not stay in the summary.
+    assert composer.needs_compose(done, visible_member_ids=['c1']) is True
+
+
+def test_empty_after_a_discard_clears_the_old_notes(store):
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    store.rows['c1']['discarded'] = True
+    store.rows['c2']['transcript_segments'] = []
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'empty'
+    assert store.episode['title'] == '' and store.episode['bullets'] == [] and store.episode['moments'] == []
+    assert composer.needs_compose(store.episode, visible_member_ids=['c2']) is False
+
+
+def test_a_superseded_run_keeps_a_newer_lease(store):
+    newer = {'fingerprint': 'newer-evidence', 'until': datetime.now(timezone.utc) + timedelta(minutes=2)}
+
+    def invoke(uid, messages):
+        store.rows['c2']['transcript_segments'].append({'start': 700, 'end': 705, 'text': 'Late.', 'is_user': True})
+        store.episode['compose_lease'] = newer  # another replica claimed the new evidence
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'superseded'
+    assert store.episode['compose_lease'] == newer
+
+
+def test_speaker_correction_recomposes(store):
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    store.rows['c1']['transcript_segments'][1]['person_id'] = 'person-arjan'
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 2
+
+
+def test_a_trigger_during_a_run_composes_again(store, monkeypatch):
+    outcomes = iter(['composed', 'unchanged'])
+    seen = []
+
+    def fake_compose(uid, episode_id, collaborators=None, force=False):
+        seen.append(episode_id)
+        if len(seen) == 1:
+            # A member finalize arrives while this run is in flight.
+            assert composer.schedule(uid, episode_id) is False
+        return next(outcomes)
+
+    monkeypatch.setattr(composer, 'compose', fake_compose)
+    monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
+    assert composer.schedule(UID, 'ep1') is True
+    assert seen == ['ep1', 'ep1']
 
 
 def test_membership_change_during_the_call_is_not_overwritten(store):

@@ -239,8 +239,8 @@ COMPOSER_MAX_CHAPTERS = 8
 COMPOSER_MAX_SCHEDULED_PER_READ = 2
 # A read-side caller re-queues the same episode at most this often per process.
 COMPOSER_READ_THROTTLE_SECONDS = 600
-# One paid call per evidence across replicas: the in-flight claim outlives the model timeout.
-COMPOSER_LEASE_SECONDS = 150
+# One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
+COMPOSER_LEASE_SECONDS = 240
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10
