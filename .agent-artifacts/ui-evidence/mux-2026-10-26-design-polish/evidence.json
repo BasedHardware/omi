@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-before-sign-in-xxxl.png",
+      "platform": "mobile-ios",
+      "description": "Before: sign in xxxl",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-after-sign-in-xxxl.png",
+      "platform": "mobile-ios",
+      "description": "After: sign in xxxl",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-before-paywall-dark.png",
+      "platform": "mobile-ios",
+      "description": "Before: paywall dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-after-paywall-dark.png",
+      "platform": "mobile-ios",
+      "description": "After: paywall dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-before-paywall-light.png",
+      "platform": "mobile-ios",
+      "description": "Before: paywall light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-after-paywall-light.png",
+      "platform": "mobile-ios",
+      "description": "After: paywall light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-before-home-light.png",
+      "platform": "mobile-ios",
+      "description": "Before: home light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-after-home-light.png",
+      "platform": "mobile-ios",
+      "description": "After: home light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-before-microphone-prompt.png",
+      "platform": "mobile-ios",
+      "description": "Before: microphone prompt",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-after-microphone-prompt.png",
+      "platform": "mobile-ios",
+      "description": "After: microphone prompt",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-before-sign-in-xxxl-dark.png",
+      "platform": "mobile-ios",
+      "description": "Before: sign in xxxl dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-after-sign-in-xxxl-dark.png",
+      "platform": "mobile-ios",
+      "description": "After: sign in xxxl dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-before-sign-in-light.png",
+      "platform": "mobile-ios",
+      "description": "Before: sign in light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-ios-after-sign-in-light.png",
+      "platform": "mobile-ios",
+      "description": "After: sign in light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-ios-before-home-dark.png",
+      "platform": "mobile-ios",
+      "description": "Before: home dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-ios-after-home-dark.png",
+      "platform": "mobile-ios",
+      "description": "After: home dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
