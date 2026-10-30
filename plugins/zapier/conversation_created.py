@@ -1,6 +1,6 @@
 from typing import Any, List
 
-from fastapi import HTTPException, Request, APIRouter, Form
+from fastapi import Depends, HTTPException, Request, APIRouter, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -16,9 +16,11 @@ from models import Conversation, ExternalIntegrationCreateConversation, Endpoint
 try:
     from .client import get_zapier, get_omi
     from .models import ZapierSubcribeModel, ZapierCreateConversation, ZapierActionCreateConversation
+    from .webhook_auth import require_zapier_webhook_auth
 except (ImportError, ValueError):
     from zapier.client import get_zapier, get_omi
     from zapier.models import ZapierSubcribeModel, ZapierCreateConversation, ZapierActionCreateConversation
+    from zapier.webhook_auth import require_zapier_webhook_auth
 
 router = APIRouter()
 # noinspection PyRedeclaration
@@ -80,7 +82,7 @@ async def disconnect(request: Request, uid: str = Form(...)):
 
 
 @router.post('/zapier/trigger/subscribe', tags=['zapier'], response_model=EndpointResponse)
-async def subscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
+async def subscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str = Depends(require_zapier_webhook_auth)):
     """
     Subcribe a zapier trigger
     """
@@ -105,7 +107,7 @@ async def subscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
 
 
 @router.delete('/zapier/trigger/subscribe', tags=['zapier'], response_model=EndpointResponse)
-async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
+async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str = Depends(require_zapier_webhook_auth)):
     """
     Unsubcribe a zapier trigger
     """
@@ -204,7 +206,7 @@ def _build_zapier_conversation_payload(conversation: Any) -> ZapierCreateConvers
 
 
 @router.get('/zapier/trigger/memory/sample', tags=['zapier'], response_model=List[ZapierCreateConversation])
-async def get_trigger_conversation_sample(request: Request, uid: str):
+async def get_trigger_conversation_sample(request: Request, uid: str = Depends(require_zapier_webhook_auth)):
     """
     Get the latest conversation or a sample to fullfill the triggers On conversation created
     """
@@ -250,7 +252,7 @@ async def get_trigger_conversation_sample(request: Request, uid: str):
 
 
 @router.get('/zapier/me', tags=['zapier'], response_model=EndpointResponse)
-async def auth_zapier_me(request: Request, uid: str):
+async def auth_zapier_me(request: Request, uid: str = Depends(require_zapier_webhook_auth)):
     """
     User - Zapier authentication status.
     """
@@ -277,7 +279,7 @@ def is_setup_completed(uid: str):
 
 
 @router.post('/zapier/memories', tags=['zapier'], response_model=EndpointResponse)
-def zapier_conversations(conversation: Conversation, uid: str):
+def zapier_conversations(conversation: Conversation, uid: str = Depends(require_zapier_webhook_auth)):
     """
     The actual plugin that gets triggered when a conversation gets created, and adds the conversation to the Zapier.
     """
@@ -296,7 +298,7 @@ def zapier_conversations(conversation: Conversation, uid: str):
 
 
 @router.post('/zapier/action/memories', tags=['zapier'], response_model=EndpointResponse)
-def zapier_action_conversations(create_conversation: ZapierActionCreateConversation, uid: str):
+def zapier_action_conversations(create_conversation: ZapierActionCreateConversation, uid: str = Depends(require_zapier_webhook_auth)):
     """
     Create new conversation by action from Zapier.
     """
