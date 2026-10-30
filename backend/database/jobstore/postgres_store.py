@@ -59,6 +59,16 @@ def _is_retryable(exc: BaseException) -> bool:
     return getattr(exc, 'sqlstate', None) in {_SERIALIZATION_FAILURE, _DEADLOCK}
 
 
+OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
+
+
+def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
+    decision = job.get('compute_decision')
+    if not decision:
+        return (job.get('last_policy_hold') or {}).get('reason') == 'allowance_exhausted'
+    return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
+
+
 class PostgresTransaction:
     def __init__(self, store: 'PostgresStore', conn: Any):
         self.store = store
@@ -187,13 +197,46 @@ class PostgresStore:
         return [row[0] for row in rows]
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
-        predicate = "state = 'ready'" if ready_only else 'merge_pending'
+        if ready_only:
+            with self._read_conn() as conn:
+                row = conn.execute(
+                    "SELECT min(enqueued_at) FROM jobs WHERE namespace = %s AND priority = %s AND state = 'ready'",
+                    (self.namespace, priority),
+                ).fetchone()
+            return row[0]
+
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                'SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND merge_pending '
+                'ORDER BY enqueued_at, key LIMIT %s',
+                (self.namespace, priority, OLDEST_POLICY_HOLD_SCAN_LIMIT + 1),
+            ).fetchall()
+        oldest_hold: float | None = None
+        scanned = 0
+        for enqueued_at, job in rows:
+            scanned += 1
+            if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
+                break
+            if is_allowance_policy_hold(job):
+                oldest_hold = oldest_hold if oldest_hold is not None else enqueued_at
+                continue
+            return enqueued_at
+        if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
+            return oldest_hold
+        return None
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
         with self._read_conn() as conn:
             row = conn.execute(
-                f'SELECT min(enqueued_at) FROM jobs WHERE namespace = %s AND priority = %s AND {predicate}',
-                (self.namespace, priority),
+                "SELECT count(*) FROM jobs WHERE namespace = %s AND priority = %s AND state = 'ready' "
+                "AND merge_pending AND doc->'compute_decision'->>'outcome' IN ('unattempted', 'allowed') "
+                "AND available_at <= %s",
+                (self.namespace, priority, now),
             ).fetchone()
-        return row[0]
+        count = row[0] if row else 0
+        if type(count) is not int or count < 0:
+            raise ValueError('nonnegative integer capacity count required')
+        return count
 
     def oldest_retry(self, priority: int) -> float | None:
         with self._read_conn() as conn:

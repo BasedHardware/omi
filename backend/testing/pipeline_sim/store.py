@@ -171,6 +171,16 @@ class SimTransaction:
             self.store.apply(address, row)
 
 
+OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
+
+
+def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
+    decision = job.get('compute_decision')
+    if not decision:
+        return (job.get('last_policy_hold') or {}).get('reason') == 'allowance_exhausted'
+    return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
+
+
 class SimStore:
     """Batch-namespace documents with the secondary indexes the real queries need."""
 
@@ -206,14 +216,57 @@ class SimStore:
         return [segment_id for _, segment_id in candidates[: max(1, min(limit, 100))]]
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
-        values = [
-            row['enqueued_at']
+        if ready_only:
+            values = [
+                row['enqueued_at']
+                for (table, _), row in self.rows.items()
+                if table == 'jobs'
+                and row.get('priority') == priority
+                and row.get('state') == 'ready'
+            ]
+            return min(values) if values else None
+
+        matching = [
+            row
             for (table, _), row in self.rows.items()
             if table == 'jobs'
             and row.get('priority') == priority
-            and (row.get('state') == 'ready' if ready_only else row.get('merge_pending'))
+            and row.get('merge_pending')
         ]
-        return min(values) if values else None
+        matching.sort(key=lambda r: (r['enqueued_at'], r.get('segment_id', '')))
+
+        oldest_hold: float | None = None
+        scanned = 0
+        for job in matching:
+            scanned += 1
+            if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
+                break
+            if is_allowance_policy_hold(job):
+                oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
+                continue
+            return job['enqueued_at']
+        if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
+            return oldest_hold
+        return None
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        count = 0
+        for (table, _), row in self.rows.items():
+            if table != 'jobs':
+                continue
+            if row.get('priority') != priority:
+                continue
+            if row.get('state') != 'ready':
+                continue
+            if not row.get('merge_pending'):
+                continue
+            decision = row.get('compute_decision')
+            if not isinstance(decision, dict) or decision.get('outcome') not in ('unattempted', 'allowed'):
+                continue
+            if row.get('available_at', 0.0) > now:
+                continue
+            count += 1
+        return count
 
     def oldest_retry(self, priority: int) -> float | None:
         values = [

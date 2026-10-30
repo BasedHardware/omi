@@ -249,6 +249,194 @@ def test_oldest_ready_and_pending_gauges(h):
     assert h.store.oldest(0, ready_only=True) is None
 
 
+def test_oldest_excludes_allowance_policy_holds(h):
+    put_all(
+        h,
+        [
+            # Parked hold: oldest enqueue time, but outcome='held' and reason='allowance_exhausted'
+            (
+                'jobs',
+                'held1',
+                job(
+                    h,
+                    'held1',
+                    state='result_ready',
+                    merge_pending=True,
+                    enqueued_at=1.0,
+                    compute_decision={'outcome': 'held', 'reason': 'allowance_exhausted'},
+                ),
+            ),
+            # Parked hold via legacy last_policy_hold when compute_decision absent
+            (
+                'jobs',
+                'held2',
+                job(
+                    h,
+                    'held2',
+                    state='ready',
+                    merge_pending=True,
+                    enqueued_at=2.0,
+                    last_policy_hold={'reason': 'allowance_exhausted'},
+                ),
+            ),
+            # Real commitment: merge_pending=True, outcome='allowed'
+            (
+                'jobs',
+                'active',
+                job(
+                    h,
+                    'active',
+                    state='ready',
+                    merge_pending=True,
+                    enqueued_at=10.0,
+                    compute_decision={'outcome': 'allowed'},
+                ),
+            ),
+            # Stale last_policy_hold overridden by current compute_decision outcome='allowed'
+            (
+                'jobs',
+                'unheld',
+                job(
+                    h,
+                    'unheld',
+                    state='ready',
+                    merge_pending=True,
+                    enqueued_at=15.0,
+                    last_policy_hold={'reason': 'allowance_exhausted'},
+                    compute_decision={'outcome': 'allowed'},
+                ),
+            ),
+        ],
+    )
+    # ready_only=True remains diagnostic of raw state='ready' enqueued_at
+    assert h.store.oldest(1, ready_only=True) == 2.0
+    # ready_only=False skips held1 and held2, returning active's enqueued_at
+    assert h.store.oldest(1, ready_only=False) == 10.0
+
+
+def test_ready_for_capacity_counts_only_eligible_work(h):
+    now = 100.0
+    put_all(
+        h,
+        [
+            # Eligible: priority 1, ready, merge_pending=True, unattempted, available_at <= now
+            (
+                'jobs',
+                'c1',
+                job(
+                    h,
+                    'c1',
+                    priority=1,
+                    state='ready',
+                    merge_pending=True,
+                    available_at=50.0,
+                    compute_decision={'outcome': 'unattempted'},
+                ),
+            ),
+            # Eligible: priority 1, ready, merge_pending=True, allowed, available_at == now
+            (
+                'jobs',
+                'c2',
+                job(
+                    h,
+                    'c2',
+                    priority=1,
+                    state='ready',
+                    merge_pending=True,
+                    available_at=100.0,
+                    compute_decision={'outcome': 'allowed'},
+                ),
+            ),
+            # Ineligible: available in future (available_at > now)
+            (
+                'jobs',
+                'c3',
+                job(
+                    h,
+                    'c3',
+                    priority=1,
+                    state='ready',
+                    merge_pending=True,
+                    available_at=101.0,
+                    compute_decision={'outcome': 'unattempted'},
+                ),
+            ),
+            # Ineligible: merge_pending is False
+            (
+                'jobs',
+                'c4',
+                job(
+                    h,
+                    'c4',
+                    priority=1,
+                    state='ready',
+                    merge_pending=False,
+                    available_at=50.0,
+                    compute_decision={'outcome': 'allowed'},
+                ),
+            ),
+            # Ineligible: state is leased (not ready)
+            (
+                'jobs',
+                'c5',
+                job(
+                    h,
+                    'c5',
+                    priority=1,
+                    state='leased',
+                    merge_pending=True,
+                    available_at=50.0,
+                    compute_decision={'outcome': 'allowed'},
+                ),
+            ),
+            # Ineligible: compute_decision is held
+            (
+                'jobs',
+                'c6',
+                job(
+                    h,
+                    'c6',
+                    priority=1,
+                    state='ready',
+                    merge_pending=True,
+                    available_at=50.0,
+                    compute_decision={'outcome': 'held', 'reason': 'allowance_exhausted'},
+                ),
+            ),
+            # Ineligible: legacy job with no compute_decision
+            (
+                'jobs',
+                'c7',
+                job(
+                    h,
+                    'c7',
+                    priority=1,
+                    state='ready',
+                    merge_pending=True,
+                    available_at=50.0,
+                ),
+            ),
+            # Ineligible: different priority (priority 2)
+            (
+                'jobs',
+                'c8',
+                job(
+                    h,
+                    'c8',
+                    priority=2,
+                    state='ready',
+                    merge_pending=True,
+                    available_at=50.0,
+                    compute_decision={'outcome': 'unattempted'},
+                ),
+            ),
+        ],
+    )
+    assert h.store.ready_for_capacity(1, now) == 2
+    assert h.store.ready_for_capacity(2, now) == 1
+    assert h.store.ready_for_capacity(0, now) == 0
+
+
 def test_oldest_retry_ignores_rows_that_never_retried(h):
     put_all(
         h,

@@ -119,6 +119,9 @@ class PgSimStore(SimStore):
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return self.pg.oldest(priority, ready_only=ready_only)
 
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        return self.pg.ready_for_capacity(priority, now)
+
     def oldest_retry(self, priority: int) -> float | None:
         return self.pg.oldest_retry(priority)
 
