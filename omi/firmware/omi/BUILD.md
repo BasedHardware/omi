@@ -31,6 +31,7 @@ copy it across first (CI does exactly this):
 
 ```bash
 cp ../omi/omi.conf ../omi/prj.conf
+cp ../omi/src/mcuboot_boot_zephyr.c bootloader/mcuboot/boot/zephyr/main.c
 
 west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always \
   -- -DBOARD_ROOT=..
