@@ -34,7 +34,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of settled attempts that succeeded, over the dashboard's selected time range. Denominator is success+failure only: 'cancelled' is user-initiated and 'stale' means the outcome was never recorded, so neither belongs in a success rate. Deliberately has no clamp on the denominator: with no traffic this reads 'no traffic' rather than a red 0%, because absence and total failure are different states.",
+      "description": "Success / (success + failure) over the selected range. Excludes cancelled and stale terminal events; stale includes deliberate discard, account-cutover and newer-lifecycle fences. This is not the success share of all captures. Read the sibling Capture stale terminals (3h) count and share for excluded events; those do not establish missing conversations. With no settled traffic the percentage is absent rather than a fabricated 0%.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -99,6 +99,90 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Recorded stale capture_finalization terminals in the last 3 hours: count and percentage of all capture terminal events recorded in those 3 hours (success, failure, cancelled and stale). Stale includes deliberate discard, account-cutover and newer-lifecycle fences; it does not establish a missing conversation outcome or lost capture. These events are excluded from the Voice capture success-rate denominator. This is a terminal-event window, not a cohort of captures started in the window or an accepted-minus-terminal backlog. No samples in the window stays blank; this historical window does not prove current reporter health.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "not reporting",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Terminal share"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "id": 78,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"stale\"}[3h]))",
+          "instant": true,
+          "refId": "A",
+          "legendFormat": "Lifecycle/discard fences"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"stale\"}[3h])) / sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[3h]))",
+          "instant": true,
+          "refId": "B",
+          "legendFormat": "Terminal share"
+        }
+      ],
+      "title": "Capture stale terminals (3h)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Share of settled attempts that succeeded, over the dashboard's selected time range. Denominator is success+failure only: 'cancelled' is user-initiated and 'stale' means the outcome was never recorded, so neither belongs in a success rate. Deliberately has no clamp on the denominator: with no traffic this reads 'no traffic' rather than a red 0%, because absence and total failure are different states.",
       "fieldConfig": {
         "defaults": {
@@ -128,8 +212,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 4,
+        "x": 12,
         "y": 1
       },
       "id": 3,
@@ -193,8 +277,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 4,
+        "x": 16,
         "y": 1
       },
       "id": 4,
@@ -229,7 +313,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "How many of the three journeys emitted anything in the last hour. A journey that stops reporting looks identical to a journey with no failures, which is the failure mode omi-journey-signal-dead exists to catch.",
+      "description": "How many of the three journeys emitted anything in the dashboard's selected time range. A journey that stops reporting looks identical to a journey with no failures, which is the failure mode omi-journey-signal-dead exists to catch.",
       "fieldConfig": {
         "defaults": {
           "max": 3,
@@ -257,8 +341,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 4,
+        "x": 20,
         "y": 1
       },
       "id": 5,
@@ -708,7 +792,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "'stale' means the attempt was accepted but no terminal outcome was ever written, so it was swept. These are invisible to a success rate \u2014 the request may well have returned HTTP 200 first. capture_finalization has been running a large stale share, which is worth watching here.",
+          "description": "Stale terminal-event rate, excluded from the success + failure headline. For capture_finalization this includes deliberate discard, account-cutover and newer-lifecycle fences; stale alone is not evidence of a missing or lost conversation. Other journeys use their own stale semantics.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -755,7 +839,7 @@
               "refId": "A"
             }
           ],
-          "title": "Attempts whose outcome was never recorded (stale)",
+          "title": "Stale terminal events by journey",
           "type": "timeseries"
         },
         {
@@ -1800,7 +1884,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Oldest queued or leased finalization job: system-owned work only. Jobs waiting for user BYOK reconnect have a separate informational age gauge and do not page. Replicated per process; aggregate with max().",
+      "description": "Oldest queued or leased finalization job: system-owned work only. Jobs waiting for user BYOK reconnect have a separate informational age gauge and do not page. Replicated per process; aggregate with max(). blocked_byok is excluded by the summary producer; user-side credential waits are not system-caused age.",
       "fieldConfig": {
         "defaults": {
           "noValue": "not reporting",
@@ -1867,7 +1951,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Finalization jobs that exhausted all 5 attempts, over the selected range. NOT the same as conversations lost: the discard is guarded on the conversation still being in `processing`, and measured over 14d only ~15% of dead letters actually discarded a conversation \u2014 the rest had already been finalized inline. There is no metric for the discarded subset yet. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
+      "description": "New durable dead-letter jobs over the selected range, estimated from the change in the global Firestore projection (max across replicas before delta, sampled each minute). This survives pod restarts and includes events before a new pod is first scraped, unlike the per-process counter. The projection generation starts 2026-07-25; older jobs are not backfilled. Includes exhausted retries and abandoned BYOK credential waits. Dead-letter jobs are not a count of lost conversations: some already finalized inline, and BYOK abandonment preserves the conversation. Delta extrapolates range edges; short ranges or missing summary samples can be blank. A telemetry gap is not zero. A missing current summary or no successful summary in 15 minutes suppresses the stat.",
       "fieldConfig": {
         "defaults": {
           "noValue": "not reporting",
@@ -1917,7 +2001,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "round(sum(increase(listen_finalization_dead_letter_total[$__range])))",
+          "expr": "round(clamp_min(delta((max(listen_finalization_jobs{status=\"dead_letter\"}))[$__range:1m]), 0)) and on() (time() - max(listen_finalization_summary_last_success_timestamp_seconds) < 900)",
           "instant": true,
           "refId": "A"
         }
@@ -3487,6 +3571,61 @@
             }
           ],
           "title": "Memory retrieval \u2014 tool-gated volume",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Terminal failure, degraded and unknown events by journey, outcome and closed reason enum. Success and cancellation carry reason=none. Historical series from emitters predating the reason label are shown as legacy_unlabeled; this is a dashboard-only constant, not a new emitted reason. A reporting journey can still fail: read this breakdown alongside Client journeys reporting.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 33
+          },
+          "id": 79,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (journey, outcome, reason) (rate(omi_client_journey_terminal_total{outcome=~\"failure|degraded|unknown\",reason!=\"\"}[5m])) or sum by (journey, outcome, reason) (label_replace(rate(omi_client_journey_terminal_total{outcome=~\"failure|degraded|unknown\",reason=\"\"}[5m]), \"reason\", \"legacy_unlabeled\", \"journey\", \".*\"))",
+              "refId": "A",
+              "legendFormat": "{{journey}} / {{outcome}} / {{reason}}"
+            }
+          ],
+          "title": "Client journey issues by reason and outcome",
           "type": "timeseries"
         }
       ],

@@ -643,10 +643,10 @@ OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
 OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
     'omi_client_journey_terminal_total',
     (
-        'Terminal client-segmented product journey outcomes by bounded labels. '
+        'Terminal client-segmented product journey outcomes; reason is a closed issue class or none. '
         'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
     ),
-    ['journey', 'client_kind', 'app_build', 'outcome'],
+    ['journey', 'client_kind', 'app_build', 'outcome', 'reason'],
 )
 
 OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
