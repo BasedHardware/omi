@@ -324,7 +324,7 @@ def run(*, progress=lambda _: None):
         budget = SweepBudget(60)
         with budget.interrupt_io():
             client = get_firestore_client()
-            frontier = RepairCursor(client, os.environ['ENCRYPTION_SECRET'].encode())
+            frontier = RepairCursor(client, config.cursor_secret())
             rows, saturated, cursor = discover(client, budget=budget, after=frontier.read(budget), advance_rows=workers)
             # Advance before slow proofs: refused, hung, deferred or killed rows
             # cannot monopolize the next run. Wrap revisits them on a later pass.

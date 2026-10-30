@@ -28,6 +28,11 @@ def server_flags():
     return flags
 
 
+def cursor_secret() -> bytes:
+    """Process bootstrap input; never a batch-stage policy decision."""
+    return os.environ['ENCRYPTION_SECRET'].encode()
+
+
 def require_runtime():
     if os.getenv('FIRESTORE_EMULATOR_HOST') or os.getenv('OMI_ENV_STAGE') != 'prod':
         raise ValueError('production in-cluster runtime required')
