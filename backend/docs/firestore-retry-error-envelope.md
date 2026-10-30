@@ -104,6 +104,37 @@ envelope shape fails loudly here first. The recording-session side of this
 contract is documented with the boundary in
 `docs/listen_pusher_pipeline.mdx` (the availability-transient section).
 
+## The transport family around the trio (2026-10-30)
+
+The trio covers exactly what the Firestore gapic budget replays, but the
+recording-session surface rides more transport than one RPC, and the
+transport layer's own retryable responses are the same momentary faults one
+hop out — the storage SDK's availability members
+(`google.cloud.storage.retry._RETRYABLE_TYPES` minus quota pressure): 502
+`BadGateway`, the 504 `GatewayTimeout` spelling, and the `requests` transport
+family (connection resets, chunked-encoding breaks, read timeouts), plus the
+auth-transport `TransportError` envelope. After the trio drained, the
+renewal boundary still walked into the failed-write arm on those shapes
+(prod backend-listen 2026-10-30: the renewal boundary ×9/30m).
+
+The session boundaries' classifier (`_is_recording_session_transient`,
+`utils/conversations/lifecycle.py`) therefore reads one boundary-local
+extension (`_is_wide_availability_blip`) over the family: the four
+recording-session boundaries and the live-open probe shed the family to the
+same log-only arm — nothing was written and the session's cadence is still
+the retry. The wider read is deliberately **boundary-local**: the shared
+`is_transient_availability_error` also feeds the client-facing admission
+fence (`utils/other/endpoints.py`), which must keep answering exactly the
+trio, and quota pressure (`TooManyRequests` / `ResourceExhausted`) keeps its
+loud classification because the session's cadence cannot redial it. The GCS
+sweep's deferral boundary had already followed the same SDK set
+(`_is_storage_blip`); this closes the same gap on the session side.
+
+Guards: `tests/unit/test_recording_session_transport_family_transient.py`
+(renewal/open/event/cleanup family shed, envelope-through-cause, join-not-
+shadow, loud-shape and enforce-mode preservation, shared-classifier
+narrowness).
+
 Failure-Class: FC-drained-sdk-retry-budget-escapes-transient-class — a
 provider-failure classifier that recognizes only call errors cannot see the
 SDK's own budget-exhaustion envelope, so the exact fault class its retry

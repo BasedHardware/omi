@@ -97,6 +97,41 @@ def recording_session_mode() -> str:
     return configured if configured in RECORDING_SESSION_MODES else 'dual_write'
 
 
+def _is_wide_availability_blip(error: BaseException) -> bool:
+    """True for the transport-level availability faults around the trio.
+
+    The shared classifier's trio (``is_transient_availability_error``) covers
+    exactly what Firestore's gapic retry budget replays: 503, 504
+    ``DeadlineExceeded`` and 500. The session surface rides more transport
+    than one RPC, and the transport layer's own retryable responses are the
+    same momentary faults one hop out — the pinned storage SDK's availability
+    members (``google.cloud.storage.retry._RETRYABLE_TYPES``, minus quota
+    pressure): 502 ``BadGateway``, the 504 ``GatewayTimeout`` spelling, and
+    the ``requests`` transport family (connection resets, chunked-encoding
+    breaks, read timeouts) plus the auth-transport ``TransportError``
+    envelope. The boundary-local read follows the GCS sweep's structural
+    ``requests`` match (this file may not import ``requests`` — the no-sync-
+    HTTP guard pins it), and a drained-retry envelope around any of them
+    classifies through its cause, like the trio's envelope does.
+
+    Deliberately outside the set: quota pressure (``TooManyRequests`` /
+    ``ResourceExhausted`` — not redial-able by the session's own cadence),
+    permanent refusals, and unknown failures.
+    """
+    if isinstance(error, (BadGateway, GatewayTimeout, TransportError)):
+        return True
+    if isinstance(error, RetryError):
+        cause = getattr(error, 'cause', None)
+        if cause is not None and _is_wide_availability_blip(cause):
+            return True
+        cause = error.__cause__
+        if cause is not None and _is_wide_availability_blip(cause):
+            return True
+        return False
+    module = type(error).__module__
+    return module == 'requests.exceptions' or module.startswith('requests.exceptions.')
+
+
 def _is_recording_session_transient(error: BaseException) -> bool:
     """Classify the bounded transients the session's fail-open branch absorbs.
 
@@ -133,6 +168,24 @@ def _is_recording_session_transient(error: BaseException) -> bool:
       envelope around a permanent refusal or an unknown failure does not
       classify and stays in the failed-write arm below.
 
+    - wide-availability blips: the transport family around that trio — 502
+      ``BadGateway``, the 504 ``GatewayTimeout`` spelling, the ``requests``
+      transport faults (connection resets, chunked-encoding breaks, read
+      timeouts) and the auth-transport ``TransportError`` envelope — which
+      ``_is_wide_availability_blip`` recognizes. The trio covers exactly what
+      Firestore's gapic budget retries, but the session surface rides more
+      transport than one RPC, and the transport's own retryable responses
+      (the pinned storage SDK's ``_RETRYABLE_TYPES`` availability members)
+      are the same momentary faults one hop out; after the trio drain the
+      boundary still walked into the failed-write arm on those shapes (prod
+      backend-listen 2026-10-30: the renewal boundary ×9/30m). Nothing was
+      written and the session's cadence is still the retry, so they shed to
+      the same log-only arm. Quota pressure (``TooManyRequests`` /
+      ``ResourceExhausted``) deliberately stays loud, exactly as the envelope
+      contract keeps it. The wider read is boundary-local: the shared
+      classifier also feeds the client-facing admission fence, which must
+      keep answering exactly the trio.
+
     A retirement that survives the restart budget is the same bounded
     transient by construction: a fresh transaction was already minted for
     every replay, so a drain means the burst outlived the budget, not that a
@@ -146,6 +199,7 @@ def _is_recording_session_transient(error: BaseException) -> bool:
         or is_transaction_contention(error)
         or is_expired_transaction_error(error)
         or is_transient_availability_error(error)
+        or _is_wide_availability_blip(error)
     )
 
 
@@ -1205,7 +1259,7 @@ def open_live_recording_session(
     except Exception as error:
         if recording_session_mode() == 'enforce':
             raise
-        if not is_transient_availability_error(error):
+        if not _is_recording_session_transient(error):
             raise
         logger.warning(
             'recording session open probe contended; deferring to the transactional open uid=%s session=%s proposed=%s',
