@@ -1,0 +1,71 @@
+[versions]
+agp = "8.12.0"
+kotlin = "2.2.0"
+composeBom = "2025.07.00"
+activityCompose = "1.10.1"
+lifecycle = "2.9.2"
+coreKtx = "1.16.0"
+coroutines = "1.10.2"
+serialization = "1.9.0"
+okhttp = "4.12.0"
+firebaseBom = "34.0.0"
+googleServices = "4.4.3"
+junit = "4.13.2"
+
+[libraries]
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version = "1.4.1" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version = "2.7.0" }
+# Conversations port: playback (AudioPlayerBar, AudioClipPlayer).
+media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version = "1.6.1" }
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-lifecycle-runtime = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+compose-runtime = { group = "androidx.compose.runtime", name = "runtime" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-sse = { group = "com.squareup.okhttp3", name = "okhttp-sse", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+# Sign-in (and-onboarding)
+androidx-browser = { group = "androidx.browser", name = "browser", version = "1.8.0" }
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version = "1.5.0" }
+androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version = "1.5.0" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version = "1.1.1" }
+# System (and-onboarding): splash, widgets
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version = "1.0.1" }
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version = "1.1.1" }
+# Omi firmware updates over SMP (the version the Flutter app's mcumgr_flutter 0.4.2 ships).
+mcumgr-ble = { group = "no.nordicsemi.android", name = "mcumgr-ble", version = "1.8.2" }
+org-json = { group = "org.json", name = "json", version = "20240303" }
+# Wear OS (and-wear): the watch app and the phone's end of the Data Layer.
+play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version = "19.0.0" }
+wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version = "1.4.1" }
+wear-compose-material = { group = "androidx.wear.compose", name = "compose-material", version = "1.4.1" }
+# Phone calls (and-calls): the Twilio Voice major of the Flutter app.
+twilio-voice = { group = "com.twilio", name = "voice-android", version = "6.10.2" }
+# Health Connect and the recording's place (and-transcribe)
+health-connect = { group = "androidx.health.connect", name = "connect-client", version = "1.1.0" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version = "21.3.0" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

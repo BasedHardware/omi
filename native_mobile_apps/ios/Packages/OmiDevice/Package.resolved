@@ -1,0 +1,60 @@
+{
+  "originHash" : "daecf44627fff4191211242c2be2e5355047345dcd3ee65640ba0bf3e14bd0d0",
+  "pins" : [
+    {
+      "identity" : "ios-ble-library",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nordicsemi/IOS-BLE-Library",
+      "state" : {
+        "revision" : "4f3e4987f41e0558c6fdc1e8407eb92c59ae0eff",
+        "version" : "0.4.5"
+      }
+    },
+    {
+      "identity" : "ios-common-libraries",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nordicsemi/IOS-Common-Libraries",
+      "state" : {
+        "revision" : "8e6e4c117fc0bd4b8e856501002740ebe0ff4088",
+        "version" : "0.2.5"
+      }
+    },
+    {
+      "identity" : "ios-corebluetooth-mock",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nordicsemi/IOS-CoreBluetooth-Mock.git",
+      "state" : {
+        "revision" : "5748c9e8b1750e0d7bc09243c099ff618f211cdf",
+        "version" : "1.0.6"
+      }
+    },
+    {
+      "identity" : "ios-nrf-connect-device-manager",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/NordicSemiconductor/IOS-nRF-Connect-Device-Manager",
+      "state" : {
+        "revision" : "3291e749ccbfb7f6404ebfa1efda32332c047314",
+        "version" : "1.14.9"
+      }
+    },
+    {
+      "identity" : "swiftcbor",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/valpackett/SwiftCBOR.git",
+      "state" : {
+        "revision" : "fd929a6d8f7651ce0f63fc99397fd5762358cc29",
+        "version" : "0.6.0"
+      }
+    },
+    {
+      "identity" : "zipfoundation",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/weichsel/ZIPFoundation.git",
+      "state" : {
+        "revision" : "22787ffb59de99e5dc1fbfe80b19c97a904ad48d",
+        "version" : "0.9.20"
+      }
+    }
+  ],
+  "version" : 3
+}

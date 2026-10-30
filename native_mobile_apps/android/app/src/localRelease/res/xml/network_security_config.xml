@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug only: the local dev harness speaks plain http (adb reverse, 10.0.2.2, or the Mac's LAN IP
+     that the backend puts into audio and file links). Release builds allow https only. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

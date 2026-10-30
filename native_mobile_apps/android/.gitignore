@@ -1,0 +1,17 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+captures/
+.kotlin/
+**/google-services.json
+!app/src/local/google-services.json
+.claude/worktrees/
+Tools/fonts/*_full.ttf
+# Inside the Omi repository the root .gitignore leaves out the Flutter app's Gradle wrapper; this
+# app's wrapper is committed.
+!/gradlew
+!/gradlew.bat
+!/gradle/wrapper/gradle-wrapper.jar

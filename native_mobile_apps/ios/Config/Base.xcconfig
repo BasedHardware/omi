@@ -1,0 +1,48 @@
+// Shared build settings. Structure lives in project.yml; settings live here.
+
+SWIFT_VERSION = 6.0
+SWIFT_STRICT_CONCURRENCY = complete
+SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES
+SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES
+
+// Compile tier. Overridden per lane via OMI_TIER (never override
+// SWIFT_ACTIVE_COMPILATION_CONDITIONS on the command line: it would also hit the SPM targets).
+OMI_TIER = OMI_EXPERIMENTAL
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) $(OMI_TIER)
+
+IPHONEOS_DEPLOYMENT_TARGET = 18.0
+TARGETED_DEVICE_FAMILY = 1
+SUPPORTS_MACCATALYST = NO
+SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+
+PRODUCT_NAME = Omi
+// Same bundle ids and team as the Flutter app: the native app ships as an update over it.
+OMI_BUNDLE_ID = com.friend-app-with-wearable.ios12
+PRODUCT_BUNDLE_IDENTIFIER = $(OMI_BUNDLE_ID)
+DEVELOPMENT_TEAM = 9536L8KLMP
+CODE_SIGN_STYLE = Automatic
+MARKETING_VERSION = 2.0.0
+CURRENT_PROJECT_VERSION = 1
+ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+
+// Backend. Scheme and host are split because "//" starts an xcconfig comment.
+OMI_API_SCHEME = https
+OMI_API_HOST = api.omi.me
+OMI_APP_PROFILE = production
+OMI_AUTH_EMULATOR_HOST =
+// Production Firebase client config (public identifiers): the Flutter app's own file, two levels up
+// inside the Omi repository. A separate checkout points OMI_FIREBASE_PROD_PLIST at its copy in
+// Secrets.xcconfig.
+OMI_FIREBASE_PROD_PLIST = $(SRCROOT)/../../app/setup/release-firebase/GoogleService-Info.prod.plist
+OMI_FIREBASE_PLIST = $(OMI_FIREBASE_PROD_PLIST)
+// Google Sign-In callback scheme (REVERSED_CLIENT_ID of the bundled Firebase plist).
+OMI_GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as
+// OAuth callbacks from the backend (integrations, task apps) use omi:// (hardcoded server-side).
+OMI_CALLBACK_SCHEME = omi
+
+
+// Support chat (Intercom). Empty: off, Help shows the help center and feedback only. Set both in
+// Config/Secrets.xcconfig (gitignored); never commit them.
+OMI_INTERCOM_APP_ID =
+OMI_INTERCOM_IOS_API_KEY =

@@ -1,0 +1,204 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "watch.accessibility.elapsedRecordingTime": {
+      "comment": "VoiceOver label for the elapsed recording timer.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elapsed recording time"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bisherige Aufnahmedauer"
+          }
+        }
+      }
+    },
+    "watch.accessibility.startRecording": {
+      "comment": "VoiceOver label for the button that starts an Apple Watch recording.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start recording"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme starten"
+          }
+        }
+      }
+    },
+    "watch.accessibility.stopRecording": {
+      "comment": "VoiceOver label for the button that stops an Apple Watch recording.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop recording"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme stoppen"
+          }
+        }
+      }
+    },
+    "watch.error.microphoneDenied": {
+      "comment": "The watch microphone permission was denied.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow the microphone for Omi in Settings to record."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlaube Omi das Mikrofon in den Einstellungen, um aufzunehmen."
+          }
+        }
+      }
+    },
+    "watch.error.microphoneFailed": {
+      "comment": "The watch microphone could not start.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The microphone couldn't start. Try again."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Mikrofon konnte nicht starten. Versuch es nochmal."
+          }
+        }
+      }
+    },
+    "watch.error.phoneBusy": {
+      "comment": "The iPhone app is already recording from another source.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi is already recording on your iPhone."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi nimmt schon auf deinem iPhone auf."
+          }
+        }
+      }
+    },
+    "watch.error.phoneFailed": {
+      "comment": "The iPhone could not open the live transcription.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your iPhone couldn't start the recording."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein iPhone konnte die Aufnahme nicht starten."
+          }
+        }
+      }
+    },
+    "watch.error.phoneSignedOut": {
+      "comment": "Nobody is signed in to Omi on the iPhone.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Omi on your iPhone and sign in."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffne Omi auf deinem iPhone und melde dich an."
+          }
+        }
+      }
+    },
+    "watch.omiBattery %lld": {
+      "comment": "The Omi wearable's battery level (connected to the iPhone), in percent.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi %lld%%"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi %lld %%"
+          }
+        }
+      }
+    },
+    "watch.starting": {
+      "comment": "Below the record button while the microphone starts.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet …"
+          }
+        }
+      }
+    },
+    "watch.tapToRecord": {
+      "comment": "Below the record button while idle.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to record"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tippen zum Aufnehmen"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

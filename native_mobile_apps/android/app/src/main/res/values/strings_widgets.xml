@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker names, from omi-native Extensions/OmiWidgets/Localizable.xcstrings (the widget catalog). -->
+<resources>
+    <string name="widget_battery_name">Battery</string>
+    <string name="widget_battery_description">Your Omi\'s charge at a glance.</string>
+    <string name="widget_up_next_name">Up next</string>
+    <string name="widget_up_next_description">Your next tasks from Omi.</string>
+    <string name="widget_latest_name">Latest</string>
+    <string name="widget_latest_description">Your latest conversation in Omi.</string>
+</resources>

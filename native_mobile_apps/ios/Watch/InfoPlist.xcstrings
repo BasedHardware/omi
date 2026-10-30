@@ -1,0 +1,42 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "CFBundleDisplayName": {
+      "comment": "Watch app name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi"
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription": {
+      "comment": "Microphone permission prompt on the watch.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi records your conversations from your Apple Watch with your permission to transcribe and summarize them."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi nimmt deine Gespräche mit deiner Erlaubnis über die Apple Watch auf, um sie zu transkribieren und zusammenzufassen."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

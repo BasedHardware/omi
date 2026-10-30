@@ -1,0 +1,5 @@
+# Left out of the clean export: internal agent notes.
+docs/AGENT_BRIEF.md export-ignore
+# Generated (Tools/l10n, Tools/api): GitHub collapses them in diffs and leaves them out of the stats.
+design/src/main/res/values*/strings.xml linguist-generated=true
+network/src/main/kotlin/com/friend/ios/network/generated/OmiApi.kt linguist-generated=true

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.hardware.type.watch" />
+    <uses-feature android:name="android.hardware.microphone" android:required="true" />
+
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- A recording goes on with the wrist down (iOS keeps the watch app's audio session). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:name=".OmiWatchApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OmiWatch">
+
+        <uses-library android:name="com.google.android.wearable" android:required="false" />
+        <!-- Records through the phone app: not a standalone watch app. -->
+        <meta-data android:name="com.google.android.wearable.standalone" android:value="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Keeps the microphone while the screen is off; started and stopped with each recording. -->
+        <service
+            android:name=".RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <!-- The phone's messages and state (WatchConnectivity's delegate on iOS); starts the app when needed. -->
+        <service
+            android:name=".WatchListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/omi/watch/" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/omi/watch/" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

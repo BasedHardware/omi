@@ -1,0 +1,16 @@
+{
+  "components": {
+    "schemas": {
+      "Structured": {
+        "properties": {
+          "short_summary": {
+            "default": "",
+            "description": "The gist and outcome in two or three plain sentences, kept when overview becomes the full note",
+            "title": "Short Summary",
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

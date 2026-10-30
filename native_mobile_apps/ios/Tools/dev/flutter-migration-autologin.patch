@@ -1,0 +1,20 @@
+diff --git a/app/lib/main.dart b/app/lib/main.dart
+index e5ed1d81..2e7b0ace 100644
+--- a/app/lib/main.dart
++++ b/app/lib/main.dart
+@@ -321,6 +321,15 @@ Future _init() async {
+     SharedPreferencesUtil().onboardingCompleted = true;
+   }
+ 
++  // TEMP-MIGRATION-SPIKE: real local-dev sign-in at launch so the native-update test needs no taps.
++  const migrationUid = String.fromEnvironment('OMI_MIGRATION_AUTOLOGIN_UID');
++  if (migrationUid.isNotEmpty && FirebaseAuth.instance.currentUser == null) {
++    await AuthService.instance.signInWithLocalDevToken(uid: migrationUid);
++    SharedPreferencesUtil().givenName = 'Migration Tester'; // TEMP-MIGRATION-SPIKE
++    if (const bool.fromEnvironment('OMI_MIGRATION_ONBOARDED')) {
++      SharedPreferencesUtil().onboardingCompleted = true; // TEMP-MIGRATION-SPIKE
++    }
++  }
+   bool isAuth = await PhysicalQualification.startupStage(
+     'resolve_auth',
+     () => resolveStartupAuth(() => AuthService.instance.getIdToken()),

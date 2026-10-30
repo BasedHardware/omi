@@ -1,0 +1,17 @@
+# Inside the Omi repository the root .gitignore leaves out every ios/Config (the Flutter app's);
+# this app's build configuration is committed. Secrets and the production Firebase file stay out below.
+!/Config/
+!/Config/**
+.DS_Store
+*.xcodeproj/
+DerivedData/
+.build/
+Config/Secrets.xcconfig
+build/
+.build/
+.swiftpm/
+.claude/worktrees/
+__pycache__/
+*.pyc
+# Omi's production Firebase config is not committed (as upstream); put it here locally.
+Config/Firebase/GoogleService-Info-Prod.plist

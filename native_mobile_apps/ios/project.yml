@@ -1,0 +1,181 @@
+name: Omi
+
+options:
+  bundleIdPrefix: com.friend-app-with-wearable
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+# Settings live in xcconfig, structure lives here. The generated .xcodeproj is gitignored.
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+
+packages:
+  OmiCore:
+    path: Packages/OmiCore
+  OmiNetwork:
+    path: Packages/OmiNetwork
+  OmiPersistence:
+    path: Packages/OmiPersistence
+  OmiService:
+    path: Packages/OmiService
+  OmiDesign:
+    path: Packages/OmiDesign
+  OmiFeatures:
+    path: Packages/OmiFeatures
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "11.0.0"
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
+  # --- Extras (widgets, Live Activities, rich push) ---
+  OmiExtras:
+    path: Packages/OmiExtras
+  # --- /Extras ---
+  # --- Phone calls (Twilio Voice; Flutter's Podfile has TwilioVoice ~> 6.13) ---
+  TwilioVoice:
+    url: https://github.com/twilio/twilio-voice-ios
+    from: "6.13.6"
+  # --- /Phone calls ---
+  # --- Support chat (Intercom; Flutter has intercom_flutter 9.x on Intercom iOS 19.x). Pinned; off
+  # unless OMI_INTERCOM_APP_ID and OMI_INTERCOM_IOS_API_KEY are set (Config/Secrets.xcconfig). ---
+  Intercom:
+    url: https://github.com/intercom/intercom-ios-sp
+    exactVersion: "19.8.4"
+  # --- /Support chat ---
+
+targets:
+  Omi:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: App
+      # Extras: the Live Activity's intents run in the app's process; its views render in Debug
+      # for layout checks (App/Extras/LiveActivityRenderer.swift).
+      - path: Extensions/Shared
+      - path: Extensions/LiveActivityUI
+    settings:
+      base:
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/Omi.entitlements
+    postCompileScripts:
+      - name: Copy Firebase config
+        script: cp "${OMI_FIREBASE_PLIST}" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist"
+        inputFiles:
+          - $(OMI_FIREBASE_PLIST)
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist
+        basedOnDependencyAnalysis: true
+    dependencies:
+      - package: OmiCore
+      - package: OmiNetwork
+      - package: OmiPersistence
+      - package: OmiService
+      - package: OmiDesign
+      - package: OmiFeatures
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseMessaging
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      # --- Apple Watch companion: embedded in Omi.app/Watch (begin) ---
+      - target: OmiWatch
+      # --- Apple Watch companion (end) ---
+      # --- Extras (widgets, Live Activities, rich push) ---
+      - package: OmiExtras
+      - target: OmiWidgets
+      - target: OmiNotificationService
+      # --- /Extras ---
+      # --- Phone calls (App/PhoneCalls) ---
+      - package: TwilioVoice
+        product: TwilioVoice
+      # --- /Phone calls ---
+      # --- Support chat (App/System/SupportChat.swift) ---
+      - package: Intercom
+        product: Intercom
+      # --- /Support chat ---
+
+  # --- Apple Watch companion (begin) ---------------------------------------------------------
+  # Records from the watch microphone and streams to the iPhone app over WatchConnectivity
+  # (port of the Flutter app's ios/omiWatchApp). Same bundle id suffix as Flutter's watch app.
+  OmiWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: Watch
+      # The WatchConnectivity contract, shared with the iPhone side (Foundation only).
+      - path: Packages/OmiService/Sources/OmiService/Watch/WatchMessage.swift
+        group: Watch
+    settings:
+      base:
+        INFOPLIST_FILE: Watch/Info.plist
+        PRODUCT_NAME: OmiWatch
+        PRODUCT_BUNDLE_IDENTIFIER: $(OMI_BUNDLE_ID).watchapp
+        TARGETED_DEVICE_FAMILY: "4"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        SKIP_INSTALL: YES
+  # --- Apple Watch companion (end) -----------------------------------------------------------
+
+  # --- Extras (widgets, Live Activities, rich push) ---
+  # Home and Lock Screen widgets plus the Live Activity; reads the App Group the app writes.
+  OmiWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Extensions/OmiWidgets
+      - path: Extensions/Shared
+      - path: Extensions/LiveActivityUI
+    settings:
+      base:
+        PRODUCT_NAME: OmiWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: $(OMI_BUNDLE_ID).widgets
+        INFOPLIST_FILE: Extensions/OmiWidgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extensions/OmiWidgets/OmiWidgets.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: ""
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+    dependencies:
+      - package: OmiExtras
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+      - sdk: ActivityKit.framework
+
+  # Downloads the image a push names and attaches it.
+  OmiNotificationService:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Extensions/OmiNotificationService
+    settings:
+      base:
+        PRODUCT_NAME: OmiNotificationService
+        PRODUCT_BUNDLE_IDENTIFIER: $(OMI_BUNDLE_ID).notifications
+        INFOPLIST_FILE: Extensions/OmiNotificationService/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: ""
+        APPLICATION_EXTENSION_API_ONLY: YES
+    dependencies:
+      - package: OmiExtras
+  # --- /Extras ---
+
+schemes:
+  Omi:
+    build:
+      targets:
+        Omi: all
+    run:
+      config: Debug
+    archive:
+      config: Release

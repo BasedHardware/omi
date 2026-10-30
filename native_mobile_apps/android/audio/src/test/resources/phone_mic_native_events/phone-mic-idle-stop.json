@@ -1,0 +1,33 @@
+{
+  "id": "phone-mic-idle-stop",
+  "revision": 1,
+  "schema_version": "phone-mic-native-events/v1",
+  "start_session_id": 41,
+  "events": [
+    {
+      "kind": "stateChanged",
+      "session_id": 41,
+      "state": "starting"
+    },
+    {
+      "kind": "stateChanged",
+      "session_id": 41,
+      "state": "running"
+    },
+    {
+      "kind": "audioFrame",
+      "session_id": 41,
+      "pcm_frame_base64": "AACaHMtJqHXBeGZop7dURP3f8qRDJ8BR+X4+Hp/07Mm1EUrguzvYmDEUFreX2IRqbcKiLjNn8KppGO6Sj0MchiXS+u+riQjooWvGEYcVtHzdIFKEI4MgsNntnpN/LkyulY6qS5szOGMRf3Z4d27kek37AqYTe1BhSf9OIG+1fEIFR1rzizloCoFOJutn4xRlvVGykwNPgL65TP44X9isQnX7Cud7m5jd8dnWaVd0RDstJGJN8/6wxynWrt1Pl9yu5au6JmtZyNxhIYb0RyF0/Z1yEtPjiuB8mZteDj/yDIdVWGqyW3P4B9EkNos36qSrDT3CJNPyEN4JnQ7LL+k8y8UAGopL6ShfQeTmLSfP1EV9g3JCwzZA63navhMffGx7NaXKrTu7WOKxX5bcF9AEzO1FIiyzVnCk6VNu6A+rnJc="
+    },
+    {
+      "kind": "stateChanged",
+      "session_id": 41,
+      "state": "idle"
+    },
+    {
+      "kind": "audioFrame",
+      "session_id": 41,
+      "pcm_frame_base64": "AQAdFJKWY8hgrBnV3om/h4wu1anqZdvgeKdRDrb2t68kw40+QshTkJDtiTaOJq/evFJFspody7ao3sEtZnmn9FQ9/eTyxUM0wNr50z5Pn9Hs4rW2SiG76NhBMQkWCJdVhKNtB6KPM7Twc2mt7gOPYBzfJbf6cKt2CNGhoMaih9K09d2lUiUjECC52cKeRH+LTEeVs6oMm2A4jBH0dkl3a+QzTcAChxNIUKpJFE4Rb1J8GwWsWvSLpmhzgQMm/GcgFF69VrK0A1yAR7mh/mlftaxbdaAKKHtImIbxzta6V/FEdC1pYq7zS7CQKWuuTk+03AflkLqna0bIxWFWhoVH3nR2nfcSdOMX4IWZcF6/P08MIFV9anNboPgw0Zk2XDfnpGQNAsIF078QJwmyDrwvhjykxWUai0tWKMhBmeY+Jww="
+    }
+  ]
+}
