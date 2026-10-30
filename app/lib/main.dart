@@ -117,6 +117,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 /// Firebase parameters for the current flavor, resolved identically in every engine.
 FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
@@ -252,6 +253,8 @@ Future _init() async {
     throw StartupConfigurationError(error);
   }
   await PhysicalQualification.startupStage('isolation', PhysicalQualification.install);
+  // Before Firebase: crash reporting starts right after it, and must already know whether it may.
+  await PhysicalQualification.startupStage('outbound_policy', OutboundPolicy.resolve);
 
   FlutterForegroundTask.initCommunicationPort();
 

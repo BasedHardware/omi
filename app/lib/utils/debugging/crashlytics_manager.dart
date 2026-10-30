@@ -9,6 +9,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/debugging/non_fatal_reporter.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 class CrashlyticsManager {
   static final CrashlyticsManager _instance = CrashlyticsManager._internal();
@@ -22,6 +23,11 @@ class CrashlyticsManager {
 
   static Future<void> init() async {
     if (PhysicalQualification.enabled) return;
+    if (!OutboundPolicy.thirdPartyServicesAllowed) {
+      // Persists natively, so reports from before Dart starts on the next launch stay local too.
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
+      return;
+    }
     // Disable Crashlytics collection in debug mode
     if (kDebugMode) {
       await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);

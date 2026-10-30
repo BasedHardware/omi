@@ -13,6 +13,7 @@ import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 /// Centralized platform manager for all platform-specific services
 /// This provides a single point of access for all platform services
@@ -36,7 +37,8 @@ class PlatformManager {
   static Future<void> initializeServices() async {
     _instance._packageInfo = await PackageInfo.fromPlatform();
     _instance._deviceIdHash = await _instance._getDeviceIdHash();
-    unawaited(AnalyticsManager.init());
+    // Omi's analytics only while the app talks to Omi's backend (see OutboundPolicy).
+    if (OutboundPolicy.thirdPartyServicesAllowed) unawaited(AnalyticsManager.init());
     await IntercomManager.instance.initIntercom();
   }
 
