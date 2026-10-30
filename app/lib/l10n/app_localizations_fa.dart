@@ -14925,4 +14925,19 @@ class AppLocalizationsFa extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'امروز $amount کسر شد. تمدید در $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count بخش',
+      many: '$count بخش',
+      few: '$count بخش',
+      two: '$count بخش',
+      one: '$count بخش',
+      zero: '$count بخش',
+    );
+    return '$_temp0';
+  }
 }

@@ -18245,5 +18245,14 @@
                 "type": "String"
             }
         }
+    },
+    "episodePartsCount": "{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}",
+    "@episodePartsCount": {
+        "description": "Number of retained conversations in a closed episode Home row; shown for two or more parts.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

@@ -14928,4 +14928,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Dnes účtováno $amount. Obnovení $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count částí',
+      many: '$count částí',
+      few: '$count části',
+      two: '$count částí',
+      one: '$count část',
+      zero: '$count částí',
+    );
+    return '$_temp0';
+  }
 }

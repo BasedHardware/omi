@@ -14993,4 +14993,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Azi s-au încasat $amount. Se reînnoiește pe $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de părți',
+      many: '$count de părți',
+      few: '$count părți',
+      two: '$count de părți',
+      one: '$count parte',
+      zero: '$count de părți',
+    );
+    return '$_temp0';
+  }
 }
