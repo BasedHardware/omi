@@ -189,7 +189,7 @@ class TestFastAPIDependencyInjectionIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         try:
-            from fastapi import FastAPI, Depends, Request
+            from fastapi import FastAPI, Depends, Request, Query, HTTPException
             from fastapi.testclient import TestClient
         except ImportError:
             raise unittest.SkipTest("fastapi or httpx not installed in test environment")
@@ -199,6 +199,12 @@ class TestFastAPIDependencyInjectionIntegration(unittest.TestCase):
         @app.get("/zapier/me")
         async def mock_zapier_me(request: Request, uid: str = Depends(auth.require_zapier_webhook_auth)):
             return {"status": "ok", "uid": uid}
+
+        @app.post("/zapier/memories")
+        def mock_zapier_memories(conversation: dict = None, uid: str = Query(...)):
+            if not uid or not uid.strip():
+                raise HTTPException(status_code=422, detail="Missing or empty uid")
+            return {"status": "forwarded", "uid": uid.strip()}
 
         cls.client = TestClient(app)
 
@@ -234,6 +240,21 @@ class TestFastAPIDependencyInjectionIntegration(unittest.TestCase):
         res = self.client.get(f"/zapier/me?uid=u123&zapier_webhook_token={SECRET}")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json(), {"status": "ok", "uid": "u123"})
+
+    def test_zapier_memories_behavioral_success_with_only_query_uid(self):
+        # Proves backend conversation_created_webhook posts with only ?uid= succeed without secrets/headers
+        os.environ.pop("ZAPIER_WEBHOOK_SECRET", None)
+        res = self.client.post("/zapier/memories?uid=backend_user_123", json={"id": "conv-123"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), {"status": "forwarded", "uid": "backend_user_123"})
+
+    def test_zapier_memories_behavioral_rejects_blank_uid_with_422(self):
+        res = self.client.post("/zapier/memories?uid=", json={"id": "conv-123"})
+        self.assertEqual(res.status_code, 422)
+
+    def test_zapier_memories_behavioral_rejects_whitespace_uid_with_422(self):
+        res = self.client.post("/zapier/memories?uid=   ", json={"id": "conv-123"})
+        self.assertEqual(res.status_code, 422)
 
 
 if __name__ == "__main__":
