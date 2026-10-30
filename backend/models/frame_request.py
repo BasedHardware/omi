@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -63,21 +63,21 @@ class FrameRequest(BaseModel):
     # id starve future requests.
     dedupe_window: int = Field(default=0, ge=0)
     attempt_number: int = Field(default=0, ge=0)
-    conversation_id: str | None = Field(default=None, max_length=256)
-    screenshot_id: str | None = Field(default=None, max_length=256)
+    conversation_id: Optional[str] = Field(default=None, max_length=256)
+    screenshot_id: Optional[str] = Field(default=None, max_length=256)
     state: FrameRequestState = FrameRequestState.requested
     created_at: datetime
     expires_at: datetime
-    claimed_at: datetime | None = None
-    uploaded_at: datetime | None = None
-    attached_at: datetime | None = None
-    terminal_reason: str | None = Field(default=None, max_length=240)
+    claimed_at: Optional[datetime] = None
+    uploaded_at: Optional[datetime] = None
+    attached_at: Optional[datetime] = None
+    terminal_reason: Optional[str] = Field(default=None, max_length=240)
     byte_count: int = Field(default=0, ge=0, le=10 * 1024 * 1024)
-    content_type: str | None = Field(default=None, max_length=100)
-    storage_id: str | None = Field(default=None, max_length=256)
+    content_type: Optional[str] = Field(default=None, max_length=100)
+    storage_id: Optional[str] = Field(default=None, max_length=256)
     cleanup_state: FrameRequestCleanupState = FrameRequestCleanupState.not_required
     cleanup_attempts: int = Field(default=0, ge=0, le=1000)
-    cleanup_next_attempt_at: datetime | None = None
+    cleanup_next_attempt_at: Optional[datetime] = None
 
     @field_validator("uid", "device_id", "request_id", "dedupe_key", mode="before")
     @classmethod
@@ -98,7 +98,7 @@ class FrameRequest(BaseModel):
 
     @field_validator("conversation_id", "screenshot_id", "terminal_reason", "content_type", "storage_id", mode="before")
     @classmethod
-    def _strip_optional_strings(cls, value: Any) -> str | None:
+    def _strip_optional_strings(cls, value: Any) -> Optional[str]:
         if value is None:
             return None
         if not isinstance(value, str):
@@ -108,7 +108,7 @@ class FrameRequest(BaseModel):
 
     @field_validator("storage_id")
     @classmethod
-    def _validate_storage_id(cls, value: str | None) -> str | None:
+    def _validate_storage_id(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
         if "/" in value or "\\" in value or value.startswith(("http:", "https:")):
@@ -117,7 +117,7 @@ class FrameRequest(BaseModel):
 
     @field_validator("created_at", "expires_at", "claimed_at", "uploaded_at", "attached_at", "cleanup_next_attempt_at")
     @classmethod
-    def _normalize_datetime(cls, value: datetime | None) -> datetime | None:
+    def _normalize_datetime(cls, value: Optional[datetime]) -> Optional[datetime]:
         if value is None:
             return None
         if value.tzinfo is None:
@@ -151,9 +151,29 @@ class CreateFrameRequest(BaseModel):
     device_id: str = Field(min_length=1, max_length=256)
     account_generation: int = Field(default=0, ge=0)
     dedupe_key: str = Field(min_length=1, max_length=256)
-    conversation_id: str | None = Field(default=None, max_length=256)
-    screenshot_id: str | None = Field(default=None, max_length=256)
-    requested_ttl_seconds: int | None = Field(default=None, ge=1, le=6 * 24 * 60 * 60)
+    conversation_id: Optional[str] = Field(default=None, max_length=256)
+    screenshot_id: Optional[str] = Field(default=None, max_length=256)
+    requested_ttl_seconds: Optional[int] = Field(default=None, ge=1, le=6 * 24 * 60 * 60)
+
+    @field_validator("device_id", "dedupe_key", mode="before")
+    @classmethod
+    def _strip_required_strings(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise TypeError("frame request identifiers must be strings")
+        value = value.strip()
+        if not value:
+            raise ValueError("frame request identifiers must not be blank")
+        return value
+
+    @field_validator("conversation_id", "screenshot_id", mode="before")
+    @classmethod
+    def _strip_optional_strings(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError("frame request optional fields must be strings")
+        value = value.strip()
+        return value or None
 
 
 class FrameRequestStateUpdate(BaseModel):
@@ -162,14 +182,34 @@ class FrameRequestStateUpdate(BaseModel):
     state: FrameRequestState
     device_id: str = Field(min_length=1, max_length=256)
     account_generation: int = Field(default=0, ge=0)
-    terminal_reason: str | None = Field(default=None, max_length=240)
-    storage_id: str | None = Field(default=None, max_length=256)
+    terminal_reason: Optional[str] = Field(default=None, max_length=240)
+    storage_id: Optional[str] = Field(default=None, max_length=256)
     byte_count: int = Field(default=0, ge=0, le=10 * 1024 * 1024)
-    content_type: str | None = Field(default=None, max_length=100)
+    content_type: Optional[str] = Field(default=None, max_length=100)
+
+    @field_validator("device_id", mode="before")
+    @classmethod
+    def _strip_required_strings(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise TypeError("frame request identifiers must be strings")
+        value = value.strip()
+        if not value:
+            raise ValueError("frame request identifiers must not be blank")
+        return value
+
+    @field_validator("terminal_reason", "content_type", mode="before")
+    @classmethod
+    def _strip_optional_strings(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError("frame request optional fields must be strings")
+        value = value.strip()
+        return value or None
 
     @field_validator("storage_id")
     @classmethod
-    def _validate_storage_id(cls, value: str | None) -> str | None:
+    def _validate_storage_id(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
         value = value.strip()
@@ -185,6 +225,16 @@ class FrameRequestPromotion(BaseModel):
     account_generation: int = Field(default=0, ge=0)
     conversation_id: str = Field(min_length=1, max_length=256)
 
+    @field_validator("device_id", "conversation_id", mode="before")
+    @classmethod
+    def _strip_required_strings(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise TypeError("frame request identifiers must be strings")
+        value = value.strip()
+        if not value:
+            raise ValueError("frame request identifiers must not be blank")
+        return value
+
 
 class FrameRequestEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -196,4 +246,4 @@ class FrameRequestEnvelope(BaseModel):
 class FrameRequestBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    requests: list[FrameRequest] = Field(default_factory=list, max_length=32)
+    requests: List[FrameRequest] = Field(default_factory=list, max_length=32)
