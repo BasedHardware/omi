@@ -6460,6 +6460,9 @@ marker has no audio registration obligation only when it also has no upload
 failure, pending producer or durable audio bounds. Such photo-only captures keep
 ordinary photo finalization; silent backfill keeps its existing processing fence.
 Unknown or unclosed audio remains retryable rather than being silently dropped.
+An intentionally discarded processing result retains the existing terminal
+fanout fence. Registration uses the returned model's discard state rather than
+the stale initial read; reviving a capture still retains its audio obligation.
 
 Pusher dispatches begin, clear, seal and failure-marker transactions through
 `record_barrier_executor`, separate from the shared DB pool used by integrations
