@@ -21,9 +21,9 @@ from utils.batch_pipeline.recovery_disposition import STAGES, REASONS, padded_sk
 from utils.batch_pipeline.scheduler import owner_key
 
 PAID_EPOCH = 2
-ORDINARY_EMPTY_OPERATION = 'ordinary-empty-independent-recovery-v1'
+ORDINARY_EMPTY_OPERATION = 'ordinary-empty-independent-recovery-v2'
 ORDINARY_EMPTY_MAX_UNITS = 2
-ORDINARY_EMPTY_MAX_AUDIO_SECONDS = 47.6
+ORDINARY_EMPTY_MAX_DECODED_AUDIO_SECONDS = 47.6
 
 
 def independent_redrive(job):

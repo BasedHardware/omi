@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from datetime import datetime, timezone
+from decimal import Decimal
 import hashlib
 import json
 import logging
@@ -33,7 +34,7 @@ from database.batch_pipeline_speech_redrive import (
     ordinary_empty_redrive,
     ORDINARY_EMPTY_OPERATION,
     ORDINARY_EMPTY_MAX_UNITS,
-    ORDINARY_EMPTY_MAX_AUDIO_SECONDS,
+    ORDINARY_EMPTY_MAX_DECODED_AUDIO_SECONDS,
 )
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
@@ -49,7 +50,12 @@ from database.sync_ledger import batch_ledger_owes_held_units
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import WorkItem, held_silence_allowed, worker_vad_speech
-from utils.batch_pipeline.recovery_disposition import inspect_audio, STAGES, REASONS
+from utils.batch_pipeline.recovery_disposition import (
+    AUDIO_DURATION_TOLERANCE_SECONDS,
+    inspect_audio,
+    STAGES,
+    REASONS,
+)
 from utils.batch_pipeline.speech_redrive import prepared_independent_one, redrive_one
 from utils.batch_pipeline import redrive_scope as scope
 from utils.executors import storage_executor
@@ -97,7 +103,8 @@ def paid_digest(
         body['usd_cap'] = usd_cap
     if ordinary_empty:
         body['max_units'] = ORDINARY_EMPTY_MAX_UNITS
-        body['max_total_audio_seconds'] = ORDINARY_EMPTY_MAX_AUDIO_SECONDS
+        body['max_total_decoded_audio_seconds'] = ORDINARY_EMPTY_MAX_DECODED_AUDIO_SECONDS
+        body['duration_decode_tolerance_seconds'] = AUDIO_DURATION_TOLERANCE_SECONDS
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -214,15 +221,23 @@ def prepared_budget(durations, usd_cap):
 
 
 def ordinary_empty_budget(durations):
-    """Recorded-audio bound for one explicit, exact-ID ordinary-empty plan."""
+    """Conservatively bound decoded audio for an exact-ID ordinary-empty plan."""
     require(1 <= len(durations) <= ORDINARY_EMPTY_MAX_UNITS, 'ordinary_empty_unit_budget')
     require(
         all(type(n) in (int, float) and math.isfinite(n) and 0 < n <= MAX_AUDIO_SECONDS for n in durations),
         'ordinary_empty_duration_invalid',
     )
-    total = sum(durations)
-    require(total <= ORDINARY_EMPTY_MAX_AUDIO_SECONDS, 'ordinary_empty_audio_budget')
-    return total
+    total = math.fsum(durations)
+    exact_total = sum(
+        (Decimal(n) if type(n) is int else Decimal.from_float(n) for n in durations),
+        Decimal(0),
+    )
+    max_decoded = exact_total + Decimal(str(AUDIO_DURATION_TOLERANCE_SECONDS)) * len(durations)
+    require(
+        max_decoded <= Decimal(str(ORDINARY_EMPTY_MAX_DECODED_AUDIO_SECONDS)),
+        'ordinary_empty_audio_budget',
+    )
+    return total, float(max_decoded)
 
 
 def checked_prepared(store, sid, uid, key, after, cutoff, max_seconds):
@@ -585,10 +600,10 @@ def main():
         failures[sid] = epoch1_failure(job)
     counts = Counter(decision for _, _, decision in units)
     require(counts['speech'] == args.expect_speech_count, 'speech_count_changed')
-    ordinary_audio_seconds = (
+    ordinary_audio_seconds, ordinary_max_decoded_seconds = (
         ordinary_empty_budget([durations[sid] for sid, _, decision in units if decision == 'speech'])
         if ordinary_empty
-        else None
+        else (None, None)
     )
     total_audio_seconds, estimated_usd_total = (
         prepared_budget([durations[sid] for sid, _, decision in units if decision == 'speech'], args.usd_cap)
@@ -646,8 +661,10 @@ def main():
         output['usd_cap'] = args.usd_cap
     if ordinary_empty:
         output['max_units_per_plan'] = ORDINARY_EMPTY_MAX_UNITS
-        output['max_total_recorded_audio_seconds'] = ORDINARY_EMPTY_MAX_AUDIO_SECONDS
+        output['max_total_decoded_audio_seconds'] = ORDINARY_EMPTY_MAX_DECODED_AUDIO_SECONDS
+        output['duration_decode_tolerance_seconds'] = AUDIO_DURATION_TOLERANCE_SECONDS
         output['total_recorded_audio_seconds'] = ordinary_audio_seconds
+        output['maximum_possible_decoded_audio_seconds'] = ordinary_max_decoded_seconds
     if args.apply:
 
         # Per-unit mutation consumes its persisted recovery owner part.

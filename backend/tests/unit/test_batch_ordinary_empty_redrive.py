@@ -253,6 +253,7 @@ def test_census_refuses_changed_valid_proof_or_paid_history(setup, monkeypatch, 
         ([float('inf')], 'ordinary_empty_duration_invalid'),
         ([60.01], 'ordinary_empty_duration_invalid'),
         ([24, 24], 'ordinary_empty_audio_budget'),
+        ([23.8, 23.8], 'ordinary_empty_audio_budget'),
     ],
 )
 def test_census_refuses_overbudget_or_unmeasured_audio(monkeypatch, durations, reason):
@@ -263,8 +264,9 @@ def test_census_refuses_overbudget_or_unmeasured_audio(monkeypatch, durations, r
 
 def test_actual_two_unit_budget_and_new_operation_digest(monkeypatch):
     module = operator(monkeypatch)
-    assert module.ordinary_empty_budget([6.4294375, 10.66]) == 17.0894375
-    assert module.ordinary_empty_budget([47.6]) == 47.6
+    assert module.ordinary_empty_budget([6.4294375, 10.66]) == pytest.approx((17.0894375, 17.2894375))
+    assert module.ordinary_empty_budget([47.5]) == pytest.approx((47.5, 47.6))
+    assert module.ordinary_empty_budget([23.7, 23.7]) == pytest.approx((47.4, 47.6))
     ordinary_digest = module.paid_digest('synthetic-census', 1, 3, silent=True, ordinary_empty=True)
     assert ordinary_digest != module.paid_digest('synthetic-census', 1, 3, silent=True, independent=True)
     assert ordinary_digest != module.paid_digest('different-census', 1, 3, silent=True, ordinary_empty=True)
@@ -427,9 +429,10 @@ def test_canonical_cli_new_mode_dryrun_apply_and_same_plan_replay(
     module.main()
     plan = json.loads(capsys.readouterr().out)
     assert client.rows == before and cohort.stat().st_mode & 0o777 == 0o600
-    assert plan['provider'] == 'soniox' and plan['operation'] == 'ordinary-empty-independent-recovery-v1'
+    assert plan['provider'] == 'soniox' and plan['operation'] == 'ordinary-empty-independent-recovery-v2'
     assert plan['strict_vad'] == {'worker_vad_speech': 1}
     assert plan['maximum_additional_paid_calls'] == 1 and plan['total_recorded_audio_seconds'] == 5
+    assert plan['maximum_possible_decoded_audio_seconds'] == pytest.approx(5.1)
     assert plan['paid_stt_calls'] == plan['firestore_writes'] == 0
     artifacts.fetch_audio.assert_not_called()
     soniox.assert_not_called()
