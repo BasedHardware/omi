@@ -488,11 +488,11 @@ def get_available_plans_endpoint(
         scheduled_price_id = None
         billing_currency = None
 
-        # Read currency for current paid subscriptions, including pending cancellation and active trials.
+        # Read currency for current paid subscriptions, including pending cancellation.
         if (
             current_subscription
             and is_paid_plan(current_subscription.plan)
-            and (current_subscription.status == SubscriptionStatus.active or str(current_subscription.status) == 'trialing')
+            and current_subscription.status == SubscriptionStatus.active
             and current_subscription.stripe_subscription_id
             and current_subscription.stripe_subscription_id.startswith('sub_')
             and (
@@ -894,7 +894,10 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     target_plan = get_plan_type_from_price_id(resolved_price.id)
                     target_recurring = resolved_price.recurring
                     target_interval = target_recurring.interval
-                except Exception:
+                except BillingCurrencyUnavailable:
+                    raise
+                except Exception as exc:
+                    logger.warning(f"Failed to resolve currency price {type(exc).__name__}: {exc}")
                     raise BillingCurrencyUnavailable(
                         'Please reopen Plans & Billing to select a price in your billing currency.'
                     )
