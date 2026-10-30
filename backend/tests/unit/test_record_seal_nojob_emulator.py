@@ -61,8 +61,9 @@ def test_real_discovery_resumes_and_seal_registration_is_idempotent(source):
     empty, wrapped = backfill.discover(client, limit=1, after=end)
     assert empty == [] and wrapped is None
     late = client.document(paths[0].rsplit('/', 1)[0] + '/aaa-late-match')
-    late.set({'record_lane_owner': 'batch_live_v1'})
+    late.set(client.document(paths[0]).get().to_dict())
     assert backfill.discover(client, limit=1, after=wrapped)[0] == [late.path]
+    assert backfill.summary(make_plan(source, [late.path]))['dispositions'] == {'eligible': 1}
     result = make_plan(source, paths)
     assert backfill.summary(result)['dispositions'] == {'eligible': 2}
     assert backfill.apply_backfill(store, result, result['plan_sha256']) == {'sealed_registered': 2}
