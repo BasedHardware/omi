@@ -8254,6 +8254,12 @@ assignment then groups continuous speech using the shared 120-second boundary.
 Audio custody is not acknowledged against the empty live stub: existing WAL /
 pack receipt processing still owns release of original audio.
 
+Listen reads the assigned conversation through the normal read decoder before
+building its reply; transaction write plans contain encrypted fields and delete
+transforms. A reply read/validation failure after the assignment commits skips
+delivery and records degraded telemetry without requeueing committed words.
+Assignment failures still retain the batch for retry with the same dedupe IDs.
+
 Episodes use the recorded-time ownership function and four-hour / thirty-minute
 rules documented in `utils/episodes/ARCHITECTURE.md`. The additive
 `timer_started_at` field fixes Home's elapsed-time anchor without new UI.
