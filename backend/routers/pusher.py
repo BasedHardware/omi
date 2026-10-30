@@ -6,7 +6,7 @@ import time
 import uuid
 from grpc import StatusCode
 from collections import deque
-from typing import Any, Awaitable, Deque, Dict, List, Optional, Tuple, cast
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_record_barrier import PusherRecordBarrier
 
@@ -275,6 +275,7 @@ async def _commit_durable_audio_window(
     websocket: Any,
     durable_queue: 'asyncio.Queue[AudioProjection]',
     budget: ByteBudget,
+    on_committed: Optional[Callable[[], None]] = None,
 ) -> Optional[AudioReceipt]:
     """Commit one immutable media+manifest pair for a buffered audio window.
 
@@ -304,6 +305,8 @@ async def _commit_durable_audio_window(
         data_protection_level=protection_level,
         clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
     )
+    if on_committed is not None:
+        on_committed()  # Both immutable objects exist, before ACK/queue delivery.
     if audio_custody == 1:
         await websocket.send_bytes(audio_custody_ack_frame(receipt.to_dict()))
     if receipt.conversation_id and receipt.samples:
@@ -1111,6 +1114,7 @@ async def _websocket_util_trigger(
         # buffered in private_cloud_sync_buffer, pinned verbatim into one
         # manifest when the window commits at a flush boundary.
         durable_window_frames: List[Dict[str, Any]] = []
+        durable_tail_has_receipt = False
         # Audio-timeline v2 continuity for this socket: the projected end of
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
@@ -1118,6 +1122,13 @@ async def _websocket_util_trigger(
 
         async def commit_durable_window() -> Optional[AudioReceipt]:
             """Commit the buffered window as one custody pair (see _commit_durable_audio_window)."""
+            nonlocal durable_tail_has_receipt
+            durable_tail_has_receipt = False
+
+            def committed():
+                nonlocal durable_tail_has_receipt
+                durable_tail_has_receipt = True
+
             receipt = await _commit_durable_audio_window(
                 uid=uid,
                 payload=bytes(private_cloud_sync_buffer),
@@ -1132,6 +1143,7 @@ async def _websocket_util_trigger(
                 websocket=websocket,
                 durable_queue=durable_queue,
                 budget=audio_budget,
+                on_committed=committed,
             )
             if receipt is not None:
                 _reset_private_cloud_buffer()
@@ -1563,6 +1575,7 @@ async def _websocket_util_trigger(
             if len(private_cloud_sync_buffer) > 0:
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
             tail_committed = False
+            durable_tail_has_receipt = False
             try:
                 await _queue_private_cloud_chunk()
                 tail_committed = durable_audio
@@ -1579,7 +1592,7 @@ async def _websocket_util_trigger(
                         # The immutable commit may have landed before ACK or
                         # queue delivery failed. Keep the producer token, but
                         # do not permanently poison retained custody.
-                        record_barrier.hold_recording(current_conversation_id)
+                        record_barrier.hold_recording(current_conversation_id, tail_committed=durable_tail_has_receipt)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
             if (

@@ -46,6 +46,7 @@ from database import record_audio as record_audio_db
 from database.record_audio import seal_record_audio, set_record_upload_pending, mark_record_upload_failed
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.pusher_record_barrier import PusherRecordBarrier
+import utils.pusher_record_barrier as barrier_module
 
 
 class Blob:
@@ -1154,6 +1155,8 @@ def _sent_receipts(sock):
 
 @pytest.fixture
 def inline_session(remote, monkeypatch):
+    registry = barrier_module._ProcessRecordTokens()
+    monkeypatch.setattr(barrier_module, '_process_record_tokens', lambda: registry)
     _window_harness(remote, monkeypatch)
     client = StrictFirestore()
     path = ('users', 'owner', 'conversations', 'conversation')
@@ -1227,6 +1230,35 @@ async def test_shutdown_ack_failure_keeps_token_without_poisoning_retained_custo
     assert 'conversation' in barrier.failed_recordings
     assert client.rows[path]['record_audio_closed'] is False
     assert not projected and sock.close_code == 1011
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('committed_before_failure', [False, True])
+async def test_later_socket_reclears_only_receipt_proven_shutdown_tail(
+    inline_session, monkeypatch, committed_before_failure
+):
+    client, path, earlier, projected = inline_session
+    real_commit = pusher.commit_pcm_window
+    first = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    if committed_before_failure:
+        first.send_bytes = AsyncMock(side_effect=WebSocketDisconnect(1006))
+    else:
+        monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('synthetic tail failure')))
+    await pusher._websocket_util_trigger(first, 'owner', 16000, audio_custody=1)
+    held = earlier.upload_sessions['conversation']
+    assert set(client.rows[path]['record_upload_sessions']) == {held}
+    assert not client.rows[path]['record_audio_closed']
+
+    monkeypatch.setattr(pusher, 'commit_pcm_window', real_commit)
+    later = PusherRecordBarrier('owner')
+    monkeypatch.setattr(pusher, 'PusherRecordBarrier', lambda _: later)
+    # This is new audio, not a replay of the held window. It can only release
+    # the old producer if that exact tail already obtained an immutable receipt.
+    second = Socket(_audio_frames('conversation', [b'\x02\x00' * 160], start=2000.0))
+    await pusher._websocket_util_trigger(second, 'owner', 16000, audio_custody=1)
+    assert projected
+    assert client.rows[path]['record_audio_closed'] is committed_before_failure
+    assert set(client.rows[path]['record_upload_sessions']) == (set() if committed_before_failure else {held})
 
 
 @pytest.mark.asyncio
