@@ -36,6 +36,17 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   EpisodeProvider? _episodes;
   int? _peopleKey;
   int _people = 0;
+  (CaptureProvider, int, DateTime?)? _coverageKey;
+  LivePreviewCoverage? _coverage;
+
+  LivePreviewCoverage _previewCoverage(CaptureProvider capture) {
+    final key = (capture, capture.segmentsPhotosVersion, capture.liveTranscriptStartedAt);
+    if (_coverageKey != key) {
+      _coverageKey = key;
+      _coverage = LivePreviewCoverage.forFinals(capture.segments, capture.liveTranscriptStartedAt);
+    }
+    return _coverage!;
+  }
 
   /// How many people the transcript names: the owner plus speakers resolved to the user's people,
   /// as the live page's header names them. Raw diarization ids are not people (a long session
@@ -82,9 +93,15 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
         c.localPreviewAdmitted,
       ),
     );
-    return LiveEpisodeClock(
-      clock: episodes.now,
-      builder: (context, now) => _row(context, episodes, context.read<CaptureProvider>(), state, now, reconnecting),
+    final capture = context.read<CaptureProvider>();
+    final preview = capture.localPreviewAdmitted ? capture.livePreview : null;
+    // Share one snippet between the visible subtitle and its spoken label.
+    return ListenableBuilder(
+      listenable: preview ?? const AlwaysStoppedAnimation<double>(0),
+      builder: (context, _) => LiveEpisodeClock(
+        clock: episodes.now,
+        builder: (context, now) => _row(context, episodes, capture, state, now, reconnecting),
+      ),
     );
   }
 
@@ -119,15 +136,13 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
       if (!listening) return '';
       final uncovered = preview == null
           ? ''
-          : _textTail(LivePreviewCoverage.uncovered(preview.lines, capture.segments, capture.liveTranscriptStartedAt)
-              .reversed
-              .map((line) => line.text));
+          : _textTail(_previewCoverage(capture).excludeCovered(preview.lines).reversed.map((line) => line.text));
       // Cloud sessions have no local preview. When final segments cover local
       // words, keep those words visible instead of replacing them with "Live".
       return uncovered.isNotEmpty ? uncovered : _textTail(capture.segments.reversed.map((segment) => segment.text));
     }
 
-    // Coverage walks every final segment; the spoken label reads it once per clock tick, not twice.
+    // Final coverage is reused across preview notifications and clock ticks.
     final spokenPreview = previewText();
     final status = noAudio
         ? l10n.captureNoAudioDetail
@@ -212,23 +227,16 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 3),
-                          // Words land as the recognizer hears them, not on the clock's tick.
-                          ListenableBuilder(
-                            listenable: preview ?? const AlwaysStoppedAnimation<double>(0),
-                            builder: (context, _) {
-                              final text = previewText();
-                              return text.isNotEmpty
-                                  ? StartTrimmedText(
-                                      key: const Key('home_live_episode_preview'),
-                                      runs: [(text: text, style: null)],
-                                      style: subtitleStyle,
-                                      // At accessibility sizes one line holds a word or two; a
-                                      // second keeps the newest words readable.
-                                      maxLines: MediaQuery.textScalerOf(context).scale(10) > 16 ? 2 : 1,
-                                    )
-                                  : Text(rest, style: subtitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
-                            },
-                          ),
+                          spokenPreview.isNotEmpty
+                              ? StartTrimmedText(
+                                  key: const Key('home_live_episode_preview'),
+                                  runs: [(text: spokenPreview, style: null)],
+                                  style: subtitleStyle,
+                                  // At accessibility sizes one line holds a word or two; a
+                                  // second keeps the newest words readable.
+                                  maxLines: MediaQuery.textScalerOf(context).scale(10) > 16 ? 2 : 1,
+                                )
+                              : Text(rest, style: subtitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),

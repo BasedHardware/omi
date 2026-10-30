@@ -894,6 +894,7 @@ void main() {
       final updated = tester.widget<Text>(
           find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
       expect(updated.textSpan!.toPlainText(), endsWith('we can ship'));
+      expect(_rowLabel(tester), contains('we can ship'), reason: 'visible and spoken snippets update together');
       await tester.runAsync(() async {
         preview.dispose();
         disposed = true;

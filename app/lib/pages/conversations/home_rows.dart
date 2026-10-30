@@ -28,13 +28,16 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
   final rows = <HomeRow>[];
   final singleIds = <String>{};
   for (final episode in episodes) {
+    final metadata = {for (final c in episode.members) c.id: c};
+    // Full membership includes discarded members for Delete. Only retained
+    // members may keep the episode's display row in processing.
+    final retainedIds = metadata.isEmpty ? episode.conversationIds.toSet() : metadata.keys.toSet();
     final pending = processingConversations
-        .where((c) => episode.conversationIds.contains(c.id) && !c.deleted && !deletedIds.contains(c.id))
+        .where((c) => retainedIds.contains(c.id) && !c.discarded && !c.deleted && !deletedIds.contains(c.id))
         .toList();
     // A closing episode may still be live in the last server snapshot. The
     // streaming capture owns its row until it stops; then processing owns it.
     if (episode.live && (pending.isEmpty || episode.conversationIds.any(liveConversationIds.contains))) continue;
-    final metadata = {for (final c in episode.members) c.id: c};
     final members = <ServerConversation>[];
     hidden.addAll(episode.conversationIds);
     if (pending.isNotEmpty) {
@@ -52,7 +55,6 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     }
     // Server metadata is authoritative about retained membership. Full IDs also
     // include discarded members for Delete and must not resurrect stale local rows.
-    final retainedIds = metadata.isEmpty ? episode.conversationIds.toSet() : metadata.keys;
     for (final id in retainedIds) {
       final member = byId[id] ?? metadata[id];
       if (member != null && !member.discarded && !member.deleted && !deletedIds.contains(id)) members.add(member);

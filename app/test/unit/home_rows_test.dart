@@ -53,6 +53,41 @@ void main() {
     expect(rows.single.conversation, same(a));
     expect(rows.single.isProcessing, isFalse);
   });
+  for (final hasMetadata in [false, true]) {
+    test('discarded pending member releases retained rows with metadata=$hasMetadata', () {
+      final a = conversation('a');
+      final pendingB = conversation('b');
+      final closing = episode();
+      final processing = buildHomeRows([a], [closing], enabled: true, processingConversations: [pendingB]);
+      expect(processing.single.isProcessing, isTrue);
+
+      // The server has retained only a, or the local processing entry learned
+      // that b was discarded before retained metadata arrived.
+      final reconciled = hasMetadata ? episode(members: [a]) : closing;
+      final stalePending = hasMetadata ? pendingB : conversation('b', discarded: true);
+      for (final pending in [
+        <ServerConversation>[stalePending],
+        <ServerConversation>[]
+      ]) {
+        final rows = buildHomeRows([a], [reconciled], enabled: true, processingConversations: pending);
+        expect(rows.single.isProcessing, isFalse);
+        expect(rows.single.conversation, same(a));
+        expect(rows.single.episodeConversationIds, {'a', 'b'}, reason: 'Delete still owns full membership');
+      }
+    });
+  }
+  test('locally discarded pending member cannot override stale retained metadata', () {
+    final a = conversation('a');
+    final rows = buildHomeRows(
+        [a],
+        [
+          episode(members: [a])
+        ],
+        enabled: true,
+        processingConversations: [conversation('a', discarded: true)]);
+    expect(rows.single.isProcessing, isFalse);
+    expect(rows.single.conversation, same(a));
+  });
   test('episodes off leaves processing outside the episode projection', () {
     final a = conversation('a');
     final rows = buildHomeRows([a], [episode()], enabled: false, processingConversations: [conversation('b')]);
