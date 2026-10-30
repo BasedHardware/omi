@@ -400,7 +400,15 @@ OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL = Counter(
 
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
-for _outcome in ('success', 'skipped_discarded', 'skipped_no_structured', 'skipped_stale', 'error'):
+for _outcome in (
+    'success',
+    'skipped_discarded',
+    'skipped_no_structured',
+    'skipped_stale',
+    'skipped_processing_deferred',
+    'skipped_custom_stt_budget_exhausted',
+    'error',
+):
     OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome=_outcome)
 for _path in ('keyword', 'vector', 'transcript', 'firestore'):
     for _outcome in ('ok', 'degraded', 'empty'):

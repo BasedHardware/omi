@@ -353,6 +353,47 @@ def _local_projection() -> ClientProcessing:
     )
 
 
+@pytest.mark.parametrize('persisted', [False, True])
+def test_initial_custom_stt_budget_denial_uses_idempotent_completed_creation(monkeypatch, pc, persisted):
+    # Exercise the persistence helper's CreateConversation branch directly.
+    # The public create schema does not expose a uses_custom_stt flag.
+    capture = _desktop_create()
+    capture.source = ConversationSource.phone
+    effects = _spy_managed_effects(monkeypatch, pc)
+    create = MagicMock(return_value=persisted)
+    monkeypatch.setattr(pc.lifecycle_service, 'create_completed_conversation', create)
+    observer = MagicMock()
+
+    result = pc.complete_exhausted_custom_stt_conversation(
+        'uid-initial-custom-stt',
+        capture,
+        generated_conversation_id='initial-custom-stt',
+        client_projection=None,
+        has_refresh_fence=False,
+        hooks=(pc._build_deferred_structured, pc._get_conversation_obj, pc.lifecycle_service, pc.logger),
+        on_persisted=observer,
+    )
+
+    create.assert_called_once()
+    args, kwargs = create.call_args
+    assert args[0] == 'uid-initial-custom-stt'
+    payload = args[1]
+    assert kwargs == {'idempotent': True}
+    assert payload['id'] == result.id
+    assert result.id == 'initial-custom-stt'
+    assert payload['status'] == ConversationStatus.completed
+    assert payload['discarded'] is False
+    assert payload['deferred'] is False
+    assert payload[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
+    assert payload['transcript_segments'][0]['text'] == capture.transcript_segments[0].text
+    assert payload['structured']['title']
+    assert result.summary_retryable is None
+    observer.assert_called_once_with(persisted, result)
+    pc.lifecycle_service.persist_processed_conversation.assert_not_called()
+    for effect in effects.values():
+        effect.assert_not_called()
+
+
 _PLAN_FAIL_OPEN_FALLBACK = {
     'component': 'other',
     'from_mode': 'unresolved_plan',
@@ -360,6 +401,32 @@ _PLAN_FAIL_OPEN_FALLBACK = {
     'reason': 'policy',
     'outcome': 'degraded',
 }
+
+
+@pytest.mark.parametrize('deferred', [False, True])
+def test_finalizer_vector_skip_reports_exactly_one_matching_outcome(monkeypatch, pc, deferred):
+    import sys
+
+    finalizer = load_module_fresh(
+        'utils.conversations.finalizer',
+        os.path.join(str(_BACKEND), 'utils', 'conversations', 'finalizer.py'),
+    )
+    conversation = _desktop_custom_stt()
+    conversation.processing_deferred = deferred
+    monkeypatch.setattr(
+        sys.modules['utils.subscription'], 'should_skip_omi_paid_postprocessing', lambda *_a, **_k: True
+    )
+    metric = MagicMock()
+    writer = MagicMock(side_effect=AssertionError('skipped finalization must not call the vector writer'))
+    monkeypatch.setattr(finalizer, 'OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL', metric)
+    monkeypatch.setattr(finalizer, 'save_structured_vector', writer)
+
+    finalizer._save_summary_vector_fail_soft('uid', conversation)
+
+    expected = 'skipped_processing_deferred' if deferred else 'skipped_custom_stt_budget_exhausted'
+    metric.labels.assert_called_once_with(outcome=expected)
+    metric.labels.return_value.inc.assert_called_once_with()
+    writer.assert_not_called()
 
 
 @pytest.mark.anyio

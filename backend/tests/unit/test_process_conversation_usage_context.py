@@ -1899,7 +1899,8 @@ def test_custom_stt_exhausted_processing_budget_reprocess_preserves_completed_su
     assert dispositions == [process_conversation.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
 
 
-def test_custom_stt_exhausted_processing_budget_skips_summary_vector_paid_calls(monkeypatch):
+@pytest.mark.parametrize('deferred', [False, True])
+def test_custom_stt_exhausted_processing_budget_skips_summary_vector_paid_calls(monkeypatch, deferred):
     """#7690/#23923: summary-vector indexing must not invoke Omi-paid embeddings or
     structured metadata extraction on an exhausted custom-STT conversation."""
     from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL as metric
@@ -1915,6 +1916,7 @@ def test_custom_stt_exhausted_processing_budget_skips_summary_vector_paid_calls(
         status=ConversationStatus.completed,
         discarded=False,
         uses_custom_stt=True,
+        processing_deferred=deferred,
     )
     monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *_a, **_k: True)
     forbidden = MagicMock(side_effect=AssertionError('paid vector/LLM metadata call must not run'))
@@ -1922,9 +1924,12 @@ def test_custom_stt_exhausted_processing_budget_skips_summary_vector_paid_calls(
     monkeypatch.setattr(process_conversation, 'retrieve_metadata_fields_from_structured', forbidden)
     monkeypatch.setattr(process_conversation, 'upsert_vector2', forbidden)
 
-    before = metric.labels(outcome='skipped_processing_deferred')._value.get()
+    outcomes = ('skipped_processing_deferred', 'skipped_custom_stt_budget_exhausted')
+    before = {outcome: metric.labels(outcome=outcome)._value.get() for outcome in outcomes}
     assert process_conversation.save_structured_vector('uid-vec-23923', conversation) is False
-    assert metric.labels(outcome='skipped_processing_deferred')._value.get() == before + 1
+    expected = 'skipped_processing_deferred' if deferred else 'skipped_custom_stt_budget_exhausted'
+    for outcome in outcomes:
+        assert metric.labels(outcome=outcome)._value.get() == before[outcome] + int(outcome == expected)
     forbidden.assert_not_called()
 
 

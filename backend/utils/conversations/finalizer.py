@@ -97,7 +97,7 @@ def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
         if should_skip_custom_stt_postprocessing(
             uid, conversation, should_skip_omi_paid_postprocessing, strict_bool=True
         ):
-            OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
+            OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_custom_stt_budget_exhausted').inc()
             return
     try:
         if save_structured_vector(uid, conversation) is False:

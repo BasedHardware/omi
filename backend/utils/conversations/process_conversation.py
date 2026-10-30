@@ -2148,10 +2148,11 @@ def _save_action_items(
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
     # Backlog consent outlives a reset: even a fresh available balance must not
     # embed the raw placeholder or change its vector metadata while waiting.
-    if getattr(conversation, 'processing_deferred', False) is True or should_skip_custom_stt_postprocessing(
-        uid, conversation, should_skip_omi_paid_postprocessing, strict_bool=True
-    ):
+    if getattr(conversation, 'processing_deferred', False) is True:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
+        return False
+    if should_skip_custom_stt_postprocessing(uid, conversation, should_skip_omi_paid_postprocessing, strict_bool=True):
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_custom_stt_budget_exhausted').inc()
         return False
     if not update_only and conversation.discarded:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_discarded').inc()
