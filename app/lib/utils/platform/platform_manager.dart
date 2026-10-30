@@ -42,6 +42,13 @@ class PlatformManager {
     await IntercomManager.instance.initIntercom();
   }
 
+  /// Stops the services [OutboundPolicy.backendChanged] just turned off, for the rest of the session.
+  static Future<void> stopThirdPartyServices() async {
+    AnalyticsManager.suspendForSession();
+    await CrashlyticsManager.stopCollection();
+    await IntercomManager.instance.logout();
+  }
+
   /// Synchronous initialization for the local hermetic journey lane
   /// (SCA-488): no platform plugins, no analytics, no Intercom — only the
   /// fields request headers read. The full app boot still uses

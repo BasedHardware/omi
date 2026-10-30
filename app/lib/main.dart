@@ -216,7 +216,7 @@ Future<void> _reportBootCrash(
   try {
     await BootJournal.instance.record(kind, 'observed', error: error);
     final breadcrumbs = await BootJournal.instance.breadcrumbs();
-    if (Firebase.apps.isEmpty) {
+    if (Firebase.apps.isEmpty || !OutboundPolicy.thirdPartyServicesAllowed) {
       debugPrint('Boot diagnostics: $breadcrumbs');
       return;
     }

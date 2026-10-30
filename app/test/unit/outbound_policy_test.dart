@@ -53,11 +53,43 @@ void main() {
       expect(OutboundPolicy.thirdPartyServicesAllowed, isFalse);
     });
 
+    test('a saved value of the wrong type does not stop the boot', () async {
+      SharedPreferences.setMockInitialValues({'customBackendUrl': 42});
+
+      await OutboundPolicy.resolve();
+
+      expect(Env.hasApiBaseUrlOverride, isFalse);
+    });
+
     test("a saved override that is Omi's own backend leaves them on", () async {
       SharedPreferences.setMockInitialValues({'customBackendUrl': 'https://api.omi.me'});
 
       await OutboundPolicy.resolve();
 
+      expect(OutboundPolicy.thirdPartyServicesAllowed, isTrue);
+    });
+  });
+
+  group('a backend change while the app runs', () {
+    test("switching away from Omi's backend turns them off at once", () {
+      Env.overrideApiBaseUrl('https://omi.example.test/');
+
+      expect(OutboundPolicy.backendChanged(), isTrue);
+      expect(OutboundPolicy.thirdPartyServicesAllowed, isFalse);
+    });
+
+    test("switching back to Omi's backend leaves them off until the next launch", () {
+      OutboundPolicy.debugThirdPartyServicesAllowed = false;
+      Env.overrideApiBaseUrl('https://api.omi.me/');
+
+      expect(OutboundPolicy.backendChanged(), isFalse);
+      expect(OutboundPolicy.thirdPartyServicesAllowed, isFalse);
+    });
+
+    test("staying on Omi's backend changes nothing", () {
+      Env.overrideApiBaseUrl('https://api.omi.me/');
+
+      expect(OutboundPolicy.backendChanged(), isFalse);
       expect(OutboundPolicy.thirdPartyServicesAllowed, isTrue);
     });
   });
@@ -96,6 +128,17 @@ void main() {
 
       expect(adapter.inits, 1);
     });
+
+    test('a running session stops sending when the backend changes away from Omi', () async {
+      await AnalyticsManager.init();
+
+      AnalyticsManager.suspendForSession();
+      AnalyticsManager().track('After Switch');
+      await AnalyticsManager.flushPending(force: true);
+
+      expect(adapter.disables, 1);
+      expect(adapter.events, isEmpty);
+    });
   });
 
   group('crash reporting', () {
@@ -104,14 +147,39 @@ void main() {
     setUpAll(() async => recorder = await installCrashlyticsRecorder());
     setUp(() => recorder.reset());
 
-    test('collection is switched off, persistently, and nothing is set up', () async {
+    test('collection is switched off, stored reports are deleted, and nothing is set up', () async {
       OutboundPolicy.debugThirdPartyServicesAllowed = false;
 
       await CrashlyticsManager.init();
 
-      final enabled = recorder.calls.where((c) => c.method == 'Crashlytics#setCrashlyticsCollectionEnabled');
-      expect(enabled.map((c) => (c.arguments as Map)['enabled']), [false]);
-      expect(recorder.calls.map((c) => c.method), everyElement('Crashlytics#setCrashlyticsCollectionEnabled'));
+      expect(recorder.calls.map((c) => c.method), [
+        'Crashlytics#setCrashlyticsCollectionEnabled',
+        'Crashlytics#deleteUnsentReports',
+      ]);
+      expect((recorder.calls.first.arguments as Map)['enabled'], isFalse);
+    });
+
+    test('identity, logs and reports never reach the SDK, so nothing is stored to upload later', () async {
+      OutboundPolicy.debugThirdPartyServicesAllowed = false;
+      final crashlytics = CrashlyticsManager();
+
+      crashlytics.identifyUser('me@example.test', 'Me', 'uid-1');
+      crashlytics.logInfo('hello');
+      crashlytics.setUserAttribute('k', 'v');
+      await crashlytics.reportCrash(StateError('x'), StackTrace.current, userAttributes: {'url': 'https://x/'});
+      await crashlytics.reportNonFatal(StateError('y'), StackTrace.current);
+
+      expect(recorder.calls, isEmpty);
+    });
+
+    test('stopping the services for a backend change deletes stored reports', () async {
+      AnalyticsManager.resetForTesting();
+      await PlatformManager.stopThirdPartyServices();
+
+      expect(recorder.calls.map((c) => c.method), [
+        'Crashlytics#setCrashlyticsCollectionEnabled',
+        'Crashlytics#deleteUnsentReports',
+      ]);
     });
 
     test("against Omi's backend it is set up as before", () async {
@@ -164,6 +232,8 @@ class _TestEnv implements EnvFields {
 
 class _RecordingAdapter implements AnalyticsAdapter {
   int inits = 0;
+  int disables = 0;
+  final events = <String>[];
 
   @override
   bool get isInitialized => inits > 0;
@@ -172,7 +242,7 @@ class _RecordingAdapter implements AnalyticsAdapter {
   Future<void> init() async => inits++;
 
   @override
-  void track({required String eventName, Map<String, Object>? properties}) {}
+  void track({required String eventName, Map<String, Object>? properties}) => events.add(eventName);
 
   @override
   void alias({required String newUserId}) {}
@@ -190,7 +260,7 @@ class _RecordingAdapter implements AnalyticsAdapter {
   void enable() {}
 
   @override
-  void disable() {}
+  void disable() => disables++;
 
   @override
   void reset() {}

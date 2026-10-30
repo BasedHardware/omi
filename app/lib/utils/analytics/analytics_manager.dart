@@ -517,6 +517,14 @@ class AnalyticsManager {
     });
   }
 
+  /// Stops sending for the rest of the session without recording a consent choice: the backend
+  /// changed to one that is not Omi's (see OutboundPolicy).
+  static void suspendForSession() {
+    _trackingEnabled = false;
+    _queuedEvents.clear();
+    _adapter?.disable();
+  }
+
   void optOutTracking() {
     _consentRevision++;
     _trackingEnabled = false;

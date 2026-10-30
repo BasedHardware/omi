@@ -41,6 +41,15 @@ class IntercomManager {
     );
   }
 
+  /// Ends the Intercom session. Checks only that Intercom exists here, not [OutboundPolicy]: it is
+  /// called right after the policy turned Intercom off.
+  Future<void> logout() async {
+    if (!PlatformService.isIntercomSupported || Env.intercomAppId == null || Env.intercomAppId!.isEmpty) return;
+    try {
+      await intercom.logout();
+    } catch (_) {}
+  }
+
   Future displayChargingArticle(String device) async {
     return PlatformService.executeIfSupportedAsync(_isIntercomEnabled, () async {
       if (device == 'Omi DevKit 2') {
