@@ -1,6 +1,7 @@
 """Hermetic conversation create/process/finalize lifecycle coverage."""
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, Mock
 
 from fakes.firestore import read_action_items, read_conversation, seed_conversation
 from models.structured import ActionItem, Structured
@@ -108,11 +109,11 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
         transcript_segments=[
             TranscriptSegment(
                 id="seg-life-1",
-                text="We should ship deterministic conversation lifecycle coverage.",
+                text="We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow.",
                 speaker="SPEAKER_00",
                 is_user=True,
                 start=0.0,
-                end=2.0,
+                end=8.0,
             )
         ],
     )
@@ -129,7 +130,10 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["id"] == processed.id
     assert body["status"] == "completed"
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
-    assert body["transcript_segments"][0]["text"] == "We should ship deterministic conversation lifecycle coverage."
+    assert (
+        body["transcript_segments"][0]["text"]
+        == "We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow."
+    )
 
     # INV-TASK-2: an omi conversation has no Suggested surface to review a
     # proposal on, so what the extractor admits lands in the task list.
@@ -144,6 +148,62 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     # Universal canonical intake persists the memory for later KG maintenance;
     # conversation finalization no longer performs a direct model extraction.
     assert kg_calls == []
+
+
+def test_short_recording_minimum_survives_api_readback_without_paid_intelligence(client, auth_headers, monkeypatch):
+    import utils.conversations.process_conversation as process_module
+    from models.conversation import CreateConversation
+
+    app_boundary = process_module.trigger_conversation_apps
+    _patch_process_conversation_boundaries(monkeypatch)
+    monkeypatch.setattr(process_module, 'trigger_conversation_apps', app_boundary)
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
+    paid = Mock(side_effect=AssertionError('minimum attempted paid intelligence'))
+    monkeypatch.setattr(process_module, 'get_conversation_notes', paid)
+    monkeypatch.setattr(process_module, 'extract_canonical_l1_memory_candidates', paid)
+    monkeypatch.setattr(process_module, 'get_available_apps', paid)
+    webhook = AsyncMock()
+    monkeypatch.setattr(process_module, 'conversation_created_webhook', webhook)
+    submit = process_module.submit_with_context
+
+    def run_creation_webhook(executor, fn, *args, **kwargs):
+        if fn.__name__ == '_run_webhook':
+            fn(*args, **kwargs)
+        return submit(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(process_module, 'submit_with_context', run_creation_webhook)
+    started = datetime(2026, 10, 31, 12, tzinfo=timezone.utc)
+    capture = CreateConversation(
+        started_at=started,
+        finished_at=started.replace(second=2),
+        source='omi',
+        language='en',
+        transcript_segments=[
+            TranscriptSegment(
+                id='short-source',
+                text='Small recording fragment.',
+                speaker='SPEAKER_00',
+                is_user=True,
+                start=0,
+                end=2,
+            )
+        ],
+    )
+    minimum = process_module.process_conversation('123', 'en', capture)
+    response = client.get(f'/v1/conversations/{minimum.id}', headers=auth_headers)
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert saved['status'] == 'completed' and not saved['discarded']
+    assert saved['structured']['title']
+    assert saved['structured']['title_provenance'] == 'server_minimum'
+    assert saved['structured']['overview'] == '' and saved['structured']['action_items'] == []
+    assert saved['transcript_segments'][0]['text'] == 'Small recording fragment.'
+    assert read_action_items('123') == []
+    memories = client.get('/v3/memories', headers=auth_headers)
+    assert memories.status_code == 200 and memories.json() == []
+    paid.assert_not_called()
+    webhook.assert_awaited_once()
 
 
 def test_transactional_create_exposes_recorded_span_and_preexisting_episode_membership(
