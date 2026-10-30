@@ -402,6 +402,49 @@ class TestConversationsToSqlite(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_transcript_segments_extracted_to_sqlite(self):
+        """Verify transcript_segments with integer and string speakers are extracted into SQLite."""
+        record = {
+            "id": "conv_segments",
+            "structured": {"title": "Segment Test"},
+            "transcript_segments": [
+                {"speaker": 0, "text": "Hello there"},
+                {"speaker": 1, "text": "General Kenobi"},
+                {"speaker_label": "Advisor", "text": "May the Force be with you"},
+            ],
+        }
+        json_file = self.dir_path / "segments.json"
+        json_file.write_text(json.dumps([record]), encoding="utf-8")
+
+        load(str(self.db_path), [str(json_file)])
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            row = conn.execute("SELECT transcript FROM conversations WHERE id = 'conv_segments'").fetchone()
+            self.assertIsNotNone(row)
+            expected = "Speaker 0: Hello there\nSpeaker 1: General Kenobi\nAdvisor: May the Force be with you"
+            self.assertEqual(row[0], expected)
+        finally:
+            conn.close()
+
+    def test_top_level_transcript_string_fallback(self):
+        """Verify plain top-level transcript string is preserved when present."""
+        record = {
+            "id": "conv_plain_transcript",
+            "structured": {"title": "Plain Transcript"},
+            "transcript": "Direct transcript text",
+        }
+        json_file = self.dir_path / "plain_transcript.json"
+        json_file.write_text(json.dumps([record]), encoding="utf-8")
+
+        load(str(self.db_path), [str(json_file)])
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            row = conn.execute("SELECT transcript FROM conversations WHERE id = 'conv_plain_transcript'").fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row[0], "Direct transcript text")
+        finally:
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()
