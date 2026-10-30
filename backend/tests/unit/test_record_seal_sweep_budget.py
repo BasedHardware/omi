@@ -16,6 +16,7 @@ from config import record_seal_sweeper as config
 from tests.unit.test_record_seal_repair import source, PATH, JOB_PATH
 from tests.unit.test_record_seal_sweeper import proof
 from tests.unit.test_record_seal_sweeper_deploy import render
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 from utils.batch_pipeline import record_seal_repair as repair
 from utils.batch_pipeline import record_seal_sweeper as sweeper
 from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
@@ -152,6 +153,32 @@ def test_plain_reads_use_no_transactions_and_bound_each_rpc():
     assert ref.get.call_count == 2
     assert all(c.kwargs == {'timeout': 10.0, 'retry': None} for c in ref.get.call_args_list)
     client.transaction.assert_not_called()
+
+
+def test_runtime_composition_uses_plain_reads_and_only_transacts_the_seal(source, proof, monkeypatch):
+    eligible(source)
+    original = StrictFirestoreDocument.get
+    plain_reads = []
+
+    def read(ref, *args, **kwargs):
+        if 'retry' in kwargs:
+            assert kwargs.pop('retry') is None
+            assert 0 < kwargs.pop('timeout') <= 10
+            plain_reads.append(ref.path)
+        return original(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', read)
+    monkeypatch.setattr(sweeper, 'create_storage_client', lambda: object())
+    monkeypatch.setattr(sweeper, 'artifacts_for', lambda _: source[2])
+    discover = Mock(return_value=['pending'])
+    monkeypatch.setattr(sweeper, 'discover_pending', discover)
+    result = run(source, proof, runtime_reads=True)
+    assert result['outcome'] == 'ok' and result['dispositions'] == {'sealed': 1}
+    assert plain_reads == [JOB_PATH, PATH, JOB_PATH, PATH]
+    assert len(source[1].transactions) == 1
+    assert source[1].transactions[0].updates == [(PATH, {'record_audio_closed': True, 'record_upload_sessions': {}})]
+    assert discover.call_args.kwargs['limit'] == sweeper.DISCOVERY_LIMIT
+    assert isinstance(discover.call_args.kwargs['budget'], SweepBudget)
 
 
 def test_phase_timings_identify_serial_tail_cost(source, proof, monkeypatch):

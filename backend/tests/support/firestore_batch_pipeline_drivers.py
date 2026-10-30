@@ -11,6 +11,10 @@ def entries():
         DriverEntry(
             'utils.batch_pipeline.record_seal_sweeper.discover_pending',
             domains={'namespace': namespaces},
+            neutrals={
+                'budget': (None, 'RPC timeout and retry only; no filter or ordering change'),
+                'limit': (32, 'bounded discovery page size only'),
+            },
         ),
         DriverEntry(
             'database.batch_pipeline_store.ready_for_capacity',
