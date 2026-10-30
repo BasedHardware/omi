@@ -942,6 +942,7 @@ def test_seven_fragment_evening_becomes_one_survivor_with_six_redirects(world):
         assert world.finish(cid, owner=f'job-{index}') is True
 
     survivor = world.get(UID, 'f0')
+    assert survivor['recorded_end'] == T0 + timedelta(minutes=104)
     assert not survivor.get('deleted')
     for cid in ids[1:]:
         assert world.raw(cid)['sync_merged_into'] == 'f0' and world.raw(cid)['deleted'] is True

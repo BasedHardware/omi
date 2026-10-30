@@ -28,6 +28,8 @@ SCHEMA_GROUPS = {
     'episodes': {
         'output': DEFAULT_OUTPUT_DIR / 'episodes_wire.g.dart',
         'schemas': (
+            'EpisodeMember',
+            'EpisodeListResponse',
             'EpisodeMoment',
             'EpisodeProvisionalItem',
             'Episode',

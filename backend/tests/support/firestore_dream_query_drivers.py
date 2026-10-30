@@ -64,6 +64,8 @@ def entries():
             base={'uid': UID},
             neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
         ),
+        DriverEntry('utils.dream_prescan._scan_people', base={'uid': UID}),
+        DriverEntry('utils.dream_prescan._scan_tasks', base={'uid': UID}),
         DriverEntry(
             'database.dream_history.history_page',
             base={'uid': UID},
@@ -179,8 +181,8 @@ registry_extension = SimpleNamespace(
             reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
             # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
-            body_digest='aa527730515a41f875712b46b2b1b7d7e36cc20564c1ad8178180e0b46b4fd14',
-        )
+            body_digest='e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
+        ),
     },
     SKIPS={},
 )

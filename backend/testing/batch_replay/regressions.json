@@ -3,6 +3,25 @@
   "source": "synthetic-incident-shapes-no-production-identities",
   "units": [
     {
+      "unit": "word-clock-eof",
+      "owner": "word-clock-owner",
+      "content": "word-clock-content",
+      "conversation": "word-clock-target",
+      "target": "word-clock-target",
+      "previous": null,
+      "duration": 0.5,
+      "decoded_duration": 0.5,
+      "speech_seconds": 0.5,
+      "spans": [{"start": 0.0, "end": 0.5}],
+      "worker_words": [{"word": "synthetic.", "timestamp": [0.1, 0.54]}],
+      "expected_worker_result": {"persisted": true, "outcome": "success", "word_timestamps": [[0.1, 0.5]]},
+      "references": [{"start_frame": 0, "offset_frame": 0, "frames": 8000, "source_frames": 8000}],
+      "lane": "backfill",
+      "record_origin": true,
+      "target_state": {"exists": true, "discarded": false, "deleted": false, "status": "completed"},
+      "outcome": "success"
+    },
+    {
       "unit": "vad-eof",
       "owner": "vad-owner",
       "content": "vad-content",

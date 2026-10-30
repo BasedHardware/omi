@@ -162,6 +162,44 @@ def geometry_boundaries(units, validate_spans, source_audio, item_type, priority
     }
 
 
+def replay_worker_words(item, words):
+    """Synthetic provider clocks through the selected product's real worker."""
+    import numpy as np
+    from config.batch_pipeline_providers import ProviderConfig
+    from diarizer.batch_pipeline import PipelineWorker
+
+    class Provider:
+        def transcribe_batch(self, samples):
+            return [deepcopy(words) for _ in samples]
+
+    saved = []
+
+    def persist(work, payload):
+        saved.append(payload)
+        return 'synthetic:worker-result'
+
+    worker = PipelineWorker(
+        config=ProviderConfig(context_seconds=0),
+        language_of=lambda _: 'en',
+        decode=lambda _: np.ones(round(item.duration_seconds * 16000), dtype=np.float32),
+        vad=lambda samples: [(0.0, len(samples) / 16000)],
+        words_providers={'parakeet': Provider()},
+        diarizers={'pyannote': lambda _: {'turns': []}},
+        persist=persist,
+    )
+    with patch.dict(
+        os.environ,
+        {
+            'STT_CAP_OFFLINE_ENFORCEMENT': 'false',
+            'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false',
+            'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': 'false',
+            'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': 'false',
+        },
+    ):
+        results = worker.process_batch([item])
+    return results, saved
+
+
 def replay(corpus, backend):
     # This adapter is fixed across REF and BASE; only product code changes.
     sys.path.insert(0, str(backend))
@@ -195,7 +233,14 @@ def _replay(corpus):
     from testing.pipeline_sim.clock import VirtualClock
     from testing.pipeline_sim.projection_drain import ChainLog, Lanes
     from utils.batch_pipeline import projection, projection_followup, source_audio
-    from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem, projection_speech_spans
+    from utils.batch_pipeline.contracts import (
+        Priority,
+        ProjectionBinding,
+        WorkItem,
+        WorkResult,
+        ValidationFailureWork,
+        projection_speech_spans,
+    )
     from utils.batch_pipeline.scheduler import owner_key
     from utils.sync import bridge
     from utils.sync.assignment import assign_in_transaction
@@ -317,6 +362,7 @@ def _replay(corpus):
     if not units:
         coverage['invalid_empty_corpus'] = 1
     payloads = {}
+    worker_results = {}
     untestable = set()
     for ordinal, unit in enumerate(units):
         sid, owner = unit['unit'], unit['owner']
@@ -377,6 +423,42 @@ def _replay(corpus):
             untestable.add(sid)
         if sid in untestable:
             continue
+        if 'worker_words' in unit:
+            if not corpus.get('source', '').startswith('synthetic-'):
+                raise ValueError('worker hypotheses require an explicitly synthetic corpus')
+            expected = unit.get('expected_worker_result')
+            if not isinstance(expected, dict):
+                raise ValueError('synthetic worker hypotheses require an expected result')
+            results, saved = replay_worker_words(item, unit['worker_words'])
+            coverage['worker_exercised'] += 1
+            if len(results) == 1 and isinstance(results[0], WorkResult) and len(saved) == 1:
+                worker_results[sid] = {
+                    'outcome': results[0].outcome,
+                    'persisted': True,
+                    'word_timestamps': [word['timestamp'] for word in saved[0]['words']],
+                }
+                if worker_results[sid] != expected:
+                    key = 'worker_oracle:WorkerResultMismatch:expected_outcome_and_clocks'
+                    exceptions[key] += 1
+                    issues[sid].add(key)
+                    unit_counts[sid][key] += 1
+                    untestable.add(sid)
+                    continue
+                # The worker result, not the fixture's projection outcome,
+                # determines the branch exercised after worker persistence.
+                outcome = results[0].outcome
+                log.results[sid]['result']['outcome'] = outcome
+            else:
+                failure = results[0] if len(results) == 1 else None
+                stage = failure.stage if isinstance(failure, ValidationFailureWork) else 'worker'
+                reason = failure.reason if isinstance(failure, ValidationFailureWork) else 'missing_result'
+                key = f'{stage}:ValidationFailureWork:{reason}'
+                exceptions[key] += 1
+                issues[sid].add(key)
+                unit_counts[sid][key] += 1
+                worker_results[sid] = {'persisted': False, 'stage': stage, 'reason': reason}
+                untestable.add(sid)
+                continue
         spans = unit.get('spans')
         if spans is None and outcome != 'silence':
             coverage['missing_vad_spans'] += 1
@@ -406,6 +488,8 @@ def _replay(corpus):
             'words': [{'word': 'synthetic.', 'timestamp': [s['start'], s['end']]} for s in synthetic_spans],
             'diarization': {'turns': [{**s, 'speaker': 'a'} for s in synthetic_spans]},
         }
+        if 'worker_words' in unit:
+            payloads[sid] = saved[0]
         if outcome == 'silence':
             payloads[sid].update(speech_seconds=0.0, speech_spans=[], words=[], diarization={'turns': []})
         if unit.get('spans') is not None and outcome == 'success':
@@ -578,6 +662,7 @@ def _replay(corpus):
         'unit_exception_counts': {unit: dict(sorted(counts.items())) for unit, counts in sorted(unit_counts.items())},
         'chain_blocks': blocks,
         'persisted': len(log.persist_order),
+        'worker_results': worker_results,
         'coverage': dict(sorted(coverage.items())),
         'boundaries': boundaries,
     }

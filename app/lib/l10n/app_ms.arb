@@ -4514,5 +4514,6 @@
     "yearlySwitchPreviewFailed": "Tidak dapat memuatkan harga anda.",
     "yearlySwitchUnavailable": "Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.",
     "yearlySwitchDoneTitle": "Anda kini membayar tahunan",
-    "yearlySwitchDoneBody": "{amount} dicaj hari ini. Diperbaharui pada {date}."
+    "yearlySwitchDoneBody": "{amount} dicaj hari ini. Diperbaharui pada {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} bahagian} one{{count} bahagian} two{{count} bahagian} few{{count} bahagian} many{{count} bahagian} other{{count} bahagian}}"
 }

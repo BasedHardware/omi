@@ -13,6 +13,9 @@ COPY backend/config/ ./config/
 COPY backend/database/ ./database/
 COPY backend/diarizer/ ./diarizer/
 COPY backend/utils/ ./utils/
+COPY backend/models/ ./models/
+COPY backend/omi_logging.py ./omi_logging.py
+COPY backend/scripts/record_seal_sweep.py ./scripts/record_seal_sweep.py
 ENV PYTHONUNBUFFERED=1 HF_HOME=/cache/huggingface NEMO_CACHE_DIR=/cache/nemo \
     NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     BATCH_PIPELINE_WORKER_ENABLED=false BATCH_PIPELINE_ENABLED=false

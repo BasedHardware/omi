@@ -14,6 +14,7 @@ from uuid import UUID
 
 import httpx
 from config.batch_language_recovery import allowed
+from config.batch_pipeline import second_multilingual_enabled
 from config.prerecorded_stt import SONIOX_HELD_RECOVERY_MODEL, require_provider_environment
 from utils.http_client import get_stt_client, get_stt_semaphore
 
@@ -54,8 +55,18 @@ def transcription_body(file_id, language):
     return body
 
 
-def authorization(duration):
-    if not allowed(duration) or not provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY):
+def authorization(duration, *, second_chance=False):
+    # The ordinary second chance is bounded by the admitted unit (max two
+    # hours), independently of the guarded path's opt-in one-minute budget.
+    admitted = (
+        type(duration) in (int, float)
+        and math.isfinite(duration)
+        and 0 < duration <= 7200
+        and second_multilingual_enabled()
+        if second_chance
+        else allowed(duration)
+    )
+    if not admitted or not provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY):
         raise SonioxBatchError()
     require_provider_environment('soniox')
     return {'Authorization': 'Bearer ' + os.environ['SONIOX_API_KEY']}
@@ -101,8 +112,17 @@ def transcript_words(payload, duration):
     return words, language
 
 
-def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, clock=time.monotonic, sleep=time.sleep):
-    headers = authorization(duration)
+def transcribe(
+    audio,
+    duration,
+    *,
+    language=None,
+    second_chance=False,
+    client_factory=httpx.Client,
+    clock=time.monotonic,
+    sleep=time.sleep,
+):
+    headers = authorization(duration, second_chance=second_chance)
     file_id, transcription_id = None, None
     deadline = clock() + DEADLINE_SECONDS
     # HTTP transport defaults to zero retries. Each paid POST occurs once.
@@ -155,10 +175,18 @@ def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, c
 
 
 async def transcribe_async(
-    audio, duration, *, language=None, client=None, semaphore=None, clock=time.monotonic, sleep=asyncio.sleep
+    audio,
+    duration,
+    *,
+    language=None,
+    second_chance=False,
+    client=None,
+    semaphore=None,
+    clock=time.monotonic,
+    sleep=asyncio.sleep,
 ):
     """Serving path: individual requests borrow a shared async HTTP permit only."""
-    headers = authorization(duration)
+    headers = authorization(duration, second_chance=second_chance)
     client = get_stt_client() if client is None else client
     semaphore = get_stt_semaphore() if semaphore is None else semaphore
     deadline, file_id, transcription_id = clock() + DEADLINE_SECONDS, None, None

@@ -24,6 +24,22 @@ recovery role's private OIDC `shadow-project` endpoint. It runs the production
 partitioner and assignment transaction body through bounded read-only
 references and discarded write plans. It never publishes, enriches, meters or
 changes a conversation; normal projection continues to reject shadow jobs.
+Paid shadow recovery also sends its ephemeral recovered payload through that
+same planner on the CPU role, using the original intake reservation once.
+Only a successful plan certifies recovered speech; planner refusal or failure
+settles a shadow error and never falls back to publication. Verified zero-speech
+recovery certifies an empty plan without running assignment. Recovery results
+remain absent from transcript storage, usage and customer records.
+Guarded shadow recognizers receive the same input-bound worker VAD evidence as
+serving recovery. Provider words can position that measured speech when CPU
+VAD misses it; words alone and unbound scalar estimates never prove speech.
+Shadow intake preserves serving's conversation/user language inheritance and
+freezes the resolver's authenticated proof. Every self-hosted or vendor LID
+probe rechecks current privacy generation, consent and funded dispatch; denial
+drops the shadow candidate before staging. The collector keeps combined T2 loss
+over GPU and paid recovery, but reports them separately. Normal GPU evidence
+requires positive worker VAD and an explicit empty paid-provider list; paid or
+legacy unlabelled recovery cannot fill the normal GPU success floor.
 This observes assignment planning rather than owner-chain scheduling or a
 durable transaction. See [shadow isolation and the proposed 25% window](batch-pipeline-shadow.md)
 for runtime bounds, cost assumptions, rollback and the lead-owned activation.
@@ -1097,7 +1113,11 @@ state plus only that moment's text. It never blocks the fan-out, writes no
 conversation, task or memory, and is restarted from durable state by finalization
 (`finalize_persisted_conversation` calls `utils/episodes/service.on_conversation_finalized`
 after `complete_finalization_fanout`, bounded and fail-open). See
-`backend/utils/episodes/ARCHITECTURE.md`.
+`backend/utils/episodes/ARCHITECTURE.md`. Occasion-member relevance also claims
+recorded-time metadata membership in that same flow, before finalizer fanout,
+including desktop client finalize. Final discard receipts override the sync
+intake keep/review hint for episode attachment, activity and visibility; a
+late discard recomputes episode bounds from retained recorded spans.
 
 Provider speaker labels are connection-local. Before a live segment enters a
 conversation, listen stamps the actual `stt_provider` and an opaque
@@ -6335,10 +6355,172 @@ provider wire.
 
 Finalization registers a `record_pending` job before completing its durable job.
 The pusher flushes the final buffered audio on finalize, conversation switch or
-disconnect, then writes a blind `record_audio_closed` receipt only after every
-queued upload succeeds. Queue/buffer drops and exhausted uploads never certify
-completeness. CPU reconciliation waits for both that receipt and the completed,
-retained conversation. This is a durability barrier, not an upload-grace timer.
+disconnect, then conditionally writes `record_audio_closed` only after every
+queued upload succeeds. The transaction resolves `record_lane_owner` from the
+conversation itself (`batch_live_v1` or `batch_sync_v1`); a reconnect carrying only
+finalize can close an existing batch owner even with live admission disabled.
+Legacy and unowned conversations never receive a seal.
+
+Before accepting an unowned or batch-owned conversation's first audio frame, each session
+registers a `record_upload_sessions` token transactionally and invalidates any old
+seal. Its value identifies the pusher pod (HOSTNAME) and process start time. A
+monotone `record_upload_revision` changes on every new producer; CPU admission
+rechecks that revision and the closed barrier in its final enqueue transaction,
+so a producer that starts and seals again during staging still invalidates the
+earlier source snapshot. Registering unowned captures covers ownership claimed by
+a finalizer while an earlier upload is outstanding. Immutable legacy owners add
+no normal-path record metadata writes. At the planning input of 3-4k sessions/h,
+unowned/native registration and clear add about 6-8k metadata writes/h; this is
+an estimate, not a measured Firestore or Typesense-extension cost. The lead will
+measure both Firestore write rate and Typesense extension invocation rate after
+deployment (ruling 9bc674).
+The successful drain removes only that token before attempting closure. The seal
+transaction refuses while any producer remains pending, including an older socket
+still uploading or retrying. Tokens have no TTL: process death cannot prove audio
+completeness. Terminal upload/projection failures and queue/buffer drops await a
+sticky `record_upload_failed=true` write, which also invalidates an earlier seal.
+A clean reconnect cannot clear that marker. CPU admission independently refuses
+both failure markers and pending producers. Metadata exceptions never terminate
+the audio upload queue: begin failures refuse sealing locally and attempt a
+persistent failure marker; finish/seal failures leave unsealed debt. Failed
+token clears retain local retry state. Close requests remain queued through three
+metadata attempts even without another finalize; exhaustion leaves durable repair
+debt. Metadata degradation uses the canonical `record_fallback` contract. The closed-stage
+`omi_pusher_record_barrier_failures_total{stage}` counter distinguishes begin,
+finish, seal, failure_marker and capacity errors from audio custody failures. If
+both begin registration and its failure-marker write fail, durable failure
+knowledge is unavailable across reconnects; the lead must classify this signal
+before claiming the cross-session guarantee. Audio custody remains the priority.
+Refused seals emit `omi_pusher_record_seal_refused_total{reason}` and
+`event=record_seal_refused reason=...`, with the closed reasons
+`producer_pending`, `upload_failed`, `not_batch_owner`, and `deleted` (including
+a missing row). These are refusals, separate from metadata exceptions.
+The generic batch-owned finalizer also reports a false registration return via
+`omi_record_register_refused_total` and `event=register_refused owner=batch_live_v1`;
+this observation does not change finalization or silent-backfill policy.
+
+On durable-audio disconnect, a successful final tail commit requests inline
+closure after the existing projection worker has drained that conversation.
+Projection wait and metadata finish share a 20-second bound. Timeout or a
+retryable metadata failure leaves the background close request queued; a failed
+shutdown tail holds closure locally and keeps the producer token. The immutable
+commit can succeed before its ACK/queue delivery fails, so this path does not
+assert permanent custody loss through a sticky upload-failure marker.
+`RECORD_BARRIER_INLINE_FINISH=false` restores background-only closure. It defaults
+on, adds no per-frame Firestore reads, and preserves custody → projection →
+metadata ordering. The legacy non-durable uploader keeps background-only closure.
+Pusher's uvicorn graceful timeout is 90 seconds: SIGTERM after the 15-second
+preStop sleep permits shutdown through T+105, covering the LB's 60-second drain
+and the 30-second background drain inside the pod's 120-second grace.
+Firestore `InvalidArgument` projection rejections drop that projection batch
+without setting `record_upload_failed`: immutable audio and manifests remain
+in custody. They emit the bounded `projection/invalid_argument` failure metric,
+degraded fallback and a content-free rejection log. Projection class logs also
+include the SDK's closed gRPC status code (never the exception message or
+arbitrary server metadata). Existing conflict and transient failure policy stays
+unchanged; payload rejection root cause remains a separate investigation.
+These metadata transactions do not
+touch transcript or lifecycle fields. Steady-state frames reuse the session token;
+the extra producer transaction runs only on its first accepted audio per drain.
+CPU reconciliation waits for a successful receipt and the completed, retained
+conversation. This is a durability barrier, not an upload-grace timer.
+
+Pusher dispatches begin, clear, seal and failure-marker transactions through
+`record_barrier_executor`, separate from the shared DB pool used by integrations
+and webhook consumers. It defaults to 16 workers
+(`PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS`) and 64 queued calls; saturated callers
+wait asynchronously for capacity. Shared DB capacity defaults to 32 workers
+(`PUSHER_DB_EXECUTOR_WORKERS`). Both pools publish the existing
+`omi_executor_task_active{executor,task}` and queued gauges, plus
+`omi_executor_max_workers{executor}`. The pusher DB saturation alert sums task
+kinds per scrape target and fires at configured capacity for 10 minutes.
+Transaction arguments, await ordering, close retries and durable custody fences
+are unchanged. Tuning details: [pusher runbook](runbooks/pusher-degraded.md).
+
+The ship-on `record-seal-sweeper` CronJob in the batch worker chart reuses the
+existing worker image and identity, with only namespaced `pods: list` RBAC.
+Every five minutes it discovers at most 128 existing pending jobs and reuses the
+exact-state retained-tail repair for at most 64 token-bearing rows. Live/unknown
+producers, bare tokens, upload failures and stale/unavailable inventory never
+authorize a seal. It emits one content-free structured summary; sampled backlog,
+age, bare-token and missing-cycle alerts are defined in
+`backend/deploy/record-seal-sweeper/`. The lead first observes a production
+`mode=plan` cycle (no writes), then ships `mode=apply`; dev stays disabled because
+the proof is production-namespace scoped. Set `recordSealSweeper.enabled=false`
+or `RECORD_SEAL_SWEEPER_ENABLED=false` to stop future runs. It never creates jobs
+for legacy rows. See that directory's runbook for image, alert and first-cycle
+acceptance requirements.
+
+One-time stuck-job repair: `backend/scripts/repair_record_audio_seals.py
+--ids-file PRIVATE_JSON` takes 1..128 exact pending job IDs, with no discovery scan.
+Default dry-run accepts `ro-prod` or `prod-operator`; use `prod-operator` when
+retained-audio object reads require it. Output is only counts, closed dispositions
+and `plan_sha256`. Apply requires a separately authorized operator using
+`prod-operator` with `--apply --approve-plan-sha256 DIGEST`; `ro-prod` cannot apply.
+The tool refuses Firestore emulator use for either operation.
+The fresh plan must match the approved
+digest, including source generation/digest proofs and conversation/job state.
+The tool requires `record_pending`, a completed batch-owned retained conversation,
+no failed upload marker, no live/unknown producer, and generation-pinned retained
+units whose last
+durable end covers both current and frozen `finished_at` (the same 100 ms tolerance
+as record admission). Missing finishes, privacy refusals, conflicting overlaps,
+read errors and missing tails stay pending. The final write transaction rechecks
+job/record state and privacy generation before patching the seal and any proven-dead
+producer map. It never
+clears a failed-upload marker, edits jobs or invokes processing. An abandoned
+producer can be cleared only with `--pusher-pods-file PRIVATE_JSON` and
+`--pusher-pods-captured-at RFC3339`: capture a current Kubernetes v1 PodList, filtering
+before persistence so the file contains no env/spec payload:
+
+```bash
+umask 077
+kubectl get --raw '/api/v1/namespaces/prod-omi-backend/pods?labelSelector=app.kubernetes.io%2Fname%3Dpusher' | \
+  jq '{apiVersion,kind,metadata:{resourceVersion:.metadata.resourceVersion},items:[.items[]|{metadata:{name:.metadata.name,namespace:.metadata.namespace,labels:{"app.kubernetes.io/name":.metadata.labels["app.kubernetes.io/name"]}},status:{containerStatuses:[.status.containerStatuses[]?|{state:{running:{startedAt:.state.running.startedAt}}}]}}]}' > PRIVATE_PODS_JSON
+```
+
+The List must carry resourceVersion; its file digest, capture time and normalized
+pod inventory join the approval digest. The inventory is limited to five minutes
+at plan/apply. Each token's pod must be absent, or every running container must
+have started more than two seconds after its recorded process epoch. The same
+margin must elapse before an absence inventory can prove death, accounting for
+Linux boot-time/tick precision. Missing/unknown state is refused.
+Only bare pre-identity tokens accept `--producers-stopped`, an explicit operator
+attestation bound to their exact token map and approval digest. No TTL expires a
+producer. The write transaction rechecks the exact map, privacy and capture state,
+then atomically clears only proven-dead tokens and writes the seal.
+The parser accepts Kubernetes [PodList](https://kubernetes.io/docs/reference/kubernetes-api/core/pod-v1/#podlist)
+and kubectl's generic List form; missing list metadata is refused.
+Keep the exact-ID file private (0600); do not publish it or exception text.
+
+Required release procedure (lead rulings 34e19f and 5dbd80): deploy the Cloud Run
+CPU reconciliation/admission consumer first with
+`BATCH_PIPELINE_RECORD_PROTOCOL_READY=false` (also the code default), and verify
+the new release identity serving. Native record admission then defers before
+archive staging and again before the final enqueue transaction; `record_pending`
+obligations remain retained without expiry. Roll pusher in the listen/pusher train,
+prove rollout completion and every pusher pod on the new image digest with zero
+old pods, then the two-lane lead opens the control (`true`) for all native record
+admissions. Target open: **2026-10-30T06:00:00Z**; `review_by` **2026-11-01**.
+The lead retires the control in a follow-up PR within 48 hours of opening.
+Rollback of admission is to close the control again. Missing cutover proof blocks
+opening and must be reported, rather than leaving an unexpanded flag silently.
+
+Keep the batch percentage at 0 during this cutover and let the lead re-enter 5%
+after its proof, but do not use percentage as proof of quiescence: the private
+batch cohort remains eligible at 0, and desktop server-batch capture can reserve
+new batch owners independently of that cohort. Already admitted work also drains.
+The retained-archive tail check does refuse an old-pod tail that has not landed
+when the last durable end is earlier than frozen or current `finished_at` beyond
+100 ms. It cannot prove that all older producer audio is present (including gaps
+or audio beyond that finish), and does not replace the cutover hold.
+
+Both releases are required to claim the cross-session/staging guarantee; reversing
+the consumer-first order is unsafe. Code rollback: revert; behavior returns to
+today's stuck-but-retained path. Producer identity and marker fields remain stored
+after rollback; older binaries do not enforce the new metadata refusal contract.
+The lead owns rollout/rollback, opening and retirement of the cutover control, and
+qualification of unresolved metadata-outage or abandoned-producer debt.
 
 The coordinator lists the already retained audio, verifies overlaps, and freezes
 one-hour capture units as encrypted **reference manifests**, not copies of the
@@ -6396,11 +6578,11 @@ The future sequence remains David, then 5%, then 100% jointly with sync, using t
 existing correctness gates and capacity model; this is not permission to start it.
 
 Future activation requires CPU/listen/pusher/integration to agree on the new flag.
-While enabled, pusher may seal any successfully uploaded retained recording,
-including a capture not yet stamped by the in-flight finalizer. When dark, it seals
-only owners observed through its existing audio-metadata update snapshot. An
-unowned close adds no lookup, close write or early buffer flush. Failed/dropped
-uploads never certify closure. Integration pending-record scans run only while
+Pusher resolves persisted batch ownership at every retained close, independently
+of this producer flag. A finalize-only reconnect performs one transactional owner
+read, with a seal write only for a batch owner without failed or pending uploads.
+Unowned/legacy closes may flush their pending buffer, but never gain a seal.
+Failed/dropped uploads never certify closure. Integration pending-record scans run only while
 the new flag is on; there is no per-tick query to discover whether owners exist.
 Already admitted ready GPU work continues through the existing serving path.
 
@@ -6408,8 +6590,8 @@ For rollback with pending registrations or first-WAL proofs to drain, close new
 admission with the existing batch master/percentage controls and private
 `batch-pipeline` cohort membership
 while retaining the live flag and serving/recovery paths. Set the new flag false
-after those obligations resolve. Flag-off drains already-loaded owners and existing
-content aliases, but does not discover unknown owners. Do not roll back to an image
+after those obligations resolve. Flag-off drains persisted owners and existing
+content aliases; pusher close discovers persisted owners across sessions. Do not roll back to an image
 lacking the persisted-owner/reference-manifest protocol. Unsetting producer flags
 never removes persisted label authority.
 
@@ -6419,7 +6601,7 @@ Existing provenance/privacy and audio-metadata reads are reused.
 | Path | Flag off, unowned: added reads / writes | Enabled or already-owned path |
 | --- | --- | --- |
 | Named sync ownership routing | 0 / 0 | Discovery: one conversation read, plus one session lookup if needed. Loaded owners skip discovery. New owner: one conditional field write. |
-| Pusher close | 0 / 0 | One blind close write per successful owned or explicitly enabled retained close; existing metadata read supplies owner hints. |
+| Pusher close | One transactional read; no seal write for unowned/legacy | One transactional owner/failure/pending check, with an idempotent seal write only when eligible. Native producers also register and clear one token per session/drain. Legacy/unowned normal paths write no tokens. |
 | Legacy final pass | 0 / 0 | One conditional owner write if unowned; each lost CAS adds one refresh read before a bounded retry. |
 | Integration pending scan | 0 / 0 | At 20-second ticks, nominally 4,320 queries/day/process plus returned documents; empty queries bill at least one read. |
 | Record admission | Existing sync protocol only | Patch only `record_lane_owner` once if missing; matching owners add no conversation write. Never set the conversation body. |
@@ -7083,6 +7265,15 @@ resume ordinary processing. Serving and enrichment code must be deployed before
 paid silent apply; CLI-only rollout cannot guarantee silence. See
 [the scoped redrive runbook](runbooks/scoped-batch-redrive.md) for digest approval,
 canary/remainder prefix semantics and stop conditions.
+
+An explicit `--ordinary-empty-independent` operator plan may buy one Soniox
+epoch-3 call for an exact ordinary worker-empty unit with settled empty Modulate
+epochs 1 and 2 and valid input-bound worker speech. It preserves both spent
+intents and requires silent mode, fresh census/plan approval, and all existing
+privacy, funding, policy and lease fences. Each owner-scoped plan is capped at
+two units and 47.6 recorded audio seconds; cross-owner execution still requires
+the lead's combined budget approval. Empty replies remain held. This does not
+change automatic recovery or grant a runtime provider fallback.
 
 ### Stale reconnect recovery
 
@@ -7991,6 +8182,20 @@ ownership within the episode gap/cap rules, or a kept conversation is adjacent.
 A clip's self-created singleton never proves relevance. Episode API projections
 hide episodes whose members are all discarded, deleted or absorbed, including
 when a relevance decision arrives after the episode poll cache was populated.
+This visibility rule also applies with occasion relevance disabled. Episode
+activity tracks retained members separately; a later discard removes its clock
+contribution, and known discarded rows never open or refresh an episode.
+
+A confirmed capture-group join schedules episode membership for every member
+(`capture_group` trigger), including desktop captures. The finalizer's completed
+replay repeats the episode hook; metadata attachment precedes short-tail and
+model checks. Membership links are claimed transactionally and cannot move a
+still-bound conversation to another episode. A four-hour cap closes the recorded
+window without duplicating the continuing conversation; the next conversation
+starts the successor. Moment count is a bounded presentation budget, not a close
+clock. Recovery retains the original owner's full evidence and clamps activity
+to recorded time even when a fragment's `finished_at` is an upload timestamp.
+
 
 ### Occasion step 2 merge-path audit
 
@@ -8025,3 +8230,9 @@ conversations or confirmed full-note runs. Sum increases across serving jobs;
 Cloud Run coverage can differ from GKE scrapes. `omi_sync_intake_total{outcome="merged"}`
 counts appends/absorbs, not already-processed donors. Missing series are unknown,
 never zero. No account ids or transcript data are exported by these counters.
+
+Episode group completion recovers the canonical capture once and links the other
+capture surfaces as hidden duplicate members without repeating episode notes.
+An explicit episode close derives its recorded end from retained member spans,
+bounded by the next episode, rather than using delayed finalize arrival. A late
+discard removes its derived moments/items and invalidates the mixed summary.

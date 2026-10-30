@@ -38,13 +38,13 @@ one capture window's evidence.
      retains the buffer for one `MOMENT_PAUSE_SECONDS` reconnect window, then
      flushes the tail if no reconnect arrives. Finalization and Wrap Up flush it
      sooner when they run.
-   - The first episode moment is checked against the episode's original start
-     across every member conversation. At `MAX_EPISODE_SECONDS`, the old episode
-     closes and continued speech starts a new one at the cap boundary. Provisional
-     items for a continuing member transfer to the successor for finalization
-     reconciliation. While an episode is live, the Home row timer uses its
-     `started_at`; during rotation it holds the prior anchor until the successor
-     row is visible.
+   - The hard cap is four hours from the episode's recorded `started_at`.
+     Moment count only bounds the stored presentation list; it cannot close an
+     occasion. A continuing conversation stays with its original episode after
+     the cap or an explicit close. Only a different conversation opens the next
+     episode. Finalization retains the original member's evidence and reconciles
+     its provisional items on that owner.
+
 2. When a moment ends, `service.record_moment` runs on `postprocess_executor` as
    a tracked background task:
    - **Boundary** (`policy.boundary`): the hard cap (`MAX_EPISODE_SECONDS`), a gap at
@@ -100,15 +100,14 @@ one capture window's evidence.
    only recorded activity; old audio cannot replace current activity with
    ingestion time. With no covering episode, sync creates a **closed** episode
    at its recorded start/end and leaves both `current` and `last_closed`
-   navigation pointers alone. Retry membership is stable inside its recorded window and notes still
-   use the existing transactional content receipts. A later append extends
-   the same member's recorded window before notes recovery. A conversation that
-   crosses a four-hour or existing explicit boundary remains one storage row
-   referenced by successive closed windows, just like a live cap rotation.
-   Its membership link records all windows and names the latest one. Recovery
-   assigns each placed segment to its start window once, clamps moment clocks
-   at the cap, and retains unplaced evidence in the first window. Receipts
-   remain global to the conversation, so retries cannot duplicate the text.
+   navigation pointers alone. Membership is singular and checked in the same
+   transaction as each link write, including live commits, updates and reopens.
+   A capture crossing the cap stays in its starting episode, whose visible
+   recorded window stops at four hours or the following episode. All retained
+   speech (including the tail beyond the cap) is recovered once into that owner;
+   recovery cannot substitute an upload-time `finished_at` for recorded activity.
+   The timeline fence and metadata-window guard reject overlapping recorded
+   windows before any writes.
    A later **fresh live** capture may resume a silence-closed owner under the
    timeline/current-pointer fence; late intake never calls that transition.
    Explicit closes and the four-hour boundary stay closed. Finalization
@@ -291,3 +290,138 @@ builds, the desktop app and web never call any `/v1/episodes` route.
 
 The shared `utils.metrics` exporter imports these collectors, so the backend,
 listen and pusher `/metrics` routes expose the same bounded-label families.
+
+## Live integrity and grouped completion
+
+A confirmed capture-group join schedules one canonical recovery, including
+`desktop` groups, with the admitted `capture_group` trigger. Other members join
+as hidden duplicates and contribute no additional moments or model work. Metadata attachment runs
+before short-tail/model checks, and completed finalizer replays repeat the hook.
+Grouping and primary-note refresh never substitute for episode membership.
+
+Known discarded/deleted/absorbed captures cannot open an episode or update its
+activity. Per-member recorded clocks let a later discard remove only that
+member's contribution without a stale notes CAS restoring it. A retained hidden
+membership does not extend the quiet window. API visibility suppresses episodes
+with no retained members independently of the occasion-relevance kill switch.
+
+## Recorded span and time index (Phase A)
+
+Conversation storage writes `recorded_start`, `recorded_end`, `arrival_at` and
+`clock` for all channels, before compressing/encrypting transcript. The flat
+API fields come from `models.recorded_span.RecordedSpan`. `conversation_span`
+is the sole legacy derivation: placed transcript/frame offsets, then a sync
+recording receipt or named speech end, then an imported extent. A live empty
+stub is a point; its processing end never proves audio. Legacy derivation is
+read-only and tagged `legacy`; an old row's creation/admission timestamp is only
+an arrival estimate. There is no backfill. Live segment and sync CAS writes
+refresh the span with the accepted transcript, preserving first arrival.
+
+`utils.episodes.service.episode_at(uid, T)` answers recorded ownership without
+opening or closing anything. `episodes_between(uid, start, end)` returns ordered
+overlapping windows, paging on the built-in `started_at` index. Windows are
+half open; quiet ownership ends at last recorded activity plus 30 minutes,
+clipped to the four-hour cap. Explicit boundaries stay closed. Candidate
+queries used for placement still allow a late prefix to join the same occasion.
+New historical episodes retain their recorded member intervals. A late bridge
+or earlier prefix recomputes that component in recorded order in one fenced
+transaction, including its four-hour cuts. This makes cap placement independent
+of arrival order. Old episode IDs redirect to the resulting window. Existing
+live/user/calendar boundaries stay authoritative; no historical scan/backfill
+is performed outside intake. Member/window/query budgets fail closed.
+
+Each membership CAS writes `conversation.episode_id` alongside its overlay
+link. A conversation crossing the cap stays with its starting episode; only
+a different conversation starts the next window. An attach-before-create
+link is adopted by the conversation create transaction without fabricating a
+conversation. Episode writes retain `EPISODES_CLIENT_CHANNELS` admission; span
+writes are global. No new composite index or reconciliation is required.
+
+Boundary arithmetic cannot read ambient wall time. Pollers supply `arrival_at`
+to evaluate recorded quiet deadlines; recorded coordinates determine edges and
+activity. Moment buffering receives both recorded time and arrival explicitly;
+only cache eviction uses arrival. Live conversation cap checks and reconnect/
+calendar-continuation admission consume the same span; continuation timers
+receive explicit `arrival_at`. Missing recorded origins are never reconstructed
+from a creation/arrival timestamp. End-only legacy metadata keeps its declared
+legacy fallback until a normal writer supplies recording evidence. Missing live cap-hold capture coordinates
+fail closed before acknowledging audio custody.
+
+`LIFECYCLE_V2_MODE` remains: the flag registry still says pending/default-shadow
+with zero default serve percent, and it also gates recovery/executor behavior.
+Typed-span readers do not depend on this unfinished rollout. No runtime flag or
+production state is read or modified by this change.
+
+Read-only Phase B sizing: `omi_conversation_llm_calls_total{feature,outcome}`
+counts observed LangChain completions/errors and direct Jev dispatch attempts
+in processing, live-moment and smart-merge conversation scopes regardless
+of the revision-reuse flag. Content-free `repeat_work` log joins identify each
+conversation using an account-scoped hash. `omi_episode_survivor_refreshes_total`
+counts actual refresh processing attempts by assigned/unassigned membership;
+`episode_survivor_refresh` logs hash conversation and episode IDs for per-episode
+counts. Retries count as attempts. These measurements do not change LLM work,
+read production data, or add persistent measurement writes. Labels have fixed
+vocabularies; no user/conversation/episode ID appears in a metric label.
+
+Recorded-component membership reads use batches of at most 50 inside the same
+transaction, before any writes, so a busy component can retain all reverse
+links. Relevance and duplicate-capture discovery widen legacy `finished_at`
+prefilters by the shared clock-skew tolerance; recorded spans still decide
+adjacency and overlap, including delayed ingestion.
+
+Explicit closes store `recorded_end` from retained members' typed recorded spans,
+clipped to the hard cap and the next recorded episode. `closed_at` remains the
+close event time; it is never a new recorded ownership edge. The time index and
+all overlap guards use `recorded_end` for explicit closes. The existing hard-cap
+kill switch also disables the live activity clamp and automatic cap close.
+A late discard removes that member's moments and items, clears the mixed summary,
+and marks it for regeneration before later valid speech can reuse it.
+
+### Occasion membership and late discard repair
+
+`occasion_retention` returns `occasion_member` only after a metadata-only,
+recorded-timeline transaction claims that exact episode and writes both
+`episode_links/{conversation_id}` and the conversation's `episode_id`. This
+runs inside relevance, before desktop `client_finalize` fanout can delay or
+skip its post-finalization hook. A changed owner or failed claim retains the
+clip as `occasion_lookup_unavailable`; it never reports uncommitted membership.
+The write requires episode cohort admission, the capable-client marker and the
+recorded-time switch. Without admission, read-only proof still keeps content as
+`occasion_context`, without claiming membership. The normal desktop and pendant
+finalize hooks remain idempotent safety nets. A changed past-cap owner is rejected
+before the immutable-owner shortcut can report success.
+Claims into automatic historical episodes also update `recorded_members` in the
+same transaction, so later canonical repartition retains the claimed capture.
+
+`sync_relevance` is intake's `keep`/`review` hint, not the final keep/discard
+verdict. It can remain `keep` when a later model assessment discards content.
+Episode attachment, recorded activity, finalization and API visibility use the
+shared final-discard predicate (`fragment_visibility.is_relevance_discarded`),
+including restore authority, instead of interpreting that hint as visibility.
+A discard CAS re-reads retained members' recorded spans and recomputes the
+start and end for live and closed episodes, applying the cap from the retained
+start. Recompute only when the discarded set changes or membership changes in an
+episode with discarded members; notes-only updates reuse the repaired bounds.
+Discard repair retries with a fresh episode after
+a notes CAS wins the race. Legacy compressed/encrypted transcript evidence is
+decoded before deriving spans; processing `finished_at` is never used to
+reconstruct a legacy member's end. Reconstruction uses the new attachment's
+clipped recorded boundary, so retained spans cannot extend it across the next
+episode. Hidden memberships remain for
+recovery and single ownership; they contribute no clocks or visible row.
+
+Recorded attachment preserves a cross-source overlap interval before adding the
+new member/source. Both recovered content and the desktop finalization tail skip
+segments fully inside the original device's recorded interval, even when relevance attached
+first. Earlier prefixes and later segments beyond that interval remain eligible for notes; confirmed
+capture groups continue to use their canonical member.
+
+A historical episode whose start advanced after discard keeps its original ID.
+Canonical partitioning checks every destination document before writing and uses
+a deterministic displaced ID when an unrelated episode or redirect occupies it.
+It never overwrites that episode's retained members, notes or reverse links.
+
+When atomic sync intake appends meaningful speech, its new content revision
+invalidates an older automatic model/Jev/deterministic discard. Transport replays
+and content still needing fragment review retain the assessment; user decisions remain authoritative.
+The final-discard predicate continues to ignore the intake hint itself.

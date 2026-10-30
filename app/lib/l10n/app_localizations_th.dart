@@ -14857,4 +14857,19 @@ class AppLocalizationsTh extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'เรียกเก็บ $amount วันนี้ ต่ออายุ $date';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ส่วน',
+      many: '$count ส่วน',
+      few: '$count ส่วน',
+      two: '$count ส่วน',
+      one: '$count ส่วน',
+      zero: '$count ส่วน',
+    );
+    return '$_temp0';
+  }
 }

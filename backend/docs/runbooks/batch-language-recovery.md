@@ -71,8 +71,12 @@ lower the hard 60-second per-unit ceiling. Invalid/nonfinite values refuse spend
 Each unit gets at most one independent submission across automatic and explicit
 recovery. Company-funded Soniox rechecks the batch allowance even for units
 originally admitted with customer-funded credentials. Guarded Modulate dispatch
-also rechecks company funding. Larger units stay held
-for a separately reviewed recovery plan. Polling has a 120 s budget and 60-GET
+also rechecks company funding. With the feature enabled, a positive input-bound
+worker VAD receipt permits that existing Modulate attempt when CPU VAD has no
+spans, including captures above 60 seconds. An absent, zero or unbound receipt
+does not permit it. The configured independent-call cap still applies to Soniox;
+a longer unit that Modulate cannot recover remains held for a separately reviewed plan.
+Polling has a 120 s budget and 60-GET
 ceiling; individual requests have at most a 20 s I/O timeout. Cleanup uses two
 bounded requests. Recovery never automatically resubmits a timed-out job.
 

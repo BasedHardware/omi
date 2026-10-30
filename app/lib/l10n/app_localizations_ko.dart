@@ -14723,4 +14723,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return '오늘 $amount이 결제되었습니다. 갱신일은 $date입니다.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count개 부분',
+      many: '$count개 부분',
+      few: '$count개 부분',
+      two: '$count개 부분',
+      one: '$count개 부분',
+      zero: '$count개 부분',
+    );
+    return '$_temp0';
+  }
 }

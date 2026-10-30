@@ -9,6 +9,10 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'utils.batch_pipeline.record_seal_sweeper.discover_pending',
+            domains={'namespace': namespaces},
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.ready_for_capacity',
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
             neutrals={'now': (1.0, 'availability cutoff only')},
@@ -50,7 +54,7 @@ def entries():
             covered_by=('database.batch_pipeline_shadow.stale_jobs',),
             reason='bounded orchestration delegates its only query to stale_jobs; finish uses document transactions',
             expect_observed=False,
-            body_digest='e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
+            body_digest='014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
         ),
         CoveredByEntry(
             'database.batch_ramp.ramp_admission_policy',

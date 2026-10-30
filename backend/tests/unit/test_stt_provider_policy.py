@@ -8,6 +8,7 @@ import yaml
 from config.stt_provider_policy import (
     DEEPGRAM_CLOUD_PROVIDER,
     DEEPGRAM_SELF_HOSTED_PROVIDER,
+    HELD_RECOVERY_SECOND_PROVIDER,
     MODULATE_PROVIDER,
     PARAKEET_MODEL_BY_SURFACE,
     PARAKEET_PROVIDER,
@@ -51,6 +52,7 @@ def test_deepgram_is_retired_on_every_surface():
 
 
 def test_soniox_async_is_limited_to_held_recovery():
+    assert HELD_RECOVERY_SECOND_PROVIDER == 'soniox'
     assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
     assert not provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
     assert not provider_is_enabled('soniox', STTServingSurface.PTT)

@@ -146,7 +146,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_projection_release.release_page': '9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
-    'database.batch_pipeline_shadow.ShadowStore.reap': 'e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
+    'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
     'database.batch_ramp.ramp_admission_policy': 'af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
     'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
@@ -165,8 +165,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
-    # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
-    'database.dream_scheduler.discover': 'aa527730515a41f875712b46b2b1b7d7e36cc20564c1ad8178180e0b46b4fd14',
+    # Re-reviewed 2026-10-30: due_time now takes the owner id for hunt backoff; query shape is unchanged.
+    'database.dream_scheduler.discover': 'e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
@@ -191,7 +191,8 @@ BODY_DIGEST = {
     # refresh a document read, while post-commit bridge logging adds no query.
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
-    'database.smart_merge.absorb_conversation': '447f59e9acea150e7fa53a927c7d1f6bf983c13a44723781d254d5d39392d7c5',
+    # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
+    'database.smart_merge.absorb_conversation': '531806c3dc28aa6d728effd0a0ff8037b7621128037ed7350cf06beb3bd5674b',
     'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
     'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
@@ -1043,6 +1044,18 @@ _add(
         neutrals={'diagnostics': (None, 'caller-owned diagnostic sink; no filter, order or projection effect')},
     )
 )
+_add(DriverEntry('database.episode_timeline.between', base={'uid': UID, 'start': T0, 'end': T1}))
+_add(
+    DriverEntry(
+        'database.episode_timeline.check_window',
+        base={
+            'transaction': ref_transaction(),
+            'uid': UID,
+            'episode': {'id': 'recorded-1', 'started_at': T0, 'last_activity_at': T1},
+        },
+        neutrals={'rows': (None, 'preloaded rows reuse the recorded_candidates query shape')},
+    )
+)
 _add(
     DriverEntry(
         'database.episode_timeline.recorded_candidates',
@@ -1077,7 +1090,29 @@ _add(
             'choose': lambda rows, start, end: None,
             'new_episode': {'id': 'recorded-1'},
         },
+        neutrals={'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape')},
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.episode_timeline.attach_existing_recorded',
+        base={
+            'uid': UID,
+            'conversation_id': 'recorded-1',
+            'source': 'desktop',
+            'started': T0,
+            'finished': T1,
+            'episode_id': 'owner',
+            'choose': lambda rows, start, end: {'id': 'owner'},
+        },
+        patchers=(
+            _stub(
+                'database.episodes.unseal',
+                {'id': 'owner', 'started_at': T0, 'last_activity_at': T1, 'status': 'live', 'state_version': 1},
+            ),
+            _stub('database.episodes.seal', {'id': 'owner'}),
+        ),
     )
 )
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
@@ -2895,6 +2930,12 @@ _add(
     )
 )
 _add(DriverEntry('database.person_aliases.find_person_by_name', base={'uid': UID, 'name': 'shape-name'}))
+_add(
+    DriverEntry(
+        'database.people.get_or_create_person_by_name',
+        base={'uid': UID, 'data': {'id': 'person-1', 'name': 'shape-name'}},
+    )
+)
 _add(DriverEntry('database.users.get_task_integrations', base={'uid': UID}))
 _add(DriverEntry('database.users.get_user_by_stripe_customer_id', base={'customer_id': 'cus_1'}))
 _add(DriverEntry('database.users.resolve_deletion_wipe_job_id', base={'wipe_job_id': 'job-1'}))

@@ -15,6 +15,10 @@ import hashlib
 import json
 
 import pytest
+import numpy as np
+
+from config.batch_pipeline_providers import ProviderConfig
+from diarizer.batch_pipeline import BatchValidationError, PipelineWorker, bounded_window_words, validate_words
 
 # build_incoming's function-level imports (pre_recorded pulls the deepgram SDK,
 # deterministic_minimum, models.conversation, sync.capture) land in whichever
@@ -30,6 +34,8 @@ from utils.batch_pipeline.contracts import (
     ProjectionBinding,
     Priority,
     WorkItem,
+    ValidationFailureWork,
+    WorkResult,
     bound_vad_receipt,
     projection_speech_spans,
     vad_receipt,
@@ -180,6 +186,64 @@ def test_word_clock_one_sample_past_eof_clamps_to_eof_exactly():
     duration = 1.0
     bounded = bounded_projection_words([{'word': 'edge', 'timestamp': [0.5, 1.0 + SAMPLE]}], duration)
     assert bounded[0]['timestamp'] == [0.5, 1.0]
+
+
+def window_word_result(words):
+    class Provider:
+        def transcribe_batch(self, samples):
+            return [words for _ in samples]
+
+    saved = []
+
+    def persist(item, payload):
+        saved.append(payload)
+        return 'synthetic:result'
+
+    worker = PipelineWorker(
+        config=ProviderConfig(context_seconds=0),
+        language_of=lambda _: 'en',
+        decode=lambda _: np.ones(8000, dtype=np.float32),
+        vad=lambda _: [(0.0, 0.5)],
+        words_providers={'parakeet': Provider()},
+        diarizers={'pyannote': lambda _: {'turns': []}},
+        persist=persist,
+    )
+    item = WorkItem('synthetic-window', 'synthetic-owner', 0.0, 'synthetic:audio', 0.5, Priority.DEEP)
+    return worker.process_batch([item]), saved
+
+
+def test_subsecond_window_word_past_eof_commits_clamped():
+    results, saved = window_word_result([{'word': 'edge', 'timestamp': [0.1, 0.54]}])
+    assert len(results) == 1 and isinstance(results[0], WorkResult)
+    assert results[0].outcome == 'success'
+    assert saved[0]['words'] == [{'word': 'edge', 'timestamp': [0.1, 0.5]}]
+    # Other validation surfaces retain their strict bounds.
+    with pytest.raises(BatchValidationError, match='word_clock'):
+        validate_words([{'word': 'edge', 'timestamp': [0.1, 0.54]}], 0.5)
+
+
+@pytest.mark.parametrize(
+    'clocks', [[-0.2, -0.1], [-0.1, 0.0], [0.5, 0.6], [0.3, 0.2], [0.1, float('nan')], [0.1, float('inf')]]
+)
+def test_invalid_window_word_clocks_still_fail_at_word_clocks(clocks):
+    results, saved = window_word_result([{'word': 'invalid', 'timestamp': clocks}])
+    assert results == [ValidationFailureWork('synthetic-window', 'word_clocks', 'word_clock')]
+    assert saved == []
+
+
+def test_bounded_window_owns_midpoints_and_preserves_raw_order():
+    words = [
+        {'word': 'left-context', 'timestamp': [-0.3, 0.1]},
+        {'word': 'left-edge', 'timestamp': [-0.1, 0.2]},
+        {'word': 'right-edge', 'timestamp': [0.3, 0.6]},
+        {'word': 'right-context', 'timestamp': [0.4, 0.7]},
+    ]
+    assert bounded_window_words(words, 0.5) == [
+        {'word': 'left-edge', 'timestamp': [0, 0.2]},
+        {'word': 'right-edge', 'timestamp': [0.3, 0.5]},
+    ]
+    with pytest.raises(BatchValidationError, match='word_sequence'):
+        bounded_window_words(list(reversed(words)), 0.5)
 
 
 # --- retained-audio manifest slices ------------------------------------------------

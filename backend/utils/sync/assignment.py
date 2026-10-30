@@ -42,9 +42,9 @@ from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry, merge_before_processing
 import config.speaker_match_scores as match_scores
-from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
+from utils.conversations.fragment_visibility import superseded_intake_discard, is_user_curated
 from config.occasion_relevance import enabled as occasion_relevance_enabled
-from utils.conversations.recorded_time import recorded_span, sync_recorded_end
+from utils.conversations.recorded_time import recorded_span, sync_recorded_end, write_span
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
@@ -874,7 +874,7 @@ def assign_in_transaction(
         )
         if result['discarded']:
             result['relevance_decision'] = sync_intake_decision(rule)
-        elif is_rule_discard_decision(result.get('relevance_decision')):
+        elif superseded_intake_discard(result, bool(survivors or transfers)):
             result['relevance_decision'] = None
         result['is_locked'] = bool(incoming.get('is_locked'))
         result['private_cloud_sync_enabled'] = any(
@@ -915,6 +915,7 @@ def assign_in_transaction(
 
         # Read all occupied day buckets before the first write.
         index.read(extent)
+        result.update(write_span(result, arrival_at=incoming.get('arrival_at')))
         payload = encode(result)
         payload.pop('photos', None)
         donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}

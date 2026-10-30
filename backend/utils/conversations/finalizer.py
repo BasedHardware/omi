@@ -56,6 +56,7 @@ from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
+    RECORD_REGISTER_REFUSED,
     classify_finalization_failure,
     finalization_diagnostic_id,
     record_finalization_failure,
@@ -63,6 +64,7 @@ from utils.observability.finalization import (
 from utils.conversations.capture_group_notes_refresh import refresh_primary_notes
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
+
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
 from utils.batch_pipeline.live import register_recording, reserve_recording
@@ -418,7 +420,11 @@ async def finalize_persisted_conversation(
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
         if not silent_backfill and conversation_data.get('record_lane_owner') == 'batch_live_v1':
-            await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
+            if not await run_blocking(
+                db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
+            ):
+                RECORD_REGISTER_REFUSED.inc()
+                logger.warning('event=register_refused owner=batch_live_v1')
 
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
@@ -486,6 +492,7 @@ async def finalize_persisted_conversation(
             # summary-vector emission below the claim branch is unreachable on
             # this path, so run the same fail-soft freshness guard here; a
             # summary-vector failure never fails finalization (#21111 gap).
+            latest_data = None
             try:
                 latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
                 latest = deserialize_conversation(latest_data) if latest_data else None
@@ -503,6 +510,7 @@ async def finalize_persisted_conversation(
             except Exception as error:
                 OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
                 logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
+            await _episode_after_finalization(uid, conversation_id, latest_data, trigger)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(

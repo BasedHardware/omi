@@ -14938,4 +14938,19 @@ class AppLocalizationsMr extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'आज $amount आकारले. नूतनीकरण $date रोजी.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count भाग',
+      many: '$count भाग',
+      few: '$count भाग',
+      two: '$count भाग',
+      one: '$count भाग',
+      zero: '$count भाग',
+    );
+    return '$_temp0';
+  }
 }

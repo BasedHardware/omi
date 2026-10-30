@@ -80,6 +80,7 @@ class _Buffer:
     carried: list[MomentFragment] = field(default_factory=list)
     words: int = 0
     last_flush_wall: float = 0.0
+    last_arrival_at: float = 0.0
     current_first_wall: Optional[float] = None
     session_ended: bool = False
     session_end_generation: int = 0
@@ -93,11 +94,11 @@ class MomentTracker:
         self._lock = threading.Lock()
 
     def _evict(self, now: float) -> None:
-        stale = [uid for uid, buf in self._buffers.items() if now - buf.last_wall > BUFFER_TTL_SECONDS]
+        stale = [uid for uid, buf in self._buffers.items() if now - buf.last_arrival_at > BUFFER_TTL_SECONDS]
         for uid in stale:
             del self._buffers[uid]
         while len(self._buffers) > MAX_BUFFERS:
-            oldest = min(self._buffers, key=lambda uid: self._buffers[uid].last_wall)
+            oldest = min(self._buffers, key=lambda uid: self._buffers[uid].last_arrival_at)
             del self._buffers[oldest]
 
     @staticmethod
@@ -149,18 +150,19 @@ class MomentTracker:
         conversation_id: Optional[str],
         source: Optional[str],
         *,
-        now: Optional[float] = None,
+        arrival_at: float,
+        recorded_at: float,
     ) -> list[MomentInput]:
         """Returns the moments that ended with this batch (usually none, at most two)."""
         if not conversation_id:
             return []
-        wall = time.time() if now is None else now
+        wall = recorded_at
         fresh = [dict(s) for s in segments if str(s.get('text') or '').strip()]
         if not fresh:
             return []
         ended: list[MomentInput] = []
         with self._lock:
-            self._evict(wall)
+            self._evict(arrival_at)
             buf = self._buffers.get(uid)
             if buf is not None and buf.segments:
                 moved = buf.conversation_id != conversation_id
@@ -169,7 +171,7 @@ class MomentTracker:
                 spaced = wall - buf.last_flush_wall >= MOMENT_MIN_INTERVAL_SECONDS
                 if paused and buf.words >= MOMENT_MIN_WORDS and spaced:
                     ended.append(self._moment(buf, 'pause'))
-                    buf = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
+                    buf = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall, last_arrival_at=arrival_at)
                     self._buffers[uid] = buf
                 elif moved:
                     buf.carried.append(
@@ -193,7 +195,7 @@ class MomentTracker:
                 else:
                     buf.session_ended = False
             if buf is None:
-                buf = _Buffer(conversation_id, source, wall, wall)
+                buf = _Buffer(conversation_id, source, wall, wall, last_arrival_at=arrival_at)
                 self._buffers[uid] = buf
             elif buf.conversation_id != conversation_id:
                 # A carried-only buffer can move again before the next moment ends.
@@ -208,12 +210,15 @@ class MomentTracker:
                         buf.first_wall = wall
                 buf.segments.extend(fresh)
                 buf.words += sum(len(str(s.get('text') or '').split()) for s in fresh)
-                buf.last_wall = wall
+                buf.last_wall = max(buf.last_wall, wall)
+                buf.last_arrival_at = arrival_at
                 buf.session_ended = False
                 self._trim(buf)
                 if buf.words >= MOMENT_MAX_WORDS:
                     ended.append(self._moment(buf, 'rollover'))
-                    self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
+                    self._buffers[uid] = _Buffer(
+                        conversation_id, source, wall, wall, last_flush_wall=wall, last_arrival_at=arrival_at
+                    )
                 elif (
                     wall - buf.first_wall >= MOMENT_MAX_SECONDS
                     and buf.words >= MOMENT_MIN_WORDS
@@ -226,7 +231,9 @@ class MomentTracker:
                     >= FIRST_MOMENT_MIN_SECONDS
                 ):
                     ended.append(self._moment(buf, 'interval'))
-                    self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
+                    self._buffers[uid] = _Buffer(
+                        conversation_id, source, wall, wall, last_flush_wall=wall, last_arrival_at=arrival_at
+                    )
         return ended
 
     def flush(
@@ -428,6 +435,7 @@ async def on_realtime_segments(
     try:
         if not episodes_enabled_for(uid):
             return
+        arrival_at = time.time()
         recorded = None
         if recorded_episodes_enabled() and conversation_id:
             if not await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid):
@@ -443,12 +451,12 @@ async def on_realtime_segments(
                 )
                 if row:
                     sessions.remember_origin(uid, conversation_id, row)
-            if not row:
+            if not row or row.get('discarded') or row.get('deleted'):
                 return
             recorded = recorded_span(row.get('started_at'), segments)
             if recorded is None:
                 return  # An unplaced transcript proves no timeline boundary.
-            if is_late(recorded, datetime.now(timezone.utc)):
+            if is_late(recorded, datetime.fromtimestamp(arrival_at, timezone.utc)):
                 # Pusher and listen share this guard, so transport cannot turn
                 # a delayed batch into an arrival-timed live occasion.
                 row = dict(row, transcript_segments=list(segments), finished_at=recorded[1])
@@ -465,14 +473,19 @@ async def on_realtime_segments(
                         uid,
                         conversation_id,
                         source,
-                        recorded[0] if recorded else datetime.now(timezone.utc),
+                        recorded[0] if recorded else datetime.fromtimestamp(arrival_at, timezone.utc),
                         first=first,
                         ended_at=recorded[1] if recorded else None,
                     ),
                     name='episode_attach',
                 )
         moments = tracker.observe(
-            uid, segments, conversation_id, source, **({'now': recorded[1].timestamp()} if recorded else {})
+            uid,
+            segments,
+            conversation_id,
+            source,
+            arrival_at=arrival_at,
+            recorded_at=recorded[1].timestamp() if recorded else arrival_at,
         )
         if not moments:
             return

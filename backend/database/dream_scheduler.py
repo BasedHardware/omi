@@ -7,7 +7,7 @@ from google.cloud import firestore
 from database import firestore_transaction_retry
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_blocks_user_work
-from config.dream_agent import allowlist_uids, eligibility, eligible, enabled, hunt_interval
+from config.dream_agent import allowlist_uids, backed_off_hunt_interval, eligibility, eligible, enabled, hunt_interval
 from config import dream_levers
 from utils.observability.fallback import record_fallback
 
@@ -32,13 +32,20 @@ def priority(row, now, *, weight=1):
     return max(0, (now - last).total_seconds()) + min(500, row.get('score', 0)) * 60, row.get('score', 0)
 
 
-def due_time(state, now):
+def owner_hunt_interval(uid, state):
+    """Today's hunt interval, backed off by the owner's dry-hunt streak when the lever serves them."""
+    if uid is not None and dream_levers.arm(dream_levers.HUNT_BACKOFF_MODE_ENV, uid) == 'serve':
+        return backed_off_hunt_interval(state.get('size_bucket'), state.get('dry_hunts'))
+    return hunt_interval(state.get('size_bucket'))
+
+
+def due_time(state, now, uid=None):
     last = state.get('last_attempt_at') or state.get('last_pass_at') or EPOCH
     if not isinstance(last, datetime) or last.tzinfo is None:
         last = EPOCH
     if state.get('score', 0) > 0:
         return last - timedelta(minutes=min(500, state['score']))
-    return last + hunt_interval(state.get('size_bucket'))
+    return last + owner_hunt_interval(uid, state)
 
 
 def candidate_page(*, after=None, limit=499, transaction=None, firestore_client=None):
@@ -162,7 +169,7 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                     target = database.collection('dream_due').document(row.id)
                     if eligible_owners[row.id]:
                         if row.id not in queued and not _parked(row.id, states.get(row.id, {})):
-                            tx.set(target, {'due_at': due_time(states.get(row.id, {}), now)})
+                            tx.set(target, {'due_at': due_time(states.get(row.id, {}), now, row.id)})
                     elif row.id in queued:
                         tx.delete(target)
                 if listed is None and final_chunk:
@@ -197,8 +204,12 @@ def _backlog_owed(uid):
 
 # Payoff ordering (lever B2). Owners overdue this long run first in due order, so
 # reordering can delay an owner by at most this much beyond today's queue.
-PAYOFF_AGING = timedelta(hours=6)
-PAYOFF_RANKED = 200
+# Payoff first (David 2026-10-30). Only a month-overdue owner jumps the payoff order:
+# at 10-30 the oldest 200 due rows were all past a 7-day bound, so ranking was FIFO.
+PAYOFF_AGING = timedelta(days=30)
+# Heavy owners made 582 of 596 applied edits in the 10-29 shadow day.
+PAYOFF_HEAVY_BONUS = 20
+PAYOFF_RANKED = 1000
 
 
 def payoff_order(rows, now, *, firestore_client=None):
@@ -224,8 +235,10 @@ def payoff_order(rows, now, *, firestore_client=None):
         if now - due >= PAYOFF_AGING:
             return (0, 0.0, due)
         state = states.get(uid, {})
-        payoff = min(50, max(0, int(state.get('score', 0) or 0))) + 5 * min(
-            10, max(0, int(state.get('last_yield', 0) or 0))
+        payoff = (
+            min(50, max(0, int(state.get('score', 0) or 0)))
+            + 5 * min(10, max(0, int(state.get('last_yield', 0) or 0)))
+            + (PAYOFF_HEAVY_BONUS if state.get('size_bucket') == 'heavy' else 0)
         )
         return (1, -float(payoff), due)
 

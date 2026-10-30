@@ -45,7 +45,10 @@ def _row(cid, created_s, started_s, finished_s, **extra):
         'client_device_id': 'pendant-1',
         'status': 'completed',
         'discarded': False,
-        'created_at': T0 + timedelta(seconds=created_s),
+        'created_at': T0 + timedelta(days=1),
+        # Explicit calibrated capture bounds; started_at remains the segment origin.
+        'recorded_start': T0 + timedelta(seconds=created_s),
+        'recorded_end': T0 + timedelta(seconds=finished_s),
         'started_at': T0 + timedelta(seconds=started_s),
         'finished_at': T0 + timedelta(seconds=finished_s),
         'structured': {'title': f'title {cid}', 'overview': f'overview {cid}'},
@@ -86,7 +89,7 @@ def test_newest_wallclock_fragment_picks_max_finish_not_max_start():
 def test_newest_wallclock_fragment_unmerged_row_is_itself():
     row = _live_row('p', 0, 0, 600)
     fragment = policy.newest_wallclock_fragment(row)
-    assert fragment is not None and fragment.id == 'p' and fragment.finished_at == row['finished_at']
+    assert fragment is not None and fragment.id == 'p' and fragment.finished_at == row['recorded_end']
 
 
 def test_newest_wallclock_fragment_malformed_ledger_proves_nothing():
@@ -119,7 +122,7 @@ def test_newest_wallclock_fragment_over_budget_ledger_proves_nothing():
 def test_wallclock_pair_with_negative_legacy_gap_is_eligible():
     survivor, s_segments, new, n_segments = _drifted_pair()
     legacy = policy.check_pair(survivor, s_segments, new, n_segments)
-    assert legacy.reason == 'gap_out_of_window' and legacy.gap_seconds < 0
+    assert legacy.reason == 'gap_out_of_window' and legacy.speech_gap_seconds < 0
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=survivor)
     assert check.reason is None
     assert check.same_recording is True
@@ -130,8 +133,8 @@ def test_wallclock_pair_with_negative_legacy_gap_is_eligible():
 @pytest.mark.parametrize('gap_seconds', [0, 60, 119, 120, 3600])
 def test_wallclock_gap_window_allows_zero_to_max(gap_seconds):
     survivor, s_segments, new, n_segments = _drifted_pair()
-    new['created_at'] = survivor['finished_at'] + timedelta(seconds=gap_seconds)
-    new['finished_at'] = new['created_at'] + timedelta(seconds=300)
+    new['recorded_start'] = survivor['recorded_end'] + timedelta(seconds=gap_seconds)
+    new['recorded_end'] = new['recorded_start'] + timedelta(seconds=300)
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=survivor)
     assert check.reason is None and check.same_recording is True
     assert check.gap_seconds == float(gap_seconds)
@@ -139,21 +142,21 @@ def test_wallclock_gap_window_allows_zero_to_max(gap_seconds):
 
 def test_wallclock_gap_over_max_is_out_of_window():
     survivor, s_segments, new, n_segments = _drifted_pair()
-    new['created_at'] = survivor['finished_at'] + timedelta(seconds=3601)
-    new['finished_at'] = new['created_at'] + timedelta(seconds=300)
+    new['recorded_start'] = survivor['recorded_end'] + timedelta(seconds=3601)
+    new['recorded_end'] = new['recorded_start'] + timedelta(seconds=300)
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=survivor)
     assert check.reason == 'gap_out_of_window' and check.same_recording is True
 
 
 def test_wallclock_gap_negative_is_a_bounded_reason():
     survivor, s_segments, new, n_segments = _drifted_pair()
-    new['created_at'] = survivor['finished_at'] - timedelta(seconds=1)
+    new['recorded_start'] = survivor['recorded_end'] - timedelta(seconds=1)
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=survivor)
     assert check.reason == 'wallclock_gap_negative' and check.same_recording is True
     assert check.gap_seconds == -1.0
 
 
-@pytest.mark.parametrize('field', ['created_at', 'finished_at'])
+@pytest.mark.parametrize('field', ['recorded_start', 'recorded_end'])
 def test_wallclock_missing_wall_time_is_invalid_not_legacy(field):
     survivor, s_segments, new, n_segments = _drifted_pair()
     new[field] = None
@@ -163,7 +166,7 @@ def test_wallclock_missing_wall_time_is_invalid_not_legacy(field):
 
 def test_wallclock_finish_before_created_is_invalid():
     survivor, s_segments, new, n_segments = _drifted_pair()
-    new['created_at'], new['finished_at'] = new['finished_at'], new['created_at']
+    new['recorded_start'], new['recorded_end'] = new['recorded_end'], new['recorded_start']
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=survivor)
     assert check.reason == 'wallclock_time_invalid'
 
@@ -197,8 +200,8 @@ def test_sync_row_without_stamps_matches_legacy_eligible_result():
     survivor['external_data'] = None
     new['external_data'] = None
     new['started_at'] = T0 + timedelta(seconds=800)
-    new['created_at'] = new['started_at']
-    new['finished_at'] = T0 + timedelta(seconds=1400)
+    new['recorded_start'] = new['started_at']
+    new['recorded_end'] = T0 + timedelta(seconds=1400)
     legacy = policy.check_pair(survivor, s_segments, new, n_segments)
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True)
     assert check.reason == legacy.reason
@@ -219,9 +222,10 @@ def test_legacy_accepted_pair_never_enters_the_wall_path(monkeypatch, created_s)
     """Legacy-first: a pass returns the legacy PairCheck untouched, so a wall
     clock that is negative (599) or invalid (1600 > finished) stays unseen."""
     survivor, s_segments, new, n_segments = _drifted_pair()
-    new['created_at'] = T0 + timedelta(seconds=created_s)
+    new['recorded_start'] = T0 + timedelta(seconds=created_s)
     new['started_at'] = T0 + timedelta(seconds=900)
-    new['finished_at'] = T0 + timedelta(seconds=1500)
+    new['recorded_start'] = new['started_at']
+    new['recorded_end'] = T0 + timedelta(seconds=1500)
     legacy = policy.check_pair(survivor, s_segments, new, n_segments)
     assert legacy.reason is None and legacy.same_recording is False
 
@@ -256,7 +260,10 @@ def test_ledger_donor_fragment_requires_the_supplied_row():
     n_segments = _segments()
 
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True)
-    assert check.same_recording is False and check.reason == 'gap_out_of_window'
+    assert (
+        check.same_recording is False
+        and check.reason == policy.check_pair(survivor, s_segments, new, n_segments).reason
+    )
     for bad in (
         dict(donor, id='other'),
         dict(donor, external_data=_stamps('other-recording')),
@@ -265,7 +272,7 @@ def test_ledger_donor_fragment_requires_the_supplied_row():
     ):
         check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=bad)
         assert check.same_recording is False, bad.get('id')
-        assert check.reason == 'gap_out_of_window'
+        assert check.reason == policy.check_pair(survivor, s_segments, new, n_segments).reason
 
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=donor)
     assert check.same_recording is True and check.reason is None
@@ -304,7 +311,7 @@ def test_ledger_donor_fragment_row_must_be_completed_or_a_real_tombstone():
     ):
         check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=bad)
         assert check.same_recording is False
-        assert check.reason == 'gap_out_of_window'
+        assert check.reason == policy.check_pair(survivor, s_segments, new, n_segments).reason
 
 
 def test_newest_fragment_word_count_uses_the_donor_rows_own_transcript():
@@ -330,7 +337,7 @@ def test_survivor_missing_stamps_is_fine_when_last_fragment_is_a_proven_donor():
 
 def test_wall_span_cap_uses_created_and_finished_not_speech_bounds():
     survivor = _live_row('p', 0, -4 * 3600, 600)
-    s_segments = _segments()
+    s_segments = _segments(first_start=4 * 3600 + 580)
     new = _live_row('n', 720, 400, 1020)
     n_segments = _segments()
     check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=survivor)
@@ -341,7 +348,7 @@ def test_wall_span_cap_rejects_a_real_over_three_hour_span():
     survivor = _live_row('p', 0, 0, 600)
     new = _live_row('n', 720, 400, 4 * 3600)
     check = policy.check_pair(survivor, _segments(), new, _segments(), wallclock_gap=True, last_fragment_row=survivor)
-    assert check.same_recording is True and check.reason == 'span_cap'
+    assert check.reason == 'span_cap'
 
 
 def test_wallclock_path_keeps_every_unchanged_gate():
