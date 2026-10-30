@@ -10,7 +10,6 @@ import time
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from config.policy import resolve_batch_policy
 from database._client import run_transactional
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreTransaction
@@ -90,7 +89,7 @@ def registration(tx, uid, cid, row, server_flags):
             {**row, 'id': cid},
             now=0,
             transaction=capture,
-            admission_policy=resolve_batch_policy(uid, flags=server_flags),
+            server_flags=server_flags,
         )
         or capture.job is None
     ):

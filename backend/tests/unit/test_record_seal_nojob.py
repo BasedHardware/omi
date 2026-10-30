@@ -9,7 +9,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from config.policy.batch import BatchUnitPolicy
 from database.batch_pipeline_store import FirestoreStore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import (
@@ -28,7 +27,6 @@ SERVER = {'K_SERVICE': 'synthetic-serving-role', 'BATCH_PIPELINE_PERCENT': '5'}
 @pytest.fixture
 def source(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setattr(live, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
     monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 1000)
     client = StrictFirestore(
         {
