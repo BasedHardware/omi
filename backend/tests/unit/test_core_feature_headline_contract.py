@@ -24,8 +24,10 @@ def test_capture_coverage_is_visible_without_redefining_settled_success():
     assert 'stale' not in headline['targets'][0]['expr']
     coverage = panels[78]
     assert coverage['type'] == 'stat'
-    assert coverage['gridPos']['y'] == headline['gridPos']['y']
-    assert coverage['gridPos']['x'] == headline['gridPos']['x'] + headline['gridPos']['w']
+    # Coverage stays on the first screen, never inside a collapsed row.
+    dashboard = json.loads((MONITORING / 'dashboards/general/omi-core-features.json').read_text())
+    assert coverage in dashboard['panels']
+    assert coverage['gridPos']['y'] < 20
     assert all(target['instant'] for target in coverage['targets'])
     count, share = [target['expr'] for target in coverage['targets']]
     assert 'outcome="stale"}[3h]' in count
@@ -67,3 +69,42 @@ def test_system_owned_age_stays_separate_from_byok_waits():
     # The producer's split and its distinct BYOK age are exercised by
     # test_conversation_finalization_jobs.test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at.
     assert 'blocked_byok is excluded' in _panels()[30]['description']
+
+
+def _top_level_outcome_tiles():
+    dashboard = json.loads((MONITORING / 'dashboards/general/omi-core-features.json').read_text())
+    start = next(i for i, p in enumerate(dashboard['panels']) if p['id'] == 1)
+    end = next(i for i, p in enumerate(dashboard['panels']) if p['id'] == 27)
+    return dashboard['panels'][start + 1 : end]
+
+
+def test_first_screen_keeps_outcome_thresholds_and_a_trend_under_each_tile():
+    panels = _top_level_outcome_tiles()
+    stats = {p['id']: p for p in panels if p['type'] == 'stat'}
+    bands = {'default': [None, 95, 99], 73: [None, 90, 98]}
+    for stat_id, spark_id in zip((63, 3, 2, 73, 4, 20, 36, 70), range(80, 88)):
+        stat = stats[stat_id]
+        steps = [s['value'] for s in stat['fieldConfig']['defaults']['thresholds']['steps']]
+        assert steps == bands.get(stat_id, bands['default']), stat['title']
+        spark = next(p for p in panels if p['id'] == spark_id)
+        assert spark['fieldConfig']['defaults']['thresholds'] == stat['fieldConfig']['defaults']['thresholds']
+        assert spark['gridPos']['x'] == stat['gridPos']['x']
+        assert spark['gridPos']['y'] == stat['gridPos']['y'] + stat['gridPos']['h']
+        assert spark['interval'] == '1h'
+        assert 'noValue' not in spark['fieldConfig']['defaults'], 'noValue turns gaps into a drawn value'
+        expr = spark['targets'][0].get('expr')
+        if expr is not None:
+            # The window equals the step, so each sample is read once and a wider range cannot overlap.
+            assert '[$__interval]' in expr and '[$__range]' not in expr
+            assert expr.endswith(' >= 0'), 'hours with no settled traffic must gap, not draw NaN'
+
+
+def test_verdict_counts_the_same_expressions_as_the_tiles():
+    panels = _panels()
+    (target,) = panels[88]['targets']
+    assert target['instant'] is True
+    assert target['expr'].startswith('count_values("state", clamp(floor((((')
+    assert target['expr'].endswith(') >= 0) - 95) / 4), -1, 1))')
+    for tile in (63, 3, 2, 4, 20, 36, 70):
+        assert panels[tile]['targets'][0]['expr'] in target['expr']
+    assert panels[73]['targets'][0].get('expr') is None  # Recaps live in another datasource and bands.
