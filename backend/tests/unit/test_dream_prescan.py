@@ -386,14 +386,37 @@ def test_prescan_shadow_records_the_lever_and_changes_no_seed(runtime, monkeypat
         'people_dupes': 0,
         'junk_names': 1,
         'task_dupes': 0,
+        'served': 0,
         'hits': 0,
     }
     seeds = _seed_payloads(captured)
     assert seeds and all('people/prescan-a' not in seed.get('targets', []) for seed in seeds)
 
 
+def _as_hunt(monkeypatch, hunt_pass=True):
+    acquire = dream_agent.dream_store.acquire
+
+    def hunt(*args, **kwargs):
+        lease = acquire(*args, **kwargs)
+        return lease if lease is None else {**lease, 'hunt': hunt_pass}
+
+    monkeypatch.setattr(dream_agent.dream_store, 'acquire', hunt)
+
+
+def test_prescan_serve_never_reorders_a_pass_admitted_for_dirty_work(runtime, monkeypatch):
+    monkeypatch.setenv(dream_levers.PRESCAN_MODE_ENV, 'serve')
+    _as_hunt(monkeypatch, False)
+    scan = {'refs': ['people/prescan-a'], 'counts': {'people_dupes': 0, 'junk_names': 1, 'task_dupes': 0}}
+    monkeypatch.setattr(dream_prescan, 'scan', lambda uid, **kwargs: scan)
+    captured = []
+    report = asyncio.run(dream_agent.run_pass(UID, turn=_finish_only(captured)))
+    assert report['levers']['prescan']['served'] == 0
+    assert all('people/prescan-a' not in seed.get('targets', []) for seed in _seed_payloads(captured))
+
+
 def test_prescan_serve_prepends_targets_and_counts_hits(runtime, monkeypatch):
     monkeypatch.setenv(dream_levers.PRESCAN_MODE_ENV, 'serve')
+    _as_hunt(monkeypatch)
     scan = {
         'refs': ['people/prescan-a', 'people/junk'],
         'counts': {'people_dupes': 0, 'junk_names': 2, 'task_dupes': 0},
@@ -408,6 +431,7 @@ def test_prescan_serve_prepends_targets_and_counts_hits(runtime, monkeypatch):
         'people_dupes': 0,
         'junk_names': 2,
         'task_dupes': 0,
+        'served': 1,
         'hits': 1,
     }
     seeds = _seed_payloads(captured)
