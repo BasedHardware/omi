@@ -63,8 +63,9 @@ class _FolderContextMenu extends StatelessWidget {
           // Fire and forget - don't wait
           folderProvider.deleteFolder(folder.id, moveToFolderId: moveToFolderId).then((success) {
             if (success) {
-              // Refresh conversations to show updated folder contents
-              conversationProvider.filterByFolder(moveToFolderId);
+              // Reload so the moved conversations carry their new folder. Home has no folder chip to
+              // show or clear a folder filter (folders live in search), so it stays on all conversations.
+              conversationProvider.fetchConversations();
             } else {
               if (navigatorContext.mounted) OmiFeedback.error(navigatorContext, l10n.failedToDeleteFolder);
             }
