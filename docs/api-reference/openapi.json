@@ -5833,6 +5833,61 @@
           "Memories"
         ]
       },
+      "get": {
+        "description": "Fetch a single developer-readable memory by ID.\n\nUses the same read authorization/policy as the memories list endpoint.\nRegistered after /memories/vector/search so that route keeps matching first.",
+        "operationId": "getMemory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperMemory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "developerApiKey": []
+          }
+        ],
+        "summary": "Get Memory By Id",
+        "tags": [
+          "Memories"
+        ]
+      },
       "patch": {
         "description": "Update a memory's content, visibility, tags, or category.\n\n- **memory_id**: The ID of the memory to update\n- **content**: New content for the memory (optional)\n- **visibility**: New visibility: public or private (optional)\n- **tags**: New tags for the memory (optional)\n- **category**: New category for the memory (optional)",
         "operationId": "updateMemory",

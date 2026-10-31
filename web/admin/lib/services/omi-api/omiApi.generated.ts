@@ -9147,6 +9147,15 @@ export interface OmiApiPaths {
     };
   };
   "/v1/dev/user/memories/{memory_id}": {
+    get: {
+      operationId: "getMemory";
+      responses: {
+        "200": DeveloperMemory;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
     patch: {
       operationId: "updateMemory";
       responses: {
@@ -16299,6 +16308,21 @@ export async function search_memories_vector_v1_dev_user_memories_vector_search_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function getMemory(path: { memory_id: string }, init?: OmiApiClientInit): Promise<DeveloperMemory> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dev/user/memories/${path.memory_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function updateMemory(path: { memory_id: string }, body: UpdateMemoryRequest, init?: OmiApiClientInit): Promise<DeveloperMemory> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/dev/user/memories/${path.memory_id}`;
@@ -23367,4 +23391,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 536 client methods generated.
+// Total: 537 client methods generated.
