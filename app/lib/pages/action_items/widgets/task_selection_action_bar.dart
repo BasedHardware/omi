@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -26,6 +27,7 @@ class TaskSelectionActionBar extends StatefulWidget {
 }
 
 class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with SingleTickerProviderStateMixin {
+  bool _exportInProgress = false;
   late final AnimationController _animationController;
   late final Animation<Offset> _slideAnimation;
 
@@ -51,7 +53,7 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
       builder: (context, provider, _) {
         final isActive = provider.isSelectionMode;
         final taskCount = provider.selectedCount;
-        final canExport = taskCount > 0;
+        final canExport = taskCount > 0 && !_exportInProgress;
 
         if (isActive) {
           _animationController.forward();
@@ -112,24 +114,34 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
   }
 
   Future<void> _handleExport(BuildContext context, ActionItemsProvider provider) async {
+    if (_exportInProgress) return;
+    setState(() => _exportInProgress = true);
     OmiHaptics.light();
+    final selection = provider.selectedItems;
+    final ids = Set<String>.of(selection);
+    try {
+      final integrations = Provider.of<TaskIntegrationProvider>(context, listen: false);
+      final target = await integrations.resolveExportTarget();
+      if (!context.mounted ||
+          !provider.isSelectionMode ||
+          !identical(selection, provider.selectedItems) ||
+          !setEquals(ids, provider.selectedItems)) {
+        return;
+      }
 
-    // Users connect one task app at a time. If none connected, nudge to
-    // Settings; otherwise export directly to the connected app.
-    final integrations = Provider.of<TaskIntegrationProvider>(context, listen: false);
-    final connected = TaskIntegrationApp.values.where(integrations.isAppConnected).toList(growable: false);
-
-    if (connected.isEmpty) {
-      OmiFeedback.error(
-        context,
-        context.l10n.connectTaskAppToExport,
-        actionLabel: context.l10n.connectAction,
-        onAction: () => routeToPage(context, const TaskIntegrationsPage()),
-      );
-      return;
+      if (target == null) {
+        OmiFeedback.error(
+          context,
+          context.l10n.connectTaskAppToExport,
+          actionLabel: context.l10n.connectAction,
+          onAction: () => routeToPage(context, const TaskIntegrationsPage()),
+        );
+        return;
+      }
+      await provider.bulkExportSelected(context, target);
+    } finally {
+      if (mounted) setState(() => _exportInProgress = false);
     }
-
-    await provider.bulkExportSelected(context, connected.first);
   }
 
   /// Bulk delete cannot be undone: confirm every time (docs/ux-contract.md §4).

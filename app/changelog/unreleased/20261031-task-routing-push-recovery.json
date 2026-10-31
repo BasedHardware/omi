@@ -1,0 +1,3 @@
+{
+  "change": "Task exports respect your selected integration when Apple Reminders is also connected. Push registration retries delayed setup and reconnects after returning to the app."
+}
