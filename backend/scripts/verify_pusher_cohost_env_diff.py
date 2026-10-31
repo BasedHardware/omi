@@ -82,6 +82,18 @@ _DEMAND_LISTEN_ONLY = frozenset(
 # Only listen WebSocket reconnects run the stale-page scanner. Pusher consumes
 # admitted jobs; this kill switch must not disable their finalization/retries.
 _RECONNECT_RECOVERY_LISTEN_ONLY = frozenset({'STALE_IN_PROGRESS_RECOVERY_ENABLED'})
+# main.py owns the singleton replay pass. Pusher consumes finalizations but
+# never schedules that pass; copying this binding there would imply ownership
+# it does not have. Live admission's dispatch mode remains unchanged.
+_FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
+    {
+        'LISTEN_FINALIZATION_REPLAY_ENABLED',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+        'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS',
+    }
+)
 # main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
@@ -331,7 +343,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
-    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
+    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
+    | _FINALIZATION_REPLAY_LISTEN_ONLY,
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
