@@ -359,9 +359,9 @@ def remove_invalid_token(token: str) -> None:
     """Remove invalid token using collection group query (rare operation)"""
     if not token or not token.strip():
         return
-    query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token.strip())).limit(1)
 
     try:
+        query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token.strip())).limit(1)
         for doc in query.stream():
             try:
                 doc.reference.delete()
