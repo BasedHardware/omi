@@ -53,7 +53,8 @@ RECORD_CLOSE_REFUSALS = Counter(
     ['reason'],
 )
 _CLOSE_REFUSAL_COUNTERS = {
-    reason: RECORD_CLOSE_REFUSALS.labels(reason=reason) for reason in ('admission', 'outstanding')
+    'admission': RECORD_CLOSE_REFUSALS.labels(reason='admission'),
+    'outstanding': RECORD_CLOSE_REFUSALS.labels(reason='outstanding'),
 }
 
 
