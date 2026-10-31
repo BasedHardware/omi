@@ -8,7 +8,6 @@ are rejected with 404 Not Found in Developer API mutation endpoints:
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 import pytest
