@@ -1462,15 +1462,15 @@ class ListenSessionRuntime:
             except Exception as error:
                 logger.error('Conversation disconnect finalization failed type=%s', type(error).__name__)
         try:
-            if not owner_persistence_blocked:
-                await self.receiver.flush_multi_channel_tail()
-        finally:
-            if self.pusher_close:
-                try:
-                    await self.pusher_close()
-                except Exception as error:
-                    logger.error('Pusher close failed type=%s', type(error).__name__)
-        try:
+            try:
+                if not owner_persistence_blocked:
+                    await self.receiver.flush_multi_channel_tail()
+            finally:
+                if self.pusher_close:
+                    try:
+                        await self.pusher_close()
+                    except Exception as error:
+                        logger.error('Pusher close failed type=%s', type(error).__name__)
             if self.onboarding_handler:
                 self.onboarding_handler.cleanup()
             if self.language_observations is not None:
