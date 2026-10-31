@@ -269,8 +269,11 @@ class FirestoreEnrichmentOutbox:
 
         A pull claim was not delivered by a wake, so ``Claim.wake_token`` is '' (contract (a)).
         """
+        if n <= 0:
+            return []
         claims: list[Claim] = []
-        for row_id, row in _outbox().due_rows(now=now, limit=n * 4, client=self._bound_client):
+        page_size = max(1, min(100, max(32, n * 4)))
+        for row_id, row in _outbox().due_rows(now=now, limit=page_size, client=self._bound_client):
             claimed = self.claim_key(row_id, row['task_token'], lease_seconds, now=now)
             if isinstance(claimed, Claim):
                 claims.append(dataclasses.replace(claimed, wake_token=''))
