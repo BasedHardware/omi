@@ -19,6 +19,9 @@ os.environ.setdefault(
 # Product tests exercise the normal universal write-enabled deployment. Tests
 # for the global incident fence override this explicitly to ``off``.
 os.environ.setdefault('MEMORY_ENABLED', 'on')
+# The episode composer schedules background threads on close/finalize; tests that exercise it
+# enable it explicitly (tests/unit/test_episode_composer.py), so other episode tests stay hermetic.
+os.environ.setdefault('EPISODE_COMPOSER', 'off')
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.

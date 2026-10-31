@@ -67,6 +67,8 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
         'template',
         f'prod-omi-{service}',
         str(chart),
+        '--namespace',
+        'prod-omi-backend',
         '--values',
         str(values),
         '--set-string',

@@ -1,5 +1,7 @@
 import posthog from 'posthog-js';
 
+import { omiFlagEnabled, resetOmiFlags } from '@/lib/omiFlags';
+
 const POSTHOG_KEY =
   process.env.NEXT_PUBLIC_POSTHOG_KEY ||
   'phc_xUxO7ovj7ckqMu2GhFltKeNM1EtVOSS6rnVhRH5ClIl';
@@ -47,10 +49,20 @@ export const PostHogManager = {
     }
   },
   /**
-   * Resolve a boolean flag once PostHog has delivered flags. Fails closed:
-   * no SDK, a throw, or no answer within `timeoutMs` reads as off.
+   * Resolve a boolean flag: Omi's flag store first for the keys it owns, else
+   * once PostHog has delivered flags. Fails closed: no SDK, a throw, or no
+   * answer within `timeoutMs` reads as off.
    */
-  isFeatureEnabled(flag: string, timeoutMs = 2000): Promise<boolean> {
+  async isFeatureEnabled(flag: string, timeoutMs = 2000): Promise<boolean> {
+    try {
+      const omi = await omiFlagEnabled(flag, { timeoutMs });
+      if (omi !== undefined) return omi;
+    } catch {
+      // Omi store unavailable: PostHog answers.
+    }
+    return this.isPostHogFeatureEnabled(flag, timeoutMs);
+  },
+  isPostHogFeatureEnabled(flag: string, timeoutMs: number): Promise<boolean> {
     try {
       if (typeof window === 'undefined') return Promise.resolve(false);
       this.init();
@@ -82,6 +94,7 @@ export const PostHogManager = {
     try {
       if (typeof window === 'undefined') return;
       this.init();
+      resetOmiFlags();
       if (!isInitialized) return;
       posthog.reset();
     } catch {

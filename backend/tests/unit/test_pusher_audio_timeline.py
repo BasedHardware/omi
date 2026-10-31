@@ -121,7 +121,7 @@ def env(monkeypatch):
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
-    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=False))
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
     monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', MagicMock(return_value=True))
     monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', MagicMock(return_value=True))
 
@@ -780,7 +780,7 @@ async def test_record_upload_close_receipt_follows_successful_tail_flush(env, mo
     def seal(uid, conversation):
         assert env and env[-1][0] == conversation
         sealed.append(conversation)
-        return True
+        return None
 
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
@@ -793,7 +793,7 @@ async def test_dark_unowned_close_adds_no_seal_and_failed_upload_never_seals(env
     sealed = []
     # Close now resolves persisted ownership transactionally even when dark.
     # The database helper refuses unowned rows without writing a seal.
-    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda *args: False)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda *args: 'not_batch_owner')
     ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
     await _run(ws)
     assert sealed == []
@@ -814,7 +814,7 @@ async def test_owned_close_drains_when_dark_using_existing_audio_metadata_snapsh
     _observe_record_owner(monkeypatch)
     monkeypatch.setattr(pusher.conversations_db, 'get_conversation', lambda *_: pytest.fail('extra ownership read'))
     sealed = []
-    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid) or True)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid))
     await _run(FakeWebSocket([_conversation('owned'), _audio(100, b'\x01\x00' * RATE)]))
     assert sealed == ['owned']
 
@@ -831,7 +831,7 @@ async def test_failed_record_upload_does_not_block_another_durable_record(env, m
 
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
     sealed = []
-    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid) or True)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid))
     pcm = b'\x01\x00' * RATE
     await _run(
         FakeWebSocket(

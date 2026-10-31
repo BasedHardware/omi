@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Real Firestore cursor/CAS contract; run only against an isolated emulator."""
 
+from database import conversation_processing_recovery as processing_recovery
+
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -188,14 +190,14 @@ def exercise_lifecycle_retirement(client):
             (
                 'orphan',
                 {'status': 'processing', 'processing_admitted_at': now},
-                lambda cid: jobs.complete_orphan_conversation(
+                lambda cid: processing_recovery.complete_orphan_conversation(
                     uid, cid, expected_admitted_at=now, firestore_client=client
                 ),
             ),
             (
                 'unstampable',
                 {'status': 'processing'},
-                lambda cid: jobs.complete_unstampable_orphan_conversation(
+                lambda cid: processing_recovery.complete_unstampable_orphan_conversation(
                     uid, cid, stale_after=timedelta(0), firestore_client=client
                 ),
             ),

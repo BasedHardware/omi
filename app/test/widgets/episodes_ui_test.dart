@@ -102,6 +102,11 @@ class _LiveCapture extends CaptureProvider {
 
   String source = 'omi';
 
+  DateTime? transcriptOrigin;
+
+  @override
+  DateTime? get liveTranscriptStartedAt => transcriptOrigin ?? super.liveTranscriptStartedAt;
+
   LivePreviewController? preview;
   bool previewAdmitted = false;
 
@@ -786,6 +791,25 @@ void main() {
       await _unmount(tester);
     });
 
+    testWidgets('a cloud live row shows new transcript words before the clock ticks', (tester) async {
+      final capture = _LiveCapture()..segments = [_segment('cloud', 'First live words', 0)];
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: _liveEpisode());
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      String subtitle() => tester
+          .widget<Text>(
+              find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)))
+          .textSpan!
+          .toPlainText();
+      expect(subtitle(), 'First live words');
+      capture.onSegmentReceived([_segment('cloud', 'These are the latest live words', 0)]);
+      await tester.pump();
+      expect(subtitle(), 'These are the latest live words');
+      expect(_rowLabel(tester), contains('These are the latest live words'));
+      await _unmount(tester);
+    });
+
     testWidgets('a local-preview row reads its newest preview line in the subtitle', (tester) async {
       final engine = FakeLivePreviewEngine();
       final preview = LivePreviewController(
@@ -870,10 +894,43 @@ void main() {
       final updated = tester.widget<Text>(
           find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
       expect(updated.textSpan!.toPlainText(), endsWith('we can ship'));
+      expect(_rowLabel(tester), contains('we can ship'), reason: 'visible and spoken snippets update together');
       await tester.runAsync(() async {
         preview.dispose();
         disposed = true;
       });
+      await _unmount(tester);
+    });
+
+    testWidgets('a covered local preview keeps the final transcript snippet on Home', (tester) async {
+      final engine = FakeLivePreviewEngine();
+      final preview = LivePreviewController(
+        engine: engine,
+        telemetry: LivePreviewTelemetry(emit: (_) {}),
+        platform: LivePreviewPlatform.ios,
+        osMajor: 26,
+      );
+      preview.admit(language: 'en');
+      final origin = DateTime(2026, 10, 20, 12);
+      await tester.runAsync(() async {
+        await pumpEventQueue();
+        engine.emit('covered', 'Provisional words', true,
+            startedAt: origin, endedAt: origin.add(const Duration(seconds: 5)));
+        await pumpEventQueue();
+      });
+      final capture = _LiveCapture()
+        ..preview = preview
+        ..previewAdmitted = true
+        ..transcriptOrigin = origin
+        ..segments = [_segment('final', 'The finished words stay live', 0)];
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: null);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      final line = tester.widget<Text>(
+          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
+      expect(line.textSpan!.toPlainText(), 'The finished words stay live');
+      await tester.runAsync(() async => preview.dispose());
       await _unmount(tester);
     });
 

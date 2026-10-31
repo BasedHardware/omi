@@ -79,7 +79,7 @@ def transcribe(item, binding, audio, *, multilingual=None, force_recognition=Fal
     return words_payload(duration, spans, words, language, worker_speech=worker_speech)
 
 
-def second_transcribe(item, audio, empty):
+def second_transcribe(item, audio, empty, second_chance=False):
     """One independent Soniox async call after Modulate's validated empty response."""
     from utils.stt.soniox_batch import transcribe as soniox_transcribe
 
@@ -88,7 +88,7 @@ def second_transcribe(item, audio, empty):
     response = at_stage(
         'provider',
         'provider_failed',
-        lambda: soniox_transcribe(output, duration),
+        lambda: soniox_transcribe(output, duration, second_chance=second_chance),
     )
     return independent_payload(response, duration, spans, getattr(empty, 'worker_speech', None))
 
@@ -107,12 +107,12 @@ def independent_payload(response, duration, spans, worker_speech=None):
     return {**words_payload(duration, spans, words, language, worker_speech=worker_speech), 'words_provider': 'soniox'}
 
 
-async def second_transcribe_async(item, audio, empty):
+async def second_transcribe_async(item, audio, empty, second_chance=False):
     from utils.stt.soniox_batch import transcribe_async as soniox_transcribe_async
 
     output, duration, spans = await run_blocking(sync_executor, independent_audio, item, audio, empty)
     try:
-        response = await soniox_transcribe_async(output, duration)
+        response = await soniox_transcribe_async(output, duration, second_chance=second_chance)
     except Exception:
         raise RecoveryFailure('provider', 'provider_failed') from None
     return await run_blocking(

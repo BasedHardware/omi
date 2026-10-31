@@ -167,3 +167,56 @@ def test_each_page_has_bounded_episode_reads_and_chunked_member_reads(store, mon
     projected = home_read.project_episodes('u', rows, firestore_client=store)
     assert batches == [50, 50, 21]
     assert [len(row['members']) for row in projected] == [121, 10]
+
+
+@pytest.mark.parametrize('status', ['live', 'closed'])
+@pytest.mark.parametrize('discarded', [False, True])
+def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store, monkeypatch, status, discarded):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import episodes as router
+    from utils.episodes import service
+    from utils.other import endpoints as auth
+
+    put(store, 'noise', START, START + timedelta(minutes=2), status)
+    root = store.collection('users').document('u')
+    root.collection('episodes').document('noise').update(
+        {'conversation_ids': ['fragment'], 'discarded_conversation_ids': ['fragment']}
+    )
+    root.collection('episode_links').document('current').set({'episode_id': 'noise'})
+    root.collection('conversations').document('fragment').set(
+        {
+            'id': 'fragment',
+            'status': 'completed',
+            'started_at': START,
+            'discarded': discarded,
+            'sync_relevance': 'keep',
+            'relevance_decision': {'verdict': 'discard', 'decided_by': 'model', 'trigger': 'sync_update', 'arm': 'jev'},
+        }
+    )
+    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(home_read, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    live = service.live_episode
+    c = service.Collaborators(firestore_client=store, now=lambda: START + timedelta(minutes=3))
+    monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
+    monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
+    app = FastAPI()
+    app.include_router(router.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'
+    with TestClient(app) as client:
+        live_response = client.get('/v1/episodes/live')
+        assert live_response.status_code == 200 and live_response.json()['episode'] is None
+        response = client.get(
+            '/v1/episodes', params={'from': START.isoformat(), 'to': (START + timedelta(hours=1)).isoformat()}
+        )
+        assert response.status_code == 200 and response.json()['episodes'] == []
+        # A later explicit restore outranks the older receipt and discard bookkeeping.
+        root.collection('conversations').document('fragment').update(
+            {'discarded': False, 'sync_relevance_user_kept': True}
+        )
+        restored = client.get(
+            '/v1/episodes', params={'from': START.isoformat(), 'to': (START + timedelta(hours=1)).isoformat()}
+        )
+        assert restored.status_code == 200 and len(restored.json()['episodes']) == 1
+        assert (client.get('/v1/episodes/live').json()['episode'] is not None) == (status == 'live')

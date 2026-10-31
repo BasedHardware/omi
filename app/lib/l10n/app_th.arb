@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "ตอนนี้แพ็กเกจของคุณยังจ่ายรายปีไม่ได้",
     "yearlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายปีแล้ว",
     "yearlySwitchDoneBody": "เรียกเก็บ {amount} วันนี้ ต่ออายุ {date}",
-    "episodePartsCount": "{count, plural, zero{{count} ส่วน} one{{count} ส่วน} two{{count} ส่วน} few{{count} ส่วน} many{{count} ส่วน} other{{count} ส่วน}}"
+    "episodePartsCount": "{count, plural, zero{{count} ส่วน} one{{count} ส่วน} two{{count} ส่วน} few{{count} ส่วน} many{{count} ส่วน} other{{count} ส่วน}}",
+    "chatAppsWaitingMessageIn": "ส่งข้อความในแอป {app} หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ",
+    "chatAppsCodeExpiredMessageIn": "ขอรหัสใหม่แล้วส่งจากแอป{app}"
 }

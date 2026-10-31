@@ -12,6 +12,8 @@
   whether the user's client was seen (``omi_episode_live_sessions_total``)
 - episodes API calls by client channel and admission outcome
   (``omi_episode_client_requests_total``)
+- closed-episode composer runs by outcome and their latency
+  (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
 """
 
 from __future__ import annotations
@@ -44,6 +46,8 @@ MOMENT_OUTCOMES = frozenset(
         'skipped_short',
         'skipped_applied',
         'skipped_closed',
+        # A write into a closed episode the composer owns: bookkeeping only, no model call.
+        'composer_owned',
         'rate_limited',
         'llm_error',
         'parse_error',
@@ -133,6 +137,36 @@ EPISODE_LIVE_SESSIONS_TOTAL = _reuse_or_create(
     'Admitted live conversations at their first speech, by whether a capable client was seen (true|false).',
     ['client_seen'],
 )
+COMPOSE_OUTCOMES = frozenset(
+    {
+        'composed',
+        'unchanged',
+        'leased',
+        'waiting',
+        'live',
+        'empty',
+        'no_episode',
+        'superseded',
+        'stale',
+        'backoff',
+        'conflict',
+        'disabled',
+        'error',
+    }
+)
+EPISODE_COMPOSE_TOTAL = _reuse_or_create(
+    Counter,
+    'omi_episode_compose_total',
+    'Closed-episode composer runs by outcome. Never labeled by uid.',
+    ['outcome'],
+)
+EPISODE_COMPOSE_SECONDS = _reuse_or_create(
+    Histogram,
+    'omi_episode_compose_seconds',
+    'Wall time of a composer run, including its model call.',
+    ['outcome'],
+    buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
+)
 CLIENT_CHANNELS = frozenset({'beta', 'store', 'unknown'})
 CLIENT_REQUEST_OUTCOMES = frozenset({'admitted', 'channel_closed', 'not_admitted'})
 EPISODE_CLIENT_REQUESTS_TOTAL = _reuse_or_create(
@@ -174,6 +208,9 @@ def _prime() -> None:
             EPISODE_WRAPUP_LATENCY_SECONDS.labels(reason=_label(reason, CLOSE_REASON_LABELS))
         for seen in ('true', 'false'):
             EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen=seen)
+        for outcome in COMPOSE_OUTCOMES:
+            EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+            EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
         for channel in CLIENT_CHANNELS:
             for outcome in CLIENT_REQUEST_OUTCOMES:
                 EPISODE_CLIENT_REQUESTS_TOTAL.labels(channel=channel, outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES))
@@ -257,5 +294,13 @@ def record_client_request(channel: str, outcome: str) -> None:
             channel=channel if channel in CLIENT_CHANNELS else 'unknown',
             outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES),
         ).inc()
+    except Exception:
+        pass
+
+
+def record_compose(outcome: str, seconds: float) -> None:
+    try:
+        EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
+        EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).observe(max(0.0, seconds))
     except Exception:
         pass

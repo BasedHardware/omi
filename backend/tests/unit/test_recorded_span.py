@@ -307,10 +307,10 @@ def test_recorded_component_larger_than_membership_batch_commits_all_reverse_lin
     read = episodes.read_memberships
     batches = []
 
-    def bounded_read(transaction, client, uid, ids):
+    def bounded_read(transaction, client, uid, ids, *, admit_conversation_id=None):
         ids = list(ids)
         batches.append(len(ids))
-        return read(transaction, client, uid, ids)
+        return read(transaction, client, uid, ids, admit_conversation_id=admit_conversation_id)
 
     monkeypatch.setattr(episodes, 'read_memberships', bounded_read)
     result = episode_timeline.attach_recorded(

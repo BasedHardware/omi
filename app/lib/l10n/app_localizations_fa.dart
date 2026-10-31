@@ -14940,4 +14940,14 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'پیام را در $app ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'کد جدید بگیرید و از $app ارسال کنید.';
+  }
 }

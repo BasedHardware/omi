@@ -446,7 +446,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Kubernetes / Scheduler | `2e6b6a3b4bddf1427b3a55aa1311c656` | `kubernetes-mixin` | Bundled |
 | Node Exporter / AIX | `7e0a61e486f727d763fb1d86fdd629c2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / MacOS | `629701ea43bf69291922ea45f4a87d37` | `node-exporter-mixin` | Bundled |
-| Omi Core Features | `omi-core-features` | — | **Custom** — user-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), rolling one-hour relevance discard share by Cloud Run service and trigger, and conversation search freshness (summary-vector writes and retrieval degradation). Sync-service series appear after the metrics-egress workflow applies the sync exporter values; the collapsed row retains its Cloud Logging `omi_sync_intake` panel. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
+| Omi Core Features | `omi-core-features` | — | **Custom** — glance board. First screen: count of outcomes at 99%+, eight outcome tiles each with an hourly trend, what is stuck, who stayed; everything else is in collapsed rows. User-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), rolling one-hour relevance discard share by Cloud Run service and trigger, and conversation search freshness (summary-vector writes and retrieval degradation). Sync-service series appear after the metrics-egress workflow applies the sync exporter values; the collapsed row retains its Cloud Logging `omi_sync_intake` panel. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
 | Node Exporter / Nodes | `7d57716318ee0dddbac5a7f451fb7753` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Cluster | `3e97d1d02672cdd0861f4c97c64f89b2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Node | `fac67cfbe174d3ef53eb473d73d9212f` | `node-exporter-mixin` | Bundled |
@@ -1025,6 +1025,38 @@ Cloud Logging presentation acceptance follow [LOG_CONSOLIDATION.md](LOG_CONSOLID
 Grafana availability independently; it cannot prove query-path or delivery health.
 
 ### Metrics Contract
+
+Core Features Prometheus trend panels use `[$__interval]` with a 1h minimum interval, so
+the window equals the step and each sample is read once. The recap trend reads Cloud
+Monitoring with a fixed `[1h]` window and `step: 1h`. They follow the time picker;
+on Prometheus a fixed 14-day trend would exceed the 10-day Prometheus retention and cost about
+7 to 15 seconds per tile, so longer history needs recording rules first. Do not set
+`noValue` on these panels: Grafana coerces it to a number and draws gaps as that
+value. The 99%+ count covers the seven Prometheus outcomes; daily recaps come from
+Cloud Monitoring and keep their own 98%/90% bands.
+
+Core Features keeps capture success / (success + failure) separate from the
+3-hour stale terminal count and share. Stale finalization includes deliberate
+lifecycle/discard fences; it cannot establish missing conversations or an
+accepted-cohort conversion rate. The dead-letter stat uses
+`delta((max(listen_finalization_jobs{status="dead_letter"}))[$__range:1m])`,
+clamped at zero and rounded: the Firestore projection survives pod churn and
+replicas must be collapsed before computing the change. It includes abandoned
+BYOK waits as well as exhausted retries, and excludes pre-projection history.
+The stat requires a current summary timestamp no older than 15 minutes, so
+cached history alone cannot paint a dead publisher green. The existing
+system-owned age gauge already excludes `blocked_byok`.
+
+`omi_client_journey_terminal_total` adds `reason` from the existing closed
+`CLIENT_JOURNEY_ISSUE_CLASSES` enum for failure/degraded/unknown, and `none` for
+success/cancelled. Unknown input collapses to `unknown`; no input text is
+exported. The 12 issue classes give at most 38 outcome/reason combinations
+per journey/client kind, or 3,420 counter children per process at the full
+9-by-10 bound (previously 450). Children are emitted only on real events;
+the histogram gains no dimension. During rolling deploys and historical
+queries the breakdown retains old series as `legacy_unlabeled`. Backend,
+listen and pusher emitter releases are required before reason coverage is
+complete; dashboard provisioning alone does not deploy the label.
 
 `omi_stt_stream_close_total{provider,reason}` pre-creates 55 zero-valued children:
 the four bounded providers plus the `unknown` fallback, crossed with the eleven

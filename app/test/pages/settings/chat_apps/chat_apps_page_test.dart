@@ -164,6 +164,44 @@ void main() {
     });
   });
 
+  group('WhatsApp connect', () {
+    testWidgets('a configured number replaces the waitlist with the code flow', (tester) async {
+      const config = ChatAppsConfig(
+        enabled: true,
+        endpoints: {
+          ChatChannel.telegram: telegramEndpoint,
+          ChatChannel.imessage: imessageEndpoint,
+          ChatChannel.whatsapp: ChatChannelEndpoint(provider: 'keiki', address: '+15550100200'),
+        },
+      );
+      final backend = await pumpPage(tester, config: config);
+      expect(find.text('Notify Me'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('chat_apps_row_whatsapp')));
+      await settle(tester);
+      expect(find.text('Text Omi to connect'), findsOneWidget);
+      expect(find.textContaining('Hi Omi, link code 9F2C4A7B'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('chat_apps_open_messages')));
+      await settle(tester);
+      expect(launched.single.host, 'wa.me');
+      expect(launched.single.path, '/15550100200');
+      expect(launched.single.toString(), contains('link%20code%209F2C4A7B'));
+      expect(find.text('Send the message in WhatsApp. This screen updates as soon as Omi gets it.'), findsOneWidget);
+      expect(find.text('Open WhatsApp'), findsOneWidget);
+
+      backend.links = [linkJson(id: linkIdIMessage, channel: 'whatsapp', externalId: 'wa:+15550100')];
+      await tester.pump(const Duration(milliseconds: 150));
+      await settle(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('WhatsApp is connected'), findsOneWidget);
+    });
+
+    testWidgets('without a configured number WhatsApp stays a waitlist', (tester) async {
+      await pumpPage(tester);
+      expect(find.text('Notify Me'), findsOneWidget);
+    });
+  });
+
   group('iMessage connect', () {
     testWidgets('prefills Messages with the code, then waits and connects', (tester) async {
       final backend = await pumpPage(tester);
