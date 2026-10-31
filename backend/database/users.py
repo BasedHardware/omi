@@ -2487,9 +2487,25 @@ def get_ai_user_profile_v2(uid: str) -> Optional[dict]:
     return (doc.to_dict() or {}).get('ai_user_profile_v2')
 
 
-def update_ai_user_profile_v2(uid: str, profile_v2: dict) -> None:
-    """Replace only the v2 side field; the served ai_user_profile and its cache are untouched."""
-    db.collection('users').document(uid).update({'ai_user_profile_v2': profile_v2})
+def update_ai_user_profile_v2(uid: str, profile_v2: dict) -> bool:
+    """Replace only the v2 side field, unless a newer run already wrote it.
+
+    ``profile_v2['run_started_at']`` (ISO) fences late writes from a timed-out run.
+    The served ai_user_profile and its cache are untouched. Returns whether it wrote.
+    """
+    ref = db.collection('users').document(uid)
+
+    @transactional
+    def write(transaction):
+        snapshot = ref.get(['ai_user_profile_v2'], transaction=transaction)
+        current = (snapshot.to_dict() or {}).get('ai_user_profile_v2') if snapshot.exists else None
+        previous = str((current or {}).get('run_started_at') or '')
+        if previous and previous > str(profile_v2.get('run_started_at') or ''):
+            return False
+        transaction.update(ref, {'ai_user_profile_v2': profile_v2})
+        return True
+
+    return write(db.transaction())
 
 
 def update_ai_user_profile(

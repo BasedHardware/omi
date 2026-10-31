@@ -38,6 +38,7 @@ from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
 from models.agent_edit import HarnessEdit
+from models.agent_refs import base_ref
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import verifiers
@@ -291,6 +292,20 @@ async def run_session(
     session.counters['search_embedding_token_upper_bound'] += seed.get('required_intake_embedding_tokens', 0)
     stage = 'session'
 
+    def _pre_effect_rows(loop_staged, pass_report):
+        applied = {
+            row.get('key')
+            for row in pass_report['outcomes']
+            if isinstance(row, dict) and row.get('status') == 'applied'
+        }
+        rows = {}
+        for item in loop_staged:
+            if item.key in applied and item.kind in dream_state_pass.CLEANUP_KINDS:
+                target = base_ref(item.operation.target)
+                if target in item.records:
+                    rows[target] = item.records[target]
+        return rows
+
     async def _state_pass(loop_staged):
         nonlocal state_allowance, state_running
         arm, would_serve = dream_state_pass.mode()
@@ -308,6 +323,7 @@ async def run_session(
                 verify_turn=partial(invoke, dream_harness_transport.VERIFY_LANE),
                 loop_report=report,
                 loop_staged_keys={item.key for item in loop_staged},
+                loop_applied_rows=_pre_effect_rows(loop_staged, report),
                 deadline_seconds=min(
                     dream_state_pass.seconds(), max(0, deadline - asyncio.get_running_loop().time() - 60)
                 ),

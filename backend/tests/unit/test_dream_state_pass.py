@@ -154,8 +154,15 @@ def state_env(runtime, monkeypatch):
     dream_state_pass._sweep_calls.clear()
     dream_judge._sweep_calls.clear()
     snapshot = records(runtime)
+    # Post-effect scan: dismissed people are gone, as in production.
     monkeypatch.setattr(
-        dream_state_pass, 'people_page', lambda uid, firestore_client=None: [('people/junk', snapshot['people/junk'])]
+        dream_state_pass,
+        'people_page',
+        lambda uid, firestore_client=None: [
+            (ref, row)
+            for ref, row in records(runtime).items()
+            if ref.startswith('people/') and not row.get('is_dismissed')
+        ],
     )
     monkeypatch.setattr(dream_state_pass, 'tasks_page', lambda uid, firestore_client=None: [])
     monkeypatch.setattr(dream_state_pass, 'memories_page', lambda uid: [('memories/m1', {'content': 'Builds Omi.'})])
@@ -338,3 +345,42 @@ def test_state_pass_times_out_as_a_whole():
     finally:
         sp.people_page, sp.tasks_page, sp.memories_page, sp.conversation_index = original
         users_db.get_ai_user_profile_v2 = original_get
+
+
+def test_check_lines_needs_exactly_one_agreeing_decision():
+    from utils.dream_profile_v2 import ProfileLine
+
+    line = ProfileLine(id='l1', text='Builds Omi.', refs=['memories/m1'])
+
+    async def duplicate(mount, messages):
+        return Turn(
+            tokens=10,
+            value=VerificationBatch(
+                decisions=[
+                    Verification(id='l1', agree=True, reason='ok'),
+                    Verification(id='l1', agree=False, reason='no'),
+                ]
+            ),
+        )
+
+    async def single(mount, messages):
+        return Turn(tokens=10, value=VerificationBatch(decisions=[Verification(id='l1', agree=True, reason='ok')]))
+
+    args = dict(tokens=10000, deadline_seconds=5)
+    assert asyncio.run(dream_state_pass.check_lines([line], {}, duplicate, **args)) == set()
+    assert asyncio.run(dream_state_pass.check_lines([line], {}, single, **args)) == {'l1'}
+
+
+def test_recall_counts_only_supported_kinds():
+    report = {
+        'outcomes': [
+            {'key': 'k1', 'kind': 'dismiss_person', 'status': 'applied'},
+            {'key': 'k2', 'kind': 'spelling', 'status': 'applied'},
+        ],
+        'proposed': {'edits': [{'key': 'k1', 'kind': 'dismiss_person', 'target': 'people/a'}]},
+    }
+    planned = [
+        dream_state_pass.DreamHarnessEdit(kind='dismiss_person', target='people/a', reason='r', evidence=['people/a'])
+    ]
+    result = dream_state_pass.compare(planned, {'k1'}, [], {}, report, set())
+    assert result['loop_applied'] == 1 and result['recall_keys'] == 1 and result['recall_refs'] == 1
