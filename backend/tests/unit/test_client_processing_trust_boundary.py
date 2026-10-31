@@ -536,6 +536,11 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             'client_processing_mutation',
             'model_dump',
         ),
+        DumpSite(
+            'utils/conversations/projection_payload.py',
+            'complete_exhausted_custom_stt_conversation',
+            'model_dump',
+        ),
         DumpSite('utils/conversations/process_conversation.py', '_get_conversation_obj', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', 'execute_app', 'dict'),
         DumpSite(
