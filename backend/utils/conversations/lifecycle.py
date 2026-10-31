@@ -966,10 +966,21 @@ def _finalization_admission(
 
 
 def claim_finalization_fanout(
-    job_id: str, dispatch_generation: int, lease_epoch: int
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    expected_discarded: bool = False,
+    firestore_client: Any = None,
 ) -> jobs_db.FinalizationFanoutClaim:
     """Claim the durable external-integration fanout through the lifecycle owner."""
-    return jobs_db.claim_finalization_fanout(job_id, dispatch_generation, lease_epoch)
+    return jobs_db.claim_finalization_fanout(
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+        expected_discarded=expected_discarded,
+        firestore_client=firestore_client,
+    )
 
 
 def complete_finalization_fanout(
