@@ -239,6 +239,56 @@ if grep -Fq "Warning:" "$prefs_home/res-both.err"; then
   fail "authority with both hotkeys must not warn"
 fi
 
+# --- Local AI provider protection: chatBridgeMode is bundle-local once a ---
+# --- target has already selected "local". Its companion endpoint keys ---
+# --- (localLLMBaseURL and friends) are bundle-local and never mirrored, so ---
+# --- mirroring or deleting the mode alone would orphan those endpoint keys ---
+# --- against Omi's cloud chat runtime and its billing gate. ---
+bridge_authority_absent="com.omi.codex-settings-bridge-absent-$$"
+bridge_authority_claudecode="com.omi.codex-settings-bridge-claudecode-$$"
+bridge_authority_local="com.omi.codex-settings-bridge-authlocal-$$"
+bridge_target_local1="com.omi.codex-settings-bridge-local1-$$"
+bridge_target_local2="com.omi.codex-settings-bridge-local2-$$"
+bridge_target_pimono1="com.omi.codex-settings-bridge-pimono1-$$"
+bridge_target_pimono2="com.omi.codex-settings-bridge-pimono2-$$"
+bridge_target_none="com.omi.codex-settings-bridge-none-$$"
+cleanup_domains+=("$bridge_authority_absent" "$bridge_authority_claudecode" "$bridge_authority_local" "$bridge_target_local1" "$bridge_target_local2" "$bridge_target_pimono1" "$bridge_target_pimono2" "$bridge_target_none")
+
+# 1. Authority absent chatBridgeMode; target already on "local" with a
+# bundle-local endpoint key. Both must survive, and the provenance line
+# must show up in stdout.
+defaults write "$bridge_authority_absent" fontScale -float 1.0
+defaults write "$bridge_target_local1" chatBridgeMode -string local
+defaults write "$bridge_target_local1" localLLMBaseURL -string "http://127.0.0.1:1234/v1"
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$bridge_target_local1" "$bridge_authority_absent" >"$prefs_home/bridge-local1.out"
+assert_defaults "$bridge_target_local1" chatBridgeMode local
+assert_defaults "$bridge_target_local1" localLLMBaseURL "http://127.0.0.1:1234/v1"
+grep -Fq "Kept $bridge_target_local1's bundle-local Local AI provider selection" "$prefs_home/bridge-local1.out" \
+  || fail "protecting a target already on local must print a provenance line"
+
+# 2. Authority explicitly on a different mode; target already on "local"
+# still keeps "local" rather than following the authority.
+defaults write "$bridge_authority_claudecode" chatBridgeMode -string claudeCode
+defaults write "$bridge_target_local2" chatBridgeMode -string local
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$bridge_target_local2" "$bridge_authority_claudecode" >/dev/null
+assert_defaults "$bridge_target_local2" chatBridgeMode local
+
+# 3. Control: mirror semantics for chatBridgeMode are unchanged when the
+# target is not already on "local".
+defaults write "$bridge_target_pimono1" chatBridgeMode -string piMono
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$bridge_target_pimono1" "$bridge_authority_absent" >/dev/null
+assert_unset "$bridge_target_pimono1" chatBridgeMode
+
+defaults write "$bridge_target_pimono2" chatBridgeMode -string piMono
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$bridge_target_pimono2" "$bridge_authority_claudecode" >/dev/null
+assert_defaults "$bridge_target_pimono2" chatBridgeMode claudeCode
+
+# 4. A target with no chatBridgeMode still gets a plain mirror: the
+# protection only applies once the target has already selected "local".
+defaults write "$bridge_authority_local" chatBridgeMode -string local
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$bridge_target_none" "$bridge_authority_local" >/dev/null
+assert_defaults "$bridge_target_none" chatBridgeMode local
+
 # omi-test-quality: source-inspection -- static contract: named-bundle settings seeding stays on the common prelaunch path shared by fast and full bundle builds.
 python3 - "$MACOS_DIR/run.sh" <<'PY'
 from pathlib import Path

@@ -269,6 +269,11 @@ package enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable 
   /// `tooShort`, which blames the user for latency they did not cause.
   case captureNotReady = "capture_not_ready"
   case transcriptionFailed = "transcription_failed"
+  /// Omi's transcription endpoint refused a batch (PTT) request because the
+  /// account's transcription plan limit is exhausted (HTTP 402). Distinct
+  /// from `transcriptionFailed` so the user is told it is a plan limit, not
+  /// a generic AI-service failure, and so it is never told to just retry.
+  case transcriptionPlanLimit = "transcription_plan_limit"
   case providerFailed = "provider_failed"
   /// The turn was recorded with no network path and was not a dictation:
   /// nothing offline can answer it. Distinct from `providerFailed`, which
@@ -368,6 +373,8 @@ package enum VoiceTurnUICopy {
       return "Microphone wasn't ready — retrying, hold again"
     case .transcriptionFailed:
       return "Couldn't transcribe that — try again"
+    case .transcriptionPlanLimit:
+      return "Transcription is over your plan's limit. Check Settings → Plan and Usage."
     case .journalFailed:
       return "Couldn't save that reply — try again"
     case .providerFailed, .providerNoResponse, .deferredCommitTimeout:
@@ -1127,15 +1134,36 @@ package struct VoiceTurnFact: Sendable {
 /// The only mutable lifecycle owner. Its event representation and reducer stay
 /// internal to this target; drivers publish facts and consume immutable results.
 @MainActor package final class VoiceTurnDomain {
-  private let reducer: VoiceTurnReducer
+  private var reducer: VoiceTurnReducer
   package private(set) var model: VoiceTurnModel
+  private let providerResponseDeadline: @MainActor () -> TimeInterval?
 
-  package init(model: VoiceTurnModel = .idle) {
+  /// - Parameter providerResponseDeadline: overrides `Deadlines.providerResponse`
+  ///   (default 20s, sized for a cloud round trip) when it returns non-nil.
+  ///   Called on every `publish(_:)`, not just at init, so a caller whose
+  ///   provider changes after construction (e.g. a Settings switch) applies
+  ///   on the next event rather than the next relaunch. Callers whose
+  ///   provider's time to first token is dominated by local prompt prefill
+  ///   need a longer deadline; every other caller keeps the default by
+  ///   returning nil.
+  package init(
+    model: VoiceTurnModel = .idle,
+    providerResponseDeadline: @escaping @MainActor () -> TimeInterval? = { nil }
+  ) {
     reducer = VoiceTurnReducer()
     self.model = model
+    self.providerResponseDeadline = providerResponseDeadline
   }
 
   package func publish(_ fact: VoiceTurnFact) -> VoiceTurnReduction {
+    let override = providerResponseDeadline()
+    if let override, override != reducer.deadlines.providerResponse {
+      reducer.deadlines.providerResponse = override
+    } else if override == nil,
+      reducer.deadlines.providerResponse != VoiceTurnReducer.Deadlines().providerResponse
+    {
+      reducer.deadlines.providerResponse = VoiceTurnReducer.Deadlines().providerResponse
+    }
     let reduction = reducer.reduce(model, fact.event)
     model = reduction.model
     return reduction

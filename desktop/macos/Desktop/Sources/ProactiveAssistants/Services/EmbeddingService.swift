@@ -105,6 +105,9 @@ actor EmbeddingService {
     async throws -> [Float]
   {
     try requireAuthority(authorization)
+    guard !AIProvider.isLocalProviderFailingClosed else {
+      throw EmbeddingError.localProviderCloudOff
+    }
     try requireCloudEntitlement(authorization)
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
@@ -164,6 +167,9 @@ actor EmbeddingService {
     async throws -> [[Float]]
   {
     try requireAuthority(authorization)
+    guard !AIProvider.isLocalProviderFailingClosed else {
+      throw EmbeddingError.localProviderCloudOff
+    }
     try requireCloudEntitlement(authorization)
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
@@ -446,6 +452,14 @@ actor EmbeddingService {
     case missingAPIKey
     case invalidResponse
     case serverError(statusCode: Int, body: String)
+    /// The Local provider is active and the user has not opted cloud-assisted
+    /// features on (`AIProvider.localCloudAssistEnabled`). Thrown before any
+    /// network call, from `embed`/`embedBatch`: no text ever leaves the
+    /// machine for embedding. Same family as a 402/`product_gate`: callers
+    /// that already treat `isExpectedBackendState` as a quiet, expected
+    /// backend-limit state (Rewind's backfill and search paths) degrade the
+    /// same way without any change on their side.
+    case localProviderCloudOff
 
     var reasonCode: String {
       switch self {
@@ -453,6 +467,8 @@ actor EmbeddingService {
         return "missing_api_key"
       case .invalidResponse:
         return "malformed_response"
+      case .localProviderCloudOff:
+        return "local_provider_cloud_off"
       case .serverError(let statusCode, let body):
         let lower = body.lowercased()
         if statusCode == 402 || lower.contains("trial_expired") || lower.contains("trial expired")
@@ -473,7 +489,7 @@ actor EmbeddingService {
       }
     }
 
-    var isExpectedProductState: Bool { reasonCode == "product_gate" }
+    var isExpectedProductState: Bool { reasonCode == "product_gate" || reasonCode == "local_provider_cloud_off" }
     var isTransient: Bool { reasonCode == "rate_limited" || reasonCode == "temporarily_unavailable" }
     var isNonActionableForSentry: Bool { isExpectedProductState || isTransient }
 
@@ -483,6 +499,9 @@ actor EmbeddingService {
         return "AI features are not configured. Please update the app."
       case .invalidResponse:
         return "Embedding API returned an unexpected response."
+      case .localProviderCloudOff:
+        return
+          "Embeddings are off under the Local provider. Enable Cloud-assisted features in Settings > AI Provider to use semantic search here."
       case .serverError:
         switch reasonCode {
         case "product_gate":
@@ -497,13 +516,15 @@ actor EmbeddingService {
       }
     }
 
-    /// Expected product-gating / backend-limit states (paywall/trial-expired, rate-limited).
-    /// These are not actionable bugs: they should be logged locally rather than reported to
-    /// as high-priority errors, and must not drive tight retry loops.
+    /// Expected product-gating / backend-limit states (paywall/trial-expired, rate-limited,
+    /// Local-provider cloud-assist off). These are not actionable bugs: they should be logged
+    /// locally rather than reported to as high-priority errors, and must not drive tight
+    /// retry loops.
     var isExpectedBackendState: Bool {
       if case .serverError(let statusCode, _) = self {
         return statusCode == 402 || statusCode == 429
       }
+      if case .localProviderCloudOff = self { return true }
       return false
     }
   }

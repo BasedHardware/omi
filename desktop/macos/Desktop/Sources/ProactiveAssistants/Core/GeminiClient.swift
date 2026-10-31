@@ -221,6 +221,7 @@ actor GeminiClient {
       case .networkError: return "offline"
       case .invalidResponse: return "invalid_response"
       case .missingAPIKey: return "auth"
+      case .localProviderCloudOff: return "local_failure"
       }
     }
 
@@ -231,6 +232,13 @@ actor GeminiClient {
     /// Identified basic + non-BYOK, or a typed 402 `plan_gated` from the proxy.
     /// Non-retryable. Distinct from chat-quota 402 (`error` field).
     case planGated
+    /// The Local provider is active and the user has not opted cloud-assisted
+    /// features on (`AIProvider.localCloudAssistEnabled`). Thrown before any
+    /// network call, never a server response, so screenshot/transcript
+    /// content for this call never leaves the machine. Non-retryable, same
+    /// family as `planGated`: both are a product-level "this call may not
+    /// happen" answer, not a transient failure.
+    case localProviderCloudOff
 
     /// The raw API message for internal logging (not shown to user).
     var internalMessage: String? {
@@ -256,7 +264,7 @@ actor GeminiClient {
           || lower.contains("internal error")
       case .networkError:
         return true
-      case .invalidResponse, .missingAPIKey, .planGated:
+      case .invalidResponse, .missingAPIKey, .planGated, .localProviderCloudOff:
         return false
       }
     }
@@ -272,7 +280,7 @@ actor GeminiClient {
         // A transport error after dispatch is ambiguous. Only a typed backend
         // response may authorize replay.
         return false
-      case .invalidResponse, .missingAPIKey, .planGated:
+      case .invalidResponse, .missingAPIKey, .planGated, .localProviderCloudOff:
         return false
       }
     }
@@ -292,7 +300,7 @@ actor GeminiClient {
           || lower.contains("quota exceeded")
           || lower.contains("http 402")
           || lower == "legacy_task_reservation_inactive"
-      case .missingAPIKey, .planGated:
+      case .missingAPIKey, .planGated, .localProviderCloudOff:
         return true
       case .networkError, .invalidResponse:
         return false
@@ -311,6 +319,9 @@ actor GeminiClient {
         return Self.userFacingMessage(for: message)
       case .planGated:
         return "AI features require an active plan or BYOK keys."
+      case .localProviderCloudOff:
+        return
+          "This feature is off under the Local provider. Enable Cloud-assisted features in Settings > AI Provider to turn it on."
       }
     }
 
@@ -592,7 +603,7 @@ actor GeminiClient {
           return "provider_5xx"
         }
         return "other"
-      case .invalidResponse, .missingAPIKey, .planGated:
+      case .invalidResponse, .missingAPIKey, .planGated, .localProviderCloudOff:
         return "other"
       }
     }
@@ -606,6 +617,13 @@ actor GeminiClient {
       "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
     )
     try await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+    // enforceManagedProactivity() only gates the first attempt; a retry is a
+    // new send, and the user may have flipped Cloud-assisted features off
+    // during this sleep. Recheck so an opt-out mid-retry takes effect
+    // immediately instead of letting an already-scheduled retry still go out.
+    if AIProvider.isLocalProviderFailingClosed {
+      throw GeminiClientError.localProviderCloudOff
+    }
   }
 
   /// Client UX gate. Server 402 `plan_gated` remains the invariant.
@@ -615,6 +633,16 @@ actor GeminiClient {
   }
 
   static func enforceManagedProactivity() async throws {
+    // Local-provider fail-closed gate, checked before `ManagedProactivityDecisionSource.current()`
+    // (which itself may issue a subscription-refresh network call) so an
+    // opted-out Local session never makes ANY network call for this feature,
+    // not even the entitlement lookup. Independent of subscription/BYOK
+    // state: the point is that this content (screenshot or prompt text) does
+    // not leave the machine unless the user explicitly opted cloud-assisted
+    // features on, regardless of what plan they're on.
+    if AIProvider.isLocalProviderFailingClosed {
+      throw GeminiClientError.localProviderCloudOff
+    }
     try requireManagedProactivity(await ManagedProactivityDecisionSource.current())
   }
 
