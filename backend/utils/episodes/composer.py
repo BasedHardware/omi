@@ -30,7 +30,10 @@ from config.episodes import (
     COMPOSER_FEATURE,
     COMPOSER_LEASE_SECONDS,
     COMPOSER_MAX_FAILURES,
+    COMPOSER_MAX_DETAILS,
     COMPOSER_MAX_PARAGRAPH_CHARS,
+    COMPOSER_MAX_POINT_CHARS,
+    COMPOSER_MAX_POINTS,
     COMPOSER_READ_THROTTLE_SECONDS,
     COMPOSER_RETRY_MINUTES,
     COMPOSER_MAX_CHAPTERS,
@@ -54,15 +57,18 @@ _PLACEHOLDER = re.compile(r'^\s*(new|unknown)\b.*\bmoment\b', re.I)
 _WINDOW_SECONDS = 600
 _CLOCK_SLACK_MINUTES = 2
 
-SYSTEM_PROMPT = """You write the summary people read for an "episode": one continuous stretch of {owner}'s day captured by a wearable. It can span several recordings. {owner} is the wearer.
-You get each recording's existing summary and the full transcript (or its densest stretches when it is very long). The transcript is automatic and noisy: speaker labels can be wrong, and short fragments in other languages are usually mis-transcribed background noise. Use the summaries as a map and the transcript as the source of truth.
+SYSTEM_PROMPT = """You write the page people read for an "episode": one continuous stretch of {owner}'s day captured by a wearable. It can span several recordings. {owner} is the wearer; call them {owner}, never "the user" or "someone".
+You get each recording's existing summary and action items, and the full transcript (or its densest stretches when it is very long). The transcript is automatic and noisy: speaker labels can be wrong, and short fragments in other languages are usually mis-transcribed background noise. Use the summaries as a map and the transcript as the source of truth.
 Write in {language}. Return JSON only:
 {{"title": "<= 7 words, specific to what happened",
  "emoji": "one emoji",
- "overview": "2-4 short paragraphs a busy person would want to read later: what happened, what was decided, what matters. Concrete names, numbers and decisions. No filler. Never write speaker labels, transcript lines or quotes of filler.",
- "chapters": [{{"start": "HH:MM", "end": "HH:MM", "title": "<= 6 words", "summary": "one sentence"}}],
+ "lede": "one or two sentences: what this stretch of the day was and what came out of it",
+ "chapters": [{{"start": "HH:MM:SS", "end": "HH:MM:SS", "title": "<= 6 words",
+   "points": [{{"text": "one specific point", "details": ["a supporting specific"]}}]}}],
+ "follow_ups": ["a concrete next step someone committed to or clearly needs to take"],
  "people": ["names of people who mattered, only if named"]}}
-chapters: 1 to {max_chapters} significant stretches in time order, with clock times copied from the transcript. Skip noise, background chatter, mumbling and filler entirely. Never title anything "New moment" or similar."""
+chapters are the body of the page: 1 to {max_chapters} significant stretches in time order. start and end are the clock labels of the chapter's first and last transcript lines, copied exactly. Each chapter has 2 to 5 points; a point may carry 0 to 3 details. Points carry the substance the way good meeting notes do: names, numbers, product and feature names, the exact problem or idea, what was decided and why, open questions. Never repeat the lede inside a chapter. Attribute a statement, request or decision to a person only when the transcript makes the speaker clear; otherwise write it without a name.
+Skip noise, background chatter, mumbling and filler entirely. Never write meta-commentary such as "no decision was recorded" or "nothing else was discussed": leave it out. Never write speaker labels or quote filler. Never title anything "New moment" or similar. follow_ups is empty when there are none."""
 
 
 class ComposeFailed(RuntimeError):
@@ -139,14 +145,18 @@ def _speaker(segment: Mapping[str, Any], owner: str) -> str:
     return label
 
 
+def _origin(row: Mapping[str, Any]) -> Optional[datetime]:
+    """The instant a member's segment offsets count from."""
+    return _utc(row.get('started_at')) or _span(row)[0]
+
+
 def transcript_lines(row: Mapping[str, Any], owner: str, tz: ZoneInfo) -> list[tuple[datetime, str]]:
-    start, _ = _span(row)
-    origin = _utc(row.get('started_at')) or start
+    origin = _origin(row)
     out = []
     for segment in _segments(row):
         at = (origin or datetime.now(timezone.utc)) + timedelta(seconds=float(segment.get('start') or 0))
         local = at.astimezone(tz)
-        out.append((at, f"[{local:%H:%M}] {_speaker(segment, owner)}: {str(segment.get('text')).strip()}"))
+        out.append((at, f"[{local:%H:%M:%S}] {_speaker(segment, owner)}: {str(segment.get('text')).strip()}"))
     return out
 
 
@@ -218,9 +228,16 @@ def parse(content: str) -> dict[str, Any]:
         raise ComposeFailed('parse_error') from error
     if not isinstance(data, dict):
         raise ComposeFailed('parse_error')
-    if isinstance(data.get('overview'), list):
-        data['overview'] = '\n\n'.join(str(part) for part in data['overview'] if str(part).strip())
-    if not str(data.get('title') or '').strip() or not str(data.get('overview') or '').strip():
+    for key in ('lede', 'overview'):
+        if isinstance(data.get(key), list):
+            data[key] = ' '.join(str(part) for part in data[key] if str(part).strip())
+    if not str(data.get('lede') or '').strip():
+        data['lede'] = str(data.get('overview') or '').strip()
+    for key in ('chapters', 'follow_ups', 'people'):
+        if not isinstance(data.get(key), list):
+            data[key] = []
+    data['chapters'] = [chapter for chapter in data['chapters'] if isinstance(chapter, Mapping)]
+    if not str(data.get('title') or '').strip() or not str(data.get('lede') or '').strip():
         raise ComposeFailed('parse_error')
     return data
 
@@ -233,20 +250,66 @@ def line_span(lines: Sequence[tuple[datetime, str]]) -> tuple[Optional[datetime]
 
 
 def _clock(value: Any, lo: datetime, hi: datetime, tz: ZoneInfo) -> Optional[datetime]:
-    """Resolve a local HH:MM to an instant inside the episode's transcript span (two-minute slack)."""
-    match = re.match(r'^\s*(\d{1,2}):(\d{2})', str(value or ''))
+    """Resolve a local HH:MM[:SS] to an instant inside the episode's transcript span (two-minute slack)."""
+    match = re.match(r'^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?', str(value or ''))
     if not match:
         return None
-    hour, minute = int(match.group(1)), int(match.group(2))
-    if hour > 23 or minute > 59:
+    hour, minute, second = int(match.group(1)), int(match.group(2)), int(match.group(3) or 0)
+    if hour > 23 or minute > 59 or second > 59:
         return None
     slack = timedelta(minutes=_CLOCK_SLACK_MINUTES)
     floor = lo.replace(second=0, microsecond=0) - slack
     for day in sorted({lo.astimezone(tz).date() + timedelta(days=d) for d in (-1, 0, 1, 2)}):
-        candidate = datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz).astimezone(timezone.utc)
+        candidate = datetime(day.year, day.month, day.day, hour, minute, second, tzinfo=tz).astimezone(timezone.utc)
         if floor <= candidate <= hi + slack:
             return candidate
     return None
+
+
+def _speech_end(row: Mapping[str, Any]) -> Optional[datetime]:
+    """When a member's last transcript segment ends, on the same clock as its lines."""
+    origin, segments = _origin(row), _segments(row)
+    if origin is None or not segments:
+        return None
+    return origin + timedelta(seconds=max(float(s.get('end') or s.get('start') or 0) for s in segments))
+
+
+def _line(value: Any, limit: int) -> str:
+    return re.sub(r'\s+', ' ', str(value or '')).strip().strip('•-* ').strip()[:limit].rstrip()
+
+
+def _points(chapter: Mapping[str, Any]) -> list[dict[str, Any]]:
+    points = []
+    raw_points = chapter.get('points')
+    for raw in raw_points if isinstance(raw_points, list) else []:
+        if isinstance(raw, Mapping):
+            text, details = _line(raw.get('text'), COMPOSER_MAX_POINT_CHARS), raw.get('details')
+            details = details if isinstance(details, list) else []
+        else:
+            text, details = _line(raw, COMPOSER_MAX_POINT_CHARS), []
+        if not text:
+            continue
+        kept = [d for d in (_line(d, COMPOSER_MAX_POINT_CHARS) for d in details if not isinstance(d, Mapping)) if d]
+        points.append({'text': text, 'details': kept[:COMPOSER_MAX_DETAILS]})
+    if not points and str(chapter.get('summary') or '').strip():
+        points.append({'text': _line(chapter.get('summary'), COMPOSER_MAX_POINT_CHARS), 'details': []})
+    return points[:COMPOSER_MAX_POINTS]
+
+
+def wire_points(value: Any) -> list[dict[str, Any]]:
+    """The stored points of a moment as the client sees them; anything malformed is dropped."""
+    out = []
+    for point in value if isinstance(value, list) else []:
+        if not isinstance(point, Mapping):
+            continue
+        text = _line(point.get('text'), COMPOSER_MAX_POINT_CHARS)
+        raw = point.get('details')
+        if text:
+            details = [
+                d for d in (_line(d, COMPOSER_MAX_POINT_CHARS) for d in (raw if isinstance(raw, list) else [])) if d
+            ]
+            out.append({'text': text, 'details': details[:COMPOSER_MAX_DETAILS]})
+    return out[:COMPOSER_MAX_POINTS]
 
 
 def to_updates(
@@ -254,26 +317,29 @@ def to_updates(
     members: Sequence[Mapping[str, Any]],
     tz: ZoneInfo,
     spans: Optional[Sequence[tuple[str, Optional[datetime], Optional[datetime]]]] = None,
+    times: Optional[Mapping[str, Sequence[datetime]]] = None,
 ) -> dict[str, Any]:
-    """``spans`` are (member id, first line, last line) on the transcript clock the model saw."""
+    """``spans`` are (member id, first line, last line) and ``times`` each member's line instants, on the
+    transcript clock the model saw."""
+    if times is None:
+        times = {str(row.get('id')): [at for at, _ in transcript_lines(row, '', tz)] for row in members}
     if spans is None:
-        spans = [(str(row.get('id')), *line_span(transcript_lines(row, '', tz))) for row in members]
+        spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
     known: list[tuple[str, datetime, datetime]] = [
         (cid, a, b) for cid, a, b in spans if a is not None and b is not None
     ]
-    moments = []
+    origins = {str(row.get('id')): _origin(row) for row in members}
+    speech_ends = {str(row.get('id')): _speech_end(row) for row in members}
+    drafts = []
     if known:
         lo, hi = min(a for _, a, _ in known), max(b for _, _, b in known)
         for chapter in (data.get('chapters') or [])[:COMPOSER_MAX_CHAPTERS]:
             if not isinstance(chapter, Mapping):
                 continue
-            heading = re.sub(r'\s+', ' ', str(chapter.get('title') or '')).strip()[:60]
+            heading = _line(chapter.get('title'), 60)
             start = _clock(chapter.get('start'), lo, hi, tz)
             if not heading or _PLACEHOLDER.match(heading) or start is None:
                 continue
-            end = _clock(chapter.get('end'), lo, hi, tz) or start
-            if end < start:
-                end = start
             owner = next(
                 (cid for cid, a, b in known if a - timedelta(minutes=1) <= start <= b + timedelta(minutes=1)), None
             )
@@ -282,28 +348,45 @@ def to_updates(
                 owner = min(
                     known, key=lambda s: min(abs((s[1] - at).total_seconds()), abs((s[2] - at).total_seconds()))
                 )[0]
-            moments.append(
-                {
-                    'id': uuid4().hex[:12],
-                    'conversation_id': owner,
-                    'started_at': start,
-                    'ended_at': end + timedelta(seconds=59) if end == start else end,
-                    'heading': heading,
-                    'summary': str(chapter.get('summary') or '').strip()[:280],
-                    'composed': True,
-                }
-            )
-    moments.sort(key=lambda m: m['started_at'])
-    paragraphs = [
-        p.strip()[:COMPOSER_MAX_PARAGRAPH_CHARS]
-        for p in re.split(r'\n\s*\n|\n', str(data.get('overview') or ''))
-        if p.strip()
-    ][:4]
-    people = [str(p).strip() for p in data.get('people') or [] if str(p).strip()][:12]
+            drafts.append((start, _clock(chapter.get('end'), lo, hi, tz), owner, heading, _points(chapter)))
+    drafts.sort(key=lambda d: d[0])
+    moments = []
+    for index, (start, end, owner, heading, points) in enumerate(drafts):
+        following = drafts[index + 1][0] if index + 1 < len(drafts) else None
+        if end is None or end <= start:
+            # The last line the chapter owns: before the next chapter, on its own recording.
+            inside = [t for t in times.get(owner) or [] if t >= start and (following is None or t < following)]
+            end = max(inside) if inside else start
+        # The moment stays inside its own recording's speech, whose transcript it opens.
+        limit = speech_ends.get(owner) or max(times.get(owner) or [start])
+        start = min(start, limit)
+        if end <= start:
+            end = start + timedelta(seconds=30)
+        end = max(start, min(end, limit))
+        origin = origins.get(owner)
+        moments.append(
+            {
+                'id': uuid4().hex[:12],
+                'conversation_id': owner,
+                'started_at': start,
+                'ended_at': end,
+                'start_offset': max(0.0, (start - origin).total_seconds()) if origin else 0.0,
+                'end_offset': max(0.0, (end - origin).total_seconds()) if origin else 0.0,
+                'heading': heading,
+                'points': points,
+                'composed': True,
+            }
+        )
+    lede = _line(data.get('lede') or data.get('overview'), COMPOSER_MAX_PARAGRAPH_CHARS)
+    follow_ups = [f for f in (_line(f, COMPOSER_MAX_POINT_CHARS) for f in data.get('follow_ups') or []) if f][:8]
+    people = [_line(p, 60) for p in data.get('people') or [] if _line(p, 60)][:12]
     activity = {str(row.get('id')): end for row in members if (end := _span(row)[1])}
     updates: dict[str, Any] = {
-        'title': re.sub(r'\s+', ' ', str(data.get('title'))).strip()[:80],
-        'bullets': paragraphs,
+        'title': _line(data.get('title'), 80),
+        # Released clients read bullets; the lede is the one-paragraph summary they show.
+        'bullets': [lede] if lede else [],
+        'lede': lede,
+        'follow_ups': follow_ups,
         'moments': moments,
         'people': people,
         'open_questions': [],
@@ -458,12 +541,21 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
     if not members or not any(_segments(row) for row in members):
         # Nothing to say: clear notes that may describe a member since hidden, and stamp it so
         # neither reads nor finalizers keep retrying.
-        cleared = {'title': '', 'bullets': [], 'moments': [], 'people': [], 'open_questions': []}
+        cleared = {
+            'title': '',
+            'bullets': [],
+            'lede': '',
+            'follow_ups': [],
+            'moments': [],
+            'people': [],
+            'open_questions': [],
+        }
         stamp = {
             **cleared,
             'composed_fingerprint': fingerprint(members),
             'composed_member_ids': member_ids,
             'composed_notes': notes_hash(cleared),
+            'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
         }
         _write(uid, episode_id, c, stamp)
@@ -521,11 +613,14 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         if isinstance(content, list):
             content = ''.join(part.get('text', '') if isinstance(part, Mapping) else str(part) for part in content)
         data = parse(str(content))
+        times = {str(row['id']): [at for at, _ in transcript_lines(row, owner, tz)] for row in members}
+        spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
+        composed = to_updates(data, members, tz, spans, times)
+        if not any(m['points'] for m in composed['moments']):
+            raise ComposeFailed('no_sections')  # Speech was there: a page with no sections is a failed compose.
     except Exception:
         _record_failure(uid, episode_id, c, print_)
         raise
-    spans = [(str(row['id']), *line_span(transcript_lines(row, owner, tz))) for row in members]
-    composed = to_updates(data, members, tz, spans)
     input_tokens, output_tokens = _usage(reply)
 
     # The model call took seconds: re-read the evidence. A discard, a transcript upgrade or a
@@ -590,6 +685,8 @@ def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: O
         return True
     if episode.get('summary_needs_regeneration'):
         return True
+    if episode.get('composed_fingerprint') and episode.get('composer_version') != COMPOSER_VERSION:
+        return not _backed_off(episode)  # A new composer: recompose once on read, backing off on failure.
     return not episode.get('composed_fingerprint') and not _backed_off(episode)
 
 

@@ -25545,6 +25545,18 @@ abstract class AppLocalizations {
   /// **'Moments'**
   String get episodeMoments;
 
+  /// Section title for the next steps written into a finished episode summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow-ups'**
+  String get episodeFollowUps;
+
+  /// Link from the Summary live card to the Transcript tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Open transcript'**
+  String get episodeOpenTranscript;
+
   /// Title of the running notes card on a live episode.
   ///
   /// In en, this message translates to:
@@ -25898,12 +25910,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'On this phone'**
   String get episodeOnThisPhone;
-
-  /// Link from the Summary live card to the Transcript tab.
-  ///
-  /// In en, this message translates to:
-  /// **'Open transcript'**
-  String get episodeOpenTranscript;
 
   /// Title of the live preview card on the Summary tab.
   ///

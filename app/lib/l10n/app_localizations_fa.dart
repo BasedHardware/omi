@@ -14442,6 +14442,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get episodeMoments => 'لحظه‌ها';
 
   @override
+  String get episodeFollowUps => 'پیگیری‌ها';
+
+  @override
+  String get episodeOpenTranscript => 'باز کردن پی‌نوشت';
+
+  @override
   String get episodeSoFar => 'تا اینجا';
 
   @override
@@ -14660,9 +14666,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'روی این گوشی';
-
-  @override
-  String get episodeOpenTranscript => 'باز کردن پی‌نوشت';
 
   @override
   String get liveCardTitle => 'زنده';
