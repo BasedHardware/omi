@@ -99,6 +99,10 @@ def test_first_screen_keeps_outcome_thresholds_and_a_trend_under_each_tile():
         assert 'noValue' not in spark['fieldConfig']['defaults'], 'noValue turns gaps into a drawn value'
         expr = spark['targets'][0].get('expr')
         assert spark['fieldConfig']['defaults']['custom']['gradientMode'] == 'scheme'
+        if stat_id != 73:
+            # A numerator series that was never created must read 0% under traffic, not "no traffic".
+            assert ' or 0 * sum(' in stat['targets'][0]['expr'], stat['title']
+            assert ' or 0 * sum(' in spark['targets'][0]['expr'], stat['title']
         if expr is None:
             assert spark['interval'] == '1h'
             promql = spark['targets'][0]['promQLQuery']
