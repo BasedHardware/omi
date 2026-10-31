@@ -99,6 +99,53 @@ void main() {
     expect(exposures, isEmpty);
   });
 
+  group('exposeControl (end-of-onboarding placement)', () {
+    const placed = PaywallExperimentConfig(variant: PaywallVariant.control, onboardingPaywall: true);
+
+    testWidgets('a free control reader is exposed as control', (tester) async {
+      final context = await _context(tester, UsageProvider());
+      final exposures = <String>[];
+      final exposed = PaywallRouter.exposeControl(context, config: placed, record: (key, variant) {
+        exposures.add('$key=$variant');
+        return true;
+      });
+      expect(exposed, isTrue);
+      expect(exposures, ['paywall-variant=control']);
+    });
+
+    testWidgets('a variant reader is not exposed here (openVariant does that)', (tester) async {
+      final context = await _context(tester, UsageProvider());
+      final exposures = <String>[];
+      final exposed = PaywallRouter.exposeControl(
+        context,
+        config: const PaywallExperimentConfig(variant: PaywallVariant.outline, onboardingPaywall: true),
+        record: (key, variant) {
+          exposures.add('$key=$variant');
+          return true;
+        },
+      );
+      expect(exposed, isFalse);
+      expect(exposures, isEmpty);
+    });
+
+    testWidgets('paid readers and hidden subscription UI are never exposed', (tester) async {
+      for (final response in [
+        _response(plan: PlanType.unlimitedV2),
+        _response(plan: PlanType.basic, showSubscriptionUi: false),
+      ]) {
+        final usage = UsageProvider()..debugSetSubscription(response);
+        final context = await _context(tester, usage);
+        final exposures = <String>[];
+        final exposed = PaywallRouter.exposeControl(context, config: placed, record: (key, variant) {
+          exposures.add('$key=$variant');
+          return true;
+        });
+        expect(exposed, isFalse);
+        expect(exposures, isEmpty);
+      }
+    });
+  });
+
   testWidgets('trial arm: a former subscriber on the free plan is exposed as trial but keeps the sheet',
       (tester) async {
     final usage = UsageProvider();

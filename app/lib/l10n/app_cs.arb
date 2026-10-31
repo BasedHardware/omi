@@ -1506,7 +1506,7 @@
     "durationSeconds": "Délka: {seconds} sekund",
     "additionalSpeechSampleRemoved": "Další hlasový vzorek byl odstraněn",
     "consentDataMessage": "Pokračováním budou vaše konverzace, nahrávky a osobní údaje bezpečně uloženy na našich serverech. Vaše audio nahrávky a přepisy jsou zpracovávány AI službami třetích stran (včetně Deepgram pro přepis a OpenAI pro analýzu), aby vám poskytly poznatky založené na AI a umožnily všechny funkce aplikace.",
-    "tasksEmptyStateMessage": "Začněte konverzaci a vytvořte úkol.",
+    "tasksEmptyStateMessage": "Úkoly z vašich konverzací se zobrazí tady.",
     "clearChatAction": "Vymazat chat",
     "enableApps": "Povolit aplikace",
     "omiAppName": "Omi",
@@ -4517,5 +4517,13 @@
     "yearlySwitchDoneBody": "Dnes účtováno {amount}. Obnovení {date}.",
     "episodePartsCount": "{count, plural, zero{{count} částí} one{{count} část} two{{count} částí} few{{count} části} many{{count} částí} other{{count} částí}}",
     "chatAppsWaitingMessageIn": "Pošli zprávu v aplikaci {app}. Tato obrazovka se aktualizuje, jakmile ji Omi dostane.",
-    "chatAppsCodeExpiredMessageIn": "Získej nový kód a pošli ho z aplikace {app}."
+    "chatAppsCodeExpiredMessageIn": "Získej nový kód a pošli ho z aplikace {app}.",
+    "voiceProfileCardDismissed": "Hlasový profil můžete kdykoli nastavit v Nastavení.",
+    "homeNewRecordingButton": "Nový záznam",
+    "chatWelcomeMessage": "Ahoj, jsem Omi. Zeptej se mě na cokoli, o čem jsi mluvil: co kdo řekl, co jsi slíbil nebo shrnutí tvého dne. Umím také přidávat úkoly a pamatovat si věci za tebe.",
+    "onboardingStarterTaskAsk": "Zeptej se Omi na svůj den",
+    "onboardingStarterTaskRecord": "Nahraj rozhovor s Omi",
+    "onboardingStarterTaskCheck": "Odškrtni tento úkol a dokonči ho",
+    "capturePendantDisconnectedShort": "Omi se znovu připojí sám",
+    "capturePendantDisconnectedDetail": "Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí."
 }

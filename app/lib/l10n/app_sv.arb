@@ -1506,7 +1506,7 @@
     "durationSeconds": "Längd: {seconds} sekunder",
     "additionalSpeechSampleRemoved": "Ytterligare röstprov borttaget",
     "consentDataMessage": "Genom att fortsätta kommer dina konversationer, inspelningar och personlig information att lagras säkert på våra servrar. Dina ljudinspelningar och transkriptioner behandlas av AI-tjänster från tredje part (inklusive Deepgram för transkription och OpenAI för analys) för att ge dig AI-drivna insikter och aktivera alla appfunktioner.",
-    "tasksEmptyStateMessage": "Starta ett samtal för att skapa en uppgift.",
+    "tasksEmptyStateMessage": "Att göra från dina samtal visas här.",
     "clearChatAction": "Rensa chatt",
     "enableApps": "Aktivera appar",
     "omiAppName": "Omi",
@@ -4517,5 +4517,13 @@
     "yearlySwitchDoneBody": "{amount} drogs i dag. Förnyas {date}.",
     "episodePartsCount": "{count, plural, zero{{count} delar} one{{count} del} two{{count} delar} few{{count} delar} many{{count} delar} other{{count} delar}}",
     "chatAppsWaitingMessageIn": "Skicka meddelandet i {app}. Den här skärmen uppdateras så fort Omi får det.",
-    "chatAppsCodeExpiredMessageIn": "Hämta en ny kod och skicka den från {app}."
+    "chatAppsCodeExpiredMessageIn": "Hämta en ny kod och skicka den från {app}.",
+    "voiceProfileCardDismissed": "Du kan ställa in din röstprofil när som helst i Inställningar.",
+    "homeNewRecordingButton": "Ny inspelning",
+    "chatWelcomeMessage": "Hej, jag är Omi. Fråga mig om allt du har pratat om: vad någon sa, vad du lovade eller en sammanfattning av din dag. Jag kan också lägga till uppgifter och komma ihåg saker åt dig.",
+    "onboardingStarterTaskAsk": "Fråga Omi om din dag",
+    "onboardingStarterTaskRecord": "Spela in ett samtal med Omi",
+    "onboardingStarterTaskCheck": "Bocka av den här uppgiften för att slutföra den",
+    "capturePendantDisconnectedShort": "Omi ansluter igen av sig själv",
+    "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert."
 }

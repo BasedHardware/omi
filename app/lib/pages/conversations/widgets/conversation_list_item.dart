@@ -21,6 +21,8 @@ import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -234,7 +236,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Future<void> _open(BuildContext context, ConversationProvider provider) async {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      routeToPage(context, const UsagePage());
+      // home-redesign: the paywall opens in place; today's Home goes to Usage.
+      if (HomeRedesign.on) {
+        await openUpgradePaywall(context, source: 'locked_conversation');
+      } else {
+        routeToPage(context, const UsagePage());
+      }
       return;
     }
     if (widget.homeEpisode case final episode?) {
@@ -508,7 +515,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;
     return OmiLockedPreview(
       status: context.l10n.statusPending,
-      label: context.l10n.viewUsage,
+      label: HomeRedesign.on ? context.l10n.upgrade : context.l10n.viewUsage,
       onPressed: onTap,
       child: content,
     );
@@ -964,7 +971,12 @@ class LockedConversationRun extends StatelessWidget {
       return;
     }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
-    routeToPage(context, const UsagePage());
+    // home-redesign: the paywall opens in place; today's Home goes to Usage.
+    if (HomeRedesign.on) {
+      await openUpgradePaywall(context, source: 'locked_conversation');
+    } else {
+      routeToPage(context, const UsagePage());
+    }
   }
 
   @override
@@ -976,7 +988,7 @@ class LockedConversationRun extends StatelessWidget {
         // Each row keeps its own long-press menu, swipe-to-delete and selection handling.
         interactive: true,
         status: context.l10n.statusPending,
-        label: context.l10n.viewUsage,
+        label: HomeRedesign.on ? context.l10n.upgrade : context.l10n.viewUsage,
         onPressed: () => _openUsage(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,

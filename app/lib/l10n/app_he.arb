@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "התחילו שיחה כדי ליצור משימה.",
+    "tasksEmptyStateMessage": "משימות מהשיחות שלך יופיעו כאן.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11943,5 +11943,13 @@
     "yearlySwitchDoneBody": "חויבו היום {amount}. מתחדש ב-{date}.",
     "episodePartsCount": "{count, plural, zero{{count} חלקים} one{{count} חלק} two{{count} חלקים} few{{count} חלקים} many{{count} חלקים} other{{count} חלקים}}",
     "chatAppsWaitingMessageIn": "שלחו את ההודעה באפליקציית {app}. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.",
-    "chatAppsCodeExpiredMessageIn": "קבלו קוד חדש ושלחו אותו מ{app}."
+    "chatAppsCodeExpiredMessageIn": "קבלו קוד חדש ושלחו אותו מ{app}.",
+    "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
+    "homeNewRecordingButton": "הקלטה חדשה",
+    "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.",
+    "onboardingStarterTaskAsk": "שאל את Omi על היום שלך",
+    "onboardingStarterTaskRecord": "הקלט שיחה עם Omi",
+    "onboardingStarterTaskCheck": "סמן משימה זו כדי לסיים אותה",
+    "capturePendantDisconnectedShort": "Omi יתחבר מחדש מעצמו",
+    "capturePendantDisconnectedDetail": "התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור."
 }

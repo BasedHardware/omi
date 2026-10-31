@@ -4896,7 +4896,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'Ved at fortsætte vil dine samtaler, optagelser og personlige oplysninger blive sikkert gemt på vores servere. Dine lydoptagelser og udskrifter behandles af tredjeparts AI-tjenester (herunder Deepgram til transskription og OpenAI til analyse) for at give dig AI-drevne indsigter og aktivere alle appfunktioner.';
 
   @override
-  String get tasksEmptyStateMessage => 'Start en samtale for at oprette en opgave.';
+  String get tasksEmptyStateMessage => 'Opgaver fra dine samtaler vises her.';
 
   @override
   String get clearChatAction => 'Ryd chat';
@@ -14947,4 +14947,30 @@ class AppLocalizationsDa extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Få en ny kode, og send den fra $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Du kan altid oprette din stemmeprofil under Indstillinger.';
+
+  @override
+  String get homeNewRecordingButton => 'Ny optagelse';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hej, jeg er Omi. Spørg mig om alt, du har talt om: hvad nogen sagde, hvad du lovede, eller et overblik over din dag. Jeg kan også tilføje opgaver og huske ting for dig.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Spørg Omi om din dag';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Optag en samtale med Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Sæt flueben ved denne opgave for at fuldføre den';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi genopretter forbindelsen af sig selv';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.';
 }

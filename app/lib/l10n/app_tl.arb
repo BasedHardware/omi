@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Magsimula ng pag-uusap para gumawa ng gawain.",
+    "tasksEmptyStateMessage": "Lalabas dito ang mga gagawin mula sa iyong mga usapan.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11943,5 +11943,13 @@
     "yearlySwitchDoneBody": "{amount} ang siningil ngayon. Magre-renew sa {date}.",
     "episodePartsCount": "{count, plural, zero{{count} bahagi} one{{count} bahagi} two{{count} bahagi} few{{count} bahagi} many{{count} bahagi} other{{count} bahagi}}",
     "chatAppsWaitingMessageIn": "Ipadala ang mensahe sa {app}. Mag-a-update ang screen na ito pagkatanggap ni Omi.",
-    "chatAppsCodeExpiredMessageIn": "Kumuha ng bagong code at ipadala ito mula sa {app}."
+    "chatAppsCodeExpiredMessageIn": "Kumuha ng bagong code at ipadala ito mula sa {app}.",
+    "voiceProfileCardDismissed": "Maaari mong i-set up ang Voice Profile anumang oras sa Settings.",
+    "homeNewRecordingButton": "Bagong Recording",
+    "chatWelcomeMessage": "Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.",
+    "onboardingStarterTaskAsk": "Tanungin si Omi tungkol sa araw mo",
+    "onboardingStarterTaskRecord": "Mag-record ng usapan gamit ang Omi",
+    "onboardingStarterTaskCheck": "Lagyan ng tsek ang gawaing ito para matapos",
+    "capturePendantDisconnectedShort": "Kusang kokonekta muli ang Omi",
+    "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito."
 }

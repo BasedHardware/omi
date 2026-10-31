@@ -1506,7 +1506,7 @@
     "durationSeconds": "Varighet: {seconds} sekunder",
     "additionalSpeechSampleRemoved": "Ekstra taleprøve fjernet",
     "consentDataMessage": "Ved å fortsette vil samtalene, opptakene og den personlige informasjonen din bli lagret sikkert på våre servere. Lydopptakene og transkripsjonene dine behandles av tredjeparts AI-tjenester (inkludert Deepgram for transkripsjon og OpenAI for analyse) for å gi deg AI-drevne innsikter og aktivere alle appfunksjoner.",
-    "tasksEmptyStateMessage": "Start en samtale for å opprette en oppgave.",
+    "tasksEmptyStateMessage": "Gjøremål fra samtalene dine vises her.",
     "clearChatAction": "Tøm chat",
     "enableApps": "Aktiver apper",
     "omiAppName": "Omi",
@@ -4517,5 +4517,13 @@
     "yearlySwitchDoneBody": "{amount} belastet i dag. Fornyes {date}.",
     "episodePartsCount": "{count, plural, zero{{count} deler} one{{count} del} two{{count} deler} few{{count} deler} many{{count} deler} other{{count} deler}}",
     "chatAppsWaitingMessageIn": "Send meldingen i {app}. Denne skjermen oppdateres så snart Omi får den.",
-    "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}."
+    "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}.",
+    "voiceProfileCardDismissed": "Du kan sette opp stemmeprofilen når som helst i Innstillinger.",
+    "homeNewRecordingButton": "Ny opptak",
+    "chatWelcomeMessage": "Hei, jeg er Omi. Spør meg om alt du har snakket om: hva noen sa, hva du lovet, eller et sammendrag av dagen din. Jeg kan også legge til oppgaver og huske ting for deg.",
+    "onboardingStarterTaskAsk": "Spør Omi om dagen din",
+    "onboardingStarterTaskRecord": "Ta opp en samtale med Omi",
+    "onboardingStarterTaskCheck": "Kryss av denne oppgaven for å fullføre den",
+    "capturePendantDisconnectedShort": "Omi kobler til igjen av seg selv",
+    "capturePendantDisconnectedDetail": "Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt."
 }

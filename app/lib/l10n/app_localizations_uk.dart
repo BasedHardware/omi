@@ -4915,7 +4915,7 @@ class AppLocalizationsUk extends AppLocalizations {
       'Продовжуючи, ваші розмови, записи та особиста інформація будуть надійно зберігатися на наших серверах. Ваші аудіозаписи та транскрипції обробляються сторонніми AI-сервісами (включаючи Deepgram для транскрипції та OpenAI для аналізу), щоб надати вам аналітику на основі ШІ та увімкнути всі функції додатку.';
 
   @override
-  String get tasksEmptyStateMessage => 'Почніть розмову, щоб створити завдання.';
+  String get tasksEmptyStateMessage => 'Завдання з ваших розмов з\'являться тут.';
 
   @override
   String get clearChatAction => 'Очистити чат';
@@ -14986,4 +14986,30 @@ class AppLocalizationsUk extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Отримайте новий код і надішліть його з застосунку «$app».';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.';
+
+  @override
+  String get homeNewRecordingButton => 'Новий запис';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Привіт, я Omi. Питайте про все, про що ви говорили: що хтось сказав, що ви пообіцяли або як минув ваш день. Я також можу додавати завдання й запам\'ятовувати важливе за вас.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Запитайте Omi про свій день';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Запишіть розмову з Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Позначте це завдання, щоб завершити його';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi перепідключиться сам';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.';
 }

@@ -19,8 +19,8 @@ const double kHomeBottomFadeHeight = 20;
 /// Gap between the chat bar and the system inset (or the screen edge when there is none).
 const double kHomeChatBarBottomGap = 8;
 
-/// Height of Home's floating chat bar.
-const double kHomeChatBarHeight = 62;
+/// Height of Home's floating bottom controls (Ask Omi and the record pill).
+const double kHomeChatBarHeight = 56;
 
 /// Space every Home-shell page leaves below its last row so it can scroll clear of the screen edge.
 const double kHomeScrollEndPadding = 24;

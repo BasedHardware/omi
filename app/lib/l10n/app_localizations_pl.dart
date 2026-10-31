@@ -4918,7 +4918,7 @@ class AppLocalizationsPl extends AppLocalizations {
       'Kontynuując, Twoje rozmowy, nagrania i dane osobowe będą bezpiecznie przechowywane na naszych serwerach. Twoje nagrania audio i transkrypcje są przetwarzane przez zewnętrzne usługi AI (w tym Deepgram do transkrypcji i OpenAI do analizy), aby dostarczyć Ci wglądy oparte na AI i umożliwić wszystkie funkcje aplikacji.';
 
   @override
-  String get tasksEmptyStateMessage => 'Rozpocznij rozmowę, aby utworzyć zadanie.';
+  String get tasksEmptyStateMessage => 'Zadania z Twoich rozmów pojawią się tutaj.';
 
   @override
   String get clearChatAction => 'Wyczyść czat';
@@ -14998,4 +14998,30 @@ class AppLocalizationsPl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Pobierz nowy kod i wyślij go z aplikacji $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Profil głosowy możesz skonfigurować w każdej chwili w Ustawieniach.';
+
+  @override
+  String get homeNewRecordingButton => 'Nowe nagranie';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Cześć, jestem Omi. Pytaj mnie o wszystko, o czym rozmawiałeś: co ktoś powiedział, co obiecałeś albo jak minął ci dzień. Mogę też dodawać zadania i zapamiętywać rzeczy za ciebie.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Zapytaj Omi o swój dzień';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Nagraj rozmowę z Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Odhacz to zadanie, aby je ukończyć';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi połączy się ponownie samo';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
 }

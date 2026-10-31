@@ -1506,7 +1506,7 @@
     "durationSeconds": "Продължителност: {seconds} секунди",
     "additionalSpeechSampleRemoved": "Допълнителната гласова проба е премахната",
     "consentDataMessage": "С продължаването вашите разговори, записи и лична информация ще бъдат сигурно съхранени на нашите сървъри. Вашите аудиозаписи и транскрипции се обработват от AI услуги на трети страни (включително Deepgram за транскрипция и OpenAI за анализ), за да ви предоставят прозрения, базирани на AI, и да активират всички функции на приложението.",
-    "tasksEmptyStateMessage": "Започнете разговор, за да създадете задача.",
+    "tasksEmptyStateMessage": "Задачите от разговорите ви ще се появят тук.",
     "clearChatAction": "Изчисти чата",
     "enableApps": "Активиране на приложения",
     "omiAppName": "Omi",
@@ -4517,5 +4517,13 @@
     "yearlySwitchDoneBody": "Днес са таксувани {amount}. Подновяване на {date}.",
     "episodePartsCount": "{count, plural, zero{{count} части} one{{count} част} two{{count} части} few{{count} части} many{{count} части} other{{count} части}}",
     "chatAppsWaitingMessageIn": "Изпрати съобщението от {app}. Този екран се обновява веднага щом Omi го получи.",
-    "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}."
+    "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}.",
+    "voiceProfileCardDismissed": "Можете да настроите гласовия профил по всяко време от Настройки.",
+    "homeNewRecordingButton": "Нов запис",
+    "chatWelcomeMessage": "Здравей, аз съм Omi. Питай ме за всичко, за което си говорил: какво е казал някой, какво си обещал или обобщение на деня ти. Мога и да добавям задачи и да запомням неща вместо теб.",
+    "onboardingStarterTaskAsk": "Попитай Omi за деня си",
+    "onboardingStarterTaskRecord": "Запиши разговор с Omi",
+    "onboardingStarterTaskCheck": "Отметни тази задача, за да я завършиш",
+    "capturePendantDisconnectedShort": "Omi ще се свърже отново сам",
+    "capturePendantDisconnectedDetail": "Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено."
 }

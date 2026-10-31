@@ -9,6 +9,8 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/services/client_device_service.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -54,7 +56,12 @@ class MemoryItem extends StatelessWidget {
           showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
           return;
         }
-        routeToPage(context, const UsagePage());
+        // home-redesign: the paywall opens in place; today's Home goes to Usage.
+        if (HomeRedesign.on) {
+          openUpgradePaywall(context, source: 'locked_memory');
+        } else {
+          routeToPage(context, const UsagePage());
+        }
         return;
       }
       if (editable) {
@@ -176,7 +183,9 @@ class MemoryItem extends StatelessWidget {
         child: memory.isLocked
             ? OmiLockedPreview(
                 status: context.l10n.statusPending,
-                label: context.watch<UsageProvider>().showSubscriptionUI ? context.l10n.viewUsage : context.l10n.saved,
+                label: context.watch<UsageProvider>().showSubscriptionUI
+                    ? (HomeRedesign.on ? context.l10n.upgrade : context.l10n.viewUsage)
+                    : context.l10n.saved,
                 onPressed: openMemory,
                 child: rowContent,
               )

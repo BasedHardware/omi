@@ -4824,7 +4824,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
 
   @override
-  String get tasksEmptyStateMessage => '开始对话以创建任务。';
+  String get tasksEmptyStateMessage => '对话中的待办事项会显示在这里。';
 
   @override
   String get clearChatAction => '清除聊天';
@@ -14723,4 +14723,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return '获取新验证码，并从“$app”中发送。';
   }
+
+  @override
+  String get voiceProfileCardDismissed => '你可以随时在设置中设置声音档案。';
+
+  @override
+  String get homeNewRecordingButton => '新录音';
+
+  @override
+  String get chatWelcomeMessage => '你好，我是 Omi。关于你聊过的任何事都可以问我：某人说了什么、你答应过什么，或者今天的总结。我还能帮你添加待办、记住重要的事。';
+
+  @override
+  String get onboardingStarterTaskAsk => '问问 Omi 你今天过得怎么样';
+
+  @override
+  String get onboardingStarterTaskRecord => '用 Omi 录一段对话';
+
+  @override
+  String get onboardingStarterTaskCheck => '勾选这项任务来完成它';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';
+
+  @override
+  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
 }

@@ -95,7 +95,7 @@ void main() {
       debugPrint('[4/7] Navigating to CHAT screen...');
 
       // Find and tap the "Ask Omi" button
-      final askOmiButton = find.text('Ask Omi');
+      final askOmiButton = find.byKey(const ValueKey('home_ask_omi_button'));
       if (askOmiButton.evaluate().isNotEmpty) {
         await tester.tap(askOmiButton);
         await _pumpFor(tester, 2000);
@@ -185,7 +185,7 @@ Future<void> _handleOnboardingIfNeeded(WidgetTester tester) async {
   debugPrint('[2/7] Checking for onboarding...');
 
   // Check if we're already on home screen
-  final askOmi = find.text('Ask Omi');
+  final askOmi = find.byKey(const ValueKey('home_ask_omi_button'));
   if (askOmi.evaluate().isNotEmpty) {
     debugPrint('      Already logged in - on home screen');
     return;
@@ -275,7 +275,7 @@ Future<void> _handleAuthFlow(WidgetTester tester) async {
       await tester.pump(const Duration(milliseconds: 500));
 
       // Check if we've reached home screen
-      final askOmi = find.text('Ask Omi');
+      final askOmi = find.byKey(const ValueKey('home_ask_omi_button'));
       if (askOmi.evaluate().isNotEmpty) {
         debugPrint('      Sign-in complete - reached home screen');
         return;
@@ -377,7 +377,7 @@ Future<void> _handleUserReviewScreen(WidgetTester tester) async {
     }
 
     // Check if we've already passed to home screen
-    final askOmi = find.text('Ask Omi');
+    final askOmi = find.byKey(const ValueKey('home_ask_omi_button'));
     if (askOmi.evaluate().isNotEmpty) {
       debugPrint('      Already on home screen - skipping user review');
       return;
@@ -484,7 +484,7 @@ Future<void> _handleSpeechProfileScreen(WidgetTester tester) async {
     await _pumpFor(tester, 500);
 
     // Check if we're already on home screen
-    final askOmi = find.text('Ask Omi');
+    final askOmi = find.byKey(const ValueKey('home_ask_omi_button'));
     if (askOmi.evaluate().isNotEmpty) {
       debugPrint('      Onboarding complete - reached home screen');
       return;

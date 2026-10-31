@@ -4917,7 +4917,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz sunucularımızda güvenli bir şekilde saklanacaktır. Ses kayıtlarınız ve transkriptleriniz, size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için üçüncü taraf yapay zeka hizmetleri (transkripsiyon için Deepgram ve analiz için OpenAI dahil) tarafından işlenir.';
 
   @override
-  String get tasksEmptyStateMessage => 'Görev oluşturmak için bir konuşma başlatın.';
+  String get tasksEmptyStateMessage => 'Konuşmalarındaki yapılacaklar burada görünecek.';
 
   @override
   String get clearChatAction => 'Sohbeti temizle';
@@ -14968,4 +14968,30 @@ class AppLocalizationsTr extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Yeni bir kod al ve $app\'dan gönder.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Ses profilini istediğin zaman Ayarlar\'dan kurabilirsin.';
+
+  @override
+  String get homeNewRecordingButton => 'Yeni Kayıt';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi\'ye gününü sor';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi ile bir konuşma kaydet';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Bu görevi tamamlamak için işaretle';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi kendiliğinden yeniden bağlanır';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
 }

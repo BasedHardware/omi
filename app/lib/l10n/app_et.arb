@@ -1506,7 +1506,7 @@
     "durationSeconds": "Kestus: {seconds} sekundit",
     "additionalSpeechSampleRemoved": "Lisakõnenäidis eemaldatud",
     "consentDataMessage": "Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.",
-    "tasksEmptyStateMessage": "Ülesande loomiseks alusta vestlust.",
+    "tasksEmptyStateMessage": "Sinu vestlustest pärit ülesanded ilmuvad siia.",
     "clearChatAction": "Tühjenda vestlus",
     "enableApps": "Luba rakendused",
     "omiAppName": "Omi",
@@ -4517,5 +4517,13 @@
     "yearlySwitchDoneBody": "Täna võeti {amount}. Uueneb {date}.",
     "episodePartsCount": "{count, plural, zero{{count} osa} one{{count} osa} two{{count} osa} few{{count} osa} many{{count} osa} other{{count} osa}}",
     "chatAppsWaitingMessageIn": "Saada sõnum rakenduses {app}. See ekraan uueneb, kui Omi selle kätte saab.",
-    "chatAppsCodeExpiredMessageIn": "Hangi uus kood ja saada see rakendusest {app}."
+    "chatAppsCodeExpiredMessageIn": "Hangi uus kood ja saada see rakendusest {app}.",
+    "voiceProfileCardDismissed": "Häälprofiili saad seadistada igal ajal seadetes.",
+    "homeNewRecordingButton": "Uus salvestus",
+    "chatWelcomeMessage": "Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.",
+    "onboardingStarterTaskAsk": "Küsi Omilt oma päeva kohta",
+    "onboardingStarterTaskRecord": "Salvesta Omiga üks vestlus",
+    "onboardingStarterTaskCheck": "Märgi see ülesanne tehtuks",
+    "capturePendantDisconnectedShort": "Omi loob ühenduse ise uuesti",
+    "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles."
 }

@@ -4905,7 +4905,7 @@ class AppLocalizationsEt extends AppLocalizations {
       'Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.';
 
   @override
-  String get tasksEmptyStateMessage => 'Ülesande loomiseks alusta vestlust.';
+  String get tasksEmptyStateMessage => 'Sinu vestlustest pärit ülesanded ilmuvad siia.';
 
   @override
   String get clearChatAction => 'Tühjenda vestlus';
@@ -14948,4 +14948,30 @@ class AppLocalizationsEt extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Hangi uus kood ja saada see rakendusest $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Häälprofiili saad seadistada igal ajal seadetes.';
+
+  @override
+  String get homeNewRecordingButton => 'Uus salvestus';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Küsi Omilt oma päeva kohta';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Salvesta Omiga üks vestlus';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Märgi see ülesanne tehtuks';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi loob ühenduse ise uuesti';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
 }

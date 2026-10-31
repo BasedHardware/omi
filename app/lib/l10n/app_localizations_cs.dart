@@ -4900,7 +4900,7 @@ class AppLocalizationsCs extends AppLocalizations {
       'Pokračováním budou vaše konverzace, nahrávky a osobní údaje bezpečně uloženy na našich serverech. Vaše audio nahrávky a přepisy jsou zpracovávány AI službami třetích stran (včetně Deepgram pro přepis a OpenAI pro analýzu), aby vám poskytly poznatky založené na AI a umožnily všechny funkce aplikace.';
 
   @override
-  String get tasksEmptyStateMessage => 'Začněte konverzaci a vytvořte úkol.';
+  String get tasksEmptyStateMessage => 'Úkoly z vašich konverzací se zobrazí tady.';
 
   @override
   String get clearChatAction => 'Vymazat chat';
@@ -14953,4 +14953,30 @@ class AppLocalizationsCs extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Získej nový kód a pošli ho z aplikace $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Hlasový profil můžete kdykoli nastavit v Nastavení.';
+
+  @override
+  String get homeNewRecordingButton => 'Nový záznam';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Ahoj, jsem Omi. Zeptej se mě na cokoli, o čem jsi mluvil: co kdo řekl, co jsi slíbil nebo shrnutí tvého dne. Umím také přidávat úkoly a pamatovat si věci za tebe.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Zeptej se Omi na svůj den';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Nahraj rozhovor s Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Odškrtni tento úkol a dokonči ho';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi se znovu připojí sám';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
 }

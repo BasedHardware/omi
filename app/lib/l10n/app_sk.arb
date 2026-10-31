@@ -1506,7 +1506,7 @@
     "durationSeconds": "Trvanie: {seconds} sekúnd",
     "additionalSpeechSampleRemoved": "Ďalšia hlasová vzorka odstránená",
     "consentDataMessage": "Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch. Vaše audio nahrávky a prepisy sú spracovávané AI službami tretích strán (vrátane Deepgram na prepis a OpenAI na analýzu), aby vám poskytli poznatky založené na AI a umožnili všetky funkcie aplikácie.",
-    "tasksEmptyStateMessage": "Začnite konverzáciu a vytvorte úlohu.",
+    "tasksEmptyStateMessage": "Úlohy z vašich rozhovorov sa zobrazia tu.",
     "clearChatAction": "Vymazať chat",
     "enableApps": "Povoliť aplikácie",
     "omiAppName": "Omi",
@@ -4517,5 +4517,13 @@
     "yearlySwitchDoneBody": "Dnes účtované {amount}. Obnovenie {date}.",
     "episodePartsCount": "{count, plural, zero{{count} častí} one{{count} časť} two{{count} častí} few{{count} časti} many{{count} častí} other{{count} častí}}",
     "chatAppsWaitingMessageIn": "Pošlite správu v aplikácii {app}. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.",
-    "chatAppsCodeExpiredMessageIn": "Získajte nový kód a pošlite ho z aplikácie {app}."
+    "chatAppsCodeExpiredMessageIn": "Získajte nový kód a pošlite ho z aplikácie {app}.",
+    "voiceProfileCardDismissed": "Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.",
+    "homeNewRecordingButton": "Nový záznam",
+    "chatWelcomeMessage": "Ahoj, som Omi. Opýtaj sa ma na čokoľvek, o čom si hovoril: čo kto povedal, čo si sľúbil alebo zhrnutie tvojho dňa. Viem aj pridávať úlohy a pamätať si veci za teba.",
+    "onboardingStarterTaskAsk": "Opýtaj sa Omi na svoj deň",
+    "onboardingStarterTaskRecord": "Nahraj rozhovor s Omi",
+    "onboardingStarterTaskCheck": "Odškrtni túto úlohu a dokonči ju",
+    "capturePendantDisconnectedShort": "Omi sa znova pripojí sám",
+    "capturePendantDisconnectedDetail": "Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí."
 }

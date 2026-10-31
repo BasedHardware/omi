@@ -1506,7 +1506,7 @@
     "durationSeconds": "Dauer: {seconds} Sekunden",
     "additionalSpeechSampleRemoved": "Zusätzliche Sprachprobe entfernt",
     "consentDataMessage": "Durch Fortfahren werden Ihre Gespräche, Aufnahmen und persönlichen Daten sicher auf unseren Servern gespeichert. Ihre Audioaufnahmen und Transkripte werden von KI-Diensten Dritter verarbeitet (einschließlich Deepgram für die Transkription und OpenAI für die Analyse), um Ihnen KI-gestützte Erkenntnisse zu liefern und alle App-Funktionen zu ermöglichen.",
-    "tasksEmptyStateMessage": "Starte ein Gespräch, um eine Aufgabe zu erstellen.",
+    "tasksEmptyStateMessage": "To-dos aus deinen Gesprächen erscheinen hier.",
     "clearChatAction": "Chat löschen",
     "enableApps": "Apps aktivieren",
     "omiAppName": "Omi",
@@ -4517,5 +4517,13 @@
     "yearlySwitchDoneBody": "Heute {amount} abgebucht. Verlängerung am {date}.",
     "episodePartsCount": "{count, plural, zero{{count} Teile} one{{count} Teil} two{{count} Teile} few{{count} Teile} many{{count} Teile} other{{count} Teile}}",
     "chatAppsWaitingMessageIn": "Sende die Nachricht in {app}. Dieser Bildschirm aktualisiert sich, sobald Omi sie erhält.",
-    "chatAppsCodeExpiredMessageIn": "Hol dir einen neuen Code und sende ihn in {app}."
+    "chatAppsCodeExpiredMessageIn": "Hol dir einen neuen Code und sende ihn in {app}.",
+    "voiceProfileCardDismissed": "Dein Stimmprofil kannst du jederzeit in den Einstellungen einrichten.",
+    "homeNewRecordingButton": "Neue Aufnahme",
+    "chatWelcomeMessage": "Hi, ich bin Omi. Frag mich alles, worüber du gesprochen hast: was jemand gesagt hat, was du versprochen hast oder eine Zusammenfassung deines Tages. Ich kann auch Aufgaben hinzufügen und mir Dinge für dich merken.",
+    "onboardingStarterTaskAsk": "Frag Omi nach deinem Tag",
+    "onboardingStarterTaskRecord": "Nimm ein Gespräch mit Omi auf",
+    "onboardingStarterTaskCheck": "Hake diese Aufgabe ab, um sie zu erledigen",
+    "capturePendantDisconnectedShort": "Omi verbindet sich von selbst neu",
+    "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher."
 }

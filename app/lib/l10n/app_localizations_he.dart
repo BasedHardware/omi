@@ -4869,7 +4869,7 @@ class AppLocalizationsHe extends AppLocalizations {
       'בהמשך, השיחות, ההקלטות והמידע האישי שלך יאוחסנו בצורה מאובטחת בשרתים שלנו. הקלטות האודיו והתמלולים שלך מעובדים על ידי שירותי AI של צד שלישי (כולל Deepgram לתמלול ו-OpenAI לניתוח) כדי לספק לך תובנות מבוססות AI ולאפשר את כל תכונות האפליקציה.';
 
   @override
-  String get tasksEmptyStateMessage => 'התחילו שיחה כדי ליצור משימה.';
+  String get tasksEmptyStateMessage => 'משימות מהשיחות שלך יופיעו כאן.';
 
   @override
   String get clearChatAction => 'נקה שיחה';
@@ -14845,4 +14845,30 @@ class AppLocalizationsHe extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'קבלו קוד חדש ושלחו אותו מ$app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'אפשר להגדיר פרופיל קולי בכל עת בהגדרות.';
+
+  @override
+  String get homeNewRecordingButton => 'הקלטה חדשה';
+
+  @override
+  String get chatWelcomeMessage =>
+      'היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'שאל את Omi על היום שלך';
+
+  @override
+  String get onboardingStarterTaskRecord => 'הקלט שיחה עם Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'סמן משימה זו כדי לסיים אותה';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi יתחבר מחדש מעצמו';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
 }

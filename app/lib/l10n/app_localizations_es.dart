@@ -4913,7 +4913,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Al continuar, tus conversaciones, grabaciones e información personal se almacenarán de forma segura en nuestros servidores. Tus grabaciones de audio y transcripciones son procesadas por servicios de IA de terceros (incluyendo Deepgram para transcripción y OpenAI para análisis) para proporcionarte información impulsada por IA y habilitar todas las funciones de la aplicación.';
 
   @override
-  String get tasksEmptyStateMessage => 'Inicia una conversación para crear una tarea.';
+  String get tasksEmptyStateMessage => 'Las tareas de tus conversaciones aparecerán aquí.';
 
   @override
   String get clearChatAction => 'Borrar chat';
@@ -15000,4 +15000,30 @@ class AppLocalizationsEs extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Obtén un código nuevo y envíalo desde $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Puedes configurar tu perfil de voz cuando quieras en Ajustes.';
+
+  @override
+  String get homeNewRecordingButton => 'Nueva grabación';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hola, soy Omi. Pregúntame lo que quieras sobre lo que has hablado: lo que dijo alguien, lo que prometiste o un resumen de tu día. También puedo añadir tareas y recordar cosas por ti.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Pregúntale a Omi por tu día';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Graba una conversación con Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Marca esta tarea para completarla';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi se volverá a conectar solo';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.';
 }
