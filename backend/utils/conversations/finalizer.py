@@ -448,7 +448,8 @@ async def finalize_persisted_conversation(
         # Persist its obligation before the finalization job can complete.
         # Processing may have persisted a discard or revival after the initial read.
         # Preserve that result while retaining the raw archive/producer metadata.
-        if _record_registration_required({**conversation_data, 'discarded': conversation.discarded}):
+        conversation_discarded = bool(getattr(conversation, 'discarded', False))
+        if _record_registration_required({**conversation_data, 'discarded': conversation_discarded}):
             stage = 'record_registration'
             if not await run_blocking(
                 db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
@@ -465,13 +466,14 @@ async def finalize_persisted_conversation(
         # action/goal, audio, webhook, memory) so a losing finalizer produces
         # zero canonical side effects (#10468 r5).
         stage = 'fanout_claim'
+        claim_kwargs = {'expected_discarded': True} if conversation_discarded else {}
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
             finalization_job_id,
             dispatch_generation,
             lease_epoch,
-            expected_discarded=conversation.discarded,
+            **claim_kwargs,
         )
         if silent_backfill:
             if fanout['status'] == 'completed':

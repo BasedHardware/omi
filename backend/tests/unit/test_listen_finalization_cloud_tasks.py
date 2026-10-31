@@ -1673,7 +1673,7 @@ async def test_a_webhook_stuck_on_5xx_only_strands_the_conversation_while_retrie
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     completed = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
@@ -1802,7 +1802,7 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     completed = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
@@ -1857,7 +1857,7 @@ async def test_async_finalizer_records_degraded_redis_location_fallback(monkeypa
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *args: True)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
@@ -2237,7 +2237,7 @@ async def test_finalizer_runs_derived_effects_only_after_winning_claim(monkeypat
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
@@ -2299,7 +2299,7 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
 
@@ -2381,7 +2381,7 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    def claim(*args):
+    def claim(*args, **kwargs):
         events.append('claim')
         return {'status': claim_status, 'fanout_key': 'fixture'}
 
