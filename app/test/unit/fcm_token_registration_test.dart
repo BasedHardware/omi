@@ -119,6 +119,26 @@ void main() {
     });
   });
 
+  test('session invalidation cancels retries without implicitly admitting a replacement', () {
+    fakeAsync((clock) {
+      apns = null;
+      final service = registrar();
+      unawaited(service.refresh());
+      clock.flushMicrotasks();
+      service.invalidateSession();
+      owner = const AuthSessionSnapshot(ownerUid: 'bob', generation: 2);
+      apns = 'ready';
+      clock.elapse(const Duration(minutes: 2));
+      clock.flushMicrotasks();
+      expect(saves, isEmpty);
+      expect(clock.pendingTimers, isEmpty);
+      unawaited(service.refresh());
+      clock.flushMicrotasks();
+      expect(saves.single.$3, 'bob');
+      service.dispose();
+    });
+  });
+
   test('sign-out while APNs is pending cannot save a token', () async {
     final pending = Completer<String?>();
     final service = registrar(apnsRead: () => pending.future);

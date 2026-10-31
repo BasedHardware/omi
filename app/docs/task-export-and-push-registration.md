@@ -24,8 +24,9 @@ session generation. They do not add a backend contract or change provider grants
 
 `FcmTokenRegistration` owns token acquisition, accepted HTTP persistence and a
 bounded retry schedule for one `AuthSessionSnapshot`. Restored authenticated
-startup, successful notification permission, foreground resume, auth generation
-changes and token rotation all reach that owner. Listeners install once before
+shell startup, successful notification permission, foreground resume and token
+rotation all reach that owner. Auth generation changes revoke pending work; the
+existing authenticated entry points admit a replacement owner. Listeners install once before
 acquisition. iOS waits for APNs before requesting FCM; Android skips that wait.
 
 Every SDK/HTTP wait has a deadline. A failed attempt keeps its retry budget;

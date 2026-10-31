@@ -41,7 +41,12 @@ class _FCMNotificationService with WidgetsBindingObserver implements Notificatio
   bool _registrationListenersInstalled = false;
   bool _messageListenersInstalled = false;
   late final FcmTokenRegistration _registration = FcmTokenRegistration(
-    capture: () => AuthService.instance.captureSessionSnapshot(),
+    capture: () {
+      final owner = AuthService.instance.captureSessionSnapshot();
+      // Capturing may synchronously report an account change and revoke the
+      // admission flag. A refresh event must not admit that replacement user.
+      return _registrationReady ? owner : null;
+    },
     isCurrent: (owner) => AuthService.instance.isSessionSnapshotCurrent(owner),
     readApns: _firebaseMessaging.getAPNSToken,
     readToken: _firebaseMessaging.getToken,
@@ -86,7 +91,8 @@ class _FCMNotificationService with WidgetsBindingObserver implements Notificatio
         Logger.debug('Push token stream deferred: ${error.runtimeType}');
       });
       AuthService.instance.sessionGenerationEvents.listen((_) {
-        if (_registrationReady) unawaited(register());
+        _registrationReady = false;
+        _registration.invalidateSession();
       });
     }
     listenForMessages();
@@ -164,6 +170,14 @@ class _FCMNotificationService with WidgetsBindingObserver implements Notificatio
   @override
   Future<void> register() async {
     if (PhysicalQualification.enabled) return;
+    // Existing sign-in/restored-shell/permission entry points admit the owner.
+    // Settle a newly observed auth generation before enabling token callbacks.
+    final owner = AuthService.instance.captureSessionSnapshot();
+    if (owner == null) {
+      _registrationReady = false;
+      _registration.invalidateSession();
+      return;
+    }
     _registrationReady = true;
     await _registration.refresh();
   }
@@ -181,8 +195,7 @@ class _FCMNotificationService with WidgetsBindingObserver implements Notificatio
 
   @override
   Future<void> saveFcmToken(String? token) async {
-    if (PhysicalQualification.enabled || token == null || token.isEmpty) return;
-    _registrationReady = true;
+    if (PhysicalQualification.enabled || !_registrationReady || token == null || token.isEmpty) return;
     await _registration.refresh(token: token);
   }
 

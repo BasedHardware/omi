@@ -379,9 +379,6 @@ Future _init() async {
       );
     }
   }
-  // Also register restored sessions. Notification bootstrap runs before auth
-  // resolution, and an explicit sign-in is not required on every app launch.
-  if (isAuth && !PhysicalQualification.enabled) unawaited(NotificationService.instance.register());
   initOpus(await PhysicalQualification.startupStage<dynamic>('opus_load', opus_flutter.load));
 
   // Register native BLE bridge

@@ -50,6 +50,10 @@ class FcmTokenRegistration {
 
   Future<void> refresh({String? token}) => _run(token: token, resetBudget: true);
 
+  /// Revoke pending work immediately, without admitting a replacement owner.
+  /// The normal authenticated entry point must explicitly refresh again.
+  void invalidateSession() => _reset();
+
   Future<void> _run({String? token, required bool resetBudget}) {
     if (_disposed) return Future.value();
     final owner = capture();
