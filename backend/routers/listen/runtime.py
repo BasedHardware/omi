@@ -67,6 +67,7 @@ from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.live_speaker_ordinals import LiveSpeakerOrdinalTracker, record_live_speaker_ordinals
+from utils.observability import soniox_idle_arm
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
@@ -459,6 +460,7 @@ class ListenSessionRuntime:
             return
         try:
             outcome = self._session_transcript_outcome()
+            soniox_idle_arm.note_outcome(self, outcome)
             record_live_session_transcript_outcome(
                 outcome=outcome,
                 demand_cohort=host_cohort(self),
@@ -850,6 +852,7 @@ class ListenSessionRuntime:
         admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
         now = time.time()
         subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
+        soniox_idle_arm.note_plan(self, subscription)
         ladder_session = (
             ladder_enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
             and ladder_policy.entitlements(subscription) is not None
@@ -1475,7 +1478,8 @@ class ListenSessionRuntime:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         # After the transcript loop drained and before the matcher's maps clear:
         # the ordinal ledger needs both the final segments and final naming.
-        record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
+        speakers = record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
+        soniox_idle_arm.record_session(self, speakers)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()
