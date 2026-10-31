@@ -128,8 +128,30 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
     members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
     wires = [wire for row in rows if (wire := project_episode(uid, row, members=members)) is not None]
-    schedule_missed_composes(uid, rows, wires)
+    contained = _contained_ids(rows, wires)
+    wires = [wire for wire in wires if wire['id'] not in contained]
+    schedule_missed_composes(uid, [row for row in rows if row.get('id') not in contained], wires)
     return wires
+
+
+def _contained_ids(rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> set[str]:
+    """Closed episodes whose visible members another closed episode on the page already shows. Episodes
+    from before membership became singular (2026-10-30) can share members, and each would otherwise
+    get its own row and its own paid compose over the same speech."""
+    closed = {str(row.get('id')): row for row in rows if row.get('status') != 'live'}
+    visible = {wire['id']: {m['id'] for m in wire.get('members') or []} for wire in wires if wire['id'] in closed}
+
+    def preference(episode_id: str) -> tuple[bool, int, str]:
+        return (not closed[episode_id].get('composed_fingerprint'), -len(visible[episode_id]), episode_id)
+
+    kept: list[set[str]] = []
+    contained = set()
+    for episode_id in sorted(visible, key=preference):
+        if any(visible[episode_id] <= members for members in kept):
+            contained.add(episode_id)
+        else:
+            kept.append(visible[episode_id])
+    return contained
 
 
 def project_lookup(uid: str, episode: dict[str, Any] | None) -> dict[str, Any] | None:
