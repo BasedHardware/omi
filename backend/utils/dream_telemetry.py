@@ -94,6 +94,48 @@ def _int(value: Any) -> int:
         return 0
 
 
+def _kind(value: Any) -> str:
+    return str(value) if value in KNOWN_KINDS else 'other'
+
+
+OUTCOME_DECISIONS = frozenset({'undo', 'redo', 'accept', 'dismiss'})
+
+
+def _age(applied_at: Any, now: datetime) -> str:
+    if not isinstance(applied_at, datetime):
+        return 'none'
+    days = (now - applied_at).total_seconds() / 86400
+    return 'lt1d' if days < 1 else 'lt7d' if days < 7 else 'lt30d' if days < 30 else 'gte30d'
+
+
+def outcome_payload(kind: Any, decision: Any, *, applied_at: Any = None, now: datetime | None = None) -> dict[str, Any]:
+    return {
+        'event': 'dream_outcome',
+        'kind': _kind(kind),
+        'decision': decision if decision in OUTCOME_DECISIONS else 'other',
+        'age': _age(applied_at, now or datetime.now(timezone.utc)),
+    }
+
+
+def record_outcome(kind: Any, decision: Any, *, applied_at: Any = None) -> None:
+    """One owner decision on a Dream change: Undo, Redo, or a Review accept/dismiss."""
+    try:
+        payload = outcome_payload(kind, decision, applied_at=applied_at)
+    except Exception as error:
+        ERRORS.labels('outcome').inc()
+        logger.warning('event=dream_telemetry_error record=outcome exc=%s', type(error).__name__)
+        return
+    _emit('outcome', payload)
+
+
+def dream_kind(edit_key: Any) -> str | None:
+    """The kind of a Dream-authored edit key (``dream:<kind>:…``), else None."""
+    if not isinstance(edit_key, str) or not edit_key.startswith(('dream:', 'agent:')):
+        return None
+    parts = edit_key.split(':')
+    return parts[1] if len(parts) > 1 else None
+
+
 def _counts(values: Iterable[Any]) -> dict[str, int]:
     return dict(sorted(Counter(_label(value) for value in values).items()))
 
@@ -141,6 +183,11 @@ def pass_payload(report: dict[str, Any]) -> dict[str, Any]:
         'turns': _int(report.get('turns')),
         'tool_calls': sum(_int(count) for count in (report.get('tool_counts') or {}).values()),
         'verifier_calls': _int(report.get('verifier_calls')),
+        'verifier_by_kind': {
+            _kind(kind): {_label(decision): _int(count) for decision, count in row.items()}
+            for kind, row in (report.get('verifier_by_kind') or {}).items()
+            if isinstance(row, dict)
+        },
         'staged': sum(len(rows) for rows in (report.get('proposed') or {}).values() if isinstance(rows, list)),
         'outcomes': _counts(row.get('status') for row in outcomes if isinstance(row, dict)),
         'applied': _counts(
