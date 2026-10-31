@@ -118,6 +118,59 @@ def test_live_member_stays_owned_after_cap_and_after_new_episode_opens(lane):
     assert not calls
 
 
+def _old_overlap(store):
+    """Two closed episodes from before the fence: overlapping windows and one shared member."""
+    end = T0 + timedelta(minutes=30)
+    for eid in ('x', 'y'):
+        store.rows[('users', 'u', 'episodes', eid)] = episodes.seal(
+            'u',
+            dict(
+                id=eid,
+                status='closed',
+                close_reason='gap',
+                conversation_ids=['same', eid],
+                started_at=T0,
+                last_activity_at=end,
+                state_version=1,
+            ),
+        )
+    store.rows[('users', 'u', 'episode_links', 'same')] = {'episode_id': 'x'}
+    store.rows[('users', 'u', 'episode_links', 'y')] = {'episode_id': 'y'}
+
+
+def test_notes_write_on_closed_episode_ignores_older_overlap(lane):
+    store, _, _ = lane
+    _old_overlap(store)
+    stored = episodes.update_episode('u', 'y', expected_version=1, updates={'title': 'Notes'}, firestore_client=store)
+    assert stored['title'] == 'Notes' and stored['state_version'] == 2
+    assert store.rows[('users', 'u', 'episode_links', 'same')] == {'episode_id': 'x'}
+
+
+@pytest.mark.parametrize(
+    'updates',
+    [{'last_activity_at': T0 + timedelta(minutes=40)}, {'conversation_ids': ['same', 'y', 'new']}],
+)
+def test_closed_episode_write_that_moves_it_is_still_checked(lane, updates):
+    store, _, _ = lane
+    _old_overlap(store)
+    with pytest.raises(episodes.EpisodeConflict, match='conversation_already_owned'):
+        episodes.update_episode('u', 'y', expected_version=1, updates=updates, firestore_client=store)
+
+
+def test_closed_episode_window_move_is_still_refused_on_overlap(lane):
+    store, _, _ = lane
+    _old_overlap(store)
+    store.rows[('users', 'u', 'episode_links', 'same')] = {'episode_id': 'y'}
+    with pytest.raises(episodes.EpisodeConflict, match='recorded_window_overlap'):
+        episodes.update_episode(
+            'u',
+            'y',
+            expected_version=1,
+            updates={'last_activity_at': T0 + timedelta(minutes=40)},
+            firestore_client=store,
+        )
+
+
 @pytest.mark.parametrize('writer', ['commit', 'update', 'reopen'])
 def test_membership_claim_is_checked_before_any_transaction_write(lane, writer):
     store, c, _ = lane
