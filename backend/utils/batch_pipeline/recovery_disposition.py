@@ -1,6 +1,7 @@
 """Content-free recovery failures and strict, in-memory silence evidence."""
 
 import io
+import logging
 import wave
 from collections.abc import Callable
 from typing import Any
@@ -18,6 +19,7 @@ from utils.observability.reasons import (
 STAGES = reason_values(RecoveryFailureStage)
 REASONS = reason_values(RecoveryFailureReason)
 AUDIO_DURATION_TOLERANCE_SECONDS = 0.1
+logger = logging.getLogger(__name__)
 
 
 class RecoveryFailure(ValueError):
@@ -36,8 +38,18 @@ def at_stage(stage: str, reason: str, operation: Callable[[], Any]):
         return operation()
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
-    except Exception:
-        raise RecoveryFailure(stage, reason) from None
+    except Exception as error:
+        failure = RecoveryFailure(stage, reason)
+        try:
+            logger.warning(
+                'event=batch_recovery_failure stage=%s reason=%s exception_type=%s',
+                failure.stage,
+                failure.reason,
+                type(error).__name__,
+            )
+        except Exception:
+            pass
+        raise failure from None
 
 
 def inspect_audio(item, audio, *, vad=None):
