@@ -18,6 +18,10 @@ from utils.other.raw_audio_read import select_raw_pcm
 MAX_SPEAKER_DOWNLOADS = 32
 MAX_SPEAKER_BYTES = 64 * 1024 * 1024
 MAX_SPEAKER_READ_SECONDS = 30.0
+# Widened sessions hold decoded PCM across embedding, so they share one pool per process.
+MAX_SPEAKER_PCM_POOL_BYTES = 512 * 1024 * 1024
+_pcm_pool_lock = threading.Lock()
+_pcm_pool_bytes = 0
 
 
 class AudioChunkReadSession:
@@ -166,8 +170,7 @@ class AudioChunkReadSession:
                     self.sample_rate,
                     on_failure=self._failure,
                 )
-                self.pcm_bytes += len(pcm or b'')
-                if self.max_pcm_bytes is not None and self.pcm_bytes > self.max_pcm_bytes:
+                if self.max_pcm_bytes is not None and not self._reserve_pcm(len(pcm or b'')):
                     self.reason, self.limit_hit = 'download_limit', True
                 if not self.in_budget():
                     return None
@@ -189,6 +192,30 @@ class AudioChunkReadSession:
 
     def _failure(self, reason: str):
         self.reason = reason
+
+    def _reserve_pcm(self, size: int) -> bool:
+        global _pcm_pool_bytes
+        if self.pcm_bytes + size > self.max_pcm_bytes:
+            return False
+        with _pcm_pool_lock:
+            if _pcm_pool_bytes + size > MAX_SPEAKER_PCM_POOL_BYTES:
+                return False
+            _pcm_pool_bytes += size
+        self.pcm_bytes += size
+        return True
+
+    def release_pcm(self) -> None:
+        """Return this session's decoded PCM to the pool; its cached proofs are gone after this."""
+        global _pcm_pool_bytes
+        with self.lock:
+            size, self.pcm_bytes = self.pcm_bytes, 0
+            self.cache.clear()
+        with _pcm_pool_lock:
+            _pcm_pool_bytes -= size
+
+    def __del__(self):
+        if getattr(self, 'pcm_bytes', 0):
+            self.release_pcm()
 
 
 def chunk_start(chunk) -> float:

@@ -537,7 +537,7 @@ def _unreconciled_extents(
     for chunk in chunks:
         bounds = _chunk_actual_bounds(chunk)
         if bounds is not None:
-            listed.append((bounds[0], bounds[1], chunk.get('span') is not None))
+            listed.append((cast(float, _finite_number(chunk['timestamp'])), bounds, chunk.get('span') is not None))
     listed.sort(key=lambda item: item[0])
     manifest = sorted(expected, key=lambda item: item[0])
     disputed: List[Tuple[float, float]] = []
@@ -545,8 +545,8 @@ def _unreconciled_extents(
     def from_manifest(timestamp: float, bounds: Optional[Tuple[float, float]]) -> Tuple[float, float]:
         return bounds if bounds is not None else (timestamp, math.inf)
 
-    def from_listing(start: float, end: Optional[float]) -> Tuple[float, float]:
-        return start, end if end is not None else math.inf
+    def from_listing(bounds: Tuple[float, Optional[float]]) -> Tuple[float, float]:
+        return bounds[0], bounds[1] if bounds[1] is not None else math.inf
 
     m = n = 0
     while m < len(manifest) or n < len(listed):
@@ -554,20 +554,20 @@ def _unreconciled_extents(
             disputed.append(from_manifest(*manifest[m]))
             m += 1
         elif m == len(manifest) or listed[n][0] < manifest[m][0] - COVERAGE_TOLERANCE_SECONDS:
-            disputed.append(from_listing(*listed[n][:2]))
+            disputed.append(from_listing(listed[n][1]))
             n += 1
         else:
             timestamp, bounds = manifest[m]
-            start, end, has_span = listed[n]
+            _, actual, has_span = listed[n]
             if (bounds is not None) != has_span or (
                 bounds is not None
                 and (
-                    abs(bounds[0] - start) > COVERAGE_TOLERANCE_SECONDS
-                    or end is None
-                    or abs(bounds[1] - end) > COVERAGE_TOLERANCE_SECONDS
+                    abs(bounds[0] - actual[0]) > COVERAGE_TOLERANCE_SECONDS
+                    or actual[1] is None
+                    or abs(bounds[1] - actual[1]) > COVERAGE_TOLERANCE_SECONDS
                 )
             ):
-                disputed.extend((from_manifest(timestamp, bounds), from_listing(start, end)))
+                disputed.extend((from_manifest(timestamp, bounds), from_listing(actual)))
             m += 1
             n += 1
     return disputed
@@ -752,6 +752,8 @@ def _verified_read_session(
     )
     if not verified:
         resolver_reason(first_refusal or 'no_proven_window')
+        if per_window:
+            session.release_pcm()
         return None
     session.verified_segment_ids = verified
     return session
@@ -1501,20 +1503,24 @@ def _resolve(
     speaker_evidence.window_abstentions(placements, abstained)
     diagnostics = EmbeddingDiagnostics()
     measured_windows: Dict[str, Tuple[float, float]] = {}
-    new_embeddings, stop = _embed_missing(
-        uid,
-        conversation,
-        pending,
-        cache,
-        deadline,
-        placements=placements,
-        keys=keys,
-        session=read_session,
-        diagnostics=diagnostics,
-        evidence_seconds=clip_seconds,
-        measured_windows=measured_windows,
-        max_attempts=max_embedding_attempts,
-    )
+    try:
+        new_embeddings, stop = _embed_missing(
+            uid,
+            conversation,
+            pending,
+            cache,
+            deadline,
+            placements=placements,
+            keys=keys,
+            session=read_session,
+            diagnostics=diagnostics,
+            evidence_seconds=clip_seconds,
+            measured_windows=measured_windows,
+            max_attempts=max_embedding_attempts,
+        )
+    finally:
+        if read_session is not None and getattr(read_session, 'max_pcm_bytes', None) is not None:
+            read_session.release_pcm()
     owner_diagnostics.resolver_counts(
         attempted=diagnostics.attempted,
         successful=new_embeddings,

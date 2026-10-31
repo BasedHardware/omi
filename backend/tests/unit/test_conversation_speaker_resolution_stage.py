@@ -1449,6 +1449,9 @@ def _per_window_session(monkeypatch, chunks, reads):
         def in_budget(self):
             return True
 
+        def release_pcm(self):
+            self.cache.clear()
+
         def fetch(self, path):
             reads.append(path)
             seconds = next(c['span']['samples'] for c in chunks if c['path'] == path) // stage.SAMPLE_RATE
@@ -1470,6 +1473,10 @@ def test_unreconciled_extents_name_only_the_disputed_audio():
     # Same timestamp, different length: both claims stay disputed.
     resized = stage._manifest_inventory(_manifest((100.0, 10), (110.0, 20), (500.0, 10)))
     assert stage._unreconciled_extents(resized, chunks) == [(110.0, 130.0), (110.0, 120.0)]
+    # The listed name and the span must both agree with the manifest entry.
+    renamed = [{**_span_chunk('moved', 300.0, 10), 'span': _span_chunk('moved', 100.0, 10)['span']}]
+    one = stage._manifest_inventory(_manifest((100.0, 10)))
+    assert stage._unreconciled_extents(one, renamed) == [(100.0, 110.0), (100.0, 110.0)]
     # A manifest entry without a span has an unknown end, so it stays unbounded.
     spanless = [{'chunk_timestamps': [100.0, 110.0, 500.0, 700.0]}]
     assert stage._unreconciled_extents(stage._manifest_inventory(spanless), chunks[:1])[-1] == (700.0, math.inf)

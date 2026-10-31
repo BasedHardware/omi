@@ -555,3 +555,23 @@ def test_widened_session_keeps_its_own_download_and_decoded_memory_caps(memory_b
     assert second not in session.cache
     # Proof already cached for the first window stays readable after the budget hit.
     assert session.cache[first][0] is not None
+
+
+def test_widened_sessions_share_a_process_pool_and_return_it(memory_bucket, monkeypatch):
+    memory_bucket.add(ORIGIN, 4)
+    path = next(iter(memory_bucket.objects))
+    monkeypatch.setattr(audio_chunks, '_pcm_pool_bytes', 0)
+    monkeypatch.setattr(audio_chunks, 'MAX_SPEAKER_PCM_POOL_BYTES', 5 * 32000)
+
+    def widened():
+        session = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
+        session.max_downloads, session.max_pcm_bytes = 2, 5 * 32000
+        return session
+
+    first, second = widened(), widened()
+    assert first.fetch(path) is not None
+    assert second.fetch(path) is None and second.limit_hit
+    assert audio_chunks._pcm_pool_bytes == 4 * 32000
+    first.release_pcm()
+    assert audio_chunks._pcm_pool_bytes == 0 and not first.cache
+    assert widened().fetch(path) is not None
