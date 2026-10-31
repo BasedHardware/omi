@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-windows-muted-reminder-settings.png",
+      "platform": "desktop-windows",
+      "description": "Settings > General showing Muted recording reminder urgency (Standard) and default Every 1h interval controls",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "002-desktop-windows-muted-reminder-off.png",
+      "platform": "desktop-windows",
+      "description": "Settings > General with Muted recording reminder set to Off, hiding the interval selector",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    }
+  ]
+}
