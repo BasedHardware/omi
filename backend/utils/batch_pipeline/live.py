@@ -158,6 +158,7 @@ def retained_record_units(
         pcm = read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
         if not pcm or len(pcm) % 2:
             raise ValueError('retained source has no aligned audio')
+        comparison_pcm = pcm
         source_digest = hashlib.sha256(pcm).hexdigest()
         source_skip = 0
         capture = float(chunk['timestamp'])
@@ -186,6 +187,10 @@ def retained_record_units(
             pcm, capture = pcm[overlap:], end
             if not pcm:
                 continue
+            # The next overlap may reach into this object's discarded prefix.
+            # Keep its full extent with earlier accepted bytes in that prefix,
+            # so both the size fence and divergence count use the accepted union.
+            comparison_pcm = previous_pcm[-overlap:] + pcm if trim_divergent else pcm
         if start is not None and end is not None and capture - end > 30:
             yield start, end - start, references
             references, start = [], None
@@ -217,7 +222,7 @@ def retained_record_units(
             if position + frames == 3600 * 16000:
                 yield start, end - start, references
                 references, start = [], None
-        previous_pcm = pcm
+        previous_pcm = comparison_pcm
     if references and start is not None and end is not None:
         yield start, end - start, references
 

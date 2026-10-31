@@ -23,7 +23,7 @@ Retained admission and seal repair keep the earlier retained object's bytes on
 divergent overlaps and reference only the later object's uncovered tail. The
 manifest reader verifies each complete decoded source digest and reads those
 same frame slices; it never reorders or re-resolves overlaps. An overlap larger
-than the previous retained PCM still refuses. Decode, checksum, size, reference,
+than the previous object's full PCM span still refuses. Decode, checksum, size, reference,
 unit, finish and tail checks remain required; tail tolerance stays 0.1 seconds.
 `RECORD_SEAL_OVERLAP_TRIM_ENABLED=false` restores byte-equality refusal. A short
 singleton last-object precheck defers to the full walk for multi-object rows,
@@ -31,6 +31,9 @@ because a contained final object need not reach the union end.
 Chunk starts are quantized once to the first capture's 16 kHz sample grid;
 overlap trimming and manifest placement use that same boundary, including
 half-frame ties.
+After a partial trim, the next overlap is checked against the full previous
+object span, retaining the earlier accepted bytes within that span. A wholly
+covered object does not replace this comparison history.
 
 Only the independent repair job opts into retrying `record_upload_failed` rows.
 `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED=false` disables that rule. After full

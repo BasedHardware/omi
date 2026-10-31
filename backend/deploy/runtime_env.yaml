@@ -345,6 +345,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          RECORD_SEAL_OVERLAP_TRIM_ENABLED:
+            value: 'true'
+            category: ops_kill
           LISTEN_QUIET_FINALIZATION_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2505,6 +2508,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          RECORD_SEAL_OVERLAP_TRIM_ENABLED:
+            value: 'true'
+            category: ops_kill
           LISTEN_QUIET_FINALIZATION_ENABLED:
             value: 'true'
             category: ops_kill

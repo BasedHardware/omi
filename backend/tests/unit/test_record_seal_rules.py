@@ -99,6 +99,42 @@ def test_inconsistent_timestamps_still_refuse(monkeypatch):
         list(live.retained_record_units('synthetic', 'capture', chunks, None, b''))
 
 
+@pytest.mark.parametrize('contained', [False, True])
+def test_chained_overlap_keeps_full_previous_extent_and_earlier_bytes(monkeypatch, contained):
+    chunks, sources = overlap_source(monkeypatch, starts=(100, 100 + 2 / 16000, 100 + 3 / 16000), lengths=(1, 1, 1))
+    sources[chunks[0]['path']] = b'\x01\x00' * 4
+    sources[chunks[1]['path']] = b'\x02\x00' * 3
+    # Its overlap matches B's original bytes, but the first of those frames
+    # belongs to A. The diagnostic must compare against accepted bytes too.
+    sources[chunks[2]['path']] = b'\x02\x00' * 2 + b'\x03\x00'
+    if contained:
+        chunks.insert(
+            2, {'path': 'chunks/synthetic/capture/contained.pcm', 'generation': 1, 'timestamp': 100 + 2 / 16000}
+        )
+        sources[chunks[2]['path']] = b'\x04\x00' * 2
+    diagnostics = {}
+    units = list(live.retained_record_units('synthetic', 'capture', chunks, None, b'', diagnostics=diagnostics))
+    start, duration, refs = units[0]
+    assert [(r['start_frame'], r['offset_frame'], r['frames']) for r in refs] == [(0, 0, 4), (4, 2, 1), (5, 2, 1)]
+    item = SimpleNamespace(owner_id='synthetic', conversation_id='capture', capture_at=start, duration_seconds=duration)
+    body = (
+        MAGIC
+        + json.dumps(
+            {
+                'owner_id': item.owner_id,
+                'conversation_id': item.conversation_id,
+                'capture_at': start,
+                'references': refs,
+                'context': {},
+            }
+        ).encode()
+    )
+    wav = materialize(body, item, lambda ref: sources[ref['path']])
+    with wave.open(io.BytesIO(wav), 'rb') as stream:
+        assert stream.readframes(stream.getnframes()) == b'\x01\x00' * 4 + b'\x02\x00' + b'\x03\x00'
+    assert diagnostics == {'trimmed_divergent_overlaps': 3 if contained else 2}
+
+
 def test_overlap_switch_off_restores_refusal(monkeypatch):
     monkeypatch.setenv('RECORD_SEAL_OVERLAP_TRIM_ENABLED', 'false')
     chunks, _ = overlap_source(monkeypatch)
