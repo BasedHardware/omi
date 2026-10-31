@@ -38,7 +38,7 @@ def _fetch_review_config(platform: str, client: Any = None) -> dict[str, Any]:
         raw: object = doc.to_dict()
         return cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
     except Exception as e:
-        logger.warning(f"Failed to fetch review config for platform {platform}: {e}")
+        logger.warning("Failed to fetch review config for platform %s: %s", platform, type(e).__name__)
         return {}
 
 

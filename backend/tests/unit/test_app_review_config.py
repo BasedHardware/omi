@@ -76,10 +76,14 @@ def test_hidden_version_comparison():
     assert arc.should_hide_subscription_ui("user_xyz", "ios", "1.0.532", client=mock_client) is False
 
 
-def test_firestore_exception_fails_open():
-    mock_client = MagicMock()
-    mock_client.collection.side_effect = Exception("Firestore unavailable")
+def test_firestore_exception_fails_open(caplog):
+    import logging
 
-    # Should not raise exception, returns False gracefully
-    res = arc.should_hide_subscription_ui("user-1", "ios", "1.0.0", client=mock_client)
+    mock_client = MagicMock()
+    mock_client.collection.side_effect = Exception("Firestore unavailable with sensitive db url")
+
+    with caplog.at_level(logging.WARNING):
+        res = arc.should_hide_subscription_ui("user-1", "ios", "1.0.0", client=mock_client)
     assert res is False
+    assert "Firestore unavailable with sensitive db url" not in caplog.text
+    assert "Failed to fetch review config for platform ios: Exception" in caplog.text
