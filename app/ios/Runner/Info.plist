@@ -188,7 +188,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>When creating your memories, we use your location for determining where they were created.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone so you can share audio explanations of Bugs you find, and for voice commands.</string>
+	<string>Omi uses your phone's microphone to record conversations when no Omi is connected, and for voice input.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>

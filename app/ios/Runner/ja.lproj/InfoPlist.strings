@@ -12,7 +12,7 @@
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "記憶を作成する際に、どこで作成されたかを判定するために位置情報を使用します。";
 "NSLocationUsageDescription" = "記憶を作成する際に、どこで作成されたかを判定するために位置情報を使用します。";
 
-"NSMicrophoneUsageDescription" = "発見した不具合の音声説明の共有や、音声コマンドの利用のためにマイクへのアクセスが必要です。";
+"NSMicrophoneUsageDescription" = "Omi が接続されていないときの会話の録音や音声入力に、スマートフォンのマイクを使用します。";
 
 "NSSpeechRecognitionUsageDescription" = "音声をテキストに変換する処理をデバイス上で行うため、音声認識を使用します。";
 
