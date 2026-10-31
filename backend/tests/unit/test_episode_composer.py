@@ -355,18 +355,35 @@ def test_home_read_safety_net_schedules_uncomposed_and_changed_episodes(monkeypa
 
 
 def test_per_conversation_lookup_carries_the_safety_net(monkeypatch):
-    # Home reads episodes through /by-conversation, not the window list: the lookup must schedule too.
+    # Home reads episodes through /by-conversation, not only the window list: the lookup schedules too.
     from utils.episodes import home_read
 
     queued = []
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.setattr(home_read, '_lookup_spend', {})
     monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
     old = datetime.now(timezone.utc) - timedelta(minutes=5)
-    episode = {'id': 'e1', 'status': 'closed', 'started_at': old, 'closed_at': old}
-    monkeypatch.setattr(home_read, 'project_episode', lambda uid, ep: ep and {'id': ep['id'], 'members': [{'id': 'a'}]})
-    assert home_read.project_lookup(UID, episode) == {'id': 'e1', 'members': [{'id': 'a'}]}
+    visible = {'e1', 'e2', 'e3', 'e4', 'e5', 'e6'}
+    monkeypatch.setattr(
+        home_read,
+        'project_episode',
+        lambda uid, ep: ep and ep['id'] in visible and {'id': ep['id'], 'members': [{'id': 'a'}]} or None,
+    )
+
+    def ep(eid):
+        return {'id': eid, 'status': 'closed', 'started_at': old, 'closed_at': old}
+
+    assert home_read.project_lookup(UID, ep('e1')) == {'id': 'e1', 'members': [{'id': 'a'}]}
     assert home_read.project_lookup(UID, None) is None
-    assert queued == ['e1']
+    # A fully hidden episode projects to nothing but is still checked, so stale notes get cleared.
+    assert home_read.project_lookup(UID, ep('hidden')) is None
+    assert queued == ['e1', 'hidden']
+    # Lookups arrive once per Home row: distinct episodes queued across them are capped per user.
+    for eid in ['e2', 'e3', 'e4', 'e5', 'e6']:
+        home_read.project_lookup(UID, ep(eid))
+    assert queued == ['e1', 'hidden', 'e2', 'e3']
+    home_read.project_lookup('someone-else', ep('e6'))
+    assert queued[-1] == 'e6'
 
 
 def test_a_second_replica_does_not_pay_for_the_same_evidence(store):

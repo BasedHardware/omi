@@ -1,13 +1,20 @@
 """Client read projection with only retained, extant episode members."""
 
 import logging
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.episodes import COMPOSER_MAX_SCHEDULED_PER_READ, MAX_EPISODE_SECONDS
+from config.episodes import (
+    COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
+    COMPOSER_MAX_SCHEDULED_PER_READ,
+    COMPOSER_READ_THROTTLE_SECONDS,
+    MAX_EPISODE_SECONDS,
+)
 from database import conversations, episodes
 from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
@@ -126,25 +133,54 @@ def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: 
 
 
 def project_lookup(uid: str, episode: dict[str, Any] | None) -> dict[str, Any] | None:
-    """One episode for the per-conversation lookup Home actually calls; it carries the same safety net."""
+    """One episode for the per-conversation lookup; it carries the same safety net as the list read.
+
+    A fully hidden episode projects to nothing but is still checked, so the composer clears its notes.
+    Lookups arrive one per conversation row, so a per-user budget caps distinct episodes queued across them.
+    """
     wire = project_episode(uid, episode)
-    if episode is not None and wire is not None:
-        schedule_missed_composes(uid, [episode], [wire])
+    if episode is not None and _lookup_room(uid):
+        queued = schedule_missed_composes(uid, [episode], [wire] if wire is not None else [])
+        _lookup_spend_record(uid, queued)
     return wire
 
 
-def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> None:
+_lookup_lock = threading.Lock()
+_lookup_spend: dict[str, list[float]] = {}
+
+
+def _lookup_recent(uid: str, now: float) -> list[float]:
+    return [at for at in _lookup_spend.get(uid, []) if now - at < COMPOSER_READ_THROTTLE_SECONDS]
+
+
+def _lookup_room(uid: str) -> bool:
+    with _lookup_lock:
+        return len(_lookup_recent(uid, time.monotonic())) < COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW
+
+
+def _lookup_spend_record(uid: str, queued: int) -> None:
+    if not queued:
+        return
+    now = time.monotonic()
+    with _lookup_lock:
+        if len(_lookup_spend) > 10_000:
+            _lookup_spend.clear()
+        _lookup_spend[uid] = [*_lookup_recent(uid, now), *([now] * queued)]
+
+
+def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> int:
     """Safety net for the composer: a closed episode that is uncomposed, drifted, or whose visible
-    members changed since its compose (a direct discard or delete) gets one, at most a few per read."""
+    members changed since its compose (a direct discard or delete) gets one, at most a few per read.
+    Returns how many were queued."""
     from utils.episodes import composer
 
+    queued = 0
     try:
         visible = {wire['id']: [m['id'] for m in wire.get('members') or []] for wire in wires}
         now = datetime.now(timezone.utc)
-        queued = 0
         for row in rows:
             if queued >= COMPOSER_MAX_SCHEDULED_PER_READ:
-                return
+                break
             closed_at = utc(row.get('closed_at'))
             if closed_at is None or (now - closed_at).total_seconds() < 60:
                 continue
@@ -156,6 +192,7 @@ def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[d
         logger.warning(
             'event=episode_compose_schedule outcome=error source=read exception_type=%s', type(error).__name__
         )
+    return queued
 
 
 def project_episode(
