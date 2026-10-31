@@ -24,7 +24,7 @@ WITH cost_window AS (
   SELECT FORMAT_DATE('%F', date) AS day, pool, delta_pct, run_id, inputs_settled
   FROM \`based-hardware.omi_finops.unit_cost_reconciliation\`, cost_window
   WHERE date BETWEEN DATE_SUB(last_day, INTERVAL 6 DAY) AND last_day
-    AND pool != 'llm_openai_ledger_coverage'
+    AND pool NOT IN ('llm_openai_ledger_coverage', 'stt_soniox_measured', 'stt_deepgram_measured')
 )
 SELECT TO_JSON_STRING(STRUCT(
   ARRAY(SELECT AS STRUCT * FROM cost) AS costs,
@@ -157,7 +157,11 @@ export function buildPlanEconomics(snapshot: EconomicsSnapshot, today: string) {
       if (daily.filter((r) => r.component === component).length !== 1)
         problem ||= "Cost feed has incomplete totals";
     }
-    const checks = snapshot.reconciliation.filter((r) => r.day === day);
+    // Diagnostic pools (ledger coverage, measured STT) publish no allocation
+    // delta. Only the allocation pools can fail-close the board.
+    const checks = snapshot.reconciliation.filter(
+      (r) => r.day === day && POOLS.includes(r.pool)
+    );
     if (
       POOLS.some(
         (pool) => checks.filter((r) => r.pool === pool).length !== 1
