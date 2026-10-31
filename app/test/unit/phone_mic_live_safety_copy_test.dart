@@ -50,6 +50,7 @@ void main() {
     scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026, 10, 29)));
     sync = LocalWalSyncImpl(
       _Listener(),
+      now: scheduler.clock.now,
       periodic: scheduler.periodic,
       freeDiskBytes: () async => 1 << 40,
       persistWals: WalFileManager.saveWals,
@@ -87,7 +88,8 @@ void main() {
     expect(sync.testWals, isEmpty, reason: 'nothing stored before a drain runs');
 
     scheduler.elapse(const Duration(seconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await scheduler.waitForCallbackIo();
+    await sync.drainBufferQueueForTesting();
 
     expect(sync.testWals, isNotEmpty);
     final wal = sync.testWals.first;
@@ -104,7 +106,7 @@ void main() {
     expect(sync.testWals, isEmpty);
 
     sync.didChangeAppLifecycleState(AppLifecycleState.paused);
-    await Future<void>.delayed(const Duration(milliseconds: 60));
+    await sync.drainBufferQueueForTesting();
 
     expect(sync.testWals, hasLength(1));
     final wal = sync.testWals.single;
@@ -118,7 +120,8 @@ void main() {
     await captureTransportSynced(6000);
     // One 10-second drain produces exactly one durable safety copy.
     scheduler.elapse(const Duration(seconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await scheduler.waitForCallbackIo();
+    await sync.drainBufferQueueForTesting();
     final wal = sync.testWals.single;
     expect(wal.syncedAt, 0);
     expect(wal.storage, WalStorage.disk);
