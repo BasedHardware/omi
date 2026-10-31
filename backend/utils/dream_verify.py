@@ -200,8 +200,9 @@ async def verify_two(
                 elif str(exc) == 'dream_input_token_budget':
                     # The pass's own budget refused the call; no verifier ran.
                     cause = 'budget_tokens'
-                elif isinstance(exc, TimeoutError) or asyncio.get_running_loop().time() >= call_deadline:
-                    # The pass deadline or the per-call verifier limit expired.
+                elif asyncio.get_running_loop().time() >= call_deadline:
+                    # The pass deadline or the per-call verifier limit expired; an
+                    # earlier provider timeout is a failed call.
                     cause = 'budget_deadline'
                 else:
                     cause = 'call_failed'
@@ -219,7 +220,8 @@ async def verify_two(
             elif id_ in failed:
                 reasons[id_] = failed[id_]
             elif len(votes) == 1:
-                reasons[id_] = 'single_vote'
+                # A budget or deadline stop before the second call names its cause.
+                reasons[id_] = stopped.get(id_, 'single_vote')
             else:
                 reasons[id_] = stopped.get(id_, 'budget_tokens')
     return support, calls, used

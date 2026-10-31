@@ -273,6 +273,24 @@ def test_budget_limited_skip_is_budget_tokens_and_per_call_timeout_is_deadline()
     }
 
 
+def test_second_call_stop_names_its_cause_and_early_timeout_is_a_failed_call():
+    async def spend_most(mount, messages):
+        batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+        return Turn(
+            tokens=9000,
+            price_weighted_tokens=9000,
+            value=VerificationBatch(decisions=[Verification(id=row['id'], agree=True, reason='ok') for row in batch]),
+        )
+
+    async def early_timeout(mount, messages):
+        raise TimeoutError('synthetic provider timeout')
+
+    assert _reasons(spend_most, [_item()], tokens=10000, deadline_seconds=5) == {'synthetic-proposal': 'budget_tokens'}
+    assert _reasons(early_timeout, [_item()], tokens=100000, deadline_seconds=5) == {
+        'synthetic-proposal': 'call_failed'
+    }
+
+
 def test_verifier_payload_is_the_compact_utf8_form_the_reserve_measures():
     from utils.agent_capabilities.session import serialized_bytes
     from utils.dream_verify import compact_json, evidence
