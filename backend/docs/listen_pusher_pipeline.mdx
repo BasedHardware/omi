@@ -42,7 +42,12 @@ existing repair pass refresh the partial barrier and reopen the coordinator,
 retaining prior coverage. A storage-only late arrival without that revision
 signal is **not automatically picked up after retirement**; operator recovery
 must rearm it under a separately authorized repair. Ordinary repair does not
-restart an unchanged retired coordinator. A changed
+restart an unchanged retired coordinator. Each five-minute repair attempt reads
+the coordinator and, for a partial coordinator, its row before producer inventory.
+A matching partial barrier skips inventory entirely: zero producer-inventory
+reads per unchanged row per day (288 attempts), including retired rows. A changed
+upload revision still requires fresh producer inventory before transactional rearm.
+A changed
 storage inventory creates a new generation only after the prior generation
 settles. It subtracts actual recognized source-frame coverage, including gaps
 inside earlier padded units, and sends only newly stored audio to the normal
@@ -51,6 +56,8 @@ pages share immutable content identities and projection receipts. Every partial
 pass, including the first, preserves existing text, IDs, translations and user
 edits. Incoming sentences are added only in empty spans: any overlap or
 ambiguous stored alignment keeps the original text and omits that new sentence.
+Incoming partial alignment must be valid both before and after shifting to the
+conversation clock, even for an empty initial transcript; negative offsets are omitted.
 Recorded BYOK policies are refused before plan/audio reads and again at atomic
 intake, including late generations; initial refusals and continuation outcomes
 have closed counters. Discard is rechecked before reads and at atomic intake.

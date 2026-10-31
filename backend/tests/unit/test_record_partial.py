@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 from types import SimpleNamespace
+from unittest.mock import Mock
 import wave
 
 import pytest
@@ -316,6 +317,73 @@ def test_partial_keeps_text_when_existing_alignment_is_ambiguous(source, ambiguo
     result, added = replace_record(row, incoming, {'start': 100, 'end': 102, 'preserve_existing': True})
     assert result['transcript_segments'] == [old]
     assert added == []
+
+
+@pytest.mark.parametrize(
+    'invalid',
+    [
+        {'start': 0, 'end': 1},  # Valid locally, but negative after the clock shift.
+        {'start': 2, 'end': 2},
+        {'start': 2, 'end': float('inf')},
+        {'start': 2, 'end': 3, 'audio_alignment': 'unplaced'},
+        {'start': 2, 'end': 3, 'audio_alignment': 'unknown'},
+    ],
+)
+def test_initial_partial_rejects_invalid_alignment_on_both_clocks(source, invalid):
+    row = deepcopy(source[1].rows[ROW])
+    segment = {'speaker_id': 0, 'speaker': 'SPEAKER_00', 'is_user': False}
+    incoming = {
+        'started_at': datetime.fromtimestamp(99, timezone.utc),
+        'transcript_segments': [
+            {**segment, 'id': 'invalid', 'text': 'Cannot place', **invalid},
+            {**segment, 'id': 'valid', 'text': 'Placed speech', 'start': 1, 'end': 2},
+        ],
+    }
+    result, added = replace_record(row, incoming, {'start': 99, 'end': 102, 'preserve_existing': True})
+    assert [s['id'] for s in result['transcript_segments']] == ['valid']
+    assert [(s['start'], s['end']) for s in added] == [(0, 1)]
+    assert row['transcript_segments'] == []
+    assert incoming['transcript_segments'][0] == {**segment, 'id': 'invalid', 'text': 'Cannot place', **invalid}
+
+
+@pytest.mark.parametrize('state', ['record_pending', 'partial_retired'])
+def test_real_repair_skips_unchanged_partial_inventory_but_rearms_upload_revision(source, state):
+    assert finish(source) == 'partial_finished'
+    job_id = record_identity('synthetic', 'record')[1]
+    job = pending(source)
+    job.update(state=state, partial_run={'retired_at': NOW, 'coverage': [{'start': 1600000, 'end': 1616000}]})
+    source[0].run(lambda tx: tx.put('jobs', job_id, job))
+    before = deepcopy(source[1].rows)
+    inventory = Mock(return_value=source[2])
+
+    def sweep():
+        return cluster.repair_one(
+            source[0],
+            object(),
+            object(),
+            '/'.join(ROW),
+            flags=FLAGS,
+            inventory=inventory,
+            budget=SweepBudget(240),
+        )
+
+    # One day's five-minute repair attempts, using the real per-row repair path.
+    for _ in range(288):
+        assert sweep() == 'already_partial'
+    inventory.assert_not_called()
+    assert source[1].rows == before
+    set_record_upload_pending('synthetic', 'record', 'late', True, firestore_client=source[1])
+    set_record_upload_pending('synthetic', 'record', 'late', False, firestore_client=source[1])
+    assert sweep() == 'partial_finished'
+    assert inventory.call_count == 1
+    assert pending(source)['state'] == 'record_pending'
+    assert 'retired_at' not in pending(source)['partial_run']
+    assert pending(source)['partial_run']['coverage'] == job['partial_run']['coverage']
+    assert source[1].rows[ROW]['record_audio_closed'] is False
+    assert source[1].rows[ROW]['transcript_segments'] == before[ROW]['transcript_segments']
+    for _ in range(288):
+        assert sweep() == 'already_partial'
+    assert inventory.call_count == 1
 
 
 def set_byok(source):

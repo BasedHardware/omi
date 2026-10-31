@@ -86,12 +86,19 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     from utils.batch_pipeline.record_seal_sweeper import require_fresh_proof
 
     budget.check()
-    proof = inventory()
-    require_fresh_proof(proof)  # Required even for token-free rows.
     uid, cid = nojob.conversation_path(path)
     _, job_id = record_identity(uid, cid)
     job = store.run(lambda tx: tx.get('jobs', job_id))
     budget.check()
+    if job.get('partial_coordinator'):
+        # Partial rows stay open, including after coordinator retirement. Only
+        # a changed barrier needs fresh producer proof and transactional rearm.
+        row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
+        budget.check()
+        if partial_config.partial_barrier(row):
+            return 'already_partial'
+    proof = inventory()
+    require_fresh_proof(proof)  # Required for every attempted seal or rearm.
     if job.get('partial_coordinator'):
         if reason_out is not None:
             reason = job.get('partial_reason')
