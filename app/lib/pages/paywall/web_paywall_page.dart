@@ -268,11 +268,14 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
             Positioned(
               top: MediaQuery.paddingOf(context).top + 4,
               left: 4,
+              // A dark X on a light disc reads on both dark and white pages; the steps page has no
+              // close of its own on its first two pages, so this is the only exit there.
               child: IconButton(
                 key: const Key('web_paywall_close'),
                 tooltip: context.l10n.useFreePlan,
                 onPressed: _dismiss,
-                icon: const Icon(Icons.close, color: Colors.white),
+                style: IconButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.85)),
+                icon: const Icon(Icons.close, color: Colors.black87, size: 20),
               ),
             ),
           ],

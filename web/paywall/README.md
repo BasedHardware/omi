@@ -16,8 +16,8 @@ drops it from the visible address. It listens on the
 `{"type":"ready"|"checkout"|"free"|"restore"|"fallback", "interval":"year"|"month"}` and calls
 `window.OmiPaywallHost.onCheckout(outcome)` after checkout. The app runs the real Stripe checkout;
 the page only renders. A page that errors, returns 4xx/5xx or never posts `ready` within 10 s is
-replaced by the native plans sheet. The app draws its own (white) close button over the top-left
-corner of every page.
+replaced by the native plans sheet. The app draws its own close button (a dark X on a light disc)
+over the top-left corner of every page.
 
 - `index.html` — asks PostHog which page this reader gets (flag `web-paywall-version`, variants
   `benefits` / `steps`, experiment 486505) and opens it. Flag off or not launched → `benefits`,
