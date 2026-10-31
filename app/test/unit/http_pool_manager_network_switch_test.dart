@@ -34,8 +34,20 @@ void main() {
         stalled.add(request);
         return;
       }
+      if (request.uri.path == '/redirect') {
+        await request.response.redirect(baseUri.resolve('/stream'), status: HttpStatus.seeOther);
+        return;
+      }
+      if (request.uri.path == '/body-waits') {
+        request.response.contentLength = 5;
+        request.response.add([1]);
+        await request.response.flush();
+        return;
+      }
       if (request.uri.path == '/stream') {
         request.response.statusCode = HttpStatus.ok;
+        request.response.contentLength = 5;
+        request.response.headers.set('x-network-test', 'kept');
         for (var i = 0; i < 5; i++) {
           request.response.add([i]);
           await request.response.flush();
@@ -51,8 +63,7 @@ void main() {
         request.response.contentLength = 5;
         request.response.add([1]);
         await request.response.flush();
-        final socket = await request.response.detachSocket(writeHeaders: false);
-        socket.destroy();
+        request.response.deadline = const Duration(milliseconds: 50);
         return;
       }
       if (dropNextConnection) {
@@ -174,6 +185,34 @@ void main() {
 
     expect(await upload(), HttpStatus.accepted);
     expect(pooled, isNot(contains(sourcePorts.last)), reason: 'a body failure must also retire stale sibling sockets');
+  });
+
+  test('stopping a response body does not retire the pool', () async {
+    final abort = Completer<void>();
+    final response = await manager.sendStreaming(
+      http.AbortableRequest('POST', baseUri.resolve('/body-waits'), abortTrigger: abort.future),
+    );
+    abort.complete();
+    await expectLater(response.stream.drain<void>(), throwsA(isA<http.RequestAbortedException>()));
+
+    expect(manager.retiredClientCount, 0);
+    expect(await upload(), HttpStatus.accepted);
+  });
+
+  test('stream observation preserves response metadata and final redirected URL', () async {
+    final response = await start('/redirect');
+
+    expect(response.statusCode, HttpStatus.ok);
+    expect(response.contentLength, 5);
+    expect(response.headers['x-network-test'], 'kept');
+    expect(response.reasonPhrase, 'OK');
+    expect(response.persistentConnection, isTrue);
+    expect(response.isRedirect, isFalse);
+    expect(response.request?.url, baseUri.resolve('/redirect'));
+    expect(response, isA<http.BaseResponseWithUrl>());
+    expect((response as http.BaseResponseWithUrl).url, baseUri.resolve('/stream'));
+    expect(await response.stream.expand((chunk) => chunk).toList(), [0, 1, 2, 3, 4]);
+    expect(manager.retiredClientCount, 0);
   });
 
   test('delayed headers and an active response stream survive repeated resets', () async {

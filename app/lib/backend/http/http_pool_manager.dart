@@ -9,6 +9,23 @@ import 'package:pool/pool.dart';
 import 'package:omi/services/dev_controls/journey_faults.dart';
 import 'package:omi/backend/http/api_edge_throttle_telemetry.dart';
 
+class _ObservedStreamedResponse extends http.StreamedResponse implements http.BaseResponseWithUrl {
+  @override
+  final Uri url;
+
+  _ObservedStreamedResponse(http.StreamedResponse response, Stream<List<int>> stream, this.url)
+      : super(
+          stream,
+          response.statusCode,
+          contentLength: response.contentLength,
+          request: response.request,
+          headers: response.headers,
+          isRedirect: response.isRedirect,
+          persistentConnection: response.persistentConnection,
+          reasonPhrase: response.reasonPhrase,
+        );
+}
+
 class HttpPoolManager {
   static final HttpPoolManager instance = HttpPoolManager._();
 
@@ -103,6 +120,7 @@ class HttpPoolManager {
   /// failed socket's idle siblings were opened on the same network. Only the
   /// pool that failed is replaced, so a burst of its failures resets once.
   void _resetAfterTransportFailure(Object error, IOClient failedClient) {
+    if (error is http.RequestAbortedException) return;
     if (error is! SocketException && error is! http.ClientException) return;
     if (identical(failedClient, _client)) resetConnections();
   }
@@ -250,7 +268,14 @@ class HttpPoolManager {
     return client.send(request).timeout(timeout).then(
       (response) {
         ApiEdgeThrottleTelemetry.instance.observe(request, response);
-        return response;
+        return _ObservedStreamedResponse(
+          response,
+          response.stream.handleError((Object error, StackTrace stackTrace) {
+            _resetAfterTransportFailure(error, client);
+            Error.throwWithStackTrace(error, stackTrace);
+          }),
+          response is http.BaseResponseWithUrl ? (response as http.BaseResponseWithUrl).url : request.url,
+        );
       },
       onError: (Object error, StackTrace stackTrace) {
         _resetAfterTransportFailure(error, client);
