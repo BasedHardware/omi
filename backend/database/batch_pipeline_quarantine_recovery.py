@@ -433,6 +433,8 @@ def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | 
 
 def cancel_fenced_recovery(store, segment_id):
     """Revocation-only write, allowed after privacy rejects ordinary job writes."""
+    if hasattr(store, 'cancel_fenced_recovery'):
+        return store.cancel_fenced_recovery(segment_id)
     from google.cloud import firestore
     from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 
