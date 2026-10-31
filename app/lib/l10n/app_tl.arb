@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Buksan / Patayin",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Tapusin & Proseso ang Pag-uusap",
     "@endAndProcess": {
         "description": "End and process action"

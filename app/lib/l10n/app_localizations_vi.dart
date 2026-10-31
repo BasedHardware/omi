@@ -581,6 +581,27 @@ class AppLocalizationsVi extends AppLocalizations {
   String get doubleTapAction => 'Hành động nhấn đúp';
 
   @override
+  String get singlePress => 'Nhấn một lần';
+
+  @override
+  String get triplePress => 'Nhấn ba lần';
+
+  @override
+  String get longPress => 'Nhấn giữ';
+
+  @override
+  String get singlePressAction => 'Hành động nhấn một lần';
+
+  @override
+  String get triplePressAction => 'Hành động nhấn ba lần';
+
+  @override
+  String get turnOnOff => 'Bật thiết bị / Tắt thiết bị';
+
+  @override
+  String get triplePressSubtitle => 'Yêu cầu firmware mới';
+
+  @override
   String get endAndProcess => 'Kết thúc & Xử lý cuộc trò chuyện';
 
   @override

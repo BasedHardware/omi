@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "चालू करा / बंद करा",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "संभाषण समाप्त आणि प्रक्रिया करा",
     "@endAndProcess": {
         "description": "End and process action"

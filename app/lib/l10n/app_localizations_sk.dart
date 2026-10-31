@@ -581,6 +581,27 @@ class AppLocalizationsSk extends AppLocalizations {
   String get doubleTapAction => 'Akcia dvojitého ťuknutia';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Zapnutie / Vypnutie';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Ukončiť a spracovať konverzáciu';
 
   @override

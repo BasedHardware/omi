@@ -579,6 +579,27 @@ class AppLocalizationsBs extends AppLocalizations {
   String get doubleTapAction => 'Akcija duplog dodira';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Uključi / Isključi';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Završi i obradi razgovor';
 
   @override

@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Уключыць / Выключыць",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Завяршыць і перапрацаваць размову",
     "@endAndProcess": {
         "description": "End and process action"

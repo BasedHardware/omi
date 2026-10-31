@@ -1293,6 +1293,48 @@ abstract class AppLocalizations {
   /// **'Double Tap Action'**
   String get doubleTapAction;
 
+  /// Single press action label
+  ///
+  /// In en, this message translates to:
+  /// **'Single Press'**
+  String get singlePress;
+
+  /// Triple press action label
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Press'**
+  String get triplePress;
+
+  /// Long press action label
+  ///
+  /// In en, this message translates to:
+  /// **'Long Press'**
+  String get longPress;
+
+  /// Single press action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Single Press Action'**
+  String get singlePressAction;
+
+  /// Triple press action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Press Action'**
+  String get triplePressAction;
+
+  /// Combined label for turning the device on or off
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On / Turn Off'**
+  String get turnOnOff;
+
+  /// Subtitle noting firmware requirement for triple press
+  ///
+  /// In en, this message translates to:
+  /// **'Requires updated firmware'**
+  String get triplePressSubtitle;
+
   /// End and process action
   ///
   /// In en, this message translates to:

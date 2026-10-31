@@ -580,6 +580,27 @@ class AppLocalizationsLv extends AppLocalizations {
   String get doubleTapAction => 'Dubultklikšķa darbība';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Ieslēgt / Izslēgt';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Beigt un apstrādāt sarunu';
 
   @override

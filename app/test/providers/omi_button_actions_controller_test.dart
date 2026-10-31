@@ -461,4 +461,84 @@ void main() {
     provider.dispose();
     onboarding.dispose();
   });
+
+  group('customizable button gesture routing (#2825)', () {
+    test('routes single (1), double (2), and triple (6) presses to configured actions and honors Off (4)', () {
+      final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
+      provider.updateRecordingDevice(_device(DeviceType.omi));
+      final prefs = SharedPreferencesUtil();
+
+      // Configure single press = Star (2), double press = Ask Omi (3), triple press = Off (4)
+      prefs.singlePressAction = 2;
+      prefs.doublePressAction = 3;
+      prefs.triplePressAction = 4;
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+      provider.handleButtonEventForTesting('test-id', 1);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+
+      // Triple press is Off (4) -> no-op
+      provider.handleButtonEventForTesting('test-id', 6);
+      expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+
+      // Double press is Ask Omi (3) -> starts voice session
+      provider.handleButtonEventForTesting('test-id', 2);
+      expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+      // While a voice session is active, single press (keepVoice override) ends the voice session
+      // instead of toggling star again.
+      provider.handleButtonEventForTesting('test-id', 1);
+      expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+
+      // Triple press configured to Star (2) toggles starring off
+      prefs.triplePressAction = 2;
+      provider.handleButtonEventForTesting('test-id', 6);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      provider.dispose();
+    });
+
+    test('_isProcessingButtonEvent guard blocks overlapping mute/unmute actions across gestures', () async {
+      final pauseCompleter = Completer<void>();
+      var pauseCalls = 0;
+      final provider = _PausedGuardTestCaptureProvider(
+        onPause: () {
+          pauseCalls++;
+          return pauseCompleter.future;
+        },
+      );
+      provider.updateRecordingDevice(_device(DeviceType.omi));
+      final prefs = SharedPreferencesUtil();
+      prefs.singlePressAction = 1; // Mute / Unmute
+      prefs.doublePressAction = 2; // Star Conversation
+
+      // First single press starts async pauseDeviceRecording()
+      provider.handleButtonEventForTesting('test-id', 1);
+      expect(pauseCalls, 1);
+
+      // While pause is in-flight, overlapping non-voice button gestures are ignored
+      provider.handleButtonEventForTesting('test-id', 1);
+      provider.handleButtonEventForTesting('test-id', 2);
+      expect(pauseCalls, 1);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      // Once pause completes, subsequent gestures are processed normally
+      pauseCompleter.complete();
+      await Future<void>.delayed(Duration.zero);
+      provider.handleButtonEventForTesting('test-id', 2);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+
+      provider.dispose();
+    });
+  });
+}
+
+class _PausedGuardTestCaptureProvider extends _NoSocketCaptureProvider {
+  _PausedGuardTestCaptureProvider({required this.onPause});
+
+  final Future<void> Function() onPause;
+
+  @override
+  Future<void> pauseDeviceRecording() => onPause();
 }

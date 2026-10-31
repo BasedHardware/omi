@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "இயக்கவும் / அணைக்கவும்",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "முடிக்கவும் & உரையாடல் செயல்படுத்தவும்",
     "@endAndProcess": {
         "description": "End and process action"
