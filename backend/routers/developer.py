@@ -1019,7 +1019,7 @@ def delete_action_item(
     - **action_item_id**: The ID of the action item to delete
     """
     action_item = action_items_db.get_action_item(uid, action_item_id)
-    if not action_item:
+    if not action_item or action_item.get('deleted', False):
         raise HTTPException(status_code=404, detail="Action item not found")
     if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
@@ -1050,7 +1050,7 @@ def update_action_item(
     """
     # Check if action item exists
     action_item = action_items_db.get_action_item(uid, action_item_id)
-    if not action_item:
+    if not action_item or action_item.get('deleted', False):
         raise HTTPException(status_code=404, detail="Action item not found")
     if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
