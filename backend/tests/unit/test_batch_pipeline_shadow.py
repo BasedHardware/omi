@@ -25,11 +25,11 @@ from utils.batch_pipeline.recovery_recognizers import words_payload
 
 @pytest.fixture
 def repository(monkeypatch):
-    # Production answers None (Deepgram retired 2026-08-27); the second-provider
-    # machinery these shadows exercise stays covered under a named provider.
-    from utils.batch_pipeline import quarantine_recovery as _qr
+    # Prepare the deferred serving module during fixture setup, as before;
+    # provider import cost is separate from the per-operation CPU guard.
+    from utils.batch_pipeline import quarantine_recovery as recovery
 
-    monkeypatch.setattr(_qr, 'SECOND_PROVIDER', 'deepgram')
+    assert recovery.SECOND_PROVIDER == 'soniox'
     monkeypatch.setenv('BATCH_PIPELINE_SHADOW_PERCENT', '100')
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
@@ -294,7 +294,7 @@ def test_atomic_hourly_cap_shared_by_instances_and_each_provider(repository, mon
     another = ShadowStore(repository.store, clock=repository.clock, busy=lambda: False)
     assert repository.paid(first.segment_id, 'modulate')
     assert not another.paid(first.segment_id, 'modulate')
-    assert another.paid(first.segment_id, 'deepgram')
+    assert another.paid(first.segment_id, 'soniox')
     assert not repository.paid(second.segment_id, 'modulate')
     another.clock = lambda: 10800
     assert not another.paid(first.segment_id, 'modulate')  # same intent, next hour
@@ -378,7 +378,7 @@ def test_cap_records_paid_skipped_without_provider_call(repository, monkeypatch)
     assert row(repository, item.segment_id)['speech_loss_seconds'] == 19
 
 
-def test_second_provider_requires_same_long_speech_handoff_as_live(repository):
+def test_second_provider_recovers_held_padded_empty_when_terminal_flag_off(repository):
     item = running(repository)
     repository.store.run(
         lambda tx: tx.put(
@@ -393,7 +393,7 @@ def test_second_provider_requires_same_long_speech_handoff_as_live(repository):
     )
     spans = [{'start': 0.0, 'end': 300.0}]
     first = Mock(side_effect=MultilingualEmpty(300, spans))
-    second = Mock()
+    second = Mock(side_effect=MultilingualEmpty(300, spans))
     assert (
         recover(
             repository,
@@ -405,7 +405,7 @@ def test_second_provider_requires_same_long_speech_handoff_as_live(repository):
         )
         == 'failed_held'
     )
-    second.assert_not_called()
+    second.assert_called_once()
 
 
 @pytest.mark.parametrize('safety,expected', [('false', 'empty'), ('true', 'failed_held')])
@@ -428,7 +428,7 @@ def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkey
     )
 
 
-@pytest.mark.parametrize('failed_provider', ['modulate', 'deepgram'])
+@pytest.mark.parametrize('failed_provider', ['modulate', 'soniox'])
 def test_provider_failures_keep_the_live_failed_held_disposition(repository, failed_provider):
     item = running(repository)
     spans = [{'start': 0.0, 'end': 300.0}]
@@ -451,7 +451,7 @@ def test_provider_failures_keep_the_live_failed_held_disposition(repository, fai
         )
         == 'failed_held'
     )
-    assert second.call_count == (failed_provider == 'deepgram')
+    assert second.call_count == (failed_provider == 'soniox')
 
 
 def test_active_recovery_reap_uses_its_start_time_and_transport_cannot_settle_it(repository, monkeypatch):

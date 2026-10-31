@@ -1,0 +1,68 @@
+[
+  {
+    "name": "omi_record_seal_backlog",
+    "description": "Bounded sampled unsealed record backlog; lower bound when discovery saturates. No identifiers.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"sweeper\" AND jsonPayload.logger=\"record-seal-sweeper\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_sweep\\\"\" AND jsonPayload.message:\"\\\"outcome\\\": \\\"ok\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "DISTRIBUTION",
+      "unit": "1"
+    },
+    "valueExtractor": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"backlog\\\": ([0-9]+)\")",
+    "bucketOptions": {
+      "exponentialBuckets": {
+        "numFiniteBuckets": 32,
+        "growthFactor": 2,
+        "scale": 1
+      }
+    }
+  },
+  {
+    "name": "omi_record_seal_oldest_unsealed_seconds",
+    "description": "Oldest observed unsealed record age in seconds; lower bound when discovery saturates. No identifiers.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"sweeper\" AND jsonPayload.logger=\"record-seal-sweeper\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_sweep\\\"\" AND jsonPayload.message:\"\\\"outcome\\\": \\\"ok\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "DISTRIBUTION",
+      "unit": "s"
+    },
+    "valueExtractor": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"oldest_unsealed_seconds\\\": ([0-9]+)\")",
+    "bucketOptions": {
+      "exponentialBuckets": {
+        "numFiniteBuckets": 32,
+        "growthFactor": 2,
+        "scale": 1
+      }
+    }
+  },
+  {
+    "name": "omi_record_seal_runs",
+    "description": "Successful sweeper cycle count, including empty cycles.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"sweeper\" AND jsonPayload.logger=\"record-seal-sweeper\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_sweep\\\"\" AND jsonPayload.message:\"\\\"outcome\\\": \\\"ok\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  },
+  {
+    "name": "omi_record_seal_nonempty_runs",
+    "description": "Exact content-free sweeper alert signal.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"sweeper\" AND jsonPayload.logger=\"record-seal-sweeper\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_sweep\\\"\" AND jsonPayload.message:\"\\\"outcome\\\": \\\"ok\\\"\" AND jsonPayload.message=~\"\\\"backlog\\\": [1-9][0-9]*\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  },
+  {
+    "name": "omi_record_seal_old_runs",
+    "description": "Exact content-free sweeper alert signal.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"sweeper\" AND jsonPayload.logger=\"record-seal-sweeper\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_sweep\\\"\" AND jsonPayload.message:\"\\\"outcome\\\": \\\"ok\\\"\" AND jsonPayload.message=~\"\\\"oldest_unsealed_over_four_hours\\\": true\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  }
+]

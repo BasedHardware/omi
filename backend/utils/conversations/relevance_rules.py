@@ -158,7 +158,7 @@ def _is_cjk(ch: str) -> bool:
     )
 
 
-def _normalise(text: str) -> str:
+def normalize_relevance_text(text: str) -> str:
     text = unicodedata.normalize('NFKC', text)
     return text.replace('’', "'").replace('‘', "'").replace('`', "'")
 
@@ -196,7 +196,7 @@ def _tokenise(texts: Sequence[str]) -> Tuple[List[str], List[str], List[str]]:
     foreign: List[str] = []
     cjk: List[str] = []
     for raw in texts:
-        text = _normalise(raw)
+        text = normalize_relevance_text(raw)
         cjk.extend(ch for ch in text if _is_cjk(ch))
         stripped = ''.join(' ' if _is_cjk(ch) else ch for ch in text).casefold()
         for token in _TOKEN_RE.findall(stripped):
@@ -219,7 +219,7 @@ def deterministic_relevance(texts: Sequence[str], speech_seconds: Optional[float
     cjk_content = [ch for ch in cjk if ch not in CJK_FILLER_CHARS]
     word_equivalents = len(latin) + len(foreign) + len(cjk) / CJK_CHARS_PER_WORD
 
-    joined = ' '.join(_normalise(t) for t in texts)
+    joined = ' '.join(normalize_relevance_text(t) for t in texts)
     has_digit = any(ch.isdigit() for ch in joined)
     unreadable = bool(cjk_content) or any(not _is_filler(t) for t in foreign)
 
@@ -290,7 +290,7 @@ def deterministic_tiebreak(texts: Sequence[str]) -> Verdict:
     if verdict is not None:
         return verdict
     latin, foreign, cjk = _tokenise(texts)
-    joined = ' '.join(_normalise(t) for t in texts)
+    joined = ' '.join(normalize_relevance_text(t) for t in texts)
     if (not latin) or foreign or cjk or any(ch.isdigit() for ch in joined) or _has_mid_sentence_capital(texts):
         return 'keep'
     filler_ratio = sum(_is_filler(t) for t in latin) / len(latin)

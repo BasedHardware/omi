@@ -47,6 +47,7 @@ TARGET_SCHEMAS = (
     'ProactivityOutcomeResponse',
     'ScreenTaskGateRequest',
     'ScreenTaskGateResponse',
+    'ClientFlagsResponse',
     'Conversation',
     'Structured',
     'ActionItem',

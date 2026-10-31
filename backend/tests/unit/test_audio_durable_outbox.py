@@ -16,7 +16,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from starlette.websockets import WebSocketState
 from fastapi.websockets import WebSocketDisconnect
-from google.api_core.exceptions import PreconditionFailed
+from google.api_core.exceptions import InvalidArgument, PreconditionFailed
+from google.rpc.error_details_pb2 import ErrorInfo
 from google.cloud.exceptions import NotFound
 
 from config.audio_outbox import enabled
@@ -42,6 +43,10 @@ from utils.pusher_protocol import (
 )
 import routers.pusher as pusher
 from database import record_audio as record_audio_db
+from database.record_audio import seal_record_audio, set_record_upload_pending, mark_record_upload_failed
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.pusher_record_barrier import PusherRecordBarrier
+import utils.pusher_record_barrier as barrier_module
 
 
 class Blob:
@@ -98,7 +103,7 @@ class Bucket:
 @pytest.fixture
 def remote(monkeypatch):
     bucket = Bucket()
-    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=False))
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
     monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', MagicMock(return_value=True))
     monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', MagicMock(return_value=True))
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
@@ -1148,6 +1153,229 @@ def _sent_receipts(sock):
     return [AudioReceipt(**json.loads(frame[4:])['receipt']) for frame in sock.sent]
 
 
+@pytest.fixture
+def inline_session(remote, monkeypatch):
+    registry = barrier_module._ProcessRecordTokens()
+    monkeypatch.setattr(barrier_module, '_process_record_tokens', lambda: registry)
+    _window_harness(remote, monkeypatch)
+    client = StrictFirestore()
+    path = ('users', 'owner', 'conversations', 'conversation')
+    client.rows[path] = {'record_lane_owner': 'batch_live_v1'}
+    monkeypatch.setattr(record_audio_db, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal_record_audio)
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', set_record_upload_pending)
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', mark_record_upload_failed)
+    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
+    barrier = PusherRecordBarrier('owner')
+    monkeypatch.setattr(pusher, 'PusherRecordBarrier', lambda _: barrier)
+    projected = []
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', lambda *a, **kw: projected.append(a))
+    return client, path, barrier, projected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [None, 'false'])
+async def test_inline_finish_waits_for_projection_and_kill_switch_keeps_background(
+    inline_session, monkeypatch, enabled
+):
+    client, path, barrier, projected = inline_session
+    if enabled is None:
+        monkeypatch.delenv('RECORD_BARRIER_INLINE_FINISH', raising=False)
+    else:
+        monkeypatch.setenv('RECORD_BARRIER_INLINE_FINISH', enabled)
+    finish_tasks = []
+    original = barrier.finish_recording
+
+    async def finish(cid):
+        assert projected, 'metadata must follow the existing projection drain'
+        finish_tasks.append(asyncio.current_task().get_name())
+        return await original(cid)
+
+    monkeypatch.setattr(barrier, 'finish_recording', finish)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160] * 50))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert finish_tasks == [f'ws:owner:{"receive" if enabled is None else "private_cloud"}']
+    assert client.rows[path]['record_audio_closed'] is True
+    assert client.rows[path]['record_upload_sessions'] == {}
+    # Fifty frames share one producer begin; neither inline nor background
+    # closure introduces frame-frequency Firestore reads.
+    assert len(client.transactions) == 3  # begin, token clear, seal
+
+
+@pytest.mark.asyncio
+async def test_failed_tail_never_runs_inline_or_background_finish(inline_session, monkeypatch):
+    client, path, barrier, projected = inline_session
+    finish = AsyncMock(wraps=barrier.finish_recording)
+    monkeypatch.setattr(barrier, 'finish_recording', finish)
+    monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('synthetic tail failure')))
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    finish.assert_not_awaited()
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path].get('record_upload_failed')
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_audio_closed'] is False
+    assert not projected and not sock.sent and sock.close_code == 1011
+
+
+@pytest.mark.asyncio
+async def test_shutdown_ack_failure_keeps_token_without_poisoning_retained_custody(inline_session, remote, monkeypatch):
+    client, path, barrier, projected = inline_session
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    sock.send_bytes = AsyncMock(side_effect=WebSocketDisconnect(1006))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert remote.list_blobs('raw-live/') and remote.list_blobs('audio-outbox/')
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path].get('record_upload_failed')
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_audio_closed'] is False
+    assert not projected and sock.close_code == 1011
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('committed_before_failure', [False, True])
+async def test_later_socket_reclears_only_receipt_proven_shutdown_tail(
+    inline_session, monkeypatch, committed_before_failure
+):
+    client, path, earlier, projected = inline_session
+    real_commit = pusher.commit_pcm_window
+    first = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    if committed_before_failure:
+        first.send_bytes = AsyncMock(side_effect=WebSocketDisconnect(1006))
+    else:
+        monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('synthetic tail failure')))
+    await pusher._websocket_util_trigger(first, 'owner', 16000, audio_custody=1)
+    held = earlier.upload_sessions['conversation']
+    assert set(client.rows[path]['record_upload_sessions']) == {held}
+    assert not client.rows[path]['record_audio_closed']
+
+    monkeypatch.setattr(pusher, 'commit_pcm_window', real_commit)
+    later = PusherRecordBarrier('owner')
+    monkeypatch.setattr(pusher, 'PusherRecordBarrier', lambda _: later)
+    # This is new audio, not a replay of the held window. It can only release
+    # the old producer if that exact tail already obtained an immutable receipt.
+    second = Socket(_audio_frames('conversation', [b'\x02\x00' * 160], start=2000.0))
+    await pusher._websocket_util_trigger(second, 'owner', 16000, audio_custody=1)
+    assert projected
+    assert client.rows[path]['record_audio_closed'] is committed_before_failure
+    assert set(client.rows[path]['record_upload_sessions']) == (set() if committed_before_failure else {held})
+
+
+@pytest.mark.asyncio
+async def test_projection_failure_while_inline_waits_keeps_token(inline_session, monkeypatch):
+    client, path, barrier, projected = inline_session
+    monkeypatch.setattr(
+        pusher, 'upload_audio_chunks_batch', MagicMock(side_effect=OSError('synthetic projection failure'))
+    )
+    finish = AsyncMock(wraps=barrier.finish_recording)
+    monkeypatch.setattr(barrier, 'finish_recording', finish)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    finish.assert_not_awaited()
+    assert client.rows[path]['record_upload_sessions']
+    assert client.rows[path]['record_upload_failed'] is True
+    assert client.rows[path]['record_audio_closed'] is False
+
+
+@pytest.mark.asyncio
+async def test_invalid_argument_projection_keeps_custody_and_allows_seal(inline_session, monkeypatch, caplog):
+    client, path, barrier, projected = inline_session
+    fail = AsyncMock(wraps=barrier.fail_recording)
+    monkeypatch.setattr(barrier, 'fail_recording', fail)
+    audio_file = SimpleNamespace(model_dump=lambda: {'id': 'synthetic-audio'})
+    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [audio_file])
+    sensitive = 'A' * 28 + ' person@example.test conversations/private-conversation/jobs/private-job'
+    rejection = InvalidArgument(sensitive, error_info=ErrorInfo(reason=sensitive))
+    update = MagicMock(side_effect=rejection)
+    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update)
+    before = audio_outbox_metrics.CUSTODY_FAILURES.labels(stage='projection', reason='invalid_argument')._value.get()
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    with caplog.at_level(logging.INFO, logger='routers.pusher'):
+        await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    fail.assert_not_awaited()
+    assert not barrier.failed_recordings and not barrier.record_upload_failed
+    assert not client.rows[path].get('record_upload_failed')
+    assert client.rows[path]['record_audio_closed'] is True
+    assert update.call_count == 1, 'deterministic rejection drops refs without retry'
+    assert (
+        audio_outbox_metrics.CUSTODY_FAILURES.labels(stage='projection', reason='invalid_argument')._value.get()
+        == before + 1
+    )
+    messages = [record.getMessage() for record in caplog.records]
+    assert any('grpc_code=INVALID_ARGUMENT' in message for message in messages)
+    assert 'Durable audio projection rejected; archive receipt retained' in messages
+    assert all(
+        sensitive not in message and 'person@example.test' not in message and 'private-conversation' not in message
+        for message in messages
+    )
+    assert _sent_receipts(sock) and projected
+
+
+def test_projection_grpc_code_never_serializes_untrusted_reason_or_code():
+    rejection = InvalidArgument('secret message', error_info=ErrorInfo(reason='A' * 28))
+    assert pusher._projection_grpc_code(rejection) == 'INVALID_ARGUMENT'
+    rejection.grpc_status_code = 'person@example.test/private-job'
+    assert pusher._projection_grpc_code(rejection) == 'UNKNOWN'
+    assert pusher._projection_grpc_code(ValueError('private/path')) == 'UNKNOWN'
+
+
+@pytest.mark.asyncio
+async def test_inline_projection_timeout_keeps_background_close(inline_session, monkeypatch):
+    client, path, barrier, projected = inline_session
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    timed_out = asyncio.Event()
+    timeouts = []
+    real_timeout = asyncio.timeout
+    real_info = pusher.logger.info
+    finish_tasks = []
+    original = barrier.finish_recording
+
+    def capture_timeout(delay):
+        timeout = real_timeout(delay)
+        timeouts.append(timeout)
+        return timeout
+
+    def expire_budget():
+        # The blocked projection expires its own handler budget explicitly;
+        # healthy CI work never races a tiny real-clock deadline.
+        timeouts[-1].reschedule(loop.time() - 1)
+
+    def info(message, *args, **kwargs):
+        if message == 'event=record_inline_finish outcome=timeout':
+            timed_out.set()
+        real_info(message, *args, **kwargs)
+
+    def project(*args, **kwargs):
+        loop.call_soon_threadsafe(entered.set)
+        loop.call_soon_threadsafe(expire_budget)
+        assert release.wait(5)
+        projected.append(args)
+
+    async def finish(cid):
+        assert projected
+        finish_tasks.append(asyncio.current_task().get_name())
+        return await original(cid)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
+    monkeypatch.setattr(pusher.asyncio, 'timeout', capture_timeout)
+    monkeypatch.setattr(pusher.logger, 'info', info)
+    monkeypatch.setattr(barrier, 'finish_recording', finish)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        await asyncio.wait_for(timed_out.wait(), 5)
+        assert client.rows[path]['record_upload_sessions']
+        assert not finish_tasks
+    finally:
+        release.set()
+        await asyncio.wait_for(task, 5)
+    assert finish_tasks == ['ws:owner:private_cloud']
+    assert client.rows[path]['record_audio_closed'] is True
+
+
 @pytest.mark.asyncio
 async def test_window_batches_messages_into_one_custody_pair(remote, monkeypatch):
     _window_harness(remote, monkeypatch)
@@ -1306,7 +1534,7 @@ async def test_transient_projection_failure_requeues_and_then_lands(remote, monk
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=flaky_upload))
     audio_files_calls = MagicMock(return_value=[])
     monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', audio_files_calls)
-    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=None))
     sock = Socket(_audio_frames('conversation', payloads))
     monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
     task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
@@ -1333,7 +1561,7 @@ async def test_conflict_projection_failure_never_retries_and_withholds_close(rem
         raise storage.AudioChunkContentConflict('v2 audio blob content conflict at chunks/owner/conversation/1000.000')
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=conflict_upload))
-    seal = MagicMock()
+    seal = MagicMock(return_value=None)
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     payloads = [struct.pack('<160h', *[n] * 160) for n in range(5)]
     sock = Socket(_audio_frames('conversation', payloads))
@@ -1365,7 +1593,7 @@ async def test_transient_projection_failure_drops_after_the_retry_budget(remote,
         raise OSError('projection unavailable')
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=always_unavailable))
-    seal = MagicMock()
+    seal = MagicMock(return_value=None)
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     frames = [struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm]
     sock = Socket(frames)
@@ -1402,7 +1630,9 @@ async def test_transient_projection_failure_drops_after_the_retry_budget(remote,
         for record in caplog.records
         if record.getMessage().startswith('Durable audio projection failure class:')
     ]
-    assert class_lines == ['Durable audio projection failure class: OSError raised by always_unavailable'] * (
+    assert class_lines == [
+        'Durable audio projection failure class: OSError raised by always_unavailable grpc_code=UNKNOWN'
+    ] * (
         1 + pusher.PROJECTION_RETRY_BUDGET
     ), 'every failed attempt logs the exception class name and the innermost raising frame, never the message'
     assert not any(
@@ -1535,7 +1765,7 @@ async def test_notfound_on_live_conversation_keeps_transient_retry_and_terminal_
     monkeypatch.setattr(pusher, 'read_pcm', purged_read)
     # The remote fixture already pins conversation_tombstones.is_deleted to False.
     monkeypatch.setattr(pusher, 'get_firestore_client', lambda: _firestore_client_with_conversation(True))
-    seal = MagicMock()
+    seal = MagicMock(return_value=None)
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
     real_receive = sock.receive_bytes
@@ -1567,9 +1797,9 @@ async def test_notfound_on_live_conversation_keeps_transient_retry_and_terminal_
         for record in caplog.records
         if record.getMessage().startswith('Durable audio projection failure class:')
     ]
-    assert class_lines == ['Durable audio projection failure class: NotFound raised by purged_read'] * (
-        1 + pusher.PROJECTION_RETRY_BUDGET
-    ), 'the class line names the innermost raising frame'
+    assert class_lines == [
+        'Durable audio projection failure class: NotFound raised by purged_read grpc_code=NOT_FOUND'
+    ] * (1 + pusher.PROJECTION_RETRY_BUDGET), 'the class line names the innermost raising frame'
     assert not any(
         'pinned generation missing' in record.getMessage() for record in caplog.records
     ), 'the exception message must never reach the projection failure logs'
@@ -1584,8 +1814,10 @@ def test_custody_failure_reason_label_is_a_bounded_vocabulary():
     def value(reason):
         return REGISTRY.get_sample_value(sample, {'stage': 'projection', 'reason': reason})
 
-    assert audio_outbox_metrics.CUSTODY_FAILURE_REASONS == frozenset({'other', 'conflict', 'transient'})
-    for reason in ('other', 'conflict', 'transient'):
+    assert audio_outbox_metrics.CUSTODY_FAILURE_REASONS == frozenset(
+        {'other', 'conflict', 'transient', 'invalid_argument'}
+    )
+    for reason in ('other', 'conflict', 'transient', 'invalid_argument'):
         assert value(reason) is not None, f'{reason} must have a scraped zero baseline'
     before = value('other')
     audio_outbox_metrics.record_failure('projection', 'free text from an exception message')
@@ -1609,7 +1841,7 @@ async def test_wrapped_probe_valueerror_is_transient_and_retries(remote, monkeyp
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=probe_error_then_success))
     monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[]))
-    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=None))
     sock = Socket(_audio_frames('conversation', payloads))
     monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
     task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
@@ -1645,7 +1877,7 @@ async def test_projection_retry_budget_resets_after_a_dropped_batch(remote, monk
         return []
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=fail_five_then_succeed))
-    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=None))
     frames = [struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm]
     sock = Socket(frames)
     real_receive = sock.receive_bytes

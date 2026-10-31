@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "你的计划目前不支持按年付费。",
     "yearlySwitchDoneTitle": "已改为按年付费",
     "yearlySwitchDoneBody": "今日已扣款 {amount}。续订日期：{date}。",
-    "episodePartsCount": "{count, plural, zero{{count} 个部分} one{{count} 个部分} two{{count} 个部分} few{{count} 个部分} many{{count} 个部分} other{{count} 个部分}}"
+    "episodePartsCount": "{count, plural, zero{{count} 个部分} one{{count} 个部分} two{{count} 个部分} few{{count} 个部分} many{{count} 个部分} other{{count} 个部分}}",
+    "chatAppsWaitingMessageIn": "在“{app}”中发送这条消息。Omi 一收到，此屏幕就会更新。",
+    "chatAppsCodeExpiredMessageIn": "获取新验证码，并从“{app}”中发送。"
 }

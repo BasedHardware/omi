@@ -4611,5 +4611,7 @@
     "yearlySwitchUnavailable": "Az éves fizetés jelenleg nem érhető el az Ön csomagjához.",
     "yearlySwitchDoneTitle": "Mostantól évente fizet",
     "yearlySwitchDoneBody": "Ma terhelve: {amount}. Megújul: {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} rész} one{{count} rész} two{{count} rész} few{{count} rész} many{{count} rész} other{{count} rész}}"
+    "episodePartsCount": "{count, plural, zero{{count} rész} one{{count} rész} two{{count} rész} few{{count} rész} many{{count} rész} other{{count} rész}}",
+    "chatAppsWaitingMessageIn": "Küldd el az üzenetet az {app} alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.",
+    "chatAppsCodeExpiredMessageIn": "Kérj új kódot, és küldd el az {app} alkalmazásból."
 }

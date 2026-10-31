@@ -29,7 +29,16 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
     for name in dream_levers.PER_OWNER:
         monkeypatch.delenv(name, raising=False)
         monkeypatch.delenv(name + '_SERVE_PERCENT', raising=False)
-    assert set(dream_levers.arms('owner-a').values()) == {'shadow'}
+    # Retired 2026-10-30 from the 10-29 shadow day: idle-skip and no-progress default off.
+    assert dream_levers.arms('owner-a') == {
+        'idle_skip': 'off',
+        'material_budget': 'shadow',
+        'no_progress_stop': 'off',
+        'history_compact': 'shadow',
+        'hunt_backoff': 'shadow',
+        'prescan': 'shadow',
+    }
+    monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
     monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '100')
     assert dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, 'owner-a') == 'serve'
     monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '0')
@@ -41,6 +50,7 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
 
 
 def test_lever_cohorts_are_salted_per_lever(monkeypatch):
+    monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
     monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '50')
     monkeypatch.setenv(dream_levers.MATERIAL_BUDGET_SERVE_PERCENT_ENV, '50')
     owners = [f'owner-{index}' for index in range(400)]
@@ -62,8 +72,11 @@ def test_lever_errors_fail_open_to_off(monkeypatch):
 def test_payoff_order_is_global_mode_only(monkeypatch):
     monkeypatch.setenv(dream_levers.PAYOFF_ORDER_MODE_ENV, 'serve')
     assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'serve'
-    monkeypatch.delenv(dream_levers.PAYOFF_ORDER_MODE_ENV)
+    monkeypatch.setenv(dream_levers.PAYOFF_ORDER_MODE_ENV, 'shadow')
     assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'shadow'
+    monkeypatch.delenv(dream_levers.PAYOFF_ORDER_MODE_ENV)
+    # David 2026-10-30: payoff first.
+    assert dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None) == 'serve'
 
 
 def test_material_budget_never_raises_the_ceiling():
@@ -182,6 +195,19 @@ def test_sweep_record_counts_owners_not_retry_attempts(caplog):
     assert payload['waiting_attempts'] == {'reserved_capacity': 3}
     assert payload['applied'] == 1 and payload['owners_unreached'] == 2
     assert payload['scheduled_at'] == '2026-10-28T09:00:00+00:00'
+
+
+def test_value_weights_user_impact():
+    outcomes = [
+        {'kind': 'merge_conversations', 'status': 'applied'},
+        {'kind': 'dismiss_person', 'status': 'applied'},
+        {'kind': 'dismiss_person', 'status': 'verifier_disagree'},
+        {'kind': 'unlisted_kind', 'status': 'applied'},
+        'malformed',
+    ]
+    assert dream_telemetry.value(outcomes) == 5 + 1 + 1
+    assert dream_telemetry.pass_payload({'status': 'complete', 'outcomes': outcomes})['value'] == 7
+    assert dream_telemetry.sweep_payload({'finals': [{'outcomes': outcomes}]}, [])['value'] == 7
 
 
 def test_sweep_record_keeps_the_scheduler_offset_and_splits_wait_causes(caplog):
@@ -565,6 +591,79 @@ def test_finish_parks_an_idle_owner_and_records_yield(queue):
     assert queue.rows[('dream_users', QUEUE_UID)]['last_yield'] == 1
 
 
+def test_hunt_backoff_doubles_per_dry_hunt_and_caps():
+    from config.dream_agent import backed_off_hunt_interval, hunt_interval
+
+    base = hunt_interval('light')
+    assert [backed_off_hunt_interval('light', n) for n in (0, 1, 2, 3, 9)] == [
+        base,
+        2 * base,
+        4 * base,
+        8 * base,
+        8 * base,
+    ]
+    assert backed_off_hunt_interval('light', 'junk') == base
+    assert backed_off_hunt_interval('heavy', 1) == 2 * hunt_interval('heavy')
+
+
+def test_finish_counts_dry_hunts_and_yield_resets_them(queue):
+    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0, 'dry_hunts': 2}
+    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
+    assert lease['hunt'] and lease['dry_hunts'] == 2
+    dream_store.finish(QUEUE_UID, lease, {'tokens': 5}, success=True, now=NOW)
+    assert queue.rows[('dream_users', QUEUE_UID)]['dry_hunts'] == 3
+    later = NOW + timedelta(days=9)
+    lease = dream_store.acquire(QUEUE_UID, Caps(), now=later)
+    report = {'tokens': 5, 'outcomes': [{'key': 'a', 'kind': 'dismiss_person', 'status': 'applied'}]}
+    dream_store.finish(QUEUE_UID, lease, report, success=True, now=later)
+    assert queue.rows[('dream_users', QUEUE_UID)]['dry_hunts'] == 0
+
+
+def test_serve_dry_hunt_due_row_uses_the_incremented_streak(queue, monkeypatch):
+    from config.dream_agent import hunt_interval
+
+    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'serve')
+    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0, 'dry_hunts': 1, 'size_bucket': 'light'}
+    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
+    dream_store.finish(QUEUE_UID, lease, {'tokens': 5, 'size_bucket': 'light'}, success=True, now=NOW)
+    assert queue.rows[('dream_users', QUEUE_UID)]['dry_hunts'] == 2
+    assert queue.rows[('dream_due', QUEUE_UID)]['due_at'] == NOW + 4 * hunt_interval('light')
+
+
+@pytest.mark.parametrize('case', ['failed', 'manual', 'canary'])
+def test_dry_hunts_ignore_failed_manual_and_canary_passes(queue, case):
+    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0, 'dry_hunts': 1}
+    lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
+    if case == 'manual':
+        lease = {**lease, 'trigger': 'manual'}
+    if case == 'canary':
+        lease = {**lease, 'canary': True}
+    dream_store.finish(QUEUE_UID, lease, {'tokens': 5}, success=case != 'failed', now=NOW)
+    assert queue.rows[('dream_users', QUEUE_UID)].get('dry_hunts', 1) == 1
+
+
+def test_hunt_backoff_serve_delays_the_next_hunt_and_shadow_only_records(queue, monkeypatch):
+    from config.dream_agent import hunt_interval
+
+    state = {'score': 0, 'dry_hunts': 2, 'size_bucket': 'light', 'last_pass_at': NOW}
+    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'shadow')
+    assert dream_scheduler.due_time(state, NOW, QUEUE_UID) == NOW + hunt_interval('light')
+    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'serve')
+    assert dream_scheduler.due_time(state, NOW, QUEUE_UID) == NOW + 4 * hunt_interval('light')
+    assert dream_scheduler.due_time(state, NOW) == NOW + hunt_interval('light')
+    # Dirty work is never backed off.
+    assert dream_scheduler.due_time({**state, 'score': 3}, NOW, QUEUE_UID) < NOW
+
+    queue.rows[('dream_users', QUEUE_UID)] = {**state, 'last_attempt_at': NOW}
+    denied = {}
+    when = NOW + 2 * hunt_interval('light')
+    assert dream_store.acquire(QUEUE_UID, Caps(), now=when, denial_sink=denied) is None
+    assert denied['reason'] == 'not_due'
+    monkeypatch.setenv(dream_levers.HUNT_BACKOFF_MODE_ENV, 'shadow')
+    lease = dream_store.acquire(QUEUE_UID, Caps(), now=when)
+    assert lease['hunt'] and lease['backoff_would_defer'] is True
+
+
 def test_finish_without_parking_keeps_the_timed_hunt(queue):
     lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
     dream_store.finish(QUEUE_UID, lease, {'tokens': 5}, success=True, now=NOW)
@@ -578,7 +677,7 @@ def test_payoff_order_prefers_material_and_yield_but_ages_first(queue):
     queue.rows[('dream_users', 'fruitful')] = {'score': 2, 'last_yield': 8}
     queue.rows[('dream_users', 'aged')] = {'score': 0}
     rows = [
-        ('aged', now - timedelta(days=8)),
+        ('aged', now - timedelta(days=31)),
         ('quiet', now - timedelta(hours=1)),
         ('busy', now - timedelta(minutes=30)),
         ('fruitful', now - timedelta(minutes=10)),

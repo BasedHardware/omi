@@ -14953,4 +14953,14 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app अॅपमध्ये मेसेज पाठवा. Omi ला तो मिळताच ही स्क्रीन अपडेट होईल.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'नवीन कोड मिळवा आणि तो $app अॅपमधून पाठवा.';
+  }
 }

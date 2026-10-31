@@ -627,6 +627,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Corrections deliberately enter summarization; overview is the owned override.
         'user_corrections',
         'user_overview',
+        # Stored manual-edit read authority, not client display projection.
+        # Excluded from dumps/schema; its raw database field stays owned by manual edits.
+        # test_short_clip_authority.py proves that exclusion and floor admission.
+        'user_title',
         # S3 (§1.7): server-authored, NOT projection-family. It says why
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.
@@ -990,6 +994,7 @@ def test_conversation_field_set_is_pinned(render_mod: ModuleType) -> None:
     current = frozenset(Conversation.model_fields)
     new = sorted(current - PINNED_CONVERSATION_FIELDS)
     gone = sorted(PINNED_CONVERSATION_FIELDS - current)
+    assert 'user_title' not in family  # Stored manual-edit authority, never client projection.
     assert family <= PINNED_CONVERSATION_FIELDS
     assert family <= current
     assert current == PINNED_CONVERSATION_FIELDS, (

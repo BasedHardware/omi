@@ -164,7 +164,9 @@ def assert_batch_write_allowed(
             if row.get('record_lane_owner') == 'batch_live_v1' and (
                 row.get('uses_custom_stt')
                 or not row.get('private_cloud_sync_enabled')
-                or not data.get('private_cloud_sync_enabled', False)
+                # Match users.get_user_private_cloud_sync_enabled without an
+                # out-of-transaction read: absent means enabled, opt-out wins.
+                or not data.get('private_cloud_sync_enabled', True)
             ):
                 raise BatchPrivacyBlocked('recording_privacy_changed')
             if redirected and not conversation.exists:

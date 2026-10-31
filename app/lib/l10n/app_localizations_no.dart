@@ -14949,4 +14949,14 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Send meldingen i $app. Denne skjermen oppdateres så snart Omi får den.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Få en ny kode og send den fra $app.';
+  }
 }
