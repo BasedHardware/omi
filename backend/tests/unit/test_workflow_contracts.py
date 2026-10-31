@@ -377,7 +377,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
     assert "--shard 6/${{ matrix.shard }}" in workflow
     assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
-    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
+    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "900"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
     # guardrail result that is not a plain success.
