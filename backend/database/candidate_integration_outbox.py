@@ -55,19 +55,38 @@ ABANDON_REASONS = frozenset({'stale_abandoned', 'generation_mismatch', 'missing_
 _ACTION_ITEMS_COLLECTION = 'action_items'
 
 
+def _clean_id(val: Any, field_name: str = 'id') -> str:
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(f'{field_name} must be a non-empty string')
+    val = val.strip()
+    if '/' in val or '\\' in val or '..' in val or '\x00' in val:
+        raise ValueError(f'{field_name} contains invalid characters')
+    if len(val) > 128:
+        raise ValueError(f'{field_name} exceeds maximum length')
+    return val
+
+
+def _ensure_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _firestore(firestore_client: Any = None) -> Any:
     if firestore_client is not None:
         return firestore_client
+    if db is not None:
+        return db
     return get_firestore_client()
 
 
-def _integration_outbox_ref(uid: str, candidate_id: str):
-    return (
-        db.collection('users').document(uid).collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION).document(candidate_id)
-    )
+def _integration_outbox_ref(uid: str, candidate_id: str, *, firestore_client: Any = None):
+    return _outbox_ref(uid, candidate_id, firestore_client=firestore_client)
 
 
 def _outbox_ref(uid: str, candidate_id: str, *, firestore_client: Any = None):
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
     return (
         _firestore(firestore_client)
         .collection('users')
@@ -78,6 +97,7 @@ def _outbox_ref(uid: str, candidate_id: str, *, firestore_client: Any = None):
 
 
 def _control_ref(uid: str, *, firestore_client: Any = None):
+    uid = _clean_id(uid, 'uid')
     return (
         _firestore(firestore_client)
         .collection('users')
@@ -98,8 +118,8 @@ def _processing_lease_is_current(payload: dict[str, Any], now: datetime) -> bool
     claimed_at = payload.get('claimed_at')
     if not isinstance(claimed_at, datetime):
         return False
-    if claimed_at.tzinfo is None or claimed_at.utcoffset() is None:
-        claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+    now = _ensure_utc(now)
+    claimed_at = _ensure_utc(claimed_at)
     return claimed_at + timedelta(seconds=CANDIDATE_INTEGRATION_LEASE_SECONDS) > now
 
 
@@ -182,7 +202,10 @@ def claim_candidate_integration_dispatch(
     is ``not_sent`` or ``definite_error`` claim as before.
     """
 
-    claim_time = now or datetime.now(timezone.utc)
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    lease_seconds = max(1, min(86400, int(lease_seconds)))
+    claim_time = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
@@ -207,8 +230,10 @@ def claim_candidate_integration_dispatch(
         live_lease = False
         if status == 'processing':
             claimed_at = payload.get('claimed_at')
-            if isinstance(claimed_at, datetime) and claimed_at + timedelta(seconds=lease_seconds) > claim_time:
-                live_lease = True
+            if isinstance(claimed_at, datetime):
+                claimed_at = _ensure_utc(claimed_at)
+                if claimed_at + timedelta(seconds=lease_seconds) > claim_time:
+                    live_lease = True
         terminal = status in {'completed', 'suppressed', 'dead_letter'}
         action_ref = None
         action_snapshot = None
@@ -314,7 +339,9 @@ def refresh_candidate_integration_lease(
     means ownership was lost; the caller must not call the provider. This does
     not increment ``attempt_count`` or mint a new token.
     """
-    refresh_time = now or datetime.now(timezone.utc)
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    refresh_time = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     transaction = client.transaction()
@@ -363,7 +390,9 @@ def note_candidate_integration_provider_attempt(
         PROVIDER_ATTEMPT_ACCEPTED,
     }:
         raise ValueError('unsupported provider attempt outcome')
-    noted_at = now or datetime.now(timezone.utc)
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    noted_at = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     transaction = client.transaction()
@@ -401,7 +430,9 @@ def complete_candidate_integration_dispatch(
     external_task_id: Optional[str] = None,
     firestore_client: Any = None,
 ) -> bool:
-    completion_time = now or datetime.now(timezone.utc)
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    completion_time = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
@@ -480,11 +511,15 @@ def redrive_candidate_integration_dead_letter(
     *,
     account_generation: int,
     now: Optional[datetime] = None,
+    firestore_client: Any = None,
 ) -> bool:
     """Move a dead-lettered integration item back to ready by identity."""
-    completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    completion_time = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
+    client = _firestore(firestore_client)
+    outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
+    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -509,11 +544,15 @@ def dead_letter_malformed_candidate_integration(
     account_generation: int,
     error_text: str,
     now: Optional[datetime] = None,
+    firestore_client: Any = None,
 ) -> bool:
     """Park a malformed outbox row to dead_letter instead of retrying it forever."""
-    completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    completion_time = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
+    client = _firestore(firestore_client)
+    outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
+    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -654,7 +693,9 @@ def abandon_candidate_integration_dispatch(
     """
     if reason not in ABANDON_REASONS:
         raise ValueError('unsupported dead-letter reason')
-    completion_time = now or datetime.now(timezone.utc)
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    completion_time = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     transaction = client.transaction()
@@ -697,7 +738,9 @@ def dead_letter_candidate_integration_generation_mismatch(
     The control document is read in this transaction, not from a sweep cache.
     Returns ``dead_letter``, ``current``, or ``skipped``.
     """
-    completion_time = now or datetime.now(timezone.utc)
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    completion_time = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
@@ -743,7 +786,9 @@ def complete_candidate_integration_recorded_export(
     firestore_client: Any = None,
 ) -> bool:
     """Complete a row whose provider id was already recorded. Does not call the provider."""
-    completion_time = now or datetime.now(timezone.utc)
+    uid = _clean_id(uid, 'uid')
+    candidate_id = _clean_id(candidate_id, 'candidate_id')
+    completion_time = _ensure_utc(now) if now is not None else datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     transaction = client.transaction()
@@ -783,21 +828,27 @@ def list_candidate_integration_dispatches(
     *,
     account_generation: int,
     limit: int = 100,
+    firestore_client: Any = None,
 ) -> list[dict[str, Any]]:
+    uid = _clean_id(uid, 'uid')
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+        raise ValueError('limit must be a positive integer')
+    clamped_limit = min(limit, 1000)
+    client = _firestore(firestore_client)
     query = (
-        db.collection('users')
+        client.collection('users')
         .document(uid)
         .collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION)
         .where(filter=FieldFilter('account_generation', '==', account_generation))
         .where(filter=FieldFilter('status', 'in', ['pending', 'failed', 'processing']))
-        .limit(limit)
+        .limit(clamped_limit)
     )
     rows = [_snapshot_dict(snapshot) for snapshot in query.stream()]
     now = datetime.now(timezone.utc)
     ready: list[dict[str, Any]] = []
     for row in rows:
         available_at = row.get('available_at')
-        if isinstance(available_at, datetime) and available_at > now:
+        if isinstance(available_at, datetime) and _ensure_utc(available_at) > now:
             continue
         ready.append(row)
     return ready
