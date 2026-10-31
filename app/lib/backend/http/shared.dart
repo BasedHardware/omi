@@ -42,15 +42,38 @@ class AuthTokenUnavailableException implements Exception {
   String toString() => 'AuthTokenUnavailableException(${result.runtimeType})';
 }
 
+// A connection that dies mid-request reaches callers as a bare
+// http.ClientException: dart:io rewraps the socket error as
+// HttpException(<OS error text>), so the SocketException type and errno are
+// gone. iOS reports a network switch under an open upload as EADDRNOTAVAIL
+// ("Can't assign requested address", errno 49): the socket's local address
+// left with the old network.
+const _droppedConnectionMessages = [
+  "can't assign requested address", // EADDRNOTAVAIL (iOS)
+  'cannot assign requested address', // EADDRNOTAVAIL (Android)
+  'operation timed out', // ETIMEDOUT (iOS)
+  'connection timed out', // ETIMEDOUT (Android)
+  'no route to host', // EHOSTUNREACH
+  'broken pipe', // EPIPE
+  'read failed', // dart:io socket read error
+  'write failed', // dart:io socket write error
+  'bad_record_mac', // TLS record damaged in transit
+];
+
 // Normal-mode connectivity failures on mobile (no network, DNS failure,
 // connection reset, TLS handshake during reconnect, request timeout, OS abort
-// when the app backgrounds mid-upload). Reporting these to Crashlytics drowns
-// out real signal — caller logs them locally and either returns null or
-// rethrows for the upstream sync state machine.
+// when the app backgrounds mid-upload, a network switch under an open
+// connection). Reporting these to Crashlytics drowns out real signal — caller
+// logs them locally and either returns null or rethrows for the upstream sync
+// state machine.
 bool isTransientNetworkError(Object e) {
   if (e is SocketException) return true;
   if (e is HandshakeException) return true;
   if (e is TimeoutException) return true;
+  if (e is http.ClientException) {
+    final message = e.message.toLowerCase();
+    if (_droppedConnectionMessages.any(message.contains)) return true;
+  }
   final text = e is http.ClientException ? e.message : e.toString();
   final lower = text.toLowerCase();
   return text.contains('SocketException') ||
