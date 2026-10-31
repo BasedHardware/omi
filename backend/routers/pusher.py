@@ -9,6 +9,7 @@ from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_record_barrier import PusherRecordBarrier
+from utils.pusher_receive_metrics import SocketObservation, observe_work
 from utils.pusher_record_finish import RecordProjectionQueue, retain_closed_record_drain
 
 from fastapi import APIRouter
@@ -292,20 +293,21 @@ async def _commit_durable_audio_window(
     """
     if not frames or start is None:
         return None
-    receipt = await run_blocking(
-        storage_executor,
-        commit_pcm_window,
-        uid,
-        payload,
-        conversation_id,
-        start,
-        sample_rate,
-        custody_root,
-        frames[0]['sequence'],
-        frames,
-        data_protection_level=protection_level,
-        clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
-    )
+    with observe_work('custody_commit'):
+        receipt = await run_blocking(
+            storage_executor,
+            commit_pcm_window,
+            uid,
+            payload,
+            conversation_id,
+            start,
+            sample_rate,
+            custody_root,
+            frames[0]['sequence'],
+            frames,
+            data_protection_level=protection_level,
+            clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
+        )
     if on_committed is not None:
         on_committed()  # Both immutable objects exist, before ACK/queue delivery.
     if audio_custody == 1:
@@ -314,7 +316,8 @@ async def _commit_durable_audio_window(
         if durable_queue.full():
             BACKPRESSURE.labels(stage='pusher_queue').inc()
             record_would_drop('pusher_queue')
-        await durable_queue.put(AudioProjection(receipt, start, 0, receipt.samples))
+        with observe_work('projection_enqueue'):
+            await durable_queue.put(AudioProjection(receipt, start, 0, receipt.samples))
     budget.release(len(payload))
     return receipt
 
@@ -326,6 +329,31 @@ async def _websocket_util_trigger(
     client_kind: str = 'unknown',
     audio_timeline: Optional[int] = None,
     audio_custody: Optional[int] = None,
+) -> None:
+    observation = SocketObservation()
+    try:
+        await _run_websocket_util_trigger(
+            websocket, uid, sample_rate, client_kind, audio_timeline, audio_custody, observation=observation
+        )
+    except asyncio.CancelledError:
+        observation.reason = 'cancelled'
+        raise
+    except Exception:
+        observation.reason = 'application_error'
+        raise
+    finally:
+        observation.close()  # No await: even repeated cancellation cannot skip close accounting.
+
+
+async def _run_websocket_util_trigger(
+    websocket: WebSocket,
+    uid: str,
+    sample_rate: int,
+    client_kind: str,
+    audio_timeline: Optional[int],
+    audio_custody: Optional[int],
+    *,
+    observation: SocketObservation,
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
     resolved_client_kind = bounded_client_kind(client_kind)
@@ -373,6 +401,7 @@ async def _websocket_util_trigger(
         return
 
     await warm_rollout_cohorts(uid)
+    observation.reason = 'peer'
     journey_attempt = JourneyAttempt('pusher_session')
     websocket_active = True
     shutdown_event = asyncio.Event()
@@ -1304,12 +1333,18 @@ async def _websocket_util_trigger(
                     data = await asyncio.wait_for(websocket.receive_bytes(), timeout=WS_RECEIVE_TIMEOUT)
                 except asyncio.TimeoutError:
                     logger.warning(f"WebSocket receive timeout ({WS_RECEIVE_TIMEOUT}s), closing connection {uid}")
+                    observation.reason = 'receive_timeout'
                     # This is a dead upstream, not a normal remote close. Keep its
                     # terminal outcome distinct from protocol close codes 1000/1001.
                     websocket_close_code = 1011
                     application_failed = True
                     break
-                header_type = frame_header(data)
+                try:
+                    header_type = frame_header(data)
+                except (ValueError, struct.error):
+                    observation.frame(None)
+                    raise
+                observation.frame(header_type)
 
                 # Heartbeat (data-frame keepalive from backend to reset GKE ILB idle timer)
                 if header_type == 100:
@@ -1512,7 +1547,8 @@ async def _websocket_util_trigger(
                     # the window itself commits in _queue_private_cloud_chunk.
                     if private_cloud_sync_enabled and (current_conversation_id or durable_audio):
                         if current_conversation_id:
-                            await record_barrier.begin_recording(current_conversation_id)
+                            with observe_work('record_begin'):
+                                await record_barrier.begin_recording(current_conversation_id)
                         if private_cloud_chunk_start_time is None:
                             # Use timestamp from first buffer of this 5-second chunk
                             private_cloud_chunk_start_time = buffer_start_timestamp
@@ -1578,12 +1614,14 @@ async def _websocket_util_trigger(
                     continue
 
         except (ValueError, struct.error, UnicodeDecodeError) as exc:
+            observation.reason = 'protocol_error'
             websocket_close_code = 1003
             logger.warning(f'Invalid pusher frame: {type(exc).__name__} {uid}')
         except WebSocketDisconnect as exc:
             websocket_close_code = exc.code or 1006
             logger.info("WebSocket disconnected")
         except Exception as e:
+            observation.reason = 'application_error'
             logger.error(f'Could not process audio: error {e}')
             websocket_close_code = 1011
             application_failed = True
@@ -1608,6 +1646,7 @@ async def _websocket_util_trigger(
                     # be replayable, so signal the same error close the
                     # mid-session commit failure path uses.
                     websocket_close_code = 1011
+                    observation.reason = 'application_error'
                     logger.exception(f'Durable audio window tail commit failed at shutdown {uid}')
                     if current_conversation_id:
                         # The immutable commit may have landed before ACK or
@@ -1625,14 +1664,15 @@ async def _websocket_util_trigger(
             ):
                 inline_finish_conversation = current_conversation_id
                 try:
-                    async with asyncio.timeout(RECORD_INLINE_FINISH_TIMEOUT):
-                        await inline_projection_drained.wait()
-                        if (
-                            current_conversation_id not in record_barrier.failed_recordings
-                            and not record_barrier.record_upload_failed
-                        ):
-                            if await record_barrier.finish_recording(current_conversation_id):
-                                retire_record_close(current_conversation_id)
+                    with observe_work('inline_finish'):
+                        async with asyncio.timeout(RECORD_INLINE_FINISH_TIMEOUT):
+                            await inline_projection_drained.wait()
+                            if (
+                                current_conversation_id not in record_barrier.failed_recordings
+                                and not record_barrier.record_upload_failed
+                            ):
+                                if await record_barrier.finish_recording(current_conversation_id):
+                                    retire_record_close(current_conversation_id)
                 except TimeoutError:
                     logger.info('event=record_inline_finish outcome=timeout')
                 finally:
@@ -1686,15 +1726,17 @@ async def _websocket_util_trigger(
             # Preserve the *same* worker and its in-flight projection. Cancelling
             # and restarting would lose the drain proof for a thread still doing
             # storage I/O. All other socket tasks keep bounded cleanup.
-            await asyncio.wait(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT)
-            private_worker = bg_main_tasks[1]
-            has_record_debt = (
-                record_barrier.upload_sessions or record_barrier.pending_clears or record_barrier.close_failures
-            )
-            if has_record_debt and retain_closed_record_drain(private_worker):
-                bg_main_tasks.remove(private_worker)
+            with observe_work('drain'):
+                await asyncio.wait(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT)
+                private_worker = bg_main_tasks[1]
+                has_record_debt = (
+                    record_barrier.upload_sessions or record_barrier.pending_clears or record_barrier.close_failures
+                )
+                if has_record_debt and retain_closed_record_drain(private_worker):
+                    bg_main_tasks.remove(private_worker)
         else:
-            await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
+            with observe_work('drain'):
+                await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
 
     except asyncio.CancelledError:
         websocket_close_code = 1006
@@ -1708,8 +1750,11 @@ async def _websocket_util_trigger(
         websocket_active = False
 
         all_to_cancel = [t for t in bg_main_tasks if not t.done()]
-        await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
+        with observe_work('drain'):
+            await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
 
+        if application_failed and observation.reason == 'peer':
+            observation.reason = 'application_error'
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
         # Live episode moments buffer in this process; a pod move or reconnect must not strand them.
         await flush_episode_moment(uid, episode_session['conversation_id'])
