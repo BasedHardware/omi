@@ -773,7 +773,10 @@ runs:
         identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
         forbidden_env_names: ${{ steps.runtime-env.outputs.backend_sync_backfill_forbidden_env_names }}
         remove_env_extra: ${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_extra }}
-        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+        # The release stamp rides the candidate itself, as on backend, so a train adds no second revision.
+        backfill_env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
 
@@ -833,6 +836,7 @@ runs:
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
 
     - name: Capture ${{ inputs.service }}-sync revision
@@ -943,7 +947,9 @@ runs:
           --min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}
           --max-instances=50
           --no-cpu-throttling
-        env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+        env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
 
     - name: Capture ${{ inputs.service }}-integration revision
