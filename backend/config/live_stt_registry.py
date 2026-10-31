@@ -66,7 +66,7 @@ def routing_on(uid: str | None) -> bool:
 
 DEFAULT_TARGETS = (
     Target('parakeet-window', 'parakeet', 0.02),
-    Target('modulate-velma-2', 'modulate', 0.055),
+    Target('modulate-velma-2', 'modulate', 0.055, ramp_percent=0),
     Target('soniox', 'soniox', 0.0754),
 )
 DEFAULT_IDS = {target.family: target.id for target in DEFAULT_TARGETS}

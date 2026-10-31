@@ -9,7 +9,8 @@ from functools import lru_cache
 
 import pytest
 
-from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
+from config.live_stt_registry import Target, assigned
+from tests.unit.fixtures.live_stt_registry import ENABLED_TARGETS as DEFAULT_TARGETS
 from utils.stt import live_cost_health, live_failure, live_chain, live_health, live_router, streaming as st
 from config import live_stt_state
 from utils.stt.live_gate import GateState, begin_trial, transition, gate_rate

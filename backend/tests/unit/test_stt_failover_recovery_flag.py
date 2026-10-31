@@ -26,6 +26,7 @@ from routers.listen import receiver as receiver_module
 from routers.listen.receiver import ListenReceiver
 from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.test_live_session_transcript_outcome import _runtime
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.stt import connect_backoff as connect_backoff_module
 from utils.stt import (
     legacy_replay,
@@ -60,6 +61,7 @@ ENV = 'STT_FAILOVER_RECOVERY_ENABLED'
 
 @pytest.fixture(autouse=True)
 def _isolated_stt_state(monkeypatch):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setenv('STT_ROUTING_MODE', 'off')
     fleet = FleetHealth()
     for module in (live_health, live_chain, live_session, streaming):

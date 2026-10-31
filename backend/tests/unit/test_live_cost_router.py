@@ -14,7 +14,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from config import live_stt_state
-from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned, registry, routing_on
+from config.live_stt_registry import Target, assigned, registry, routing_on
+from tests.unit.fixtures.live_stt_registry import ENABLED_TARGETS as DEFAULT_TARGETS, enabled_live_targets
 from utils.stt import (
     connect_backoff as connect_backoff_module,
     live_failure,
@@ -36,12 +37,12 @@ from utils.stt.live_metrics import COST_SHADOW, COST_DECISION, CONNECT_BACKOFF
 
 @pytest.fixture(autouse=True)
 def controls(monkeypatch):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
-    monkeypatch.delenv('STT_ROUTING_TARGETS_JSON', raising=False)
     monkeypatch.delenv('STT_ROUTING_DISRUPTION_GATE', raising=False)
     # Scope every new test's process state; do not poison another module's circuits.
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
