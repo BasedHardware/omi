@@ -5,7 +5,7 @@ The host-side repair loop remains an operator fallback. This job reuses the
 worker image, KSA/GSA and encryption-secret reference. It runs on CPU nodes,
 independently of the unchanged 240-second sweeper. No GPU is allocated.
 
-Default on, eight disposable row processes, 240 seconds per row (configurable
+Default on, eight disposable row processes, 270 seconds per row (configurable
 1–270), 1500 seconds per cycle, 1680-second Kubernetes Job ceiling, every five
 minutes with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
 and skipped; all other rows continue. A timed-out transaction might have
@@ -17,22 +17,34 @@ Discovery pages completed `batch_live_v1` / `batch_sync_v1` metadata by
 `finished_at, __name__` ascending within each pass, skipping already-closed rows, with hard caps
 of 10,000 metadata reads / 1024 unsealed candidates and 60 seconds. The added
 collection-group composite index must be READY before deployment. Discovery
-reads only finish/closed metadata. Lead ruling `f79d45` authorizes one maintenance
-read/write per apply cycle at
+reads only finish/closed metadata. Lead ruling `f79d45` authorizes a maintenance
+read/write per apply cycle; ruling `4cbd2a` extends this to two encrypted
+point writes on the same document and key at
 `batch_pipeline_prod_maintenance/record_seal_repair_cursor_v1`. The cursor's
 finish time and private path are authenticated/encrypted with a domain-separated
 key derived from the existing job encryption secret; no plaintext identities or
 cursor payloads are logged. Firestore nanoseconds round-trip without truncation.
 It advances **before** slow work and wraps at the end of the pass, so a refused
 prefix or closed-row scan cap cannot monopolize every run. Interrupted/deferred
-rows are revisited. The checkpoint covers the first worker group, so a larger
-selected-but-deferred tail remains ahead of the next scan even when discovery
-reached the end. `mode=plan` reads but never advances state.
+rows are revisited. The initial checkpoint covers the first worker group. After the cycle, a
+second checkpoint advances past the last row actually attempted, including
+refusals, exhausted budgets and launch failures, but never past deferred rows.
+The first checkpoint survives interruption; the next completed pass wraps to
+revisit interrupted and oldest rows. No per-row retry state is persisted. `mode=plan` reads but never advances state.
 No new IAM, secret or index is required for the maintenance point read/write.
+Each pass freezes its upper `finished_at` boundary in that encrypted cursor;
+newer inflow waits for the next pass, so it cannot prevent wrapping back to the
+oldest refusals. Existing cursors without a boundary start one on their next
+read. The discovery query uses the same finish/name index.
 Both absent and explicit-false seals are discovered. Each row gets a fresh,
 complete, TLS-verified in-cluster pusher PodList, then canonical singleton
 `plan_backfill/apply_backfill` (no job) or `plan_seals/apply_seals` (canonical
-record job). Neither existing planner nor apply function is changed.
+record job). Apply authority and transaction checks remain unchanged. Before the full
+retained-object walk, repair checks the final chunk with the same tail
+predicate and a conservative sample-rounding allowance. A clearly short tail
+refuses early; an eligible or rounding-ambiguous row still gets the complete
+existing overlap, decoding, checksum, unit-budget and frozen/current finish
+proof. Metadata loading reuses the reader's generation-pinned GET.
 
 Unknown/refused/failed rows never grant write authority. PodList continuation,
 missing inventory, stale proof after tail download, privacy changes, bare/live
@@ -104,11 +116,16 @@ permission before Helm applies (the existing ci-deployer pods:list grant may
 already cover it). No workload YAML/env or PodList is logged or stored.
 
 Counts-only structured JSON rows (`record_seal_repair_row`) contain a closed
-disposition, count=1, and seal age in seconds (zero for refusals). Summaries
+disposition, count=1, and seal age in seconds (zero for refusals). Proof
+refusals also carry a closed `proof_reason`: `tail_lagging`,
+`tail_lost_or_unproven`, `overlap_conflict`, `decode_or_checksum`, `budget_limit`,
+`finish_missing`, `registration_refused`, or `other`. Tail lagging is a
+necessary-condition failure, not proof that an upload will recover or is lost.
+No terminal marker or age-gate exemption is written. Summaries
 include dispositions, observed oldest age, saturation and deferred rows. Native
 SDK stdout/stderr is suppressed; IDs, exceptions, paths and plan digests are
 never output. `log-metrics.json` defines rows by disposition and seal-age
-distribution; lead installs these metrics through the normal monitoring path.
+distribution and proof-reason counts; lead installs these metrics through the normal monitoring path.
 Metric filters/labels are allowlisted and fixture-tested against private tokens.
 
 Rollback: set `recordSealRepair.runtimeEnabled=false` (registered env kill

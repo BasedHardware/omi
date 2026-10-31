@@ -384,8 +384,13 @@ class CursorClient:
         class Query:
             def __init__(self):
                 self.offset, self.cap = 0, 128
+                self.horizon = None
 
             def where(self, **kwargs):
+                field = kwargs['filter']
+                if field.field_path == 'finished_at':
+                    assert field.op_string == '<='
+                    self.horizon = field.value
                 return self
 
             def order_by(self, field):
@@ -406,7 +411,11 @@ class CursorClient:
                 return self
 
             def stream(self, **kwargs):
-                return client.documents[self.offset : self.offset + self.cap]
+                return [
+                    doc
+                    for doc in client.documents[self.offset :]
+                    if self.horizon is None or doc.to_dict()['finished_at'] <= self.horizon
+                ][: self.cap]
 
         return Query()
 
@@ -524,6 +533,8 @@ def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, mo
 
     def time_limited(rows, **kwargs):
         attempted.extend(path for path, _ in rows[:2])
+        for path, _ in rows[:2]:
+            kwargs['attempted'](path)
         return {'rows': len(rows), 'dispositions': {'budget_exhausted': len(rows[:2]), 'deferred': len(rows[2:])}}
 
     monkeypatch.setattr(cluster, 'coordinate', time_limited)
@@ -552,3 +563,113 @@ def test_admitted_registration_succeeds_at_zero_and_full_ramp_but_policy_changes
     assert plans[1]['batch_percent'] == plans[1]['retire_percent'] == 100
     assert plans[0]['live_stt_retired'] is False and plans[1]['live_stt_retired'] is True
     assert plans[0]['policy_id'] != plans[1]['policy_id']
+
+
+def test_last_attempt_checkpoint_skips_refused_prefix_and_wrap_revisits_oldest(source, proof, monkeypatch):
+    from database import _client
+    from utils.batch_pipeline import record_seal_sweeper
+
+    finished = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    paths = [f'users/synthetic/conversations/{i:04d}' for i in range(12)]
+    client = CursorClient(
+        [
+            SimpleNamespace(reference=SimpleNamespace(path=path), to_dict=lambda: {'finished_at': finished})
+            for path in paths
+        ]
+    )
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'settings', lambda: (2, 1, 2.1, 'apply'))
+    original = cluster.coordinate
+    attempts = []
+
+    def work(rows, **kwargs):
+        clock = [0]
+
+        def launch(path, *_):
+            attempts.append(path)
+            # Refusals and exhausted rows remain unclosed on every cycle.
+            finish = clock[0] + 0.4 if int(path[-1]) % 2 else float('inf')
+            return FakeProcess(clock, finish, result='proof_refused')
+
+        def pause(seconds):
+            clock[0] += seconds
+
+        return original(rows, **kwargs, launch=launch, clock=lambda: clock[0], pause=pause)
+
+    monkeypatch.setattr(cluster, 'coordinate', work)
+    for _ in range(8):
+        cluster.run()
+        if len(attempts) > len(paths):
+            break
+    assert attempts[: len(paths)] == paths
+    assert attempts[len(paths)] == paths[0]
+    assert b'synthetic' not in client.state['cursor']
+
+
+@pytest.mark.parametrize('candidate', ['tail_lagging', 'A' * 28, 'private@example.invalid'])
+def test_child_proof_reason_is_allowlisted(candidate):
+    process = FakeProcess([0], 0, result='proof_refused')
+    process.stdout = io.BytesIO(json.dumps({'disposition': 'proof_refused', 'proof_reason': candidate}).encode())
+    progress = []
+    report = cluster.coordinate(
+        [('private-path', 100)],
+        workers=1,
+        row_seconds=1,
+        run_seconds=1,
+        mode='apply',
+        launch=lambda *_: process,
+        progress=progress.append,
+    )
+    expected = candidate if candidate == 'tail_lagging' else 'other'
+    assert report['proof_reasons'] == {expected: 1}
+    assert progress[0]['proof_reason'] == expected
+
+
+def test_frozen_pass_boundary_wraps_despite_continuous_newer_inflow():
+    from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
+
+    finished = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    horizon = datetime(2026, 10, 2, tzinfo=timezone.utc)
+    newer = datetime(2026, 10, 3, tzinfo=timezone.utc)
+
+    def doc(i, stamp):
+        return SimpleNamespace(
+            reference=SimpleNamespace(path=f'users/synthetic/conversations/{i:04d}'),
+            to_dict=lambda: {'finished_at': stamp},
+        )
+
+    client = CursorClient([doc(i, finished) for i in range(8)])
+    cursor = {'path': client.documents[0].reference.path, 'finished_at': finished, 'horizon': horizon}
+    budget = SweepBudget(60)
+    frontier = RepairCursor(client, b'synthetic-local-key' * 2)
+    seen = []
+    for cycle in range(4):
+        client.documents.extend(doc(100 + cycle * 10 + j, newer) for j in range(10))
+        rows, _, checkpoint = cluster.discover(client, budget=budget, after=cursor, max_rows=2)
+        seen.extend(path for path, _ in rows)
+        frontier.write(checkpoint, budget)
+        cursor = frontier.read(budget)
+    assert seen == [doc(i, finished).reference.path for i in range(1, 8)]
+    assert cursor is None  # Next pass starts at oldest, despite 40 new rows.
+
+
+def test_row_refusal_reason_survives_canonical_planner(source, proof):
+    source[1].rows[PATH]['finished_at'] = None
+    reason = {}
+    assert (
+        cluster.repair_one(
+            source[0],
+            object(),
+            source[2],
+            SCOPE[0],
+            flags=SERVER,
+            inventory=proof,
+            budget=SweepBudget(270),
+            reason_out=reason,
+        )
+        == 'proof_refused'
+    )
+    assert reason == {'proof_reason': 'finish_missing'}

@@ -5,6 +5,7 @@ Discovery scans at most 128 batch-live rows per page, including refused rows.
 """
 
 from collections import Counter
+from utils.batch_pipeline.record_seal_reasons import proof_reason
 import math
 import time
 
@@ -147,8 +148,9 @@ def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, prod
                 entry.update(row=row_state(row), job=job, disposition='eligible', proof_sha256=proof)
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_refused'
-        except (ValueError, TypeError, AttributeError, KeyError):
+        except (ValueError, TypeError, AttributeError, KeyError) as error:
             entry['disposition'] = 'proof_refused'
+            entry['proof_reason'] = proof_reason(error)
         except Exception:
             entry['disposition'] = 'read_error'
         entries.append(entry)

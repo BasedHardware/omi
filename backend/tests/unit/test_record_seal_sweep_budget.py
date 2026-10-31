@@ -228,7 +228,8 @@ def test_phase_timings_identify_serial_tail_cost(source, proof, monkeypatch):
     )
     elapsed = {e['phase']: e['elapsed_ms'] for e in events}
     assert elapsed['classification'] == 2000
-    assert elapsed['plan'] - elapsed['classification'] == 22000
+    # One final-chunk precheck plus the unchanged full retained proof.
+    assert elapsed['plan'] - elapsed['classification'] == 42000
 
 
 @pytest.mark.parametrize('value', ['nan', 'inf', '0', '181', 'private-invalid'])

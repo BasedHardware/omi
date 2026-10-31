@@ -3,6 +3,7 @@
 import hmac
 import json
 import os
+from datetime import datetime
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
@@ -37,7 +38,13 @@ class RepairCursor:
         if type(value['seconds']) is not int or type(value['nanos']) is not int or not 0 <= value['nanos'] < 10**9:
             raise ValueError('invalid maintenance frontier')
         stamp = Timestamp(seconds=value['seconds'], nanos=value['nanos'])
-        return {'path': path, 'finished_at': DatetimeWithNanoseconds.from_timestamp_pb(stamp)}
+        cursor = {'path': path, 'finished_at': DatetimeWithNanoseconds.from_timestamp_pb(stamp)}
+        if 'horizon' in value:
+            horizon = datetime.fromisoformat(value['horizon'])
+            if horizon.tzinfo is None:
+                raise ValueError('invalid maintenance frontier')
+            cursor['horizon'] = horizon
+        return cursor
 
     def write(self, cursor, budget):
         value = None
@@ -51,6 +58,9 @@ class RepairCursor:
                 stamp = Timestamp()
                 stamp.FromDatetime(finished)
             value = {'path': cursor['path'], 'seconds': stamp.seconds, 'nanos': stamp.nanos}
+            if 'horizon' in cursor:
+                # This boundary originates from datetime.now, not Firestore.
+                value['horizon'] = cursor['horizon'].isoformat()
         nonce = os.urandom(12)
         blob = nonce + self.cipher.encrypt(nonce, json.dumps(value).encode(), PURPOSE)
         self.ref.set({'version': 1, 'cursor': blob}, timeout=budget.timeout(), retry=None)

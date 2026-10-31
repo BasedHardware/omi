@@ -149,15 +149,10 @@ def retained_record_units(
             'path': chunk['path'],
             'bucket': chunk.get('bucket', private_cloud_sync_bucket),
             'generation': int(chunk['generation']),
-            'sample_rate': int((chunk.get('span') or {}).get('sample_rate', 16000)),
         }
-        # Metadata is tied to the same immutable object version used by readers.
-        blob = client.bucket(ref['bucket']).blob(ref['path'], generation=ref['generation'])
-        blob.reload(if_generation_match=ref['generation'], timeout=30, retry=None)
-        ref['metadata'] = blob.metadata or {}
-        if not chunk.get('span'):
-            ref['sample_rate'] = int(ref['metadata'].get('record_sample_rate', 16000))
-        pcm = read_reference(client, ref, uid, conversation_id, allowed, key)
+        if chunk.get('span'):
+            ref['sample_rate'] = int(chunk['span'].get('sample_rate', 16000))
+        pcm = read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
         if not pcm or len(pcm) % 2:
             raise ValueError('retained source has no aligned audio')
         source_digest = hashlib.sha256(pcm).hexdigest()
