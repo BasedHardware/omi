@@ -1,6 +1,7 @@
 """Fault injection for the capture -> immutable receipt custody boundary."""
 
 import asyncio
+from concurrent.futures import Future
 from collections import deque
 from contextlib import nullcontext
 from datetime import datetime, timezone
@@ -1612,6 +1613,154 @@ async def test_durable_close_retry_capacity_survives_caller_cancellation(inline_
     clock[0] += 60
     assert await barriers[-1].finish_recording('conversation')
     assert client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+async def test_failed_projection_retires_close_retry_entries_before_next_close(inline_session, monkeypatch):
+    client, path, barrier, _ = inline_session
+    barrier.keep_close_pending = True
+    monkeypatch.setattr(barrier_module, 'CLOSE_RETRY_MAX_SECONDS', 0.01)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(side_effect=OSError('metadata unavailable')))
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', MagicMock(side_effect=OSError('projection unavailable')))
+    monkeypatch.setattr(pusher, 'PROJECTION_RETRY_BUDGET', 0)
+    # Reproduce the real removal path that used to leave 128 stale failures:
+    # a metadata failure followed by a terminal projection failure for that close.
+    for index in range(128):
+        cid = f'synthetic-{index}'
+        row = (*path[:-1], cid)
+        client.rows[row] = {'record_lane_owner': 'batch_live_v1'}
+        assert not await barrier.finish_recording(cid)
+        assert cid in barrier.close_failures
+        sock = Socket(_audio_frames(cid, [b'\x01\x00' * 160]))
+        await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+        assert cid in barrier.failed_recordings
+        assert client.rows[row]['record_upload_sessions'], 'failed projection retains its durable fence'
+        assert not barrier.close_failures and not barrier.close_retry_at
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal_record_audio)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', lambda *a, **kw: None)
+    original = record_audio_db.set_record_upload_pending
+    clear_calls = []
+
+    def clear(*args, **kwargs):
+        if not args[3]:
+            clear_calls.append(True)
+            if len(clear_calls) == 1:
+                raise OSError('metadata unavailable')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', clear)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert len(clear_calls) == 2
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert client.rows[path]['record_audio_closed']
+    assert not barrier.close_failures and not barrier.close_retry_at
+
+
+def test_durable_failure_map_capacity_never_retires_a_close():
+    barrier = PusherRecordBarrier('owner')
+    barrier.keep_close_pending = True
+    for index in range(129):
+        assert not barrier._close_failed(f'synthetic-{index}', 'finish')
+    assert len(barrier.close_failures) == len(barrier.close_retry_at) == 129
+
+
+@pytest.mark.asyncio
+async def test_four_unknown_metadata_calls_allow_fifth_and_safe_late_success(inline_session, monkeypatch):
+    client, path, _, _ = inline_session
+    count = barrier_module.CLOSE_RETRY_MAX_IN_FLIGHT
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', threading.BoundedSemaphore(count))
+    monkeypatch.setattr(barrier_module, '_close_outstanding_slots', threading.BoundedSemaphore(12))
+    monkeypatch.setattr(barrier_module, 'CLOSE_METADATA_DEADLINE_SECONDS', 0.5)
+    barriers = [PusherRecordBarrier('owner') for _ in range(count + 1)]
+    for barrier in barriers:
+        await barrier.begin_recording('conversation')
+        barrier.keep_close_pending = True
+    original = record_audio_db.set_record_upload_pending
+    stalled = []
+
+    def submit(fn):
+        future = Future()
+        future.set_running_or_notify_cancel()
+        if len(stalled) < count:
+            stalled.append((future, fn))
+        else:
+            future.set_result(fn())
+        return future
+
+    monkeypatch.setattr(barrier_module, 'record_barrier_executor', SimpleNamespace(submit=submit))
+    before = barrier_module._CLOSE_DEADLINE_COUNTER._value.get()
+    results = await asyncio.gather(*(barrier.finish_recording('conversation') for barrier in barriers[:-1]))
+    assert results == [False] * count
+    assert all(not future.done() for future, _ in stalled)
+    assert barrier_module._CLOSE_DEADLINE_COUNTER._value.get() == before + count
+    assert len(client.rows[path]['record_upload_sessions']) == count + 1
+    assert await barriers[-1].finish_recording('conversation'), 'fifth close must run before any stalled call settles'
+    # The four earlier drains already supplied durable proof, so the later
+    # producer may also recover their exact ready tokens through the registry.
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert client.rows[path]['record_audio_closed']
+    # Retry clears the identical tokens. A late success repeats only that
+    # removal, never another producer's token or an audio commit.
+    for barrier in barriers[:-1]:
+        barrier.close_retry_at.clear()
+        assert await barrier.finish_recording('conversation')
+    original('owner', 'conversation', 'synthetic-new-producer', True)
+    for future, fn in stalled:
+        future.set_result(fn())
+    await asyncio.sleep(0)
+    assert not client.rows[path]['record_audio_closed']
+    assert set(client.rows[path]['record_upload_sessions']) == {'synthetic-new-producer'}
+    original('owner', 'conversation', 'synthetic-new-producer', False)
+    assert seal_record_audio('owner', 'conversation') is None
+
+
+@pytest.mark.asyncio
+async def test_abandoned_metadata_calls_are_bounded_and_capacity_recovers(inline_session, monkeypatch):
+    _, _, barrier, _ = inline_session
+    barrier.keep_close_pending = True
+    active = barrier_module.CLOSE_RETRY_MAX_IN_FLIGHT
+    outstanding = barrier_module.CLOSE_METADATA_MAX_OUTSTANDING
+    slots = threading.BoundedSemaphore(active)
+    outstanding_slots = threading.BoundedSemaphore(outstanding)
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', slots)
+    monkeypatch.setattr(barrier_module, '_close_outstanding_slots', outstanding_slots)
+    monkeypatch.setattr(barrier_module, 'CLOSE_METADATA_DEADLINE_SECONDS', 0.5)
+    futures = []
+
+    def submit(fn):
+        future = Future()
+        future.set_running_or_notify_cancel()
+        futures.append(future)
+        return future
+
+    monkeypatch.setattr(barrier_module, 'record_barrier_executor', SimpleNamespace(submit=submit))
+    before = barrier_module._CLOSE_DEADLINE_COUNTER._value.get()
+    for _ in range(outstanding // active):
+        results = await asyncio.gather(
+            *(barrier._close_metadata('conversation', lambda: None) for _ in range(active)), return_exceptions=True
+        )
+        assert all(isinstance(result, TimeoutError) for result in results)
+    with pytest.raises(barrier_module.ExecutorSaturatedError):
+        await barrier._close_metadata('conversation', lambda: None)
+    assert len(futures) == outstanding
+    assert barrier_module._CLOSE_DEADLINE_COUNTER._value.get() == before + outstanding
+    # Completion of any abandoned call must permit new admission even if
+    # every other call remains stalled after its deadline.
+    futures[0].set_result(None)
+    retry = asyncio.create_task(barrier._close_metadata('conversation', lambda: None))
+    await asyncio.sleep(0)
+    assert len(futures) == outstanding + 1
+    futures[-1].set_result(None)
+    assert await retry is None
+    for future in futures[1:-1]:
+        future.set_exception(OSError('late unknown write failure'))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert all(slots.acquire(blocking=False) for _ in range(active))
+    assert not slots.acquire(blocking=False)
+    assert all(outstanding_slots.acquire(blocking=False) for _ in range(outstanding))
+    assert not outstanding_slots.acquire(blocking=False)
 
 
 @pytest.mark.asyncio

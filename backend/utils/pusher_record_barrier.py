@@ -22,9 +22,48 @@ logger = logging.getLogger(__name__)
 CLOSE_RETRY_BUDGET = 3
 CLOSE_RETRY_MAX_SECONDS = 60.0
 CLOSE_RETRY_MAX_IN_FLIGHT = 4
+CLOSE_METADATA_DEADLINE_SECONDS = 30.0
+# Bound all outstanding writes, including abandoned ones, below pool capacity.
+# Leave one quarter of workers (four by default) for begin/failure markers.
+CLOSE_METADATA_MAX_OUTSTANDING = min(
+    12, max(1, record_barrier_executor._max_workers - max(1, record_barrier_executor._max_workers // 4))
+)
 _close_retry_slots = threading.BoundedSemaphore(CLOSE_RETRY_MAX_IN_FLIGHT)
+_close_outstanding_slots = threading.BoundedSemaphore(CLOSE_METADATA_MAX_OUTSTANDING)
 P = ParamSpec('P')
 T = TypeVar('T')
+
+RECORD_CLOSE_ABANDONED = Counter(
+    'omi_pusher_record_close_abandoned_total',
+    'Record close calls with unknown write outcome after their admission deadline',
+    ['reason'],
+)
+_CLOSE_DEADLINE_COUNTER = RECORD_CLOSE_ABANDONED.labels(reason='deadline')
+
+
+class _CloseAdmission:
+    """Recycle admission at a deadline while bounding still-running writes."""
+
+    def __init__(self):
+        self.slots = _close_retry_slots
+        self.outstanding_slots = _close_outstanding_slots
+        self.lock = threading.Lock()
+        self.state = 'active'
+
+    def abandon(self):
+        with self.lock:
+            if self.state == 'active':
+                self.state = 'abandoned'
+                self.slots.release()
+                _CLOSE_DEADLINE_COUNTER.inc()
+
+    def completed(self, _future):
+        with self.lock:
+            if self.state == 'active':
+                self.slots.release()
+            self.outstanding_slots.release()
+            self.state = 'completed'
+
 
 RECORD_BARRIER_FAILURES = Counter(
     'omi_pusher_record_barrier_failures_total', 'Record barrier metadata failures; audio upload continues', ['stage']
@@ -160,11 +199,11 @@ class PusherRecordBarrier:
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
         attempts = min(self.close_failures.get(conversation_id, 0) + 1, 6)
-        if (not self.keep_close_pending and attempts >= CLOSE_RETRY_BUDGET) or (
-            conversation_id not in self.close_failures and len(self.close_failures) >= 128
+        if not self.keep_close_pending and (
+            attempts >= CLOSE_RETRY_BUDGET
+            or (conversation_id not in self.close_failures and len(self.close_failures) >= 128)
         ):
-            self.close_failures.pop(conversation_id, None)
-            self.close_retry_at.pop(conversation_id, None)
+            self.retire_close(conversation_id)
             return True  # Stop this bounded drain; leave durable repair debt.
         self.close_failures[conversation_id] = attempts
         if self.keep_close_pending:
@@ -173,11 +212,15 @@ class PusherRecordBarrier:
         return False
 
     async def _close_metadata(self, conversation_id: str, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
-        if not self.keep_close_pending or conversation_id not in self.close_failures:
+        if not self.keep_close_pending:
             return await run_blocking(record_barrier_executor, fn, *args, **kwargs)
         slots = _close_retry_slots
         if not slots.acquire(blocking=False):
             raise ExecutorSaturatedError('record close retry capacity')
+        if not _close_outstanding_slots.acquire(blocking=False):
+            slots.release()
+            raise ExecutorSaturatedError('record close outstanding capacity')
+        admission = _CloseAdmission()
         context = contextvars.copy_context()
 
         def call() -> T:
@@ -187,11 +230,30 @@ class PusherRecordBarrier:
             future = record_barrier_executor.submit(call)
         except BaseException:
             slots.release()
+            admission.outstanding_slots.release()
             raise
-        # Release on the underlying worker's completion, not caller cancellation:
-        # a cancelled await cannot make a still-running Firestore call free capacity.
-        future.add_done_callback(lambda _: slots.release())
-        return await asyncio.wrap_future(future)
+        future.add_done_callback(admission.completed)
+        wrapped = asyncio.wrap_future(future)
+        deadline = asyncio.get_running_loop().call_later(CLOSE_METADATA_DEADLINE_SECONDS, admission.abandon)
+
+        def settled(done):
+            deadline.cancel()
+            if not done.cancelled():
+                done.exception()  # Observe late errors even after caller cancellation/timeout.
+
+        wrapped.add_done_callback(settled)
+        # Unknown is neither failure proof nor success proof. Keep the token's
+        # pending clear; its exact-token removal and transactional seal are
+        # idempotent even if the original write succeeds after a retry.
+        return await asyncio.wait_for(asyncio.shield(wrapped), timeout=CLOSE_METADATA_DEADLINE_SECONDS)
+
+    def retire_close(self, conversation_id: str) -> None:
+        """Forget scheduling state only; never change durable custody proof."""
+        self.close_failures.pop(conversation_id, None)
+        self.close_retry_at.pop(conversation_id, None)
+        # Failed recordings remain fenced by failed_recordings/global failure;
+        # they no longer need a second entry in begin's checked-set budget.
+        self.checked_conversations.discard(conversation_id)
 
     async def begin_recording(self, conversation_id: str) -> None:
         if conversation_id in self.checked_conversations or conversation_id in self.failed_recordings:
@@ -235,6 +297,7 @@ class PusherRecordBarrier:
         failure never retires their only retry while this process is alive.
         """
         if self.record_upload_failed or conversation_id in self.failed_recordings:
+            self.retire_close(conversation_id)
             return True  # A held tail is not a successful drain.
         if self.keep_close_pending and time.monotonic() < self.close_retry_at.get(conversation_id, 0):
             return False
@@ -277,8 +340,7 @@ class PusherRecordBarrier:
                 logger.info('event=record_seal_refused reason=%s', refused)
         except Exception:
             return self._close_failed(conversation_id, 'seal')
-        self.close_failures.pop(conversation_id, None)
-        self.close_retry_at.pop(conversation_id, None)
+        self.retire_close(conversation_id)
         return True
 
     def hold_recording(self, conversation_id: str, *, tail_committed: bool = False) -> None:

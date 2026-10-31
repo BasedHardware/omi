@@ -654,7 +654,7 @@ async def _websocket_util_trigger(
                         continue
                 elif conv_id in pending_refs or durable_queue.has_conversation(conv_id):
                     continue
-                record_close_requests.discard(conv_id)
+                retire_record_close(conv_id)
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
 
@@ -689,6 +689,10 @@ async def _websocket_util_trigger(
     # Durable workers can outlive socket cleanup; transient metadata errors
     # keep their close pending until success or process shutdown.
     record_barrier.keep_close_pending = durable_audio
+
+    def retire_record_close(conv_id: str) -> None:
+        record_close_requests.discard(conv_id)
+        record_barrier.retire_close(conv_id)
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
@@ -926,8 +930,10 @@ async def _websocket_util_trigger(
             await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
 
             if record_barrier.record_upload_failed or upload_fenced:
-                record_close_requests.clear()
-            record_close_requests.difference_update(record_barrier.failed_recordings)
+                for conv_id in list(record_close_requests):
+                    retire_record_close(conv_id)
+            for conv_id in record_close_requests.intersection(record_barrier.failed_recordings):
+                retire_record_close(conv_id)
 
             # Drain queue into pending batches
             if private_cloud_queue:
@@ -1003,7 +1009,7 @@ async def _websocket_util_trigger(
                     and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
                 ):
                     if await record_barrier.finish_recording(conv_id):
-                        record_close_requests.discard(conv_id)
+                        retire_record_close(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
         # and eligibility precedes the eight-pass selection limit.
@@ -1626,7 +1632,7 @@ async def _websocket_util_trigger(
                             and not record_barrier.record_upload_failed
                         ):
                             if await record_barrier.finish_recording(current_conversation_id):
-                                record_close_requests.discard(current_conversation_id)
+                                retire_record_close(current_conversation_id)
                 except TimeoutError:
                     logger.info('event=record_inline_finish outcome=timeout')
                 finally:
