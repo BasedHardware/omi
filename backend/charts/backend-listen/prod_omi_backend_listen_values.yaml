@@ -631,6 +631,15 @@ env:
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
+  # Soniox bills every connected second; 5% uid cohort tests tighter idle close (registry ramp 5→25→50→100, speaker bars).
+  - name: SONIOX_IDLE_COHORT_PERCENT
+    value: "5"
+  - name: SONIOX_IDLE_COHORT_CLOSE_SECONDS
+    value: "20"
+  - name: SONIOX_IDLE_COHORT_REARM_SECONDS
+    value: "15"
+  - name: SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR
+    value: "20"
   - name: STT_SERVICE_MODELS
     value: "parakeet-window,modulate-velma-2,soniox"
   - name: HOSTED_TRANSLATION_API_URL
