@@ -21,7 +21,7 @@ def get_support_access(caller_uid: str, *, firestore_client: Any = None) -> dict
         snapshot = client.collection('supportData').document(clean_uid).get()
         return snapshot.to_dict() if snapshot.exists else None
     except Exception as e:
-        logger.warning("Failed to fetch support access for %s: %s", clean_uid, e)
+        logger.warning("Failed to fetch support access for %s: %s", clean_uid, type(e).__name__)
         return None
 
 
@@ -38,7 +38,7 @@ def get_support_activity(target_uid: str, *, firestore_client: Any = None) -> di
             return {}
         return snapshot.to_dict() or {}
     except Exception as e:
-        logger.warning("Failed to fetch support activity for %s: %s", clean_uid, e)
+        logger.warning("Failed to fetch support activity for %s: %s", clean_uid, type(e).__name__)
         return {}
 
 
@@ -68,5 +68,7 @@ def write_support_audit(
     try:
         client.collection('support_audit_log').document().set(row)
     except Exception as e:
-        logger.warning("Failed to persist support audit for actor %s target %s: %s", clean_actor, clean_target, e)
+        logger.warning(
+            "Failed to persist support audit for actor %s target %s: %s", clean_actor, clean_target, type(e).__name__
+        )
         raise

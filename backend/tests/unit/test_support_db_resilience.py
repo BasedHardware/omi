@@ -1,5 +1,6 @@
 """Hermetic unit tests for support database client injection, sanitization, and audit resilience."""
 
+import logging
 import os
 import sys
 from datetime import datetime, timezone
@@ -39,15 +40,18 @@ def test_get_support_access_success_and_missing():
     assert support_db.get_support_access("user-non-support", firestore_client=mock_client) is None
 
 
-def test_get_support_access_firestore_exception_fails_safe():
+def test_get_support_access_firestore_exception_fails_safe(caplog):
     mock_client = MagicMock()
-    mock_client.collection.side_effect = Exception("Firestore unavailable")
+    mock_client.collection.side_effect = Exception("Sensitive Internal DB Connection URL")
 
-    res = support_db.get_support_access("admin-1", firestore_client=mock_client)
+    with caplog.at_level(logging.WARNING):
+        res = support_db.get_support_access("admin-1", firestore_client=mock_client)
     assert res is None
+    assert "Sensitive Internal DB Connection URL" not in caplog.text
+    assert "Failed to fetch support access for admin-1: Exception" in caplog.text
 
 
-def test_get_support_activity():
+def test_get_support_activity(caplog):
     mock_doc = MagicMock()
     mock_doc.exists = True
     mock_doc.to_dict.return_value = {"last_active_at": 1700000000, "last_active_platform": "macos"}
@@ -60,11 +64,18 @@ def test_get_support_activity():
     # Empty UID -> returns {}
     assert support_db.get_support_activity("", firestore_client=mock_client) == {}
 
+    # Exception fails safe without leaking exception message
+    mock_client.collection.return_value.document.return_value.get.side_effect = RuntimeError("Secret token leak")
+    with caplog.at_level(logging.WARNING):
+        assert support_db.get_support_activity("target-123", firestore_client=mock_client) == {}
+    assert "Secret token leak" not in caplog.text
+    assert "Failed to fetch support activity for target-123: RuntimeError" in caplog.text
+
 
 def test_write_support_audit_trace_and_lookup():
     mock_client = MagicMock()
     mock_doc = MagicMock()
-    mock_client.collection.return_value.document.return_value = mock_doc
+    mock_client.collection.return_value.document.return_value.get.return_value = mock_doc
 
     # Action lookup
     support_db.write_support_audit(
@@ -100,14 +111,17 @@ def test_write_support_audit_trace_and_lookup():
     assert payload_trace["window_to"] == t1
 
 
-def test_write_support_audit_exception_raises():
+def test_write_support_audit_exception_raises(caplog):
     mock_client = MagicMock()
-    mock_client.collection.side_effect = Exception("Outage")
-    with pytest.raises(Exception, match="Outage"):
-        support_db.write_support_audit(
-            actor_uid="admin-1",
-            action="lookup",
-            target_uid="user-2",
-            email="test@example.com",
-            firestore_client=mock_client,
-        )
+    mock_client.collection.side_effect = Exception("Sensitive Outage Details")
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(Exception, match="Sensitive Outage Details"):
+            support_db.write_support_audit(
+                actor_uid="admin-1",
+                action="lookup",
+                target_uid="user-2",
+                email="test@example.com",
+                firestore_client=mock_client,
+            )
+    assert "Sensitive Outage Details" not in caplog.text
+    assert "Failed to persist support audit for actor admin-1 target user-2: Exception" in caplog.text
