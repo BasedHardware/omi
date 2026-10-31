@@ -31,6 +31,21 @@ class RecoveryFailure(ValueError):
         super().__init__(self.reason)
 
 
+def stage_failure(stage: str, reason: str, error: Exception) -> RecoveryFailure:
+    """Build the same bounded failure even when diagnostic logging fails."""
+    failure = RecoveryFailure(stage, reason)
+    try:
+        logger.warning(
+            'event=batch_recovery_stage_failure stage=%s reason=%s exception_type=%s',
+            failure.stage,
+            failure.reason,
+            type(error).__name__,
+        )
+    except Exception:
+        pass
+    return failure
+
+
 def at_stage(stage: str, reason: str, operation: Callable[[], Any]):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
@@ -39,17 +54,7 @@ def at_stage(stage: str, reason: str, operation: Callable[[], Any]):
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
     except Exception as error:
-        failure = RecoveryFailure(stage, reason)
-        try:
-            logger.warning(
-                'event=batch_recovery_stage_failure stage=%s reason=%s exception_type=%s',
-                failure.stage,
-                failure.reason,
-                type(error).__name__,
-            )
-        except Exception:
-            pass
-        raise failure from None
+        raise stage_failure(stage, reason, error) from None
 
 
 def inspect_audio(item, audio, *, vad=None):
