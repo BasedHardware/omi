@@ -235,7 +235,7 @@ def _claim_task_integration(
     if lease_token is None:
         return None, None
     task = action_items_db.get_action_item(uid, task_id)
-    if not task:
+    if not task or task.get('deleted') is True:
         _fail_missing_task(
             uid,
             candidate_id,
@@ -441,7 +441,7 @@ def accept_candidate(
         if task_id is None:
             raise candidates_db.CandidateConflictError('task mutation Candidate is missing task_id')
         task = action_items_db.get_action_item(uid, task_id)
-        if task is None:
+        if task is None or task.get('deleted') is True:
             raise candidates_db.CandidateNotFoundError(f'task:{task_id}')
         expected_task_links = (task.get('goal_id'), task.get('workstream_id'))
         if final_goal_id is None:
