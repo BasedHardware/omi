@@ -9,7 +9,7 @@ SPEAKER_EVIDENCE_MODE cohort also qualifies. Reads fail closed.
 from config.batch_conversation_speakers import has_batch_authority
 from config.episodes import episodes_client_channels
 from config.refactor_modes import default_on, serving_for
-from utils.episodes.client_gate import client_seen
+from utils.episodes.client_gate import client_seen_cached
 
 SPEAKER_PER_WINDOW_ENV = 'SPEAKER_PER_WINDOW_ENABLED'
 _BETA_ONLY = frozenset({'beta'})
@@ -22,4 +22,4 @@ def per_window_evidence(uid, segments) -> bool:
         return False
     if has_batch_authority(segments):
         return True
-    return episodes_client_channels() == _BETA_ONLY and client_seen(uid)
+    return episodes_client_channels() == _BETA_ONLY and client_seen_cached(uid)
