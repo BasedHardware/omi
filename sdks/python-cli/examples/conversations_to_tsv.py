@@ -83,8 +83,8 @@ def extract_transcript(item: Dict[str, Any]) -> str:
     if isinstance(transcript_val, str) and transcript_val.strip():
         return strip_surrogates(transcript_val.strip())
 
-    # Support segment/transcripts arrays
-    segments = item.get("segments") or item.get("transcripts")
+    # Support transcript_segments / segments / transcripts arrays
+    segments = item.get("transcript_segments") or item.get("segments") or item.get("transcripts")
     if isinstance(segments, list):
         parts: List[str] = []
         for seg in segments:
