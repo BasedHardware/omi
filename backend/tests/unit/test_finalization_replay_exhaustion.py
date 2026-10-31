@@ -204,3 +204,124 @@ def test_real_reconciler_claim_path_retires_without_enqueue(store, monkeypatch):
     assert store.rows[JOB_PATH]['status'] == 'dead_letter'
     enqueue.assert_not_called()
     recorded.assert_called_once_with(JOB_PATH[-1], firestore_client=store)
+
+
+@pytest.fixture
+def inline_replay(store, monkeypatch):
+    """Listen's real inline admission mode with an independent worker binding."""
+    monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline')
+    monkeypatch.delenv('LISTEN_FINALIZATION_REPLAY_ENABLED', raising=False)
+    monkeypatch.setenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true')
+    for key, value in {
+        'SYNC_TASKS_PROJECT': 'synthetic-project',
+        'SYNC_TASKS_LOCATION': 'us-central1',
+        'LISTEN_FINALIZATION_TASKS_QUEUE': 'conversation-finalization',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL': 'https://synthetic.invalid/finalize',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA': 'synthetic@example.invalid',
+        'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS': '5',
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(jobs, 'recover_stranded_byok_jobs', Mock(return_value={'blocked': 0, 'errors': 0}))
+    monkeypatch.setattr(jobs, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **_: 0)
+    monkeypatch.setattr(
+        jobs,
+        'get_finalization_replay_candidates',
+        Mock(side_effect=lambda **_: [deepcopy(store.rows[JOB_PATH]) | {'job_id': JOB_PATH[-1]}]),
+    )
+    monkeypatch.setattr(service, '_publish_job_metrics', Mock())
+    monkeypatch.setattr(service, '_record_dead_letter', Mock())
+    enqueue = Mock()
+    monkeypatch.setattr(service, 'enqueue_listen_finalization_job', enqueue)
+    return enqueue
+
+
+def test_inline_replay_recovers_dead_workers_then_dead_letters(store, monkeypatch, inline_replay):
+    clock = [NOW]
+    monkeypatch.setattr(jobs, '_now', lambda: clock[0])
+    store.rows[JOB_PATH].update(status='queued', worker_claim_count=0, attempt_count=0)
+    before_row = deepcopy(store.rows[ROW_PATH])
+    for _ in range(6):
+        result = service.reconcile_listen_finalization_jobs(firestore_client=store)
+        assert result['requeued'] == 1 and result['retired'] == 0
+        generation = store.rows[JOB_PATH]['dispatch_generation']
+        claim = jobs.claim_finalization_job(JOB_PATH[-1], generation, count_worker_claim=True, firestore_client=store)
+        assert claim['status'] == 'claimed'
+        # The worker dies without reporting failure. Let its real lease expire.
+        clock[0] = store.rows[JOB_PATH]['lease_expires_at'] + timedelta(seconds=1)
+    result = service.reconcile_listen_finalization_jobs(firestore_client=store)
+    assert result['retired'] == 1 and result['requeued'] == 0
+    assert inline_replay.call_count == 6
+    assert store.rows[JOB_PATH]['status'] == 'dead_letter'
+    assert store.rows[JOB_PATH]['last_failure_code'] == 'durable_attempts_exhausted'
+    for key in ('transcript_segments', 'audio_files', 'photos', 'custom_field'):
+        assert store.rows[ROW_PATH][key] == before_row[key]
+    service.reconcile_listen_finalization_jobs(firestore_client=store)
+    assert inline_replay.call_count == 6
+    service._record_dead_letter.assert_called_once()
+
+
+def test_inline_replay_live_lease_is_not_reclaimed(store, inline_replay):
+    store.rows[JOB_PATH]['lease_expires_at'] = NOW + timedelta(minutes=10)
+    store.rows[JOB_PATH]['reconcile_after_at'] = NOW - timedelta(minutes=1)
+    before = deepcopy(store.rows)
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['skipped'] == 1
+    # The existing backoff advances only scan bookkeeping, never the live lease,
+    # dispatch generation, worker budget, fanout or conversation contents.
+    assert store.rows[JOB_PATH] == before[JOB_PATH] | {
+        'reconcile_after_at': NOW + timedelta(seconds=60),
+        'updated_at': NOW,
+    }
+    assert store.rows[ROW_PATH] == before[ROW_PATH]
+    inline_replay.assert_not_called()
+
+
+def test_inline_replay_committed_effects_are_not_repeated(store, inline_replay):
+    store.rows[JOB_PATH]['fanout_status'] = 'completed'
+    before_row = deepcopy(store.rows[ROW_PATH])
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['requeued'] == 1
+    generation = store.rows[JOB_PATH]['dispatch_generation']
+    claim = jobs.claim_finalization_job(JOB_PATH[-1], generation, count_worker_claim=True, firestore_client=store)
+    assert claim['status'] == 'claimed'
+    # The existing worker short-circuits completed fanout into this completion;
+    # the fanout CAS also refuses to claim those effects for a second execution.
+    assert (
+        jobs.claim_finalization_fanout(JOB_PATH[-1], generation, claim['lease_epoch'], firestore_client=store)['status']
+        == 'completed'
+    )
+    assert jobs.mark_finalization_completed(JOB_PATH[-1], generation, claim['lease_epoch'], firestore_client=store)
+    assert store.rows[JOB_PATH]['status'] == 'completed'
+    assert store.rows[ROW_PATH] == before_row
+    service._record_dead_letter.assert_not_called()
+
+
+@pytest.mark.parametrize('disabled_by', ['kill_switch', 'missing_binding'])
+def test_inline_replay_off_preserves_today_behavior(store, monkeypatch, inline_replay, disabled_by):
+    if disabled_by == 'kill_switch':
+        monkeypatch.setenv('LISTEN_FINALIZATION_REPLAY_ENABLED', 'false')
+    else:
+        monkeypatch.delenv('LISTEN_FINALIZATION_TASKS_QUEUE')
+    before = deepcopy(store.rows)
+    assert not any(service.reconcile_listen_finalization_jobs(firestore_client=store).values())
+    assert store.rows == before
+    jobs.get_finalization_replay_candidates.assert_not_called()
+    jobs.recover_stranded_byok_jobs.assert_called_once()
+    service._publish_job_metrics.assert_called_once()
+    inline_replay.assert_not_called()
+
+
+def test_inline_replay_binding_does_not_enable_stale_admission(store, monkeypatch, inline_replay):
+    heal = Mock()
+    monkeypatch.setattr(service, 'run_selfheal_tick', heal)
+    for enabled in ('true', 'false'):
+        monkeypatch.setenv('LISTEN_FINALIZATION_REPLAY_ENABLED', enabled)
+        assert service.reconcile_stale_in_progress_conversations(firestore_client=store)['mode'] == 'off'
+    heal.assert_not_called()
+
+
+def test_replay_kill_switch_also_stops_cloud_tasks_host(store, monkeypatch, inline_replay):
+    monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'cloud_tasks')
+    monkeypatch.setenv('LISTEN_FINALIZATION_REPLAY_ENABLED', 'false')
+    before = deepcopy(store.rows)
+    assert not any(service.reconcile_listen_finalization_jobs(firestore_client=store).values())
+    assert store.rows == before
+    inline_replay.assert_not_called()

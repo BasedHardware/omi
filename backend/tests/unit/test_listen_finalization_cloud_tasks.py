@@ -33,6 +33,30 @@ import utils.conversations.finalizer as persisted_finalizer
 import services.conversation_finalization as finalization_service
 
 
+def test_prod_listen_has_replay_binding_without_enabling_live_admission(monkeypatch):
+    backend_root = Path(__file__).resolve().parents[2]
+    renderer = runpy.run_path(str(backend_root / 'scripts/render_backend_runtime_env.py'))
+    manifest = renderer['_load_yaml'](renderer['DEFAULT_MANIFEST'])
+    entries = manifest['environments']['prod']['gke']['backend-listen']['env']
+    monkeypatch.delenv('LISTEN_FINALIZATION_DISPATCH_MODE', raising=False)
+    for name in (
+        'SYNC_TASKS_PROJECT',
+        'SYNC_TASKS_LOCATION',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+        'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS',
+        'LISTEN_FINALIZATION_REPLAY_ENABLED',
+    ):
+        monkeypatch.setenv(name, entries[name]['value'])
+    assert 'LISTEN_FINALIZATION_DISPATCH_MODE' not in entries
+    assert cloud_tasks.is_listen_finalization_tasks_configured()
+    assert not cloud_tasks.is_listen_finalization_dispatch_enabled()
+    assert not cloud_tasks.is_listen_finalization_dispatch_configured()
+    assert finalization_service.replay_enabled()
+    assert cloud_tasks.get_listen_finalization_tasks_max_attempts() == 5
+
+
 def _prod_backend_sync_runtime_env(monkeypatch):
     """Render the production backend-sync contract instead of duplicating it here."""
     backend_root = Path(__file__).resolve().parents[2]

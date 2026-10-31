@@ -8,7 +8,7 @@ presents its request-scoped keys.
 
 from __future__ import annotations
 
-from config.listen_finalization import durable_attempt_cap_enabled
+from config.listen_finalization import durable_attempt_cap_enabled, replay_enabled
 from database import conversation_processing_recovery as processing_recovery
 
 import logging
@@ -32,6 +32,7 @@ from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
     is_listen_finalization_dispatch_enabled,
+    is_listen_finalization_tasks_configured,
 )
 from utils.metrics import (
     CONVERSATION_ORPHANED_UNFINALIZED,
@@ -195,7 +196,9 @@ def reconcile_listen_finalization_jobs(
             logger.error('listen BYOK ownership reclaim failed rows=%s', recovery['errors'])
     except Exception:
         logger.exception('listen BYOK ownership reclaim scan failed')
-    if not is_listen_finalization_dispatch_enabled():
+    if not replay_enabled() or (
+        not is_listen_finalization_dispatch_enabled() and not is_listen_finalization_tasks_configured()
+    ):
         _publish_job_metrics(firestore_client=firestore_client)
         return result
 
