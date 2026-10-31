@@ -110,7 +110,8 @@ class TestDemandProcessingTools(unittest.TestCase):
     def test_handles_downstream_exception_gracefully(self):
         mock_demand_fn.side_effect = RuntimeError("Redis connection failure")
         res = demand_mod.process_recent_conversations.func(self.config)
-        self.assertIn('"error": "Redis connection failure"', res)
+        self.assertIn('"error": "Failed to process recent conversations"', res)
+        self.assertNotIn("Redis connection failure", res)
         self.assertIn('"ready": false', res)
         mock_demand_fn.side_effect = None
 

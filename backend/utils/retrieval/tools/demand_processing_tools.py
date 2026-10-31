@@ -1,9 +1,12 @@
 """Explicit fresh-conversation demand, shared by app and messaging chat."""
 
 import json
+import logging
 from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+
+logger = logging.getLogger(__name__)
 
 
 def _get_user_id(config: Any) -> str:
@@ -41,4 +44,5 @@ def process_recent_conversations(config: RunnableConfig, hours: int = 6, limit: 
     try:
         return json.dumps(process_recent(uid, hours=bounded_hours, limit=bounded_limit))
     except Exception as e:
-        return json.dumps({'error': str(e), 'ready': False})
+        logger.error("Failed to process recent conversations for user %s: %s", uid, type(e).__name__, exc_info=True)
+        return json.dumps({'error': 'Failed to process recent conversations', 'ready': False})
