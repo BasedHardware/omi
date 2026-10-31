@@ -553,6 +553,7 @@ and an explicit empty literal renders as `''`.
 | `SPEAKER_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `SPEAKER_PER_WINDOW_ENABLED` | Default on; a manifest dispute abstains speaker windows instead of the recording, for batch-authoritative conversations and beta clients | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `SPEAKER_ROLE_PROJECTION_ENABLED` | Shared evidence-backed prompt roles for notes, memory quote sources and tasks; on unless explicitly false | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `SPEAKER_SYNC_STORE_ENABLED` | Default on; a sync-scoped speaker window refused only because the live store overlaps it is proven and cut on the sync store alone, inside the per-window cohort | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `STALE_IN_PROGRESS_RECOVERY_ENABLED` | Incident stop for reconnect stale in-progress recovery; default on | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | — | keep | keep | — | backend listen |
 | `STT_CAP_FINALIZE_FORWARD_ENABLED` | Default on; preserve provider-specific finalize arguments through the funded STT cap proxy | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STT_CAP_OFFLINE_ENFORCEMENT` | Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1110,6 +1111,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SPEAKER_IDENTITY_REPAIR_ENABLED` — Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names (fail: open)
 - `SPEAKER_PER_WINDOW_ENABLED` — Default on; a manifest dispute abstains speaker windows instead of the recording, for batch-authoritative conversations and beta clients (fail: closed)
 - `SPEAKER_ROLE_PROJECTION_ENABLED` — Shared evidence-backed prompt roles for notes, memory quote sources and tasks; on unless explicitly false (fail: open)
+- `SPEAKER_SYNC_STORE_ENABLED` — Default on; a sync-scoped speaker window refused only because the live store overlaps it is proven and cut on the sync store alone, inside the per-window cohort (fail: closed)
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_CAP_FINALIZE_FORWARD_ENABLED` — Default on; preserve provider-specific finalize arguments through the funded STT cap proxy (fail: open)
 - `STT_CAP_OFFLINE_ENFORCEMENT` — Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope (fail: open)

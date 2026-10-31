@@ -153,7 +153,8 @@ def test_each_page_has_bounded_episode_reads_and_chunked_member_reads(store, mon
     for cid in ids:
         root.document(cid).set({'structured': {'title': cid}, 'started_at': START})
     rows[0]['conversation_ids'] = ids
-    rows[1]['conversation_ids'] = ids[:10]  # Shared members are fetched once per page.
+    rows[1]['conversation_ids'] = ids[:9] + ids[120:]  # Shared members are fetched once per page.
+    rows[0]['conversation_ids'] = ids[:120]
     batches = []
     get_all = store.get_all
 
@@ -166,7 +167,7 @@ def test_each_page_has_bounded_episode_reads_and_chunked_member_reads(store, mon
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     projected = home_read.project_episodes('u', rows, firestore_client=store)
     assert batches == [50, 50, 21]
-    assert [len(row['members']) for row in projected] == [121, 10]
+    assert [len(row['members']) for row in projected] == [120, 10]
 
 
 @pytest.mark.parametrize('status', ['live', 'closed'])
@@ -220,3 +221,51 @@ def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store
         )
         assert restored.status_code == 200 and len(restored.json()['episodes']) == 1
         assert (client.get('/v1/episodes/live').json()['episode'] is not None) == (status == 'live')
+
+
+def _shared_rows(store, monkeypatch, *episodes):
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    scheduled = []
+    monkeypatch.setattr(
+        home_read, 'schedule_missed_composes', lambda uid, rows, wires: scheduled.extend(r['id'] for r in rows)
+    )
+    root = store.collection('users').document('u').collection('conversations')
+    rows = []
+    for episode_id, members, extra in episodes:
+        for cid in members:
+            root.document(cid).set({'structured': {'title': cid}, 'started_at': START})
+        rows.append(
+            {
+                'id': episode_id,
+                'status': 'closed',
+                'started_at': START,
+                'last_activity_at': START,
+                'closed_at': START,
+                'conversation_ids': members,
+                **extra,
+            }
+        )
+    wires = home_read.project_episodes('u', rows, firestore_client=store)
+    return [wire['id'] for wire in wires], scheduled
+
+
+def test_a_closed_episode_inside_another_gets_no_row_and_no_compose(store, monkeypatch):
+    ids, scheduled = _shared_rows(store, monkeypatch, ('small', ['a'], {}), ('big', ['a', 'b'], {}))
+    assert ids == ['big'] and scheduled == ['big']
+
+
+def test_identical_episodes_keep_the_composed_one(store, monkeypatch):
+    ids, _ = _shared_rows(
+        store, monkeypatch, ('plain', ['a', 'b'], {}), ('done', ['a', 'b'], {'composed_fingerprint': 'f'})
+    )
+    assert ids == ['done']
+
+
+def test_partly_shared_episodes_both_stay(store, monkeypatch):
+    ids, _ = _shared_rows(store, monkeypatch, ('one', ['a', 'b'], {}), ('two', ['b', 'c'], {}))
+    assert sorted(ids) == ['one', 'two']
+
+
+def test_a_live_episode_is_never_contained(store, monkeypatch):
+    ids, _ = _shared_rows(store, monkeypatch, ('now', ['a'], {'status': 'live'}), ('big', ['a', 'b'], {}))
+    assert sorted(ids) == ['big', 'now']
