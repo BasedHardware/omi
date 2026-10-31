@@ -1979,7 +1979,9 @@ def _replay_terminal_owner_allowed(transaction: Any, job: Mapping[str, Any], cli
     """Retain worker admission fences before replay writes account-owned data."""
     uid = job.get('uid')
     if not isinstance(uid, str) or not uid:
-        return False
+        # No account binding can be formed. The shared writer closes only the
+        # job in this case; malformed jobs must not replay forever.
+        return True
     marker = client.collection('account_deletions').document(uid).get(transaction=transaction)
     deletion_status = normalize_account_deletion_status(
         marker_exists=bool(marker.exists), raw_status=(marker.to_dict() or {}).get('wipe_status')

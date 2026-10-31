@@ -142,6 +142,29 @@ def test_replay_does_not_mutate_a_newer_conversation_binding(store):
     assert store.rows[ROW_PATH] == before_row
 
 
+@pytest.mark.parametrize('field', ['uid', 'conversation_id'])
+@pytest.mark.parametrize('value', [None, '', 17, {}])
+def test_exhausted_replay_without_valid_binding_closes_only_job(store, field, value):
+    if value is None:
+        store.rows[JOB_PATH].pop(field)
+    else:
+        store.rows[JOB_PATH][field] = value
+    before = deepcopy(store.rows)
+
+    intent = replay(store)
+
+    assert intent['created'] is True
+    assert intent['status'] == 'dead_letter'
+    assert store.rows[JOB_PATH]['last_failure_code'] == 'durable_attempts_exhausted'
+    assert store.rows[JOB_PATH]['dispatch_generation'] == before[JOB_PATH]['dispatch_generation']
+    assert {path: row for path, row in store.rows.items() if path != JOB_PATH} == {
+        path: row for path, row in before.items() if path != JOB_PATH
+    }
+    assert all(path == JOB_PATH for tx in store.transactions for path, _ in tx.updates)
+    assert not any(tx.creates or tx.sets for tx in store.transactions)
+    assert replay(store)['created'] is False
+
+
 @pytest.mark.parametrize('guard', ['deleting', 'cutover', 'malformed_cutover'])
 def test_replay_preserves_worker_account_admission_fences(store, monkeypatch, guard):
     if guard == 'deleting':

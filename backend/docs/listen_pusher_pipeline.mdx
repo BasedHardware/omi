@@ -8423,15 +8423,10 @@ existing admission rules. The existing
 `LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED=false` kill switch disables both
 worker and replay enforcement.
 
-The two post-claim preflight reads (job and account cutover) each have a
-30-second application deadline, including shared DB executor queue/admission
-time. Timeout attempts the normal fenced `worker_failed` retry update, bounded
-to 30 seconds; lock release is bounded to five seconds. These deadlines cannot
-interrupt a synchronous RPC already running in a thread. If persistence stays
-unavailable, the lease expires and replay still enforces the durable cap.
-The timeout emits `event=listen_finalization_preflight outcome=timeout` with a
-closed `stage` value (`job_read` or `account_cutover`), without account/content
-identifiers.
+Worker preflight reads retain their existing waiting behavior. If a worker is
+lost or hangs without recording a failure, lease expiry lets replay enforce the
+durable cap. An exhausted job with a missing or invalid account binding closes
+only the job, without writing a conversation.
 
 Dead-lettering keeps the conversation visible and preserves its transcript,
 audio references, photos, and any existing structured output. It stops automatic
