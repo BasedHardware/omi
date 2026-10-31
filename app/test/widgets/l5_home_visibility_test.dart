@@ -303,6 +303,14 @@ void main() {
           lastActivityAt: now,
           title: 'Planning the garden',
           conversationIds: ['active', 'finished'],
+          moments: [
+            EpisodeMoment(
+                id: 'm',
+                conversationId: 'finished',
+                startedAt: now,
+                endedAt: now,
+                points: const [EpisodePoint('Point')])
+          ],
           members: items);
       if (searching) conversations.previousQuery = 'meeting';
       // The closed snapshot owns both members even with no streaming capture.

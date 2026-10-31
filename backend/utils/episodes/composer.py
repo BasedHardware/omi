@@ -39,6 +39,7 @@ from config.episodes import (
     COMPOSER_MAX_CHAPTERS,
     COMPOSER_MAX_TRANSCRIPT_CHARS,
     COMPOSER_TIMEOUT_SECONDS,
+    RECOVERY_NOTES_MIN_INTERVAL_SECONDS,
     COMPOSER_VERSION,
     episode_composer_enabled,
 )
@@ -54,6 +55,8 @@ logger = logging.getLogger(__name__)
 
 _DONE = {'completed'}
 _PLACEHOLDER = re.compile(r'^\s*(new|unknown)\b.*\bmoment\b', re.I)
+_TURN_SECONDS = 60
+_TURN_GAP_SECONDS = 15
 _WINDOW_SECONDS = 600
 _CLOCK_SLACK_MINUTES = 2
 
@@ -150,13 +153,40 @@ def _origin(row: Mapping[str, Any]) -> Optional[datetime]:
     return _utc(row.get('started_at')) or _span(row)[0]
 
 
+def speech_times(row: Mapping[str, Any]) -> list[datetime]:
+    """Every segment's start: moments end on speech, which a merged line's own clock would cut short."""
+    origin = _origin(row) or datetime.now(timezone.utc)
+    return [origin + timedelta(seconds=float(segment.get('start') or 0)) for segment in _segments(row)]
+
+
 def transcript_lines(row: Mapping[str, Any], owner: str, tz: ZoneInfo) -> list[tuple[datetime, str]]:
+    """One line per speaker turn: batch units cut speech every few seconds, and repeating the clock and
+    the name on each fragment costs more tokens than the words. A turn still restarts each
+    ``_TURN_SECONDS`` so a chapter can open inside a long monologue."""
     origin = _origin(row)
-    out = []
+    out: list[tuple[datetime, str]] = []
+    open_at, open_speaker, last_end, words = None, None, 0.0, []
+
+    def close() -> None:
+        if open_at is not None and words:
+            local = open_at.astimezone(tz)
+            out.append((open_at, f"[{local:%H:%M:%S}] {open_speaker}: {' '.join(words)}"))
+
     for segment in _segments(row):
-        at = (origin or datetime.now(timezone.utc)) + timedelta(seconds=float(segment.get('start') or 0))
-        local = at.astimezone(tz)
-        out.append((at, f"[{local:%H:%M:%S}] {_speaker(segment, owner)}: {str(segment.get('text')).strip()}"))
+        start = float(segment.get('start') or 0)
+        at = (origin or datetime.now(timezone.utc)) + timedelta(seconds=start)
+        speaker = _speaker(segment, owner)
+        if (
+            open_at is None
+            or speaker != open_speaker
+            or start - last_end > _TURN_GAP_SECONDS
+            or (at - open_at).total_seconds() >= _TURN_SECONDS
+        ):
+            close()
+            open_at, open_speaker, words = at, speaker, []
+        words.append(str(segment.get('text')).strip())
+        last_end = max(start, float(segment.get('end') or start))
+    close()
     return out
 
 
@@ -322,7 +352,7 @@ def to_updates(
     """``spans`` are (member id, first line, last line) and ``times`` each member's line instants, on the
     transcript clock the model saw."""
     if times is None:
-        times = {str(row.get('id')): [at for at, _ in transcript_lines(row, '', tz)] for row in members}
+        times = {str(row.get('id')): speech_times(row) for row in members}
     if spans is None:
         spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
     known: list[tuple[str, datetime, datetime]] = [
@@ -613,7 +643,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         if isinstance(content, list):
             content = ''.join(part.get('text', '') if isinstance(part, Mapping) else str(part) for part in content)
         data = parse(str(content))
-        times = {str(row['id']): [at for at, _ in transcript_lines(row, owner, tz)] for row in members}
+        times = {str(row['id']): speech_times(row) for row in members}
         spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
         composed = to_updates(data, members, tz, spans, times)
         if not any(m['points'] for m in composed['moments']):
@@ -778,6 +808,15 @@ def owns_closed_notes(uid: str, episode: Mapping[str, Any], conversation_id: str
     except Exception:
         return False
     return True
+
+
+def recovery_notes_wait(episode: Optional[Mapping[str, Any]], updated_at: Optional[datetime], now: datetime) -> bool:
+    """Recovered audio arrives batch by batch and the composer rewrites these notes at close, so draft
+    notes refresh at most once per interval. Unconsumed speech stays in the conversation for the composer.
+    Without a working composer these notes are the final ones and nothing waits."""
+    if not episode or updated_at is None or not episode_composer_enabled() or _backed_off(episode):
+        return False
+    return (now - updated_at).total_seconds() < RECOVERY_NOTES_MIN_INTERVAL_SECONDS
 
 
 def notes_free(*_args: Any, **_kwargs: Any) -> Any:

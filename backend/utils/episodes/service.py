@@ -81,7 +81,7 @@ from utils.episodes.recovery import segment_end as _segment_end, segment_start a
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
 from utils.episodes.visibility import visible_episode, hidden_conversation
-from utils.episodes.recorded_recovery import record_windows
+from utils.episodes.recorded_recovery import record_walk, record_windows, unconsumed_moments
 
 logger = logging.getLogger(__name__)
 
@@ -933,15 +933,15 @@ def _record_moment_once(
         return 'skipped_short'
 
     state_updated_at = policy.utc(episode.get('state_updated_at')) if episode else None
+    compose_owns = closed is not None and composer.owns_closed_notes(uid, closed, moment.conversation_id, c)
     if (
         moment.trigger == 'pause'
         and state_updated_at is not None
         and (now - state_updated_at).total_seconds() < MOMENT_MIN_INTERVAL_SECONDS
-    ):
+    ) or (recovered and not compose_owns and composer.recovery_notes_wait(episode, state_updated_at, now)):
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'
 
-    compose_owns = closed is not None and composer.owns_closed_notes(uid, closed, moment.conversation_id, c)
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     output_language, repair = '', None
     conversation_language = moment.language or ''
@@ -1428,13 +1428,10 @@ def _attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[st
 def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
     if recorded_episodes_enabled():
         owner = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
-        return record_windows(uid, conversation_id, row, [owner] if owner else [], c, record_moment, now=_now(c))
-    outcome = 'skipped_applied'
-    for moment in recovery.moments(conversation_id, row, now=_now(c), calendar_identity=_calendar_identity(row)):
-        outcome = record_moment(uid, moment, c, member_episode_id=episode_id)
-        if outcome not in {'applied', 'skipped_applied'}:
-            return outcome
-    return outcome
+        windows = [owner] if owner else []
+        return record_windows(uid, conversation_id, row, windows, c, record_moment, now=_now(c))
+    walk = recovery.moments(conversation_id, row, now=_now(c), calendar_identity=_calendar_identity(row))
+    return record_walk(uid, episode_id, unconsumed_moments(uid, conversation_id, walk, c), c, record_moment)
 
 
 def _attach_synced(
