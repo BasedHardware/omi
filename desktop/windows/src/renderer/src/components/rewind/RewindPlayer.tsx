@@ -7,6 +7,7 @@ import {
 } from '../../../../shared/timelineGeometry'
 import { relativeTime, isSameDay } from '../../../../shared/relativeTime'
 import { parseWindowTitle } from '../../lib/windowTitle'
+import { FrameImageSource } from '../../rewind/frameImageSource'
 import {
   containedImageRect,
   highlightTerms,
@@ -50,20 +51,42 @@ export function RewindPlayer({
   )
   const frame = idx >= 0 ? frames[idx] : null
 
+  // One source for the whole player, not one per frame: it holds the chunk
+  // decoder open between frames, which is what makes stepping through a
+  // compacted run cost one decode instead of re-decoding from the chunk's start
+  // every time. See rewind/frameImageSource.ts.
+  const [imageSource] = useState(() => new FrameImageSource())
+  useEffect(() => () => imageSource.dispose(), [imageSource])
+
   useEffect(() => {
     let alive = true
+    let objectUrl: string | null = null
     if (!frame) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
       setSrc(null)
       return
     }
-    void window.omi.rewindFrameImage(frame.imagePath).then((dataUrl) => {
-      if (alive) setSrc(dataUrl)
-    })
+    void imageSource
+      .srcFor(frame)
+      .then((resolved) => {
+        if (!alive) {
+          // Arrived after the frame changed: revoke rather than leak.
+          if (resolved?.revoke) URL.revokeObjectURL(resolved.src)
+          return
+        }
+        if (resolved?.revoke) objectUrl = resolved.src
+        setSrc(resolved?.src ?? null)
+      })
+      .catch(() => {
+        // A frame whose chunk is corrupt or missing renders as no image, the
+        // same as a JPEG that is gone. One bad row must not take down the page.
+        if (alive) setSrc(null)
+      })
     return () => {
       alive = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [frame?.imagePath])
+  }, [frame?.imagePath, frame?.chunkPath, frame?.chunkOffset])
 
   // Load per-line OCR boxes for the current frame only while a search is active.
   const terms = highlightTerms(highlightQuery)
