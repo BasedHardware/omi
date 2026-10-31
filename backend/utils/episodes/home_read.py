@@ -139,9 +139,9 @@ def project_lookup(uid: str, episode: dict[str, Any] | None) -> dict[str, Any] |
     Lookups arrive one per conversation row, so a per-user budget caps distinct episodes queued across them.
     """
     wire = project_episode(uid, episode)
-    if episode is not None and _lookup_reserve(uid):
+    if episode is not None and (claim := _lookup_reserve(uid)) is not None:
         if not schedule_missed_composes(uid, [episode], [wire] if wire is not None else []):
-            _lookup_refund(uid)
+            _lookup_refund(uid, claim)
     return wire
 
 
@@ -149,7 +149,7 @@ _lookup_lock = threading.Lock()
 _lookup_spend: dict[str, list[float]] = {}
 
 
-def _lookup_reserve(uid: str) -> bool:
+def _lookup_reserve(uid: str) -> float | None:
     """Claim one of the user's lookup schedules for this window atomically; refunded if nothing queues."""
     now = time.monotonic()
     with _lookup_lock:
@@ -160,16 +160,17 @@ def _lookup_reserve(uid: str) -> bool:
         recent = _live(_lookup_spend.get(uid, []), now)
         if len(recent) >= COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW:
             _lookup_spend[uid] = recent
-            return False
+            return None
         _lookup_spend[uid] = [*recent, now]
-        return True
+        return now
 
 
-def _lookup_refund(uid: str) -> None:
+def _lookup_refund(uid: str, claim: float) -> None:
+    """Return this lookup's own reservation, never a concurrent lookup's."""
     with _lookup_lock:
         spent = _lookup_spend.get(uid)
-        if spent:
-            spent.pop()
+        if spent and claim in spent:
+            spent.remove(claim)
 
 
 def _live(spent: list[float], now: float) -> list[float]:
