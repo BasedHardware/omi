@@ -40,7 +40,9 @@ overlay:
     backend-listen:
       env:
         # Replay uses the existing singleton loop; live admission stays inline.
-        LISTEN_FINALIZATION_REPLAY_ENABLED: {value: 'true', category: ops_kill}
+        LISTEN_FINALIZATION_REPLAY_ENABLED:
+          value: 'true'
+          category: ops_kill
         LISTEN_FINALIZATION_TASKS_QUEUE: {value: conversation-finalization, category: reliability}
         LISTEN_FINALIZATION_TASKS_HANDLER_URL:
           value: https://backend-sync-hhibjajaja-uc.a.run.app/v1/conversation-finalization-jobs/run
