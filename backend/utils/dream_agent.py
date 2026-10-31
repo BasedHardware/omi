@@ -39,9 +39,10 @@ from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
 from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_prescan, dream_verify
-from utils import dream_required_intake
+from utils import dream_judge, dream_required_intake
 from utils.dream_cost import (
     conservative_attempt_micro,
     minute_burndown_tokens,
@@ -434,6 +435,8 @@ async def run_session(
 
     main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
     budget_notice_sent = False
+    # Extra tokens the value judge may spend after effects, outside the pass budget.
+    judge_allowance = 0
 
     def remember_main(result, messages):
         main_history['prompt_tokens'] = result.prompt_tokens
@@ -442,6 +445,50 @@ async def run_session(
         report['last_prompt_tokens'] = result.prompt_tokens
 
     compact_arm = arms.get('history_compact', 'off')
+    judge_mode = dream_judge.mode() if arms else 'off'
+
+    async def _judge_applied(staged_items, pass_report):
+        nonlocal judge_allowance
+        applied = {
+            row.get('key')
+            for row in pass_report['outcomes']
+            if isinstance(row, dict) and row.get('status') == 'applied'
+        }
+        rows, kinds = [], {}
+        for item in staged_items:
+            if item.key not in applied or not isinstance(item.operation, HarnessEdit):
+                continue
+            label = dream_judge.stratum(item.kind, item.key)
+            if label is None:
+                continue
+            try:
+                view = dream_change_view.edit_change(uid, item.operation, item.records, item.key)
+            except Exception:
+                continue
+            rows.append((item.id, dream_judge.projection(view)))
+            kinds[item.id] = (item.kind, label)
+        if not rows:
+            return
+        judge_allowance = dream_judge.token_allowance()
+        try:
+            judged = await dream_judge.judge(
+                rows,
+                partial(invoke, dream_harness_transport.VERIFY_LANE),
+                tokens=judge_allowance,
+                deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - 30),
+            )
+        finally:
+            judge_allowance = 0
+        for id_, _row in rows[: dream_judge.MAX_ITEMS]:
+            kind, label = kinds[id_]
+            dream_judge.record(kind, label, judged.get(id_))
+        levers['value_judge'] = {
+            'arm': judge_mode,
+            'sent': min(len(rows), dream_judge.MAX_ITEMS),
+            'judged': len(judged),
+            'harmful': sum(1 for judgment in judged.values() if judgment.verdict == 'harmful'),
+        }
+
     compact_trigger = _tunable('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', COMPACT_TRIGGER_PROMPT_TOKENS_DEFAULT)
     compact_keep = int(_tunable('DREAM_HISTORY_COMPACT_KEEP_RESULTS', COMPACT_KEEP_RECENT_TOOL_RESULTS_DEFAULT))
     compaction = {'arm': compact_arm, 'fired': False, 'compactions': 0, 'elided_chars': 0, 'would_elide_chars': 0}
@@ -517,7 +564,10 @@ async def run_session(
             compact(messages)
         stage = 'request_sizing'
         remaining = (
-            limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
+            limits.tokens
+            + judge_allowance
+            - report['price_weighted_tokens']
+            - session.counters['search_embedding_token_upper_bound']
         )
         if (
             lane == dream_harness_transport.MAIN_LANE
@@ -894,6 +944,9 @@ async def run_session(
                 dream_writing.reset(token)
                 ACTIVE_RUN.reset(effect_scope)
             report['verifier_outcomes'] = dict(decisions)
+            if judge_mode != 'off' and not dry_run:
+                stage = 'value_judge'
+                await _judge_applied(staged, report)
             report.update(
                 status='complete',
                 notes=session.finish.notes if session.finish else '',

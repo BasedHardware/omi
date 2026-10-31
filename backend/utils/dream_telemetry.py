@@ -170,6 +170,22 @@ def pass_payload(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_JUDGE_KEYS = ('kind', 'stratum', 'verdict', 'grounded', 'owner_appropriate', 'useful')
+
+
+def record_judgment(row: dict[str, Any]) -> None:
+    """One content-free value-judge record (scores are -1 when unjudged)."""
+    try:
+        payload = {'event': 'dream_judge'}
+        for key in _JUDGE_KEYS:
+            value = row.get(key)
+            payload[key] = value if isinstance(value, int) and -1 <= value <= 2 else _label(value)
+    except Exception:
+        ERRORS.labels('judge').inc()
+        return
+    _emit('judge', payload)
+
+
 def record_pass(report: dict[str, Any]) -> None:
     try:
         payload = pass_payload(report)
