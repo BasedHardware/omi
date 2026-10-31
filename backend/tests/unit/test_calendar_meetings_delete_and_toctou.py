@@ -62,7 +62,7 @@ def test_update_meeting_toctou_not_found(caplog):
     mock_client = MagicMock()
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = True
-    mock_doc.update.side_effect = _NotFound("Meeting deleted concurrently")
+    mock_doc.update.side_effect = _NotFound("Meeting deleted concurrently with secret token")
     mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_doc
 
     with pytest.MonkeyPatch.context() as mp:
@@ -70,6 +70,7 @@ def test_update_meeting_toctou_not_found(caplog):
         with caplog.at_level(logging.WARNING, logger=calendar_db.__name__):
             res = calendar_db.update_meeting("uid-1", "meet-raced", {"title": "Test"})
         assert res is False
+        assert "Meeting deleted concurrently with secret token" not in caplog.text
         assert any("meet-raced" in record.message for record in caplog.records)
 
 

@@ -84,7 +84,7 @@ def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> b
         doc_ref.update(meeting_data)
         return True
     except NotFound as e:
-        logger.warning("Meeting %s not found during update (concurrent deletion): %s", meeting_id, e)
+        logger.warning("Meeting %s not found during update (concurrent deletion): %s", meeting_id, type(e).__name__)
         return False
 
 
