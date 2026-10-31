@@ -8,9 +8,14 @@ malformed records fail closed with 404 (never a 500), and the literal
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault(
@@ -103,6 +108,8 @@ _stubs = [
     'firebase_admin.auth',
     'firebase_admin.credentials',
     'firebase_admin.firestore',
+    'google',
+    'google.cloud',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
     'utils.other.storage',
@@ -118,21 +125,37 @@ _stubs = [
     'utils.llm.chat',
     'utils.llm.knowledge_graph',
 ]
-for _mod_name in _stubs:
-    if _mod_name not in sys.modules:
-        sys.modules[_mod_name] = _AutoMockModule(_mod_name)
+def _install_stubs(monkeypatch):
+    # Sanctioned Tier-2 seam (backend/docs/test_isolation.md): stubs are installed
+    # per-test via monkeypatch and auto-restored at teardown. Nothing here runs at
+    # module scope, so the module-scope sys.modules gate stays clean.
+    for _mod_name in _stubs:
+        if _mod_name not in sys.modules:
+            monkeypatch.setitem(sys.modules, _mod_name, _AutoMockModule(_mod_name))
 
-sys.modules['database._client'].document_id_from_seed = MagicMock(return_value='memory-id')
-sys.modules['database.vector_db'].upsert_memory_vectors_batch = MagicMock()
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-sys.modules['utils.apps'].update_personas_async = MagicMock()
+    monkeypatch.setattr(sys.modules['database._client'], 'document_id_from_seed', MagicMock(return_value='memory-id'))
+    monkeypatch.setattr(sys.modules['database.vector_db'], 'upsert_memory_vectors_batch', MagicMock())
+    monkeypatch.setattr(
+        sys.modules['firebase_admin.auth'], 'InvalidIdTokenError', type('InvalidIdTokenError', (Exception,), {})
+    )
+    monkeypatch.setattr(sys.modules['utils.apps'], 'update_personas_async', MagicMock())
 
-# utils.other.endpoints must expose real callables (used in route signatures); provide stand-ins
-# without replacing an existing stub that another test may inspect later.
-_endpoints = sys.modules.get('utils.other.endpoints')
-if _endpoints is None:
-    _endpoints = ModuleType('utils.other.endpoints')
-    sys.modules['utils.other.endpoints'] = _endpoints
+    # utils.other.endpoints must expose real callables (used in route signatures); provide stand-ins
+    # without replacing an existing stub that another test may inspect later.
+    _endpoints = sys.modules.get('utils.other.endpoints')
+    if _endpoints is None:
+        _endpoints = ModuleType('utils.other.endpoints')
+        monkeypatch.setitem(sys.modules, 'utils.other.endpoints', _endpoints)
+    if not hasattr(_endpoints, 'get_current_user_uid'):
+        monkeypatch.setattr(_endpoints, 'get_current_user_uid', _fake_get_current_user_uid, raising=False)
+    if not hasattr(_endpoints, 'with_rate_limit'):
+        monkeypatch.setattr(_endpoints, 'with_rate_limit', _fake_with_rate_limit, raising=False)
+    if not hasattr(_endpoints, 'with_rate_limit_context'):
+        monkeypatch.setattr(_endpoints, 'with_rate_limit_context', _fake_with_rate_limit, raising=False)
+    if not hasattr(_endpoints, 'check_api_key_rate_limit'):
+        monkeypatch.setattr(_endpoints, 'check_api_key_rate_limit', MagicMock(), raising=False)
+    if not hasattr(_endpoints, 'get_user'):
+        monkeypatch.setattr(_endpoints, 'get_user', MagicMock(), raising=False)
 
 
 def _fake_get_current_user_uid():  # pragma: no cover - dependency stand-in
@@ -143,44 +166,41 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
     return dependency
 
 
-if not hasattr(_endpoints, 'get_current_user_uid'):
-    _endpoints.get_current_user_uid = _fake_get_current_user_uid
-if not hasattr(_endpoints, 'with_rate_limit'):
-    _endpoints.with_rate_limit = _fake_with_rate_limit
-if not hasattr(_endpoints, 'with_rate_limit_context'):
-    setattr(_endpoints, 'with_rate_limit_context', _fake_with_rate_limit)
-if not hasattr(_endpoints, 'check_api_key_rate_limit'):
-    _endpoints.check_api_key_rate_limit = MagicMock()
-if not hasattr(_endpoints, 'get_user'):
-    _endpoints.get_user = MagicMock()
+@pytest.fixture(autouse=True)
+def _router_under_test(monkeypatch):
+    # Stubs must be present before the router is imported (they prevent google
+    # init), so the stub-dependent imports happen here, after _install_stubs.
+    # The router module stays cached across tests in this file's process; each
+    # test re-binds the same module object and re-installs fresh stubs.
+    _install_stubs(monkeypatch)
+    _ensure_package_path("models", BACKEND_DIR / "models")
+    _ensure_package_path("routers", BACKEND_DIR / "routers")
+    _ensure_package_path("utils", BACKEND_DIR / "utils")
+    _ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
+    _drop_stale_module("models.conversation", BACKEND_DIR / "models" / "conversation.py")
+    _drop_stale_module("models.conversation_enums", BACKEND_DIR / "models" / "conversation_enums.py")
+    _drop_stale_module("models.dev_api_key", BACKEND_DIR / "models" / "dev_api_key.py")
+    _drop_stale_module("models.folder", BACKEND_DIR / "models" / "folder.py")
+    _drop_stale_module("models.geolocation", BACKEND_DIR / "models" / "geolocation.py")
+    _drop_stale_module("models.memories", BACKEND_DIR / "models" / "memories.py")
+    _drop_stale_module("models.transcript_segment", BACKEND_DIR / "models" / "transcript_segment.py")
+    _drop_stale_module("routers.developer", BACKEND_DIR / "routers" / "developer.py")
+    _drop_stale_module("utils.conversations.render", BACKEND_DIR / "utils" / "conversations" / "render.py")
 
-_ensure_package_path("models", BACKEND_DIR / "models")
-_ensure_package_path("routers", BACKEND_DIR / "routers")
-_ensure_package_path("utils", BACKEND_DIR / "utils")
-_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
-_drop_stale_module("models.conversation", BACKEND_DIR / "models" / "conversation.py")
-_drop_stale_module("models.conversation_enums", BACKEND_DIR / "models" / "conversation_enums.py")
-_drop_stale_module("models.dev_api_key", BACKEND_DIR / "models" / "dev_api_key.py")
-_drop_stale_module("models.folder", BACKEND_DIR / "models" / "folder.py")
-_drop_stale_module("models.geolocation", BACKEND_DIR / "models" / "geolocation.py")
-_drop_stale_module("models.memories", BACKEND_DIR / "models" / "memories.py")
-_drop_stale_module("models.transcript_segment", BACKEND_DIR / "models" / "transcript_segment.py")
-_drop_stale_module("routers.developer", BACKEND_DIR / "routers" / "developer.py")
-_drop_stale_module("utils.conversations.render", BACKEND_DIR / "utils" / "conversations" / "render.py")
+    import routers.developer as developer_module
+    from dependencies import get_developer_memory_default_memory_read_context
+    from models.memories import MemoryCategory  # real model; stubs prevent google init
+    from routers.developer import router as developer_router
+    from utils.memory.default_read_rollout import MemoryReadDecision
+    from utils.memory.product_authorization import ProductAuthorizationDecision
 
-from datetime import datetime, timezone  # noqa: E402
-
-from models.memories import MemoryCategory  # noqa: E402  (real model; stubs prevent google init)
-
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from routers.developer import router as developer_router  # noqa: E402
-import routers.developer as developer_module  # noqa: E402
-from dependencies import get_developer_memory_default_memory_read_context  # noqa: E402
-from utils.memory.product_authorization import ProductAuthorizationDecision  # noqa: E402
-from utils.memory.default_read_rollout import MemoryReadDecision  # noqa: E402
-
-_VALID_CATEGORY = next(iter(MemoryCategory)).value
+    globals()["developer_module"] = developer_module
+    globals()["developer_router"] = developer_router
+    globals()["get_developer_memory_default_memory_read_context"] = get_developer_memory_default_memory_read_context
+    globals()["ProductAuthorizationDecision"] = ProductAuthorizationDecision
+    globals()["MemoryReadDecision"] = MemoryReadDecision
+    globals()["_VALID_CATEGORY"] = next(iter(MemoryCategory)).value
+    yield
 
 
 def _valid_memory(mid):
