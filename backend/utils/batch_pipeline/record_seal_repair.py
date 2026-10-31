@@ -25,6 +25,7 @@ ROW_FIELDS = (
     'record_upload_sessions',
     'record_upload_revision',
     'record_audio_closed',
+    'record_audio_partial',
     'status',
     'deleted',
     'discarded',
@@ -59,6 +60,8 @@ def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False, repa
         return 'not_pending'
     if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
         return 'not_batch_owned'
+    if row.get('record_audio_partial'):
+        return 'already_partial'
     if row.get('record_upload_failed') and not (repair_upload_failed and upload_failed_repair_enabled()):
         return 'upload_failed'
     if row.get('record_upload_sessions') and not producer_tokens_dead(

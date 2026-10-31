@@ -94,6 +94,7 @@ def test_partial_is_distinct_from_complete_and_api_exposes_it(source):
     assert model.model_dump()['record_audio_partial']['reason'] == 'tail_lagging'
     assert pending(source)['state'] == 'record_pending'
     assert finish(source) == 'already_partial'
+    assert repair.seal_refusal(pending(source), row) == 'already_partial'
 
 
 @pytest.mark.parametrize('age', [1799, 1800])
@@ -138,6 +139,12 @@ def test_dead_producer_requires_existing_fresh_death_proof(source):
     assert source[1].rows[ROW]['record_upload_sessions'] == {}
 
 
+def test_partial_requires_fresh_inventory_even_without_tokens(source):
+    source[2]['captured_at'] = NOW - 301
+    assert finish(source) == 'state_changed'
+    assert not source[1].rows[ROW].get('record_audio_partial')
+
+
 def test_producer_finishing_between_check_and_apply_is_not_raced(source):
     source[1].rows[ROW]['record_upload_sessions'] = {'producer': {'pod': 'alive', 'process_started_at': 100}}
     source[2]['pods'] = {'alive': 100}
@@ -169,6 +176,19 @@ def test_kill_switch_off_does_not_finish_or_admit(source, monkeypatch):
     monkeypatch.setenv('RECORD_AUDIO_PARTIAL_ENABLED', 'false')
     with pytest.raises(ValueError, match='barrier'):
         require_record_audio_barrier(source[1].rows[ROW])
+
+
+@pytest.mark.parametrize('private', ['A' * 28, 'person@example.invalid', 'users/private/conversations/private'])
+def test_rerun_metric_and_log_discard_arbitrary_identifiers(private, caplog):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger=record_partial.__name__):
+        record_partial.event(private)
+    assert private not in caplog.text
+    assert 'outcome=state_changed' in caplog.text
+    assert all(
+        private not in sample.labels.values() for metric in record_partial.RERUNS.collect() for sample in metric.samples
+    )
 
 
 def test_only_actual_reference_frames_become_coverage_and_gap_fill_is_sliced():

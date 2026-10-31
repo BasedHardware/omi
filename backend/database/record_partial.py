@@ -31,6 +31,8 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
         job = tx.get('jobs', segment)
         if not config.enabled():
             return 'disabled'
+        if not proof or not proof.get('resource_version') or not producer_tokens_dead({}, proof):
+            return 'state_changed'
         if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
             return 'not_batch_owned'
         if row.get('record_audio_closed') and not row.get('record_audio_partial'):
@@ -72,6 +74,8 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
             'finished_partial_at': mark.get('finished_partial_at', datetime.fromtimestamp(now, timezone.utc)),
         }
         job.update(partial_coordinator=True, available_at=now)
+        if not producer_tokens_dead({}, proof):
+            return 'state_changed'
         tx.put('jobs', segment, job)
         tx.flush()
         raw.update(row_ref, {'record_audio_closed': False, 'record_audio_partial': mark, 'record_upload_sessions': {}})
