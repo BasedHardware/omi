@@ -133,7 +133,7 @@ void main() {
                 DateTime? endDate,
                 DateTime? dueStartDate,
                 DateTime? dueEndDate}) async =>
-            ActionItemsResponse(actionItems: [row]),
+            const ActionItemsResponse(actionItems: [row]),
         exportActionItem: (item, app) async {
           writes.add(app);
           return ExportResult.success;
@@ -179,7 +179,7 @@ void main() {
     }), writes);
     await tester.tap(find.text('Export · 1'));
     await tester.pump();
-    await tester.tap(find.text('Export · 1'));
+    await tester.tap(find.text('Export'));
     await tester.pump();
     expect(reads, 1);
     pending.complete(status('todoist'));
