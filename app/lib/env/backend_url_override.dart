@@ -7,6 +7,10 @@ final class BackendUrlOverride {
 
   final String url;
 
+  static const bool allowInRelease = bool.fromEnvironment('ALLOW_CUSTOM_BACKEND_URL', defaultValue: false);
+
+  static bool get isSupported => !kReleaseMode || allowInRelease;
+
   factory BackendUrlOverride.parse(String input) {
     final value = input.trim();
     final uri = Uri.tryParse(value);
@@ -24,8 +28,8 @@ final class BackendUrlOverride {
     return BackendUrlOverride._(uri.replace(path: normalizedPath).toString());
   }
 
-  static bool restore(String persistedUrl, {bool runtimeAllowed = !kReleaseMode}) {
-    if (!runtimeAllowed) {
+  static bool restore(String persistedUrl, {bool? runtimeAllowed}) {
+    if (!(runtimeAllowed ?? isSupported)) {
       Env.clearApiBaseUrlOverride();
       return false;
     }
@@ -46,6 +50,7 @@ final class BackendUrlOverride {
   static bool _isPrivateHost(String host) {
     final normalized = host.toLowerCase();
     if (normalized == 'localhost' || normalized == 'host.docker.internal' || normalized == '::1') return true;
+    if (normalized == 'ts.net' || normalized.endsWith('.ts.net')) return true;
 
     final octets = normalized.split('.').map(int.tryParse).toList();
     if (octets.length != 4 || octets.any((octet) => octet == null || octet < 0 || octet > 255)) return false;

@@ -29,6 +29,7 @@ void main() {
         'http://172.31.0.8:8000',
         'http://192.168.1.8:8000',
         'http://100.64.0.8:8000',
+        'http://my-mac.tail1234.ts.net:8000',
       ]) {
         expect(BackendUrlOverride.parse(url).url, endsWith('/'), reason: url);
       }
@@ -37,6 +38,7 @@ void main() {
     test('rejects public cleartext, credentials, fragments, and unsupported schemes', () {
       for (final url in [
         'http://8.8.8.8:8000',
+        'http://ts.net.example.com:8000',
         'http://user:pass@127.0.0.1:8000',
         'https://example.test/?token=secret',
         'https://example.test/#secret',
@@ -67,6 +69,7 @@ void main() {
 
   test('release-mode restoration fails closed to the flavor backend', () {
     expect(BackendUrlOverride.restore('https://omi.example.test/api/', runtimeAllowed: false), isFalse);
+    expect(BackendUrlOverride.allowInRelease, isFalse);
     expect(Env.hasApiBaseUrlOverride, isFalse);
   });
 
