@@ -546,6 +546,8 @@ async def run_session(
     # outside the pass budget; both run on reserved capacity only.
     judge_allowance = 0
     state_allowance = 0
+    # Verifier tokens a served hold still owes after a main turn overshot its estimate.
+    verify_allowance = 0
     state_running = False
 
     def remember_main(result, messages):
@@ -689,6 +691,7 @@ async def run_session(
             limits.tokens
             + judge_allowance
             + state_allowance
+            + (verify_allowance if lane == dream_harness_transport.VERIFY_LANE else 0)
             - report['price_weighted_tokens']
             - session.counters['search_embedding_token_upper_bound']
         )
@@ -954,16 +957,21 @@ async def run_session(
                 verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
                 8 * 24000,
             )
-            # Same effective budget invoke_once enforces, so batch sizing matches what calls can afford.
-            verify_budget = min(
-                verify_need,
-                max(
-                    0,
-                    limits.tokens
-                    - report['price_weighted_tokens']
-                    - session.counters['search_embedding_token_upper_bound'],
-                ),
+            # Negative after an overshoot; invoke_once sizes calls from the same difference.
+            pass_left = (
+                limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
             )
+            if hold_arm == 'serve' and staged:
+                # A main turn can cost more than its pre-call estimate (a cache miss on a
+                # long history) and eat the hold. Still pay for the staged items' two calls.
+                try:
+                    owed = verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens)
+                    verify_allowance = max(0, owed - pass_left)
+                    hold_row['allowance'] = verify_allowance
+                except Exception as error:
+                    logger.warning('event=dream_lever_error lever=verify_hold exc=%s', type(error).__name__)
+            # Same effective budget invoke_once enforces, so batch sizing matches what calls can afford.
+            verify_budget = min(verify_need, max(0, pass_left + verify_allowance))
             if budget_stop_without_staged_work:
                 support, calls = {}, 0
             else:

@@ -30,11 +30,13 @@ def _limited(runtime, monkeypatch):
     )
 
 
-def _spender(votes=(True, True), late=False):
+def _spender(votes=(True, True), late=False, overshoot=0):
     """Stage one dismissal, then read until the budget stops the loop.
 
     ``late`` stages the dismissal together with finish on the turn that reaches the
     budget edge instead of on the first turn. A ``None`` vote is a failed call.
+    ``overshoot`` makes the edge turn cost that much past its allowance, as a cache
+    miss on a long history does.
     """
     main = []
     verified = []
@@ -80,6 +82,8 @@ def _spender(votes=(True, True), late=False):
             )
         # Spend the weighted budget the turn was allowed, as a long uncached prompt would.
         spend = max(0, min(150000, (mount.budget.tokens or 0) - 500))
+        if edge:
+            spend += overshoot
         return Turn(
             tokens=1000,
             prompt_tokens=1000,
@@ -138,6 +142,27 @@ def test_hold_covers_a_proposal_staged_with_finish_at_the_budget_edge(runtime, m
     model, verified = _spender(late=True)
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
     assert len(verified) == 2 and _status(report) == ['applied'], report['verify_reasons']
+
+
+def test_served_hold_still_verifies_after_a_main_turn_overshoots_the_pass(runtime, monkeypatch):
+    monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
+    _limited(runtime, monkeypatch)
+    model, verified = _spender(overshoot=200000)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert report['price_weighted_tokens'] > LIMITS.tokens
+    assert len(verified) == 2 and _status(report) == ['applied'], report['verify_reasons']
+    assert report['levers']['verify_hold']['allowance'] > 0
+
+
+def test_shadow_hold_grants_no_allowance_after_an_overshoot(runtime, monkeypatch):
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'shadow')
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
+    _limited(runtime, monkeypatch)
+    model, verified = _spender(overshoot=200000)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert not verified and _status(report) == ['verifier_unverified']
+    assert 'allowance' not in report['levers']['verify_hold']
 
 
 @pytest.mark.parametrize('arm,status', [('shadow', 'verifier_unverified'), ('serve', 'applied')])
