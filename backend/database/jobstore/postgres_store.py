@@ -187,13 +187,48 @@ class PostgresStore:
         return [row[0] for row in rows]
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
-        predicate = "state = 'ready'" if ready_only else 'merge_pending'
+        if ready_only:
+            with self._read_conn() as conn:
+                row = conn.execute(
+                    'SELECT min(enqueued_at) FROM jobs WHERE namespace = %s AND priority = %s AND state = %s',
+                    (self.namespace, priority, 'ready'),
+                ).fetchone()
+            return row[0]
+        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold
+
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                'SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND merge_pending '
+                'ORDER BY enqueued_at, key LIMIT %s',
+                (self.namespace, priority, OLDEST_POLICY_HOLD_SCAN_LIMIT + 1),
+            ).fetchall()
+        oldest_hold: float | None = None
+        scanned = 0
+        for enqueued_at, doc in rows:
+            scanned += 1
+            if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
+                break
+            if is_allowance_policy_hold(doc):
+                oldest_hold = oldest_hold if oldest_hold is not None else enqueued_at
+                continue
+            return enqueued_at
+        if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
+            return oldest_hold
+        return None
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        """Count work awaiting a first/re-authorized attempt, never held legacy debt."""
         with self._read_conn() as conn:
             row = conn.execute(
-                f'SELECT min(enqueued_at) FROM jobs WHERE namespace = %s AND priority = %s AND {predicate}',
-                (self.namespace, priority),
+                'SELECT count(*) FROM jobs WHERE namespace = %s AND priority = %s AND state = %s '
+                'AND merge_pending AND available_at <= %s '
+                "AND (doc->'compute_decision'->>'outcome') IN ('unattempted', 'allowed')",
+                (self.namespace, priority, 'ready', now),
             ).fetchone()
-        return row[0]
+        count = row[0] if row else 0
+        if type(count) is not int or count < 0:
+            raise ValueError('nonnegative integer capacity count required')
+        return count
 
     def oldest_retry(self, priority: int) -> float | None:
         with self._read_conn() as conn:
