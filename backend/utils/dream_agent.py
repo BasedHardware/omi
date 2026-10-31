@@ -791,6 +791,7 @@ async def run_session(
                 isinstance(vote, bool) for votes in support.values() for vote in votes
             )
             decisions = Counter()
+            by_kind: dict[str, Counter] = {}
             stage = 'demotion_check'
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
             automatic = auto_apply_kinds(uid) - demoted
@@ -808,6 +809,7 @@ async def run_session(
                         and dream_tools.target_authority_protected(item.operation, item.records)
                     )
                     decisions[decision] += 1
+                    by_kind.setdefault(item.kind, Counter())[decision] += 1
                     category = (
                         'questions'
                         if isinstance(item.operation, HarnessQuestion)
@@ -894,6 +896,7 @@ async def run_session(
                 dream_writing.reset(token)
                 ACTIVE_RUN.reset(effect_scope)
             report['verifier_outcomes'] = dict(decisions)
+            report['verifier_by_kind'] = {kind: dict(row) for kind, row in by_kind.items()}
             report.update(
                 status='complete',
                 notes=session.finish.notes if session.finish else '',
