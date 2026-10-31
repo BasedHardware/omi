@@ -446,7 +446,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Kubernetes / Scheduler | `2e6b6a3b4bddf1427b3a55aa1311c656` | `kubernetes-mixin` | Bundled |
 | Node Exporter / AIX | `7e0a61e486f727d763fb1d86fdd629c2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / MacOS | `629701ea43bf69291922ea45f4a87d37` | `node-exporter-mixin` | Bundled |
-| Omi Core Features | `omi-core-features` | — | **Custom** — glance board. First screen: count of outcomes at 99%+, eight outcome tiles each with an hourly trend, what is stuck, who stayed; everything else is in collapsed rows. User-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), rolling one-hour relevance discard share by Cloud Run service and trigger, and conversation search freshness (summary-vector writes and retrieval degradation). Sync-service series appear after the metrics-egress workflow applies the sync exporter values; the collapsed row retains its Cloud Logging `omi_sync_intake` panel. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
+| Omi Core Features | `omi-core-features` | — | **Custom** — glance board. First screen: eight outcome tiles each with a trend, what is stuck, who stayed; everything else is in collapsed rows. User-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), rolling one-hour relevance discard share by Cloud Run service and trigger, and conversation search freshness (summary-vector writes and retrieval degradation). Sync-service series appear after the metrics-egress workflow applies the sync exporter values; the collapsed row retains its Cloud Logging `omi_sync_intake` panel. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
 | Node Exporter / Nodes | `7d57716318ee0dddbac5a7f451fb7753` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Cluster | `3e97d1d02672cdd0861f4c97c64f89b2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Node | `fac67cfbe174d3ef53eb473d73d9212f` | `node-exporter-mixin` | Bundled |
@@ -1026,14 +1026,17 @@ Grafana availability independently; it cannot prove query-path or delivery healt
 
 ### Metrics Contract
 
-Core Features Prometheus trend panels use `[$__interval]` with a 1h minimum interval, so
-the window equals the step and each sample is read once. The recap trend reads Cloud
+Core Features Prometheus trend panels use `[$__interval]` with `maxDataPoints: 24` and a 5m
+minimum interval, so the window equals the step, each sample is read once, and a short range
+does not end a whole step before now. The line is coloured by its value at each point, and gaps
+under an hour are bridged because low-traffic tiles have empty steps. The recap trend reads Cloud
 Monitoring with a fixed `[1h]` window and `step: 1h`. They follow the time picker;
 on Prometheus a fixed 14-day trend would exceed the 10-day Prometheus retention and cost about
 7 to 15 seconds per tile, so longer history needs recording rules first. Do not set
 `noValue` on these panels: Grafana coerces it to a number and draws gaps as that
-value. The 99%+ count covers the seven Prometheus outcomes; daily recaps come from
-Cloud Monitoring and keep their own 98%/90% bands.
+value. Outcome tiles keep a neutral base threshold step, because "no traffic" takes the base
+colour and absence must not read as a red outcome. Daily recaps come from Cloud Monitoring and
+keep their own 98%/90% bands.
 
 Core Features keeps capture success / (success + failure) separate from the
 3-hour stale terminal count and share. Stale finalization includes deliberate
