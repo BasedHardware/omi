@@ -47,6 +47,19 @@ RECORD_CLOSE_OUTSTANDING_REFUSALS = Counter(
     'omi_pusher_record_close_outstanding_refusals_total',
     'Close metadata admissions refused because the outstanding-call cap is full',
 )
+RECORD_CLOSE_REFUSALS = Counter(
+    'omi_pusher_record_close_refusals_total',
+    'Close metadata calls refused before any write is submitted',
+    ['reason'],
+)
+_CLOSE_REFUSAL_COUNTERS = {
+    'admission': RECORD_CLOSE_REFUSALS.labels(reason='admission'),
+    'outstanding': RECORD_CLOSE_REFUSALS.labels(reason='outstanding'),
+}
+
+
+class _CloseAdmissionRefused(ExecutorSaturatedError):
+    """No write was submitted; retry without consuming a write-failure attempt."""
 
 
 class _CloseAdmission:
@@ -227,11 +240,13 @@ class PusherRecordBarrier:
             return await run_blocking(record_barrier_executor, fn, *args, **kwargs)
         slots = _close_retry_slots
         if not slots.acquire(blocking=False):
-            raise ExecutorSaturatedError('record close retry capacity')
+            _CLOSE_REFUSAL_COUNTERS['admission'].inc()
+            raise _CloseAdmissionRefused('record close retry capacity')
         if not _close_outstanding_slots.acquire(blocking=False):
             slots.release()
             RECORD_CLOSE_OUTSTANDING_REFUSALS.inc()
-            raise ExecutorSaturatedError('record close outstanding capacity')
+            _CLOSE_REFUSAL_COUNTERS['outstanding'].inc()
+            raise _CloseAdmissionRefused('record close outstanding capacity')
         admission = _CloseAdmission()
         context = contextvars.copy_context()
 
@@ -341,6 +356,8 @@ class PusherRecordBarrier:
                     self.upload_sessions.pop(conversation_id, None)
                 else:
                     logger.info('event=record_tokens_recleared count=1')
+        except _CloseAdmissionRefused:
+            return self._close_admission_refused(conversation_id)
         except Exception:
             return self._close_failed(conversation_id, 'finish')
         try:
@@ -350,10 +367,18 @@ class PusherRecordBarrier:
             if refused is not None:
                 _SEAL_REFUSAL_COUNTERS[refused].inc()
                 logger.info('event=record_seal_refused reason=%s', refused)
+        except _CloseAdmissionRefused:
+            return self._close_admission_refused(conversation_id)
         except Exception:
             return self._close_failed(conversation_id, 'seal')
         self.retire_close(conversation_id)
         return True
+
+    def _close_admission_refused(self, conversation_id: str) -> bool:
+        # The drain loop already yields between scans. A positive, jittered
+        # retry time also bounds admission checks without adding tasks/timers.
+        self.close_retry_at[conversation_id] = time.monotonic() + random.uniform(0.5, 2.0)
+        return False
 
     def hold_recording(self, conversation_id: str, *, tail_committed: bool = False) -> None:
         """Keep the token; only a proven durable tail may later be re-cleared."""
