@@ -196,10 +196,19 @@ a worker already blocked in projection when the socket closes.
 `pusher_socket_closed_total` runs in a synchronous finalizer with closed reason,
 age and `frames_seen` (`none`, `control_only`, `audio`) labels. It counts handler
 exit after socket cleanup, not proof that TCP remained open during processing.
-These families add at most 225 series per emitting process, including optional
-Prometheus creation timestamps. The authenticated `/metrics` router and committed
+These five families add at most 225 series per emitting process, including optional
+Prometheus creation timestamps. Two label-free process-close measurements add
+three more series (228 maximum total):
+`omi_pusher_record_close_abandoned_outstanding` counts abandoned metadata calls
+until their futures settle, and `omi_pusher_record_close_outstanding_refusals_total`
+counts admissions refused at the outstanding-call cap. Deadline and completion
+race under the same admission lock, so a completed call cannot become abandoned
+or decrement the gauge twice. Twelve never-settling calls can stop further close
+progress in that process; the producer fences remain. This accepted bounded
+behavior is observable rather than a trigger for age-based release.
+The authenticated `/metrics` router and committed
 `pusher-metrics` scrape configuration expose the complete families. Release
-verification must still prove the serving targets are up and these series are
+verification must still prove the serving targets are up and all seven families are
 queryable; local exposition does not prove live scrape coverage.
 
 After immutable custody commits, the receipt enters one owned pending projection

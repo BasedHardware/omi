@@ -7,9 +7,10 @@ races a reduced real-clock budget.
 
 import asyncio
 import struct
+import threading
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.websockets import WebSocketDisconnect
@@ -22,6 +23,7 @@ from tests.unit.test_audio_durable_outbox import (
     remote,
     pusher,
     finish_module,
+    barrier_module,
 )
 from utils import pusher_receive_metrics as metrics
 from utils.other.audio_outbox import commit_pcm
@@ -377,3 +379,52 @@ async def test_quiet_control_session_never_enters_capacity_wait(inline_session, 
         release.set()
         await asyncio.wait_for(handler, 5)
     assert sock.close_code == 1000
+
+
+@pytest.mark.parametrize('abandon_first', [True, False])
+def test_abandoned_close_gauge_follows_both_completion_race_orders(monkeypatch, abandon_first):
+    active, outstanding = MagicMock(), MagicMock()
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', active)
+    monkeypatch.setattr(barrier_module, '_close_outstanding_slots', outstanding)
+    gauge = barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING
+    before = gauge._value.get()
+    admission = barrier_module._CloseAdmission()
+    if abandon_first:
+        admission.abandon()
+        admission.abandon()  # A second deadline observation cannot double-count.
+        assert gauge._value.get() == before + 1
+        admission.completed(None)
+    else:
+        admission.completed(None)
+        admission.abandon()  # An overdue timer after completion cannot count it.
+    assert gauge._value.get() == before
+    active.release.assert_called_once()
+    outstanding.release.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_active_close_admission_refusal_is_not_counted_as_outstanding_cap(inline_session, monkeypatch):
+    _, _, barrier, _ = inline_session
+    barrier.keep_close_pending = True
+    occupied = threading.BoundedSemaphore(1)
+    occupied.acquire()
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', occupied)
+    before = barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get()
+    with pytest.raises(barrier_module.ExecutorSaturatedError):
+        await barrier._close_metadata('conversation', lambda: None)
+    assert barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get() == before
+
+
+def test_close_cap_metrics_have_no_labels_and_are_exposed_by_metrics_router(monkeypatch):
+    from routers import metrics as metrics_router
+
+    monkeypatch.setenv('METRICS_SECRET', 'synthetic-scrape-token')
+    response = metrics_router.metrics(SimpleNamespace(credentials='synthetic-scrape-token'))
+    body = response.body.decode()
+    for collector, name in (
+        (barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING, 'omi_pusher_record_close_abandoned_outstanding'),
+        (barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS, 'omi_pusher_record_close_outstanding_refusals_total'),
+    ):
+        assert name in body
+        for family in collector.collect():
+            assert all(sample.labels == {} for sample in family.samples)
