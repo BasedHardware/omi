@@ -3162,7 +3162,7 @@ environments:
             KEIKI_WHATSAPP_AGENT_ID: {value: ce208cdb-f08b-40ce-8817-bec102f072dc, category: rollout}
             OMI_WHATSAPP_ENABLED: {value: 'on', category: rollout}
             OMI_WHATSAPP_PROVIDER: {value: keiki, category: rollout}
-            OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967"}}',
+            OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967","lines":[{"address":"+14155252967","started":"2026-10-30"}]}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}

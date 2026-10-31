@@ -228,6 +228,25 @@ void main() {
       expect(find.text('Open Messages'), findsOneWidget);
     });
 
+    testWidgets('Open Messages after connecting texts the assigned line, not the flag address', (tester) async {
+      final backend = await pumpPage(tester);
+      backend.proofAddress = '+15550100222';
+      await tester.tap(find.byKey(const ValueKey('chat_apps_row_imessage')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('chat_apps_open_messages')));
+      await settle(tester);
+      expect(launched.single.toString(), contains('+15550100222'));
+
+      backend.links = [linkJson(id: linkIdIMessage, channel: 'imessage', externalId: '+15550100')];
+      await tester.pump(const Duration(milliseconds: 150));
+      await settle(tester);
+      await tester.pumpAndSettle();
+      launched.clear();
+      await tester.tap(find.byKey(const ValueKey('chat_apps_open_connected')));
+      await settle(tester);
+      expect(launched.single.toString(), contains('+15550100222'));
+    });
+
     testWidgets('an expired code offers a new one', (tester) async {
       final backend = FakeMessagingBackend()..proofTtl = const Duration(milliseconds: 400);
       await pumpPage(tester, backend: backend);
