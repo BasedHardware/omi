@@ -41,10 +41,16 @@ At graceful finish, two independent verifier calls see only each staged edit,
 its cited evidence and minimal context, never planner history, seed notes or each
 other's response or the proposer's reason. The two mounts use distinct audit/falsification framing. Batches use server proposal IDs; duplicate/missing IDs fail
 verification. Staging budgets reserve verification capacity, so turn/tool/read
-exhaustion can still verify accepted proposals.
+exhaustion can still verify accepted proposals. `DREAM_VERIFY_HOLD_MODE`
+(default serve) also holds the two verifier calls' token reserve, sized from the
+staged evidence, out of the main loop's budget, so a pass that stops on its token
+budget still verifies what it staged; `off` restores the old split. Each item
+left without two votes is counted in `verify_reasons` on the `dream_pass` record:
+`oversized`, `ids_invalid`, `call_failed`, `single_vote`, `budget_tokens` or
+`budget_deadline`.
 
 Both agree plus auto eligibility plus no Undo-rate demotion permits journaled
-apply. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review. Eligible proposals are ranked by value then verifier support.
+apply. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review, except under `DREAM_LIBERAL_VERIFIER_MODE=serve` (default shadow, which only counts `would_apply`): an auto-eligible `dismiss_person`, `spelling`, `title`, `overview`, `set_language` or `vocabulary` item unverified by budget, deadline or a failed call, with no disagree vote, applies with the usual journal and Undo. Oversized evidence and invalid verifier ids never apply. Eligible proposals are ranked by value then verifier support.
 Values 1–2 are never offered; proposal/answer attention shares three UTC-day
 slots. User-authored facts (`direct_user_statement`, `explicit_remember`,
 `onboarding`) require explicit Review acceptance even when both verifiers agree.
