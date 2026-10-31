@@ -4,17 +4,27 @@ import uuid
 import os
 import time
 import logging
+import asyncio
+import contextvars
+import random
+import threading
 from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
+from typing import Callable, ParamSpec, TypeVar
 from prometheus_client import Counter
 
 from database import record_audio as record_audio_db
-from utils.executors import record_barrier_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 CLOSE_RETRY_BUDGET = 3
+CLOSE_RETRY_MAX_SECONDS = 60.0
+CLOSE_RETRY_MAX_IN_FLIGHT = 4
+_close_retry_slots = threading.BoundedSemaphore(CLOSE_RETRY_MAX_IN_FLIGHT)
+P = ParamSpec('P')
+T = TypeVar('T')
 
 RECORD_BARRIER_FAILURES = Counter(
     'omi_pusher_record_barrier_failures_total', 'Record barrier metadata failures; audio upload continues', ['stage']
@@ -144,18 +154,44 @@ class PusherRecordBarrier:
         self.checked_conversations: set[str] = set()
         self.pending_clears: set[tuple[str, str]] = set()
         self.close_failures: dict[str, int] = {}
+        self.close_retry_at: dict[str, float] = {}
         self.keep_close_pending = False
 
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
-        attempts = min(self.close_failures.get(conversation_id, 0) + 1, CLOSE_RETRY_BUDGET)
+        attempts = min(self.close_failures.get(conversation_id, 0) + 1, 6)
         if (not self.keep_close_pending and attempts >= CLOSE_RETRY_BUDGET) or (
             conversation_id not in self.close_failures and len(self.close_failures) >= 128
         ):
             self.close_failures.pop(conversation_id, None)
+            self.close_retry_at.pop(conversation_id, None)
             return True  # Stop this bounded drain; leave durable repair debt.
         self.close_failures[conversation_id] = attempts
+        if self.keep_close_pending:
+            ceiling = min(2.0**attempts, CLOSE_RETRY_MAX_SECONDS)
+            self.close_retry_at[conversation_id] = time.monotonic() + random.uniform(ceiling / 2, ceiling)
         return False
+
+    async def _close_metadata(self, conversation_id: str, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+        if not self.keep_close_pending or conversation_id not in self.close_failures:
+            return await run_blocking(record_barrier_executor, fn, *args, **kwargs)
+        slots = _close_retry_slots
+        if not slots.acquire(blocking=False):
+            raise ExecutorSaturatedError('record close retry capacity')
+        context = contextvars.copy_context()
+
+        def call() -> T:
+            return context.run(fn, *args, **kwargs)
+
+        try:
+            future = record_barrier_executor.submit(call)
+        except BaseException:
+            slots.release()
+            raise
+        # Release on the underlying worker's completion, not caller cancellation:
+        # a cancelled await cannot make a still-running Firestore call free capacity.
+        future.add_done_callback(lambda _: slots.release())
+        return await asyncio.wrap_future(future)
 
     async def begin_recording(self, conversation_id: str) -> None:
         if conversation_id in self.checked_conversations or conversation_id in self.failed_recordings:
@@ -200,6 +236,8 @@ class PusherRecordBarrier:
         """
         if self.record_upload_failed or conversation_id in self.failed_recordings:
             return True  # A held tail is not a successful drain.
+        if self.keep_close_pending and time.monotonic() < self.close_retry_at.get(conversation_id, 0):
+            return False
         token = self.upload_sessions.get(conversation_id)
         registry = _process_record_tokens()
         if token is not None:
@@ -214,8 +252,8 @@ class PusherRecordBarrier:
             for cid, token in list(self.pending_clears):
                 if cid != conversation_id:
                     continue
-                await run_blocking(
-                    record_barrier_executor,
+                await self._close_metadata(
+                    conversation_id,
                     record_audio_db.set_record_upload_pending,
                     self.uid,
                     conversation_id,
@@ -231,8 +269,8 @@ class PusherRecordBarrier:
         except Exception:
             return self._close_failed(conversation_id, 'finish')
         try:
-            refused = await run_blocking(
-                record_barrier_executor, record_audio_db.seal_record_audio, self.uid, conversation_id
+            refused = await self._close_metadata(
+                conversation_id, record_audio_db.seal_record_audio, self.uid, conversation_id
             )
             if refused is not None:
                 _SEAL_REFUSAL_COUNTERS[refused].inc()
@@ -240,6 +278,7 @@ class PusherRecordBarrier:
         except Exception:
             return self._close_failed(conversation_id, 'seal')
         self.close_failures.pop(conversation_id, None)
+        self.close_retry_at.pop(conversation_id, None)
         return True
 
     def hold_recording(self, conversation_id: str, *, tail_committed: bool = False) -> None:

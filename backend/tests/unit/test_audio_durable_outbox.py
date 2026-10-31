@@ -1401,8 +1401,8 @@ async def test_closed_socket_retains_real_drain_past_both_deadlines(inline_sessi
 
     monkeypatch.setattr(finish_module, 'start_background_task', track)
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
-    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.01)
-    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.01)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.5)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
     sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
     handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
     try:
@@ -1489,6 +1489,7 @@ async def test_later_recording_does_not_starve_earlier_close(inline_session, mon
 @pytest.mark.parametrize('stage', ['clear', 'seal'])
 async def test_durable_metadata_close_retries_beyond_legacy_budget(inline_session, monkeypatch, stage):
     client, path, barrier, _ = inline_session
+    monkeypatch.setattr(barrier_module, 'CLOSE_RETRY_MAX_SECONDS', 0.01)
     original = record_audio_db.set_record_upload_pending
     calls = []
 
@@ -1518,6 +1519,102 @@ async def test_durable_metadata_close_retries_beyond_legacy_budget(inline_sessio
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('jitter_fraction', [0.0, 1.0])
+@pytest.mark.parametrize('stage', ['clear', 'seal'])
+async def test_durable_close_backoff_uses_real_barrier(inline_session, monkeypatch, jitter_fraction, stage):
+    client, path, barrier, _ = inline_session
+    await barrier.begin_recording('conversation')
+    barrier.keep_close_pending = True
+    clock = [100.0]
+    monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(barrier_module.random, 'uniform', lambda low, high: low + (high - low) * jitter_fraction)
+    target = 'set_record_upload_pending' if stage == 'clear' else 'seal_record_audio'
+    original = getattr(record_audio_db, target)
+    failing = MagicMock(side_effect=OSError('synthetic metadata outage'))
+    monkeypatch.setattr(record_audio_db, target, failing)
+    for attempt in range(1, 11):
+        assert not await barrier.finish_recording('conversation')
+        assert failing.call_count == attempt
+        if stage == 'clear':
+            assert client.rows[path]['record_upload_sessions'], 'failed clears must keep the producer fence'
+        assert not client.rows[path].get('record_audio_closed')
+        ceiling = min(2.0**attempt, 60.0)
+        delay = ceiling / 2 + ceiling / 2 * jitter_fraction
+        assert barrier.close_retry_at['conversation'] == clock[0] + delay
+        clock[0] += delay - 0.01
+        for _ in range(10):
+            assert not await barrier.finish_recording('conversation')
+        assert failing.call_count == attempt, 'worker ticks must not dispatch before the deadline'
+        clock[0] += 0.01
+    monkeypatch.setattr(record_audio_db, target, original)
+    assert await barrier.finish_recording('conversation')
+    assert client.rows[path]['record_audio_closed']
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert barrier.close_failures == barrier.close_retry_at == {}
+
+
+@pytest.mark.asyncio
+async def test_durable_close_retry_capacity_survives_caller_cancellation(inline_session, monkeypatch):
+    client, path, _, _ = inline_session
+    count = barrier_module.CLOSE_RETRY_MAX_IN_FLIGHT
+    slots = threading.BoundedSemaphore(count)
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', slots)
+    barriers = [PusherRecordBarrier('owner') for _ in range(count + 1)]
+    for barrier in barriers:
+        await barrier.begin_recording('conversation')
+        barrier.keep_close_pending = True
+    original = record_audio_db.set_record_upload_pending
+    monkeypatch.setattr(
+        record_audio_db, 'set_record_upload_pending', MagicMock(side_effect=OSError('synthetic metadata outage'))
+    )
+    for barrier in barriers:
+        assert not await barrier.finish_recording('conversation')
+    clock = [1000.0]
+    monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    for barrier in barriers:
+        barrier.close_retry_at['conversation'] = clock[0]
+    entered = asyncio.Event()
+    finished = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    calls = []
+    completions = []
+
+    def pending(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == count:
+            loop.call_soon_threadsafe(entered.set)
+        assert release.wait(10)
+        try:
+            return original(*args, **kwargs)
+        finally:
+            completions.append(True)
+            if len(completions) == count:
+                loop.call_soon_threadsafe(finished.set)
+
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', pending)
+    tasks = [asyncio.create_task(barrier.finish_recording('conversation')) for barrier in barriers[:-1]]
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        assert not await barriers[-1].finish_recording('conversation')
+        assert len(calls) == count
+        tasks[0].cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await tasks[0]
+        clock[0] += 60
+        assert not await barriers[-1].finish_recording('conversation')
+        assert len(calls) == count, 'cancelled caller must not free a running retry slot'
+        assert client.rows[path]['record_upload_sessions']
+    finally:
+        release.set()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.wait_for(finished.wait(), 5)
+    clock[0] += 60
+    assert await barriers[-1].finish_recording('conversation')
+    assert client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
 async def test_non_record_socket_does_not_consume_closed_drain_capacity(inline_session, monkeypatch):
     client, path, _, _ = inline_session
     client.rows[path]['record_lane_owner'] = 'legacy_final_pass_v1'
@@ -1532,8 +1629,8 @@ async def test_non_record_socket_does_not_consume_closed_drain_capacity(inline_s
 
     monkeypatch.setattr(pusher, 'retain_closed_record_drain', retain)
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
-    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.01)
-    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.01)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.5)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
     sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
     handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
     try:
