@@ -27,6 +27,8 @@ def prepare_summary_task(
             .get()
         )
         data = task.to_dict() if task.exists else None
+        if isinstance(data, dict) and data.get('deleted') is True:
+            data = None
         candidate_id = data.get('candidate_id') if data else None
         candidate = (
             candidates_db.get_candidate(uid, candidate_id) if isinstance(candidate_id, str) and candidate_id else None
@@ -48,3 +50,4 @@ def prepare_summary_task(
         idempotency_key=idempotency_key,
         account_generation=account_generation,
     )
+
