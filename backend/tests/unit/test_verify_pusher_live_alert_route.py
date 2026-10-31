@@ -209,6 +209,8 @@ def test_prepublish_does_not_deadlock_on_a_not_yet_deployed_metric_family(verifi
 @pytest.mark.parametrize(
     'missing',
     [
+        'omi_pusher_record_close_abandoned_outstanding',
+        'omi_pusher_record_close_outstanding_refusals_total',
         'pusher_socket_frames_total',
         'pusher_receive_work_stalls_total',
         'pusher_receive_work_stalled_handlers',

@@ -12,7 +12,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, ParamSpec, TypeVar
-from prometheus_client import Counter
+from prometheus_client import Counter, Gauge
 
 from database import record_audio as record_audio_db
 from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking
@@ -39,6 +39,14 @@ RECORD_CLOSE_ABANDONED = Counter(
     ['reason'],
 )
 _CLOSE_DEADLINE_COUNTER = RECORD_CLOSE_ABANDONED.labels(reason='deadline')
+RECORD_CLOSE_ABANDONED_OUTSTANDING = Gauge(
+    'omi_pusher_record_close_abandoned_outstanding',
+    'Outstanding close metadata calls abandoned at their admission deadline; process-local, no identifiers',
+)
+RECORD_CLOSE_OUTSTANDING_REFUSALS = Counter(
+    'omi_pusher_record_close_outstanding_refusals_total',
+    'Close metadata admissions refused because the outstanding-call cap is full',
+)
 
 
 class _CloseAdmission:
@@ -56,11 +64,14 @@ class _CloseAdmission:
                 self.state = 'abandoned'
                 self.slots.release()
                 _CLOSE_DEADLINE_COUNTER.inc()
+                RECORD_CLOSE_ABANDONED_OUTSTANDING.inc()
 
     def completed(self, _future):
         with self.lock:
             if self.state == 'active':
                 self.slots.release()
+            elif self.state == 'abandoned':
+                RECORD_CLOSE_ABANDONED_OUTSTANDING.dec()
             self.outstanding_slots.release()
             self.state = 'completed'
 
@@ -219,6 +230,7 @@ class PusherRecordBarrier:
             raise ExecutorSaturatedError('record close retry capacity')
         if not _close_outstanding_slots.acquire(blocking=False):
             slots.release()
+            RECORD_CLOSE_OUTSTANDING_REFUSALS.inc()
             raise ExecutorSaturatedError('record close outstanding capacity')
         admission = _CloseAdmission()
         context = contextvars.copy_context()

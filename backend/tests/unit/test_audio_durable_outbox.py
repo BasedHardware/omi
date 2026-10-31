@@ -1724,6 +1724,8 @@ async def test_four_unknown_metadata_calls_allow_fifth_and_safe_late_success(inl
 @pytest.mark.asyncio
 async def test_abandoned_metadata_calls_are_bounded_and_capacity_recovers(inline_session, monkeypatch):
     _, _, barrier, _ = inline_session
+    gauge_before = barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get()
+    refusals_before = barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get()
     barrier.keep_close_pending = True
     active = barrier_module.CLOSE_RETRY_MAX_IN_FLIGHT
     outstanding = barrier_module.CLOSE_METADATA_MAX_OUTSTANDING
@@ -1751,9 +1753,12 @@ async def test_abandoned_metadata_calls_are_bounded_and_capacity_recovers(inline
         await barrier._close_metadata('conversation', lambda: None)
     assert len(futures) == outstanding
     assert barrier_module._CLOSE_DEADLINE_COUNTER._value.get() == before + outstanding
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before + outstanding
+    assert barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get() == refusals_before + 1
     # Completion of any abandoned call must permit new admission even if
     # every other call remains stalled after its deadline.
     futures[0].set_result(None)
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before + outstanding - 1
     retry = asyncio.create_task(barrier._close_metadata('conversation', lambda: None))
     await asyncio.sleep(0)
     assert len(futures) == outstanding + 1
@@ -1763,6 +1768,7 @@ async def test_abandoned_metadata_calls_are_bounded_and_capacity_recovers(inline
         future.set_exception(OSError('late unknown write failure'))
     await asyncio.sleep(0)
     await asyncio.sleep(0)
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before
     assert all(slots.acquire(blocking=False) for _ in range(active))
     assert not slots.acquire(blocking=False)
     assert all(outstanding_slots.acquire(blocking=False) for _ in range(outstanding))

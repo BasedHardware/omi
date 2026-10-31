@@ -80,6 +80,8 @@ REQUIRED_METRICS = {
     "omi_journey_terminal_total",
 }
 PUSHER_RECEIVE_METRICS = {
+    'omi_pusher_record_close_abandoned_outstanding',
+    'omi_pusher_record_close_outstanding_refusals_total',
     'pusher_socket_frames_total',
     'pusher_receive_work_stalls_total',
     'pusher_receive_work_stalled_handlers',
