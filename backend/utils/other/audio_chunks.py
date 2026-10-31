@@ -20,7 +20,8 @@ MAX_SPEAKER_BYTES = 64 * 1024 * 1024
 MAX_SPEAKER_READ_SECONDS = 30.0
 # Widened sessions hold decoded PCM across embedding, so they share one pool per process.
 MAX_SPEAKER_PCM_POOL_BYTES = 512 * 1024 * 1024
-_pcm_pool_lock = threading.Lock()
+# Reentrant: a collected session's __del__ can run on a thread already holding this lock.
+_pcm_pool_lock = threading.RLock()
 _pcm_pool_bytes = 0
 
 
