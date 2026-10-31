@@ -192,6 +192,28 @@ class TestConversationsToTsv(unittest.TestCase):
             sys.stdin = saved_stdin
             sys.stdout = saved_stdout
 
+    def test_extract_transcript_with_transcript_segments_key(self):
+        conv = {
+            "id": "c1",
+            "transcript_segments": [
+                {"speaker": 0, "text": "Hello from speaker zero."},
+                {"speaker": 1, "text": "Reply from speaker one."},
+            ],
+        }
+        res = c2tsv.extract_transcript(conv)
+        self.assertEqual(res, "Speaker 0: Hello from speaker zero. Speaker 1: Reply from speaker one.")
+
+    def test_extract_transcript_preserves_speaker_label_and_text(self):
+        conv = {
+            "id": "c2",
+            "segments": [
+                {"speaker_label": "Host", "content": "Welcome to the show."},
+                {"speaker": 0, "text": "Thanks for having me."},
+            ],
+        }
+        res = c2tsv.extract_transcript(conv)
+        self.assertEqual(res, "Host: Welcome to the show. Speaker 0: Thanks for having me.")
+
 
 if __name__ == "__main__":
     unittest.main()
