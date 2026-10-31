@@ -5,6 +5,9 @@ data_plane_project: based-hardware
 overlay:
   llm_gateway:
     env:
+      OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+      OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+      OMI_FLAGS_SOURCE: {value: dual, category: rollout}
       # Retirement is an operator decision; expiring evidence can revive old ACTIVE state.
       OMI_VERTEX_RESERVATION_STATES:
         value: '{"gemini-2.5-flash":"inactive"}'
@@ -36,6 +39,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+        OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+        OMI_FLAGS_SOURCE: {value: dual, category: rollout}
         FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         BATCH_PIPELINE_ENABLED:
@@ -227,6 +233,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+        OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+        OMI_FLAGS_SOURCE: {value: dual, category: rollout}
         FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         AUDIO_ARCHIVE_PERCENT:
@@ -404,6 +413,9 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+      OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+      OMI_FLAGS_SOURCE: {value: dual, category: rollout}
       OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
         value: '12435'
       OMI_CUSTOMER_DATA_PROJECT:
@@ -461,6 +473,9 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+          OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           # Monthly-total scope deliberately stays 100/c2fs_20261026_r1 on these four prod services;
           # base/GKE/jobs/desktop/dev stay 0/v1. Full literal also carries people=5, memory=0, privacy=0.
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
@@ -796,6 +811,9 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+          OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           # Monthly-total scope deliberately stays 100/c2fs_20261026_r1 on these four prod services;
           # base/GKE/jobs/desktop/dev stay 0/v1. Full literal also carries people=5, memory=0, privacy=0.
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
