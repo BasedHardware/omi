@@ -9264,7 +9264,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Tal til din Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Sig et par ord, og se dem dukke op i realtid';
+  String get deviceOnboardingTranscriptionSubtitle => 'Sig noget i stil med\n“Mind mig om at ringe til Sam i morgen.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Godt klaret!';
@@ -9344,16 +9344,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Afslut';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Lær din Omi at kende';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Prøv live-transskription, stil et spørgsmål og genvejen med dobbelttryk.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
 
   @override
   String quoteJumpToTime(String duration) {

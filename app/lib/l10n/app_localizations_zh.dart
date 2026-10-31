@@ -9125,7 +9125,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => '对着 Omi 说话';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => '说几句话，看它们实时显示出来';
+  String get deviceOnboardingTranscriptionSubtitle => '试着说\n“提醒我明天给山姆打电话。”';
 
   @override
   String get deviceOnboardingGoodJob => '做得好！';
@@ -9204,15 +9204,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '完成';
-
-  @override
-  String get deviceOnboardingIntroTitle => '了解你的 Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => '试试实时转录、提问和双击快捷方式。';
-
-  @override
-  String get deviceOnboardingIntroDuration => '大约 1 分钟';
 
   @override
   String quoteJumpToTime(String duration) {

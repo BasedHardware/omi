@@ -9347,7 +9347,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'உங்கள் Omi-யிடம் பேசுங்கள்';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'சில வார்த்தைகள் சொல்லி, அவை உடனடியாகத் தோன்றுவதைப் பாருங்கள்';
+  String get deviceOnboardingTranscriptionSubtitle => 'இப்படி ஏதாவது சொல்லுங்கள்\n“நாளை சாமை அழைக்க நினைவூட்டு.”';
 
   @override
   String get deviceOnboardingGoodJob => 'அருமை!';
@@ -9427,16 +9427,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'முடிக்கவும்';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'நேரடி எழுத்தாக்கம், கேள்வி கேட்பது, இருமுறை தட்டும் குறுக்குவழி ஆகியவற்றை முயன்று பாருங்கள்.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'சுமார் 1 நிமிடம்';
 
   @override
   String quoteJumpToTime(String duration) {

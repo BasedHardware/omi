@@ -9223,7 +9223,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'พูดใส่ Omi ของคุณ';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'พูดสักสองสามคำแล้วดูข้อความปรากฏแบบเรียลไทม์';
+  String get deviceOnboardingTranscriptionSubtitle => 'ลองพูดว่า\n“เตือนให้ฉันโทรหาแซมพรุ่งนี้”';
 
   @override
   String get deviceOnboardingGoodJob => 'เยี่ยมมาก!';
@@ -9302,15 +9302,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'เสร็จสิ้น';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'ทำความรู้จักกับ Omi ของคุณ';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'ลองการถอดเสียงสด การถามคำถาม และทางลัดแตะสองครั้ง';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'ประมาณ 1 นาที';
 
   @override
   String quoteJumpToTime(String duration) {

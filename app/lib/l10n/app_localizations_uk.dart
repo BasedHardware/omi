@@ -9293,8 +9293,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Говоріть у свій Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle =>
-      'Скажіть кілька слів і спостерігайте, як вони з\'являються в реальному часі';
+  String get deviceOnboardingTranscriptionSubtitle => 'Скажіть, наприклад:\n«Нагадай мені завтра зателефонувати Сему.»';
 
   @override
   String get deviceOnboardingGoodJob => 'Чудово!';
@@ -9374,15 +9373,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Завершити';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Знайомство з Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'Спробуйте живу транскрипцію, запитання та швидку дію подвійним дотиком.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Близько 1 хвилини';
 
   @override
   String quoteJumpToTime(String duration) {

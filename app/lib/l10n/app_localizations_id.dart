@@ -9276,7 +9276,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceOnboardingTranscriptionSubtitle =>
-      'Ucapkan beberapa kata dan lihat kata-katanya muncul secara langsung';
+      'Ucapkan sesuatu seperti\n“Ingatkan aku untuk menelepon Sam besok.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Bagus sekali!';
@@ -9356,16 +9356,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Selesai';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Kenali Omi Anda';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Coba transkripsi langsung, mengajukan pertanyaan, dan pintasan ketuk dua kali.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Sekitar 1 menit';
 
   @override
   String quoteJumpToTime(String duration) {
