@@ -79,6 +79,22 @@ REQUIRED_METRICS = {
     "omi_journey_accepted_total",
     "omi_journey_terminal_total",
 }
+PUSHER_RECEIVE_METRICS = {
+    'omi_pusher_record_close_abandoned_outstanding',
+    'omi_pusher_record_close_outstanding_refusals_total',
+    'pusher_socket_frames_total',
+    'pusher_receive_work_stalls_total',
+    'pusher_receive_work_stalled_handlers',
+    'pusher_receive_work_duration_seconds_count',
+    'pusher_socket_closed_total',
+}
+METRIC_COVERAGE_QUERY = (
+    'count({__name__=~"'
+    + '|'.join(sorted(REQUIRED_METRICS))
+    + '",job=~"pusher-metrics|backend-listen-metrics"} or {__name__=~"'
+    + '|'.join(sorted(PUSHER_RECEIVE_METRICS))
+    + '",job="pusher-metrics"}) by (__name__,job)'
+)
 REQUIRED_JOBS = {"pusher-metrics", "backend-listen-metrics"}
 # Per-target `up` series. Pusher and backend-listen additionalScrapeConfigs both
 # relabel namespace and pod. min(up) is applied in process to the series that
@@ -826,8 +842,13 @@ def validate_live_route(
         if isinstance(item, dict) and isinstance(item.get("metric"), dict)
     }
     required_metric_jobs = {(metric, job) for metric in REQUIRED_METRICS for job in REQUIRED_JOBS}
-    if phase == "postrollout" and observed_metrics != required_metric_jobs:
+    if phase == "postrollout" and not required_metric_jobs <= observed_metrics:
         errors.append("live Prometheus finalization telemetry sources are missing or incomplete")
+    if (
+        phase == 'postrollout'
+        and not {(metric, 'pusher-metrics') for metric in PUSHER_RECEIVE_METRICS} <= observed_metrics
+    ):
+        errors.append('live Prometheus pusher receive-work telemetry sources are missing or incomplete')
     points = contact_points if isinstance(contact_points, list) else []
     for receiver in receivers:
         if not any(
@@ -870,9 +891,7 @@ def _prometheus_instant_query_or_error(base_url: str, token: str, query: str) ->
 
 def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) -> list[str]:
     metric_query_path = "/api/datasources/proxy/uid/prometheus/api/v1/query?" + urllib.parse.urlencode(
-        {
-            "query": 'count({__name__=~"omi_capture_finalization_failures_total|omi_journey_accepted_total|omi_journey_terminal_total",job=~"pusher-metrics|backend-listen-metrics"}) by (__name__,job)'
-        }
+        {"query": METRIC_COVERAGE_QUERY}
     )
     up_query = PREPUBLISH_UP_QUERY if phase == "prepublish" else SERVING_UP_QUERY
     failures: list[str] = []
