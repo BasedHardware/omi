@@ -3748,7 +3748,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "app_open_reask"
           ]
         },
         "currentPlan": {
@@ -4467,7 +4468,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "app_open_reask"
           ]
         }
       },

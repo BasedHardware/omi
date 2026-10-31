@@ -6,6 +6,7 @@ import 'package:omi/pages/paywall/trial_paywall_page.dart';
 import 'package:omi/pages/paywall/web_paywall_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
+import 'package:omi/services/experiments/paywall_reask.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -42,6 +43,7 @@ abstract final class PaywallRouter {
     // The reader is about to see a paywall: the variant page below, or the sheet the opener shows
     // right after a false return. Either way they count for their arm.
     PaywallExperiment.recordExposure(resolved, record: record);
+    PaywallReask.noteShown();
     const TypedEvents().emit(PaywallVariantShown(variant: variantWire(resolved.variant), source: sourceWire(source)));
     if (resolved.isControl || trialBlocked) return false;
 
