@@ -387,6 +387,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   List<Wal> get testRetiredWals => _retiredWals;
 
+  @visibleForTesting
+  Future<void> drainBufferQueueForTesting() => _enqueueBuffer(() async {});
+
   @override
   void cancelSync() {
     _isCancelled = true;
