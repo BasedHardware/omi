@@ -6,6 +6,7 @@ or end-user screens.
 """
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 import unittest
@@ -114,11 +115,6 @@ def _calendar_module():
         emit_sync_failed=MagicMock(),
         emit_sync_succeeded=MagicMock(),
     )
-    log_sanitizer = _module(
-        "utils.log_sanitizer",
-        sanitize=lambda text: text,
-        sanitize_pii=lambda text: text,
-    )
     stubs = {
         "httpx": httpx,
         "langchain_core": _package("langchain_core"),
@@ -137,10 +133,10 @@ def _calendar_module():
         "utils.retrieval.tools.integration_base": integration_base,
         "utils.retrieval.tools.google_utils": google_utils,
         "utils.integration_telemetry": telemetry,
-        "utils.log_sanitizer": log_sanitizer,
     }
 
     with stub_modules(stubs):
+        load_module_fresh("utils.log_sanitizer", str(BACKEND_DIR / "utils" / "log_sanitizer.py"))
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
         load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
         load_module_fresh(
@@ -423,6 +419,44 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(self.SENSITIVE, result)
         self.assertIn("Standup", result)
         self.assertIn("could not delete this event", result)
+
+    async def test_delete_failures_keep_exception_text_out_of_response_and_logs(self):
+        mutation = load_module_fresh(
+            "models._calendar_mutation_sanitization_test", str(BACKEND_DIR / "models" / "calendar_mutation.py")
+        )
+        events = [{"id": "evt-1", "summary": "Standup", "start": {"dateTime": "2026-09-28T10:00:00Z"}}]
+        expired = GoogleAPIError("Token expired", is_auth_error=True, status_code=401)
+        searches = {
+            "first attempt": AsyncMock(return_value=events),
+            "after token refresh": AsyncMock(side_effect=[expired, events]),
+        }
+        for label, search in searches.items():
+            with (
+                self.subTest(label),
+                self._with_access(),
+                patch.object(ct, "get_google_calendar_events", new=search),
+                patch.object(ct, "refresh_google_token", new=AsyncMock(return_value="new_token")),
+                patch.object(ct, "delete_google_calendar_event", side_effect=RuntimeError(self.SENSITIVE)),
+                patch.object(ct, "CalendarMutationResult", mutation.CalendarMutationResult),
+                patch.object(ct, "format_deleted_calendar_events", mutation.format_deleted_calendar_events),
+                patch.object(ct, "calendar_event_title", mutation.event_title),
+                self.assertLogs(ct.logger, level="ERROR") as logs,
+            ):
+                result = await ct.delete_calendar_event_tool.func(event_title="Standup")
+            self.assertIn("could not delete this event", result)
+            self.assertNotIn(self.SENSITIVE, result)
+            formatter = logging.Formatter()
+            self.assertNotIn(self.SENSITIVE, "\n".join(formatter.format(r) for r in logs.records))
+
+    async def test_update_search_failure_keeps_exception_text_out_of_logs(self):
+        with (
+            self._with_access(),
+            patch.object(ct, "get_google_calendar_events", side_effect=RuntimeError(self.SENSITIVE)),
+            self.assertLogs(ct.logger, level="ERROR") as logs,
+        ):
+            await ct.update_calendar_event_tool.func(event_title="Standup")
+        formatter = logging.Formatter()
+        self.assertNotIn(self.SENSITIVE, "\n".join(formatter.format(r) for r in logs.records))
 
     async def test_update_search_failure_returns_fixed_text(self):
         with (

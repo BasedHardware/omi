@@ -44,7 +44,7 @@ from utils.retrieval.tools.google_utils import google_api_request, GoogleAPIErro
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
 
-from utils.log_sanitizer import sanitize, sanitize_pii
+from utils.log_sanitizer import sanitize, sanitize_pii, sanitize_provider_error
 import logging
 
 from utils.retrieval.tools.calendar_render import render_calendar_event
@@ -1120,11 +1120,7 @@ async def delete_calendar_event_tool(
                     await delete_google_calendar_event(access_token, event_id_val)
                     mutation_result.succeeded.append(event)
                 except Exception as e:
-                    logger.error(
-                        "Failed to delete calendar event (%s)",
-                        type(e).__name__,
-                        exc_info=True,
-                    )
+                    logger.error("Failed to delete calendar event: %s", sanitize_provider_error(e))
                     mutation_result.failed.append((event_title_found, "could not delete this event"))
 
             return format_deleted_calendar_events(mutation_result)
@@ -1173,9 +1169,8 @@ async def delete_calendar_event_tool(
                                     mutation_result.succeeded.append(event)
                                 except Exception as delete_error:
                                     logger.error(
-                                        "Failed to delete calendar event after token refresh (%s)",
-                                        type(delete_error).__name__,
-                                        exc_info=True,
+                                        "Failed to delete calendar event after token refresh: %s",
+                                        sanitize_provider_error(delete_error),
                                     )
                                     mutation_result.failed.append((event_title_found, "could not delete this event"))
 
@@ -1324,11 +1319,7 @@ async def update_calendar_event_tool(
 
                 logger.info(f"📅 Found event ID: {target_event_id}")
             except Exception as e:
-                logger.error(
-                    "Error searching for calendar event (%s)",
-                    type(e).__name__,
-                    exc_info=True,
-                )
+                logger.error("Error searching for calendar event: %s", sanitize_provider_error(e))
                 return "Error searching for calendar event. Please try again."
 
         # Get current event to preserve existing data
