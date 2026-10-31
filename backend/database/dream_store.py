@@ -774,6 +774,8 @@ def vocabulary(uid, *, firestore_client=None):
 
 
 def demoted_types(uid, caps, *, firestore_client=None):
+    from utils import dream_telemetry
+
     since = datetime.now(timezone.utc) - timedelta(days=30)
     query = client(firestore_client).collection('users').document(uid).collection('review_changes')
     rows = (
@@ -782,18 +784,27 @@ def demoted_types(uid, caps, *, firestore_client=None):
         .limit(500)
         .stream()
     )
+    recent_since = datetime.now(timezone.utc) - timedelta(days=caps.undo_recent_days)
     counts = {}
+    recent = {}
     for snapshot in rows:
         data = _review_store().decode_doc(uid, snapshot.to_dict()) or {}
         if not data.get('edit_key', '').startswith(('dream:', 'agent:')) or data.get('phase', 'applied') != 'applied':
             continue
-        kind = data['edit_key'].split(':')[1]
+        # The policy kind auto-apply checks; key segments differ (memory-target
+        # spelling keys 'memory', accepted proposals 'user').
+        kind = dream_telemetry.change_kind(data) or data['edit_key'].split(':')[1]
+        undone_now = int(bool(data['change']['undone']))
         total, undone = counts.get(kind, (0, 0))
-        counts[kind] = (total + 1, undone + int(data['change']['undone']))
+        counts[kind] = (total + 1, undone + undone_now)
+        created = data.get('created_at')
+        if undone_now and isinstance(created, datetime) and created >= recent_since:
+            recent[kind] = recent.get(kind, 0) + 1
     return {
         kind
         for kind, (total, undone) in counts.items()
-        if total >= caps.undo_min_samples and undone / total > caps.undo_rate
+        if (total >= caps.undo_min_samples and undone / total > caps.undo_rate)
+        or recent.get(kind, 0) >= caps.undo_recent_count
     }
 
 

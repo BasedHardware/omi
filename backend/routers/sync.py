@@ -151,6 +151,7 @@ from utils.sync.repeat_work_metrics import (
     PLAYBACK_WRITES,
     PLAYBACK_BUILD_SECONDS,
     PLAYBACK_BUILDS,
+    record_demand_playback_outcome,
     record_playback_ready,
 )
 from utils.product_metrics import record_product_event, sanitize_app_build
@@ -3764,6 +3765,24 @@ async def _defer_merge_for_destructive_operation(payload: dict):
 # codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_audio_merge_cloud_tasks_oidc)):
+    try:
+        response = await _handle_audio_merge_job(request, task_retry_count)
+    except Exception:
+        await _record_demand_playback_outcome(request, None)
+        raise
+    await _record_demand_playback_outcome(request, response)
+    return response
+
+
+async def _record_demand_playback_outcome(request: Request, response) -> None:
+    try:
+        payload = await request.json()
+    except Exception:
+        return
+    record_demand_playback_outcome(payload, None if response is None else response.body)
+
+
+async def _handle_audio_merge_job(request: Request, task_retry_count: int):
     from database.legal_holds import (
         DestructiveOperationInProgress,
     )  # deferred: sync.py imported with database stubbed in test isolation
@@ -3948,7 +3967,6 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
         if playback_on_demand():
-            PLAYBACK_BUILDS.labels('file', 'built').inc()
             record_playback_ready(payload, 'file')
         logger.debug(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
         return JSONResponse(status_code=200, content={'status': 'done'})

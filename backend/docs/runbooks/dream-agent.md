@@ -44,7 +44,11 @@ verification. Staging budgets reserve verification capacity, so turn/tool/read
 exhaustion can still verify accepted proposals.
 
 Both agree plus auto eligibility plus no Undo-rate demotion permits journaled
-apply. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review. Eligible proposals are ranked by value then verifier support.
+apply. A kind is demoted for an owner when more than `DREAM_AGENT_UNDO_RATE`
+(0.2) of its last-30-day changes were undone with at least
+`DREAM_AGENT_UNDO_MIN_SAMPLES` (10), or when `DREAM_AGENT_UNDO_RECENT_COUNT` (3)
+of its changes applied in the last `DREAM_AGENT_UNDO_RECENT_DAYS` (7) were
+undone, so low-volume owners are protected too. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review. Eligible proposals are ranked by value then verifier support.
 Values 1–2 are never offered; proposal/answer attention shares three UTC-day
 slots. User-authored facts (`direct_user_statement`, `explicit_remember`,
 `onboarding`) require explicit Review acceptance even when both verifiers agree.
@@ -289,6 +293,12 @@ Internal OIDC routes are `POST /v2/dream-agent/sweep` and
 Count metrics cover outcomes, size buckets, turns, tools, rejection reasons,
 successful resubmits, verifier outcomes, applied/undone kinds, cache usage and
 stale reclaim. Metric labels never contain owner IDs, refs or content.
+Owner decisions on Dream edits emit one `dream_outcome` JSON log record each
+(`kind`, `decision` undo/redo/accept/dismiss, applied-age bucket): Undo/Redo of a
+Dream-journaled change and Review answers to Dream edit/vocabulary proposals.
+Answers to Review questions (same-person, spelling) are not yet counted. Every
+`dream_pass` record carries `verifier_by_kind`, so Undo, accept and verifier
+rates are aggregable per kind from logs alone.
 
 The value judge (`DREAM_VALUE_JUDGE_MODE`, default shadow) asks whether the owner
 is better off for each sampled applied edit: every rare high-stakes kind, and
