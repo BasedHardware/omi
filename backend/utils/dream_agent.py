@@ -977,18 +977,22 @@ async def run_session(
             else:
                 stage = 'verify'
                 verify_started = asyncio.get_running_loop().time()
-                support, calls = await dream_verify.verify(
-                    staged,
-                    partial(invoke, dream_harness_transport.VERIFY_LANE),
-                    tokens=verify_budget,
-                    deadline_seconds=max(
-                        0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)
-                    ),
-                    verifier_seconds=limits.verifier_seconds,
-                    completion_tokens=limits.verifier_completion_tokens,
-                    telemetry=verification_telemetry,
-                    cheap_turn=_cheap_turn(staged, invoke),
-                )
+                try:
+                    support, calls = await dream_verify.verify(
+                        staged,
+                        partial(invoke, dream_harness_transport.VERIFY_LANE),
+                        tokens=verify_budget,
+                        deadline_seconds=max(
+                            0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)
+                        ),
+                        verifier_seconds=limits.verifier_seconds,
+                        completion_tokens=limits.verifier_completion_tokens,
+                        telemetry=verification_telemetry,
+                        cheap_turn=_cheap_turn(staged, invoke),
+                    )
+                finally:
+                    # The judge and the state pass share the verify lane; the allowance is this call's only.
+                    verify_allowance = 0
                 timing['verify_ms'] += int(1000 * (asyncio.get_running_loop().time() - verify_started))
             report['verifier_calls'] = calls
             report['verifier_transport_responses'] = max(
