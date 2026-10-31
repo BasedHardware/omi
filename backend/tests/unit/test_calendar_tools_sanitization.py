@@ -6,6 +6,8 @@ or end-user screens.
 """
 
 import asyncio
+import io
+import logging
 import os
 from pathlib import Path
 import unittest
@@ -114,11 +116,6 @@ def _calendar_module():
         emit_sync_failed=MagicMock(),
         emit_sync_succeeded=MagicMock(),
     )
-    log_sanitizer = _module(
-        "utils.log_sanitizer",
-        sanitize=lambda text: text,
-        sanitize_pii=lambda text: text,
-    )
     stubs = {
         "httpx": httpx,
         "langchain_core": _package("langchain_core"),
@@ -137,10 +134,10 @@ def _calendar_module():
         "utils.retrieval.tools.integration_base": integration_base,
         "utils.retrieval.tools.google_utils": google_utils,
         "utils.integration_telemetry": telemetry,
-        "utils.log_sanitizer": log_sanitizer,
     }
 
     with stub_modules(stubs):
+        load_module_fresh("utils.log_sanitizer", str(BACKEND_DIR / "utils" / "log_sanitizer.py"))
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
         load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
         load_module_fresh(
@@ -202,6 +199,15 @@ GRANT_WITH_CALENDAR = {
 
 class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
     SENSITIVE = "sensitive_internal_api_token_xyz_98765"
+
+    def setUp(self):
+        # Every case also checks the server log, tracebacks included.
+        logs = io.StringIO()
+        handler = logging.StreamHandler(logs)
+        handler.setFormatter(logging.Formatter())
+        ct.logger.addHandler(handler)
+        self.addCleanup(lambda: self.assertNotIn(self.SENSITIVE, logs.getvalue()))
+        self.addCleanup(ct.logger.removeHandler, handler)
 
     async def test_search_query_reports_widened_range_and_full_page_cap(self):
         event = {
@@ -395,6 +401,65 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(self.SENSITIVE, result)
             self.assertNotIn("RuntimeError", result)
             self.assertEqual("Error getting calendar event. Please try again.", result)
+
+    async def test_retry_and_search_failures_log_without_exception_text(self):
+        current = {"id": "evt_123", "summary": "Standup", "attendees": []}
+
+        def expired_then_crash():
+            return [GoogleAPIError("Token expired", is_auth_error=True), RuntimeError(self.SENSITIVE)]
+
+        cases = [
+            (
+                "create_google_calendar_event",
+                expired_then_crash,
+                lambda: ct.create_calendar_event_tool.func(
+                    title="Design Sync", start_time="2026-09-28T10:00:00Z", end_time="2026-09-28T11:00:00Z"
+                ),
+                "Error after token refresh",
+            ),
+            (
+                "delete_google_calendar_event",
+                expired_then_crash,
+                lambda: ct.delete_calendar_event_tool.func(event_id="evt_123"),
+                "Error after token refresh deleting event",
+            ),
+            (
+                "get_google_calendar_events",
+                expired_then_crash,
+                lambda: ct.delete_calendar_event_tool.func(event_title="Standup"),
+                "Error after token refresh deleting events",
+            ),
+            (
+                "get_google_calendar_events",
+                lambda: RuntimeError(self.SENSITIVE),
+                lambda: ct.delete_calendar_event_tool.func(event_title="Standup"),
+                "Unexpected error searching events to delete",
+            ),
+            (
+                "get_google_calendar_event",
+                expired_then_crash,
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123"),
+                "Error after token refresh getting event",
+            ),
+            (
+                "update_google_calendar_event",
+                expired_then_crash,
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123", title="Renamed"),
+                "Error after token refresh updating event",
+            ),
+        ]
+        for target, failure, call, logged in cases:
+            with (
+                self.subTest(logged),
+                patch.object(ct, "prepare_access", return_value=("uid_123", {"access_token": "token"}, "token", None)),
+                patch.object(ct, "refresh_google_token", new=AsyncMock(return_value="new_token")),
+                patch.object(ct, "get_google_calendar_event", new=AsyncMock(return_value=current)),
+                patch.object(ct, target, side_effect=failure()),
+                self.assertLogs(ct.logger, level="ERROR") as logs,
+            ):
+                result = await call()
+            self.assertNotIn(self.SENSITIVE, result)
+            self.assertIn(f"{logged}: code=", "\n".join(logs.output))
 
 
 if __name__ == "__main__":
