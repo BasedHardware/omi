@@ -125,6 +125,8 @@ _stubs = [
     'utils.llm.chat',
     'utils.llm.knowledge_graph',
 ]
+
+
 def _install_stubs(monkeypatch):
     # Sanctioned Tier-2 seam (backend/docs/test_isolation.md): stubs are installed
     # per-test via monkeypatch and auto-restored at teardown. Nothing here runs at
