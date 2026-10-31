@@ -43,11 +43,11 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
     allocator.hydrate(old)
     placed = []
     for segment in new:
-        if span.get('preserve_existing') and old and not _placed(segment):
+        if span.get('preserve_existing') and not _placed(segment):
             continue
         segment['start'] += shift
         segment['end'] += shift
-        if span.get('preserve_existing') and old:
+        if span.get('preserve_existing'):
             # A partial result may only fill demonstrably empty time. Never
             # split an ASR sentence across existing text or guess its alignment.
             if not _placed(segment) or any(
