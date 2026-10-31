@@ -590,7 +590,7 @@ overlay:
             value: keiki
             category: rollout
           OMI_MESSAGING_LINK_TARGETS:
-            value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967"}}'
+            value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967","lines":[{"address":"+14155252967","started":"2026-10-30"}]}}'
             category: rollout
           DREAM_AGENT_ENABLED:
             value: 'true'

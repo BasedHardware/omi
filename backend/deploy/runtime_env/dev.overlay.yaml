@@ -16,6 +16,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
+        # changed-source and duplicate-task checks before prod.
+        PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         BATCH_PIPELINE_UID_ALLOWLIST:
           value: ''
         BATCH_PIPELINE_API_URL:
@@ -97,6 +100,9 @@ overlay:
           value: '0'
     pusher:
       env:
+        # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
+        # changed-source and duplicate-task checks before prod.
+        PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         AUDIO_ARCHIVE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -320,6 +326,9 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
+          # changed-source and duplicate-task checks before prod.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:
@@ -385,6 +394,9 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
+          # changed-source and duplicate-task checks before prod.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_API_URL:
             value: ''
           BATCH_PIPELINE_WORKER_AUDIENCE:
@@ -475,6 +487,9 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
+          # changed-source and duplicate-task checks before prod.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:
@@ -547,6 +562,9 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
+          # changed-source and duplicate-task checks before prod.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Lead ruling01d584: activation waits for approved CPU-role secret access.
           BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:

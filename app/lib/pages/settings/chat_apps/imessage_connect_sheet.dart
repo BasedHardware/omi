@@ -104,7 +104,7 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
   @override
   void onLinked(ChannelLink link) {
     ChatAppsAnalytics.connected(widget.channel);
-    Navigator.of(context).pop(link);
+    Navigator.of(context).pop(link.withAddress(_address(_proof)));
   }
 
   Future<void> _mint() async {
