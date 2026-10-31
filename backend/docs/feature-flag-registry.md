@@ -152,7 +152,6 @@ exception is recorded for David.
 - `NOTES_PACKET_V2_MODE` — review_by 2026-10-26 (dazheng)
 - `NOTES_PACKET_V2_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
 - `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
-- `OMI_LIST_VERSION_EPOCH` — review_by 2026-10-24 (dazheng)
 - `SPEAKER_EVIDENCE_MODE` — review_by 2026-10-26 (dazheng)
 - `SPEAKER_EVIDENCE_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
 - `SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
@@ -342,7 +341,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | on | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_INDEXED_LIST_READS_ENABLED` | Default off; indexed canonical list candidates and slim main conversation lists preserve released row authority | backend | env | closed | — | — | — | — | graduate | on | 2026-11-16 | dazheng |
-| `OMI_LIST_VERSION_EPOCH` | Empty by default; unique reader rollout epoch after complete writer-fleet attestation | backend | env | closed | — | — | — | — | pending | on | 2026-10-24 | dazheng |
+| `OMI_LIST_VERSION_EPOCH` | Empty by default; unique reader rollout epoch after complete writer-fleet attestation | backend | env | closed | — | — | — | — | pending | on | 2026-11-14 | dazheng |
 | `OMI_MESSAGING_CHANNELS` | Default-off channel gateway and opt-in cross-surface continuity; also requires uid allowlist and paid-plan entitlement. | backend | env | closed | — | — | on | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_MESSAGING_CHANNELS_UIDS` | Comma-separated exact uid allowlist for messaging channels; empty admits nobody. | backend | env | closed | — | — | — | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_SHAPED_AGENT_MODE` | Notes and mobile/app chat shaped invocation. on serves shaped to everyone; off/unset/unknown disables shaped serving. cohort is an alias of on after legacy removal. Legacy comparison and shadow serving have been removed. Default off. | backend | env | closed | — | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | 2026-11-05 | dazheng |
@@ -610,6 +609,7 @@ and an explicit empty literal renders as `''`.
 | `SPEAKER_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `SPEAKER_PER_WINDOW_ENABLED` | Default on; a manifest dispute abstains speaker windows instead of the recording, for batch-authoritative conversations and beta clients | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `SPEAKER_ROLE_PROJECTION_ENABLED` | Shared evidence-backed prompt roles for notes, memory quote sources and tasks; on unless explicitly false | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `SPEAKER_SYNC_STORE_ENABLED` | Default on; a sync-scoped speaker window refused only because the live store overlaps it is proven and cut on the sync store alone, inside the per-window cohort | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `STALE_IN_PROGRESS_RECOVERY_ENABLED` | Incident stop for reconnect stale in-progress recovery; default on | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | — | keep | keep | — | backend listen |
 | `STT_CAP_FINALIZE_FORWARD_ENABLED` | Default on; preserve provider-specific finalize arguments through the funded STT cap proxy | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STT_CAP_OFFLINE_ENFORCEMENT` | Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1167,6 +1167,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SPEAKER_IDENTITY_REPAIR_ENABLED` — Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names (fail: open)
 - `SPEAKER_PER_WINDOW_ENABLED` — Default on; a manifest dispute abstains speaker windows instead of the recording, for batch-authoritative conversations and beta clients (fail: closed)
 - `SPEAKER_ROLE_PROJECTION_ENABLED` — Shared evidence-backed prompt roles for notes, memory quote sources and tasks; on unless explicitly false (fail: open)
+- `SPEAKER_SYNC_STORE_ENABLED` — Default on; a sync-scoped speaker window refused only because the live store overlaps it is proven and cut on the sync store alone, inside the per-window cohort (fail: closed)
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_CAP_FINALIZE_FORWARD_ENABLED` — Default on; preserve provider-specific finalize arguments through the funded STT cap proxy (fail: open)
 - `STT_CAP_OFFLINE_ENFORCEMENT` — Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope (fail: open)

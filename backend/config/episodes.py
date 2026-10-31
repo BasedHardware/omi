@@ -173,6 +173,8 @@ MOMENT_MIN_WORDS = 25
 MOMENT_TEXT_MAX_CHARS = 6_000
 # One live update per episode at most this often; a burst folds into the next.
 MOMENT_MIN_INTERVAL_SECONDS = 60
+# Recovered audio refreshes draft notes at most this often: the composer rewrites them at close.
+RECOVERY_NOTES_MIN_INTERVAL_SECONDS = MOMENT_MAX_SECONDS
 
 # --------------------------------------------------------------------------- close detection
 

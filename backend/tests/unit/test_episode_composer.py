@@ -585,3 +585,50 @@ def test_discarding_a_member_clears_the_composed_lede_and_follow_ups():
     assert set(cleared) == set(episodes_db.CONTENT_FIELDS) - {'moments', 'provisional_items'} | {
         'summary_needs_regeneration'
     }
+
+
+def _turn_row(*segments):
+    started = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
+    return {
+        'started_at': started,
+        'transcript_segments': [
+            {'start': start, 'end': end, 'text': text, 'speaker': speaker, 'is_user': False}
+            for start, end, speaker, text in segments
+        ],
+    }
+
+
+def test_transcript_lines_join_fragments_of_one_turn():
+    row = _turn_row(
+        (0, 5, 'SPEAKER_00', 'one'),
+        (5, 10, 'SPEAKER_00', 'two'),
+        (10, 15, 'SPEAKER_01', 'three'),
+        (15, 20, 'SPEAKER_00', 'four'),
+    )
+    lines = composer.transcript_lines(row, 'Me', ZoneInfo('UTC'))
+    assert [text for _, text in lines] == [
+        '[12:00:00] Speaker 00: one two',
+        '[12:00:10] Speaker 01: three',
+        '[12:00:15] Speaker 00: four',
+    ]
+
+
+def test_transcript_lines_restart_after_a_pause_and_inside_a_monologue():
+    row = _turn_row(
+        *[(i * 10, i * 10 + 10, 'SPEAKER_00', f'w{i}') for i in range(8)], (200, 205, 'SPEAKER_00', 'later')
+    )
+    lines = composer.transcript_lines(row, 'Me', ZoneInfo('UTC'))
+    assert [text.split(': ')[0] for _, text in lines] == [
+        '[12:00:00] Speaker 00',
+        '[12:01:00] Speaker 00',
+        '[12:03:20] Speaker 00',
+    ]
+
+
+def test_a_moment_ends_on_the_last_speech_of_a_merged_turn():
+    row = {'id': 'c1', **_turn_row(*[(i * 10, i * 10 + 10, 'SPEAKER_00', f'w{i}') for i in range(5)])}
+    tz = ZoneInfo('UTC')
+    assert len(composer.transcript_lines(row, 'Me', tz)) == 1
+    data = {'chapters': [{'title': 'Plans', 'start': '12:00:00', 'points': ['Point']}]}
+    moment = composer.to_updates(data, [row], tz)['moments'][0]
+    assert moment['end_offset'] >= 40
