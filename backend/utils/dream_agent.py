@@ -239,6 +239,7 @@ async def run_session(
     bootstrap_tools=None,
     arms=None,
     budget_probe=None,
+    judge=False,
 ):
     caps = caps or Caps.from_env()
     arms = arms or {}
@@ -445,10 +446,12 @@ async def run_session(
         report['last_prompt_tokens'] = result.prompt_tokens
 
     compact_arm = arms.get('history_compact', 'off')
-    judge_mode = dream_judge.mode() if arms else 'off'
+    # Scheduled owner passes only; never canary, dry-run or manual runs.
+    judge_mode = dream_judge.mode() if judge else 'off'
+    judging = False
 
     async def _judge_applied(staged_items, pass_report):
-        nonlocal judge_allowance
+        nonlocal judge_allowance, judging
         applied = {
             row.get('key')
             for row in pass_report['outcomes']
@@ -467,9 +470,10 @@ async def run_session(
                 continue
             rows.append((item.id, dream_judge.projection(view)))
             kinds[item.id] = (item.kind, label)
-        if not rows:
+        if not rows or not dream_judge.take_call(dream_telemetry.SWEEP_ID.get()):
             return
         judge_allowance = dream_judge.token_allowance()
+        judging = True
         try:
             judged = await dream_judge.judge(
                 rows,
@@ -479,6 +483,7 @@ async def run_session(
             )
         finally:
             judge_allowance = 0
+            judging = False
         for id_, _row in rows[: dream_judge.MAX_ITEMS]:
             kind, label = kinds[id_]
             dream_judge.record(kind, label, judged.get(id_))
@@ -686,6 +691,7 @@ async def run_session(
                 prior_prompt_tokens=prior,
                 prior_message_count=prior_count,
                 cached_tokens_estimate=cached_estimate,
+                reserved_only=judging,
             )
             report['model_lanes'].append(lane)
             counted = True
@@ -1221,6 +1227,7 @@ async def run_pass(
                 bootstrap_tools=bootstrap_tools,
                 arms=arms,
                 budget_probe=budget_probe,
+                judge=trigger == 'schedule' and not canary and not dry_run,
             )
         if 'prescan' in pass_levers:
             # Recall of the finalized report, merged into the admission-time row

@@ -294,11 +294,15 @@ The value judge (`DREAM_VALUE_JUDGE_MODE`, default shadow) asks whether the owne
 is better off for each sampled applied edit: every rare high-stakes kind, and
 `DREAM_JUDGE_COMMON_PERCENT` (2) of common cleanup kinds by salted edit key. It
 sees the owner-visible change view (kind, before/after, cited speech, record
-labels), never the proposer's reason or verifier votes, runs once per pass on the
-reserved verifier lane within `DREAM_JUDGE_TOKENS_PER_PASS`, and emits only
-content-free `dream_judge` records (kind, stratum, verdict, three 0-2 scores).
+labels and speaker-marked cited speech), never the proposer's reason or verifier
+votes. It runs only after scheduled owner passes (never canary, dry-run or manual),
+once per pass on reserved capacity only (never on-demand), within
+`DREAM_JUDGE_TOKENS_PER_PASS` (60000) and at most `DREAM_JUDGE_MAX_CALLS_PER_SWEEP`
+(4) calls per sweep, and emits only content-free `dream_judge` records (kind,
+stratum, verdict, three 0-2 scores).
 Calibration: `backend/scripts/dream-label-export.py --uid <authorized-owner>` runs
-in an isolated operator pod for the owner who agreed to label their own changes,
+in an isolated operator pod only for an owner listed (as a uid sha256 digest) in
+`DREAM_LABEL_EXPORT_UID_SHA256S`, i.e. who agreed to label their own changes,
 judges the same projection of their journaled changes, and prints decision-mill
 proposal items to operator stdout (labels directories are never in git). Judge
 scores gate nothing until their agreement with owner labels reaches 0.7.

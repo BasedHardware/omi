@@ -28,7 +28,9 @@ logger = logging.getLogger(__name__)
 MODE_ENV = 'DREAM_VALUE_JUDGE_MODE'
 COMMON_PERCENT_ENV = 'DREAM_JUDGE_COMMON_PERCENT'
 TOKENS_ENV = 'DREAM_JUDGE_TOKENS_PER_PASS'
-MAX_ITEMS = 8
+# One call covers every edit a pass may apply (Caps.edits), so no rare edit is dropped.
+MAX_ITEMS = 25
+CALLS_PER_SWEEP_ENV = 'DREAM_JUDGE_MAX_CALLS_PER_SWEEP'
 SALT = 'dream-judge-v1'
 # Rare and high-stakes: judged whenever applied. Everything else is common cleanup.
 ALWAYS = frozenset(
@@ -86,9 +88,32 @@ def common_percent() -> float:
 
 def token_allowance() -> int:
     try:
-        return max(0, int(os.getenv(TOKENS_ENV, '40000') or 0))
+        return max(0, int(os.getenv(TOKENS_ENV, '60000') or 0))
     except ValueError:
         return 0
+
+
+_sweep_calls: dict[str, int] = {}
+
+
+def take_call(sweep_id: str | None) -> bool:
+    """Spend one of this sweep's judge calls (DREAM_JUDGE_MAX_CALLS_PER_SWEEP, default 4).
+
+    Bounds judge spend per 30-minute sweep: 4 calls x 60k tokens is at most about
+    1% of the reserved daily draw, and sampled passes are far fewer.
+    """
+    try:
+        limit = max(0, int(os.getenv(CALLS_PER_SWEEP_ENV, '4') or 0))
+    except ValueError:
+        return False
+    key = sweep_id or 'none'
+    if key not in _sweep_calls:
+        _sweep_calls.clear()
+        _sweep_calls[key] = 0
+    if _sweep_calls[key] >= limit:
+        return False
+    _sweep_calls[key] += 1
+    return True
 
 
 def stratum(kind: str, key: str, *, percent: float | None = None) -> str | None:
@@ -104,11 +129,21 @@ def projection(change: Any) -> dict[str, Any]:
     """The owner-visible change, blind to the proposer's reason and verifier votes."""
     data = change.model_dump(mode='json') if hasattr(change, 'model_dump') else dict(change or {})
     context = data.get('context') or {}
+    main = context.get('main_index')
+    speech = [
+        {
+            'speaker': 'owner' if segment.get('is_user') else (segment.get('speaker_label') or 'other'),
+            'text': segment.get('text'),
+            **({'cited': True} if index == main else {}),
+        }
+        for index, segment in enumerate(context.get('segments') or [])
+        if isinstance(segment, dict) and segment.get('text')
+    ]
     return {
         'kind': data.get('edit_kind'),
         'before': data.get('before'),
         'after': data.get('after'),
-        'context': {key: context.get(key) for key in ('quote', 'before', 'after') if context.get(key)},
+        'speech': speech,
         'refs': [ref.get('label') for ref in data.get('refs') or [] if isinstance(ref, dict) and ref.get('label')],
     }
 

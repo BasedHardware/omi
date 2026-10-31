@@ -14,6 +14,7 @@ never in git.
 import argparse
 import asyncio
 import json
+import os
 import random
 import sys
 from datetime import datetime, timedelta, timezone
@@ -25,9 +26,12 @@ from google.cloud import firestore
 
 from config.dream_agent import dream_journal_key, enabled
 from database import review_store
+from config.refactor_modes import uid_digest
 from utils import dream_harness_transport, dream_judge
 from utils.rollout_cohorts import configure_rollout_runtime
 
+# Fail closed: only owners who agreed to label their own changes, as sha256 digests.
+CONSENT_ENV = 'DREAM_LABEL_EXPORT_UID_SHA256S'
 QUESTION = 'Is the owner better off for this change Dream applied?'
 POLICY = [
     'Good: correct and the owner would notice or care.',
@@ -64,11 +68,19 @@ def sample(rows, count, seed):
 
 def item(kind, data, change, stratum, judgment):
     projection = dream_judge.projection(change)
-    context = projection['context']
     evidence = []
-    if context:
-        speech = ' '.join(part for part in (context.get('before'), context.get('quote'), context.get('after')) if part)
-        evidence.append({'title': 'Cited speech', 'tag': 'Context', 'text': speech})
+    if projection['speech']:
+        evidence.append(
+            {
+                'title': 'Cited speech',
+                'tag': 'Context',
+                'segments': [
+                    {'id': str(index), 'is_user': row['speaker'] == 'owner', 'start': index, 'text': row['text']}
+                    for index, row in enumerate(projection['speech'])
+                ],
+                'cited': [str(index) for index, row in enumerate(projection['speech']) if row.get('cited')],
+            }
+        )
     if projection['refs']:
         evidence.append({'title': 'Records involved', 'tag': 'Refs', 'text': '\n'.join(projection['refs'])})
     return {
@@ -99,17 +111,30 @@ def item(kind, data, change, stratum, judgment):
     }
 
 
+def consented(uid, environ=None):
+    env = os.environ if environ is None else environ
+    digests = {d.strip().lower() for d in env.get(CONSENT_ENV, '').split(',') if d.strip()}
+    return bool(uid) and uid_digest(uid) in digests
+
+
 async def judged(uid, rows):
+    """Judge every exported row on reserved capacity within one total token allowance."""
+    spent = 0
+
     async def turn(mount, messages):
-        return await dream_harness_transport.model_turn(uid, dream_harness_transport.VERIFY_LANE, mount, messages)
+        nonlocal spent
+        result = await dream_harness_transport.model_turn(
+            uid, dream_harness_transport.VERIFY_LANE, mount, messages, reserved_only=True
+        )
+        spent += result.price_weighted_tokens if result.price_weighted_tokens is not None else result.tokens
+        return result
 
     verdicts = {}
+    total = dream_judge.token_allowance()
     for start in range(0, len(rows), dream_judge.MAX_ITEMS):
         chunk = rows[start : start + dream_judge.MAX_ITEMS]
         batch = [(str(index), dream_judge.projection(row[0][2])) for index, row in enumerate(chunk, start)]
-        verdicts.update(
-            await dream_judge.judge(batch, turn, tokens=dream_judge.token_allowance(), deadline_seconds=180)
-        )
+        verdicts.update(await dream_judge.judge(batch, turn, tokens=max(0, total - spent), deadline_seconds=180))
     return verdicts
 
 
@@ -123,6 +148,8 @@ def main():
     args = parser.parse_args()
     if not enabled():
         parser.error('DREAM_AGENT_ENABLED must be true; the global kill switch also stops exports')
+    if not consented(args.uid):
+        parser.error(f'{CONSENT_ENV} must list this owner; only consenting owners export their own changes')
     week = datetime.now(timezone.utc).strftime('%G-W%V')
     rows = sample(list(changes(args.uid, args.days)), args.count, seed=week)
     verdicts = {} if args.no_judge else asyncio.run(judged(args.uid, rows))

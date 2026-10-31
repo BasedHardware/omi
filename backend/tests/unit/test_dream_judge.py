@@ -57,7 +57,7 @@ def test_projection_is_the_owner_visible_change_without_the_proposer_reason():
         'kind': 'dismiss_person',
         'before': 'Canadian',
         'after': '(dismissed)',
-        'context': {},
+        'speech': [],
         'refs': ['Canadian'],
     }
     assert 'Proposer' not in json.dumps(projection)
@@ -223,3 +223,96 @@ def test_calibration_export_puts_rare_kinds_first_and_hides_the_judge_verdict():
     # Blind: no model output or proposer reason outside hidden.
     visible = json.dumps({key: value for key, value in item.items() if key != 'hidden'})
     assert 'neutral' not in visible and 'Proposer reason' not in visible
+
+
+def test_projection_keeps_cited_speech_with_speakers():
+    from models.review import SpellingContext, SpellingContextSegment
+
+    change = ReviewChange(
+        change_id='c2',
+        kind='other',
+        title='Spelling',
+        edit_kind='spelling',
+        before='kiesh',
+        after='quiche',
+        context=SpellingContext(
+            conversation_title='Lunch',
+            segments=[
+                SpellingContextSegment(text='What should we eat?', speaker_label='Anna'),
+                SpellingContextSegment(text='Maybe kiesh tonight.', is_user=True),
+            ],
+            main_index=1,
+        ),
+        created_at='2026-10-31T00:00:00Z',
+    )
+    assert dream_judge.projection(change)['speech'] == [
+        {'speaker': 'Anna', 'text': 'What should we eat?'},
+        {'speaker': 'owner', 'text': 'Maybe kiesh tonight.', 'cited': True},
+    ]
+
+
+def test_one_call_covers_every_edit_a_pass_can_apply():
+    from config.dream_agent import Caps
+
+    assert dream_judge.MAX_ITEMS >= Caps().edits
+
+
+def test_judge_calls_are_capped_per_sweep(monkeypatch):
+    monkeypatch.setenv(dream_judge.CALLS_PER_SWEEP_ENV, '2')
+    dream_judge._sweep_calls.clear()
+    assert [dream_judge.take_call('sweep-a') for _ in range(3)] == [True, True, False]
+    assert dream_judge.take_call('sweep-b') is True
+    monkeypatch.setenv(dream_judge.CALLS_PER_SWEEP_ENV, 'x')
+    assert dream_judge.take_call('sweep-c') is False
+
+
+def test_manual_runs_are_not_judged(runtime, monkeypatch):
+    monkeypatch.setenv(dream_judge.COMMON_PERCENT_ENV, '100')
+    dream_judge._sweep_calls.clear()
+    judged = []
+    report = asyncio.run(dream_agent.run_pass(UID, turn=_pass_model(judged), trigger='manual'))
+    assert report['outcomes'][0]['status'] == 'applied' and judged == []
+
+
+def test_reserved_only_transport_forces_reserved_capacity(monkeypatch):
+    from utils import dream_harness_transport as transport
+
+    seen = []
+
+    async def available(mode, owner_allowlisted):
+        seen.append(mode)
+        return None
+
+    async def warm(uid):
+        return None
+
+    monkeypatch.setattr(transport, 'generated_compute_configured', lambda: False)
+    monkeypatch.setattr(transport, 'admission_for', lambda uid: ('on_demand', True))
+    monkeypatch.setattr(transport, 'warm_rollout_cohorts', warm)
+    monkeypatch.setattr(transport.dream_capacity, 'available_model', available)
+    from utils.llm.shaped_agent import Budget, Mount
+
+    mount = Mount(
+        instructions='x', schema=dream_judge.JudgmentBatch, budget=Budget(turns=1, tokens=10000, deadline_seconds=5)
+    )
+    for reserved_only in (False, True):
+        with pytest.raises(transport.CapacityWait):
+            asyncio.run(
+                transport.model_turn(
+                    'synthetic-owner',
+                    transport.VERIFY_LANE,
+                    mount,
+                    [{'role': 'user', 'content': 'x'}],
+                    reserved_only=reserved_only,
+                )
+            )
+    assert seen == ['on_demand', 'reserved']
+
+
+def test_export_requires_explicit_owner_consent():
+    from config.refactor_modes import uid_digest
+
+    export = _export_module()
+    assert export.consented('owner-a', environ={}) is False
+    assert export.consented('owner-a', environ={export.CONSENT_ENV: uid_digest('owner-b')}) is False
+    assert export.consented('owner-a', environ={export.CONSENT_ENV: 'x,' + uid_digest('owner-a').upper()}) is True
