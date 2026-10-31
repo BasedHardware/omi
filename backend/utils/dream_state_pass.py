@@ -393,12 +393,10 @@ async def run(
     # cancelled, so racing it would let a "timed out" pass commit anyway. Instead the
     # transaction refuses to start past the pass deadline, and the outcome reported
     # here is the one Firestore actually reached.
-    from database import users as users_db
+    from database import dream_profile as profile_db
 
     try:
-        outcome = await run_blocking(
-            db_executor, partial(users_db.update_ai_user_profile_v2, not_after=not_after), uid, doc
-        )
+        outcome = await run_blocking(db_executor, partial(profile_db.write_profile_v2, not_after=not_after), uid, doc)
     except Exception as error:
         logger.warning('event=dream_lever_error lever=state_pass exc=%s', type(error).__name__)
         outcome = 'failed'
@@ -428,7 +426,7 @@ async def _run(
     spent,
     now,
 ):
-    from database import users as users_db
+    from database import dream_profile as profile_db
 
     def left(margin=0.0):
         return max(0.0, deadline - asyncio.get_running_loop().time() - margin)
@@ -437,7 +435,7 @@ async def _run(
     tasks = await run_blocking(db_executor, tasks_page, uid)
     memories = await run_blocking(db_executor, memories_page, uid)
     conversations = await run_blocking(db_executor, conversation_index, uid, now)
-    previous_doc = await run_blocking(db_executor, users_db.get_ai_user_profile_v2, uid)
+    previous_doc = await run_blocking(db_executor, profile_db.get_profile_v2, uid)
     previous = dream_profile_v2.from_doc(previous_doc)
     # The loop's effects ran first, so its dismissed people / retired tasks have left
     # these scans. Show their pre-effect rows so recall compares like with like.

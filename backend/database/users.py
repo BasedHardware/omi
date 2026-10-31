@@ -9,7 +9,6 @@ from utils.speakers.person_pool import (
     shadow_profile,
 )
 from config.firestore_read_levers import lever_enabled
-import time
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
 from datetime import datetime, timedelta, timezone
@@ -2478,40 +2477,6 @@ def get_ai_user_profile(uid: str) -> Optional[dict]:
     # Avoid full user-doc caching because high-risk entitlement/BYOK/privacy
     # fields live on the same Firestore document.
     return get_or_fetch(_USER_AI_PROFILE_CACHE, uid, lambda: _get_ai_user_profile_from_firestore(uid))
-
-
-def get_ai_user_profile_v2(uid: str) -> Optional[dict]:
-    """Dream's shadow profile v2 side field; no product reader yet, so never cached."""
-    doc = db.collection('users').document(uid).get(['ai_user_profile_v2'])
-    if not doc.exists:
-        return None
-    return (doc.to_dict() or {}).get('ai_user_profile_v2')
-
-
-def update_ai_user_profile_v2(uid: str, profile_v2: dict, *, not_after: float | None = None) -> str:
-    """Replace only the v2 side field, unless a newer run already wrote it.
-
-    ``profile_v2['run_started_at']`` (ISO) fences late writes from an older run, and
-    ``not_after`` (epoch seconds) refuses a write that starts past its run's deadline.
-    The served ai_user_profile and its cache are untouched. Returns 'written',
-    'superseded' (a newer run owns the field) or 'expired'.
-    """
-    ref = db.collection('users').document(uid)
-
-    @transactional
-    def write(transaction):
-        # A run past its deadline never starts (or retries) the write.
-        if not_after is not None and time.time() > not_after:
-            return 'expired'
-        snapshot = ref.get(['ai_user_profile_v2'], transaction=transaction)
-        current = (snapshot.to_dict() or {}).get('ai_user_profile_v2') if snapshot.exists else None
-        previous = str((current or {}).get('run_started_at') or '')
-        if previous and previous > str(profile_v2.get('run_started_at') or ''):
-            return 'superseded'
-        transaction.update(ref, {'ai_user_profile_v2': profile_v2})
-        return 'written'
-
-    return write(db.transaction())
 
 
 def update_ai_user_profile(

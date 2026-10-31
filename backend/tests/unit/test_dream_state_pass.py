@@ -174,16 +174,16 @@ def state_env(runtime, monkeypatch):
     )
     # Full-record reads for staging come from the live fake store (after the loop's effects).
     monkeypatch.setattr(dream_state_pass, 'read_record', lambda uid, ref: records(runtime).get(ref))
-    from database import users as users_db
+    from database import dream_profile as profile_db
 
     written = []
-    monkeypatch.setattr(users_db, 'get_ai_user_profile_v2', lambda uid: None)
+    monkeypatch.setattr(profile_db, 'get_profile_v2', lambda uid: None)
 
     def write(uid, doc, *, not_after=None):
         written.append({**doc, '_not_after': not_after})
         return 'written'
 
-    monkeypatch.setattr(users_db, 'update_ai_user_profile_v2', write)
+    monkeypatch.setattr(profile_db, 'write_profile_v2', write)
     applied = []
     real_apply = dream_tools.apply_verified_edit
 
@@ -345,15 +345,15 @@ def test_state_pass_times_out_as_a_whole():
     sp.people_page = sp.tasks_page = lambda uid, firestore_client=None: []
     sp.memories_page = lambda uid: []
     sp.conversation_index = lambda uid, now, firestore_client=None: []
-    from database import users as users_db
+    from database import dream_profile as profile_db
 
-    original_get = users_db.get_ai_user_profile_v2
-    users_db.get_ai_user_profile_v2 = lambda uid: None
+    original_get = profile_db.get_profile_v2
+    profile_db.get_profile_v2 = lambda uid: None
     try:
         assert asyncio.run(run())['status'] == 'timeout'
     finally:
         sp.people_page, sp.tasks_page, sp.memories_page, sp.conversation_index = original
-        users_db.get_ai_user_profile_v2 = original_get
+        profile_db.get_profile_v2 = original_get
 
 
 def test_check_lines_needs_exactly_one_agreeing_decision():
@@ -418,9 +418,9 @@ def test_pre_effect_rows_never_ground_profile_lines(runtime, state_env):
     [('expired', 'timeout', False), ('superseded', 'complete', True)],
 )
 def test_write_outcome_decides_completion_and_cadence(runtime, state_env, monkeypatch, outcome, status, stamped):
-    from database import users as users_db
+    from database import dream_profile as profile_db
 
-    monkeypatch.setattr(users_db, 'update_ai_user_profile_v2', lambda uid, doc, *, not_after=None: outcome)
+    monkeypatch.setattr(profile_db, 'write_profile_v2', lambda uid, doc, *, not_after=None: outcome)
     plan = StatePlan(
         profile_ops=[dream_profile_v2.ProfileLineOp(op='add', section='work', text='Builds Omi.', refs=['memories/m1'])]
     )
@@ -432,7 +432,7 @@ def test_write_outcome_decides_completion_and_cadence(runtime, state_env, monkey
 
 def test_a_slow_write_is_not_raced_by_the_pass_timeout(monkeypatch):
     """The write runs after the timed section, so its real outcome is what gets reported."""
-    from database import users as users_db
+    from database import dream_profile as profile_db
 
     async def fake_run(uid, summary, **kwargs):
         summary.update(status='ready', _profile_doc={'run_started_at': 'x'})
@@ -442,7 +442,7 @@ def test_a_slow_write_is_not_raced_by_the_pass_timeout(monkeypatch):
         return 'written'
 
     monkeypatch.setattr(dream_state_pass, '_run', fake_run)
-    monkeypatch.setattr(users_db, 'update_ai_user_profile_v2', slow_write)
+    monkeypatch.setattr(profile_db, 'write_profile_v2', slow_write)
     summary = asyncio.run(
         dream_state_pass.run(
             UID,
@@ -464,7 +464,7 @@ def test_a_slow_write_is_not_raced_by_the_pass_timeout(monkeypatch):
 
 
 def test_expired_write_does_not_commit(monkeypatch):
-    from database import users as users_db
+    from database import dream_profile as profile_db
 
     class Ref:
         def get(self, *args, **kwargs):
@@ -480,6 +480,6 @@ def test_expired_write_does_not_commit(monkeypatch):
         def transaction(self):
             return object()
 
-    monkeypatch.setattr(users_db, 'db', Client())
-    monkeypatch.setattr(users_db, 'transactional', lambda fn: fn)
-    assert users_db.update_ai_user_profile_v2(UID, {}, not_after=time.time() - 1) == 'expired'
+    monkeypatch.setattr(profile_db, 'db', Client())
+    monkeypatch.setattr(profile_db, 'transactional', lambda fn: fn)
+    assert profile_db.write_profile_v2(UID, {}, not_after=time.time() - 1) == 'expired'
