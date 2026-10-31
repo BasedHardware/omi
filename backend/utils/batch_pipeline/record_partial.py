@@ -194,6 +194,13 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
         run and run.get('complete') and now < run.get('next_inventory_at', 0)
     ):
         return {'outcome': 'partial'}
+    if run and run.get('complete'):
+        # Every serving replica can drain recordings. Claim this hourly poll
+        # before listing so stale/concurrent scheduler snapshots do no IO.
+        claimed = {**run, 'next_inventory_at': now + config.INVENTORY_POLL_SECONDS}
+        if not await run_blocking(db_executor, update_run, store, pending, barrier, run, claimed, now=now):
+            return {'outcome': 'partial'}
+        pending = {**pending, 'partial_run': claimed}
     if not run or run.get('complete'):
         await prepare_run(store, pending, current, barrier, client, artifacts, units_reader, now)
         return {'outcome': 'partial'}

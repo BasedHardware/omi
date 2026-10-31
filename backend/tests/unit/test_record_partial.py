@@ -473,6 +473,31 @@ async def test_inventory_change_resets_retirement_window(source, audio):
     assert pending(source)['state'] == 'record_pending'
 
 
+async def test_hourly_poll_claim_fences_stale_scheduler_snapshots_before_listing(source, audio, monkeypatch):
+    assert finish(source) == 'partial_finished'
+    await audio.drain()
+    snapshot = pending(source)
+    calls = []
+
+    def listed(*args, **kwargs):
+        assert pending(source)['partial_run']['next_inventory_at'] == NOW + 7200
+        calls.append(1)
+        return []
+
+    monkeypatch.setattr(record_partial, 'list_audio_chunks', listed)
+    for _ in range(2):
+        await record_partial.drain_partial(
+            source[0],
+            snapshot,
+            source[1].rows[ROW],
+            audio.artifacts.client,
+            audio.artifacts,
+            live.retained_record_units,
+            now=NOW + 3600,
+        )
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize('listing_error', [False, True])
 async def test_live_drainer_never_overwrites_hourly_inventory_schedule(source, audio, monkeypatch, listing_error):
     assert finish(source) == 'partial_finished'
