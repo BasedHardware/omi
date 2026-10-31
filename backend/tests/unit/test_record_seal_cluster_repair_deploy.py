@@ -1,7 +1,9 @@
 """Offline rendered chart contracts for independent concurrent repair."""
 
 import json
+from pathlib import Path
 import re
+import subprocess
 
 import yaml
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS
@@ -53,6 +55,39 @@ def test_seal_rules_have_independent_chart_rollback_switches():
     assert env('record-seal-repair')['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'false'
     assert env('record-seal-sweeper')['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == 'false'
     assert 'RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED' not in env('record-seal-sweeper')
+
+
+def test_cpu_admission_switch_is_declared_in_runtime_manifest_and_listen_chart():
+    backend = Path(__file__).resolve().parents[2]
+    manifest = yaml.safe_load((backend / 'deploy/runtime_env.yaml').read_text())
+    key = 'RECORD_SEAL_OVERLAP_TRIM_ENABLED'
+    for stage, config in manifest['environments'].items():
+        assert config['gke']['backend-listen']['env'][key]['value'] == 'true'
+        for service in config['cloud_run']['services'].values():
+            assert service['env'][key]['value'] == 'true'
+        values = backend / f'charts/backend-listen/{stage}_omi_backend_listen_values.yaml'
+        entries = yaml.safe_load(values.read_text())['env']
+        assert next(e for e in entries if e['name'] == key)['value'] == 'true'
+        rendered = subprocess.run(
+            [
+                'helm',
+                'template',
+                'sealrules-test',
+                str(backend / 'charts/backend-listen'),
+                '-f',
+                str(values),
+                '--set-string',
+                'image.tag=synthetic',
+                '--set-string',
+                f'privateEnv.{key}=false',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert rendered.returncode == 0
+        deployment = next(d for d in yaml.safe_load_all(rendered.stdout) if d and d['kind'] == 'Deployment')
+        entries = deployment['spec']['template']['spec']['containers'][0]['env']
+        assert [e['value'] for e in entries if e['name'] == key] == ['false']
 
 
 def test_repair_only_ramp_refresh_changes_no_other_resource():

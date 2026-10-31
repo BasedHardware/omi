@@ -146,6 +146,7 @@ def retained_record_units(
     trim_divergent = overlap_trim_enabled()
     allowed = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
     references, start, end, previous_pcm = [], None, None, b''
+    capture_origin = None
     for chunk in chunks:
         ref = {
             'path': chunk['path'],
@@ -160,6 +161,11 @@ def retained_record_units(
         source_digest = hashlib.sha256(pcm).hexdigest()
         source_skip = 0
         capture = float(chunk['timestamp'])
+        if capture_origin is None:
+            capture_origin = capture
+        # Quantize once to the capture's sample grid. Independent rounding of
+        # overlap lengths and manifest positions disagrees at half-frame ties.
+        capture = capture_origin + round((capture - capture_origin) * 16000) / 16000
         # Resolve even a one-frame overlap: the manifest reader forbids
         # overlapping slices, so the proof cannot let that frame through twice.
         if end is not None and round((end - capture) * 16000) > 0:

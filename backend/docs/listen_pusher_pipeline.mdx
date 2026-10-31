@@ -28,6 +28,9 @@ unit, finish and tail checks remain required; tail tolerance stays 0.1 seconds.
 `RECORD_SEAL_OVERLAP_TRIM_ENABLED=false` restores byte-equality refusal. A short
 singleton last-object precheck defers to the full walk for multi-object rows,
 because a contained final object need not reach the union end.
+Chunk starts are quantized once to the first capture's 16 kHz sample grid;
+overlap trimming and manifest placement use that same boundary, including
+half-frame ties.
 
 Only the independent repair job opts into retrying `record_upload_failed` rows.
 `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED=false` disables that rule. After full
@@ -46,6 +49,12 @@ failure-marker writers before allowing failed-row repair. Old writers make a
 repeated mark a no-op, which cannot fence a repair. For a staged rollout set the
 upload-failed rule off until the writers have drained, then enable it in the
 chart. New Jobs take the chart env; stop active repair Jobs for immediate rollback.
+Overlap rollback must also set `RECORD_SEAL_OVERLAP_TRIM_ENABLED=false` on every
+CPU admission role. It is declared in both listen charts and the Cloud Run
+runtime manifest; listen's `privateEnv.RECORD_SEAL_OVERLAP_TRIM_ENABLED=false`
+override emits exactly one env entry. Apply the same false value to CPU roles
+and worker `recordSealRules.overlapTrimEnabled`; a worker-only override does not
+roll back CPU admission. Environment-only revisions can retain the same image.
 
 ## Server batch-only capture by platform
 

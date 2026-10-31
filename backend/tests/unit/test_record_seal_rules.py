@@ -116,6 +116,34 @@ def test_one_frame_divergent_overlap_is_trimmed_for_reader_agreement(monkeypatch
     assert refs[1]['frames'] == 15999
 
 
+@pytest.mark.parametrize('start_frame', [0.4999, 0.5, 0.5001, 1.4999, 1.5, 1.5001])
+def test_half_frame_quantization_uses_same_boundary_for_proof_and_reader(monkeypatch, start_frame):
+    chunks, sources = overlap_source(monkeypatch, starts=(100, 100 + start_frame / 16000), lengths=(1, 1))
+    # Small real sources make the banker's-rounding boundary explicit.
+    sources[chunks[0]['path']] = b'\x01\x00'
+    sources[chunks[1]['path']] = b'\x02\x00' * 3
+    units = list(live.retained_record_units('synthetic', 'capture', chunks, None, b''))
+    start, duration, refs = units[0]
+    item = SimpleNamespace(owner_id='synthetic', conversation_id='capture', capture_at=start, duration_seconds=duration)
+    body = (
+        MAGIC
+        + json.dumps(
+            {
+                'owner_id': item.owner_id,
+                'conversation_id': item.conversation_id,
+                'capture_at': start,
+                'references': refs,
+                'context': {},
+            }
+        ).encode()
+    )
+    wav = materialize(body, item, lambda ref: sources[ref['path']])
+    with wave.open(io.BytesIO(wav), 'rb') as stream:
+        frames = stream.readframes(stream.getnframes())
+    assert frames[:2] == b'\x01\x00'
+    assert refs[1]['start_frame'] >= refs[0]['frames']
+
+
 def failed_plan(source):
     store, client, artifacts = source
     client.rows[PATH]['record_upload_failed'] = True

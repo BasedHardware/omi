@@ -75,6 +75,7 @@ environment_shared:
         FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
+        RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_SERVING_ENABLED:
           value: 'false'
           category: rollout
@@ -930,6 +931,7 @@ environment_shared:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
+          RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1304,6 +1306,7 @@ environment_shared:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
+          RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1666,6 +1669,7 @@ environment_shared:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
+          RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -2019,6 +2023,7 @@ environment_shared:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
+          RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             category: rollout
           BATCH_PIPELINE_WORKER_ENABLED:
