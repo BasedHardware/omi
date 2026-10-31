@@ -456,10 +456,12 @@ String? accountDeletionStatusOf(String body) {
 
 /// Expires the session (once; [AuthService.expireSession] is idempotent) when
 /// a 403 is the deleted-account fence. Any other 403 is left to the caller.
-Future<void> _expireSessionIfAccountDeleted(int statusCode, String body, {AuthService? authService}) async {
+Future<void> _expireSessionIfAccountDeleted(int statusCode, String body,
+    {AuthService? authService, void Function()? beforeExpire}) async {
   if (statusCode != HttpStatus.forbidden) return;
   final status = accountDeletionStatusOf(body);
   if (status == null) return;
+  beforeExpire?.call();
   Logger.debug('Account deletion in progress (wipe status: $status): expiring the session');
   await (authService ?? AuthService.instance).expireSession(
     AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.accountDeleted, code: status),
@@ -588,8 +590,8 @@ Future<http.Response> sendUncaughtApiCall({
     var builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
     ensureCurrentOwner();
     var response = await execution.transport(ApiRequest(url: url, method: method, headers: builtHeaders, body: body));
-    ensureCurrentOwner();
     if (response.statusCode == 401) {
+      ensureCurrentOwner();
       response = await refreshAndReplayAfter401(
         firstResponse: response,
         statusCode: (value) => value.statusCode,
@@ -603,8 +605,8 @@ Future<http.Response> sendUncaughtApiCall({
         },
       );
     }
-    ensureCurrentOwner();
-    await _expireSessionIfAccountDeleted(response.statusCode, response.body, authService: execution.auth);
+    await _expireSessionIfAccountDeleted(response.statusCode, response.body,
+        authService: execution.auth, beforeExpire: ensureCurrentOwner);
     return response;
   }
 
@@ -628,9 +630,9 @@ Future<http.Response> sendUncaughtApiCall({
     timeout: effectiveTimeout,
     retries: effectiveRetries,
   );
-  ensureCurrentOwner();
 
   if (requireAuthCheck && response.statusCode == 401) {
+    ensureCurrentOwner();
     response = await refreshAndReplayAfter401(
       firstResponse: response,
       statusCode: (value) => value.statusCode,
@@ -655,8 +657,9 @@ Future<http.Response> sendUncaughtApiCall({
       },
     );
   }
-  ensureCurrentOwner();
-  if (requireAuthCheck) await _expireSessionIfAccountDeleted(response.statusCode, response.body);
+  if (requireAuthCheck) {
+    await _expireSessionIfAccountDeleted(response.statusCode, response.body, beforeExpire: ensureCurrentOwner);
+  }
 
   _checkClockSkewResponse(response);
   return response;

@@ -144,6 +144,29 @@ void main() {
       expect(service.captureSessionSnapshot()?.ownerUid, 'replacement');
     });
 
+    test('a spent send budget still returns a successful receipt to its caller', () async {
+      var allowed = true;
+      final gateway = _Gateway();
+      final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+      final seams = ApiExecutionSeams(
+          headers: (_) async => {},
+          auth: service,
+          transport: (_) async {
+            allowed = false;
+            return http.Response('{"status":"Ok"}', HttpStatus.ok);
+          });
+      final receipt = await sendUncaughtApiCall(
+          url: 'https://api.omi.me/v1/users/fcm-token',
+          headers: {},
+          body: '{}',
+          method: 'POST',
+          execution: seams,
+          canSend: () => allowed);
+      expect(receipt.statusCode, HttpStatus.ok);
+      expect(gateway.refreshCalls, 0);
+      expect(gateway.signOutCalls, 0);
+    });
+
     test('a plain 403 leaves the session alone', () async {
       final gateway = _Gateway();
       final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});

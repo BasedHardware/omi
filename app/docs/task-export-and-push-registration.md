@@ -33,7 +33,7 @@ Every SDK/HTTP wait has a deadline. A failed attempt keeps its retry budget;
 external lifecycle/permission wakes renew it. Only an accepted token/timezone
 receipt deduplicates subsequent writes. Account/generation changes invalidate
 pending reads and retries, and guarded HTTP sends cannot borrow a replacement
-account. Guarded HTTP responses recheck the owner before refresh or account-
+account. Guarded HTTP responses recheck the owner before refresh or account
 deletion side effects, including replay responses. Intercom remains best effort and cannot block Omi's accepted receipt.
 Tokens and task contents are excluded from the new diagnostic logs.
 
