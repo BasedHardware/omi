@@ -184,6 +184,7 @@ def test_rerun_metric_and_log_discard_arbitrary_identifiers(private, caplog):
 
     with caplog.at_level(logging.INFO, logger=record_partial.__name__):
         record_partial.event(private)
+        record_partial.record_failure(ValueError(private))
     assert private not in caplog.text
     assert 'outcome=state_changed' in caplog.text
     assert all(

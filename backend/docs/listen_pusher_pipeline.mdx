@@ -47,7 +47,7 @@ counts partial/applied/pending and unprovable separately, and excludes explicit
 partial finishes from unfinished. Old rows retain their classification. The
 lead installs the collector patch with the release; no hard-3 threshold changes.
 
-Closed metrics: `omi_record_audio_partial_reruns_total{outcome}` on the CPU
+Closed metrics: `omi_record_audio_partial_reruns_total{phase,outcome}` on the CPU
 serving process; the repair log metric `omi_record_audio_partial_finishes` by
 reason. Repair row/pass logs include partial counts separately from complete
 seals. These are observed transitions; the durable marker is the census.

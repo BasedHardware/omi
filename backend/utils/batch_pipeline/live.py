@@ -30,7 +30,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
 from utils.batch_pipeline.record_barrier import validate_record_tail
-from utils.batch_pipeline.record_partial import drain_partial
+from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.local_storage import create_storage_client
@@ -381,10 +381,14 @@ async def drain_recordings(store):
             await admit_recording(store, pending)
             if not pending.get('partial_coordinator'):
                 continue
-        except BatchPrivacyBlocked:
+        except BatchPrivacyBlocked as error:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
+            if pending.get('partial_coordinator'):
+                record_partial_failure(error, privacy=True, run=pending.get('partial_run'))
             continue
         except Exception as error:
+            if pending.get('partial_coordinator'):
+                record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
 
         def defer(tx):

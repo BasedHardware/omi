@@ -18,15 +18,40 @@ from utils.executors import db_executor, storage_executor, sync_executor, run_bl
 from utils.other.storage import list_audio_chunks
 
 logger = logging.getLogger(__name__)
-RERUNS = Counter('omi_record_audio_partial_reruns_total', 'Observed partial continuation outcomes', ['outcome'])
+RERUNS = Counter(
+    'omi_record_audio_partial_reruns_total', 'Observed partial continuation outcomes', ['phase', 'outcome']
+)
 
 
-def event(outcome):
+def event(outcome, *, late=False):
     # No identities, storage paths, exception messages or open labels.
-    if outcome not in {'scheduled', 'completed', 'unchanged', 'no_new_audio', 'waiting', 'state_changed', 'bounded'}:
+    if outcome not in {
+        'scheduled',
+        'completed',
+        'unchanged',
+        'no_new_audio',
+        'waiting',
+        'state_changed',
+        'bounded',
+        'retry',
+        'privacy_refused',
+    }:
         outcome = 'state_changed'
-    logger.info('event=record_partial_rerun outcome=%s count=1', outcome)
-    RERUNS.labels(outcome=outcome).inc()
+    phase = 'late' if late else 'initial'
+    logger.info('event=record_partial_rerun phase=%s outcome=%s count=1', phase, outcome)
+    RERUNS.labels(phase=phase, outcome=outcome).inc()
+
+
+def record_failure(error, *, privacy=False, run=None):
+    bounded = str(error) in {
+        'partial source budget exceeded',
+        'partial unit budget exceeded',
+        'partial coverage budget exceeded',
+        'batch artifact exceeds bounded payload size',
+        'speaker audio listing budget exhausted',
+    }
+    late = bool(run and (run.get('generation', 0) > 1 or run.get('complete')))
+    event('privacy_refused' if privacy else 'bounded' if bounded else 'retry', late=late)
 
 
 def seed_for(pending):
@@ -66,7 +91,7 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
     )
     fingerprint = inventory_digest(chunks)
     if previous and previous.get('complete') and previous['fingerprint'] == fingerprint:
-        event('unchanged')
+        event('unchanged', late=True)
         return None
     seed = seed_for(pending)
     await run_blocking(db_executor, artifacts.authorize, seed)
@@ -110,7 +135,9 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
         now=now,
         applied=not units,
     )
-    event('scheduled' if changed and units else 'no_new_audio' if changed else 'state_changed')
+    event(
+        'scheduled' if changed and units else 'no_new_audio' if changed else 'state_changed', late=run['generation'] > 1
+    )
     return run if changed else None
 
 
@@ -127,7 +154,7 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
         db_executor, store.run, lambda tx: tx.get('content', f"{pending['owner_id']}/{content}")
     )
     if ledger and ledger.get('status') != 'completed':
-        event('waiting')
+        event('waiting', late=run['generation'] > 1)
         return {'outcome': 'partial'}
     seed = seed_for(pending)
     plan = await run_blocking(storage_executor, artifacts.load_record_plan, seed, run['plan_uri'])
@@ -155,7 +182,7 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
             now=now,
             applied=bool(updated['complete']),
         )
-        event('completed' if changed else 'state_changed')
+        event('completed' if changed else 'state_changed', late=run['generation'] > 1)
         return {'outcome': 'partial'}
     await admit_page(store, pending, current, barrier, artifacts, plan, run, units, content, now)
     return {'outcome': 'partial'}
