@@ -95,6 +95,7 @@ def test_partial_is_distinct_from_complete_and_api_exposes_it(source):
     model = Conversation(**{**row, 'created_at': row['started_at']})
     assert model.model_dump()['record_audio_partial']['reason'] == 'tail_lagging'
     assert pending(source)['state'] == 'record_pending'
+    assert pending(source)['partial_reason'] == 'tail_lagging'
     assert finish(source) == 'already_partial'
     assert repair.seal_refusal(pending(source), row) == 'already_partial'
 
@@ -174,6 +175,38 @@ def test_late_producer_cannot_promote_partial_to_complete(source):
     assert not source[1].rows[ROW]['record_audio_closed']
     assert finish(source) == 'partial_finished'
     require_record_audio_barrier(source[1].rows[ROW])
+
+
+def test_late_refresh_keeps_the_original_closed_metric_reason(source):
+    assert (
+        finish_partial(
+            source[0],
+            '/'.join(ROW),
+            reason='budget_limit',
+            proof=source[2],
+            now=NOW,
+            register=lambda tx, uid, cid, row: registration(tx, uid, cid, row, FLAGS),
+        )
+        == 'partial_finished'
+    )
+    set_record_upload_pending('synthetic', 'record', 'late', True, firestore_client=source[1])
+    set_record_upload_pending('synthetic', 'record', 'late', False, firestore_client=source[1])
+    details = {}
+    assert (
+        cluster.repair_one(
+            source[0],
+            None,
+            None,
+            '/'.join(ROW),
+            flags=FLAGS,
+            inventory=lambda: source[2],
+            budget=SweepBudget(240),
+            reason_out=details,
+        )
+        == 'partial_finished'
+    )
+    assert details['partial_reason'] == 'budget_limit'
+    assert pending(source)['partial_reason'] == 'budget_limit'
 
 
 def test_kill_switch_off_does_not_finish_or_admit(source, monkeypatch):

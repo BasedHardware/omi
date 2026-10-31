@@ -92,6 +92,9 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     job = store.run(lambda tx: tx.get('jobs', job_id))
     budget.check()
     if job.get('partial_coordinator'):
+        if reason_out is not None:
+            reason = job.get('partial_reason')
+            reason_out['partial_reason'] = reason if reason in partial_config.REASONS else 'tail_lost_or_unproven'
         return finish_partial(store, path, reason='tail_lagging', proof=proof, now=time.time(), preview=mode == 'plan')
     plan: dict[str, Any]
     if job:

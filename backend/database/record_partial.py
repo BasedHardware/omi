@@ -73,7 +73,7 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
             'applied_generation': mark.get('applied_generation', 0),
             'finished_partial_at': mark.get('finished_partial_at', datetime.fromtimestamp(now, timezone.utc)),
         }
-        job.update(partial_coordinator=True, available_at=now)
+        job.update(partial_coordinator=True, partial_reason=mark['reason'], available_at=now)
         if not producer_tokens_dead({}, proof):
             return 'state_changed'
         tx.put('jobs', segment, job)
