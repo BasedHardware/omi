@@ -3997,6 +3997,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
     lock_key = f'audio:{conversation_id}:conversation'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
     if not lock_token:
+        if await run_blocking(db_executor, playback_build.superseded_while_locked, payload):
+            return JSONResponse(status_code=200, content={'status': 'superseded'})
         return JSONResponse(status_code=409, content={'status': 'locked'})
 
     try:
@@ -4009,14 +4011,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
-        if demand:
-            fingerprint = compute_audio_files_fingerprint(
-                audio_files,
-                origin=conversation.get('started_at') or conversation.get('created_at'),
-                source_identity=True,
-            )
-        else:
-            fingerprint = compute_audio_files_fingerprint(audio_files)
+        fingerprint = sync_playback.conversation_merge_fingerprint(conversation, demand=demand)
         if payload_fingerprint and payload_fingerprint != fingerprint:
             PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
