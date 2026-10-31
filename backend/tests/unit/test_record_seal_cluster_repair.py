@@ -17,6 +17,7 @@ from config import record_seal_repair as config
 from utils.batch_pipeline import record_seal_nojob as nojob, record_seal_cluster_repair as cluster
 from utils.batch_pipeline import record_producer_proof as producer
 from utils.batch_pipeline.record_seal_budget import SweepBudget
+from utils.batch_pipeline.record_seal_reasons import TAIL_GAP_BUCKETS
 from tests.unit.test_record_seal_nojob import source, SCOPE, SERVER, PATH, JOB_PATH
 from tests.unit.test_record_producer_proof import inventory
 
@@ -673,3 +674,110 @@ def test_row_refusal_reason_survives_canonical_planner(source, proof):
         == 'proof_refused'
     )
     assert reason == {'proof_reason': 'finish_missing'}
+
+
+@pytest.mark.parametrize('pending_job', [False, True])
+@pytest.mark.parametrize('precheck', [False, True])
+def test_row_tail_gap_survives_both_canonical_planners(source, proof, pending_job, precheck, monkeypatch):
+    if not precheck:
+        from utils.batch_pipeline import record_seal_repair as repair
+
+        monkeypatch.setattr(repair, 'precheck_record_tail', lambda *a, **k: None)
+    if pending_job:
+        assert settle(source, proof) == 'sealed_registered'
+        source[1].rows[PATH]['record_audio_closed'] = False
+    source[1].rows[PATH]['finished_at'] = datetime.fromtimestamp(132, timezone.utc)
+    reason = {}
+    assert (
+        cluster.repair_one(
+            source[0],
+            object(),
+            source[2],
+            SCOPE[0],
+            flags=SERVER,
+            inventory=proof,
+            budget=SweepBudget(270),
+            reason_out=reason,
+        )
+        == 'proof_refused'
+    )
+    assert reason == {'proof_reason': 'tail_lagging', 'tail_gap_bucket': '30_to_120s'}
+    assert not source[1].rows[PATH].get('record_audio_closed')
+
+
+@pytest.mark.parametrize('candidate', [*sorted(TAIL_GAP_BUCKETS), 'A' * 28, 'private@example.invalid', None])
+def test_child_gap_bucket_is_allowlisted(candidate):
+    process = FakeProcess([0], 0, result='proof_refused')
+    process.stdout = io.BytesIO(
+        json.dumps(
+            {
+                'disposition': 'proof_refused',
+                'proof_reason': 'tail_lagging',
+                'tail_gap_bucket': candidate,
+            }
+        ).encode()
+    )
+    progress = []
+    report = cluster.coordinate(
+        [('private-path', 100)],
+        workers=1,
+        row_seconds=1,
+        run_seconds=1,
+        mode='apply',
+        launch=lambda *_: process,
+        progress=progress.append,
+    )
+    expected = candidate if candidate in TAIL_GAP_BUCKETS else 'negative_or_unknown'
+    assert report['tail_gap_buckets'] == {expected: 1}
+    assert progress[0]['tail_gap_bucket'] == expected
+    assert set(progress[0]) == {'event', 'count', 'disposition', 'seal_age_seconds', 'proof_reason', 'tail_gap_bucket'}
+
+
+def test_upload_failed_skips_proof_cost_and_gap(source, proof, monkeypatch):
+    from utils.batch_pipeline import record_seal_repair as repair
+
+    source[1].rows[PATH]['record_upload_failed'] = True
+    read = Mock(side_effect=AssertionError('must not read audio'))
+    monkeypatch.setattr(repair, 'list_audio_chunks', read)
+    reason = {}
+    assert (
+        cluster.repair_one(
+            source[0],
+            object(),
+            source[2],
+            SCOPE[0],
+            flags=SERVER,
+            inventory=proof,
+            budget=SweepBudget(270),
+            reason_out=reason,
+        )
+        == 'upload_failed'
+    )
+    assert reason == {}
+    read.assert_not_called()
+    assert source[1].rows[PATH]['record_upload_failed'] is True
+
+
+def test_non_tail_child_cannot_emit_gap():
+    process = FakeProcess([0], 0, result='upload_failed')
+    process.stdout = io.BytesIO(
+        json.dumps(
+            {
+                'disposition': 'upload_failed',
+                'proof_reason': 'tail_lagging',
+                'tail_gap_bucket': 'over_120s',
+            }
+        ).encode()
+    )
+    progress = []
+    report = cluster.coordinate(
+        [('private-path', 100)],
+        workers=1,
+        row_seconds=1,
+        run_seconds=1,
+        mode='apply',
+        launch=lambda *_: process,
+        progress=progress.append,
+    )
+    assert report['tail_gap_buckets'] == {}
+    assert 'tail_gap_bucket' not in progress[0]

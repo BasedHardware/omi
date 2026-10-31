@@ -102,3 +102,15 @@ def test_log_metrics_use_only_allowlisted_row_counts_and_numeric_age():
     pattern = json.loads(expression.split(', ', 1)[1][:-1])
     for private in ('A' * 28, 'private@example.invalid', 'users/private/conversations/private', 'other_private'):
         assert re.search(pattern, json.dumps({'proof_reason': private})) is None
+
+    from utils.batch_pipeline.record_seal_reasons import TAIL_GAP_BUCKETS
+
+    gap = next(metric for metric in metrics if metric['name'].endswith('_tail_gap'))
+    assert list(gap['labelExtractors']) == ['tail_gap_bucket']
+    assert 'proof_refused' in gap['filter'] and 'tail_lagging' in gap['filter']
+    assert extract(gap['valueExtractor'], {'count': 1}) == '1'
+    for bucket in TAIL_GAP_BUCKETS:
+        assert extract(gap['labelExtractors']['tail_gap_bucket'], {'tail_gap_bucket': bucket}) == bucket
+    pattern = json.loads(gap['labelExtractors']['tail_gap_bucket'].split(', ', 1)[1][:-1])
+    for private in ('A' * 28, 'private@example.invalid', 'users/private/conversations/private', 'under_1s_private'):
+        assert re.search(pattern, json.dumps({'tail_gap_bucket': private})) is None

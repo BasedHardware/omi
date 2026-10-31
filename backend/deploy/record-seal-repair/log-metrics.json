@@ -76,5 +76,26 @@
     "labelExtractors": {
       "proof_reason": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"proof_reason\\\": \\\"(tail_lagging|tail_lost_or_unproven|overlap_conflict|decode_or_checksum|budget_limit|finish_missing|registration_refused|other)\\\"\")"
     }
+  },
+  {
+    "name": "omi_record_seal_repair_tail_gap",
+    "description": "Tail-lagging refusals by closed finish-minus-audio-end gap bucket; counts only.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.logger=\"record-seal-repair\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_repair_row\\\"\" AND jsonPayload.message=~\"\\\"disposition\\\": \\\"proof_refused\\\"\" AND jsonPayload.message=~\"\\\"proof_reason\\\": \\\"tail_lagging\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1",
+      "labels": [
+        {
+          "key": "tail_gap_bucket",
+          "valueType": "STRING",
+          "description": "Closed finish-minus-audio-end gap bucket."
+        }
+      ]
+    },
+    "valueExtractor": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"count\\\": ([0-9]+)\")",
+    "labelExtractors": {
+      "tail_gap_bucket": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"tail_gap_bucket\\\": \\\"(under_1s|1_to_5s|5_to_30s|30_to_120s|over_120s|negative_or_unknown)\\\"\")"
+    }
   }
 ]
