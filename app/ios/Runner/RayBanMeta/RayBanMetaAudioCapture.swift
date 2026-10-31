@@ -72,6 +72,15 @@ final class RayBanMetaAudioCapture {
         }
     }
 
+    static func looksLikeMetaGlasses(_ portName: String) -> Bool {
+        let lower = portName.lowercased()
+        return lower.contains("ray-ban") ||
+            lower.contains("rayban") ||
+            lower.contains("oakley meta") ||
+            lower.contains("meta glasses") ||
+            lower.range(of: #"^el ai\s"#, options: .regularExpression) != nil
+    }
+
     var isSelectedRouteActive: Bool { Self.isHfpRouteActive(inputUid: targetInputUid) }
 
     func start(targetUid: String?) throws {
@@ -81,25 +90,27 @@ final class RayBanMetaAudioCapture {
         try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP])
 
         let hfpInputs = (session.availableInputs ?? []).filter { $0.portType == .bluetoothHFP }
-        let selectedInput: AVAudioSessionPortDescription?
-        if let targetUid {
-            selectedInput = hfpInputs.first { $0.uid == targetUid }
-            guard selectedInput != nil else {
+        let hfpInput: AVAudioSessionPortDescription
+        if let targetUid, !targetUid.isEmpty {
+            guard let matched = hfpInputs.first(where: { $0.uid == targetUid }) else {
                 throw NSError(
                     domain: "RayBanMetaAudioCapture", code: 3,
                     userInfo: [NSLocalizedDescriptionKey: "Selected Bluetooth microphone is unavailable"]
                 )
             }
+            hfpInput = matched
         } else {
-            // DAT mode does not expose a mapping from its device ID to the HFP
-            // port UID, so preserve its existing first-HFP behavior.
-            selectedInput = hfpInputs.first
+            guard let matched = hfpInputs.first(where: { Self.looksLikeMetaGlasses($0.portName) }) else {
+                throw NSError(
+                    domain: "RayBanMetaAudioCapture", code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "Ray-Ban Meta microphone is unavailable"]
+                )
+            }
+            hfpInput = matched
         }
 
-        if let hfpInput = selectedInput {
-            try session.setPreferredInput(hfpInput)
-        }
-        targetInputUid = targetUid
+        try session.setPreferredInput(hfpInput)
+        targetInputUid = hfpInput.uid
 
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 
