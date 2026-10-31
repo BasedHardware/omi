@@ -190,6 +190,17 @@ class TestConversationsToTsv(unittest.TestCase):
             sys.stdin = saved_stdin
             sys.stdout = saved_stdout
 
+    def test_extract_transcript_with_transcript_segments_key(self):
+        conv = {
+            "id": "c-transcript-segments",
+            "transcript_segments": [
+                {"speaker": 0, "text": "Hello from speaker zero."},
+                {"speaker": 1, "text": "Reply from speaker one."},
+            ],
+        }
+        res = c2tsv.extract_transcript(conv)
+        self.assertEqual(res, "0: Hello from speaker zero. 1: Reply from speaker one.")
+
     def test_speaker_zero_and_alternate_speaker_keys_preserved(self):
         conv = {
             "id": "c-speaker-0",
