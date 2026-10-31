@@ -18,8 +18,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from config.batch_pipeline import scheduler_control_key
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
+from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.batch_pipeline.scheduler import Scheduler, owner_key as scheduler_owner_key
 
 pytestmark = pytest.mark.integration
 
@@ -427,3 +430,138 @@ def test_concurrent_read_modify_write_never_loses_an_update(h):
     with ThreadPoolExecutor(max_workers=2) as pool:  # Firestore aborts after 5 attempts under heavier contention
         list(pool.map(bump, range(6)))
     assert h.store.run(lambda tx: tx.get('owners', 'ctr'))['n'] == 6
+
+
+# -- daily parity: fenced scheduler pulls (PL-141/142/143, source PR #23927) ---------------------------
+@pytest.fixture
+def pull_case(h, monkeypatch):
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    monkeypatch.setenv('BATCH_SHARD_SPREAD_ENABLED', 'true')
+    # All timestamps, including time spent between claim and commit, are explicit.
+    clock = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: clock[0])
+    queue = Scheduler(h.store)
+    for segment in ('a', 'b'):
+        assert queue.enqueue(WorkItem(segment, h.uid('o'), 1, f'gs://synthetic/{segment}', 30, Priority.FRESH), 1000)
+    key = scheduler_owner_key(h.uid('o'))
+    shard = scheduler_control_key(key)
+    keys = [('jobs', 'a'), ('jobs', 'b'), ('queues', f'0_{key}'), ('owners', key), ('control', shard)]
+
+    def snapshot():
+        return h.store.run(lambda tx: [tx.get(table, name) for table, name in keys])
+
+    return queue, shard, clock, snapshot
+
+
+def test_pl141_busy_pull_claim_leaves_queue_and_control_untouched(h, pull_case, monkeypatch):
+    queue, shard, _, snapshot = pull_case
+    assert h.store.acquire_pull_claim(shard, 'holder', 1000, 30)
+    before = snapshot()
+    run = h.store.run
+    reads, writes = [], []
+
+    class ObservedTransaction:
+        def __init__(self, tx):
+            self.tx = tx
+
+        def __getattr__(self, name):
+            return getattr(self.tx, name)
+
+        def get(self, table, key):
+            reads.append(table)
+            return self.tx.get(table, key)
+
+        def put(self, table, key, value):
+            writes.append(table)
+            return self.tx.put(table, key, value)
+
+        def delete(self, table, key):
+            writes.append(table)
+            return self.tx.delete(table, key)
+
+    def observed_run(body):
+        return run(lambda tx: body(ObservedTransaction(tx)))
+
+    monkeypatch.setattr(h.store, 'run', observed_run)
+    assert queue.pull(1001) == []
+    # Postgres acquires through a transaction; Firestore uses conditional CAS.
+    # Neither may enter the queue/control read set or write anything when busy.
+    assert set(reads) <= {'pull_claims'} and writes == []
+    monkeypatch.setattr(h.store, 'run', run)
+    assert snapshot() == before
+    assert run(lambda tx: tx.get('pull_claims', shard)) == {'token': 'holder', 'expires_at': 1030}
+    assert not h.store.acquire_pull_claim(shard, 'follower', 1029.999, 30)
+    assert run(lambda tx: tx.get('pull_claims', shard)) == {'token': 'holder', 'expires_at': 1030}
+
+
+@pytest.mark.parametrize('takeover', [False, True], ids=['expired', 'replaced'])
+def test_pl142_paused_holder_cannot_mutate_or_release_a_new_claim(h, pull_case, monkeypatch, takeover):
+    queue, shard, clock, snapshot = pull_case
+    before = snapshot()
+    acquire = h.store.acquire_pull_claim
+    issued = []
+
+    def pause_after_acquisition(key, token, now, ttl):
+        won = acquire(key, token, now, ttl)
+        assert won and key == shard
+        issued.append(token)
+        clock[0] += ttl  # expires exactly at the transaction's current time
+        if takeover:
+            assert acquire(key, 'replacement', now + ttl, ttl)
+        return won
+
+    monkeypatch.setattr(h.store, 'acquire_pull_claim', pause_after_acquisition)
+    assert queue.pull(1000) == []
+    assert len(issued) == 1
+    assert snapshot() == before
+    claim = h.store.run(lambda tx: tx.get('pull_claims', shard))
+    assert claim == {
+        'token': 'replacement' if takeover else issued[0],
+        'expires_at': 1060 if takeover else 1030,
+    }
+    monkeypatch.setattr(h.store, 'acquire_pull_claim', acquire)
+    # A reconstructed scheduler cannot renew/clear a live replacement either.
+    if takeover:
+        assert Scheduler(h.store).pull(1059) == []
+        assert h.store.run(lambda tx: tx.get('pull_claims', shard)) == claim
+    (lease,) = Scheduler(h.store).pull(1060 if takeover else 1030)
+    assert lease.item.segment_id == 'a' and lease.attempt == 1
+
+
+def test_pl143_failed_pull_rolls_back_release_and_restart_recovers_after_expiry(h, pull_case, monkeypatch):
+    queue, shard, _, snapshot = pull_case
+    before = snapshot()
+    run = h.store.run
+
+    class BeforeCommitFailure(RuntimeError):
+        pass
+
+    def abort_after_body(body):
+        def abort(tx):
+            result = body(tx)
+            if isinstance(result, bool):  # Postgres's separate claim-acquisition transaction
+                return result
+            assert result[0] is not None  # the real pull buffered a job lease and claim release
+            raise BeforeCommitFailure('synthetic abort after pull body, before commit')
+
+        return run(abort)
+
+    monkeypatch.setattr(h.store, 'run', abort_after_body)
+    with pytest.raises(BeforeCommitFailure, match='before commit'):
+        queue.pull(1000)
+    monkeypatch.setattr(h.store, 'run', run)
+    assert snapshot() == before
+    claim = run(lambda tx: tx.get('pull_claims', shard))
+    assert claim['token'] and claim['expires_at'] == 1030
+    restarted = Scheduler(h.store)
+    assert restarted.pull(1029.999) == []
+    assert snapshot() == before
+    first, second = restarted.pull(1030, 2)
+    assert [first.item.segment_id, second.item.segment_id] == ['a', 'b']
+    assert first.token != second.token and first.attempt == second.attempt == 1
+    assert run(lambda tx: tx.get('pull_claims', shard)) == {'token': '', 'expires_at': 0.0}
+    assert Scheduler(h.store).pull(1031) == []  # issued job leases remain exclusive
+    for lease in (first, second):
+        row = run(lambda tx: tx.get('jobs', lease.item.segment_id))
+        assert row['state'] == 'leased' and row['token'] == lease.token
