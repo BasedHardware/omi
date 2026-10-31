@@ -72,6 +72,28 @@ loss has issued no audio or coverage custody ACK for that uncommitted window.
 
 ## Recovery and acceptance
 
+After a record socket closes, inline finish waits up to 20 seconds for its
+projection. The existing socket drain gets another 30 seconds. If durable work
+still remains, pusher transfers that same worker to a tracked process owner
+(at most 32 closed drains per process). No projection is restarted or certified
+by the transfer. Queue accounting and close checks are per conversation;
+a later recording on the socket cannot keep the earlier close waiting for
+the whole socket queue to empty. Each pass consumes a bounded queue snapshot.
+
+Transient close metadata errors keep retrying at the drain's one-second cadence,
+including after the old three-attempt limit. Permanent projection/tail failures
+retain their producer token. A `producer_pending` seal refusal means another
+producer remains; the successfully drained caller has already released its own
+token. At closed-drain capacity, cleanup cancels the worker as before and leaves
+the immutable receipts and token for repair. SIGTERM cancels tracked drain owners
+and their workers; no cancellation or timer releases a token. Repair still needs
+the existing pod-death proof after process exit.
+
+`event=record_closed_finish` uses only closed outcomes: `retained`, `completed`,
+`failed`, `cancelled`, `capacity`. `completed` means the drain settled, not that
+every seal succeeded; projection failures and seal refusals retain their existing
+failure/refusal events. These events contain no recording or producer identity.
+
 After a pod loss, list raw-live objects for the affected owner/conversation and
 the corresponding immutable audio-outbox manifests. Fetch the pinned media
 generation, decrypt under its owner, verify the plaintext digest, decode, and

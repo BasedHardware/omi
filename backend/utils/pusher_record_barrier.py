@@ -144,11 +144,12 @@ class PusherRecordBarrier:
         self.checked_conversations: set[str] = set()
         self.pending_clears: set[tuple[str, str]] = set()
         self.close_failures: dict[str, int] = {}
+        self.keep_close_pending = False
 
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
-        attempts = self.close_failures.get(conversation_id, 0) + 1
-        if attempts >= CLOSE_RETRY_BUDGET or (
+        attempts = min(self.close_failures.get(conversation_id, 0) + 1, CLOSE_RETRY_BUDGET)
+        if (not self.keep_close_pending and attempts >= CLOSE_RETRY_BUDGET) or (
             conversation_id not in self.close_failures and len(self.close_failures) >= 128
         ):
             self.close_failures.pop(conversation_id, None)
@@ -192,7 +193,11 @@ class PusherRecordBarrier:
             await self.fail_recording(conversation_id)
 
     async def finish_recording(self, conversation_id: str) -> bool:
-        """Return whether this close is settled or its retry budget exhausted."""
+        """Return whether settled (or the legacy bounded retry budget exhausted).
+
+        Durable drain owners set keep_close_pending so transient metadata
+        failure never retires their only retry while this process is alive.
+        """
         if self.record_upload_failed or conversation_id in self.failed_recordings:
             return True  # A held tail is not a successful drain.
         token = self.upload_sessions.get(conversation_id)
