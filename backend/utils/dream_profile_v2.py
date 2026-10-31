@@ -181,6 +181,8 @@ def from_doc(doc: Any) -> ProfileV2 | None:
     if not isinstance(doc, dict):
         return None
     try:
-        return ProfileV2.model_validate({key: value for key, value in doc.items() if key != 'rendered'})
+        # Side metadata (rendered, notes, run_started_at, ...) lives beside the schema fields.
+        fields = set(ProfileV2.model_fields) - {'rendered'}
+        return ProfileV2.model_validate({key: value for key, value in doc.items() if key in fields})
     except Exception:
         return None

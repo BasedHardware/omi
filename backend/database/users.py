@@ -9,6 +9,7 @@ from utils.speakers.person_pool import (
     shadow_profile,
 )
 from config.firestore_read_levers import lever_enabled
+import time
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
 from datetime import datetime, timedelta, timezone
@@ -2487,7 +2488,7 @@ def get_ai_user_profile_v2(uid: str) -> Optional[dict]:
     return (doc.to_dict() or {}).get('ai_user_profile_v2')
 
 
-def update_ai_user_profile_v2(uid: str, profile_v2: dict) -> bool:
+def update_ai_user_profile_v2(uid: str, profile_v2: dict, *, not_after: float | None = None) -> bool:
     """Replace only the v2 side field, unless a newer run already wrote it.
 
     ``profile_v2['run_started_at']`` (ISO) fences late writes from a timed-out run.
@@ -2497,6 +2498,9 @@ def update_ai_user_profile_v2(uid: str, profile_v2: dict) -> bool:
 
     @transactional
     def write(transaction):
+        # A run past its deadline never starts (or retries) the write.
+        if not_after is not None and time.time() > not_after:
+            return False
         snapshot = ref.get(['ai_user_profile_v2'], transaction=transaction)
         current = (snapshot.to_dict() or {}).get('ai_user_profile_v2') if snapshot.exists else None
         previous = str((current or {}).get('run_started_at') or '')

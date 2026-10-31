@@ -1,6 +1,7 @@
 """Shadow state pass: stable serialization, capped plans, staged + verified, never applied."""
 
 import asyncio
+import time
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -177,7 +178,12 @@ def state_env(runtime, monkeypatch):
 
     written = []
     monkeypatch.setattr(users_db, 'get_ai_user_profile_v2', lambda uid: None)
-    monkeypatch.setattr(users_db, 'update_ai_user_profile_v2', lambda uid, doc: written.append(doc))
+
+    def write(uid, doc, *, not_after=None):
+        written.append({**doc, '_not_after': not_after})
+        return True
+
+    monkeypatch.setattr(users_db, 'update_ai_user_profile_v2', write)
     applied = []
     real_apply = dream_tools.apply_verified_edit
 
@@ -211,6 +217,9 @@ def test_shadow_state_pass_stages_and_verifies_but_never_applies(runtime, state_
     assert lever['profile_added'] == 1 and lever['profile_lines'] == 1
     assert written and written[0]['rendered']['profile_text'].endswith('- Builds Omi.')
     assert written[0]['notes'] == 'next week'
+    # The write is bounded by the pass deadline, so a timed-out run cannot commit.
+    assert written[0]['_not_after'] is not None and written[0]['_not_after'] > time.time()
+    assert lever['profile_written'] is True
     planner = [entry for entry in seen if entry[0] == 'planner']
     assert len(planner) == 1 and planner[0][1] == MAIN_LANE
     assert 'UNTRUSTED STATE DATA' in planner[0][2]
@@ -384,3 +393,21 @@ def test_recall_counts_only_supported_kinds():
     ]
     result = dream_state_pass.compare(planned, {'k1'}, [], {}, report, set())
     assert result['loop_applied'] == 1 and result['recall_keys'] == 1 and result['recall_refs'] == 1
+
+
+def test_pre_effect_rows_never_ground_profile_lines(runtime, state_env):
+    written, _applied = state_env
+    # people/junk is dismissed by the loop; its pre-effect row is in the planner view only.
+    plan = StatePlan(
+        profile_ops=[
+            dream_profile_v2.ProfileLineOp(
+                op='add', section='people', text='Works with Junk.', refs=['people/junk', 'memories/m1']
+            ),
+            dream_profile_v2.ProfileLineOp(op='add', section='work', text='Builds Omi.', refs=['memories/m1']),
+        ]
+    )
+    report = asyncio.run(dream_agent.run_pass(UID, turn=_loop_and_state_model([], plan)))
+    lever = report['levers']['state_pass']
+    assert lever['profile_added'] == 1 and lever['profile_rejected'] >= 1
+    text = written[0]['rendered']['profile_text']
+    assert 'Junk' not in text and text.endswith('- Builds Omi.')

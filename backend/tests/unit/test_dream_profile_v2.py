@@ -100,3 +100,7 @@ def test_doc_round_trip():
     restored = profile.from_doc(doc)
     assert restored is not None and restored.sections == state.sections
     assert profile.from_doc({'sections': 'broken'}) is None
+    # The exact persisted shape carries side metadata beside the schema fields.
+    stored = {**doc, 'notes': 'next week', 'run_started_at': '2026-10-31T00:00:00Z'}
+    restored = profile.from_doc(stored)
+    assert restored is not None and restored.sections == state.sections

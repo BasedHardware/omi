@@ -14,6 +14,8 @@ generated tasks.
 
 import asyncio
 import hashlib
+import time
+from functools import partial
 import json
 import logging
 import os
@@ -418,13 +420,16 @@ async def _run(
     # The loop's effects ran first, so its dismissed people / retired tasks have left
     # these scans. Show their pre-effect rows so recall compares like with like.
     seen_refs = {ref for ref, _row in (*people, *tasks)}
+    injected = set()
     for ref, row in sorted(loop_applied_rows.items()):
         if ref in seen_refs:
             continue
         if ref.startswith('people/'):
             people.append((ref, row))
+            injected.add(ref)
         elif ref.startswith('action_items/'):
             tasks.append((ref, row))
+            injected.add(ref)
     sections, trimmed = bounded(
         {
             'people': [[ref, _person_view(row)] for ref, row in people],
@@ -510,14 +515,19 @@ async def _run(
     summary['verifier'] = decisions
     summary.update(compare(edits, planned_keys, staged, support, loop_report, loop_staged_keys))
 
-    corpus_refs = set(corpus)
+    # Profile lines are grounded and rendered only on current records: pre-effect
+    # rows injected for recall are not evidence for the owner's profile.
+    profile_corpus = {ref: row for ref, row in corpus.items() if ref not in injected}
+    corpus_refs = set(profile_corpus)
     profile, profile_counts = dream_profile_v2.apply_ops(
         previous, plan.profile_ops, run_id=run_id, now=now.date().isoformat(), corpus_refs=corpus_refs
     )
     # Existence is not support: every new or changed line must pass a verifier
     # check against its cited records as a fact about the owner.
     fresh = [line for section in profile.sections for line in section.lines if line.run_id == run_id]
-    agreed = await check_lines(fresh, corpus, verify_turn, tokens=max(0, tokens - spent()), deadline_seconds=left(45))
+    agreed = await check_lines(
+        fresh, profile_corpus, verify_turn, tokens=max(0, tokens - spent()), deadline_seconds=left(45)
+    )
     unsupported = {line.id for line in fresh} - agreed
     if unsupported:
         profile = dream_profile_v2.ProfileV2(
@@ -543,7 +553,10 @@ async def _run(
         raise TimeoutError('state_pass_profile_write_deadline')
     # The write is fenced by run_started_at, so a late write from a timed-out run
     # cannot replace a newer run's profile.
-    summary['profile_written'] = bool(await run_blocking(db_executor, users_db.update_ai_user_profile_v2, uid, doc))
+    not_after = time.time() + left(5)
+    summary['profile_written'] = bool(
+        await run_blocking(db_executor, partial(users_db.update_ai_user_profile_v2, not_after=not_after), uid, doc)
+    )
     summary.update(
         profile_ops=profile_counts,
         profile_lines=sum(len(section.lines) for section in profile.sections),
