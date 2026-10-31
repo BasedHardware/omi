@@ -187,7 +187,15 @@ async def verify_two(
                 for decision in decisions:
                     support[decision.id].append(decision.agree)
             except Exception as exc:
-                cause = 'ids_invalid' if str(exc) == 'dream_invalid_verifier_ids' else 'call_failed'
+                if str(exc) == 'dream_invalid_verifier_ids':
+                    cause = 'ids_invalid'
+                elif str(exc) == 'dream_input_token_budget':
+                    # The pass's own budget refused the call; no verifier ran.
+                    cause = 'budget_tokens'
+                elif deadline - asyncio.get_running_loop().time() <= 0:
+                    cause = 'budget_deadline'
+                else:
+                    cause = 'call_failed'
                 for id_ in ids:
                     support[id_].append(None)
                     failed.setdefault(id_, cause)

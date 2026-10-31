@@ -18,7 +18,7 @@ from utils.dream_harness_transport import MAIN_LANE, VERIFY_LANE
 from utils.dream_verify import verify
 from utils.llm.shaped_agent import Turn
 
-LIMITS = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=60000)
+LIMITS = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=400000)
 
 
 def _limited(runtime, monkeypatch):
@@ -30,8 +30,12 @@ def _limited(runtime, monkeypatch):
     )
 
 
-def _spender(votes=(True, True)):
-    """Stage one dismissal, then read until the budget stops the loop."""
+def _spender(votes=(True, True), late=False):
+    """Stage one dismissal, then read until the budget stops the loop.
+
+    ``late`` stages the dismissal together with finish on the turn that reaches the
+    budget edge instead of on the first turn. A ``None`` vote is a failed call.
+    """
     main = []
     verified = []
 
@@ -40,6 +44,8 @@ def _spender(votes=(True, True)):
             batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
             vote = votes[len(verified)]
             verified.append(1)
+            if vote is None:
+                raise RuntimeError('synthetic transport failure')
             return Turn(
                 tokens=200,
                 prompt_tokens=200,
@@ -50,8 +56,12 @@ def _spender(votes=(True, True)):
         assert lane == MAIN_LANE
         main.append(1)
         step = len(main)
+        # 400k budget at 150k per turn: the third turn spends everything the hold leaves.
+        edge = step == 3
         calls = [call('read', {'refs': ['conversations/one']}, index=step)]
-        if step == 1:
+        if late and edge:
+            calls = [call('finish', {'summary': 'Checked synthetic records', 'notes': ''}, index=step)]
+        if (late and edge) or (not late and step == 1):
             calls.insert(
                 0,
                 call(
@@ -69,7 +79,7 @@ def _spender(votes=(True, True)):
                 ),
             )
         # Spend the weighted budget the turn was allowed, as a long uncached prompt would.
-        spend = max(0, min(20000, (mount.budget.tokens or 0) - 500))
+        spend = max(0, min(150000, (mount.budget.tokens or 0) - 500))
         return Turn(
             tokens=1000,
             prompt_tokens=1000,
@@ -122,16 +132,43 @@ def test_verify_hold_shadow_measures_without_changing_the_budget(runtime, monkey
     assert report['levers']['verify_hold']['arm'] == 'shadow' and report['levers']['verify_hold']['held'] > 0
 
 
+def test_hold_covers_a_proposal_staged_with_finish_at_the_budget_edge(runtime, monkeypatch):
+    monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
+    _limited(runtime, monkeypatch)
+    model, verified = _spender(late=True)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert len(verified) == 2 and _status(report) == ['applied'], report['verify_reasons']
+
+
 @pytest.mark.parametrize('arm,status', [('shadow', 'verifier_unverified'), ('serve', 'applied')])
-def test_liberal_verifier_applies_budget_unverified_reversible_kinds_only_in_serve(runtime, monkeypatch, arm, status):
-    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'off')
+def test_liberal_verifier_applies_one_agree_and_one_failed_call_only_in_serve(runtime, monkeypatch, arm, status):
     monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, arm)
     _limited(runtime, monkeypatch)
-    model, _ = _spender()
+    model, _ = _spender(votes=(True, None))
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
-    assert _status(report) == [status]
+    assert _status(report) == [status] and report['verify_reasons'] == {'call_failed': 1}
     lever = report['levers']['liberal_verifier']
     assert lever['would_apply'] == 1 and lever['applied'] == (1 if arm == 'serve' else 0)
+
+
+@pytest.mark.parametrize('votes', [(False, None), (None, None)])
+def test_liberal_verifier_never_applies_without_an_agree_or_after_a_disagree(runtime, monkeypatch, votes):
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'serve')
+    _limited(runtime, monkeypatch)
+    model, _ = _spender(votes=votes)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert _status(report) == ['verifier_unverified']
+    assert report['levers']['liberal_verifier']['would_apply'] == 0
+
+
+def test_liberal_verifier_never_applies_zero_vote_budget_items(runtime, monkeypatch):
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'off')
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'serve')
+    _limited(runtime, monkeypatch)
+    model, verified = _spender()
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert not verified and _status(report) == ['verifier_unverified']
+    assert report['verify_reasons'] == {'budget_tokens': 1}
 
 
 def test_liberal_verifier_defaults_to_shadow(monkeypatch):
@@ -180,6 +217,29 @@ def test_reasons_name_oversized_invalid_ids_failed_calls_and_budget():
     assert _reasons(boom, [_item()], tokens=100000, deadline_seconds=5) == {'synthetic-proposal': 'call_failed'}
     assert _reasons(agree, [_item()], tokens=500, deadline_seconds=5) == {'synthetic-proposal': 'budget_tokens'}
     assert _reasons(agree, [_item()], tokens=100000, deadline_seconds=0) == {'synthetic-proposal': 'budget_deadline'}
+
+    async def refused(mount, messages):
+        raise ValueError('dream_input_token_budget')
+
+    async def slow(mount, messages):
+        await asyncio.sleep(0.3)
+        return await agree(mount, messages)
+
+    assert _reasons(refused, [_item()], tokens=100000, deadline_seconds=5) == {'synthetic-proposal': 'budget_tokens'}
+    assert _reasons(slow, [_item()], tokens=100000, deadline_seconds=0.05) == {'synthetic-proposal': 'budget_deadline'}
+
+
+def test_reserve_pays_two_calls_per_batch():
+    from utils.dream_cost import VERIFIER_CALL_FLOOR, verification_hold_tokens, verification_reserve_tokens
+
+    one = verification_reserve_tokens([_item()], completion_tokens=256)
+    many = verification_reserve_tokens([_item(id_=f'p{index}') for index in range(30)], completion_tokens=256)
+    assert one == 2 * VERIFIER_CALL_FLOOR
+    # 30 items split into two batches of at most 25.
+    assert many >= 2 * one
+    # Headroom for the next turn's proposals, capped at 5% of the pass budget.
+    assert verification_hold_tokens([], completion_tokens=256, pass_tokens=10000) == 500
+    assert verification_hold_tokens([], completion_tokens=256, pass_tokens=1000000) > 2 * VERIFIER_CALL_FLOOR
 
 
 def test_small_verify_budget_still_batches_ordinary_evidence():

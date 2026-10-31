@@ -46,6 +46,7 @@ from utils.dream_cost import (
     conservative_attempt_micro,
     minute_burndown_tokens,
     price_weighted_tokens,
+    verification_hold_tokens,
     verification_reserve_tokens,
 )
 from utils.agent_capabilities.search import OwnerSearch
@@ -530,8 +531,10 @@ async def run_session(
         if lane == dream_harness_transport.MAIN_LANE and hold_arm != 'off':
             # Keep the staged work's two verifier calls paid for; an unverified item is dropped.
             try:
-                held = verification_reserve_tokens(
-                    list(session.staged.values()), completion_tokens=limits.verifier_completion_tokens
+                held = verification_hold_tokens(
+                    list(session.staged.values()),
+                    completion_tokens=limits.verifier_completion_tokens,
+                    pass_tokens=limits.tokens,
                 )
                 hold_row['held'] = max(hold_row['held'], held)
                 if hold_arm == 'serve':
@@ -783,7 +786,16 @@ async def run_session(
                 verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
                 8 * 24000,
             )
-            verify_budget = min(verify_need, max(0, limits.tokens - report['price_weighted_tokens']))
+            # Same effective budget invoke_once enforces, so batch sizing matches what calls can afford.
+            verify_budget = min(
+                verify_need,
+                max(
+                    0,
+                    limits.tokens
+                    - report['price_weighted_tokens']
+                    - session.counters['search_embedding_token_upper_bound'],
+                ),
+            )
             if budget_stop_without_staged_work:
                 support, calls = {}, 0
             else:
@@ -849,6 +861,8 @@ async def run_session(
                         and auto_allowed
                         and item.kind in dream_levers.LIBERAL_VERIFIER_KINDS
                         and unverified_reasons.get(item.id) in dream_levers.LIBERAL_VERIFIER_REASONS
+                        # Apply unless a verifier disagreed, but only after one actually agreed.
+                        and any(vote is True for vote in support[item.id])
                         and not any(vote is False for vote in support[item.id])
                         and not isinstance(item.operation, HarnessQuestion)
                     )
