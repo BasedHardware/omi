@@ -20,6 +20,10 @@ void main() {
     expect(OnboardingVariantGate.parse(variant: ' yinka ', payload: 'ignored'), OnboardingArm.yinka);
     expect(OnboardingVariantGate.parse(variant: 'pocket'), OnboardingArm.pocket);
     expect(OnboardingVariantGate.parse(variant: 'pocket', payload: 'ignored').variant, OnboardingVariant.pocket);
+    expect(OnboardingVariantGate.parse(variant: 'connect_first'), OnboardingArm.connectFirst);
+    expect(OnboardingVariantGate.parse(variant: ' connect_first ', payload: 'ignored'), OnboardingArm.connectFirst);
+    expect(OnboardingVariantGate.parse(variant: 'connect-first'), OnboardingArm.control);
+    expect(OnboardingVariantGate.parse(variant: 'connectFirst'), OnboardingArm.control);
     expect(OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'https://x.example/onboarding'}).variant,
         OnboardingVariant.reid);
     expect(OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'https://x.example/onboarding'}).webUrl,
@@ -64,6 +68,22 @@ void main() {
       },
     );
     expect(arm, OnboardingArm.yinka);
+    expect(payloadReads, 0);
+  });
+
+  test('connect_first -> the native steps with Connect first, without reading the payload', () async {
+    var payloadReads = 0;
+    final arm = await OnboardingVariantGate.resolve(
+      settledIdentity: () => 'u',
+      reload: () async => true,
+      readVariant: (_) async => 'connect_first',
+      readPayload: (_) async {
+        payloadReads++;
+        return null;
+      },
+    );
+    expect(arm, OnboardingArm.connectFirst);
+    expect(arm.isControl, isFalse);
     expect(payloadReads, 0);
   });
 
