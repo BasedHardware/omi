@@ -747,6 +747,24 @@ abstract class DeviceConnection {
 
   Future<int?> performGetMicGain();
 
+  Future<bool> setDeviceName(String name) async {
+    if (await isConnected()) {
+      return await performSetDeviceName(name);
+    }
+    return false;
+  }
+
+  Future<bool> performSetDeviceName(String name) async => false;
+
+  Future<String?> getDeviceName() async {
+    if (await isConnected()) {
+      return await performGetDeviceName();
+    }
+    return null;
+  }
+
+  Future<String?> performGetDeviceName() async => null;
+
   /// Called when the server transcription WebSocket reconnects after a
   /// network-only outage (BLE stayed connected throughout). Override to
   /// re-initialize device streaming if the device may have stopped sending
