@@ -196,10 +196,17 @@ autoscaling:
   # P77r retry proposal: install the relative-refusal guard before activating.
   # Rollback: restore minReplicas=12 and workloadOnly=false together.
   workloadOnly: true
-  # The ratified 2 active requests / 35% GPU targets trigger scale-out;
-  # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
-  # Floor 8 retains warm headroom; cap 12 bounds burst scale-out.
-  minReplicas: 8
+  # 2026-10-29 retire100, sized on lead ruling 907116 / planscost c9a37d:
+  # ~31% of 7d conversations stay live after batch-100% (20% unsupported
+  # language -> Soniox, 7% sync-off, 3% multilingual) plus ~5-6% desktop-
+  # eligible. Parakeet carries the English residual (sync-off English +
+  # desktop English, ~12-17% of conversations): peak concurrency ~29
+  # sessions > one replica's 16-session window, so the floor is 2 (32
+  # sessions absorb the peak without racing scale-up; scaleUp is still
+  # 0s-stabilization +4/15s on burst). Cap 12 unchanged: not a floor,
+  # absorbs a Soniox-failover surge, and the guard's build_rollback
+  # contract expects maxReplicas == 12 (review r1). Rollback: 8/12.
+  minReplicas: 2
   maxReplicas: 12
   behavior:
     scaleUp:
