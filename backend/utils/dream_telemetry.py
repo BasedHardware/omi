@@ -201,6 +201,7 @@ def pass_payload(report: dict[str, Any]) -> dict[str, Any]:
         'turns': _int(report.get('turns')),
         'tool_calls': sum(_int(count) for count in (report.get('tool_counts') or {}).values()),
         'verifier_calls': _int(report.get('verifier_calls')),
+        'verify_reasons': {_label(key): _int(count) for key, count in (report.get('verify_reasons') or {}).items()},
         'verifier_by_kind': {
             _kind(kind): {_label(decision): _int(count) for decision, count in row.items()}
             for kind, row in (report.get('verifier_by_kind') or {}).items()

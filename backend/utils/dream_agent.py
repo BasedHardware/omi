@@ -47,6 +47,7 @@ from utils.dream_cost import (
     conservative_attempt_micro,
     minute_burndown_tokens,
     price_weighted_tokens,
+    verification_hold_tokens,
     verification_reserve_tokens,
 )
 from utils.agent_capabilities.search import OwnerSearch
@@ -446,6 +447,14 @@ async def run_session(
         report['last_prompt_tokens'] = result.prompt_tokens
 
     compact_arm = arms.get('history_compact', 'off')
+    hold_arm = arms.get('verify_hold', 'off')
+    hold_row = {'arm': hold_arm, 'held': 0}
+    if hold_arm != 'off':
+        levers['verify_hold'] = hold_row
+    liberal_arm = arms.get('liberal_verifier', 'off')
+    liberal_row = {'arm': liberal_arm, 'would_apply': 0, 'applied': 0}
+    if liberal_arm != 'off':
+        levers['liberal_verifier'] = liberal_row
     # Scheduled owner passes only; never canary, dry-run or manual runs.
     judge_mode = dream_judge.mode() if judge else 'off'
     judging = False
@@ -574,6 +583,19 @@ async def run_session(
             - report['price_weighted_tokens']
             - session.counters['search_embedding_token_upper_bound']
         )
+        if lane == dream_harness_transport.MAIN_LANE and hold_arm != 'off':
+            # Keep the staged work's two verifier calls paid for; an unverified item is dropped.
+            try:
+                held = verification_hold_tokens(
+                    list(session.staged.values()),
+                    completion_tokens=limits.verifier_completion_tokens,
+                    pass_tokens=limits.tokens,
+                )
+                hold_row['held'] = max(hold_row['held'], held)
+                if hold_arm == 'serve':
+                    remaining -= held
+            except Exception as error:
+                logger.warning('event=dream_lever_error lever=verify_hold exc=%s', type(error).__name__)
         if (
             lane == dream_harness_transport.MAIN_LANE
             and not budget_notice_sent
@@ -820,7 +842,16 @@ async def run_session(
                 verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
                 8 * 24000,
             )
-            verify_budget = min(verify_need, max(0, limits.tokens - report['price_weighted_tokens']))
+            # Same effective budget invoke_once enforces, so batch sizing matches what calls can afford.
+            verify_budget = min(
+                verify_need,
+                max(
+                    0,
+                    limits.tokens
+                    - report['price_weighted_tokens']
+                    - session.counters['search_embedding_token_upper_bound'],
+                ),
+            )
             if budget_stop_without_staged_work:
                 support, calls = {}, 0
             else:
@@ -846,6 +877,8 @@ async def run_session(
             report['verifier_valid_responses'] = sum(
                 isinstance(vote, bool) for votes in support.values() for vote in votes
             )
+            unverified_reasons = verification_telemetry.get('unverified_reasons') or {}
+            report['verify_reasons'] = dict(Counter(unverified_reasons.values()))
             decisions = Counter()
             by_kind: dict[str, Counter] = {}
             stage = 'demotion_check'
@@ -879,17 +912,36 @@ async def run_session(
                         }
                     )
                     default_policy = verifiers.is_default_policy(verifiers.policy_for(verifiers.item_kind(item)))
+                    liberal = (
+                        liberal_arm != 'off'
+                        and decision == 'unverified'
+                        and default_policy
+                        and auto_allowed
+                        and item.kind in dream_levers.LIBERAL_VERIFIER_KINDS
+                        and unverified_reasons.get(item.id) in dream_levers.LIBERAL_VERIFIER_REASONS
+                        # Apply unless a verifier disagreed, but only after one actually agreed.
+                        and any(vote is True for vote in support[item.id])
+                        and not any(vote is False for vote in support[item.id])
+                        and not isinstance(item.operation, HarnessQuestion)
+                    )
+                    if liberal:
+                        liberal_row['would_apply'] += 1
+                    liberal_apply = liberal and liberal_arm == 'serve'
                     # The default two-verifier path records unverified and does not
                     # enqueue it. A non-default chain's unverified result uses the
                     # same offer path as a split. Disagreement is never offered.
                     if item.kind == 'resolve_required_memory' and (decision != 'agree' or not auto_allowed):
                         # A split never spills hidden submissions into Review.
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'intake_deferred'})
-                    elif decision == 'disagree' or (decision == 'unverified' and default_policy):
+                    elif decision == 'disagree' or (decision == 'unverified' and default_policy and not liberal_apply):
                         report['outcomes'].append(
                             {'key': item.key, 'kind': item.kind, 'status': 'verifier_' + decision}
                         )
-                    elif decision == 'agree' and auto_allowed and not isinstance(item.operation, HarnessQuestion):
+                    elif (
+                        (decision == 'agree' or liberal_apply)
+                        and auto_allowed
+                        and not isinstance(item.operation, HarnessQuestion)
+                    ):
                         try:
                             if isinstance(item.operation, HarnessEdit):
                                 status = await effect_with_gate_retry(
@@ -914,6 +966,8 @@ async def run_session(
                                 raise
                             status = 'invalid_evidence'
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
+                        if liberal_apply and status == 'applied':
+                            liberal_row['applied'] += 1
                     elif item.value > 2:
                         offered.append((item, sum(vote is True for vote in support[item.id])))
                     elif decision == 'unverified':

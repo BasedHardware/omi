@@ -29,6 +29,10 @@ INSTRUCTIONS = (
 )
 
 
+def compact_json(value):
+    return json.dumps(value, ensure_ascii=False, default=str, separators=(',', ':'))
+
+
 def evidence(item):
     # No seed, planner messages, prior notes, or another verifier's response.
     rows = {ref: minimal_context(ref, item.records) for ref in item.refs}
@@ -66,13 +70,21 @@ def minimal_context(ref, records):
     return context
 
 
-def batches(staged, byte_limit=24000):
+# Why an item ended without two boolean votes. Bounded labels for telemetry and
+# for the liberal-verifier lever, which never applies oversized or id-invalid items.
+UNVERIFIED_REASONS = ('oversized', 'ids_invalid', 'call_failed', 'single_vote', 'budget_tokens', 'budget_deadline')
+
+
+def batches(staged, byte_limit=24000, skipped=None):
     batch = []
     for item in staged:
         row = evidence(item)
-        if serialized_bytes(row) > byte_limit:
+        size = serialized_bytes(row)
+        if size > byte_limit:
             # Do not truncate evidence into apparent support. Unverified items
             # may go to Review but can never automatically apply.
+            if skipped is not None:
+                skipped[item.id] = size
             continue
         if batch and (len(batch) >= 25 or serialized_bytes([*batch, row]) > byte_limit):
             yield batch
@@ -123,19 +135,33 @@ async def verify(
 async def verify_two(
     staged, model_turn, *, tokens, deadline_seconds, completion_tokens=4096, verifier_seconds=120, telemetry=None
 ):
+    from utils.dream_cost import BYTES_PER_TOKEN
+
     support = {item.id: [] for item in staged}
     used = 0
     calls = 0
     deadline = asyncio.get_running_loop().time() + deadline_seconds
-    for batch in batches(staged, byte_limit=max(1024, min(24000, tokens // 8))):
+    skipped = {}
+    failed = {}
+    stopped = {}
+    # One batch is sent to both verifiers, so a batch may use half the budget less
+    # one completion. The 24000-byte cap is the verifier's evidence ceiling.
+    per_call_bytes = int((tokens // 2 - completion_tokens) * BYTES_PER_TOKEN) + 1
+    for batch in batches(staged, byte_limit=max(1024, min(24000, per_call_bytes)), skipped=skipped):
         ids = {row['id'] for row in batch}
-        seed = [{'role': 'user', 'content': 'UNTRUSTED VERIFICATION DATA\n' + json.dumps(batch, default=str)}]
+        # The same compact UTF-8 form batches() and the reserve measure.
+        seed = [{'role': 'user', 'content': 'UNTRUSTED VERIFICATION DATA\n' + compact_json(batch)}]
         # Each invocation has a freshly framed mount, with no response from the
         # other verifier. Sequential execution also bounds reserved concurrency.
         for verifier in range(2):
             remaining_seconds = deadline - asyncio.get_running_loop().time()
             if tokens - used < 1024 or remaining_seconds <= 0:
+                cause = 'budget_tokens' if tokens - used < 1024 else 'budget_deadline'
+                for id_ in ids:
+                    stopped.setdefault(id_, cause)
                 break
+            call_seconds = min(verifier_seconds, remaining_seconds)
+            call_deadline = asyncio.get_running_loop().time() + call_seconds
             mount = Mount(
                 instructions=INSTRUCTIONS
                 + (
@@ -144,7 +170,7 @@ async def verify_two(
                     else ' Act as an independent falsifier: look for counterexamples, attribution errors and missing support before deciding.'
                 ),
                 schema=VerificationBatch,
-                budget=Budget(turns=1, tokens=tokens - used, deadline_seconds=min(verifier_seconds, remaining_seconds)),
+                budget=Budget(turns=1, tokens=tokens - used, deadline_seconds=call_seconds),
             )
 
             async def invoke(active, messages):
@@ -168,9 +194,36 @@ async def verify_two(
                     raise ValueError('dream_invalid_verifier_ids')
                 for decision in decisions:
                     support[decision.id].append(decision.agree)
-            except Exception:
+            except Exception as exc:
+                if str(exc) == 'dream_invalid_verifier_ids':
+                    cause = 'ids_invalid'
+                elif str(exc) == 'dream_input_token_budget':
+                    # The pass's own budget refused the call; no verifier ran.
+                    cause = 'budget_tokens'
+                elif asyncio.get_running_loop().time() >= call_deadline:
+                    # The pass deadline or the per-call verifier limit expired; an
+                    # earlier provider timeout is a failed call.
+                    cause = 'budget_deadline'
+                else:
+                    cause = 'call_failed'
                 for id_ in ids:
                     support[id_].append(None)
+                    failed.setdefault(id_, cause)
+    if telemetry is not None:
+        reasons = telemetry.setdefault('unverified_reasons', {})
+        for id_, votes in support.items():
+            if len(votes) == 2 and all(isinstance(vote, bool) for vote in votes):
+                continue
+            if id_ in skipped:
+                # Past the verifier's own ceiling, or only past what the budget could afford.
+                reasons[id_] = 'oversized' if skipped[id_] > 24000 else 'budget_tokens'
+            elif id_ in failed:
+                reasons[id_] = failed[id_]
+            elif len(votes) == 1:
+                # A budget or deadline stop before the second call names its cause.
+                reasons[id_] = stopped.get(id_, 'single_vote')
+            else:
+                reasons[id_] = stopped.get(id_, 'budget_tokens')
     return support, calls, used
 
 
