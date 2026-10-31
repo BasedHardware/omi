@@ -210,7 +210,9 @@ def record_feedback_event(
         return event_id
     except Exception as e:
         # The comment may hold user text, so log the shape and never the row.
-        logger.error(f'Failed to record feedback event (surface={record["surface"]}, value={value}): {e}')
+        logger.error(
+            "Failed to record feedback event (surface=%s, value=%s): %s", record["surface"], value, type(e).__name__
+        )
         if raise_on_error:
             raise
         return None
@@ -356,7 +358,7 @@ def get_feedback_event(event_id: str, *, firestore_client: Any | None = None) ->
         doc = client.collection(FEEDBACK_EVENTS_COLLECTION).document(clean_id).get()
         return parse_snapshot_or_none(FeedbackEvent, doc)
     except Exception as e:
-        logger.warning(f'Failed to get feedback event {clean_id}: {e}')
+        logger.warning("Failed to get feedback event %s: %s", clean_id, type(e).__name__)
         return None
 
 
@@ -386,7 +388,7 @@ def list_negative_events(
     try:
         return parse_snapshots(FeedbackEvent, query.stream())
     except Exception as e:
-        logger.warning(f'Failed to stream negative feedback events: {e}')
+        logger.warning("Failed to stream negative feedback events: %s", type(e).__name__)
         return []
 
 
@@ -405,7 +407,7 @@ def get_report(date: str, *, firestore_client: Any | None = None) -> Optional[Fe
         doc = client.collection(FEEDBACK_REPORTS_COLLECTION).document(clean_date).get()
         return parse_snapshot_or_none(FeedbackReport, doc)
     except Exception as e:
-        logger.warning(f'Failed to get feedback report {clean_date}: {e}')
+        logger.warning("Failed to get feedback report %s: %s", clean_date, type(e).__name__)
         return None
 
 
@@ -422,7 +424,7 @@ def list_report_dates(limit: int = 30) -> List[str]:
         )
         return [doc.id for doc in docs]
     except Exception as e:
-        logger.error(f'Failed to list feedback report dates: {e}')
+        logger.error("Failed to list feedback report dates: %s", type(e).__name__)
         return []
 
 

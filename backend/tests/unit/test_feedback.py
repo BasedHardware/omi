@@ -28,16 +28,21 @@ def test_get_feedback_event_empty_or_whitespace_returns_none():
     assert feedback_db.get_feedback_event(None) is None
 
 
-def test_get_feedback_event_client_injection_and_exception_handling():
+def test_get_feedback_event_client_injection_and_exception_handling(caplog):
+    import logging
+
     client_mock = MagicMock()
     doc_mock = MagicMock()
-    doc_mock.get.side_effect = RuntimeError("Firestore unavailable")
+    doc_mock.get.side_effect = RuntimeError("Firestore unavailable with secret connection token")
     col_mock = MagicMock()
     col_mock.document.return_value = doc_mock
     client_mock.collection.return_value = col_mock
 
-    res = feedback_db.get_feedback_event("evt-123", firestore_client=client_mock)
+    with caplog.at_level(logging.WARNING):
+        res = feedback_db.get_feedback_event("evt-123", firestore_client=client_mock)
     assert res is None
+    assert "Firestore unavailable with secret connection token" not in caplog.text
+    assert "Failed to get feedback event evt-123: RuntimeError" in caplog.text
 
 
 def test_get_report_empty_returns_none():
