@@ -53,18 +53,35 @@ def checkout(monkeypatch):
     monkeypatch.setenv('STRIPE_PLUS_MONTHLY_PRICE_ID', OTHER_PRICE)
     monkeypatch.setattr(payment, 'is_purchasable_price_id', lambda price: price in (PRICE, OTHER_PRICE))
     monkeypatch.setattr(payment.users_db, 'get_user_subscription', lambda uid, **kwargs: state.stored)
-    monkeypatch.setattr(payment.users_db, 'get_stripe_customer_id', lambda uid: None)
+    state.customer_id = None
+    # What Stripe holds on the customer, whether or not Firestore has synced it.
+    state.customer_subscriptions = []
+    monkeypatch.setattr(payment.users_db, 'get_stripe_customer_id', lambda uid: state.customer_id)
     state.writes = MagicMock()
     state.customer_writes = MagicMock()
     monkeypatch.setattr(payment.users_db, 'update_user_subscription', state.writes)
     monkeypatch.setattr(payment.users_db, 'set_stripe_customer_id', state.customer_writes)
     monkeypatch.setattr(payment, 'set_credits_invalidation_signal', MagicMock())
     monkeypatch.setattr(payment, 'clear_trial_paywall_cache', MagicMock())
-    state.retrieve = MagicMock(
-        side_effect=lambda subscription_id: stripe.Subscription.construct_from(state.payload, 'sk_test_not_real')
-    )
+
+    def retrieve(subscription_id):
+        unsynced = next((sub for sub in state.customer_subscriptions if sub['id'] == subscription_id), None)
+        return stripe.Subscription.construct_from(unsynced or state.payload, 'sk_test_not_real')
+
+    state.retrieve = MagicMock(side_effect=retrieve)
     state.modify = MagicMock()
-    state.list_subscriptions = MagicMock(return_value=SimpleNamespace(data=[]))
+
+    def list_subscriptions(customer=None, status=None, **kwargs):
+        # Stripe semantics: `status` filters; no status means every subscription not canceled.
+        subs = [sub for sub in state.customer_subscriptions if sub['customer'] == customer]
+        subs = (
+            [sub for sub in subs if sub['status'] == status]
+            if status
+            else [sub for sub in subs if sub['status'] != 'canceled']
+        )
+        return SimpleNamespace(data=[stripe.Subscription.construct_from(sub, 'sk_test_not_real') for sub in subs])
+
+    state.list_subscriptions = MagicMock(side_effect=list_subscriptions)
     state.create = MagicMock(return_value=SimpleNamespace(id='cs_test', url='https://checkout.stripe.test/session'))
     monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', state.retrieve)
     monkeypatch.setattr(payment.stripe.Subscription, 'modify', state.modify)
@@ -168,13 +185,11 @@ def test_referral_without_stripe_subscription_keeps_checkout(checkout):
     checkout.retrieve.assert_not_called()
 
 
-def test_missing_local_id_still_recovers_cancel_scheduled_subscription(checkout, monkeypatch):
+def test_missing_local_id_still_recovers_cancel_scheduled_subscription(checkout):
     checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
     checkout.payload['cancel_at_period_end'] = True
-    monkeypatch.setattr(payment.users_db, 'get_stripe_customer_id', lambda uid: 'cus_existing')
-    checkout.list_subscriptions.return_value.data = [
-        stripe.Subscription.construct_from(checkout.payload, 'sk_test_not_real')
-    ]
+    checkout.customer_id = 'cus_existing'
+    checkout.customer_subscriptions = [checkout.payload]
     response = request_checkout(checkout)
     assert response.status_code == 200
     assert response.json()['status'] == 'reactivated'
@@ -270,3 +285,96 @@ def test_active_plan_change_must_use_upgrade_not_a_second_subscription(checkout)
     checkout.stored.current_period_end = checkout.payload['current_period_end']
     assert request_checkout(checkout, OTHER_PRICE).status_code == 409
     assert_no_new_billing(checkout)
+
+
+def unsynced(status, sub_id='sub_unsynced', price=PRICE, uid=UID, **fields):
+    """A subscription Stripe holds on the stored customer that the Firestore row does not reference."""
+    return {
+        'id': sub_id,
+        'object': 'subscription',
+        'status': status,
+        'customer': 'cus_existing',
+        'created': 1_800_000_000,
+        'cancel_at_period_end': False,
+        'metadata': {'uid': uid},
+        'items': {'data': [{'price': {'id': price, 'recurring': {'interval': 'month'}}}]},
+        **fields,
+    }
+
+
+@pytest.mark.parametrize('status', ['trialing', 'past_due', 'unpaid'])
+@pytest.mark.parametrize('stored', ['no_subscription_id', 'ended_subscription'])
+def test_unsynced_subscription_that_can_still_charge_blocks_a_second_checkout(checkout, status, stored):
+    """A completed yearly trial whose row has not synced, or a past_due subscription
+    projected to Free, still bills: a monthly Checkout next to it double-subscribes."""
+    if stored == 'no_subscription_id':
+        checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
+    else:
+        checkout.stored.plan = PlanType.basic
+        checkout.payload['status'] = 'canceled'
+    checkout.customer_id = 'cus_existing'
+    checkout.customer_subscriptions = [unsynced(status)]
+    response = request_checkout(checkout)
+    assert response.status_code == 409
+    assert response.json()['detail'] == payment.subscription_overlap.EXISTING_SUBSCRIPTION_DETAIL
+    assert_no_new_billing(checkout)
+    checkout.modify.assert_not_called()
+
+
+def test_unsynced_active_subscription_blocks_checkout_over_a_paid_through_cancel(checkout):
+    """The stored row is a canceled subscription still paid through its period, so
+    nothing reads Stripe for a newer active one that has not synced."""
+    checkout.stored.cancel_at_period_end = True
+    checkout.stored.current_period_end = checkout.payload['current_period_end']
+    checkout.payload['status'] = 'canceled'
+    checkout.customer_id = 'cus_existing'
+    checkout.customer_subscriptions = [unsynced('active')]
+    response = request_checkout(checkout)
+    assert response.status_code == 409
+    assert_no_new_billing(checkout)
+
+
+def test_unverifiable_stripe_customer_refuses_checkout(checkout):
+    checkout.stored.cancel_at_period_end = True
+    checkout.stored.current_period_end = checkout.payload['current_period_end']
+    checkout.payload['status'] = 'canceled'
+    checkout.customer_id = 'cus_existing'
+    checkout.list_subscriptions.side_effect = stripe.APIConnectionError('secret-provider-response')
+    response = request_checkout(checkout)
+    assert response.status_code == 503
+    assert response.json()['detail'] == payment.subscription_overlap.UNVERIFIED_SUBSCRIPTION_DETAIL
+    assert 'secret-provider-response' not in response.text
+    assert_no_new_billing(checkout)
+
+
+@pytest.mark.parametrize(
+    'subscription',
+    [
+        unsynced('canceled'),
+        unsynced('incomplete_expired'),
+        # A card declined inside Checkout: blocking would lock the reader out of a retry for 23 hours.
+        unsynced('incomplete'),
+        unsynced('paused'),
+        unsynced('active', cancel_at_period_end=True),
+        unsynced('trialing', cancel_at_period_end=True),
+        unsynced('past_due', price='price_marketplace_app'),
+        unsynced('past_due', uid='someone-else'),
+    ],
+    ids=[
+        'canceled',
+        'incomplete_expired',
+        'incomplete',
+        'paused',
+        'active_ending',
+        'trialing_ending',
+        'app_subscription',
+        'other_user',
+    ],
+)
+def test_subscription_that_cannot_charge_this_reader_again_keeps_checkout(checkout, subscription):
+    checkout.stored.plan = PlanType.basic
+    checkout.payload['status'] = 'canceled'
+    checkout.customer_id = 'cus_existing'
+    checkout.customer_subscriptions = [subscription]
+    assert request_checkout(checkout).status_code == 200
+    checkout.create.assert_called_once()
