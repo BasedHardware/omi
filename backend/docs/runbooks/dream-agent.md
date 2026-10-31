@@ -315,9 +315,13 @@ fields), generated tasks, canonical memory facts, and 14 days of conversation
 titles, with slow-moving sections first so the prompt prefix caches across
 weeks. Its people/task cleanup proposals go through ordinary staging and the two
 verifiers and are never applied or offered; at most 2 person merges per pass,
-each citing evidence beyond the name. It maintains a ref-grounded profile v2 in
+each citing evidence beyond the name; staging and verification read the full
+records the plan cites, exactly as the loop would. It maintains a ref-grounded profile v2 in
 `users/{uid}.ai_user_profile_v2` (line 1 is always the user-doc name; people
-lines must cite an owner-side record) that nothing reads yet. It runs on
+lines must cite an owner-side record; every new or changed line must pass a
+verifier check that its cited records support it as a fact about the owner),
+plus the planner's notes for next week, that nothing reads yet. A run that does
+not complete leaves the weekly cadence due. It runs on
 reserved capacity only, within `DREAM_STATE_PASS_TOKENS_PER_PASS` (120000),
 `DREAM_STATE_PASS_SECONDS` (480) and `DREAM_STATE_PASS_MAX_PER_SWEEP` (4), and
 reports `levers.state_pass` on `dream_pass` (recall of the loop's applied edits,

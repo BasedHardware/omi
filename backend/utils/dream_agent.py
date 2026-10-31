@@ -299,7 +299,6 @@ async def run_session(
         start_tokens = report['price_weighted_tokens']
         state_allowance = dream_state_pass.allowance()
         state_running = True
-        report['state_pass_done'] = True
         try:
             summary = await dream_state_pass.run(
                 uid,
@@ -317,6 +316,8 @@ async def run_session(
                 tokens=state_allowance,
                 spent=lambda: report['price_weighted_tokens'] - start_tokens,
             )
+            # Stamp the weekly cadence only after a complete run; a failure retries next pass.
+            report['state_pass_done'] = summary.get('status') == 'complete'
             judge_rows = summary.pop('_judge_rows', [])
             judged = {}
             if judge_rows and dream_judge.take_call('shadow:' + str(dream_telemetry.SWEEP_ID.get())):
@@ -359,14 +360,19 @@ async def run_session(
                     'profile_lines',
                     'stale_refs',
                     'render_chars',
+                    'trimmed',
                 )
             },
             'rejected': sum((summary.get('rejected') or {}).values()),
+            'rejected_top': max(
+                summary.get('rejected') or {'none': 0}, key=(summary.get('rejected') or {'none': 0}).get
+            ),
             'agree': verifier.get('agree', 0),
             'disagree': verifier.get('disagree', 0),
             'unverified': verifier.get('unverified', 0) + verifier.get('split', 0),
             'profile_added': profile_ops.get('add', 0),
             'profile_rejected': profile_ops.get('rejected', 0),
+            'profile_unsupported': profile_ops.get('unsupported', 0),
             'judged': len(judged),
             'judged_harmful': sum(1 for judgment in judged.values() if judgment.verdict == 'harmful'),
         }

@@ -97,7 +97,7 @@ def test_instructions_frame_data_as_untrusted():
 # --- end to end in a real pass -------------------------------------------------------------------
 
 
-def _loop_and_state_model(seen, plan):
+def _loop_and_state_model(seen, plan, profile_agree=True):
     async def model(uid, lane, mount, messages):
         if mount.schema is StatePlan:
             seen.append(('planner', lane, json.dumps(messages, default=str)))
@@ -136,10 +136,12 @@ def _loop_and_state_model(seen, plan):
                     ]
                 ),
             )
-        seen.append(('verify', lane, ''))
+        is_profile = messages[-1]['content'].startswith('UNTRUSTED PROFILE DATA')
+        seen.append(('profile_check' if is_profile else 'verify', lane, ''))
+        agree = profile_agree if is_profile else True
         return Turn(
             tokens=10,
-            value=VerificationBatch(decisions=[Verification(id=row['id'], agree=True, reason='ok') for row in rows]),
+            value=VerificationBatch(decisions=[Verification(id=row['id'], agree=agree, reason='ok') for row in rows]),
         )
 
     return model
@@ -162,6 +164,8 @@ def state_env(runtime, monkeypatch):
         'conversation_index',
         lambda uid, now, firestore_client=None: [('conversations/one', snapshot['conversations/one'])],
     )
+    # Full-record reads for staging come from the live fake store (after the loop's effects).
+    monkeypatch.setattr(dream_state_pass, 'read_record', lambda uid, ref: records(runtime).get(ref))
     from database import users as users_db
 
     written = []
@@ -193,12 +197,13 @@ def test_shadow_state_pass_stages_and_verifies_but_never_applies(runtime, state_
     lever = report['levers']['state_pass']
     assert lever['status'] == 'complete' and lever['arm'] == 'shadow'
     # The loop applied the same dismissal first, so staging rejects the duplicate;
-    # recall still counts it from the planner's proposal.
+    # recall still counts it from the planner's proposal, by ref and by key.
     assert lever['staged'] == 0 and lever['rejected'] == 1
     assert applied == ['dismiss_person'] and lever['loop_applied'] == 1
-    assert lever['recall_refs'] == 1
+    assert lever['recall_refs'] == 1 and lever['recall_keys'] == 1
     assert lever['profile_added'] == 1 and lever['profile_lines'] == 1
     assert written and written[0]['rendered']['profile_text'].endswith('- Builds Omi.')
+    assert written[0]['notes'] == 'next week'
     planner = [entry for entry in seen if entry[0] == 'planner']
     assert len(planner) == 1 and planner[0][1] == MAIN_LANE
     assert 'UNTRUSTED STATE DATA' in planner[0][2]
@@ -224,6 +229,8 @@ def test_planner_failure_fails_open(runtime, state_env, monkeypatch):
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
     assert report['status'] == 'complete'
     assert report['levers']['state_pass']['status'] == 'failed'
+    # A failed state pass leaves the weekly cadence due.
+    assert runtime.rows[('dream_users', UID)].get('last_state_pass_at') is None
 
 
 def test_injection_payloads_cannot_exceed_caps_or_write_imperative_profile_lines(runtime, state_env):
@@ -263,3 +270,71 @@ def test_a_proposal_the_loop_missed_is_staged_and_verified_but_not_applied(runti
     assert lever['staged'] == 1 and lever['agree'] == 1 and lever['extra_agree'] == 1
     assert applied == ['dismiss_person']  # only the loop's own edit
     assert not runtime.rows[('users', UID, 'people', 'junk2')].get('is_dismissed')
+
+
+def test_unsupported_profile_lines_are_not_rendered(runtime, state_env):
+    written, _applied = state_env
+    plan = StatePlan(
+        profile_ops=[dream_profile_v2.ProfileLineOp(op='add', section='work', text='Builds Omi.', refs=['memories/m1'])]
+    )
+    report = asyncio.run(dream_agent.run_pass(UID, turn=_loop_and_state_model([], plan, profile_agree=False)))
+    lever = report['levers']['state_pass']
+    assert lever['profile_unsupported'] == 1 and lever['profile_lines'] == 0
+    assert 'Builds Omi.' not in written[0]['rendered']['profile_text']
+
+
+def test_projection_is_bounded_before_any_model_call():
+    big = {
+        'people': [[f'people/{i}', {'name': 'x' * 100, 'aliases': []}] for i in range(50)],
+        'memories': [[f'memories/{i}', {'content': 'y' * 200}] for i in range(5000)],
+        'conversations': [],
+        'tasks': [],
+        'profile': [],
+        'notes': '',
+    }
+    sections, trimmed = dream_state_pass.bounded(big, limit=50_000)
+    assert len(dream_state_pass._canonical(sections).encode()) <= 50_000 and trimmed > 0
+    # Slow-moving people are trimmed last.
+    assert len(sections['people']) == 50
+    view = dream_state_pass._person_view({'name': 'n' * 500, 'aliases': ['a' * 500] * 20})
+    assert (
+        len(view['name']) == dream_state_pass.FIELD_CHARS
+        and len(view['aliases']) == dream_state_pass.ALIASES_PER_PERSON
+    )
+
+
+def test_state_pass_times_out_as_a_whole():
+    async def slow_planner(mount, messages):
+        await asyncio.sleep(5)
+
+    async def run():
+        return await dream_state_pass.run(
+            'owner',
+            seed={},
+            run_id='r',
+            planner_turn=slow_planner,
+            verify_turn=slow_planner,
+            loop_report={},
+            loop_staged_keys=set(),
+            deadline_seconds=0.5,
+            verifier_seconds=1,
+            verifier_completion_tokens=1024,
+            tokens=100000,
+            spent=lambda: 0,
+        )
+
+    import utils.dream_state_pass as sp
+
+    original = (sp.people_page, sp.tasks_page, sp.memories_page, sp.conversation_index)
+    sp.people_page = sp.tasks_page = lambda uid, firestore_client=None: []
+    sp.memories_page = lambda uid: []
+    sp.conversation_index = lambda uid, now, firestore_client=None: []
+    from database import users as users_db
+
+    original_get = users_db.get_ai_user_profile_v2
+    users_db.get_ai_user_profile_v2 = lambda uid: None
+    try:
+        assert asyncio.run(run())['status'] == 'timeout'
+    finally:
+        sp.people_page, sp.tasks_page, sp.memories_page, sp.conversation_index = original
+        users_db.get_ai_user_profile_v2 = original_get
