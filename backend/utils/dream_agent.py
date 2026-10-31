@@ -38,11 +38,12 @@ from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
 from models.agent_edit import HarnessEdit
+from models.agent_refs import base_ref
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_prescan, dream_verify
-from utils import dream_judge, dream_required_intake
+from utils import dream_judge, dream_required_intake, dream_state_pass
 from utils.dream_cost import (
     conservative_attempt_micro,
     minute_burndown_tokens,
@@ -241,6 +242,7 @@ async def run_session(
     arms=None,
     budget_probe=None,
     judge=False,
+    state_pass=False,
 ):
     caps = caps or Caps.from_env()
     arms = arms or {}
@@ -290,6 +292,109 @@ async def run_session(
     )
     session.counters['search_embedding_token_upper_bound'] += seed.get('required_intake_embedding_tokens', 0)
     stage = 'session'
+
+    def _pre_effect_rows(loop_staged, pass_report):
+        applied = {
+            row.get('key')
+            for row in pass_report['outcomes']
+            if isinstance(row, dict) and row.get('status') == 'applied'
+        }
+        rows = {}
+        for item in loop_staged:
+            if item.key in applied and item.kind in dream_state_pass.CLEANUP_KINDS:
+                target = base_ref(item.operation.target)
+                if target in item.records:
+                    rows[target] = item.records[target]
+        return rows
+
+    async def _state_pass(loop_staged):
+        nonlocal state_allowance, state_running
+        arm, would_serve = dream_state_pass.mode()
+        if arm == 'off' or lease is None or not dream_state_pass.take_call(dream_telemetry.SWEEP_ID.get()):
+            return
+        run_id = lease['run_id']
+        start_tokens = report['price_weighted_tokens']
+        state_allowance = dream_state_pass.allowance()
+        state_running = True
+        try:
+            summary = await dream_state_pass.run(
+                uid,
+                seed=seed,
+                run_id=run_id,
+                planner_turn=partial(invoke, dream_harness_transport.MAIN_LANE),
+                verify_turn=partial(invoke, dream_harness_transport.VERIFY_LANE),
+                loop_report=report,
+                loop_staged_keys={item.key for item in loop_staged},
+                loop_applied_rows=_pre_effect_rows(loop_staged, report),
+                deadline_seconds=min(
+                    dream_state_pass.seconds(), max(0, deadline - asyncio.get_running_loop().time() - 60)
+                ),
+                verifier_seconds=limits.verifier_seconds,
+                verifier_completion_tokens=limits.verifier_completion_tokens,
+                tokens=state_allowance,
+                spent=lambda: report['price_weighted_tokens'] - start_tokens,
+            )
+            # Stamp the weekly cadence only after a complete run; a failure retries next pass.
+            report['state_pass_done'] = summary.get('status') == 'complete'
+            judge_rows = summary.pop('_judge_rows', [])
+            judged = {}
+            if judge_rows and dream_judge.take_call('shadow:' + str(dream_telemetry.SWEEP_ID.get())):
+                judged = await dream_judge.judge(
+                    [(item.id, dream_judge.projection(view)) for item, view in judge_rows],
+                    partial(invoke, dream_harness_transport.VERIFY_LANE),
+                    tokens=dream_judge.token_allowance(),
+                    deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - 30),
+                )
+                for item, _view in judge_rows[: dream_judge.MAX_ITEMS]:
+                    dream_judge.record(item.kind, 'shadow', judged.get(item.id))
+        finally:
+            state_allowance = 0
+            state_running = False
+        verifier = summary.get('verifier') or {}
+        profile_ops = summary.get('profile_ops') or {}
+        rejected: dict[str, int] = summary.get('rejected') or {}
+        levers['state_pass'] = {
+            'arm': arm,
+            'would_serve': would_serve,
+            'status': summary.get('status'),
+            **{
+                key: summary.get(key, 0)
+                for key in (
+                    'people_n',
+                    'tasks_n',
+                    'memories_n',
+                    'conversations_n',
+                    'projection_bytes',
+                    'planner_tokens',
+                    'total_tokens',
+                    'staged',
+                    'merge_people_proposed',
+                    'capped',
+                    'merge_evidence_rejected',
+                    'loop_applied',
+                    'recall_keys',
+                    'recall_refs',
+                    'extra_agree',
+                    'shadow_value',
+                    'profile_lines',
+                    'stale_refs',
+                    'render_chars',
+                    'trimmed',
+                    'profile_written',
+                    'profile_write',
+                )
+            },
+            'rejected': sum(rejected.values()),
+            'rejected_top': max(rejected, key=lambda reason: rejected[reason]) if rejected else 'none',
+            'agree': verifier.get('agree', 0),
+            'disagree': verifier.get('disagree', 0),
+            'unverified': verifier.get('unverified', 0) + verifier.get('split', 0),
+            'profile_added': profile_ops.get('add', 0),
+            'profile_rejected': profile_ops.get('rejected', 0),
+            'profile_unsupported': profile_ops.get('unsupported', 0),
+            'judged': len(judged),
+            'judged_harmful': sum(1 for judgment in judged.values() if judgment.verdict == 'harmful'),
+        }
 
     async def active():
         nonlocal stage
@@ -437,8 +542,11 @@ async def run_session(
 
     main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
     budget_notice_sent = False
-    # Extra tokens the value judge may spend after effects, outside the pass budget.
+    # Extra tokens the value judge and the shadow state pass may spend after effects,
+    # outside the pass budget; both run on reserved capacity only.
     judge_allowance = 0
+    state_allowance = 0
+    state_running = False
 
     def remember_main(result, messages):
         main_history['prompt_tokens'] = result.prompt_tokens
@@ -574,12 +682,13 @@ async def run_session(
     async def invoke_once(lane, mount, messages):
         nonlocal budget_notice_sent, stage
         await active()
-        if lane == dream_harness_transport.MAIN_LANE and compact_arm != 'off':
+        if lane == dream_harness_transport.MAIN_LANE and compact_arm != 'off' and not state_running:
             compact(messages)
         stage = 'request_sizing'
         remaining = (
             limits.tokens
             + judge_allowance
+            + state_allowance
             - report['price_weighted_tokens']
             - session.counters['search_embedding_token_upper_bound']
         )
@@ -598,6 +707,7 @@ async def run_session(
                 logger.warning('event=dream_lever_error lever=verify_hold exc=%s', type(error).__name__)
         if (
             lane == dream_harness_transport.MAIN_LANE
+            and not state_running
             and not budget_notice_sent
             and limits.tokens > 0
             and remaining <= limits.tokens * TAIL_BUDGET_NOTICE_THRESHOLD
@@ -623,9 +733,11 @@ async def run_session(
             if lane == dream_harness_transport.VERIFY_LANE
             else limits.completion_tokens
         )
-        prior = main_history['prompt_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
-        prior_count = main_history['messages'] if lane == dream_harness_transport.MAIN_LANE else 0
-        cached_estimate = main_history['cached_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
+        # The state pass starts its own conversation on the main lane; never size it by the loop's history.
+        loop_history = lane == dream_harness_transport.MAIN_LANE and not state_running
+        prior = main_history['prompt_tokens'] if loop_history else None
+        prior_count = main_history['messages'] if loop_history else 0
+        cached_estimate = main_history['cached_tokens'] if loop_history else None
         if type(prior_count) is not int:
             prior_count = 0
         estimate, completion_room = dream_harness_transport.attempt_room(
@@ -689,7 +801,7 @@ async def run_session(
                 result = await turn(uid, lane, mount, messages)
                 report['model_lanes'].append(lane)
                 await usage(result)
-                if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
+                if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens and not state_running:
                     remember_main(result, messages)
                     main_history['cached_tokens'] = (
                         result.cached_tokens
@@ -713,11 +825,11 @@ async def run_session(
                 prior_prompt_tokens=prior,
                 prior_message_count=prior_count,
                 cached_tokens_estimate=cached_estimate,
-                reserved_only=judging,
+                reserved_only=judging or state_running,
             )
             report['model_lanes'].append(lane)
             counted = True
-            if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
+            if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens and not state_running:
                 remember_main(result, messages)
                 main_history['cached_tokens'] = (
                     result.cached_tokens
@@ -1010,6 +1122,8 @@ async def run_session(
             if judge_mode != 'off' and not dry_run:
                 stage = 'value_judge'
                 await _judge_applied(staged, report)
+            if state_pass and not dry_run and lease is not None and lease.get('state_pass_due'):
+                await _state_pass(staged)
             report.update(
                 status='complete',
                 notes=session.finish.notes if session.finish else '',
@@ -1287,6 +1401,7 @@ async def run_pass(
                 budget_probe=budget_probe,
                 # Scheduled sweep passes only; operator CLIs pass judge=False.
                 judge=(trigger == 'schedule' if judge is None else judge) and not canary and not dry_run,
+                state_pass=(trigger == 'schedule' if judge is None else judge) and not canary and not dry_run,
             )
         if 'prescan' in pass_levers:
             # Recall of the finalized report, merged into the admission-time row

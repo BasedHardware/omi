@@ -315,6 +315,8 @@ def acquire(
             'hunt': not has_dirty,
             'dry_hunts': _dry_hunts(data),
             'backoff_would_defer': backoff_would_defer and not has_dirty,
+            # Weekly whole-corpus state pass cadence; derived from the state doc already read.
+            'state_pass_due': _state_pass_due(data, now),
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
             'size_bucket': data.get('size_bucket', 'light'),
@@ -463,6 +465,16 @@ def assert_lease(uid, run_id, *, firestore_client=None):
     data = state_ref(client(firestore_client), uid).get().to_dict() or {}
     if (data.get('lease') or {}).get('run_id') != run_id:
         raise RuntimeError('dream_lease_lost')
+
+
+def _state_pass_due(data, now):
+    # Kept here (not utils.dream_state_pass) so acquire stays import-light.
+    try:
+        days = max(1, int(os.getenv('DREAM_STATE_PASS_WEEK_DAYS', '7') or 7))
+    except ValueError:
+        days = 7
+    last = data.get('last_state_pass_at')
+    return not isinstance(last, datetime) or now - last >= timedelta(days=days)
 
 
 def _dry_hunts(data):
@@ -718,6 +730,8 @@ def finish(
                 patch['cleanup_cursor'] = cleanup_cursor
             if not zero_refund:
                 patch['last_pass_at'] = lease['started_at']
+                if report.get('state_pass_done'):
+                    patch['last_state_pass_at'] = lease['started_at']
                 for ref in sorted(set(reviewed) - deferred)[:8]:
                     tx.set(
                         state.collection('reviews').document(review_id(ref)),
