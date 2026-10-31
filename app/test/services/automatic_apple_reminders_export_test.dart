@@ -53,7 +53,8 @@ void main() {
           return true;
         },
       );
-  ActionItemWithMetadata item() => ActionItemWithMetadata(id: 'task', description: 'Fixture task', completed: false);
+  ActionItemWithMetadata item() =>
+      const ActionItemWithMetadata(id: 'task', description: 'Fixture task', completed: false);
 
   for (final destination in ['todoist', 'asana', 'google_tasks', 'unknown', '', null]) {
     test('permission alone cannot export a task selected for $destination to Apple', () async {

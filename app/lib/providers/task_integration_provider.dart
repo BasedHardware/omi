@@ -221,7 +221,9 @@ class TaskIntegrationProvider extends ChangeNotifier {
         choice != _defaultChoice ||
         readGeneration != _readGeneration ||
         _hasLoadError ||
-        !_hasConfirmedDefault) return null;
+        !_hasConfirmedDefault) {
+      return null;
+    }
     return isAppConnected(_selectedApp) ? _selectedApp : null;
   }
 

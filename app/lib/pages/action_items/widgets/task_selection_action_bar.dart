@@ -125,7 +125,9 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
       if (!context.mounted ||
           !provider.isSelectionMode ||
           !identical(selection, provider.selectedItems) ||
-          !setEquals(ids, provider.selectedItems)) return;
+          !setEquals(ids, provider.selectedItems)) {
+        return;
+      }
 
       if (target == null) {
         OmiFeedback.error(

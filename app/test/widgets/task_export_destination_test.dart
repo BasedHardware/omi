@@ -122,7 +122,7 @@ void main() {
 
   Future<ActionItemsProvider> pumpBar(
       WidgetTester tester, TaskIntegrationProvider connections, List<TaskIntegrationApp> writes) async {
-    final row = ActionItemWithMetadata(id: 'task', description: 'Synthetic task', completed: false);
+    const row = ActionItemWithMetadata(id: 'task', description: 'Synthetic task', completed: false);
     final tasks = ActionItemsProvider(
         getActionItems: (
                 {int limit = 50,
@@ -168,6 +168,23 @@ void main() {
     expect(writes, [TaskIntegrationApp.todoist]);
     expect(tasks.isSelectionMode, isFalse);
     expect(find.textContaining('Todoist'), findsOneWidget);
+  });
+  testWidgets('repeated taps during status resolution produce one export', (tester) async {
+    final pending = Completer<TaskIntegrationsResponse?>();
+    var reads = 0;
+    final writes = <TaskIntegrationApp>[];
+    await pumpBar(tester, integrations(() {
+      reads++;
+      return pending.future;
+    }), writes);
+    await tester.tap(find.text('Export · 1'));
+    await tester.pump();
+    await tester.tap(find.text('Export · 1'));
+    await tester.pump();
+    expect(reads, 1);
+    pending.complete(status('todoist'));
+    await tester.pumpAndSettle();
+    expect(writes, [TaskIntegrationApp.todoist]);
   });
   testWidgets('cancel during destination read prevents export', (tester) async {
     final pending = Completer<TaskIntegrationsResponse?>();

@@ -48,7 +48,7 @@ class AutomaticAppleRemindersExport {
         item.completed ||
         item.exported ||
         item.appleReminderId?.isNotEmpty == true ||
-        (item.status != null && item.status != 'active')) {
+        item.status != 'active') {
       return false;
     }
     final owner = _capture();

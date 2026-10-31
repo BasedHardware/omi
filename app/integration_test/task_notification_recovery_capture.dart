@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
@@ -153,7 +152,8 @@ Future<void> main() async {
                     child: const Text('Test late APNs and refused save')),
                 const SizedBox(height: 24),
                 ValueListenableBuilder<String>(
-                    valueListenable: receipts, builder: (_, value, _) => Text(value, key: const Key('qa_receipt'))),
+                    valueListenable: receipts,
+                    builder: (context, value, child) => Text(value, key: const Key('qa_receipt'))),
               ]),
               const Align(alignment: Alignment.bottomCenter, child: TaskSelectionActionBar())
             ]),
