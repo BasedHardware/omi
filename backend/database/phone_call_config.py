@@ -84,7 +84,7 @@ def _fetch_config(client: Any = None) -> Dict[str, Any]:
         raw: object = doc.to_dict()
         return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
     except Exception as e:
-        _LOGGER.warning("Failed to fetch phone call config from Firestore: %s", e)
+        _LOGGER.warning("Failed to fetch phone call config from Firestore: %s", type(e).__name__)
         return {}
 
 

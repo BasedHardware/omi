@@ -49,13 +49,18 @@ def test_fetch_config_missing_doc_returns_catalog_defaults():
     assert paid_cfg["effective_overlay"]["source"] == "catalog"
 
 
-def test_fetch_config_exception_fails_open_to_catalog():
-    mock_client = MagicMock()
-    mock_client.collection.side_effect = Exception("Firestore unavailable")
+def test_fetch_config_exception_fails_open_to_catalog(caplog):
+    import logging
 
-    cfg = pcc.get_config_for_plan("basic", client=mock_client)
+    mock_client = MagicMock()
+    mock_client.collection.side_effect = Exception("Firestore unavailable with internal url")
+
+    with caplog.at_level(logging.WARNING):
+        cfg = pcc.get_config_for_plan("basic", client=mock_client)
     assert cfg["phone_calls_profile"] == "free"
     assert cfg["effective_overlay"]["source"] == "catalog"
+    assert "Firestore unavailable with internal url" not in caplog.text
+    assert "Failed to fetch phone call config from Firestore: Exception" in caplog.text
 
 
 def test_custom_firestore_overlay_is_applied():
