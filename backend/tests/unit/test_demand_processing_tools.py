@@ -86,10 +86,9 @@ class TestDemandProcessingTools(unittest.TestCase):
         with self.assertRaises(PermissionError):
             demand_mod.process_recent_conversations.func({"configurable": None})
 
-    def test_top_level_user_id_success(self):
-        res = demand_mod.process_recent_conversations.func({"user_id": "top_uid"})
-        self.assertIn('"status": "processing"', res)
-        mock_demand_fn.assert_called_with("top_uid", hours=6, limit=20)
+    def test_permission_error_on_missing_configurable(self):
+        with self.assertRaises(PermissionError):
+            demand_mod.process_recent_conversations.func({"user_id": "top_uid"})
 
     def test_coerces_string_hours_and_limit(self):
         res = demand_mod.process_recent_conversations.func(self.config, hours="4", limit="10")

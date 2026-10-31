@@ -3,6 +3,7 @@
 import json
 import logging
 from typing import Any
+
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
@@ -13,7 +14,9 @@ def _get_user_id(config: Any) -> str:
     if not isinstance(config, dict):
         raise PermissionError('authenticated owner required')
     configurable = config.get('configurable')
-    uid = configurable.get('user_id') if isinstance(configurable, dict) else config.get('user_id')
+    if not isinstance(configurable, dict):
+        raise PermissionError('authenticated owner required')
+    uid = configurable.get('user_id')
     if not isinstance(uid, str) or not uid:
         raise PermissionError('authenticated owner required')
     return uid
@@ -38,11 +41,12 @@ def process_recent_conversations(config: RunnableConfig, hours: int = 6, limit: 
     except (TypeError, ValueError):
         clean_limit = 20
 
-    bounded_hours = max(1, min(clean_hours, 6))
-    bounded_limit = max(1, min(clean_limit, 20))
+    clean_hours = max(1, min(6, clean_hours))
+    clean_limit = max(1, min(20, clean_limit))
 
     try:
-        return json.dumps(process_recent(uid, hours=bounded_hours, limit=bounded_limit))
+        res = process_recent(uid, hours=clean_hours, limit=clean_limit)
+        return json.dumps(res)
     except Exception as e:
         logger.error("Failed to process recent conversations for user %s: %s", uid, type(e).__name__, exc_info=True)
         return json.dumps({'error': 'Failed to process recent conversations', 'ready': False})
