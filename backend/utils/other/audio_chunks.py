@@ -195,7 +195,7 @@ class AudioChunkReadSession:
 
     def _reserve_pcm(self, size: int) -> bool:
         global _pcm_pool_bytes
-        if self.pcm_bytes + size > self.max_pcm_bytes:
+        if self.max_pcm_bytes is not None and self.pcm_bytes + size > self.max_pcm_bytes:
             return False
         with _pcm_pool_lock:
             if _pcm_pool_bytes + size > MAX_SPEAKER_PCM_POOL_BYTES:

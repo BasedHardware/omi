@@ -1,5 +1,6 @@
 """Synthetic sample-identifiable PCM through the actual storage iterator and clip reader."""
 
+import gc
 import time
 from types import SimpleNamespace
 
@@ -560,6 +561,7 @@ def test_widened_session_keeps_its_own_download_and_decoded_memory_caps(memory_b
 def test_widened_sessions_share_a_process_pool_and_return_it(memory_bucket, monkeypatch):
     memory_bucket.add(ORIGIN, 4)
     path = next(iter(memory_bucket.objects))
+    gc.collect()  # Earlier sessions return their PCM on collection; keep them out of this pool.
     monkeypatch.setattr(audio_chunks, '_pcm_pool_bytes', 0)
     monkeypatch.setattr(audio_chunks, 'MAX_SPEAKER_PCM_POOL_BYTES', 5 * 32000)
 
