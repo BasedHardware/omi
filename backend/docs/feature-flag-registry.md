@@ -332,7 +332,7 @@ and an explicit empty literal renders as `''`.
 | `NOTES_PACKET_V2_MODE_SERVE_PERCENT` | Serve cohort percentage; default 0 | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` | Serve cohort SHA256 digests; default empty, never raw identifiers | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `NOTES_TIER_ESCALATION_ENABLED` | Escalate shaped notes to xhigh effort for long meetings with at least five screen frames; enabled on the 1 percent episode cohort (2026-10-09) | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-08 | dazheng |
-| `OMI_FLAGS_SOURCE` | Default posthog; dual serves PostHog and counts Omi-store agreement, omi serves server flags (proactivity_v2) from the Omi flag store | backend, llm-gateway | env | closed | — | — | — | — | pending | on | 2026-11-12 | dazheng |
+| `OMI_FLAGS_SOURCE` | Default posthog; dual serves PostHog and counts Omi-store agreement, omi serves server flags (proactivity_v2) from the Omi flag store | backend, llm-gateway | env | closed | — | — | dual (backend-listen (chart), llm-gateway (chart), pusher (chart)); {value: dual, category: rollout} (cloud_run/backend, cloud_run/backend-sync, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | on | 2026-11-12 | dazheng |
 | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | on | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_INDEXED_LIST_READS_ENABLED` | Default off; indexed canonical list candidates and slim main conversation lists preserve released row authority | backend | env | closed | — | — | — | — | graduate | on | 2026-11-16 | dazheng |
@@ -1078,7 +1078,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_EXTERNAL_LIST_CACHE_ENABLED` — Default on unless false; Encrypted authorized external list responses; ten seconds unless collection write coverage admits a versioned cache; expiry anchored before the origin query (fail: open)
 - `OMI_EXTERNAL_LIST_METRICS_ENABLED` — Default on unless false; Count four external list GETs and staged promote POST including auth rate-limit validation and server errors (fail: open)
 - `OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED` — Default on; coalesce simultaneous identical external-list cache misses after each request passes authorization (fail: open)
-- `OMI_FLAGS_SOURCE` — Default posthog; dual serves PostHog and counts Omi-store agreement, omi serves server flags (proactivity_v2) from the Omi flag store (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
 - `OMI_INDEXED_LIST_READS_ENABLED` — Default off; indexed canonical list candidates and slim main conversation lists preserve released row authority (fail: closed)
