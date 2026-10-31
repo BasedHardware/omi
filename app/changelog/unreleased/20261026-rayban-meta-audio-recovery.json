@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Handle failed Ray-Ban Meta audio start in connector and register rayban_meta in wedge monitor; backend exception recovery without visual UI changes."
+}
