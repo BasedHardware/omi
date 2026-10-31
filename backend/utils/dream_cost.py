@@ -28,8 +28,9 @@ VERIFIER_CALL_FLOOR = 1024
 # dream_verify.batches' evidence ceiling, and the falsifier/audit suffix plus seed framing.
 VERIFIER_BATCH_BYTES = 24000
 VERIFIER_FRAMING_BYTES = 512
-# Most of a pass budget the next-turn verification headroom may take.
-HOLD_HEADROOM_SHARE = 0.05
+# Most of a pass budget the next-turn verification headroom may take. At the
+# smallest production tier (375k) this still funds one full 24000-byte batch.
+HOLD_HEADROOM_SHARE = 0.1
 
 
 def estimate_tokens(nbytes):
@@ -215,8 +216,8 @@ def verification_hold_tokens(staged, *, completion_tokens, pass_tokens):
     """Main-loop hold: the staged reserve plus headroom for what the next turn may stage.
 
     A turn can return proposals and finish together, after the hold was computed,
-    so the hold also pays for one more batch, up to a share of the pass budget so a
-    small pass is not starved before it stages anything.
+    so the hold also pays for one more full batch, up to a share of the pass budget
+    so a small pass is not starved before it stages anything.
     """
     headroom = min(
         2 * _batch_call_tokens(VERIFIER_BATCH_BYTES, completion_tokens), int(pass_tokens * HOLD_HEADROOM_SHARE)

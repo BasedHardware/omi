@@ -29,6 +29,10 @@ INSTRUCTIONS = (
 )
 
 
+def compact_json(value):
+    return json.dumps(value, ensure_ascii=False, default=str, separators=(',', ':'))
+
+
 def evidence(item):
     # No seed, planner messages, prior notes, or another verifier's response.
     rows = {ref: minimal_context(ref, item.records) for ref in item.refs}
@@ -75,11 +79,12 @@ def batches(staged, byte_limit=24000, skipped=None):
     batch = []
     for item in staged:
         row = evidence(item)
-        if serialized_bytes(row) > byte_limit:
+        size = serialized_bytes(row)
+        if size > byte_limit:
             # Do not truncate evidence into apparent support. Unverified items
             # may go to Review but can never automatically apply.
             if skipped is not None:
-                skipped.add(item.id)
+                skipped[item.id] = size
             continue
         if batch and (len(batch) >= 25 or serialized_bytes([*batch, row]) > byte_limit):
             yield batch
@@ -136,15 +141,16 @@ async def verify_two(
     used = 0
     calls = 0
     deadline = asyncio.get_running_loop().time() + deadline_seconds
-    oversized = set()
+    skipped = {}
     failed = {}
     stopped = {}
     # One batch is sent to both verifiers, so a batch may use half the budget less
     # one completion. The 24000-byte cap is the verifier's evidence ceiling.
     per_call_bytes = int((tokens // 2 - completion_tokens) * BYTES_PER_TOKEN) + 1
-    for batch in batches(staged, byte_limit=max(1024, min(24000, per_call_bytes)), skipped=oversized):
+    for batch in batches(staged, byte_limit=max(1024, min(24000, per_call_bytes)), skipped=skipped):
         ids = {row['id'] for row in batch}
-        seed = [{'role': 'user', 'content': 'UNTRUSTED VERIFICATION DATA\n' + json.dumps(batch, default=str)}]
+        # The same compact UTF-8 form batches() and the reserve measure.
+        seed = [{'role': 'user', 'content': 'UNTRUSTED VERIFICATION DATA\n' + compact_json(batch)}]
         # Each invocation has a freshly framed mount, with no response from the
         # other verifier. Sequential execution also bounds reserved concurrency.
         for verifier in range(2):
@@ -154,6 +160,8 @@ async def verify_two(
                 for id_ in ids:
                     stopped.setdefault(id_, cause)
                 break
+            call_seconds = min(verifier_seconds, remaining_seconds)
+            call_deadline = asyncio.get_running_loop().time() + call_seconds
             mount = Mount(
                 instructions=INSTRUCTIONS
                 + (
@@ -162,7 +170,7 @@ async def verify_two(
                     else ' Act as an independent falsifier: look for counterexamples, attribution errors and missing support before deciding.'
                 ),
                 schema=VerificationBatch,
-                budget=Budget(turns=1, tokens=tokens - used, deadline_seconds=min(verifier_seconds, remaining_seconds)),
+                budget=Budget(turns=1, tokens=tokens - used, deadline_seconds=call_seconds),
             )
 
             async def invoke(active, messages):
@@ -192,7 +200,8 @@ async def verify_two(
                 elif str(exc) == 'dream_input_token_budget':
                     # The pass's own budget refused the call; no verifier ran.
                     cause = 'budget_tokens'
-                elif deadline - asyncio.get_running_loop().time() <= 0:
+                elif isinstance(exc, TimeoutError) or asyncio.get_running_loop().time() >= call_deadline:
+                    # The pass deadline or the per-call verifier limit expired.
                     cause = 'budget_deadline'
                 else:
                     cause = 'call_failed'
@@ -204,8 +213,9 @@ async def verify_two(
         for id_, votes in support.items():
             if len(votes) == 2 and all(isinstance(vote, bool) for vote in votes):
                 continue
-            if id_ in oversized:
-                reasons[id_] = 'oversized'
+            if id_ in skipped:
+                # Past the verifier's own ceiling, or only past what the budget could afford.
+                reasons[id_] = 'oversized' if skipped[id_] > 24000 else 'budget_tokens'
             elif id_ in failed:
                 reasons[id_] = failed[id_]
             elif len(votes) == 1:

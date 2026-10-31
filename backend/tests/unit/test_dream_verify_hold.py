@@ -237,9 +237,60 @@ def test_reserve_pays_two_calls_per_batch():
     assert one == 2 * VERIFIER_CALL_FLOOR
     # 30 items split into two batches of at most 25.
     assert many >= 2 * one
-    # Headroom for the next turn's proposals, capped at 5% of the pass budget.
-    assert verification_hold_tokens([], completion_tokens=256, pass_tokens=10000) == 500
-    assert verification_hold_tokens([], completion_tokens=256, pass_tokens=1000000) > 2 * VERIFIER_CALL_FLOOR
+    # Headroom for the next turn's proposals, capped at 10% of the pass budget.
+    assert verification_hold_tokens([], completion_tokens=256, pass_tokens=10000) == 1000
+
+
+def test_light_pass_headroom_funds_one_full_batch():
+    from config.dream_session import LIGHT_TOKENS
+    from utils.dream_cost import verification_hold_tokens, verification_reserve_tokens
+
+    # Largest evidence the verifier accepts (just under its 24000-byte ceiling).
+    largest = _item(name='n' * 23700)
+    assert verification_hold_tokens([], completion_tokens=4096, pass_tokens=LIGHT_TOKENS) >= (
+        verification_reserve_tokens([largest], completion_tokens=4096)
+    )
+
+
+def test_budget_limited_skip_is_budget_tokens_and_per_call_timeout_is_deadline():
+    async def agree(mount, messages):
+        batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+        return Turn(
+            tokens=10,
+            value=VerificationBatch(decisions=[Verification(id=row['id'], agree=True, reason='ok') for row in batch]),
+        )
+
+    async def slow(mount, messages):
+        await asyncio.sleep(0.3)
+        return await agree(mount, messages)
+
+    # Within the verifier ceiling but beyond what this budget affords: a budget skip.
+    assert _reasons(agree, [_item(name='n' * 6000)], tokens=6000, deadline_seconds=5) == {
+        'synthetic-proposal': 'budget_tokens'
+    }
+    assert _reasons(slow, [_item()], tokens=100000, deadline_seconds=5, verifier_seconds=0.01) == {
+        'synthetic-proposal': 'budget_deadline'
+    }
+
+
+def test_verifier_payload_is_the_compact_utf8_form_the_reserve_measures():
+    from utils.agent_capabilities.session import serialized_bytes
+    from utils.dream_verify import compact_json, evidence
+
+    item = _item(name='名前' * 50)
+    sent = []
+
+    async def capture(mount, messages):
+        sent.append(messages[-1]['content'].split('\n', 1)[1])
+        batch = json.loads(sent[-1])
+        return Turn(
+            tokens=10,
+            value=VerificationBatch(decisions=[Verification(id=row['id'], agree=True, reason='ok') for row in batch]),
+        )
+
+    assert _reasons(capture, [item], tokens=100000, deadline_seconds=5) == {}
+    assert sent[0] == compact_json([evidence(item)])
+    assert len(sent[0].encode()) == serialized_bytes([evidence(item)])
 
 
 def test_small_verify_budget_still_batches_ordinary_evidence():
