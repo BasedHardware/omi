@@ -35,7 +35,7 @@ def source(monkeypatch):
             }
         )
         paths.append(ref.path)
-    monkeypatch.setattr(backfill, 'retained_tail_proof', lambda *a: 'synthetic-tail-proof')
+    monkeypatch.setattr(backfill, 'retained_tail_proof', lambda *a, **kw: 'synthetic-tail-proof')
     return client, store, sorted(paths)
 
 

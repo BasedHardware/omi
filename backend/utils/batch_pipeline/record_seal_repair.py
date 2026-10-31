@@ -8,6 +8,7 @@ import math
 from typing import Any
 
 from google.cloud import firestore
+from config.record_seal_rules import overlap_trim_enabled, upload_failed_repair_enabled
 
 from database._client import run_transactional
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
@@ -53,12 +54,12 @@ def plan_digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=encode, separators=(',', ':')).encode()).hexdigest()
 
 
-def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False):
+def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False, repair_upload_failed=False):
     if job.get('state') != 'record_pending' or not job.get('record_content_id'):
         return 'not_pending'
     if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
         return 'not_batch_owned'
-    if row.get('record_upload_failed'):
+    if row.get('record_upload_failed') and not (repair_upload_failed and upload_failed_repair_enabled()):
         return 'upload_failed'
     if row.get('record_upload_sessions') and not producer_tokens_dead(
         row['record_upload_sessions'], producer_proof, producers_stopped=producers_stopped
@@ -73,7 +74,7 @@ def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False):
     return None
 
 
-def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lambda: None):
+def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lambda: None, diagnostics=None):
     """Shared retained-object and frozen/current-finish proof for operator seals."""
     uid, cid = job['owner_id'], job['conversation_id']
     seed = WorkItem(
@@ -94,7 +95,8 @@ def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lam
     key = artifacts.key_for_owner(uid)
     precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, check_budget=check_budget)
     units = []
-    iterator = retained_record_units(uid, cid, chunks, storage_client, key)
+    options = {'diagnostics': diagnostics} if diagnostics is not None else {}
+    iterator = retained_record_units(uid, cid, chunks, storage_client, key, **options)
     try:
         for unit in iterator:
             check_budget()
@@ -125,10 +127,9 @@ def validate_repair_tail(units, finish, *, diagnostic_end=None):
 def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, check_budget=lambda: None):
     """Refusal-only necessary condition; passing still requires the full walk.
 
-    Consistent overlap trimming preserves the final end within half a 16 kHz
-    sample. A wholly covered final chunk either ends at that same boundary or
-    conflicts in the full walk. Keep the full walk near the rounding boundary
-    (and for nonfinite clocks), where singleton and trimmed ends may differ.
+    A contained final object can end before the union. Under earlier-wins
+    trimming a singleton can refuse only a singleton listing; multi-object
+    short tails require the full walk. Keep rounding uncertainty in the walk.
     """
     if not chunks:
         return
@@ -151,6 +152,11 @@ def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, che
         try:
             validate_record_tail([tail], finish, require_finish=True)
         except ValueError:
+            # With earlier-wins trimming, the final object may be wholly
+            # contained in an earlier, longer object. Its singleton end is no
+            # longer an upper bound on the union. Only the full walk can refuse.
+            if len(chunks) > 1 and overlap_trim_enabled():
+                return
             # Diagnose the actual decoded end, never the conservative ceiling.
             validate_repair_tail([(ceiling, 0, [])], finish, diagnostic_end=end)
 
@@ -164,11 +170,13 @@ def plan_seals(
     producer_proof=None,
     producers_stopped=False,
     check_budget=lambda: None,
+    repair_upload_failed=False,
 ):
     entries = []
     for job_id in sorted(job_ids):
         check_budget()
         entry = {'job_id': job_id, 'disposition': 'unavailable'}
+        diagnostics = {}
         try:
             job = _job_state(store.run(lambda tx: tx.get('jobs', job_id)))
             check_budget()
@@ -179,14 +187,25 @@ def plan_seals(
             row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
             check_budget()
             entry.update(job=job, row=seal_row_state(row))
-            refusal = seal_refusal(job, row, producer_proof=producer_proof, producers_stopped=producers_stopped)
+            refusal = seal_refusal(
+                job,
+                row,
+                producer_proof=producer_proof,
+                producers_stopped=producers_stopped,
+                repair_upload_failed=repair_upload_failed,
+            )
             if refusal:
                 entry['disposition'] = refusal
             else:
                 proof = retained_tail_proof(
-                    {**job, 'segment_id': job_id}, row, storage_client, artifacts, check_budget=check_budget
+                    {**job, 'segment_id': job_id},
+                    row,
+                    storage_client,
+                    artifacts,
+                    check_budget=check_budget,
+                    diagnostics=diagnostics,
                 )
-                entry.update(disposition='eligible', proof_sha256=proof)
+                entry.update(disposition='eligible', proof_sha256=proof, **diagnostics)
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_refused'
         except (ValueError, TypeError, AttributeError, KeyError) as error:
@@ -194,6 +213,7 @@ def plan_seals(
             entry.update(proof_diagnostics(error))
         except Exception:
             entry['disposition'] = 'read_error'
+        entry.update(diagnostics)
         entries.append(entry)
     check_budget()
     plan = {
@@ -202,6 +222,8 @@ def plan_seals(
         'entries': entries,
         'producer_proof': producer_proof,
         'producers_stopped': producers_stopped,
+        'repair_upload_failed': repair_upload_failed,
+        'overlap_trim_enabled': overlap_trim_enabled(),
     }
     return {**plan, 'plan_sha256': plan_digest(plan)}
 
@@ -218,6 +240,9 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         if entry['disposition'] != 'eligible':
             outcomes[entry['disposition']] += 1
             continue
+        if plan.get('overlap_trim_enabled') and not overlap_trim_enabled():
+            outcomes['state_changed'] += 1
+            continue
         job = entry['job']
         uid, cid = job['owner_id'], job['conversation_id']
         ref = store.client.collection('users').document(uid).collection('conversations').document(cid)
@@ -231,7 +256,11 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             if _job_state(current_job) != job or seal_row_state(row) != entry['row']:
                 return 'state_changed'
             refusal = seal_refusal(
-                current_job, row, producer_proof=plan['producer_proof'], producers_stopped=plan['producers_stopped']
+                current_job,
+                row,
+                producer_proof=plan['producer_proof'],
+                producers_stopped=plan['producers_stopped'],
+                repair_upload_failed=plan.get('repair_upload_failed', False),
             )
             if refusal:
                 return refusal
@@ -241,9 +270,11 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             patch: dict[str, Any] = {'record_audio_closed': True}
             if row.get('record_upload_sessions'):
                 patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
+            if row.get('record_upload_failed'):
+                patch['record_upload_failed'] = False
             check_budget()
             tx.update(ref, patch)
-            return 'sealed'
+            return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed'
 
         try:
             outcomes[run_transactional(store.client, commit, transient=True)] += 1

@@ -92,7 +92,8 @@ def test_precheck_never_refuses_a_full_walk_success(monkeypatch, starts, samples
         with pytest.raises(ValueError, match='tail not durable'):
             validate_record_tail([(starts[-1], samples[-1] / 16000, [])], row['finished_at'], require_finish=True)
     if finish == 103 or finish == 102 and starts[-1] == 100.5:
-        assert precheck_refused
+        # Singleton refusal is no longer sound for contained final objects.
+        assert not precheck_refused
 
 
 def test_precheck_short_tail_avoids_prefix_but_eligible_keeps_full_proof(monkeypatch):
@@ -112,7 +113,7 @@ def test_precheck_short_tail_avoids_prefix_but_eligible_keeps_full_proof(monkeyp
     with pytest.raises(ValueError, match='tail not durable') as refusal:
         repair.retained_tail_proof(job, row, None, artifacts)
     assert proof_diagnostics(refusal.value) == {'proof_reason': 'tail_lagging', 'tail_gap_bucket': '1_to_5s'}
-    assert reads == ['1.pcm']
+    assert reads == ['1.pcm', '0.pcm', '1.pcm']
     reads.clear()
     row['finished_at'] = datetime.fromtimestamp(102, timezone.utc)
     assert repair.retained_tail_proof(job, row, None, artifacts)

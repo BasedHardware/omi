@@ -99,7 +99,7 @@ def test_partial_pod_list_cannot_prove_absence(source):
 def test_proof_expiring_during_tail_read_never_applies(source, proof, monkeypatch):
     from utils.batch_pipeline import record_seal_repair
 
-    def tail(*_):
+    def tail(*_, **kwargs):
         monkeypatch.setattr(producer.time, 'time', lambda: 1400)
         return 'opaque-proof'
 
@@ -730,12 +730,21 @@ def test_child_gap_bucket_is_allowlisted(candidate):
     expected = candidate if candidate in TAIL_GAP_BUCKETS else 'negative_or_unknown'
     assert report['tail_gap_buckets'] == {expected: 1}
     assert progress[0]['tail_gap_bucket'] == expected
-    assert set(progress[0]) == {'event', 'count', 'disposition', 'seal_age_seconds', 'proof_reason', 'tail_gap_bucket'}
+    assert set(progress[0]) == {
+        'event',
+        'count',
+        'disposition',
+        'seal_age_seconds',
+        'proof_reason',
+        'tail_gap_bucket',
+        'trimmed_divergent_overlaps',
+    }
 
 
 def test_upload_failed_skips_proof_cost_and_gap(source, proof, monkeypatch):
     from utils.batch_pipeline import record_seal_repair as repair
 
+    monkeypatch.setenv('RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED', 'false')
     source[1].rows[PATH]['record_upload_failed'] = True
     read = Mock(side_effect=AssertionError('must not read audio'))
     monkeypatch.setattr(repair, 'list_audio_chunks', read)
@@ -756,6 +765,75 @@ def test_upload_failed_skips_proof_cost_and_gap(source, proof, monkeypatch):
     assert reason == {}
     read.assert_not_called()
     assert source[1].rows[PATH]['record_upload_failed'] is True
+
+
+@pytest.mark.parametrize('pending_job', [False, True])
+def test_repair_clears_upload_failed_only_with_complete_proof(source, proof, pending_job):
+    if pending_job:
+        assert settle(source, proof) == 'sealed_registered'
+    row = source[1].rows[PATH]
+    row.update(record_upload_failed=True, record_audio_closed=False)
+    assert settle(source, proof) == 'upload_failed_cleared'
+    assert row['record_audio_closed']
+    assert row['record_upload_failed'] is False
+    assert source[1].rows[JOB_PATH]['state'] == 'record_pending'
+
+
+@pytest.mark.parametrize('pending_job', [False, True])
+def test_failed_row_with_missing_tail_stays_failed_in_repair(source, proof, pending_job):
+    if pending_job:
+        assert settle(source, proof) == 'sealed_registered'
+    row = source[1].rows[PATH]
+    row.update(
+        record_upload_failed=True, record_audio_closed=False, finished_at=datetime.fromtimestamp(150, timezone.utc)
+    )
+    assert settle(source, proof) == 'proof_refused'
+    assert row['record_upload_failed']
+    assert not row['record_audio_closed']
+
+
+@pytest.mark.parametrize('pending_job', [False, True])
+def test_repeated_failure_landing_during_proof_fences_both_repair_paths(source, proof, pending_job, monkeypatch):
+    from database.record_audio import mark_record_upload_failed
+    from utils.batch_pipeline import record_seal_repair as repair
+
+    if pending_job:
+        assert settle(source, proof) == 'sealed_registered'
+    row = source[1].rows[PATH]
+    row.update(record_upload_failed=True, record_audio_closed=False)
+    original = repair.retained_tail_proof
+
+    def remark(*args, **kwargs):
+        result = original(*args, **kwargs)
+        mark_record_upload_failed('synthetic', 'capture', firestore_client=source[1])
+        return result
+
+    monkeypatch.setattr(repair, 'retained_tail_proof', remark)
+    monkeypatch.setattr(nojob, 'retained_tail_proof', remark)
+    assert settle(source, proof) == 'state_changed'
+    assert row['record_upload_failed']
+    assert not row['record_audio_closed']
+
+
+@pytest.mark.parametrize('candidate,expected', [(3, 3), (-1, 0), (4097, 0), ('3', 0), (True, 0)])
+def test_trim_count_row_log_is_bounded_and_numeric(candidate, expected):
+    process = FakeProcess([0], 0, result='upload_failed_cleared')
+    process.stdout = io.BytesIO(
+        json.dumps({'disposition': 'upload_failed_cleared', 'trimmed_divergent_overlaps': candidate}).encode()
+    )
+    progress = []
+    report = cluster.coordinate(
+        [('synthetic', 100)],
+        workers=1,
+        row_seconds=1,
+        run_seconds=1,
+        mode='apply',
+        launch=lambda *_: process,
+        progress=progress.append,
+    )
+    assert progress[0]['trimmed_divergent_overlaps'] == expected
+    assert progress[0]['seal_age_seconds'] >= 100
+    assert report['dispositions'] == {'upload_failed_cleared': 1}
 
 
 def test_non_tail_child_cannot_emit_gap():
