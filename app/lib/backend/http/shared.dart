@@ -588,6 +588,7 @@ Future<http.Response> sendUncaughtApiCall({
     var builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
     ensureCurrentOwner();
     var response = await execution.transport(ApiRequest(url: url, method: method, headers: builtHeaders, body: body));
+    ensureCurrentOwner();
     if (response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
         firstResponse: response,
@@ -602,6 +603,7 @@ Future<http.Response> sendUncaughtApiCall({
         },
       );
     }
+    ensureCurrentOwner();
     await _expireSessionIfAccountDeleted(response.statusCode, response.body, authService: execution.auth);
     return response;
   }
@@ -626,6 +628,7 @@ Future<http.Response> sendUncaughtApiCall({
     timeout: effectiveTimeout,
     retries: effectiveRetries,
   );
+  ensureCurrentOwner();
 
   if (requireAuthCheck && response.statusCode == 401) {
     response = await refreshAndReplayAfter401(
@@ -652,6 +655,7 @@ Future<http.Response> sendUncaughtApiCall({
       },
     );
   }
+  ensureCurrentOwner();
   if (requireAuthCheck) await _expireSessionIfAccountDeleted(response.statusCode, response.body);
 
   _checkClockSkewResponse(response);

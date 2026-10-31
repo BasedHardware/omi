@@ -78,6 +78,72 @@ void main() {
       expect(gateway.signOutCalls, 1);
     });
 
+    for (final statusCode in [HttpStatus.unauthorized, HttpStatus.forbidden]) {
+      test('late $statusCode cannot refresh or expire a replacement account', () async {
+        final gateway = _Gateway();
+        final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+        final owner = service.captureSessionSnapshot()!;
+        final events = <AuthSessionExpiredEvent>[];
+        service.sessionExpiredEvents.listen(events.add);
+        final seams = ApiExecutionSeams(
+          headers: (_) async => {'Authorization': 'Bearer old-owner'},
+          auth: service,
+          transport: (_) async {
+            gateway.user = const AuthUserSnapshot(uid: 'replacement');
+            service.handleAuthUserChanged('replacement');
+            return http.Response(fenceBody, statusCode);
+          },
+        );
+        await expectLater(
+            sendUncaughtApiCall(
+              url: 'https://api.omi.me/v1/users/fcm-token',
+              headers: {},
+              body: '{}',
+              method: 'POST',
+              execution: seams,
+              canSend: () => service.isSessionSnapshotCurrent(owner),
+              signOutOn401: false,
+            ),
+            throwsA(isA<AuthTokenUnavailableException>()));
+        expect(gateway.signOutCalls, 0);
+        expect(gateway.refreshCalls, 0, reason: 'a stale registration cannot refresh the next owner');
+        expect(events, isEmpty);
+        expect(service.captureSessionSnapshot()?.ownerUid, 'replacement');
+      });
+    }
+
+    test('a stale replay response cannot expire the replacement account', () async {
+      final gateway = _Gateway();
+      final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+      final owner = service.captureSessionSnapshot()!;
+      var sends = 0;
+      final seams = ApiExecutionSeams(
+        headers: (_) async => {'Authorization': 'Bearer fixture'},
+        auth: service,
+        transport: (_) async {
+          if (++sends == 1) return http.Response('', HttpStatus.unauthorized);
+          gateway.user = const AuthUserSnapshot(uid: 'replacement');
+          service.handleAuthUserChanged('replacement');
+          return http.Response(fenceBody, HttpStatus.forbidden);
+        },
+      );
+      await expectLater(
+          sendUncaughtApiCall(
+            url: 'https://api.omi.me/v1/users/fcm-token',
+            headers: {},
+            body: '{}',
+            method: 'POST',
+            execution: seams,
+            canSend: () => service.isSessionSnapshotCurrent(owner),
+            signOutOn401: false,
+          ),
+          throwsA(isA<AuthTokenUnavailableException>()));
+      expect(sends, 2);
+      expect(gateway.refreshCalls, 1, reason: 'the first owner was still current during its refresh');
+      expect(gateway.signOutCalls, 0);
+      expect(service.captureSessionSnapshot()?.ownerUid, 'replacement');
+    });
+
     test('a plain 403 leaves the session alone', () async {
       final gateway = _Gateway();
       final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
@@ -162,13 +228,17 @@ String _tokenWithExpiry(DateTime expiry) {
 
 final class _Gateway implements AuthTokenGateway {
   int signOutCalls = 0;
+  int refreshCalls = 0;
+  AuthUserSnapshot? user = const AuthUserSnapshot(uid: 'fence-user');
 
   @override
-  AuthUserSnapshot? get currentUser => const AuthUserSnapshot(uid: 'fence-user');
+  AuthUserSnapshot? get currentUser => user;
 
   @override
-  Future<RefreshedAuthToken?> forceRefresh() async =>
-      RefreshedAuthToken(token: 'fresh-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
+  Future<RefreshedAuthToken?> forceRefresh() async {
+    refreshCalls++;
+    return RefreshedAuthToken(token: 'fresh-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
+  }
 
   @override
   Future<void> signOut() async {
