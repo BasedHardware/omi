@@ -792,6 +792,29 @@ def test_failed_row_with_missing_tail_stays_failed_in_repair(source, proof, pend
     assert not row['record_audio_closed']
 
 
+@pytest.mark.parametrize('pending_job', [False, True])
+def test_repeated_failure_landing_during_proof_fences_both_repair_paths(source, proof, pending_job, monkeypatch):
+    from database.record_audio import mark_record_upload_failed
+    from utils.batch_pipeline import record_seal_repair as repair
+
+    if pending_job:
+        assert settle(source, proof) == 'sealed_registered'
+    row = source[1].rows[PATH]
+    row.update(record_upload_failed=True, record_audio_closed=False)
+    original = repair.retained_tail_proof
+
+    def remark(*args, **kwargs):
+        result = original(*args, **kwargs)
+        mark_record_upload_failed('synthetic', 'capture', firestore_client=source[1])
+        return result
+
+    monkeypatch.setattr(repair, 'retained_tail_proof', remark)
+    monkeypatch.setattr(nojob, 'retained_tail_proof', remark)
+    assert settle(source, proof) == 'state_changed'
+    assert row['record_upload_failed']
+    assert not row['record_audio_closed']
+
+
 @pytest.mark.parametrize('candidate,expected', [(3, 3), (-1, 0), (4097, 0), ('3', 0), (True, 0)])
 def test_trim_count_row_log_is_bounded_and_numeric(candidate, expected):
     process = FakeProcess([0], 0, result='upload_failed_cleared')

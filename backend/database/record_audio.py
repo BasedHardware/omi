@@ -17,8 +17,8 @@ RecordSealRefusal = Literal['producer_pending', 'upload_failed', 'not_batch_owne
 def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) -> RecordSealRefusal | None:
     """Resolve the persisted owner at closure, across websocket sessions.
 
-    Upload failures are sticky across reconnects. A later clean session must
-    never certify audio lost by an earlier session, even after a prior seal.
+    Upload failures are sticky across reconnects. Only the separate full-proof
+    repair path may clear one; a later clean session cannot certify lost audio.
     Return None on success, otherwise a closed, content-free refusal reason.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()

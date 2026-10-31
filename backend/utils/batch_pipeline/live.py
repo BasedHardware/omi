@@ -160,7 +160,9 @@ def retained_record_units(
         source_digest = hashlib.sha256(pcm).hexdigest()
         source_skip = 0
         capture = float(chunk['timestamp'])
-        if end is not None and capture < end - 1 / 16000:
+        # Resolve even a one-frame overlap: the manifest reader forbids
+        # overlapping slices, so the proof cannot let that frame through twice.
+        if end is not None and round((end - capture) * 16000) > 0:
             overlap = round((end - capture) * 16000) * 2
             if overlap > len(previous_pcm):
                 raise ValueError('conflicting retained audio overlap')

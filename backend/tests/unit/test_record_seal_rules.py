@@ -106,6 +106,16 @@ def test_overlap_switch_off_restores_refusal(monkeypatch):
         list(live.retained_record_units('synthetic', 'capture', chunks, None, b''))
 
 
+def test_one_frame_divergent_overlap_is_trimmed_for_reader_agreement(monkeypatch):
+    chunks, _ = overlap_source(monkeypatch, starts=(100, 101 - 1 / 16000), lengths=(1, 1))
+    units = list(live.retained_record_units('synthetic', 'capture', chunks, None, b''))
+    _, duration, refs = units[0]
+    assert duration == pytest.approx(2 - 1 / 16000)
+    assert refs[1]['start_frame'] == 16000
+    assert refs[1]['offset_frame'] == 1
+    assert refs[1]['frames'] == 15999
+
+
 def failed_plan(source):
     store, client, artifacts = source
     client.rows[PATH]['record_upload_failed'] = True
