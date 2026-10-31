@@ -461,6 +461,76 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(self.SENSITIVE, result)
             self.assertIn(f"{logged}: code=", "\n".join(logs.output))
 
+    async def test_google_api_and_network_failures_log_without_exception_text(self):
+        current = {"id": "evt_123", "summary": "Standup", "attendees": []}
+        calls = [
+            (
+                "get_google_calendar_events",
+                lambda: ct.get_calendar_events_tool.func(),
+                "fetching calendar events",
+            ),
+            (
+                "create_google_calendar_event",
+                lambda: ct.create_calendar_event_tool.func(
+                    title="Design Sync", start_time="2026-09-28T10:00:00Z", end_time="2026-09-28T11:00:00Z"
+                ),
+                "creating calendar event",
+            ),
+            (
+                "delete_google_calendar_event",
+                lambda: ct.delete_calendar_event_tool.func(event_id="evt_123"),
+                "deleting event by ID",
+            ),
+            (
+                "get_google_calendar_events",
+                lambda: ct.delete_calendar_event_tool.func(event_title="Standup"),
+                "searching events to delete",
+            ),
+            (
+                "get_google_calendar_event",
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123"),
+                "getting event",
+            ),
+            (
+                "update_google_calendar_event",
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123", title="Renamed"),
+                "updating calendar event",
+            ),
+        ]
+        failures = [
+            ("Google API error", lambda: GoogleAPIError(f"Bad request: {self.SENSITIVE}", status_code=400), "code=400"),
+            ("Network error", lambda: ConnectError(self.SENSITIVE), "code="),
+        ]
+        for kind, failure, code in failures:
+            for target, call, action in calls:
+                with (
+                    self.subTest(f"{kind} {action}"),
+                    patch.object(
+                        ct, "prepare_access", return_value=("uid_123", {"access_token": "token"}, "token", None)
+                    ),
+                    patch.object(ct, "get_google_calendar_event", new=AsyncMock(return_value=current)),
+                    patch.object(ct, target, side_effect=failure()),
+                    self.assertLogs(ct.logger, level="ERROR") as logs,
+                ):
+                    await call()
+                logged = "\n".join(logs.output)
+                self.assertIn(f"{kind} {action}: {code}", logged)
+                self.assertNotIn(self.SENSITIVE, logged)
+
+    async def test_contacts_network_failures_log_without_exception_text(self):
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=ConnectError(self.SENSITIVE))
+        with (
+            patch.object(ct, "get_auth_client", return_value=client),
+            self.assertLogs(ct.logger, level="ERROR") as logs,
+        ):
+            self.assertIsNone(await ct.search_google_contacts("token", "Avery"))
+        logged = "\n".join(logs.output)
+        self.assertIn("Network error searching My Contacts: code=", logged)
+        self.assertIn("Other Contacts warm-up failed (non-critical): code=", logged)
+        self.assertIn("Network error searching Other Contacts: code=", logged)
+        self.assertNotIn(self.SENSITIVE, logged)
+
 
 if __name__ == "__main__":
     unittest.main()
