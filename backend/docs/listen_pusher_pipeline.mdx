@@ -8412,6 +8412,33 @@ redispatches and at most 600 seconds of total waiting. Exhaustion terminally
 fences the job so the age-bounded orphan sweep can complete its processing row.
 Old task deliveries cannot claim a job while revision replay is waiting.
 
+Stale finalization replay also enforces the worker's durable attempt cap before
+minting another dispatch generation. It uses
+`max(attempt_count, worker_claim_count - 1) >= max_attempts`; reconciliation,
+duplicate deliveries, pusher handoffs, and explicit revision/owner deferrals do
+not consume worker claims. An exhausted platform-key job uses the existing
+atomic dead-letter transition with `last_failure_code=durable_attempts_exhausted`.
+Live leases, fresh dispatches, BYOK waits, and committed fanout retain their
+existing admission rules. The existing
+`LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED=false` kill switch disables both
+worker and replay enforcement.
+
+The two post-claim preflight reads (job and account cutover) each have a
+30-second application deadline, including shared DB executor queue/admission
+time. Timeout attempts the normal fenced `worker_failed` retry update, bounded
+to 30 seconds; lock release is bounded to five seconds. These deadlines cannot
+interrupt a synchronous RPC already running in a thread. If persistence stays
+unavailable, the lease expires and replay still enforces the durable cap.
+The timeout emits `event=listen_finalization_preflight outcome=timeout` with a
+closed `stage` value (`job_read` or `account_cutover`), without account/content
+identifiers.
+
+Dead-lettering keeps the conversation visible and preserves its transcript,
+audio references, photos, and any existing structured output. It stops automatic
+summary/derived-output and integration fanout attempts for that job; an eligible
+row can still offer the existing user retry action. A deterministic minimum
+title is not a generated summary.
+
 MCP projected list/search hydration and single/batch detail reads carry and
 honor the pending marker. Default counts add one limit-1 pending-deadline probe;
 only users with active candidates open the exact-count stream (one document read

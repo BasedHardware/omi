@@ -975,6 +975,65 @@ async def test_worker_durable_failure_budget_survives_a_new_task_generation(monk
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize('blocked_stage', ['job_read', 'account_cutover'])
+async def test_post_claim_read_timeout_records_failure_without_waiting_for_lease(monkeypatch, blocked_stage, caplog):
+    monkeypatch.setattr(finalization_router, 'PREFLIGHT_READ_TIMEOUT_SECONDS', 0.001)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    release = MagicMock()
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', release)
+    monkeypatch.setattr(finalization_router, 'account_deletion_blocks_user_work', lambda _: False)
+    monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda _: False)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *a, **kw: {
+            'status': 'claimed',
+            'lease_epoch': 9,
+            'attempt_count': 0,
+        },
+    )
+    monkeypatch.setattr(
+        jobs_db,
+        'get_finalization_job',
+        lambda _: {
+            'uid': 'synthetic-owner',
+            'conversation_id': 'synthetic-recording',
+        },
+    )
+    monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
+    retryable = MagicMock(return_value=True)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    finalizer = AsyncMock()
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', finalizer)
+    job_reads = 0
+
+    async def block_post_claim_read(executor, fn, *args, **kwargs):
+        nonlocal job_reads
+        if fn is jobs_db.get_finalization_job:
+            job_reads += 1
+            if blocked_stage == 'job_read' and job_reads == 2:
+                await asyncio.Event().wait()
+        if fn is finalization_router.should_skip_background_account_mutation and blocked_stage == 'account_cutover':
+            await asyncio.Event().wait()
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(finalization_router, 'run_blocking', block_post_claim_read)
+    with caplog.at_level(logging.WARNING):
+        response = await asyncio.wait_for(
+            finalization_router.run_listen_finalization_job(
+                _Request({'job_id': 'synthetic-job', 'dispatch_generation': 1}), task_retry_count=0
+            ),
+            timeout=1,
+        )
+
+    assert response.status_code == 500
+    retryable.assert_called_once_with('synthetic-job', 1, 9, 'worker_failed')
+    release.assert_called_once()
+    finalizer.assert_not_awaited()
+    assert f'event=listen_finalization_preflight outcome=timeout stage={blocked_stage}' in caplog.text
+
+
+@pytest.mark.anyio
 async def test_worker_closes_exhausted_crash_budget_before_processing(monkeypatch):
     monkeypatch.setenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true')
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)

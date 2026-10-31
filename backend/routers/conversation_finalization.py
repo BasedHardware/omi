@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from config.listen_finalization import durable_attempt_cap_enabled as _durable_attempt_cap_enabled
 from config.summary_guarantee import enabled as summary_deadline_enabled
 
 from database import conversation_finalization_jobs as jobs_db
@@ -46,13 +46,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _durable_attempt_cap_enabled() -> bool:
-    return os.getenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true').strip().lower() in {
-        '1',
-        'true',
-        'yes',
-        'on',
-    }
+# Includes executor admission/queue time, not just Firestore RPC time. Read
+# cancellation cannot stop an already running sync RPC; it can return control
+# to the lease owner so recovery is attempted before the 1500-second lease.
+PREFLIGHT_READ_TIMEOUT_SECONDS = 30
+RECOVERY_TIMEOUT_SECONDS = 30
+LOCK_RELEASE_TIMEOUT_SECONDS = 5
+
+
+async def _preflight_read(stage: str, fn, *args):
+    try:
+        return await asyncio.wait_for(run_blocking(db_executor, fn, *args), timeout=PREFLIGHT_READ_TIMEOUT_SECONDS)
+    except TimeoutError:
+        logger.warning('event=listen_finalization_preflight outcome=timeout stage=%s', stage)
+        raise
 
 
 def _parse_task_payload(payload: Any) -> tuple[str, int] | None:
@@ -216,7 +223,7 @@ async def run_listen_finalization_job(
             logger.error('listen finalization claim returned no lease epoch job=%s', job_id)
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
-        job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
+        job = await _preflight_read('job_read', jobs_db.get_finalization_job, job_id)
         if not job or not isinstance(job.get('uid'), str) or not isinstance(job.get('conversation_id'), str):
             terminal = await _retry_or_dead_letter(
                 job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'invalid_job'
@@ -229,7 +236,7 @@ async def run_listen_finalization_job(
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
-        if await run_blocking(db_executor, should_skip_background_account_mutation, job['uid']):
+        if await _preflight_read('account_cutover', should_skip_background_account_mutation, job['uid']):
             # Prequeued finalization must not mutate migrating/new accounts.
             completed = await run_blocking(
                 db_executor,
@@ -381,13 +388,16 @@ async def run_listen_finalization_job(
         )
         if claimed_lease_epoch is not None:
             try:
-                terminal = await _retry_or_dead_letter(
-                    job_id,
-                    dispatch_generation,
-                    claimed_lease_epoch,
-                    task_retry_count,
-                    failed_attempts,
-                    'worker_failed',
+                terminal = await asyncio.wait_for(
+                    _retry_or_dead_letter(
+                        job_id,
+                        dispatch_generation,
+                        claimed_lease_epoch,
+                        task_retry_count,
+                        failed_attempts,
+                        'worker_failed',
+                    ),
+                    timeout=RECOVERY_TIMEOUT_SECONDS,
                 )
             except Exception:
                 logger.error('listen finalization recovery update failed job=%s failure=worker_failed', job_id)
@@ -403,4 +413,10 @@ async def run_listen_finalization_job(
         return JSONResponse(status_code=500, content={'status': 'retry'})
     finally:
         if release_lock:
-            await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
+            try:
+                await asyncio.wait_for(
+                    run_blocking(db_executor, release_job_run_lock, lock_key, lock_token),
+                    timeout=LOCK_RELEASE_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                logger.warning('event=listen_finalization_lock_release outcome=timeout')
