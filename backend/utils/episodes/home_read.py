@@ -139,9 +139,9 @@ def project_lookup(uid: str, episode: dict[str, Any] | None) -> dict[str, Any] |
     Lookups arrive one per conversation row, so a per-user budget caps distinct episodes queued across them.
     """
     wire = project_episode(uid, episode)
-    if episode is not None and _lookup_room(uid):
-        queued = schedule_missed_composes(uid, [episode], [wire] if wire is not None else [])
-        _lookup_spend_record(uid, queued)
+    if episode is not None and _lookup_reserve(uid):
+        if not schedule_missed_composes(uid, [episode], [wire] if wire is not None else []):
+            _lookup_refund(uid)
     return wire
 
 
@@ -149,23 +149,31 @@ _lookup_lock = threading.Lock()
 _lookup_spend: dict[str, list[float]] = {}
 
 
-def _lookup_recent(uid: str, now: float) -> list[float]:
-    return [at for at in _lookup_spend.get(uid, []) if now - at < COMPOSER_READ_THROTTLE_SECONDS]
-
-
-def _lookup_room(uid: str) -> bool:
-    with _lookup_lock:
-        return len(_lookup_recent(uid, time.monotonic())) < COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW
-
-
-def _lookup_spend_record(uid: str, queued: int) -> None:
-    if not queued:
-        return
+def _lookup_reserve(uid: str) -> bool:
+    """Claim one of the user's lookup schedules for this window atomically; refunded if nothing queues."""
     now = time.monotonic()
     with _lookup_lock:
         if len(_lookup_spend) > 10_000:
-            _lookup_spend.clear()
-        _lookup_spend[uid] = [*_lookup_recent(uid, now), *([now] * queued)]
+            # Drop only users with no spend left in the window, so active budgets survive the bound.
+            for key in [k for k, ats in _lookup_spend.items() if not _live(ats, now)]:
+                del _lookup_spend[key]
+        recent = _live(_lookup_spend.get(uid, []), now)
+        if len(recent) >= COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW:
+            _lookup_spend[uid] = recent
+            return False
+        _lookup_spend[uid] = [*recent, now]
+        return True
+
+
+def _lookup_refund(uid: str) -> None:
+    with _lookup_lock:
+        spent = _lookup_spend.get(uid)
+        if spent:
+            spent.pop()
+
+
+def _live(spent: list[float], now: float) -> list[float]:
+    return [at for at in spent if now - at < COMPOSER_READ_THROTTLE_SECONDS]
 
 
 def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> int:
