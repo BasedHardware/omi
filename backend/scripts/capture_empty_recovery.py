@@ -29,14 +29,14 @@ import time
 from types import SimpleNamespace
 import zlib
 
-from google.api_core.exceptions import FailedPrecondition, NotFound
+from google.api_core.exceptions import Aborted, FailedPrecondition, NotFound
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1.base_query import FieldFilter
-from google.cloud.firestore_v1 import LastUpdateOption
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils.conversations.empty_capture_recovery import (
     Changed,
+    AuthorityBlocked,
     MutationUncertain,
     STOP_OUTCOMES,
     MARKER,
@@ -51,11 +51,12 @@ from utils.conversations.empty_capture_recovery import (
     speech_bucket,
     undo_one,
 )
+from scripts.capture_empty_recovery_privacy import Privacy, MaskedClient, atomic_write, marker_blocks
 
 PROJECT = 'based-hardware'
 CUSTODY_BUCKET = 'omi-private-cloud-sync'
 LEDGER_ROOT = Path('/Volumes/Ephemeral/scratch/capturereprocess')
-JOB_FIELDS = ('created_at', 'processing_trigger', 'uid', 'conversation_id')
+JOB_FIELDS = ('created_at', 'processing_trigger', 'uid', 'conversation_id', 'requires_byok')
 BUCKETS = ('zero', 'under_1s', '1_to_3s', '3_to_10s', 'over_10s')
 
 
@@ -96,6 +97,10 @@ def sample_eligible(observed, decode):
     row = observed.row
     if (
         observed.trigger != 'server_recovery'
+        or observed.rejection is not None
+        or observed.requires_byok is not False
+        or row.get('uses_custom_stt')
+        or row.get('listen_finalization_requires_byok')
         or row.get('status') != 'completed'
         or row.get('deleted')
         or row.get('discarded')
@@ -121,6 +126,25 @@ class Census:
     def __init__(self, client, pace):
         self.client, self.pace = client, pace
         self.reads = Counter()
+        self.privacy = Privacy(client, self.reads)
+        self.writes = 0
+
+    def authorize(self, observed):
+        self.privacy.check(observed)
+
+    def index_ready(self):
+        index = importlib.import_module('utils.conversations.typesense_index')
+        require(index.typesense_configured() and index.conversation_index_writes_enabled(), 'index_unavailable')
+
+    def converge(self, observed):
+        # Reconciliation reads current durable projection, never a stale patch.
+        self.authorize(observed)
+        index = importlib.import_module('utils.conversations.typesense_index')
+        client = MaskedClient(self.client, self.reads, 'index')
+        with redirect_stdout(DiscardOutput()), redirect_stderr(DiscardOutput()):
+            return index.sync_conversation_index_after_write(
+                observed.uid, observed.conversation_id, firestore_client=client, db_client=client
+            )
 
     def rows(self, after, before, max_jobs):
         query = (
@@ -147,12 +171,35 @@ class Census:
                     pair = (uid, cid)
                     trigger = job.get('processing_trigger')
                     # An ambiguous pair is counted and left unchanged.
-                    pairs[pair] = trigger if pair not in pairs or pairs[pair] == trigger else 'ambiguous'
+                    prior = pairs.get(pair)
+                    pairs[pair] = (
+                        trigger if prior is None or prior[0] == trigger else 'ambiguous',
+                        job.get('requires_byok') is False and (prior is None or prior[1]),
+                        (*prior[2], snapshot.id) if prior else (snapshot.id,),
+                    )
                 else:
                     self.reads['unresolvable_jobs'] += 1
             cursor = page[-1]
             time.sleep(self.pace)
-        ordered = sorted(pairs)
+        # Marker policy is shared with serving code. Do not fetch row content
+        # for an account whose wipe has begun (including unknown marker states).
+        denied = set()
+        owners = sorted({uid for uid, _ in pairs})
+        for start in range(0, len(owners), 50):
+            refs = [self.client.collection('account_deletions').document(uid) for uid in owners[start : start + 50]]
+            for snapshot in self.client.get_all(refs, field_paths=('wipe_status',), timeout=60, retry=None):
+                self.reads['account_markers'] += 1
+                if marker_blocks(snapshot):
+                    denied.add(snapshot.id)
+            time.sleep(self.pace)
+        ordered = []
+        for uid, cid in sorted(pairs):
+            trigger, managed, jobs = pairs[(uid, cid)]
+            rejection = 'account_blocked' if uid in denied else 'byok_or_payer_unproven' if not managed else None
+            if rejection:
+                yield Observed(uid, cid, {}, None, trigger, managed, jobs, rejection=rejection)
+            else:
+                ordered.append((uid, cid))
         for start in range(0, len(ordered), 50):
             group = ordered[start : start + 50]
             refs = [
@@ -163,7 +210,8 @@ class Census:
             for snapshot in self.client.get_all(refs, field_paths=ROW_FIELDS, timeout=60, retry=None):
                 self.reads['conversations'] += 1
                 uid, cid = identities[snapshot.reference.path]
-                yield Observed(uid, cid, snapshot.to_dict() or {}, snapshot.update_time, pairs[(uid, cid)])
+                trigger, managed, jobs = pairs[(uid, cid)]
+                yield Observed(uid, cid, snapshot.to_dict() or {}, snapshot.update_time, trigger, False, jobs)
             time.sleep(self.pace)
 
     def current(self, uid, cid):
@@ -184,20 +232,36 @@ class Census:
             .collection('conversations')
             .document(observed.conversation_id)
         )
+
+        def operation(transaction):
+            self.privacy.check(observed, transaction)
+            snapshot = (
+                MaskedClient(self.client, self.reads, 'conversations')
+                .document(ref.path)
+                .get(transaction=transaction, timeout=30, retry=None)
+            )
+            if not snapshot.exists or snapshot.update_time != observed.revision:
+                raise Changed()
+            transaction.update(ref, patch)
+
         try:
-            result = ref.update(patch, option=LastUpdateOption(observed.revision), timeout=30, retry=None)
-        except (FailedPrecondition, NotFound):
+            revision = atomic_write(self.client, operation)
+        except (Changed, AuthorityBlocked):
+            raise
+        except (Aborted, FailedPrecondition, NotFound):
             raise Changed() from None
         except Exception:
             raise MutationUncertain() from None
-        return result.update_time
+        self.writes += 1
+        return revision
 
 
 class Audio:
     """Generation-pinned retained chunks, decoded by the batch source reader."""
 
-    def __init__(self, client, modules, *, max_seconds=7200):
+    def __init__(self, client, modules, *, authorize, max_seconds=7200):
         self.client, self.modules, self.max_seconds = client, modules, max_seconds
+        self.authorize = authorize
         self.counts = Counter()
 
     def preflight(self):
@@ -206,6 +270,7 @@ class Audio:
         self.modules.vad.offline_pcm_speech_segments(bytes(1024))
 
     def pcm(self, observed):
+        self.authorize(observed)
         bucket = self.client.bucket(CUSTODY_BUCKET)
         prefix = f'chunks/{observed.uid}/{observed.conversation_id}/'
         chunks, listed_clocks = [], set()
@@ -232,6 +297,7 @@ class Audio:
             require(all(type(n) in (float, int) and math.isfinite(n) for n in clocks), 'audio_clock_unproven')
             expected_clocks.update(round(n * 1000) for n in clocks)
         require(expected_clocks <= listed_clocks, 'audio_partial_missing')
+        require(listed_clocks == expected_clocks, 'audio_unreferenced_objects')
         chunks.sort(key=lambda item: (item[0], item[1].name))
         key = self.modules.encryption.derive_key(observed.uid)
         origin, output, previous_end = chunks[0][0], bytearray(), 0
@@ -283,11 +349,11 @@ class Audio:
     def transcribe(self, observed):
         pcm = self.pcm(observed)
         try:
-            return self.transcribe_pcm(pcm)
+            return self.transcribe_pcm(observed, pcm)
         finally:
             del pcm
 
-    def transcribe_pcm(self, pcm):
+    def transcribe_pcm(self, observed, pcm):
         try:
             # Same single-call CPU recovery recognizer and response/VAD checks
             # as utils/batch_pipeline, without its projection/enrichment writes.
@@ -295,9 +361,19 @@ class Audio:
             hashes = importlib.import_module('utils.conversations.transcript_hash')
             item = SimpleNamespace(duration_seconds=len(pcm) / 32000)
             with redirect_stdout(DiscardOutput()), redirect_stderr(DiscardOutput()):
-                payload = recognizers.transcribe(
-                    item, SimpleNamespace(language=None), recognizers.canonical_wav(pcm), multilingual=True
+                # Use the existing recovery VAD/response contract and provider
+                # path, with a fresh privacy/payer check after CPU preparation
+                # and immediately before its one paid dispatch.
+                _, duration, spans = recognizers.inspect_audio(item, recognizers.canonical_wav(pcm))
+                require(spans, 'no_measured_speech')
+                output = recognizers.canonical_wav(pcm)
+                provider = importlib.import_module('utils.stt.pre_recorded')
+                self.authorize(observed)
+                response = provider.modulate_prerecorded_from_bytes(
+                    output, language=None, return_language=True, attempts=2
                 )
+                words, language = recognizers.validate_response(response, duration, spans, multilingual=True)
+                payload = recognizers.words_payload(duration, spans, words, language)
             segments = [
                 {
                     'text': word['word'],
@@ -389,7 +465,7 @@ def wilson(successes, total):
 
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument('action', choices=('census', 'measure', 'reprocess', 'hide', 'undo'))
+    result.add_argument('action', choices=('census', 'measure', 'reprocess', 'hide', 'undo', 'index'))
     result.add_argument('--after')
     result.add_argument('--before')
     result.add_argument('--max-jobs', type=int, default=20000)
@@ -410,7 +486,7 @@ def parser():
 
 
 def run(args):
-    require(not args.apply or args.action in {'reprocess', 'hide', 'undo'}, 'action_read_only')
+    require(not args.apply or args.action in {'reprocess', 'hide', 'undo', 'index'}, 'action_read_only')
     require(0.1 <= args.pace_seconds <= 60 and 1 <= args.max_jobs <= 100000, 'invalid_scan_budget')
     require(
         not args.apply or (args.concurrency == 1 and args.max_count and 0 < args.max_count <= 1000),
@@ -423,7 +499,14 @@ def run(args):
     require(not args.apply or os.getenv('CAPTURE_EMPTY_APPLY_AUTHORIZED') == OPERATION, 'apply_authorization_required')
     modules = runtime()
     census = Census(firestore.Client(project=PROJECT), args.pace_seconds)
-    audio = Audio(storage.Client(project=PROJECT), modules, max_seconds=args.max_audio_seconds or 7200)
+    audio = Audio(
+        storage.Client(project=PROJECT),
+        modules,
+        authorize=census.authorize,
+        max_seconds=args.max_audio_seconds or 7200,
+    )
+    if args.apply and args.action in {'hide', 'undo', 'index'}:
+        census.index_ready()
     if args.action == 'measure' or (args.apply and args.action in {'hide', 'reprocess'}):
         audio.preflight()
     decode = modules.codec.decode_capture_segments
@@ -440,23 +523,38 @@ def run(args):
     }
     ledger = None
     try:
-        if args.action == 'undo':
+        if args.action in {'undo', 'index'}:
             require(args.ledger, 'undo_ledger_required')
             ledger = Ledger(args.ledger)
             outcomes = Counter()
             entries = ledger.entries()
-            for entry in entries:
-                if args.apply and outcomes['restored'] >= args.max_count:
+            for number, entry in enumerate(entries):
+                if args.apply and number >= args.max_count:
                     break
                 current = census.current(entry['uid'], entry['conversation_id'])
-                outcome = undo_one(current, entry, cas=census.cas if args.apply else lambda *_: None)
+                if args.action == 'index':
+                    # Only reconcile this ledger's rows, using their current
+                    # projection; never replay discarded/transcript mutations.
+                    outcome = 'would_reconcile'
+                    if args.apply:
+                        try:
+                            outcome = 'reconciled' if census.converge(current) else 'visibility_index_unproven'
+                        except AuthorityBlocked:
+                            outcome = 'authority_blocked'
+                else:
+                    outcome = undo_one(
+                        current,
+                        entry,
+                        cas=census.cas if args.apply else lambda *_: None,
+                        converge=census.converge if args.apply else lambda _: True,
+                    )
                 outcomes['would_restore' if not args.apply and outcome == 'restored' else outcome] += 1
                 if outcome in STOP_OUTCOMES:
                     output['stopped'] = True
                     break
                 time.sleep(args.pace_seconds)
             output['outcomes'] = dict(outcomes)
-            output['firestore_writes'] = outcomes['restored']
+            output['firestore_writes'] = census.writes
         else:
             require(args.after and args.before, 'explicit_window_required')
             after, before = utc(args.after), utc(args.before)
@@ -471,7 +569,7 @@ def run(args):
                 json.dumps(
                     {
                         'census': output['counts'],
-                        'document_reads_so_far': census.reads['jobs'] + census.reads['conversations'],
+                        'document_reads_so_far': sum(v for k, v in census.reads.items() if k != 'unresolvable_jobs'),
                     }
                 ),
                 flush=True,
@@ -491,7 +589,11 @@ def run(args):
                             eligible_hide += speech == 0
                             speech_reprocess += speech > 0
                     except Exception as error:
-                        reason = str(error) if isinstance(error, Refused) else 'audio_unreadable'
+                        reason = (
+                            str(error)
+                            if isinstance(error, Refused)
+                            else 'authority_blocked' if isinstance(error, AuthorityBlocked) else 'audio_unreadable'
+                        )
                         # Refused is constructed only from fixed literals above.
                         failures[reason] += 1
                     if (index + 1) % 25 == 0:
@@ -541,7 +643,9 @@ def run(args):
                             require(decoded_seconds <= 60.05, 'decoded_not_short')
                             require(spent_audio + decoded_seconds <= args.max_audio_seconds, 'audio_budget_unproven')
                             spent_audio += decoded_seconds
-                            outcome = hide_one(row, speech, decode=decode, cas=census.cas, ledger=ledger)
+                            outcome = hide_one(
+                                row, speech, decode=decode, cas=census.cas, ledger=ledger, converge=census.converge
+                            )
                         except Exception:
                             outcome = 'audio_unproven_keep'
                     else:
@@ -564,7 +668,7 @@ def run(args):
                                 decode=decode,
                                 encode=encode,
                                 cas=census.cas,
-                                transcribe=lambda _: audio.transcribe_pcm(pcm),
+                                transcribe=lambda observed: audio.transcribe_pcm(observed, pcm),
                                 speech_seconds=speech,
                             )
                         except Exception:
@@ -577,12 +681,12 @@ def run(args):
                         break
                     time.sleep(args.pace_seconds)
                 output['outcomes'] = dict(outcomes)
-                output['firestore_writes'] = None if args.apply else 0
+                output['firestore_writes'] = census.writes if args.apply else 0
     finally:
         if ledger:
             ledger.close()
     output['firestore_reads'] = dict(census.reads)
-    output['total_document_reads'] = census.reads['jobs'] + census.reads['conversations']
+    output['total_document_reads'] = sum(v for k, v in census.reads.items() if k != 'unresolvable_jobs')
     output['audio_io'] = dict(audio.counts)
     print(json.dumps(output, sort_keys=True), flush=True)
     return output

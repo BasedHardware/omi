@@ -9,11 +9,12 @@ from pathlib import Path
 import stat
 from types import SimpleNamespace
 
-from google.api_core.exceptions import FailedPrecondition
-from google.cloud.firestore_v1 import LastUpdateOption
 import pytest
 
 from scripts import capture_empty_recovery as cli
+from scripts import capture_empty_recovery_privacy as privacy
+from database.batch_pipeline_privacy import privacy_owner_key
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import empty_capture_recovery as recovery
 
 
@@ -33,6 +34,7 @@ def candidate(codec, *, duration=90, level='standard', segments=None, title='Rec
         'status': 'completed',
         'finalization_status': 'dead_letter',
         'discarded': False,
+        'created_at': datetime(2026, 10, 31, tzinfo=timezone.utc),
         'data_protection_level': level,
         'transcript_segments_compressed': True,
         'transcript_segments': cli.encode_segments(codec, 'synthetic-owner', segments or [], level),
@@ -199,13 +201,16 @@ def test_hide_write_ahead_private_ledger_and_undo(codec, tmp_path, monkeypatch):
         return cas(observed, patch)
 
     try:
-        assert recovery.hide_one(observed, 0, decode=codec.decode, cas=write, ledger=ledger) == 'hidden'
+        assert (
+            recovery.hide_one(observed, 0, decode=codec.decode, cas=write, ledger=ledger, converge=lambda _: True)
+            == 'hidden'
+        )
         assert stat.S_IMODE((root / 'rollback.jsonl').stat().st_mode) == 0o600
         assert stat.S_IMODE(root.stat().st_mode) == 0o700
         assert recovery.hide_one(cas.current, 0, decode=codec.decode, cas=cas, ledger=ledger) == 'already_hidden'
         entry = ledger.entries()[0]
         assert 'transcript_segments' not in entry and 'structured' not in entry
-        assert recovery.undo_one(cas.current, entry, cas=cas) == 'restored'
+        assert recovery.undo_one(cas.current, entry, cas=cas, converge=lambda _: True) == 'restored'
         assert cas.current.row['discarded'] is False
         assert recovery.undo_one(cas.current, entry, cas=cas) == 'undo_not_owned'
     finally:
@@ -254,29 +259,6 @@ def test_undo_refuses_uncertain_receipt_and_unmasked_row_change(codec):
     assert not cas.writes
 
 
-@pytest.mark.parametrize(
-    'failure, expected', [(FailedPrecondition, recovery.Changed), (TimeoutError, recovery.MutationUncertain)]
-)
-def test_cas_adapter_passes_real_sdk_precondition_and_never_retries(codec, failure, expected):
-    observed = candidate(codec)
-    seen = []
-
-    def update(patch, **kwargs):
-        seen.append(kwargs)
-        assert isinstance(kwargs['option'], LastUpdateOption)
-        assert kwargs['option']._last_update_time == observed.revision
-        assert kwargs['retry'] is None
-        raise failure('synthetic missing receipt')
-
-    ref = SimpleNamespace(update=update)
-    collection = SimpleNamespace(document=lambda _: ref)
-    user = SimpleNamespace(collection=lambda _: collection)
-    client = SimpleNamespace(collection=lambda _: SimpleNamespace(document=lambda _: user))
-    with pytest.raises(expected):
-        cli.Census(client, 0.1).cas(observed, {'discarded': True})
-    assert len(seen) == 1
-
-
 def test_sample_population_is_independent_of_hide_protection(codec):
     observed = candidate(codec, duration=20)
     observed.row['starred'] = True
@@ -303,6 +285,8 @@ def audio_modules(codec, monkeypatch):
         monkeypatch.setattr(
             ctypes.util, 'find_library', lambda name: native_path if name == 'opus' else original_find(name)
         )
+    # Imported provider dependencies are setup cost, not timed test behavior.
+    importlib.import_module('utils.stt.pre_recorded')
     return SimpleNamespace(
         encryption=codec.encryption,
         timeline=importlib.import_module('database.audio_timeline'),
@@ -330,7 +314,7 @@ def audio_store(codec, modules, level):
         download_as_bytes=lambda **_: encoded,
     )
     bucket = SimpleNamespace(list_blobs=lambda **_: iter([blob]), blob=lambda *_, **__: blob)
-    return observed, cli.Audio(SimpleNamespace(bucket=lambda _: bucket), modules), pcm
+    return observed, cli.Audio(SimpleNamespace(bucket=lambda _: bucket), modules, authorize=lambda _: None), pcm
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
@@ -360,16 +344,22 @@ def test_absent_audio_manifest_cannot_prove_silence(codec, audio_modules):
 
 def test_batch_recovery_word_clocks_are_preserved(codec, audio_modules, monkeypatch):
     recognizers = importlib.import_module('utils.batch_pipeline.recovery_recognizers')
+    provider = importlib.import_module('utils.stt.pre_recorded')
+    observed = candidate(codec)
+    calls = []
 
-    def transcribe(item, binding, wav, **kwargs):
-        assert item.duration_seconds == 5
+    def transcribe(wav, **kwargs):
         assert wav[:4] == b'RIFF'
-        assert kwargs == {'multilingual': True}
-        return {'words': [{'word': 'Synthetic fixture.', 'timestamp': [2.0, 3.0], 'speaker': 'SPEAKER_01'}]}
+        assert kwargs == {'language': None, 'return_language': True, 'attempts': 2}
+        assert calls == ['authorized']
+        return 'synthetic response'
 
-    monkeypatch.setattr(recognizers, 'transcribe', transcribe)
-    audio = cli.Audio(None, audio_modules)
-    result = audio.transcribe_pcm(bytes(5 * 32000))
+    monkeypatch.setattr(provider, 'modulate_prerecorded_from_bytes', transcribe)
+    monkeypatch.setattr(recognizers, 'inspect_audio', lambda *_: (b'', 5, [{'start': 2, 'end': 3}]))
+    words = [{'word': 'Synthetic fixture.', 'timestamp': [2.0, 3.0], 'speaker': 'SPEAKER_01'}]
+    monkeypatch.setattr(recognizers, 'validate_response', lambda *_, **__: (words, 'en'))
+    audio = cli.Audio(None, audio_modules, authorize=lambda _: calls.append('authorized'))
+    result = audio.transcribe_pcm(observed, bytes(5 * 32000))
     assert result[0]['start'] == 2 and result[0]['end'] == 3
     assert result[0]['speaker'] == 'SPEAKER_01'
 
@@ -377,7 +367,7 @@ def test_batch_recovery_word_clocks_are_preserved(codec, audio_modules, monkeypa
 @pytest.mark.parametrize('action', ['reprocess', 'hide'])
 def test_dry_run_is_counts_only_no_provider_audio_or_writes(codec, monkeypatch, capsys, action):
     rows = [candidate(codec), candidate(codec, duration=20)]
-    fake = SimpleNamespace(rows=lambda *_: iter(rows), reads={'jobs': 2, 'conversations': 2})
+    fake = SimpleNamespace(rows=lambda *_: iter(rows), reads={'jobs': 2, 'conversations': 2}, authorize=lambda _: None)
     monkeypatch.setattr(
         cli, 'runtime', lambda: SimpleNamespace(codec=SimpleNamespace(decode_capture_segments=codec.decode))
     )
@@ -451,6 +441,10 @@ def test_synthetic_apply_stops_after_lost_hide_receipt(codec, monkeypatch):
         rows=lambda *_: iter(rows),
         reads={'jobs': 2, 'conversations': 2},
         cas=lambda row, patch: stores[row.conversation_id](row, patch),
+        authorize=lambda _: None,
+        index_ready=lambda: None,
+        converge=lambda _: True,
+        writes=0,
     )
     measured = []
 
@@ -504,3 +498,255 @@ def test_cli_exits_nonzero_for_uncertain_mutation(monkeypatch):
     monkeypatch.setattr(cli.sys, 'argv', ['capture_empty_recovery.py', 'hide'])
     monkeypatch.setattr(cli, 'run', lambda _: {'stopped': True})
     assert cli.main() == 2
+
+
+class ProjectedStrictClient:
+    """Projection adapter over the shared ordering fixture, not a retry model."""
+
+    def __init__(self, observed):
+        self.store = StrictFirestore()
+        self.revision = observed.revision
+        self.read_paths = []
+        self.transactions = []
+        self.store.rows[('users', observed.uid)] = {'data_protection_level': 'enhanced'}
+        self.store.rows[('users', observed.uid, 'conversations', observed.conversation_id)] = deepcopy(observed.row)
+        observed.recovery_jobs = ('synthetic-job',)
+        self.store.rows[('conversation_finalization_jobs', 'synthetic-job')] = {
+            'uid': observed.uid,
+            'conversation_id': observed.conversation_id,
+            'status': 'dead_letter',
+            'requires_byok': False,
+        }
+
+    def document(self, path):
+        raw = self.store.document(path)
+        client = self
+
+        class Reference:
+            def __init__(self):
+                self.path = path
+
+            def collection(self, name):
+                return SimpleNamespace(document=lambda key: client.document(f'{path}/{name}/{key}'))
+
+            def get(self, *, field_paths, transaction=None, timeout=None, retry=None):
+                assert retry is None and timeout == 30
+                allowed = [tuple(privacy.MASKS[path.split('/')[-2]])]
+                if path.split('/')[-2] == 'conversations':
+                    index = importlib.import_module('utils.conversations.typesense_index')
+                    allowed.append(tuple(index._INDEXED_FIRESTORE_FIELDS))
+                assert tuple(field_paths) in allowed
+                client.read_paths.append(path)
+                result = raw.get(transaction=transaction)
+                data = result.to_dict() or {}
+                return SimpleNamespace(
+                    exists=result.exists,
+                    update_time=client.revision,
+                    to_dict=lambda: {k: v for k, v in data.items() if k in field_paths},
+                )
+
+        result = Reference()
+        result.raw = raw
+        return result
+
+    def collection(self, name):
+        return SimpleNamespace(document=lambda key: self.document(f'{name}/{key}'))
+
+    def transaction(self, *, max_attempts):
+        assert max_attempts == 1
+        tx = self.store.transaction()
+        update = tx.update
+        tx.update = lambda ref, patch: update(ref.raw, patch)
+        # The fixture models ordering only. Attach a synthetic commit receipt
+        # here; real SDK write_results extraction is exercised by atomic_write.
+        tx.write_results = [SimpleNamespace(update_time=self.revision + timedelta(microseconds=1))]
+        self.transactions.append(tx)
+        return tx
+
+
+def test_real_transaction_adapter_fences_all_privacy_and_job_reads_before_write(codec):
+    observed = candidate(codec)
+    client = ProjectedStrictClient(observed)
+    census = cli.Census(client, 0.1)
+    revision = census.cas(observed, {recovery.MARKER: {'state': 'claimed'}})
+    assert revision == client.revision + timedelta(microseconds=1)
+    assert len(client.transactions) == 1 and len(client.transactions[0].updates) == 1
+    assert f'account_deletions/{observed.uid}' in client.read_paths
+    assert f'batch_pipeline_privacy/{privacy_owner_key(observed.uid)}' in client.read_paths
+    assert 'conversation_finalization_jobs/synthetic-job' in client.read_paths
+    assert census.writes == 1
+
+
+@pytest.mark.parametrize('fence', ['deletion', 'generation', 'byok', 'missing_payer', 'custom_stt'])
+def test_authority_change_during_recognition_prevents_fill(codec, fence):
+    observed = candidate(codec)
+    client = ProjectedStrictClient(observed)
+    census = cli.Census(client, 0.1)
+
+    def provider(_):
+        if fence == 'deletion':
+            client.store.rows[('account_deletions', observed.uid)] = {'wipe_status': 'pending'}
+        elif fence == 'generation':
+            client.store.rows[('batch_pipeline_privacy', privacy_owner_key(observed.uid))] = {'generation': 1}
+        elif fence == 'custom_stt':
+            client.store.rows[('users', observed.uid, 'conversations', observed.conversation_id)][
+                'uses_custom_stt'
+            ] = True
+        else:
+            job = client.store.rows[('conversation_finalization_jobs', 'synthetic-job')]
+            job['requires_byok'] = True if fence == 'byok' else None
+        return [{'text': 'Synthetic output.', 'start': 1, 'end': 2}]
+
+    assert reprocess(codec, observed, census.cas, provider) == 'authority_blocked'
+    row = client.store.rows[('users', observed.uid, 'conversations', observed.conversation_id)]
+    assert codec.decode(observed.uid, row['transcript_segments'], True) == []
+    assert len([write for tx in client.transactions for write in tx.updates]) == 1
+
+
+@pytest.mark.parametrize('requires_byok', [True, None])
+def test_abandoned_byok_or_unknown_job_never_reaches_claim_or_provider(codec, requires_byok):
+    observed = candidate(codec)
+    observed.requires_byok = requires_byok
+    cas = CAS(observed)
+    assert reprocess(codec, observed, cas, lambda _: pytest.fail('payer bypass')) == 'byok_or_custom_stt'
+    assert not cas.writes
+
+
+def test_deleted_account_prevents_any_audio_read(codec, audio_modules):
+    observed, audio, _ = audio_store(codec, audio_modules, 'standard')
+    client = ProjectedStrictClient(observed)
+    client.store.rows[('account_deletions', observed.uid)] = {'wipe_status': 'pending'}
+    audio.authorize = cli.Census(client, 0.1).authorize
+    with pytest.raises(recovery.AuthorityBlocked):
+        audio.pcm(observed)
+    assert not audio.counts
+
+
+def test_fresh_deletion_check_after_vad_prevents_provider(codec, audio_modules, monkeypatch):
+    observed = candidate(codec)
+    client = ProjectedStrictClient(observed)
+    census = cli.Census(client, 0.1)
+    census.authorize(observed)
+    recognizers = importlib.import_module('utils.batch_pipeline.recovery_recognizers')
+    provider = importlib.import_module('utils.stt.pre_recorded')
+
+    def inspect(*_):
+        client.store.rows[('account_deletions', observed.uid)] = {'wipe_status': 'pending'}
+        return b'', 5, [{'start': 0, 'end': 3}]
+
+    monkeypatch.setattr(recognizers, 'inspect_audio', inspect)
+    monkeypatch.setattr(provider, 'modulate_prerecorded_from_bytes', lambda *_, **__: pytest.fail('deleted STT'))
+    audio = cli.Audio(None, audio_modules, authorize=census.authorize)
+    with pytest.raises(recovery.AuthorityBlocked):
+        audio.transcribe_pcm(observed, bytes(5 * 32000))
+
+
+def test_orphan_unreferenced_object_never_enters_vad_or_stt(codec, audio_modules):
+    observed, audio, _ = audio_store(codec, audio_modules, 'standard')
+    original = next(audio.client.bucket('synthetic').list_blobs())
+    extra = deepcopy(original)
+    extra.name = extra.name.replace('1000.000', '1001.000')
+    audio.client.bucket('synthetic').list_blobs = lambda **_: iter([original, extra])
+    with pytest.raises(cli.Refused, match='audio_unreferenced_objects'):
+        audio.measure(observed)
+    assert audio.counts['object_reads'] == 0
+
+
+@pytest.mark.parametrize('fail_index', [False, True])
+def test_hide_and_undo_converge_search_after_committed_mutation(codec, tmp_path, monkeypatch, fail_index):
+    observed = candidate(codec, duration=20)
+    cas = CAS(observed)
+    root = tmp_path / 'private'
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(cli, 'LEDGER_ROOT', root)
+    ledger = cli.Ledger(root / 'ledger.jsonl', create=True)
+    indexed = []
+
+    def converge(_):
+        indexed.append(cas.current.row['discarded'])
+        return not fail_index
+
+    outcome = recovery.hide_one(observed, 0, decode=codec.decode, cas=cas, ledger=ledger, converge=converge)
+    assert outcome == ('visibility_index_unproven' if fail_index else 'hidden')
+    assert indexed == [True]
+    entry = ledger.entries()[0]
+    outcome = recovery.undo_one(cas.current, entry, cas=cas, converge=converge)
+    assert outcome == ('visibility_index_unproven' if fail_index else 'restored')
+    assert indexed == [True, False]
+    assert 'visibility_index_unproven' in recovery.STOP_OUTCOMES
+    ledger.close()
+
+
+def test_actual_search_hook_publishes_current_discard_state_without_content_projection(codec, monkeypatch):
+    index = importlib.import_module('utils.conversations.typesense_index')
+    observed = candidate(codec, duration=20)
+    client = ProjectedStrictClient(observed)
+    census = cli.Census(client, 0.1)
+    indexed = []
+    documents = SimpleNamespace(upsert=lambda document: indexed.append(deepcopy(document)))
+    monkeypatch.setattr(index, 'typesense_configured', lambda: True)
+    monkeypatch.setattr(index, 'conversation_index_writes_enabled', lambda: True)
+    monkeypatch.setattr(
+        index,
+        '_typesense_client',
+        lambda: SimpleNamespace(collections={'conversations': SimpleNamespace(documents=documents)}),
+    )
+    key = ('users', observed.uid, 'conversations', observed.conversation_id)
+    client.store.rows[key]['discarded'] = True
+    assert census.converge(observed)
+    client.store.rows[key]['discarded'] = False
+    assert census.converge(observed)
+    assert [document['discarded'] for document in indexed] == [True, False]
+    assert all('transcript_segments' not in document for document in indexed)
+    assert census.reads['index'] == 4
+
+
+@pytest.mark.parametrize('requires_byok', [True, None, False])
+def test_census_keeps_frozen_job_payer_and_skips_unknown_or_byok_rows(codec, monkeypatch, requires_byok):
+    observed = candidate(codec)
+    job = {'processing_trigger': 'server_recovery', 'uid': observed.uid, 'conversation_id': observed.conversation_id}
+    if requires_byok is not None:
+        job['requires_byok'] = requires_byok
+    snapshot = SimpleNamespace(id='synthetic-job', to_dict=lambda: job)
+    pages = iter([[snapshot], []])
+    query = SimpleNamespace()
+    query.where = lambda **_: query
+    query.order_by = lambda *_: query
+    query.select = lambda fields: query if 'requires_byok' in fields else pytest.fail('payer not projected')
+    query.limit = query.start_after = lambda *_: query
+    query.stream = lambda **_: iter(next(pages))
+    reads = []
+
+    def get_all(refs, *, field_paths, **kwargs):
+        for ref in refs:
+            reads.append(ref.path)
+            marker = ref.path.startswith('account_deletions/')
+            assert tuple(field_paths) == (('wipe_status',) if marker else recovery.ROW_FIELDS)
+            yield SimpleNamespace(
+                id=ref.path.rsplit('/', 1)[-1],
+                reference=ref,
+                exists=not marker,
+                to_dict=lambda: {} if marker else observed.row,
+                update_time=observed.revision,
+            )
+
+    def reference(path):
+        return SimpleNamespace(path=path, collection=lambda name: collection(f'{path}/{name}'))
+
+    def collection(path):
+        return (
+            query
+            if path == 'conversation_finalization_jobs'
+            else SimpleNamespace(document=lambda key: reference(f'{path}/{key}'))
+        )
+
+    monkeypatch.setattr(cli.time, 'sleep', lambda _: None)
+    census = cli.Census(SimpleNamespace(collection=collection, get_all=get_all), 0.1)
+    rows = list(census.rows(observed.revision - timedelta(days=1), observed.revision, 100))
+    assert len(rows) == 1 and rows[0].recovery_jobs == ('synthetic-job',)
+    if requires_byok is False:
+        assert recovery.classify(rows[0], codec.decode) == 'reprocess_long'
+        assert len(reads) == 2
+    else:
+        assert recovery.classify(rows[0], codec.decode) == 'byok_or_payer_unproven'
+        assert len(reads) == 1  # no customer row read

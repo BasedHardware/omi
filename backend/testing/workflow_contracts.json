@@ -48,7 +48,8 @@
       "risk": "high",
       "sources": [
         "backend/scripts/capture_empty_recovery.py",
-        "backend/utils/conversations/empty_capture_recovery.py"
+        "backend/utils/conversations/empty_capture_recovery.py",
+        "backend/scripts/capture_empty_recovery_privacy.py"
       ],
       "tests": [
         "tests/unit/test_empty_capture_recovery.py"

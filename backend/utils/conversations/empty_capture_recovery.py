@@ -7,7 +7,7 @@ Every decision and outcome is a closed label, safe for aggregate-only output.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import base64
 from datetime import datetime
 import hashlib
@@ -49,6 +49,9 @@ ROW_FIELDS = (
     'notes',
     'is_locked',
     'record_lane_owner',
+    'uses_custom_stt',
+    'listen_finalization_requires_byok',
+    'private_cloud_sync_enabled',
     MARKER,
 )
 _MINIMUM_TITLE = re.compile(r'Recording(?: · (?:[0-2]?\d:[0-5]\d(?: [AP]M)?))?\Z')
@@ -78,6 +81,10 @@ class Observed:
     row: dict[str, Any]
     revision: Any
     trigger: str = 'server_recovery'
+    requires_byok: bool | None = False
+    recovery_jobs: tuple[str, ...] = ()
+    privacy_generation: int | None = None
+    rejection: str | None = None
 
 
 def duration_seconds(row: dict[str, Any]) -> float | None:
@@ -97,8 +104,16 @@ def duration_seconds(row: dict[str, Any]) -> float | None:
 
 def classify(observed: Observed, decode: Callable) -> str:
     row = observed.row
+    if observed.rejection:
+        return observed.rejection
     if not row:
         return 'missing_row'
+    if (
+        observed.requires_byok is not False
+        or row.get('listen_finalization_requires_byok')
+        or row.get('uses_custom_stt')
+    ):
+        return 'byok_or_custom_stt'
     if row.get('deleted') or row.get('sync_merged_into'):
         return 'deleted_or_redirected'
     if row.get('discarded'):
@@ -220,6 +235,10 @@ class MutationUncertain(Exception):
     """A submitted write has no conclusive receipt; stop without a retry."""
 
 
+class AuthorityBlocked(Exception):
+    """A current privacy or payer fence forbids the operation."""
+
+
 STOP_OUTCOMES = frozenset(
     {
         'claim_commit_unproven',
@@ -228,6 +247,7 @@ STOP_OUTCOMES = frozenset(
         'undo_commit_unproven',
         'ledger_prepare_failed',
         'hide_receipt_unproven',
+        'visibility_index_unproven',
     }
 )
 
@@ -252,9 +272,9 @@ def reprocess_one(observed, *, decode, encode, cas, transcribe, speech_seconds=N
         return 'row_changed'
     except MutationUncertain:
         return 'claim_commit_unproven'
-    claimed = Observed(
-        observed.uid, observed.conversation_id, {**observed.row, MARKER: marker}, revision, observed.trigger
-    )
+    except AuthorityBlocked:
+        return 'authority_blocked'
+    claimed = replace(observed, row={**observed.row, MARKER: marker}, revision=revision)
     try:
         segments = transcribe(observed)
         # Encoding uses the row's persisted protection level, never today's
@@ -269,6 +289,8 @@ def reprocess_one(observed, *, decode, encode, cas, transcribe, speech_seconds=N
                 MARKER: {'operation': OPERATION, 'state': 'filled'},
             }
             result = 'filled'
+    except AuthorityBlocked:
+        return 'authority_blocked'
     except Exception:
         # Do not echo exceptions, which can contain identifiers or provider text.
         patch = {MARKER: {'operation': OPERATION, 'state': 'unproven'}}
@@ -279,10 +301,19 @@ def reprocess_one(observed, *, decode, encode, cas, transcribe, speech_seconds=N
         return 'row_changed_after_claim'
     except MutationUncertain:
         return 'fill_commit_unproven'
+    except AuthorityBlocked:
+        return 'authority_blocked'
     return result
 
 
-def hide_one(observed, speech_seconds, *, decode, cas, ledger) -> str:
+def _converge(observed, converge):
+    try:
+        return bool(converge(observed))
+    except Exception:
+        return False
+
+
+def hide_one(observed, speech_seconds, *, decode, cas, ledger, converge=None) -> str:
     decision = classify(observed, decode)
     if decision != 'short_needs_measurement':
         return decision
@@ -300,14 +331,18 @@ def hide_one(observed, speech_seconds, *, decode, cas, ledger) -> str:
         return 'row_changed'
     except MutationUncertain:
         return 'hide_commit_unproven'
+    except AuthorityBlocked:
+        return 'authority_blocked'
     try:
         ledger.committed(marker['token'], revision)
     except Exception:
         return 'hide_receipt_unproven'
+    if not _converge(observed, converge):
+        return 'visibility_index_unproven'
     return 'hidden'
 
 
-def undo_one(observed, entry, *, cas) -> str:
+def undo_one(observed, entry, *, cas, converge=None) -> str:
     """Restore only this ledger's discard. Never revive a deletion or user edit."""
     row = observed.row
     if row.get('deleted') or row.get('sync_merged_into'):
@@ -331,4 +366,8 @@ def undo_one(observed, entry, *, cas) -> str:
         return 'row_changed'
     except MutationUncertain:
         return 'undo_commit_unproven'
+    except AuthorityBlocked:
+        return 'authority_blocked'
+    if not _converge(observed, converge):
+        return 'visibility_index_unproven'
     return 'restored'

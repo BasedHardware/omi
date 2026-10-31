@@ -41,7 +41,8 @@ speaker assignments, kept/starred/folder choices, photos, locked rows and anothe
 record owner are protected. Unknown structured fields abstain.
 
 Retained audio comes only from the existing private-cloud custody bucket. Every
-manifest chunk clock must still exist. Reads pin object generations and reuse
+manifest chunk clock must still exist and the retained prefix must have no extra
+unreferenced clocks. Reads pin object generations and reuse
 the batch source decoder. Missing, malformed, conflicting overlap, unsupported
 or oversized audio abstains. The tool never deletes, uploads or saves audio.
 Reprocessing uses the existing batch CPU multilingual recovery recognizer and its
@@ -56,8 +57,15 @@ decoded audio before provider dispatch; the per-row decoded limit is at most
 two hours. No STT is called in dry-run. A missing provider environment refuses
 the attempt; inject it through the authorized runtime, not a personal login.
 
-A whole-document update-time precondition claims a row before one provider
-attempt and fences the transcript fill afterward. Any concurrent row change
+A transaction compares the whole-document update time, claims a row before one provider
+attempt and fences the transcript fill afterward. It reuses the batch privacy
+authority: account-deletion marker, existing account/protection policy, hashed
+privacy generation, conversation tombstone and redirect fences. All are in the
+same transaction read set as the row. Fresh checks also run before audio reads
+and after VAD immediately before provider dispatch. The original jobs must
+explicitly declare `requires_byok=False`, remain dead-lettered and still name
+this row. BYOK, custom STT and unknown payer authority abstain. The census checks
+deletion markers before fetching row content. Any concurrent row change
 leaves its transcript unchanged. The durable `capture_empty_recovery` marker
 prevents duplicate attempts across reruns and overlapping windows. A claimed,
 failed or uncertain attempt is reported as already attempted and requires
@@ -105,3 +113,12 @@ deleted, redirected, restored or edited row. Repeating undo cannot revive a
 different discard. Unit tests cover actual standard/enhanced codecs, precondition
 races, paid-attempt idempotence, private write-ahead hide and undo, retained Opus
 decoding, and local VAD.
+
+Hide and undo require the existing Typesense writer to be configured and enabled
+before any mutation, and synchronously call its post-write convergence hook with
+the current durable row. A failed hook stops with `visibility_index_unproven`;
+the row mutation and ledger receipt may already be committed. After restoring
+index availability, run `index --ledger <private-ledger>` (dry-run default), then
+the same explicit apply/caps/environment arguments to reconcile search only.
+That command checks current privacy authority and never repeats a hide or undo.
+No backend deployment is required for this operator CLI.
