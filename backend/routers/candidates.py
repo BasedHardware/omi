@@ -1,5 +1,7 @@
 """Canonical Candidate lifecycle API."""
 
+import logging
+
 from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
 
@@ -31,9 +33,11 @@ from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 from utils.task_intelligence.recommendations import candidate_recommendation_dedupe_key
 from utils.task_intelligence.chat_first_eligibility import resolve_task_intelligence_for_user
 from utils.task_intelligence import chat_first_e2e_fixture
-from utils.task_intelligence.task_links import TaskLinkValidationError
+from utils.task_intelligence.task_links import TaskLinkResolverUnavailableError, TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
 from utils.task_intelligence.summary_tasks import prepare_summary_task
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -57,14 +61,66 @@ def _require_candidate_write_control(uid: str, account_generation: int) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Account generation mismatch')
 
 
+_KNOWN_CANDIDATE_CONFLICTS = {
+    'Candidate suggestion has expired',
+    'Candidate resolution is already claimed',
+    'Summary action item changed; refresh the conversation',
+    'Summary action item is linked to another task',
+    'idempotency key was already used for a different proposal',
+    'Candidate is not an active staged-task compatibility proposal',
+    'Conversation is locked',
+    'Summary action item is unavailable; refresh the conversation',
+    'Summary action item is already completed',
+    'Summary action item does not create a task',
+    'Summary action item has an invalid due date',
+    'Linked task is unavailable; refresh the conversation',
+}
+
+_KNOWN_TASK_LINK_VALIDATIONS = {
+    'goal does not exist',
+    'workstream does not exist',
+    'task goal_id must match workstream goal_id',
+    'workstream and goal do not match',
+    'Task link resolver is temporarily unavailable',
+}
+
+
+def _sanitize_task_link_validation_error(exc: Exception) -> str:
+    if isinstance(exc, TaskLinkResolverUnavailableError):
+        return _sanitize_candidate_error(exc, 'Task link resolver is temporarily unavailable')
+    msg = str(exc)
+    if msg in _KNOWN_TASK_LINK_VALIDATIONS:
+        return msg
+    return _sanitize_candidate_error(exc, 'Task link validation failed')
+
+
+def _sanitize_candidate_conflict(exc: Exception) -> str:
+    msg = str(exc)
+    if msg.startswith('Candidate already ') or msg in _KNOWN_CANDIDATE_CONFLICTS:
+        return msg
+    logger.warning('Candidate mutation conflict: %s: %s', type(exc).__name__, exc)
+    return 'Candidate operation conflict. Please verify state and retry.'
+
+
+def _sanitize_candidate_error(exc: Exception, fallback: str) -> str:
+    """Sanitize candidate store and resolution exception details while preserving debug logging."""
+    logger.warning('Candidate store operation failed: %s: %s', type(exc).__name__, exc)
+    return fallback
+
+
 def _raise_store_error(exc: candidates_db.CandidateStoreError) -> None:
     if isinstance(exc, candidates_db.CandidateNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Candidate or task not found') from exc
     if isinstance(exc, candidates_db.CandidateGenerationMismatchError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Account generation mismatch') from exc
     if isinstance(exc, candidates_db.WorkstreamCandidateResolverUnavailableError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        detail = _sanitize_candidate_error(exc, 'Workstream candidate resolver is temporarily unavailable')
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+    if isinstance(exc, candidates_db.CandidateConflictError):
+        detail = _sanitize_candidate_conflict(exc)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+    detail = _sanitize_candidate_error(exc, 'Candidate operation could not be completed')
+    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
 
 
 def _require_suggested_rollout(uid: str):
@@ -323,7 +379,7 @@ def prepare_conversation_task_candidate(
     except SummaryTaskNotFoundError as exc:
         raise HTTPException(status_code=404, detail='Summary action item not found') from exc
     except SummaryTaskConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_candidate_conflict(exc)) from exc
     except candidates_db.CandidateStoreError as exc:
         _raise_store_error(exc)
 
@@ -352,7 +408,8 @@ def accept_candidate(
             )
         return candidate_service.accept_candidate(uid, candidate_id, account_generation=account_generation)
     except TaskLinkValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        detail = _sanitize_task_link_validation_error(exc)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
     except candidates_db.CandidateStoreError as exc:
         _raise_store_error(exc)
 
