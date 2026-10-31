@@ -64,7 +64,7 @@ def entries():
             base={'uid': UID},
             neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
         ),
-        DriverEntry('utils.dream_prescan._scan_people', base={'uid': UID}),
+        DriverEntry('utils.dream_prescan.scan_people', base={'uid': UID}),
         DriverEntry('utils.dream_prescan._scan_tasks', base={'uid': UID}),
         DriverEntry('utils.dream_state_pass.tasks_page', base={'uid': UID}),
         DriverEntry(

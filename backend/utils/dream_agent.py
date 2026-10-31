@@ -310,8 +310,9 @@ async def run_session(
     async def _state_pass(loop_staged):
         nonlocal state_allowance, state_running
         arm, would_serve = dream_state_pass.mode()
-        if arm == 'off' or not dream_state_pass.take_call(dream_telemetry.SWEEP_ID.get()):
+        if arm == 'off' or lease is None or not dream_state_pass.take_call(dream_telemetry.SWEEP_ID.get()):
             return
+        run_id = lease['run_id']
         start_tokens = report['price_weighted_tokens']
         state_allowance = dream_state_pass.allowance()
         state_running = True
@@ -319,7 +320,7 @@ async def run_session(
             summary = await dream_state_pass.run(
                 uid,
                 seed=seed,
-                run_id=lease['run_id'],
+                run_id=run_id,
                 planner_turn=partial(invoke, dream_harness_transport.MAIN_LANE),
                 verify_turn=partial(invoke, dream_harness_transport.VERIFY_LANE),
                 loop_report=report,
@@ -351,6 +352,7 @@ async def run_session(
             state_running = False
         verifier = summary.get('verifier') or {}
         profile_ops = summary.get('profile_ops') or {}
+        rejected: dict[str, int] = summary.get('rejected') or {}
         levers['state_pass'] = {
             'arm': arm,
             'would_serve': would_serve,
@@ -382,10 +384,8 @@ async def run_session(
                     'profile_write',
                 )
             },
-            'rejected': sum((summary.get('rejected') or {}).values()),
-            'rejected_top': max(
-                summary.get('rejected') or {'none': 0}, key=(summary.get('rejected') or {'none': 0}).get
-            ),
+            'rejected': sum(rejected.values()),
+            'rejected_top': max(rejected, key=lambda reason: rejected[reason]) if rejected else 'none',
             'agree': verifier.get('agree', 0),
             'disagree': verifier.get('disagree', 0),
             'unverified': verifier.get('unverified', 0) + verifier.get('split', 0),

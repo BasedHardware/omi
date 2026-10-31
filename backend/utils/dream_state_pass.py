@@ -25,6 +25,7 @@ from typing import Any, Literal
 from google.cloud import firestore
 from pydantic import Field
 
+from database import review_store
 from models.agent_edit import DreamHarnessEdit
 from models.agent_refs import base_ref
 from models.agent_tools import VerificationBatch
@@ -137,16 +138,20 @@ def take_call(sweep_id: str | None) -> bool:
 # --- projections ---------------------------------------------------------------------------------
 
 
+def _client(firestore_client=None):
+    return firestore_client if firestore_client is not None else review_store.client()
+
+
 def people_page(uid, firestore_client=None) -> list[tuple[str, dict]]:
     """Unprotected, not-dismissed people (pre-scan projection; never voice data)."""
-    candidates, _junk = dream_prescan._scan_people(uid, firestore_client)
+    candidates, _junk = dream_prescan.scan_people(uid, firestore_client)
     return [('people/' + person_id, row) for person_id, row in candidates]
 
 
 def tasks_page(uid, firestore_client=None) -> list[tuple[str, dict]]:
     from utils.agent_capabilities.cleanup_edits import require_generated_task
 
-    tasks = dream_prescan._client(firestore_client).collection('users').document(uid).collection('action_items')
+    tasks = _client(firestore_client).collection('users').document(uid).collection('action_items')
     rows = (
         tasks.where(filter=firestore.FieldFilter('source', '==', 'conversation'))
         .select(list(dream_prescan.TASK_FIELDS))
@@ -184,9 +189,7 @@ def memories_page(uid) -> list[tuple[str, dict]]:
 
 
 def conversation_index(uid, now, firestore_client=None) -> list[tuple[str, dict]]:
-    conversations = (
-        dream_prescan._client(firestore_client).collection('users').document(uid).collection('conversations')
-    )
+    conversations = _client(firestore_client).collection('users').document(uid).collection('conversations')
     rows = (
         conversations.where(filter=firestore.FieldFilter('created_at', '>=', now - timedelta(days=CONVERSATION_DAYS)))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
