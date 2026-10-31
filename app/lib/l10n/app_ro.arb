@@ -4517,5 +4517,7 @@
     "yearlySwitchDoneBody": "Azi s-au încasat {amount}. Se reînnoiește pe {date}.",
     "episodePartsCount": "{count, plural, zero{{count} de părți} one{{count} parte} two{{count} de părți} few{{count} părți} many{{count} de părți} other{{count} de părți}}",
     "chatAppsWaitingMessageIn": "Trimite mesajul din {app}. Acest ecran se actualizează de îndată ce Omi îl primește.",
-    "chatAppsCodeExpiredMessageIn": "Obține un cod nou și trimite-l din {app}."
+    "chatAppsCodeExpiredMessageIn": "Obține un cod nou și trimite-l din {app}.",
+    "consentShortMessage": "Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.",
+    "consentAiProviders": "Procesat cu {providers}."
 }

@@ -4517,5 +4517,7 @@
     "yearlySwitchDoneBody": "Dnes účtováno {amount}. Obnovení {date}.",
     "episodePartsCount": "{count, plural, zero{{count} částí} one{{count} část} two{{count} částí} few{{count} části} many{{count} částí} other{{count} částí}}",
     "chatAppsWaitingMessageIn": "Pošli zprávu v aplikaci {app}. Tato obrazovka se aktualizuje, jakmile ji Omi dostane.",
-    "chatAppsCodeExpiredMessageIn": "Získej nový kód a pošli ho z aplikace {app}."
+    "chatAppsCodeExpiredMessageIn": "Získej nový kód a pošli ho z aplikace {app}.",
+    "consentShortMessage": "Omi pomocí AI mění vaše konverzace v poznámky. Kdykoli je můžete smazat.",
+    "consentAiProviders": "Zpracovává {providers}."
 }

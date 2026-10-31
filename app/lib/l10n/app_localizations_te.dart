@@ -15018,4 +15018,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'కొత్త కోడ్ తీసుకుని $app నుండి పంపండి.';
   }
+
+  @override
+  String get consentShortMessage => 'Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers ద్వారా ప్రాసెస్ చేయబడుతుంది.';
+  }
 }

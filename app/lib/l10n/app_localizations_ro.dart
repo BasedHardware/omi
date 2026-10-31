@@ -15018,4 +15018,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Obține un cod nou și trimite-l din $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Procesat cu $providers.';
+  }
 }

@@ -11943,5 +11943,7 @@
     "yearlySwitchDoneBody": "আজ {amount} চার্জ করা হয়েছে। নবায়ন {date}।",
     "episodePartsCount": "{count, plural, zero{{count}টি অংশ} one{{count}টি অংশ} two{{count}টি অংশ} few{{count}টি অংশ} many{{count}টি অংশ} other{{count}টি অংশ}}",
     "chatAppsWaitingMessageIn": "{app} অ্যাপে মেসেজটি পাঠান। Omi পাওয়ামাত্র এই স্ক্রিন আপডেট হবে।",
-    "chatAppsCodeExpiredMessageIn": "নতুন কোড নিন এবং {app} অ্যাপ থেকে পাঠান।"
+    "chatAppsCodeExpiredMessageIn": "নতুন কোড নিন এবং {app} অ্যাপ থেকে পাঠান।",
+    "consentShortMessage": "Omi AI ব্যবহার করে আপনার কথোপকথনকে নোটে পরিণত করে। যেকোনো সময় মুছে ফেলতে পারেন।",
+    "consentAiProviders": "{providers} দিয়ে প্রক্রিয়া করা হয়।"
 }

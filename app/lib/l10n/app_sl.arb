@@ -11943,5 +11943,7 @@
     "yearlySwitchDoneBody": "Danes zaračunano {amount}. Podaljšanje {date}.",
     "episodePartsCount": "{count, plural, zero{{count} delov} one{{count} del} two{{count} dela} few{{count} deli} many{{count} delov} other{{count} delov}}",
     "chatAppsWaitingMessageIn": "Pošljite sporočilo v aplikaciji {app}. Ta zaslon se posodobi, takoj ko ga Omi prejme.",
-    "chatAppsCodeExpiredMessageIn": "Pridobite novo kodo in jo pošljite iz aplikacije {app}."
+    "chatAppsCodeExpiredMessageIn": "Pridobite novo kodo in jo pošljite iz aplikacije {app}.",
+    "consentShortMessage": "Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.",
+    "consentAiProviders": "Obdelano z {providers}."
 }

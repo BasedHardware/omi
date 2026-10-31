@@ -4517,5 +4517,7 @@
     "yearlySwitchDoneBody": "เรียกเก็บ {amount} วันนี้ ต่ออายุ {date}",
     "episodePartsCount": "{count, plural, zero{{count} ส่วน} one{{count} ส่วน} two{{count} ส่วน} few{{count} ส่วน} many{{count} ส่วน} other{{count} ส่วน}}",
     "chatAppsWaitingMessageIn": "ส่งข้อความในแอป {app} หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ",
-    "chatAppsCodeExpiredMessageIn": "ขอรหัสใหม่แล้วส่งจากแอป{app}"
+    "chatAppsCodeExpiredMessageIn": "ขอรหัสใหม่แล้วส่งจากแอป{app}",
+    "consentShortMessage": "Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ",
+    "consentAiProviders": "ประมวลผลด้วย {providers}"
 }

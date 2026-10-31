@@ -15000,4 +15000,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Obtén un código nuevo y envíalo desde $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi usa IA para convertir tus conversaciones en notas. Puedes eliminarlas cuando quieras.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Procesado con $providers.';
+  }
 }

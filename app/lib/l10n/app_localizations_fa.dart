@@ -14950,4 +14950,13 @@ class AppLocalizationsFa extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'کد جدید بگیرید و از $app ارسال کنید.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'پردازش با $providers.';
+  }
 }

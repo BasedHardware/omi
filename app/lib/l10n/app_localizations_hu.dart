@@ -15014,4 +15014,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Kérj új kódot, és küldd el az $app alkalmazásból.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Feldolgozás: $providers.';
+  }
 }

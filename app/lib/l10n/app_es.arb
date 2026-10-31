@@ -4517,5 +4517,7 @@
     "yearlySwitchDoneBody": "Hoy se cobraron {amount}. Se renueva el {date}.",
     "episodePartsCount": "{count, plural, zero{{count} partes} one{{count} parte} two{{count} partes} few{{count} partes} many{{count} partes} other{{count} partes}}",
     "chatAppsWaitingMessageIn": "Envía el mensaje desde {app}. Esta pantalla se actualiza en cuanto Omi lo recibe.",
-    "chatAppsCodeExpiredMessageIn": "Obtén un código nuevo y envíalo desde {app}."
+    "chatAppsCodeExpiredMessageIn": "Obtén un código nuevo y envíalo desde {app}.",
+    "consentShortMessage": "Omi usa IA para convertir tus conversaciones en notas. Puedes eliminarlas cuando quieras.",
+    "consentAiProviders": "Procesado con {providers}."
 }

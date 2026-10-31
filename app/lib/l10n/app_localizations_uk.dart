@@ -14986,4 +14986,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Отримайте новий код і надішліть його з застосунку «$app».';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обробка: $providers.';
+  }
 }

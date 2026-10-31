@@ -14962,4 +14962,13 @@ class AppLocalizationsSr extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Затражите нови код и пошаљите га из апликације $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi користи AI да ваше разговоре претвори у белешке. Можете их обрисати у било ком тренутку.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обрађује се помоћу $providers.';
+  }
 }

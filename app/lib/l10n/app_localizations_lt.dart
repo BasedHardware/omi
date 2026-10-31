@@ -14977,4 +14977,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Gaukite naują kodą ir išsiųskite jį per $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Apdorojama su $providers.';
+  }
 }

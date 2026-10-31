@@ -4517,5 +4517,7 @@
     "yearlySwitchDoneBody": "Täna võeti {amount}. Uueneb {date}.",
     "episodePartsCount": "{count, plural, zero{{count} osa} one{{count} osa} two{{count} osa} few{{count} osa} many{{count} osa} other{{count} osa}}",
     "chatAppsWaitingMessageIn": "Saada sõnum rakenduses {app}. See ekraan uueneb, kui Omi selle kätte saab.",
-    "chatAppsCodeExpiredMessageIn": "Hangi uus kood ja saada see rakendusest {app}."
+    "chatAppsCodeExpiredMessageIn": "Hangi uus kood ja saada see rakendusest {app}.",
+    "consentShortMessage": "Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.",
+    "consentAiProviders": "Töödeldakse teenustega {providers}."
 }

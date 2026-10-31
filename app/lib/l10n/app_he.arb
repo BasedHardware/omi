@@ -11943,5 +11943,7 @@
     "yearlySwitchDoneBody": "חויבו היום {amount}. מתחדש ב-{date}.",
     "episodePartsCount": "{count, plural, zero{{count} חלקים} one{{count} חלק} two{{count} חלקים} few{{count} חלקים} many{{count} חלקים} other{{count} חלקים}}",
     "chatAppsWaitingMessageIn": "שלחו את ההודעה באפליקציית {app}. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.",
-    "chatAppsCodeExpiredMessageIn": "קבלו קוד חדש ושלחו אותו מ{app}."
+    "chatAppsCodeExpiredMessageIn": "קבלו קוד חדש ושלחו אותו מ{app}.",
+    "consentShortMessage": "Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.",
+    "consentAiProviders": "מעובד באמצעות {providers}."
 }

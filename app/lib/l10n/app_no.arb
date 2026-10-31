@@ -4517,5 +4517,7 @@
     "yearlySwitchDoneBody": "{amount} belastet i dag. Fornyes {date}.",
     "episodePartsCount": "{count, plural, zero{{count} deler} one{{count} del} two{{count} deler} few{{count} deler} many{{count} deler} other{{count} deler}}",
     "chatAppsWaitingMessageIn": "Send meldingen i {app}. Denne skjermen oppdateres så snart Omi får den.",
-    "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}."
+    "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}.",
+    "consentShortMessage": "Omi bruker KI til å gjøre samtalene dine om til notater. Du kan slette dem når som helst.",
+    "consentAiProviders": "Behandles med {providers}."
 }

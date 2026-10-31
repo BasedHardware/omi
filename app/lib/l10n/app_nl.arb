@@ -4517,5 +4517,7 @@
     "yearlySwitchDoneBody": "Vandaag {amount} afgeschreven. Verlengt op {date}.",
     "episodePartsCount": "{count, plural, zero{{count} delen} one{{count} deel} two{{count} delen} few{{count} delen} many{{count} delen} other{{count} delen}}",
     "chatAppsWaitingMessageIn": "Stuur het bericht in {app}. Dit scherm wordt bijgewerkt zodra Omi het ontvangt.",
-    "chatAppsCodeExpiredMessageIn": "Vraag een nieuwe code aan en stuur die vanuit {app}."
+    "chatAppsCodeExpiredMessageIn": "Vraag een nieuwe code aan en stuur die vanuit {app}.",
+    "consentShortMessage": "Omi maakt met AI notities van je gesprekken. Je kunt ze altijd verwijderen.",
+    "consentAiProviders": "Verwerkt met {providers}."
 }

@@ -14748,4 +14748,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return '새 코드를 받아 $app 앱에서 보내세요.';
   }
+
+  @override
+  String get consentShortMessage => 'Omi는 AI로 대화를 메모로 정리합니다. 언제든지 삭제할 수 있습니다.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers(으)로 처리됩니다.';
+  }
 }

@@ -15078,4 +15078,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Obtenez un nouveau code et envoyez-le depuis $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi utilise l\'IA pour transformer vos conversations en notes. Vous pouvez les supprimer à tout moment.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Traité avec $providers.';
+  }
 }

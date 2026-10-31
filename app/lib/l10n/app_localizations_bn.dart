@@ -14950,4 +14950,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'নতুন কোড নিন এবং $app অ্যাপ থেকে পাঠান।';
   }
+
+  @override
+  String get consentShortMessage => 'Omi AI ব্যবহার করে আপনার কথোপকথনকে নোটে পরিণত করে। যেকোনো সময় মুছে ফেলতে পারেন।';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers দিয়ে প্রক্রিয়া করা হয়।';
+  }
 }

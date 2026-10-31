@@ -14968,4 +14968,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Yeni bir kod al ve $app\'dan gönder.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers ile işlenir.';
+  }
 }

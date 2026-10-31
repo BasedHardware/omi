@@ -26294,6 +26294,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Get a new code and send it from {app}.'**
   String chatAppsCodeExpiredMessageIn(String app);
+
+  /// Onboarding data & privacy consent: one-line summary of storage and AI processing
+  ///
+  /// In en, this message translates to:
+  /// **'Omi uses AI to turn your conversations into notes. You can delete them anytime.'**
+  String get consentShortMessage;
+
+  /// Onboarding consent: names the third-party AI providers (brand names, not translated)
+  ///
+  /// In en, this message translates to:
+  /// **'Processed with {providers}.'**
+  String consentAiProviders(String providers);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
