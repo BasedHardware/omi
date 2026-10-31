@@ -886,9 +886,21 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         try:
             currency = subscription_currency(stripe_sub)
             if target_price.currency != currency:
-                raise BillingCurrencyUnavailable(
-                    'Please reopen Plans & Billing to select a price in your billing currency.'
-                )
+                try:
+                    resolved_price = price_for_currency(target_price, currency)
+                    target_price = resolved_price
+                    request.price_id = resolved_price.id
+                    currency_binding = management_binding(resolved_price.id)
+                    target_plan = get_plan_type_from_price_id(resolved_price.id)
+                    target_recurring = resolved_price.recurring
+                    target_interval = target_recurring.interval
+                except BillingCurrencyUnavailable:
+                    raise
+                except Exception as exc:
+                    logger.warning(f"Failed to resolve currency price {type(exc).__name__}: {exc}")
+                    raise BillingCurrencyUnavailable(
+                        'Please reopen Plans & Billing to select a price in your billing currency.'
+                    )
             if currency_binding is not None:
                 plan, interval, expected_currency = currency_binding
                 if stripe_sub.get('status') not in ('active', 'trialing'):
