@@ -1566,6 +1566,11 @@ checks:
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
+  - id: hume-ai-route-auth-tests
+    command: ["python3", "plugins/hume-ai/test_hume_tools_auth.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hume-ai's /audio, /save-emotion-memory and /force-send-notification routes take uid from the query string with no caller authentication and write emotion memories into any user's Omi account with the app's integration key or push notifications to any user; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
   - id: dead-code-ratchet
     command: ["python3", ".github/scripts/check_dead_code.py"]
     triggers: ["app/lib/**", "app/pubspec.yaml", "backend/**/*.py", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
