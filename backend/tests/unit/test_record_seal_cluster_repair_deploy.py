@@ -32,10 +32,27 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert env['RECORD_SEAL_REPAIR_WORKERS'] == '8'
     assert env['RECORD_SEAL_REPAIR_ROW_SECONDS'] == '270'
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
+    assert env['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == 'true'
+    assert env['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'true'
     assert env['RECORD_SEAL_REPAIR_MODE'] == 'apply'
     assert json.loads(env['RECORD_SEAL_REPAIR_SERVER_FLAGS']) == {}
     assert 'nvidia.com/gpu' not in pod['containers'][0]['resources']['limits']
     assert pod['containers'][0]['securityContext']['readOnlyRootFilesystem']
+
+
+def test_seal_rules_have_independent_chart_rollback_switches():
+    docs = documents(
+        '--set', 'recordSealRules.overlapTrimEnabled=false', '--set', 'recordSealRules.uploadFailedRepairEnabled=false'
+    )
+
+    def env(name):
+        container = docs[('CronJob', name)]['spec']['jobTemplate']['spec']['template']['spec']['containers'][0]
+        return {e['name']: e.get('value') for e in container['env']}
+
+    assert env('record-seal-repair')['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == 'false'
+    assert env('record-seal-repair')['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'false'
+    assert env('record-seal-sweeper')['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == 'false'
+    assert 'RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED' not in env('record-seal-sweeper')
 
 
 def test_repair_only_ramp_refresh_changes_no_other_resource():

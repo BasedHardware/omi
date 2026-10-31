@@ -591,8 +591,10 @@ and an explicit empty literal renders as `''`.
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | declared (gke/backend-listen); gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `RECORD_BARRIER_INLINE_FINISH` | Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
+| `RECORD_SEAL_OVERLAP_TRIM_ENABLED` | Default on; earlier retained objects own divergent overlap frames in seal proof and admission manifests | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_REPAIR_ENABLED` | Default on; independent bounded concurrent in-cluster repair of no-job and pending record seals using canonical privacy and tail proof | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_SWEEPER_ENABLED` | Default on; bounded in-cluster proof and repair of dead record producers | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
+| `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` | Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SERVER_BATCH_ONLY_ENABLED` | Default on; consented supported-language platform sessions reserve durable batch ownership and open no managed live STT | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1107,10 +1109,12 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
 - `RECORD_BARRIER_INLINE_FINISH` — Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds (fail: open)
+- `RECORD_SEAL_OVERLAP_TRIM_ENABLED` — Default on; earlier retained objects own divergent overlap frames in seal proof and admission manifests (fail: open)
 - `RECORD_SEAL_REPAIR_ENABLED` — Default on; independent bounded concurrent in-cluster repair of no-job and pending record seals using canonical privacy and tail proof (fail: open)
 - `RECORD_SEAL_REPAIR_MODE` — plan or apply; default apply, plan performs canonical proofs without writes (fail: closed)
 - `RECORD_SEAL_SWEEPER_ENABLED` — Default on; bounded in-cluster proof and repair of dead record producers (fail: open)
 - `RECORD_SEAL_SWEEPER_MODE` — plan or apply; default apply, plan performs proofs without writes (fail: closed)
+- `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` — Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing (fail: open)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
 - `SCREEN_TASK_JEV_THRESHOLD` — Screen gate threshold, default 0.5 (fail: open)

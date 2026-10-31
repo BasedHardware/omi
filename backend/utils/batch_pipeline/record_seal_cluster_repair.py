@@ -33,6 +33,7 @@ DISPOSITIONS = frozenset(
         'not_pending',
         'not_batch_owned',
         'upload_failed',
+        'upload_failed_cleared',
         'upload_pending',
         'not_completed',
         'privacy_refused',
@@ -86,16 +87,28 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     budget.check()
     plan: dict[str, Any]
     if job:
-        plan = repair.plan_seals(store, [job_id], storage, artifacts, producer_proof=proof, check_budget=budget.check)
+        plan = repair.plan_seals(
+            store,
+            [job_id],
+            storage,
+            artifacts,
+            producer_proof=proof,
+            check_budget=budget.check,
+            repair_upload_failed=True,
+        )
         apply = repair.apply_seals
     else:
-        plan = nojob.plan_backfill(store, [path], storage, artifacts, server_flags=flags, producer_proof=proof)
+        plan = nojob.plan_backfill(
+            store, [path], storage, artifacts, server_flags=flags, producer_proof=proof, repair_upload_failed=True
+        )
         apply = nojob.apply_backfill
     budget.check()
     entries = plan.get('entries', [])
     if len(entries) != 1:
         return 'unknown'
     disposition = entries[0].get('disposition')
+    if reason_out is not None and entries[0].get('trimmed_divergent_overlaps'):
+        reason_out['trimmed_divergent_overlaps'] = entries[0]['trimmed_divergent_overlaps']
     if disposition == 'proof_refused' and reason_out is not None:
         reason = entries[0].get('proof_reason')
         reason_out['proof_reason'] = reason if reason in PROOF_REASONS else 'other'
@@ -252,10 +265,13 @@ def coordinate(
                 disposition = None
                 reason = 'other'
                 gap = 'negative_or_unknown'
+                trimmed = 0
                 if process.poll() is not None:
                     try:
                         payload = process.stdout.read(1025)
                         result = json.loads(payload) if len(payload) <= 1024 else {}
+                        candidate = result.get('trimmed_divergent_overlaps', 0)
+                        trimmed = candidate if type(candidate) is int and 0 <= candidate <= 4096 else 0
                         disposition = result.get('disposition')
                         candidate = result.get('proof_reason')
                         reason = candidate if candidate in PROOF_REASONS else 'other'
@@ -276,13 +292,14 @@ def coordinate(
                         if reason == 'tail_lagging':
                             gaps[gap] += 1
                     age += max(0, int(clock() - started))
-                    sealed = disposition in {'sealed', 'sealed_registered'}
+                    sealed = disposition in {'sealed', 'sealed_registered', 'upload_failed_cleared'}
                     if sealed:
                         sealed_age = max(sealed_age, age)
                     progress(
                         {
                             'event': 'record_seal_repair_row',
                             'count': 1,
+                            'trimmed_divergent_overlaps': trimmed,
                             'disposition': disposition,
                             'seal_age_seconds': age if sealed else 0,
                             **({'proof_reason': reason} if disposition == 'proof_refused' else {}),

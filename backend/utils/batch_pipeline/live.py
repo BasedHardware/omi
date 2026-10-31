@@ -29,6 +29,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
 from utils.batch_pipeline.record_barrier import validate_record_tail
+from config.record_seal_rules import overlap_trim_enabled
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
@@ -139,9 +140,10 @@ def register_recording(
 
 
 def retained_record_units(
-    uid, conversation_id, chunks, client, key
+    uid, conversation_id, chunks, client, key, *, diagnostics=None
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
-    """Bounded one-hour units, preserving capture clocks and verified overlaps."""
+    """Bounded one-hour units; earlier retained objects own overlapping frames."""
+    trim_divergent = overlap_trim_enabled()
     allowed = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
     references, start, end, previous_pcm = [], None, None, b''
     for chunk in chunks:
@@ -159,11 +161,19 @@ def retained_record_units(
         source_skip = 0
         capture = float(chunk['timestamp'])
         if end is not None and capture < end - 1 / 16000:
-            # Reject an ambiguous overlap rather than process it twice or drop it.
-            # Raw and PCM representations must prove the same overlapping bytes.
             overlap = round((end - capture) * 16000) * 2
-            if overlap > len(previous_pcm) or pcm[:overlap] != previous_pcm[-overlap:]:
+            if overlap > len(previous_pcm):
                 raise ValueError('conflicting retained audio overlap')
+            # A contained object compares only the frames it actually carries.
+            prior_start = len(previous_pcm) - overlap
+            divergent = pcm[:overlap] != previous_pcm[prior_start : prior_start + min(overlap, len(pcm))]
+            if divergent and not trim_divergent:
+                raise ValueError('conflicting retained audio overlap')
+            # Preserve the old refusal for short contained objects when off.
+            if not trim_divergent and len(pcm) < overlap:
+                raise ValueError('conflicting retained audio overlap')
+            if divergent and diagnostics is not None:
+                diagnostics['trimmed_divergent_overlaps'] = diagnostics.get('trimmed_divergent_overlaps', 0) + 1
             source_skip = overlap // 2
             pcm, capture = pcm[overlap:], end
             if not pcm:

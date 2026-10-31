@@ -95,8 +95,16 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
             return False  # Never recreate a deleted conversation.
         if row.get('record_lane_owner') not in {None, 'batch_live_v1', 'batch_sync_v1'}:
             return False  # Immutable legacy owners never enter this protocol.
-        if not row.get('record_upload_failed') or row.get('record_audio_closed'):
-            tx.update(ref, {'record_upload_failed': True, 'record_audio_closed': False})
+        # Always write, including repeated failures: a repair plan must observe
+        # a new failure even while the sticky flag was already true.
+        tx.update(
+            ref,
+            {
+                'record_upload_failed': True,
+                'record_audio_closed': False,
+                'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
+            },
+        )
         return True
 
     return run_transactional(client, commit, transient=True)

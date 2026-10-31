@@ -74,6 +74,7 @@ spec:
               command: [python, scripts/record_seal_sweep.py]
               env:
                 - {name: RECORD_SEAL_SWEEPER_ENABLED, value: {{ .Values.recordSealSweeper.runtimeEnabled | quote }}}
+                - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
                 - {name: RECORD_SEAL_SWEEPER_MODE, value: {{ .Values.recordSealSweeper.mode | quote }}}
                 - {name: RECORD_SEAL_SWEEPER_BUDGET_SECONDS, value: "150"}
                 - {name: RECORD_SEAL_SWEEPER_DISCOVERY_LIMIT, value: "32"}

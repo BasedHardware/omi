@@ -53,6 +53,8 @@ spec:
               command: [python, scripts/record_seal_repair_job.py]
               env:
                 - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealRepair.runtimeEnabled | quote }}}
+                - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
+                - {name: RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED, value: {{ .Values.recordSealRules.uploadFailedRepairEnabled | quote }}}
                 - {name: RECORD_SEAL_REPAIR_MODE, value: {{ .Values.recordSealRepair.mode | quote }}}
                 - {name: RECORD_SEAL_REPAIR_WORKERS, value: {{ .Values.recordSealRepair.workers | quote }}}
                 - {name: RECORD_SEAL_REPAIR_ROW_SECONDS, value: {{ .Values.recordSealRepair.rowSeconds | quote }}}
