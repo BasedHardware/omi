@@ -120,6 +120,13 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/conversations/first_summary_push.py",
+      "function": "hand_off",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe: the first-summary push is an optional nudge sent after the summary is stored; its atomic per-account marker means a run lost at SIGKILL can drop the push but never send it twice"
+    },
+    {
       "path": "utils/conversations/lifecycle.py",
       "function": "processing_admission_guard",
       "kind": "threading.Thread",

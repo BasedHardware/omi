@@ -128,7 +128,7 @@ from utils.conversations.projection_payload import (
     omit_null_processing_state,
     strip_client_processing,
 )
-from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import first_summary_push, lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.conversations.owner_attribution import (
     OwnerAttributionEvidence,
@@ -3037,8 +3037,8 @@ def process_conversation(
                 logger.error(f"Error during folder assignment for conversation {conversation.id}: {e}")
 
         if not discarded:
-            # Analytics tracking
-            insights_gained = 0
+            first_summary_push.hand_off(uid, conversation, trigger, first_observation=not already_observed)
+            insights_gained = 0  # Analytics tracking
             if conversation.structured:
                 # Count sentences with more than 5 words from title and overview
                 for text in [conversation.structured.title, conversation.structured.overview]:
