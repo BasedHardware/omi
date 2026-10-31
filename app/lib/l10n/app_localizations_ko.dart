@@ -14247,6 +14247,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeMoments => '순간';
 
   @override
+  String get episodeFollowUps => '후속 조치';
+
+  @override
+  String get episodeOpenTranscript => '스크립트 열기';
+
+  @override
   String get episodeSoFar => '지금까지';
 
   @override
@@ -14464,9 +14470,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => '이 휴대전화에서';
-
-  @override
-  String get episodeOpenTranscript => '스크립트 열기';
 
   @override
   String get liveCardTitle => '라이브';

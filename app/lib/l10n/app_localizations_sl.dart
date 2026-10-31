@@ -14475,6 +14475,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get episodeMoments => 'Trenutki';
 
   @override
+  String get episodeFollowUps => 'Nadaljnji koraki';
+
+  @override
+  String get episodeOpenTranscript => 'Odpri prepis';
+
+  @override
   String get episodeSoFar => 'Do zdaj';
 
   @override
@@ -14693,9 +14699,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'V tem telefonu';
-
-  @override
-  String get episodeOpenTranscript => 'Odpri prepis';
 
   @override
   String get liveCardTitle => 'V živo';

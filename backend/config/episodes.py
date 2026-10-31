@@ -229,7 +229,7 @@ EST_OUTPUT_USD_PER_MTOK = 0.40
 
 # Closed-episode composer: one strong call over member summaries plus the full transcript.
 COMPOSER_FEATURE = 'episode_composer'
-COMPOSER_VERSION = 'episode_composer_v1'
+COMPOSER_VERSION = 'episode_composer_v2'
 COMPOSER_TIMEOUT_SECONDS = 90.0
 # About 60k tokens. With the 4h episode cap almost every episode fits whole; beyond it the
 # densest 10-minute windows are kept in time order.
@@ -250,3 +250,7 @@ COMPOSER_RETRY_MINUTES = 10
 COMPOSER_MAX_FAILURES = 4
 # Wire budget per composed paragraph (to_wire serves bullets up to this length).
 COMPOSER_MAX_PARAGRAPH_CHARS = 1200
+# A composed moment's points (each with a few supporting details) are the episode page's sections.
+COMPOSER_MAX_POINTS = 6
+COMPOSER_MAX_DETAILS = 4
+COMPOSER_MAX_POINT_CHARS = 400

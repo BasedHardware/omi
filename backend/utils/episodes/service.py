@@ -1879,6 +1879,8 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'close_reason': episode.get('close_reason'),
         'title': clean_text(episode.get('title'), 240),
         'bullets': [clean_text(line, composer.COMPOSER_MAX_PARAGRAPH_CHARS) for line in episode.get('bullets') or []],
+        'lede': clean_text(episode.get('lede'), composer.COMPOSER_MAX_PARAGRAPH_CHARS),
+        'follow_ups': [clean_text(line, 400) for line in episode.get('follow_ups') or [] if clean_text(line, 400)],
         'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [
             {
@@ -1905,6 +1907,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
                 'start_offset': float(m.get('start_offset') or 0.0),
                 'end_offset': float(m.get('end_offset') or 0.0),
                 'heading': clean_text(m.get('heading'), 240),
+                'points': composer.wire_points(m.get('points')),
             }
             for m in episode.get('moments') or []
             if m.get('id') and m.get('conversation_id') and m.get('started_at')

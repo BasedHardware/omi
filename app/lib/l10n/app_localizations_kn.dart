@@ -14494,6 +14494,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get episodeMoments => 'ಕ್ಷಣಗಳು';
 
   @override
+  String get episodeFollowUps => 'ಮುಂದಿನ ಹಂತಗಳು';
+
+  @override
+  String get episodeOpenTranscript => 'ಪ್ರತಿಲಿಪಿ ತೆರೆಯಿರಿ';
+
+  @override
   String get episodeSoFar => 'ಇಲ್ಲಿಯವರೆಗೆ';
 
   @override
@@ -14713,9 +14719,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
-
-  @override
-  String get episodeOpenTranscript => 'ಪ್ರತಿಲಿಪಿ ತೆರೆಯಿರಿ';
 
   @override
   String get liveCardTitle => 'ಲೈವ್';

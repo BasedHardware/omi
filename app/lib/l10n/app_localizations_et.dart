@@ -14440,6 +14440,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get episodeMoments => 'Hetked';
 
   @override
+  String get episodeFollowUps => 'Järgmised sammud';
+
+  @override
+  String get episodeOpenTranscript => 'Ava transkriptsioon';
+
+  @override
   String get episodeSoFar => 'Seni';
 
   @override
@@ -14658,9 +14664,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Selles telefonis';
-
-  @override
-  String get episodeOpenTranscript => 'Ava transkriptsioon';
 
   @override
   String get liveCardTitle => 'Otse';

@@ -40,7 +40,7 @@ from utils.encryption import decrypt, encrypt
 
 CURRENT = 'current'
 LAST_CLOSED = 'last_closed'
-CONTENT_FIELDS = ('title', 'bullets', 'people', 'open_questions', 'provisional_items', 'moments')
+CONTENT_FIELDS = ('title', 'bullets', 'lede', 'follow_ups', 'people', 'open_questions', 'provisional_items', 'moments')
 MEMBERSHIP_BATCH_LIMIT = 50
 
 
@@ -87,7 +87,7 @@ def unseal(uid: str, raw: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any
     if isinstance(blob, str) and blob:
         content = json.loads(decrypt(blob, uid))
     for key in CONTENT_FIELDS:
-        episode[key] = content.get(key) if content.get(key) is not None else ('' if key == 'title' else [])
+        episode[key] = content.get(key) if content.get(key) is not None else ('' if key in ('title', 'lede') else [])
     return episode
 
 

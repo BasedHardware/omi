@@ -14460,6 +14460,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get episodeMoments => 'Momen';
 
   @override
+  String get episodeFollowUps => 'Tindak lanjut';
+
+  @override
+  String get episodeOpenTranscript => 'Buka transkrip';
+
+  @override
   String get episodeSoFar => 'Sejauh ini';
 
   @override
@@ -14678,9 +14684,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Di ponsel ini';
-
-  @override
-  String get episodeOpenTranscript => 'Buka transkrip';
 
   @override
   String get liveCardTitle => 'Langsung';

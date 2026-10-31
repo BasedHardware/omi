@@ -83,15 +83,31 @@ def _reply(**over):
     data = {
         'title': 'Omi app bugs and labeling tool',
         'emoji': '🛠️',
-        'overview': 'David found two app regressions.\n\nHe explained the labeling tool.',
+        'lede': 'David found two app regressions and explained the labeling tool.',
         'chapters': [
-            {'start': '15:38', 'end': '15:39', 'title': 'Labeling tool', 'summary': 'Tool explained.'},
-            {'start': '15:00', 'end': '15:01', 'title': 'App regressions', 'summary': 'Two bugs.'},
+            {
+                'start': '15:38:10',
+                'title': 'Labeling tool',
+                'points': [
+                    {'text': 'Order is random by default.', 'details': ['Open source, so strategies can be added.']}
+                ],
+            },
+            {
+                'start': '15:00:00',
+                'end': '15:04:30',
+                'title': 'App regressions',
+                'points': [
+                    {'text': 'Ending an episode no longer shows the processing row.', 'details': []},
+                    '• The live transcript is missing from the Home row.',
+                    {'text': '   '},
+                ],
+            },
             {'start': '15:10', 'end': '15:11', 'title': 'New moment detected', 'summary': 'noise'},
             {'start': '03:00', 'end': '03:05', 'title': 'Far outside', 'summary': 'x'},
             {'start': '17:58', 'end': '18:01', 'title': 'Working at Muji', 'summary': 'Calm.'},
         ],
         'people': ['Arjan'],
+        'follow_ups': ['Fix the processing row', ''],
     }
     data.update(over)
     return SimpleNamespace(content=json.dumps(data), usage_metadata={'input_tokens': 8000, 'output_tokens': 500})
@@ -127,13 +143,27 @@ def test_composes_a_closed_episode_into_summary_and_real_chapters(store):
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
     written = store.writes[-1]
     assert written['title'] == 'Omi app bugs and labeling tool'
-    assert written['bullets'] == ['David found two app regressions.', 'He explained the labeling tool.']
+    lede = 'David found two app regressions and explained the labeling tool.'
+    assert written['lede'] == lede and written['bullets'] == [lede]
+    assert written['follow_ups'] == ['Fix the processing row']
     headings = [m['heading'] for m in written['moments']]
     # Placeholder and out-of-span chapters are dropped; the rest are in time order.
     assert headings == ['App regressions', 'Labeling tool', 'Working at Muji']
-    first = written['moments'][0]
+    first, tool, muji = written['moments']
     assert first['started_at'] == datetime(2026, 10, 30, 8, 0, tzinfo=timezone.utc)
     assert first['conversation_id'] == 'c1'
+    # Second-precision times: a chapter's length is real, not padded to a minute.
+    assert first['ended_at'] - first['started_at'] == timedelta(minutes=4, seconds=30)
+    assert (first['start_offset'], first['end_offset']) == (240.0, 510.0)
+    assert first['points'] == [
+        {'text': 'Ending an episode no longer shows the processing row.', 'details': []},
+        {'text': 'The live transcript is missing from the Home row.', 'details': []},
+    ]
+    assert tool['points'][0]['details'] == ['Open source, so strategies can be added.']
+    # No end from the model: the chapter runs to its recording's last line before the next chapter.
+    assert tool['ended_at'] == T0 + timedelta(minutes=180) - timedelta(seconds=30)
+    # The old one-sentence summary still becomes a point.
+    assert muji['points'] == [{'text': 'Calm.', 'details': []}]
     assert written['moments'][-1]['conversation_id'] == 'c2'
     assert written['summary_needs_regeneration'] is False
     assert written['composed_fingerprint']
@@ -141,7 +171,7 @@ def test_composes_a_closed_episode_into_summary_and_real_chapters(store):
     # The late member's end moves the episode's activity forward (the 1h46m lunch bug).
     assert written['member_activity']['c2'] == T0 + timedelta(minutes=189)
     system, human = calls[0]
-    assert 'David' in system[1] and 'Existing summary: O' in human[1] and '[14:56] David: We planned' in human[1]
+    assert 'David' in system[1] and 'Existing summary: O' in human[1] and '[14:56:00] David: We planned' in human[1]
 
 
 def test_waits_for_members_still_processing(store):
@@ -221,6 +251,7 @@ def test_a_visible_change_after_capped_failures_still_recomposes(store):
         'status': 'closed',
         'started_at': T0,
         'composed_fingerprint': 'x',
+        'composer_version': config.COMPOSER_VERSION,
         'composed_member_ids': ['c1', 'c2'],
         'title': 'T',
         'bullets': ['b'],
@@ -321,13 +352,22 @@ def test_long_transcripts_keep_the_densest_windows_in_order():
 def test_needs_compose_read_check(monkeypatch):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
     assert composer.needs_compose({'status': 'closed', 'started_at': T0}) is True
-    done = {'status': 'closed', 'started_at': T0, 'composed_fingerprint': 'x', 'title': 'T', 'bullets': ['b']}
+    done = {
+        'status': 'closed',
+        'started_at': T0,
+        'composed_fingerprint': 'x',
+        'composer_version': config.COMPOSER_VERSION,
+        'title': 'T',
+        'bullets': ['b'],
+    }
     done['composed_notes'] = composer.notes_hash(done)
     assert composer.needs_compose(done) is False
     assert composer.needs_compose({**done, 'summary_needs_regeneration': True}) is True
     # A later per-moment write over composed notes is drift: compose again.
     assert composer.needs_compose({**done, 'bullets': ['David: Yeah.']}) is True
     assert composer.needs_compose({'status': 'live', 'started_at': T0}) is False
+    # A new composer recomposes episodes the old one wrote, once.
+    assert composer.needs_compose({**done, 'composer_version': 'episode_composer_v1'}) is True
 
 
 def test_home_read_safety_net_schedules_uncomposed_and_changed_episodes(monkeypatch):
@@ -338,7 +378,13 @@ def test_home_read_safety_net_schedules_uncomposed_and_changed_episodes(monkeypa
     monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
     now = datetime.now(timezone.utc)
     old = now - timedelta(minutes=5)
-    done = {'status': 'closed', 'started_at': now, 'closed_at': old, 'composed_fingerprint': 'x'}
+    done = {
+        'status': 'closed',
+        'started_at': now,
+        'closed_at': old,
+        'composed_fingerprint': 'x',
+        'composer_version': config.COMPOSER_VERSION,
+    }
     done['composed_notes'] = composer.notes_hash(done)
     rows = [
         {'id': 'fresh', 'status': 'closed', 'started_at': now, 'closed_at': now},
@@ -449,4 +495,28 @@ def test_long_paragraphs_survive_the_wire():
         ZoneInfo('UTC'),
     )
     wire = svc.to_wire({'id': 'e', 'status': 'closed', 'started_at': T0, 'last_activity_at': T0, **updates})
-    assert wire['bullets'][0] == paragraph.strip()
+    assert wire['bullets'][0] == paragraph.strip() and wire['lede'] == paragraph.strip()
+
+
+def test_composed_sections_reach_the_wire_and_validate():
+    from models.episode import Episode
+    from utils.episodes import service as svc
+
+    chapter = {
+        'start': '00:01:00',
+        'end': '00:04:00',
+        'title': 'Plan',
+        'points': [{'text': 'Ship Friday', 'details': ['QA first']}],
+    }
+    updates = composer.to_updates(
+        {'title': 't', 'lede': 'A plan.', 'chapters': [chapter], 'follow_ups': ['Book QA']},
+        [_row('c1', T0.replace(hour=0, minute=0), 10)],
+        ZoneInfo('UTC'),
+    )
+    stored = {'id': 'e', 'status': 'closed', 'started_at': T0, 'last_activity_at': T0, **updates}
+    stored['moments'][0]['points'].append({'text': '', 'details': ['dropped']})
+    wire = svc.to_wire(stored)
+    assert wire['lede'] == 'A plan.' and wire['follow_ups'] == ['Book QA']
+    assert wire['moments'][0]['points'] == [{'text': 'Ship Friday', 'details': ['QA first']}]
+    assert wire['moments'][0]['start_offset'] == 60.0
+    assert Episode.model_validate(wire).moments[0].points[0].details == ['QA first']
