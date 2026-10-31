@@ -231,6 +231,7 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         # an intelligence read of projection contents.
         ('utils/conversations/projection_payload.py', 'strip_client_processing'),
         ('utils/conversations/projection_payload.py', 'client_processing_mutation'),
+        ('utils/conversations/projection_payload.py', 'complete_exhausted_custom_stt_conversation'),
         # Serialization sink: family-set definition + integration redaction.
         ('utils/conversations/render.py', '<module>'),
         ('utils/conversations/render.py', 'redact_conversation_for_integration'),
@@ -316,6 +317,16 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
             'utils/conversations/projection_payload.py',
             'client_processing_mutation',
             'client_processing',
+        ),
+        Reference(
+            'utils/conversations/projection_payload.py',
+            'complete_exhausted_custom_stt_conversation',
+            'client_processing',
+        ),
+        Reference(
+            'utils/conversations/projection_payload.py',
+            'complete_exhausted_custom_stt_conversation',
+            'client_projection',
         ),
         Reference(
             'routers/conversations.py',
@@ -523,6 +534,11 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite(
             'utils/conversations/projection_payload.py',
             'client_processing_mutation',
+            'model_dump',
+        ),
+        DumpSite(
+            'utils/conversations/projection_payload.py',
+            'complete_exhausted_custom_stt_conversation',
             'model_dump',
         ),
         DumpSite('utils/conversations/process_conversation.py', '_get_conversation_obj', 'dict'),

@@ -353,6 +353,47 @@ def _local_projection() -> ClientProcessing:
     )
 
 
+@pytest.mark.parametrize('persisted', [False, True])
+def test_initial_custom_stt_budget_denial_uses_idempotent_completed_creation(monkeypatch, pc, persisted):
+    # Exercise the persistence helper's CreateConversation branch directly.
+    # The public create schema does not expose a uses_custom_stt flag.
+    capture = _desktop_create()
+    capture.source = ConversationSource.phone
+    effects = _spy_managed_effects(monkeypatch, pc)
+    create = MagicMock(return_value=persisted)
+    monkeypatch.setattr(pc.lifecycle_service, 'create_completed_conversation', create)
+    observer = MagicMock()
+
+    result = pc.complete_exhausted_custom_stt_conversation(
+        'uid-initial-custom-stt',
+        capture,
+        generated_conversation_id='initial-custom-stt',
+        client_projection=None,
+        has_refresh_fence=False,
+        hooks=(pc._build_deferred_structured, pc._get_conversation_obj, pc.lifecycle_service, pc.logger),
+        on_persisted=observer,
+    )
+
+    create.assert_called_once()
+    args, kwargs = create.call_args
+    assert args[0] == 'uid-initial-custom-stt'
+    payload = args[1]
+    assert kwargs == {'idempotent': True}
+    assert payload['id'] == result.id
+    assert result.id == 'initial-custom-stt'
+    assert payload['status'] == ConversationStatus.completed
+    assert payload['discarded'] is False
+    assert payload['deferred'] is False
+    assert payload[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
+    assert payload['transcript_segments'][0]['text'] == capture.transcript_segments[0].text
+    assert payload['structured']['title']
+    assert result.summary_retryable is None
+    observer.assert_called_once_with(persisted, result)
+    pc.lifecycle_service.persist_processed_conversation.assert_not_called()
+    for effect in effects.values():
+        effect.assert_not_called()
+
+
 _PLAN_FAIL_OPEN_FALLBACK = {
     'component': 'other',
     'from_mode': 'unresolved_plan',
@@ -360,6 +401,32 @@ _PLAN_FAIL_OPEN_FALLBACK = {
     'reason': 'policy',
     'outcome': 'degraded',
 }
+
+
+@pytest.mark.parametrize('deferred', [False, True])
+def test_finalizer_vector_skip_reports_exactly_one_matching_outcome(monkeypatch, pc, deferred):
+    import sys
+
+    finalizer = load_module_fresh(
+        'utils.conversations.finalizer',
+        os.path.join(str(_BACKEND), 'utils', 'conversations', 'finalizer.py'),
+    )
+    conversation = _desktop_custom_stt()
+    conversation.processing_deferred = deferred
+    monkeypatch.setattr(
+        sys.modules['utils.subscription'], 'should_skip_omi_paid_postprocessing', lambda *_a, **_k: True
+    )
+    metric = MagicMock()
+    writer = MagicMock(side_effect=AssertionError('skipped finalization must not call the vector writer'))
+    monkeypatch.setattr(finalizer, 'OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL', metric)
+    monkeypatch.setattr(finalizer, 'save_structured_vector', writer)
+
+    finalizer._save_summary_vector_fail_soft('uid', conversation)
+
+    expected = 'skipped_processing_deferred' if deferred else 'skipped_custom_stt_budget_exhausted'
+    metric.labels.assert_called_once_with(outcome=expected)
+    metric.labels.return_value.inc.assert_called_once_with()
+    writer.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -436,6 +503,118 @@ async def test_finalizer_completes_minimum_store_without_extracting_memories(mon
     extract.assert_not_called()
     integrations.assert_not_called()
     complete.assert_called_once_with('job-1', 2, 3)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('anyio_backend', ['asyncio'])
+async def test_finalizer_completes_exhausted_custom_stt_capture_without_paid_work(
+    monkeypatch, pc, anyio_backend
+) -> None:
+    """#23923: drive real finalizer -> real process_conversation on an exhausted
+    custom-STT capture so it persists status='completed' instead of fencing."""
+    import sys
+
+    del anyio_backend
+    persisted_finalizer = load_module_fresh(
+        'utils.conversations.finalizer',
+        os.path.join(str(_BACKEND), 'utils', 'conversations', 'finalizer.py'),
+    )
+
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    capture = Conversation(
+        id='custom-stt-23923',
+        created_at=datetime(2026, 10, 30, tzinfo=timezone.utc),
+        started_at=datetime(2026, 10, 30, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 10, 30, 0, 2, tzinfo=timezone.utc),
+        source=ConversationSource.phone,
+        language='en',
+        structured=Structured(),
+        transcript_segments=[
+            TranscriptSegment(
+                id='seg-custom-1',
+                text='Words appeared on phone using own Deepgram STT key',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=True,
+                start=0.0,
+                end=3.0,
+            )
+        ],
+        status=ConversationStatus.processing,
+        discarded=False,
+        uses_custom_stt=True,
+    )
+    persisted_rows: dict[str, dict[str, Any]] = {}
+
+    def fake_persist(uid: str, payload: dict[str, Any]) -> bool:
+        assert uid == 'uid-23923'
+        persisted_rows[payload['id']] = payload
+        return True
+
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_a, **_k: False)
+    monkeypatch.setattr(pc, 'should_skip_omi_paid_postprocessing', lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        sys.modules['utils.subscription'], 'should_skip_omi_paid_postprocessing', lambda *_a, **_k: True
+    )
+    monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', fake_persist)
+    forbidden = MagicMock(side_effect=AssertionError('paid LLM/vector work must not run'))
+    monkeypatch.setattr(pc, '_get_structured', forbidden)
+    monkeypatch.setattr(pc, 'generate_embedding', forbidden)
+
+    initial_raw = capture.model_dump()
+    extract = MagicMock()
+    integrations = MagicMock()
+    complete = MagicMock(return_value=True)
+
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda _uid, cid, **_k: persisted_rows.get(cid, initial_raw),
+    )
+    monkeypatch.setattr(
+        persisted_finalizer,
+        'deserialize_conversation',
+        lambda raw: capture if raw is initial_raw else Conversation(**raw),
+    )
+    monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda _uid: None)
+    monkeypatch.setattr(persisted_finalizer, 'process_conversation', pc.process_conversation)
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', pc.save_structured_vector)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', extract)
+    monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
+    monkeypatch.setattr(
+        persisted_finalizer.lifecycle_service,
+        'claim_finalization_fanout',
+        lambda *_a: {'status': 'claimed', 'fanout_key': 'conversation:custom-stt-23923:finalization'},
+    )
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(
+        persisted_finalizer,
+        'resolve_frame_request_authority',
+        AsyncMock(return_value=SimpleNamespace(enabled=False, account_generation=None)),
+    )
+
+    disposition = await persisted_finalizer.finalize_persisted_conversation(
+        'uid-23923',
+        'custom-stt-23923',
+        finalization_job_id='job-23923',
+        dispatch_generation=1,
+        lease_epoch=1,
+    )
+
+    assert disposition == persisted_finalizer.ConversationFinalizationDisposition.completed
+    saved = persisted_rows['custom-stt-23923']
+    assert saved['status'] == ConversationStatus.completed
+    assert saved['discarded'] is False
+    assert saved[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
+    assert saved['structured']['title'] == 'Words appeared on phone using own Deepgram STT'
+    complete.assert_called_once_with('job-23923', 1, 1)
+    extract.assert_not_called()
+    integrations.assert_not_called()
+    forbidden.assert_not_called()
 
 
 @pytest.mark.anyio

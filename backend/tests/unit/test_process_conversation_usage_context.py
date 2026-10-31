@@ -1775,10 +1775,162 @@ def test_custom_stt_exhausted_processing_budget_skips_llm_work(monkeypatch):
     )
     monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: True)
 
+    persist = MagicMock(return_value=True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persist)
+
     result = process_conversation.process_conversation('uid', 'en', completed_conversation)
 
     assert not structured_calls, 'LLM structuring ran after the processing budget was exhausted'
     assert result.status == ConversationStatus.completed
+    persist.assert_called_once()
+
+
+def test_custom_stt_exhausted_processing_budget_persists_live_capture(monkeypatch):
+    """#23923: live /v4/listen?custom_stt=enabled captures enter processing with an
+    empty Structured(). Exhausted monthly credits must durably persist a completed
+    deterministic conversation and report owned persistence."""
+    live_capture = Conversation(
+        id='conv-custom-stt-live-23923',
+        created_at=datetime(2026, 10, 30, tzinfo=timezone.utc),
+        started_at=datetime(2026, 10, 30, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 10, 30, 0, 2, tzinfo=timezone.utc),
+        source=ConversationSource.phone,
+        structured=Structured(),
+        transcript_segments=[
+            TranscriptSegment(
+                id='seg-1',
+                text='Testing my own Deepgram key on exhausted free tier account',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+        status=ConversationStatus.processing,
+        discarded=False,
+        deferred=True,
+        summary_retryable=True,
+        uses_custom_stt=True,
+    )
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_a, **_k: False)
+    monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        process_conversation,
+        '_get_structured',
+        MagicMock(side_effect=AssertionError('LLM structuring must not run')),
+    )
+    persist_mock = MagicMock(return_value=True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persist_mock)
+
+    owned: list[bool] = []
+    dispositions = []
+    result = process_conversation.process_conversation(
+        'uid-live-23923',
+        'en',
+        live_capture,
+        persistence_observer=owned.append,
+        derived_effects_disposition_observer=dispositions.append,
+    )
+
+    assert result.status == ConversationStatus.completed
+    assert result.discarded is False
+    assert result.deferred is False
+    assert result.summary_retryable is None
+    assert result.structured.title == 'Testing my own Deepgram key on exhausted free'
+    persist_mock.assert_called_once()
+    payload = persist_mock.call_args.args[1]
+    assert payload['status'] == ConversationStatus.completed
+    assert payload['discarded'] is False
+    assert payload['deferred'] is False
+    assert payload['summary_retryable'] is None
+    assert payload[process_conversation.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
+    assert payload['structured']['title'] == 'Testing my own Deepgram key on exhausted free'
+    assert payload['transcript_segments'][0]['text'].startswith('Testing my own Deepgram key')
+    assert owned == [True]
+    assert dispositions == [process_conversation.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
+
+
+def test_custom_stt_exhausted_processing_budget_reprocess_preserves_completed_summary(monkeypatch):
+    """Reprocessing an already-completed enriched custom-STT conversation after
+    monthly credits run out must not overwrite its stored summary with a placeholder."""
+    from utils.conversations.processing_trigger import ProcessingTrigger
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+
+    enriched = Conversation(
+        id='conv-custom-stt-enriched',
+        created_at=datetime(2026, 10, 30, tzinfo=timezone.utc),
+        started_at=datetime(2026, 10, 30, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 10, 30, 0, 2, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Sprint retrospective', overview='Detailed notes from earlier funded run'),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=False,
+        uses_custom_stt=True,
+    )
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_a, **_k: False)
+    monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *_a, **_k: True)
+    persist_mock = MagicMock(return_value=True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persist_mock)
+
+    owned: list[bool] = []
+    dispositions = []
+    context = {'sync_hold': True, 'hold_outcome': 'max_hold'}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        result = process_conversation.process_conversation(
+            'uid-reprocess-23923',
+            'en',
+            enriched,
+            trigger=ProcessingTrigger.USER_REPROCESS,
+            persistence_observer=owned.append,
+            derived_effects_disposition_observer=dispositions.append,
+        )
+    finally:
+        PROCESS_CONTEXT.reset(token)
+
+    assert result is enriched
+    assert result.structured.title == 'Sprint retrospective'
+    assert result.structured.overview == 'Detailed notes from earlier funded run'
+    assert context['hold_budget_denied_at_max'] is True
+    persist_mock.assert_not_called()
+    assert owned == [False]
+    assert dispositions == [process_conversation.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
+
+
+@pytest.mark.parametrize('deferred', [False, True])
+def test_custom_stt_exhausted_processing_budget_skips_summary_vector_paid_calls(monkeypatch, deferred):
+    """#7690/#23923: summary-vector indexing must not invoke Omi-paid embeddings or
+    structured metadata extraction on an exhausted custom-STT conversation."""
+    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL as metric
+
+    conversation = Conversation(
+        id='conv-custom-stt-vector-skip',
+        created_at=datetime(2026, 10, 30, tzinfo=timezone.utc),
+        started_at=datetime(2026, 10, 30, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 10, 30, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.phone,
+        structured=Structured(title='Recording'),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=False,
+        uses_custom_stt=True,
+        processing_deferred=deferred,
+    )
+    monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *_a, **_k: True)
+    forbidden = MagicMock(side_effect=AssertionError('paid vector/LLM metadata call must not run'))
+    monkeypatch.setattr(process_conversation, 'generate_embedding', forbidden)
+    monkeypatch.setattr(process_conversation, 'retrieve_metadata_fields_from_structured', forbidden)
+    monkeypatch.setattr(process_conversation, 'upsert_vector2', forbidden)
+
+    outcomes = ('skipped_processing_deferred', 'skipped_custom_stt_budget_exhausted')
+    before = {outcome: metric.labels(outcome=outcome)._value.get() for outcome in outcomes}
+    assert process_conversation.save_structured_vector('uid-vec-23923', conversation) is False
+    expected = 'skipped_processing_deferred' if deferred else 'skipped_custom_stt_budget_exhausted'
+    for outcome in outcomes:
+        assert metric.labels(outcome=outcome)._value.get() == before[outcome] + int(outcome == expected)
+    forbidden.assert_not_called()
 
 
 def _ledger_gate_conversation(conversation_id: str) -> Conversation:
