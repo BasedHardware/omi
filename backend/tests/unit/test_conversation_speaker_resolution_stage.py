@@ -1507,7 +1507,7 @@ def test_serve_refuses_only_windows_touching_an_inventory_dispute(
     _per_window_session(monkeypatch, [_span_chunk(*c) for c in listed], seen)
     pending, placements = _windows((101.0, 104.0), (301.0, 308.0))
     session = stage._verified_read_session(
-        'u1', SimpleNamespace(id='c1'), _manifest(*manifest), pending, placements, float('inf')
+        'u1', SimpleNamespace(id='c1', transcript_segments=[]), _manifest(*manifest), pending, placements, float('inf')
     )
     assert session.verified_segment_ids == verified
     assert seen == reads
@@ -1521,7 +1521,9 @@ def test_serve_with_nothing_reconciled_still_refuses_the_recording(monkeypatch):
     _per_window_session(monkeypatch, [_span_chunk('x', 100.0, 10)], seen)
     pending, placements = _windows((101.0, 104.0))
     # A file with no chunk_timestamps proves nothing about the listed object.
-    session = stage._verified_read_session('u1', SimpleNamespace(id='c1'), [{}], pending, placements, float('inf'))
+    session = stage._verified_read_session(
+        'u1', SimpleNamespace(id='c1', transcript_segments=[]), [{}], pending, placements, float('inf')
+    )
     assert session is None and seen == []
     assert reasons == ['inventory_pair_mismatch']
 
@@ -1534,7 +1536,12 @@ def test_outside_the_serve_cohort_a_count_mismatch_refuses_globally(monkeypatch)
     _per_window_session(monkeypatch, [_span_chunk('a', 100.0, 10)], seen)
     pending, placements = _windows((101.0, 104.0))
     session = stage._verified_read_session(
-        'u1', SimpleNamespace(id='c1'), _manifest((100.0, 10), (300.0, 10)), pending, placements, float('inf')
+        'u1',
+        SimpleNamespace(id='c1', transcript_segments=[]),
+        _manifest((100.0, 10), (300.0, 10)),
+        pending,
+        placements,
+        float('inf'),
     )
     assert session is None and seen == []
     assert reasons == ['inventory_count_mismatch']
@@ -1547,7 +1554,12 @@ def test_only_the_serve_cohort_widens_the_read_budget(monkeypatch, mode, widened
     _per_window_session(monkeypatch, [_span_chunk('a', 100.0, 10)], [])
     pending, placements = _windows((101.0, 104.0))
     session = stage._verified_read_session(
-        'u1', SimpleNamespace(id='c1'), _manifest((100.0, 10)), pending, placements, float('inf')
+        'u1',
+        SimpleNamespace(id='c1', transcript_segments=[]),
+        _manifest((100.0, 10)),
+        pending,
+        placements,
+        float('inf'),
     )
     assert session.verified_segment_ids == {'s0'}
     assert getattr(session, 'max_downloads', None) == (stage.PER_WINDOW_MAX_DOWNLOADS if widened else None)
