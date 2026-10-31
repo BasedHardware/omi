@@ -37,6 +37,20 @@ AUDIO_SAMPLE_RATE = 16000
 AUDIO_URLS_POLL_AFTER_MS = 3000
 
 
+def conversation_merge_fingerprint(conversation: dict, *, demand: bool) -> str:
+    return compute_audio_files_fingerprint(
+        conversation['audio_files'],
+        **(
+            {
+                'origin': conversation.get('started_at') or conversation.get('created_at'),
+                'source_identity': True,
+            }
+            if demand
+            else {}
+        ),
+    )
+
+
 def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2) -> bytes:
     """Convert raw PCM data to WAV format."""
     wav_buffer = io.BytesIO()
