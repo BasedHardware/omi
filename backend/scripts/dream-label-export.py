@@ -75,7 +75,14 @@ def item(kind, data, change, stratum, judgment):
                 'title': 'Cited speech',
                 'tag': 'Context',
                 'segments': [
-                    {'id': str(index), 'is_user': row['speaker'] == 'owner', 'start': index, 'text': row['text']}
+                    {
+                        'id': str(index),
+                        'is_user': row['speaker'] == 'owner',
+                        'speaker': row['speaker'],
+                        'name': 'You' if row['speaker'] == 'owner' else row['speaker'],
+                        'start': index,
+                        'text': row['text'],
+                    }
                     for index, row in enumerate(projection['speech'])
                 ],
                 'cited': [str(index) for index, row in enumerate(projection['speech']) if row.get('cited')],
@@ -120,17 +127,22 @@ def consented(uid, environ=None):
 async def judged(uid, rows):
     """Judge every exported row on reserved capacity within one total token allowance."""
     spent = 0
+    total = dream_judge.token_allowance()
 
     async def turn(mount, messages):
         nonlocal spent
-        result = await dream_harness_transport.model_turn(
-            uid, dream_harness_transport.VERIFY_LANE, mount, messages, reserved_only=True
-        )
+        try:
+            result = await dream_harness_transport.model_turn(
+                uid, dream_harness_transport.VERIFY_LANE, mount, messages, reserved_only=True
+            )
+        except Exception:
+            # A failed call may still have been billed; stop spending rather than guess.
+            spent = total
+            raise
         spent += result.price_weighted_tokens if result.price_weighted_tokens is not None else result.tokens
         return result
 
     verdicts = {}
-    total = dream_judge.token_allowance()
     for start in range(0, len(rows), dream_judge.MAX_ITEMS):
         chunk = rows[start : start + dream_judge.MAX_ITEMS]
         batch = [(str(index), dream_judge.projection(row[0][2])) for index, row in enumerate(chunk, start)]

@@ -1021,6 +1021,7 @@ async def run_pass(
     progress=None,
     dry_run=False,
     bootstrap_tools=None,
+    judge=None,
 ):
     if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         report = {'status': 'not_admitted', 'reason': 'account_pending_deletion'}
@@ -1227,7 +1228,8 @@ async def run_pass(
                 bootstrap_tools=bootstrap_tools,
                 arms=arms,
                 budget_probe=budget_probe,
-                judge=trigger == 'schedule' and not canary and not dry_run,
+                # Scheduled sweep passes only; operator CLIs pass judge=False.
+                judge=(trigger == 'schedule' if judge is None else judge) and not canary and not dry_run,
             )
         if 'prescan' in pass_levers:
             # Recall of the finalized report, merged into the admission-time row

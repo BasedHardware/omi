@@ -94,6 +94,8 @@ def token_allowance() -> int:
 
 
 _sweep_calls: dict[str, int] = {}
+# Overlapping drains keep their own counts; the oldest ids fall off.
+_TRACKED_SWEEPS = 16
 
 
 def take_call(sweep_id: str | None) -> bool:
@@ -108,7 +110,8 @@ def take_call(sweep_id: str | None) -> bool:
         return False
     key = sweep_id or 'none'
     if key not in _sweep_calls:
-        _sweep_calls.clear()
+        while len(_sweep_calls) >= _TRACKED_SWEEPS:
+            _sweep_calls.pop(next(iter(_sweep_calls)))
         _sweep_calls[key] = 0
     if _sweep_calls[key] >= limit:
         return False

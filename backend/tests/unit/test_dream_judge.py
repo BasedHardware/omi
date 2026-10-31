@@ -316,3 +316,57 @@ def test_export_requires_explicit_owner_consent():
     assert export.consented('owner-a', environ={}) is False
     assert export.consented('owner-a', environ={export.CONSENT_ENV: uid_digest('owner-b')}) is False
     assert export.consented('owner-a', environ={export.CONSENT_ENV: 'x,' + uid_digest('owner-a').upper()}) is True
+
+
+def test_overlapping_sweeps_keep_their_own_counts(monkeypatch):
+    monkeypatch.setenv(dream_judge.CALLS_PER_SWEEP_ENV, '1')
+    dream_judge._sweep_calls.clear()
+    assert dream_judge.take_call('sweep-a') is True
+    assert dream_judge.take_call('sweep-b') is True
+    # sweep-b starting did not reset sweep-a.
+    assert dream_judge.take_call('sweep-a') is False
+
+
+def test_operator_runs_with_judge_false_are_not_judged(runtime, monkeypatch):
+    monkeypatch.setenv(dream_judge.COMMON_PERCENT_ENV, '100')
+    dream_judge._sweep_calls.clear()
+    judged = []
+    report = asyncio.run(dream_agent.run_pass(UID, turn=_pass_model(judged), judge=False))
+    assert report['outcomes'][0]['status'] == 'applied' and judged == []
+
+
+def test_export_stops_spending_after_a_failed_call(monkeypatch):
+    export = _export_module()
+    calls = []
+
+    async def failing(*args, **kwargs):
+        calls.append(kwargs.get('reserved_only'))
+        raise RuntimeError('synthetic billed failure')
+
+    monkeypatch.setattr(export.dream_harness_transport, 'model_turn', failing)
+    rows = [(('spelling', {}, {'edit_kind': 'spelling'}), 'random') for _ in range(dream_judge.MAX_ITEMS + 1)]
+    assert asyncio.run(export.judged('owner-a', rows)) == {}
+    # The second batch had no allowance left, so only the first batch called out, reserved-only.
+    assert calls == [True]
+
+
+def test_export_segments_keep_speaker_names():
+    export = _export_module()
+    change = {
+        'change_id': 'c3',
+        'edit_kind': 'spelling',
+        'before': 'kiesh',
+        'after': 'quiche',
+        'context': {
+            'conversation_title': 'Lunch',
+            'segments': [
+                {'text': 'What should we eat?', 'speaker_label': 'Anna'},
+                {'text': 'Maybe kiesh.', 'is_user': True},
+            ],
+            'main_index': 1,
+        },
+    }
+    item = export.item('spelling', {'edit_key': 'agent:spelling:c3'}, change, 'random', None)
+    segments = item['content']['evidence'][0]['segments']
+    assert [(s['name'], s['is_user']) for s in segments] == [('Anna', False), ('You', True)]
+    assert item['content']['evidence'][0]['cited'] == ['1']
