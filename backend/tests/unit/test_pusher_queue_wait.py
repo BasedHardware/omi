@@ -428,3 +428,44 @@ def test_close_cap_metrics_have_no_labels_and_are_exposed_by_metrics_router(monk
         assert name in body
         for family in collector.collect():
             assert all(sample.labels == {} for sample in family.samples)
+
+
+@pytest.mark.asyncio
+async def test_background_failure_keeps_application_classification_when_receiver_is_cancelled(
+    inline_session, monkeypatch
+):
+    entered, never = asyncio.Event(), asyncio.Event()
+    monkeypatch.setattr(pusher, 'SPEAKER_SAMPLE_PROCESS_INTERVAL', 17.0)
+    real_wait = pusher.wait_for_event
+
+    async def fail_speaker_worker(event, seconds):
+        if seconds == 17.0:
+            await entered.wait()
+            raise RuntimeError('synthetic background failure')
+        return await real_wait(event, seconds)
+
+    monkeypatch.setattr(pusher, 'wait_for_event', fail_speaker_worker)
+    sock = Socket([struct.pack('<I', 100)])
+    real_receive = sock.receive_bytes
+
+    async def receive():
+        if not sock.frames:
+            entered.set()
+            await never.wait()
+        return await real_receive()
+
+    sock.receive_bytes = receive
+    counter = metrics.SOCKET_CLOSED.labels('application_error', '<5m', 'control_only')
+    before = counter._value.get()
+    active_before = pusher.PUSHER_ACTIVE_WS_CONNECTIONS._value.get()
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000))
+    try:
+        await asyncio.wait_for(handler, 5)
+        assert sock.close_code == 1011
+        assert counter._value.get() == before + 1
+        assert pusher.PUSHER_ACTIVE_WS_CONNECTIONS._value.get() == active_before
+    finally:
+        never.set()
+        if not handler.done():
+            handler.cancel()
+        await asyncio.gather(handler, return_exceptions=True)

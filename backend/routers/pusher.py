@@ -1754,8 +1754,8 @@ async def _run_websocket_util_trigger(
             websocket_close_code = 1011
             application_failed = True
         except asyncio.CancelledError:
-            observation.reason = 'cancelled'
-            websocket_close_code = 1006
+            if observation.reason == 'peer' and not application_failed:
+                observation.reason = 'cancelled'
             raise
         except (ValueError, struct.error, UnicodeDecodeError) as exc:
             observation.reason = 'protocol_error'
