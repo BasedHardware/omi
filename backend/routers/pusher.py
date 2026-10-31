@@ -4,13 +4,14 @@ import struct
 import asyncio
 import time
 import uuid
+from contextlib import ExitStack
 from grpc import StatusCode
 from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_receive_metrics import SocketObservation, observe_work
-from utils.pusher_record_finish import RecordProjectionQueue, retain_closed_record_drain
+from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProjectionQueue, retain_closed_record_drain
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -190,6 +191,21 @@ BG_DRAIN_TIMEOUT = 30.0  # seconds
 RECORD_INLINE_FINISH_TIMEOUT = 20.0  # projection wait and metadata combined
 
 
+def _projection_wait_bound_enabled() -> bool:
+    """Emergency rollback of the capacity deadline only; custody ownership stays."""
+    return os.getenv('PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED', 'true').strip().lower() != 'false'
+
+
+def _ack_peer_departed(exc: Exception, websocket: Any) -> bool:
+    if isinstance(exc, (WebSocketDisconnect, OSError)):
+        return True
+    return isinstance(exc, RuntimeError) and (
+        getattr(websocket, 'application_state', None) == WebSocketState.DISCONNECTED
+        or getattr(websocket, 'client_state', None) == WebSocketState.DISCONNECTED
+        or str(exc) == 'Cannot call "send" once a close message has been sent.'
+    )
+
+
 async def _dispatch_transcript_item(
     uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str], client_kind: ClientKind = 'unknown'
 ) -> None:
@@ -275,8 +291,9 @@ async def _commit_durable_audio_window(
     audio_custody: Optional[int],
     timeline_v2: bool,
     websocket: Any,
-    durable_queue: 'asyncio.Queue[AudioProjection]',
+    durable_queue: RecordProjectionQueue,
     budget: ByteBudget,
+    queue_wait_timeout: float | None,
     on_committed: Optional[Callable[[], None]] = None,
 ) -> Optional[AudioReceipt]:
     """Commit one immutable media+manifest pair for a buffered audio window.
@@ -308,17 +325,28 @@ async def _commit_durable_audio_window(
             data_protection_level=protection_level,
             clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
         )
-    if on_committed is not None:
-        on_committed()  # Both immutable objects exist, before ACK/queue delivery.
-    if audio_custody == 1:
-        await websocket.send_bytes(audio_custody_ack_frame(receipt.to_dict()))
     if receipt.conversation_id and receipt.samples:
-        if durable_queue.full():
-            BACKPRESSURE.labels(stage='pusher_queue').inc()
-            record_would_drop('pusher_queue')
-        with observe_work('projection_enqueue'):
-            await durable_queue.put(AudioProjection(receipt, start, 0, receipt.samples))
-    budget.release(len(payload))
+        durable_queue.stage_committed(AudioProjection(receipt, start, 0, receipt.samples))
+    payload_size = len(payload)
+    del payload  # Queue-capacity wait owns a receipt only, never a second PCM copy.
+    budget.release(payload_size)
+    if on_committed is not None:
+        on_committed()  # Drop the PCM buffer now; the committed reference has an owner.
+    with observe_work('projection_enqueue'):
+        if audio_custody == 1:
+            try:
+                await websocket.send_bytes(audio_custody_ack_frame(receipt.to_dict()))
+            except Exception as exc:
+                # Slot ownership precedes the ACK: peer departure cannot bypass
+                # projection delivery. The ordinary close worker promotes it.
+                if _ack_peer_departed(exc, websocket):
+                    raise WebSocketDisconnect(code=1006) from None
+                raise
+        if receipt.conversation_id and receipt.samples:
+            if durable_queue.full():
+                BACKPRESSURE.labels(stage='pusher_queue').inc()
+                record_would_drop('pusher_queue')
+            await durable_queue.deliver_pending(timeout=queue_wait_timeout)
     return receipt
 
 
@@ -442,6 +470,7 @@ async def _run_websocket_util_trigger(
     # A crash after commit but before queue.put is recoverable via raw-live's
     # existing per-conversation playback index, independent of this process.
     durable_queue = RecordProjectionQueue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
+    queue_wait_timeout = WS_RECEIVE_TIMEOUT if _projection_wait_bound_enabled() else None
     inline_finish_conversation: Optional[str] = None
     inline_projection_drained = asyncio.Event()
     inline_finish_done = asyncio.Event()
@@ -623,13 +652,21 @@ async def _run_websocket_util_trigger(
             )
             logger.warning('Durable audio projection deferred after retries; archive receipt retained')
 
-        while websocket_active or not durable_queue.empty() or pending_refs or record_close_requests:
+        while (
+            websocket_active
+            or not durable_queue.empty()
+            or durable_queue.pending_projection is not None
+            or pending_refs
+            or record_close_requests
+        ):
             if websocket_active:
                 await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
             else:
                 # This worker may now belong to the process. The socket's
                 # shutdown event is set; do not spin on metadata failures.
                 await asyncio.sleep(PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+            # Also deliver a slot left by ACK departure, timeout or cancellation.
+            durable_queue.promote_pending()
             # A continuously replenished later recording must not prevent the
             # close scan. Process a bounded snapshot before flushing/finishing.
             for _ in range(durable_queue.qsize()):
@@ -1165,6 +1202,7 @@ async def _run_websocket_util_trigger(
         # manifest when the window commits at a flush boundary.
         durable_window_frames: List[Dict[str, Any]] = []
         durable_tail_has_receipt = False
+        durable_commit_unresolved = False
         # Audio-timeline v2 continuity for this socket: the projected end of
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
@@ -1173,35 +1211,44 @@ async def _run_websocket_util_trigger(
         async def commit_durable_window() -> Optional[AudioReceipt]:
             """Commit the buffered window as one custody pair (see _commit_durable_audio_window)."""
             nonlocal durable_tail_has_receipt
+            nonlocal durable_commit_unresolved
             durable_tail_has_receipt = False
 
             def committed():
                 nonlocal durable_tail_has_receipt
                 durable_tail_has_receipt = True
-
-            receipt = await _commit_durable_audio_window(
-                uid=uid,
-                payload=bytes(private_cloud_sync_buffer),
-                frames=list(durable_window_frames),
-                conversation_id=current_conversation_id,
-                start=private_cloud_chunk_start_time,
-                sample_rate=sample_rate,
-                custody_root=custody_root,
-                protection_level=cached_protection_level,
-                audio_custody=audio_custody,
-                timeline_v2=audio_timeline_v2,
-                websocket=websocket,
-                durable_queue=durable_queue,
-                budget=audio_budget,
-                on_committed=committed,
-            )
-            if receipt is not None:
                 _reset_private_cloud_buffer()
                 durable_window_frames.clear()
-            return receipt
+
+            try:
+                return await _commit_durable_audio_window(
+                    uid=uid,
+                    payload=bytes(private_cloud_sync_buffer),
+                    frames=list(durable_window_frames),
+                    conversation_id=current_conversation_id,
+                    start=private_cloud_chunk_start_time,
+                    sample_rate=sample_rate,
+                    custody_root=custody_root,
+                    protection_level=cached_protection_level,
+                    audio_custody=audio_custody,
+                    timeline_v2=audio_timeline_v2,
+                    websocket=websocket,
+                    durable_queue=durable_queue,
+                    budget=audio_budget,
+                    queue_wait_timeout=queue_wait_timeout,
+                    on_committed=committed,
+                )
+            except BaseException:
+                # A failed/cancelled dispatch can have committed remotely. The
+                # shutdown tail must never rerun that unknown storage operation.
+                if not durable_tail_has_receipt:
+                    durable_commit_unresolved = True
+                raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False) -> None:
             if durable_audio:
+                if durable_commit_unresolved:
+                    raise RuntimeError('custody commit unresolved; producer fence retained')
                 # Custody never drops a zero run: it is captured audio, and
                 # the projection reads it back exactly like any other frame.
                 if private_cloud_sync_enabled and len(private_cloud_sync_buffer) > 0:
@@ -1613,6 +1660,14 @@ async def _run_websocket_util_trigger(
                         audiobuffer = bytearray()
                     continue
 
+        except ProjectionQueueWaitTimeout:
+            observation.reason = 'queue_wait_timeout'
+            websocket_close_code = 1011
+            application_failed = True
+        except asyncio.CancelledError:
+            observation.reason = 'cancelled'
+            websocket_close_code = 1006
+            raise
         except (ValueError, struct.error, UnicodeDecodeError) as exc:
             observation.reason = 'protocol_error'
             websocket_close_code = 1003
@@ -1638,6 +1693,14 @@ async def _run_websocket_util_trigger(
             try:
                 await _queue_private_cloud_chunk()
                 tail_committed = durable_audio
+            except ProjectionQueueWaitTimeout:
+                observation.reason = 'queue_wait_timeout'
+                websocket_close_code = 1011
+                application_failed = True
+                tail_committed = durable_tail_has_receipt
+            except WebSocketDisconnect as exc:
+                websocket_close_code = exc.code or 1006
+                tail_committed = durable_tail_has_receipt
             except Exception:
                 if durable_audio:
                     record_failure('window_tail')
@@ -1685,6 +1748,35 @@ async def _run_websocket_util_trigger(
                 audio_bytes_event.set()
 
     bg_main_tasks: List[asyncio.Task[Any]] = []
+    receive_task: asyncio.Task[Any] | None = None
+    record_drain_observed = False
+
+    async def drain_socket_tasks() -> None:
+        nonlocal record_drain_observed
+        shutdown_event.set()
+        if durable_audio:
+            # Preserve the *same* worker and its in-flight projection. Cancelling
+            # and restarting would lose the drain proof for a thread still doing
+            # storage I/O. All other socket tasks keep bounded cleanup.
+            private_worker = bg_main_tasks[1]
+            if not private_worker.done() and not record_drain_observed:
+                # Start at close, even if the worker is already stuck inside a
+                # projection operation. Its timer follows the same worker into
+                # the process owner and unwinds on success or cancellation.
+                observation_stack = ExitStack()
+                observation_stack.enter_context(observe_work('drain'))
+                private_worker.add_done_callback(lambda _: observation_stack.close())
+                record_drain_observed = True
+            await asyncio.wait(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT)
+            has_record_debt = (
+                record_barrier.upload_sessions or record_barrier.pending_clears or record_barrier.close_failures
+            )
+            if has_record_debt and retain_closed_record_drain(private_worker):
+                bg_main_tasks.remove(private_worker)
+        else:
+            with observe_work('drain'):
+                await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
+
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
         receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
@@ -1721,25 +1813,20 @@ async def _run_websocket_util_trigger(
             except asyncio.CancelledError:
                 pass
 
-        shutdown_event.set()
-        if durable_audio:
-            # Preserve the *same* worker and its in-flight projection. Cancelling
-            # and restarting would lose the drain proof for a thread still doing
-            # storage I/O. All other socket tasks keep bounded cleanup.
-            with observe_work('drain'):
-                await asyncio.wait(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT)
-                private_worker = bg_main_tasks[1]
-                has_record_debt = (
-                    record_barrier.upload_sessions or record_barrier.pending_clears or record_barrier.close_failures
-                )
-                if has_record_debt and retain_closed_record_drain(private_worker):
-                    bg_main_tasks.remove(private_worker)
-        else:
-            with observe_work('drain'):
-                await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
+        await drain_socket_tasks()
 
     except asyncio.CancelledError:
         websocket_close_code = 1006
+        observation.reason = 'cancelled'
+        if durable_queue.capacity_wait_active and receive_task is not None:
+            # Only interrupt the capacity wait, after custody and slot ownership
+            # are known. Let normal receive cleanup and the same worker drain.
+            receive_task.cancel()
+            try:
+                await receive_task
+            except asyncio.CancelledError:
+                pass
+            await drain_socket_tasks()
         raise
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
@@ -1750,8 +1837,7 @@ async def _run_websocket_util_trigger(
         websocket_active = False
 
         all_to_cancel = [t for t in bg_main_tasks if not t.done()]
-        with observe_work('drain'):
-            await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
+        await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
 
         if application_failed and observation.reason == 'peer':
             observation.reason = 'application_error'

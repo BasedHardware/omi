@@ -180,6 +180,50 @@ new client replay guarantee. Deploy compatible listen/pusher and finalizer
 artifacts together through the lead's release train; local hermetic receipts
 prove code behavior, not production or installed-client acceptance.
 
+## Pusher receive work and committed projection capacity
+
+Pusher counts frames actually received as `pusher_socket_frames_total` with
+closed `kind` (`heartbeat`, `audio`, `control`, `invalid`) and `age_bucket`
+(`<5m`, `5m_to_30m`, `30m_plus`) labels. Receive work is measured separately
+for `record_begin`, `custody_commit`, `projection_enqueue`, `inline_finish` and
+`drain`. Each wait crossing 300 seconds increments
+`pusher_receive_work_stalls_total` once and remains visible in
+`pusher_receive_work_stalled_handlers` until completion or cancellation.
+`pusher_receive_work_duration_seconds` records completed waits; a closed drain's
+observation follows its existing worker through process-owner handoff, including
+a worker already blocked in projection when the socket closes.
+
+`pusher_socket_closed_total` runs in a synchronous finalizer with closed reason,
+age and `frames_seen` (`none`, `control_only`, `audio`) labels. It counts handler
+exit after socket cleanup, not proof that TCP remained open during processing.
+These families add at most 225 series per emitting process, including optional
+Prometheus creation timestamps. The authenticated `/metrics` router and committed
+`pusher-metrics` scrape configuration expose the complete families. Release
+verification must still prove the serving targets are up and these series are
+queryable; local exposition does not prove live scrape coverage.
+
+After immutable custody commits, the receipt enters one owned pending projection
+slot before ACK or queue waiting. The slot holds a reference, never PCM. The
+receiver discards its committed window buffer before it waits; only the queue
+capacity wait uses the existing 300-second receive-liveness budget. Expiry stops
+frame admission and enters ordinary close/drain with the slot intact. Queue
+release transfers the pending reference at the tail in capture order. Both
+queued and slotted references participate in per-conversation drain proof before
+producer tokens can clear. The same worker can transfer to the capped closed
+drain owner; refused admission retains the durable producer fence and receipts.
+Peer departure during custody ACK also follows this owned delivery path without
+classifying the closed send as an application failure. Unknown commit outcomes
+retain the fence and are never rerun by shutdown tail cleanup.
+
+`PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED=false` restores unbounded capacity
+waiting for new sockets. Ownership, measurements and ACK classification stay
+active. Unset or malformed values keep the deadline on. No wire capability or
+listen change is required, so old listeners and new listeners work during a
+mixed rollout; old pushers retain their existing behavior until replaced. Quiet
+sessions without a queue wait are unaffected. There is no audio-idle reclaim or
+age-based token release. Production share of handlers retained by this mechanism
+remains unknown until these measurements are deployed.
+
 ## Sync storage round trips
 
 Retained server-only `open_loop_extractions` never reach the conversation
