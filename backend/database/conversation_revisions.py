@@ -1,6 +1,7 @@
 """Firestore revision normalization shared by conversation persistence paths."""
 
 from datetime import datetime, timezone
+import math
 from typing import Any, Optional
 
 
@@ -30,7 +31,13 @@ def firestore_revision_datetime(value: Any) -> Optional[datetime]:
         if isinstance(seconds, str) and isinstance(nanos, str):
             timestamp = float(f'{seconds}.{nanos}')
         else:
-            timestamp = float(seconds) + (float(nanos) / 1_000_000_000)
+            sec_val = float(seconds)
+            nano_val = float(nanos)
+            if math.isnan(sec_val) or math.isnan(nano_val) or math.isinf(sec_val) or math.isinf(nano_val):
+                return None
+            timestamp = sec_val + (nano_val / 1_000_000_000)
+        if math.isnan(timestamp) or math.isinf(timestamp):
+            return None
         return datetime.fromtimestamp(timestamp, tz=timezone.utc)
-    except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
+    except (AttributeError, IndexError, TypeError, ValueError, OverflowError, OSError):
         return None
