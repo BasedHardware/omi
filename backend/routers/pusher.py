@@ -1374,6 +1374,75 @@ async def _run_websocket_util_trigger(
                         return True
             return False
 
+        async def finish_receive() -> None:
+            nonlocal inline_finish_conversation, websocket_active, websocket_close_code
+            nonlocal application_failed, durable_tail_has_receipt
+            # Flush any remaining private cloud sync buffer before shutdown.
+            # The durable window tail is the last-chance custody commit: if it
+            # fails, the producer stays unacknowledged (never a false receipt)
+            # and the tail is replayable by the client — count it, never mask
+            # the close path with the commit failure.
+            if len(private_cloud_sync_buffer) > 0:
+                logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
+            tail_committed = False
+            durable_tail_has_receipt = False
+            try:
+                await _queue_private_cloud_chunk()
+                tail_committed = durable_audio
+            except ProjectionQueueWaitTimeout:
+                observation.reason = 'queue_wait_timeout'
+                websocket_close_code = 1011
+                application_failed = True
+                tail_committed = durable_tail_has_receipt
+            except WebSocketDisconnect as exc:
+                websocket_close_code = exc.code or 1006
+                tail_committed = durable_tail_has_receipt
+            except Exception:
+                if durable_audio:
+                    record_failure('window_tail')
+                    record_would_drop('window_tail')
+                    # Fail closed to the producer: the unacknowledged tail must
+                    # be replayable, so signal the same error close the
+                    # mid-session commit failure path uses.
+                    websocket_close_code = 1011
+                    observation.reason = 'application_error'
+                    logger.exception(f'Durable audio window tail commit failed at shutdown {uid}')
+                    if current_conversation_id:
+                        # The immutable commit may have landed before ACK or
+                        # queue delivery failed. Keep the producer token, but
+                        # do not permanently poison retained custody.
+                        record_barrier.hold_recording(current_conversation_id, tail_committed=durable_tail_has_receipt)
+            if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
+                record_close_requests.add(current_conversation_id)
+            if (
+                tail_committed
+                and current_conversation_id in record_close_requests
+                and current_conversation_id not in record_barrier.failed_recordings
+                and not record_barrier.record_upload_failed
+                and os.getenv('RECORD_BARRIER_INLINE_FINISH', 'true').strip().lower() != 'false'
+            ):
+                inline_finish_conversation = current_conversation_id
+                try:
+                    with observe_work('inline_finish'):
+                        async with asyncio.timeout(RECORD_INLINE_FINISH_TIMEOUT):
+                            await inline_projection_drained.wait()
+                            if (
+                                current_conversation_id not in record_barrier.failed_recordings
+                                and not record_barrier.record_upload_failed
+                            ):
+                                if await record_barrier.finish_recording(current_conversation_id):
+                                    record_close_requests.discard(current_conversation_id)
+                except TimeoutError:
+                    logger.info('event=record_inline_finish outcome=timeout')
+                finally:
+                    inline_finish_conversation = None
+                    inline_finish_done.set()
+                    websocket_active = False
+                    audio_bytes_event.set()
+            else:
+                websocket_active = False
+                audio_bytes_event.set()
+
         try:
             while websocket_active:
                 try:
@@ -1681,71 +1750,7 @@ async def _run_websocket_util_trigger(
             websocket_close_code = 1011
             application_failed = True
         finally:
-            # Flush any remaining private cloud sync buffer before shutdown.
-            # The durable window tail is the last-chance custody commit: if it
-            # fails, the producer stays unacknowledged (never a false receipt)
-            # and the tail is replayable by the client — count it, never mask
-            # the close path with the commit failure.
-            if len(private_cloud_sync_buffer) > 0:
-                logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
-            tail_committed = False
-            durable_tail_has_receipt = False
-            try:
-                await _queue_private_cloud_chunk()
-                tail_committed = durable_audio
-            except ProjectionQueueWaitTimeout:
-                observation.reason = 'queue_wait_timeout'
-                websocket_close_code = 1011
-                application_failed = True
-                tail_committed = durable_tail_has_receipt
-            except WebSocketDisconnect as exc:
-                websocket_close_code = exc.code or 1006
-                tail_committed = durable_tail_has_receipt
-            except Exception:
-                if durable_audio:
-                    record_failure('window_tail')
-                    record_would_drop('window_tail')
-                    # Fail closed to the producer: the unacknowledged tail must
-                    # be replayable, so signal the same error close the
-                    # mid-session commit failure path uses.
-                    websocket_close_code = 1011
-                    observation.reason = 'application_error'
-                    logger.exception(f'Durable audio window tail commit failed at shutdown {uid}')
-                    if current_conversation_id:
-                        # The immutable commit may have landed before ACK or
-                        # queue delivery failed. Keep the producer token, but
-                        # do not permanently poison retained custody.
-                        record_barrier.hold_recording(current_conversation_id, tail_committed=durable_tail_has_receipt)
-            if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
-                record_close_requests.add(current_conversation_id)
-            if (
-                tail_committed
-                and current_conversation_id in record_close_requests
-                and current_conversation_id not in record_barrier.failed_recordings
-                and not record_barrier.record_upload_failed
-                and os.getenv('RECORD_BARRIER_INLINE_FINISH', 'true').strip().lower() != 'false'
-            ):
-                inline_finish_conversation = current_conversation_id
-                try:
-                    with observe_work('inline_finish'):
-                        async with asyncio.timeout(RECORD_INLINE_FINISH_TIMEOUT):
-                            await inline_projection_drained.wait()
-                            if (
-                                current_conversation_id not in record_barrier.failed_recordings
-                                and not record_barrier.record_upload_failed
-                            ):
-                                if await record_barrier.finish_recording(current_conversation_id):
-                                    retire_record_close(current_conversation_id)
-                except TimeoutError:
-                    logger.info('event=record_inline_finish outcome=timeout')
-                finally:
-                    inline_finish_conversation = None
-                    inline_finish_done.set()
-                    websocket_active = False
-                    audio_bytes_event.set()
-            else:
-                websocket_active = False
-                audio_bytes_event.set()
+            await finish_receive()
 
     bg_main_tasks: List[asyncio.Task[Any]] = []
     receive_task: asyncio.Task[Any] | None = None
