@@ -157,6 +157,36 @@ def test_ordered_capture_devices_uses_earliest_evidence_not_alphabetical():
     assert primary == "macos_aaaaaaaa"
 
 
+def test_ordered_capture_devices_sorts_mixed_naive_and_aware_timestamps_without_type_error():
+    from utils.memory.canonical_memory_adapter import _ordered_capture_devices_from_evidence
+
+    raw_evidence = [
+        {
+            "evidence_id": "ev-aware-late",
+            "client_device_id": "ios_late1111",
+            "created_at": datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc),
+        },
+        {
+            "evidence_id": "ev-naive-mid",
+            "client_device_id": "web_mid22222",
+            "created_at": datetime(2025, 3, 1, 12, 0),
+        },
+        {
+            "evidence_id": "ev-naive-iso-early",
+            "client_device_id": "macos_early33",
+            "created_at": "2025-01-01T12:00:00",
+        },
+        {
+            "evidence_id": "ev-aware-iso-earliest",
+            "client_device_id": "android_first",
+            "created_at": "2024-12-01T12:00:00Z",
+        },
+    ]
+    device_ids, primary = _ordered_capture_devices_from_evidence(raw_evidence)
+    assert device_ids == ["android_first", "macos_early33", "web_mid22222", "ios_late1111"]
+    assert primary == "android_first"
+
+
 def test_listen_conversation_stamps_websocket_device_provenance():
     runtime = (Path(__file__).resolve().parents[2] / "routers" / "listen" / "runtime.py").read_text(encoding="utf-8")
     conversations = (Path(__file__).resolve().parents[2] / "routers" / "listen" / "conversations.py").read_text(
