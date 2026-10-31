@@ -114,7 +114,11 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-31.
+These rollout/experiment entries passed `review_by`. The checker warns
+during the seven-day grace, then fails unless a dated `review_overdue`
+exception is recorded for David.
+
+- `OMI_LIST_VERSION_EPOCH` — review_by 2026-10-24 (dazheng)
 
 ## Flags
 
@@ -285,7 +289,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | on | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_INDEXED_LIST_READS_ENABLED` | Default off; indexed canonical list candidates and slim main conversation lists preserve released row authority | backend | env | closed | — | — | — | — | graduate | on | 2026-11-16 | dazheng |
-| `OMI_LIST_VERSION_EPOCH` | Empty by default; unique reader rollout epoch after complete writer-fleet attestation | backend | env | closed | — | — | — | — | pending | on | 2026-11-07 | dazheng |
+| `OMI_LIST_VERSION_EPOCH` | Empty by default; unique reader rollout epoch after complete writer-fleet attestation | backend | env | closed | — | — | — | — | pending | on | 2026-10-24 | dazheng |
 | `OMI_MESSAGING_CHANNELS` | Default-off channel gateway and opt-in cross-surface continuity; also requires uid allowlist and paid-plan entitlement. | backend | env | closed | — | — | on | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_MESSAGING_CHANNELS_UIDS` | Comma-separated exact uid allowlist for messaging channels; empty admits nobody. | backend | env | closed | — | — | — | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_SHAPED_AGENT_MODE` | Notes and mobile/app chat shaped invocation. on serves shaped to everyone; off/unset/unknown disables shaped serving. cohort is an alias of on after legacy removal. Legacy comparison and shadow serving have been removed. Default off. | backend | env | closed | — | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | 2026-11-05 | dazheng |
