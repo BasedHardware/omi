@@ -1,6 +1,7 @@
 """Resumable partial admission on the real batch worker and projection path."""
 
 from dataclasses import replace
+from enum import StrEnum
 import json
 import logging
 from prometheus_client import Counter
@@ -9,13 +10,14 @@ from config import record_partial as config
 from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_policy import load_job_policy
-from database.record_partial import update_run
+from database.record_partial import update_run, continuation_refusal
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.record_partial_audio import digest, inventory_digest, missing_units, union
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.storage import list_audio_chunks
+from utils.observability.reasons import ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 RERUNS = Counter(
@@ -23,23 +25,33 @@ RERUNS = Counter(
 )
 
 
+class PartialRerunOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    SCHEDULED = 'scheduled'
+    COMPLETED = 'completed'
+    UNCHANGED = 'unchanged'
+    NO_NEW_AUDIO = 'no_new_audio'
+    WAITING = 'waiting'
+    STATE_CHANGED = 'state_changed'
+    BOUNDED = 'bounded'
+    RETRY = 'retry'
+    PRIVACY_REFUSED = 'privacy_refused'
+    BYOK_REFUSED = 'byok_refused'
+    DISCARDED_REFUSED = 'discarded_refused'
+    RETIRED = 'retired'
+
+
 def event(outcome, *, late=False):
     # No identities, storage paths, exception messages or open labels.
-    if outcome not in {
-        'scheduled',
-        'completed',
-        'unchanged',
-        'no_new_audio',
-        'waiting',
-        'state_changed',
-        'bounded',
-        'retry',
-        'privacy_refused',
-    }:
-        outcome = 'state_changed'
+    try:
+        outcome = PartialRerunOutcome(outcome)
+    except ValueError:
+        outcome = PartialRerunOutcome.STATE_CHANGED
     phase = 'late' if late else 'initial'
     logger.info('event=record_partial_rerun phase=%s outcome=%s count=1', phase, outcome)
-    RERUNS.labels(phase=phase, outcome=outcome).inc()
+    RERUNS.labels(
+        phase=phase, outcome=reason_label(ReasonFamily.RECORD_PARTIAL_RERUN, outcome, PartialRerunOutcome)
+    ).inc()
 
 
 def record_failure(error, *, privacy=False, run=None):
@@ -51,7 +63,14 @@ def record_failure(error, *, privacy=False, run=None):
         'speaker audio listing budget exhausted',
     }
     late = bool(run and (run.get('generation', 0) > 1 or run.get('complete')))
-    event('privacy_refused' if privacy else 'bounded' if bounded else 'retry', late=late)
+    event(
+        (
+            'privacy_refused'
+            if privacy
+            else 'byok_refused' if str(error) == 'partial BYOK excluded' else 'bounded' if bounded else 'retry'
+        ),
+        late=late,
+    )
 
 
 def seed_for(pending):
@@ -90,7 +109,23 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
         require_archive=True,
     )
     fingerprint = inventory_digest(chunks)
+    refusal = await run_blocking(db_executor, continuation_refusal, store, pending)
+    if refusal:
+        event(refusal, late=bool(previous))
+        return None
     if previous and previous.get('complete') and previous['fingerprint'] == fingerprint:
+        changed_at = previous.get('inventory_changed_at', now)
+        updated = {
+            **previous,
+            'inventory_changed_at': changed_at,
+            'next_inventory_at': now + config.INVENTORY_POLL_SECONDS,
+        }
+        if now - changed_at >= config.INVENTORY_IDLE_SECONDS:
+            updated['retired_at'] = now
+        changed = await run_blocking(db_executor, update_run, store, pending, barrier, previous, updated, now=now)
+        if changed and updated.get('retired_at'):
+            event('retired', late=True)
+            return None
         event('unchanged', late=True)
         return None
     seed = seed_for(pending)
@@ -124,6 +159,8 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
         'plan_uri': uri,
         'plan_digest': digest(plan),
         'complete': not units,
+        'inventory_changed_at': now,
+        'next_inventory_at': now + config.INVENTORY_POLL_SECONDS,
     }
     changed = await run_blocking(
         db_executor,
@@ -143,8 +180,20 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
 async def drain_partial(store, pending, current, client, artifacts, units_reader, *, now):
     if not config.enabled() or not pending.get('partial_coordinator'):
         raise ValueError('partial record barrier disabled')
-    barrier = require_record_audio_barrier(current)
     run = pending.get('partial_run')
+    late = bool(run and (run.get('generation', 0) > 1 or run.get('complete')))
+    if current.get('discarded'):
+        event('discarded_refused', late=late)
+        return {'outcome': 'partial'}
+    _, policy = await run_blocking(db_executor, load_job_policy, store, pending['segment_id'])
+    if policy is None or policy.provider_reason == 'byok':
+        event('byok_refused' if policy is not None else 'state_changed', late=late)
+        return {'outcome': 'partial'}
+    barrier = require_record_audio_barrier(current)
+    if pending.get('state') == 'partial_retired' or (
+        run and run.get('complete') and now < run.get('next_inventory_at', 0)
+    ):
+        return {'outcome': 'partial'}
     if not run or run.get('complete'):
         await prepare_run(store, pending, current, barrier, client, artifacts, units_reader, now)
         return {'outcome': 'partial'}
@@ -154,6 +203,10 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
     )
     if ledger and ledger.get('status') != 'completed':
         event('waiting', late=run['generation'] > 1)
+        return {'outcome': 'partial'}
+    refusal = await run_blocking(db_executor, continuation_refusal, store, pending)
+    if refusal:
+        event(refusal, late=run['generation'] > 1)
         return {'outcome': 'partial'}
     seed = seed_for(pending)
     plan = await run_blocking(storage_executor, artifacts.load_record_plan, seed, run['plan_uri'])
@@ -169,6 +222,7 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
             'page': run['page'] + 1,
             'coverage': union([*run['coverage'], *unit_coverage(units)]),
             'complete': offset + len(units) == len(plan['units']),
+            'next_inventory_at': now + config.INVENTORY_POLL_SECONDS,
         }
         changed = await run_blocking(
             db_executor,
@@ -190,6 +244,13 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
 async def admit_page(store, pending, current, barrier, artifacts, plan, run, units, content, now):
     uid, cid = pending['owner_id'], pending['conversation_id']
     _, policy = await run_blocking(db_executor, load_job_policy, store, pending['segment_id'])
+    if policy is None or policy.provider_reason == 'byok':
+        event('byok_refused', late=run['generation'] > 1)
+        return
+    refusal = await run_blocking(db_executor, continuation_refusal, store, pending)
+    if refusal:
+        event(refusal, late=run['generation'] > 1)
+        return
     items = [
         WorkItem(
             digest([content, i]),
@@ -221,7 +282,7 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
         data_protection_level=protection.level,
         record_origin=True,
         native_record=True,
-        partial_record=bool(plan['prior_coverage']),
+        partial_record=True,
     )
     staged = []
     for item, (_, _, refs) in zip(items, units):

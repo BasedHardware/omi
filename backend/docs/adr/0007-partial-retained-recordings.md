@@ -29,6 +29,11 @@ Existing transcript text and user edits survive. Each worker binding has at
 most 128 siblings; partial units have at most 256 references and 300 seconds.
 The implementation bounds a source snapshot and coverage at 8,192 entries;
 larger snapshots remain reported debt, never truncated input or complete seals.
+Completed coordinators poll inventory hourly and retire after 24 hours without
+an inventory change, leaving audio and partial status intact. Repair can reopen
+one after a new producer upload revision; an unsignalled storage-only arrival
+after retirement needs operator recovery. Partial projection fills only empty
+text spans, even on the first pass, and refuses ambiguous overlap.
 
 ## Consequences
 

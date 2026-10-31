@@ -16,7 +16,7 @@ import time
 
 from config.policy import resolve_batch_policy
 from config.record_audio import require_record_audio_barrier, record_identity
-from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES
+from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -394,7 +394,8 @@ async def drain_recordings(store):
         def defer(tx):
             latest = tx.get('jobs', segment)
             if latest.get('state') == 'record_pending':
-                latest['available_at'] = time.time() + 60
+                delay = INVENTORY_POLL_SECONDS if (latest.get('partial_run') or {}).get('complete') else 60
+                latest['available_at'] = max(latest.get('available_at', 0), time.time() + delay)
                 tx.put('jobs', segment, latest)
 
         await run_blocking(db_executor, store.run, defer)

@@ -12,8 +12,9 @@ import wave
 import pytest
 
 from config.record_audio import record_identity, require_record_audio_barrier
+from config.policy import BatchUnitPolicy
 from database.record_audio import seal_record_audio, set_record_upload_pending
-from database.record_partial import finish_partial
+from database.record_partial import finish_partial, PAYER_REFUSALS
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -273,6 +274,221 @@ def test_user_edit_before_partial_fill_survives_even_inside_enclosing_span(sourc
     ]
 
 
+@pytest.mark.parametrize('text', ['Existing transcript from another path', 'An edit without correction metadata'])
+async def test_initial_partial_fills_only_empty_spans(source, audio, text):
+    audio.add(100)
+    old = {'id': 'existing', 'text': text, 'start': 0, 'end': 1, 'speaker_id': 0, 'is_user': False}
+    source[1].rows[ROW]['transcript_segments'] = [old]
+    assert finish(source) == 'partial_finished'
+    await audio.drain()
+    await audio.drain()
+    bindings = [row['projection_binding'] for row in source[1].rows.values() if row.get('projection_binding')]
+    assert len(bindings) == 1 and bindings[0]['partial_record'] is True
+    row = source[1].rows[ROW]
+    segment = {'speaker_id': 0, 'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:initial', 'is_user': False}
+    incoming = {
+        'started_at': row['started_at'],
+        'transcript_segments': [
+            {**segment, 'id': 'overlap', 'text': 'Worse ASR', 'start': 0, 'end': 0.5},
+            {**segment, 'id': 'straddle', 'text': 'Ambiguous split', 'start': 0.5, 'end': 1.5},
+            {**segment, 'id': 'gap', 'text': 'New speech', 'start': 1, 'end': 2},
+        ],
+    }
+    result, added = replace_record(row, incoming, {'start': 100, 'end': 102, 'preserve_existing': True})
+    assert result['transcript_segments'][0] == old
+    assert [s['id'] for s in result['transcript_segments']] == ['existing', 'gap']
+    assert [s['id'] for s in added] == ['gap']
+
+
+@pytest.mark.parametrize(
+    'ambiguous', [{'start': 0, 'end': 0}, {'audio_alignment': 'unplaced'}, {'audio_alignment': 'unknown'}]
+)
+def test_partial_keeps_text_when_existing_alignment_is_ambiguous(source, ambiguous):
+    row = deepcopy(source[1].rows[ROW])
+    old = {'id': 'old', 'text': 'Keep', 'start': 0, 'end': 1, 'speaker_id': 0, 'is_user': False, **ambiguous}
+    row['transcript_segments'] = [old]
+    incoming = {
+        'started_at': row['started_at'],
+        'transcript_segments': [
+            {'id': 'new', 'text': 'Guess', 'start': 1, 'end': 2, 'speaker_id': 0, 'is_user': False}
+        ],
+    }
+    result, added = replace_record(row, incoming, {'start': 100, 'end': 102, 'preserve_existing': True})
+    assert result['transcript_segments'] == [old]
+    assert added == []
+
+
+def set_byok(source):
+    job = pending(source)
+    policy = replace(
+        BatchUnitPolicy.from_dict(job['policy']), stt_route='provider', provider_reason='byok', provider_service='byok'
+    )
+    source[0].run(lambda tx: tx.put('jobs', job['segment_id'], {**job, 'policy': policy.to_dict()}))
+
+
+def test_initial_partial_refuses_and_counts_recorded_byok(source):
+    assert live.register_recording('synthetic', source[1].rows[ROW], store=source[0], now=NOW, server_flags=FLAGS)
+    set_byok(source)
+    before = PAYER_REFUSALS._value.get()
+    assert finish(source) == 'byok_refused'
+    assert PAYER_REFUSALS._value.get() == before + 1
+    assert not source[1].rows[ROW].get('record_audio_partial')
+
+
+@pytest.mark.parametrize('stage', ['plan', 'intake', 'late'])
+@pytest.mark.parametrize('refusal', ['byok', 'discarded'])
+async def test_continuation_refuses_before_storage_reads(source, audio, monkeypatch, stage, refusal):
+    assert finish(source) == 'partial_finished'
+    if stage != 'plan':
+        if stage == 'intake':
+            audio.add(100)
+        await audio.drain()
+    if refusal == 'byok':
+        set_byok(source)
+    else:
+        source[1].rows[ROW]['discarded'] = True
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('refused continuation read audio or plan')
+
+    monkeypatch.setattr(record_partial, 'list_audio_chunks', forbidden)
+    monkeypatch.setattr(audio.artifacts, 'load_record_plan', forbidden)
+    monkeypatch.setattr(audio.artifacts, 'stage_audio', forbidden)
+    phase = 'late' if stage == 'late' else 'initial'
+    before = record_partial.RERUNS.labels(phase=phase, outcome=refusal + '_refused')._value.get()
+    await audio.drain(now=NOW + 3600)
+    assert record_partial.RERUNS.labels(phase=phase, outcome=refusal + '_refused')._value.get() == before + 1
+    assert len([row for row in source[1].rows.values() if row.get('projection_binding')]) == 0
+
+
+@pytest.mark.parametrize('refusal', ['byok', 'discarded'])
+async def test_continuation_intake_rechecks_after_staging_race(source, audio, monkeypatch, refusal):
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    await audio.drain()
+    original = audio.artifacts.stage_audio
+
+    def racing(item, body):
+        uri = original(item, body)
+        if refusal == 'byok':
+            set_byok(source)
+        else:
+            source[1].rows[ROW]['discarded'] = True
+        return uri
+
+    monkeypatch.setattr(audio.artifacts, 'stage_audio', racing)
+    with pytest.raises(ValueError, match='partial BYOK excluded|target unavailable'):
+        await audio.drain()
+    assert not any(row.get('projection_binding') for row in source[1].rows.values())
+
+
+@pytest.mark.parametrize('refusal', ['byok', 'discarded'])
+async def test_continuation_rechecks_after_listing_before_reading_audio(source, audio, monkeypatch, refusal):
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+
+    def racing(*args, **kwargs):
+        if refusal == 'byok':
+            set_byok(source)
+        else:
+            source[1].rows[ROW]['discarded'] = True
+        return list(audio.chunks)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('row changed during listing; retained audio must not be read')
+
+    monkeypatch.setattr(record_partial, 'list_audio_chunks', racing)
+    monkeypatch.setattr(live, 'retained_record_units', forbidden)
+    await audio.drain()
+    assert not pending(source).get('partial_run')
+
+
+async def test_completed_coordinator_polls_hourly_and_retires_after_24h_without_deleting(source, audio, monkeypatch):
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    calls = []
+    monkeypatch.setattr(record_partial, 'list_audio_chunks', lambda *a, **k: calls.append(1) or list(audio.chunks))
+    await audio.drain()
+    await audio.drain()
+    content = record_partial.page_content(pending(source)['partial_run'])
+    source[0].run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}))
+    await audio.drain()
+    assert pending(source)['available_at'] == NOW + 3600
+    await audio.drain(now=NOW + 3599)
+    assert len(calls) == 1
+    for hour in range(1, 24):
+        await audio.drain(now=NOW + hour * 3600)
+        assert pending(source)['available_at'] == NOW + (hour + 1) * 3600
+        assert pending(source)['state'] == 'record_pending'
+    before = record_partial.RERUNS.labels(phase='late', outcome='retired')._value.get()
+    artifacts_before = deepcopy(audio.artifacts.client.objects)
+    await audio.drain(now=NOW + 86400)
+    assert len(calls) == 25
+    assert pending(source)['state'] == 'partial_retired'
+    assert record_partial.RERUNS.labels(phase='late', outcome='retired')._value.get() == before + 1
+    assert audio.artifacts.client.objects == artifacts_before
+    assert source[1].rows[ROW]['record_audio_partial']
+    assert source[1].rows[ROW]['record_audio_closed'] is False
+    audio.add(101)  # Unsignalled storage-only arrivals cannot restart polling.
+    await audio.drain(now=NOW + 90000)
+    assert len(calls) == 25
+    # Ordinary repair does not restart polling without a new upload revision.
+    assert finish(source) == 'already_partial'
+    assert pending(source)['state'] == 'partial_retired'
+    set_record_upload_pending('synthetic', 'record', 'late', True, firestore_client=source[1])
+    set_record_upload_pending('synthetic', 'record', 'late', False, firestore_client=source[1])
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: NOW + 90000)
+    source[2]['captured_at'] = NOW + 89999
+    assert (
+        cluster.repair_one(
+            source[0],
+            audio.artifacts.client,
+            audio.artifacts,
+            '/'.join(ROW),
+            flags=FLAGS,
+            inventory=lambda: source[2],
+            budget=SweepBudget(240),
+        )
+        == 'partial_finished'
+    )
+    assert pending(source)['state'] == 'record_pending'
+    assert 'retired_at' not in pending(source)['partial_run']
+    await audio.drain(now=NOW + 90000)
+    assert len(calls) == 26
+    assert pending(source)['state'] == 'record_pending'
+    assert pending(source)['partial_run']['generation'] == 2
+    await audio.drain(now=NOW + 90000)
+    assert sorted(row['capture_at'] for row in source[1].rows.values() if row.get('projection_binding')) == [100, 101]
+
+
+async def test_inventory_change_resets_retirement_window(source, audio):
+    assert finish(source) == 'partial_finished'
+    await audio.drain()
+    audio.add(100)
+    await audio.drain(now=NOW + 23 * 3600)
+    run = pending(source)['partial_run']
+    assert run['generation'] == 2 and not run['complete']
+    assert run['inventory_changed_at'] == NOW + 23 * 3600
+    await audio.drain(now=NOW + 25 * 3600)
+    assert pending(source)['state'] == 'record_pending'
+
+
+@pytest.mark.parametrize('listing_error', [False, True])
+async def test_live_drainer_never_overwrites_hourly_inventory_schedule(source, audio, monkeypatch, listing_error):
+    assert finish(source) == 'partial_finished'
+    await audio.drain()
+    monkeypatch.setattr(live.time, 'time', lambda: NOW + 3600)
+    monkeypatch.setattr(source[0], 'due', lambda *args: [pending(source)['segment_id']])
+    if listing_error:
+
+        def unavailable(*args, **kwargs):
+            raise RuntimeError('synthetic listing error')
+
+        monkeypatch.setattr(record_partial, 'list_audio_chunks', unavailable)
+    await live.drain_recordings(source[0])
+    assert pending(source)['available_at'] == NOW + 7200
+
+
 def test_late_object_filling_4100_holes_reapplies_worker_reference_bound():
     origin, frames = 1600000, 9000
     pcm = b'\x01\x00' * frames
@@ -402,8 +618,8 @@ def audio(source, monkeypatch):
         chunks.append({'path': name, 'generation': 1, 'timestamp': start})
         pcm[name] = b'\x01\x00' * frames
 
-    async def drain():
-        return await live.admit_recording(store, pending(source), now=NOW)
+    async def drain(now=NOW):
+        return await live.admit_recording(store, pending(source), now=now)
 
     return SimpleNamespace(add=add, drain=drain, chunks=chunks, pcm=pcm, artifacts=artifacts)
 
@@ -439,8 +655,8 @@ async def test_real_staging_admission_worker_late_audio_and_serial_receipts(sour
     assert pending(source)['partial_run']['complete']
     assert source[1].rows[ROW]['record_audio_partial']['applied_generation'] == 1
     audio.add(101)
-    await audio.drain()
-    await audio.drain()
+    await audio.drain(now=NOW + 3600)
+    await audio.drain(now=NOW + 3600)
     later = pending(source)['partial_run']
     assert later['generation'] == 2
     new_content = record_partial.page_content(later)

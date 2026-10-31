@@ -53,6 +53,7 @@ DISPOSITIONS = frozenset(
         'partial_finished',
         'already_partial',
         'not_aged',
+        'byok_refused',
     }
 )
 

@@ -8,6 +8,8 @@ MAX_UNITS = 8192
 UNIT_SECONDS = 300
 UNIT_REFERENCES = 256
 PAGE_UNITS = 128
+INVENTORY_POLL_SECONDS = 3600
+INVENTORY_IDLE_SECONDS = 24 * 3600
 REASONS = frozenset({'tail_lagging', 'budget_limit', 'tail_lost_or_unproven'})
 
 

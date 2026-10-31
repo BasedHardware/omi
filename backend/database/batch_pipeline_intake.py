@@ -53,6 +53,11 @@ def admit(
         raise ValueError('work identity must match projection binding')
     policy = policy or resolve_batch_policy(binding.owner_id)
     content_key = f'{binding.owner_id}/{binding.content_id}'
+    serialized_binding = asdict(binding)
+    # Ordinary work must remain readable by pre-partial projection hosts
+    # throughout the roll. Only partial work requires the new field/readers.
+    if not binding.partial_record:
+        serialized_binding.pop('partial_record')
 
     def commit(tx):
         existing = tx.get('content', content_key)
@@ -96,10 +101,12 @@ def admit(
             )
         if not admission.batch_enabled:
             raise AdmissionDisabled('recorded admission policy does not enable batch')
+        if partial_parent and admission.provider_reason == 'byok':
+            raise ValueError('partial BYOK excluded')
         if binding.record_origin:
             key = f'{binding.owner_id}/{binding.target_conversation_id}'
             row = tx.get('conversations', key)
-            if not row or row.get('deleted') or row.get('uses_custom_stt'):
+            if not row or row.get('deleted') or row.get('uses_custom_stt') or (partial_parent and row.get('discarded')):
                 raise ValueError('registered record target unavailable')
             if binding.native_record:
                 require_record_protocol_ready()
@@ -129,9 +136,12 @@ def admit(
                 tx.put('artifacts', key, artifact)
             created = enqueue_item(tx, item, now, policy=admission)
             job = tx.get('jobs', item.segment_id)
-            if not created and job.get('projection_binding') != asdict(binding):
+            previous_binding = dict(job.get('projection_binding') or {})
+            if previous_binding.get('partial_record') is False:
+                previous_binding.pop('partial_record')
+            if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
-            job['projection_binding'] = asdict(binding)
+            job['projection_binding'] = serialized_binding
             tx.put('jobs', item.segment_id, job)
         if intake is not None:
             tx.put('intakes', binding.job_id, {**intake, 'accepted_at': now})

@@ -31,13 +31,30 @@ and recorded payer policy as ordinary batch work. The source snapshot and
 coverage are bounded at 8,192 entries, and the encrypted plan at 8 MiB. Exceeding
 a bound retries with audio retained; it never truncates a listing or manifest.
 
-The drainer polls at most once per minute per partial coordinator. A changed
+An active page uses the existing one-minute reconciliation cadence. After a
+generation completes, inventory is listed at most hourly (including retry after
+a listing failure). After 24 hours without a changed inventory, the coordinator
+enters `partial_retired`; no audio or plan is deleted, no completion/TTL receipt
+is created, and the conversation remains partial with `record_audio_closed=false`.
+Retirement increments the closed `outcome=retired` rerun counter once.
+A later producer upload that increments `record_upload_revision` lets the
+existing repair pass refresh the partial barrier and reopen the coordinator,
+retaining prior coverage. A storage-only late arrival without that revision
+signal is **not automatically picked up after retirement**; operator recovery
+must rearm it under a separately authorized repair. Ordinary repair does not
+restart an unchanged retired coordinator. A changed
 storage inventory creates a new generation only after the prior generation
 settles. It subtracts actual recognized source-frame coverage, including gaps
 inside earlier padded units, and sends only newly stored audio to the normal
 worker. No duplicate speech usage is charged for the previous frames. Replayed
-pages share immutable content identities and projection receipts. Late fills
-preserve existing text, IDs, translations and user edits. An applied-generation
+pages share immutable content identities and projection receipts. Every partial
+pass, including the first, preserves existing text, IDs, translations and user
+edits. Incoming sentences are added only in empty spans: any overlap or
+ambiguous stored alignment keeps the original text and omits that new sentence.
+Recorded BYOK policies are refused before plan/audio reads and again at atomic
+intake, including late generations; initial refusals and continuation outcomes
+have closed counters. Discard is rechecked before reads and at atomic intake.
+An applied-generation
 receipt replaces the prior partial result while remaining explicitly partial.
 
 The conversation API exposes optional reason/generation metadata; existing
@@ -51,6 +68,17 @@ Closed metrics: `omi_record_audio_partial_reruns_total{phase,outcome}` on the CP
 serving process; the repair log metric `omi_record_audio_partial_finishes` by
 reason. Repair row/pass logs include partial counts separately from complete
 seals. These are observed transitions; the durable marker is the census.
+
+Release order: keep `recordSealRules.partialEnabled=false` until every old
+pusher has drained. Roll pusher first; require rollout completion **and** an
+authoritative PodList with zero old-image pusher instances, including terminating
+instances (ready-only counts are insufficient). Roll all CPU admission/projection
+hosts and API, then the batch worker and repair image. Only then enable the
+existing partial switch for new repair Jobs. Existing Jobs retain startup env;
+wait for or stop every old/previously enabled repair Job before that step. The
+lead owns these operations and records counts and release identities without
+printing workload names or environment. A later complete proof still does not
+upgrade a partial row; held pages still use the existing operator redrive path.
 
 ## Operator recovery of empty terminal captures
 
