@@ -36,7 +36,7 @@ decorator==5.1.1
 deepgram-sdk==4.8.1
 deprecation==2.1.0
 distro==1.9.0
-dnspython==2.6.1
+dnspython==2.9.0
 docopt==0.6.2
 email_validator==2.2.0
 executing==2.0.1
@@ -121,7 +121,7 @@ monotonic==1.6
 more-itertools==10.5.0
 mplcursors==0.5.3
 mpld3==0.5.10
-msgpack==1.2.1
+msgpack==1.2.3
 multidict==6.0.5
 mypy-extensions==1.0.0
 narwhals==1.14.2
