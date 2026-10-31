@@ -15,8 +15,10 @@ from urllib.parse import urlencode
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import FastAPI, Request, Query, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+
+from whoop_tools_auth import require_whoop_tools_auth
 
 from db import (
     store_whoop_tokens,
@@ -610,7 +612,7 @@ async def get_omi_tools_manifest():
 # Chat Tool Endpoints
 # ============================================
 
-@app.post("/tools/get_recovery", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_recovery", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_whoop_tools_auth)])
 async def tool_get_recovery(request: Request):
     """Get recovery score and metrics."""
     try:
@@ -661,10 +663,10 @@ async def tool_get_recovery(request: Request):
         log(f"Error getting recovery: {e}")
         import traceback
         traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to get recovery: {str(e)}")
+        return ChatToolResponse(error="Failed to get recovery. Please try again later.")
 
 
-@app.post("/tools/get_strain", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_strain", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_whoop_tools_auth)])
 async def tool_get_strain(request: Request):
     """Get daily strain score."""
     try:
@@ -711,10 +713,10 @@ async def tool_get_strain(request: Request):
 
     except Exception as e:
         log(f"Error getting strain: {e}")
-        return ChatToolResponse(error=f"Failed to get strain: {str(e)}")
+        return ChatToolResponse(error="Failed to get strain. Please try again later.")
 
 
-@app.post("/tools/get_sleep", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_sleep", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_whoop_tools_auth)])
 async def tool_get_sleep(request: Request):
     """Get sleep data."""
     try:
@@ -761,10 +763,10 @@ async def tool_get_sleep(request: Request):
 
     except Exception as e:
         log(f"Error getting sleep: {e}")
-        return ChatToolResponse(error=f"Failed to get sleep: {str(e)}")
+        return ChatToolResponse(error="Failed to get sleep. Please try again later.")
 
 
-@app.post("/tools/get_workouts", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_workouts", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_whoop_tools_auth)])
 async def tool_get_workouts(request: Request):
     """Get recent workouts."""
     try:
@@ -823,10 +825,10 @@ async def tool_get_workouts(request: Request):
 
     except Exception as e:
         log(f"Error getting workouts: {e}")
-        return ChatToolResponse(error=f"Failed to get workouts: {str(e)}")
+        return ChatToolResponse(error="Failed to get workouts. Please try again later.")
 
 
-@app.post("/tools/get_weekly_summary", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_weekly_summary", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_whoop_tools_auth)])
 async def tool_get_weekly_summary(request: Request):
     """Get weekly summary of recovery, strain, and sleep."""
     try:
@@ -938,10 +940,10 @@ async def tool_get_weekly_summary(request: Request):
 
     except Exception as e:
         log(f"Error getting weekly summary: {e}")
-        return ChatToolResponse(error=f"Failed to get weekly summary: {str(e)}")
+        return ChatToolResponse(error="Failed to get weekly summary. Please try again later.")
 
 
-@app.post("/tools/get_body_measurements", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_body_measurements", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_whoop_tools_auth)])
 async def tool_get_body_measurements(request: Request):
     """Get body measurements."""
     try:
@@ -987,10 +989,10 @@ async def tool_get_body_measurements(request: Request):
 
     except Exception as e:
         log(f"Error getting body measurements: {e}")
-        return ChatToolResponse(error=f"Failed to get measurements: {str(e)}")
+        return ChatToolResponse(error="Failed to get measurements. Please try again later.")
 
 
-@app.post("/tools/get_profile", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_profile", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_whoop_tools_auth)])
 async def tool_get_profile(request: Request):
     """Get Whoop profile."""
     try:
@@ -1026,7 +1028,7 @@ async def tool_get_profile(request: Request):
 
     except Exception as e:
         log(f"Error getting profile: {e}")
-        return ChatToolResponse(error=f"Failed to get profile: {str(e)}")
+        return ChatToolResponse(error="Failed to get profile. Please try again later.")
 
 
 # ============================================
@@ -1275,7 +1277,7 @@ async def whoop_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content="Authentication error. Please try again.", status_code=500)
 
 
 @app.get("/setup/whoop")

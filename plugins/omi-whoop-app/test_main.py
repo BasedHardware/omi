@@ -54,6 +54,7 @@ def load_app():
     fastapi.Request = object
     fastapi.Query = Query
     fastapi.HTTPException = HTTPException
+    fastapi.Depends = lambda dep: dep
 
     responses = ModuleType("fastapi.responses")
     responses.HTMLResponse = _Response

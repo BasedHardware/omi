@@ -43,6 +43,7 @@ Track your recovery, strain, sleep, and workouts from your Whoop through Omi cha
 WHOOP_CLIENT_ID=your_client_id
 WHOOP_CLIENT_SECRET=your_client_secret
 WHOOP_REDIRECT_URI=https://your-app.up.railway.app/auth/whoop/callback
+WHOOP_TOOLS_SECRET=a_long_random_shared_secret
 ```
 
 5. Deploy! Railway will automatically:
@@ -109,6 +110,7 @@ When creating/updating the Omi app, use these URLs:
 | `WHOOP_CLIENT_ID` | Whoop OAuth Client ID | Yes |
 | `WHOOP_CLIENT_SECRET` | Whoop OAuth Client Secret | Yes |
 | `WHOOP_REDIRECT_URI` | OAuth callback URL | Yes |
+| `WHOOP_TOOLS_SECRET` | Shared secret required to call the `/tools/*` chat-tool routes. **Must be set in production** — when unset, all `/tools/*` routes fail closed with HTTP 503. Callers present it via `Authorization: Bearer <secret>` or the `whoop_tools_token` query param. | Yes (for /tools) |
 | `PORT` | Server port (default: 8080) | No |
 | `REDIS_URL` | Redis connection URL | No (uses file storage if not set) |
 
