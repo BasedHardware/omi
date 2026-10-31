@@ -366,10 +366,10 @@ def remove_invalid_token(token: str) -> None:
             try:
                 doc.reference.delete()
             except Exception as e:
-                logger.warning('Failed to delete token reference: %s', e)
+                logger.warning('Failed to delete token reference: %s', type(e).__name__)
             return
     except Exception as e:
-        logger.warning('Failed to query invalid token: %s', e)
+        logger.warning('Failed to query invalid token: %s', type(e).__name__)
 
 
 def remove_bulk_tokens(tokens: list[str]) -> None:
@@ -409,7 +409,7 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
             if count > 0:
                 batch.commit()
         except Exception as e:
-            logger.warning('Failed to process bulk token removal chunk: %s', e)
+            logger.warning('Failed to process bulk token removal chunk: %s', type(e).__name__)
 
 
 def get_users_token_in_timezones(timezones: list[str]) -> List[str]:
@@ -513,7 +513,7 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
                     chunk_users.append((uid, tokens, time_zone))
 
         except Exception as e:
-            logger.error(f"Error querying chunk {chunk}: {e}")
+            logger.error("Error querying chunk %s: %s", chunk, type(e).__name__)
         users.extend(chunk_users)
 
     return users

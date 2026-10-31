@@ -57,3 +57,16 @@ def test_remove_bulk_tokens_deduplication_and_batch_commit():
         fake_client.collection_group.assert_called_with("fcm_tokens")
         assert batch.delete.call_count == 2
         batch.commit.assert_called_once()
+
+
+def test_token_removal_exception_logging_safe(caplog):
+    import logging
+
+    fake_client = MagicMock()
+    fake_client.collection_group.side_effect = Exception("Sensitive internal Firestore trace 10.0.0.1")
+
+    with patch.object(notifications_db, "db", fake_client):
+        with caplog.at_level(logging.WARNING):
+            notifications_db.remove_invalid_token("token-test")
+        assert "Sensitive internal Firestore trace 10.0.0.1" not in caplog.text
+        assert "Failed to query invalid token: Exception" in caplog.text
