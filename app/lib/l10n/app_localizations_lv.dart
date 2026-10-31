@@ -14480,6 +14480,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get episodeMoments => 'Mirkļi';
 
   @override
+  String get episodeFollowUps => 'Turpmākie soļi';
+
+  @override
+  String get episodeOpenTranscript => 'Atvērt transkripciju';
+
+  @override
   String get episodeSoFar => 'Līdz šim';
 
   @override
@@ -14698,9 +14704,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Šajā tālrunī';
-
-  @override
-  String get episodeOpenTranscript => 'Atvērt transkripciju';
 
   @override
   String get liveCardTitle => 'Tiešraide';

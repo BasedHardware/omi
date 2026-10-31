@@ -125,7 +125,7 @@ def test_feature_health_row_carries_the_daily_recap_outcome():
     recap = recap + detail
     success = recap[0]
     assert success['fieldConfig']['defaults']['unit'] == 'percent'
-    assert success['fieldConfig']['defaults']['thresholds']['steps'][1] == {'color': 'orange', 'value': 90}
+    assert success['fieldConfig']['defaults']['thresholds']['steps'][2] == {'color': 'orange', 'value': 90}
     assert success['fieldConfig']['defaults']['noValue'] == 'no recaps due'
     assert recap[1]['fieldConfig']['defaults']['thresholds']['steps'] == [
         {'color': 'red', 'value': None},

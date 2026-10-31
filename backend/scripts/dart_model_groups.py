@@ -31,6 +31,7 @@ SCHEMA_GROUPS = {
             'EpisodeMember',
             'EpisodeListResponse',
             'EpisodeMoment',
+            'EpisodePoint',
             'EpisodeProvisionalItem',
             'Episode',
             'EpisodeLiveResponse',

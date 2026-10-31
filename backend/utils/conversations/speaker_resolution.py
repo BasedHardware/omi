@@ -12,10 +12,11 @@ from config.batch_conversation_speakers import (
     has_batch_authority,
     sync_off_enabled,
 )
-from config.refactor_modes import serving_for
+from utils.conversations.speaker_window_cohort import per_window_evidence
 from utils.speakers import processing as speaker_evidence
 
 import bisect
+from collections import Counter
 from collections.abc import Sequence
 import json
 import logging
@@ -45,6 +46,12 @@ from utils.conversations.audio_placement import (
     prepare_audio_coverage,
     text_window_refusal,
 )
+from utils.conversations.audio_inventory import (
+    chunk_actual_bounds as _chunk_actual_bounds,
+    finite_number as _finite_number,
+    unreconciled_extents as _unreconciled_extents,
+    window_covered as _window_covered,
+)
 from utils.conversations.speaker_grouping_shadow import compare_and_select
 from utils.conversations.speaker_resolution_inputs import (
     manual_speakers as _manual_speakers,
@@ -72,7 +79,6 @@ from utils.observability.fallback import record_fallback
 from utils.llm.known_spellings import reuse_people_for_spellings
 from utils.other.audio_chunks import (
     AudioChunkReadSession,
-    chunk_end_upper_bound,
     iter_audio_chunk_pcm,
 )
 from utils.other.storage import (
@@ -113,6 +119,10 @@ MIN_RESOLVED_COVERAGE = 0.9
 CAPTURE_SPAN_KEY_PREFIX = 'capture-span:'
 MAX_ADVISORY_PLACEMENTS = 1500
 MAX_PLACEMENT_SPANS = 10000
+# Ring-drained pendant audio arrives as ~10s objects, so the teaching budget of 32
+# proves only the first minutes of a long recording. The read deadline still applies.
+PER_WINDOW_MAX_DOWNLOADS = 600
+PER_WINDOW_MAX_PCM_BYTES = 128 * 1024 * 1024
 
 
 def resolver_reason(reason: str) -> None:
@@ -484,40 +494,6 @@ def _embed_missing(
     return embedded, 'complete'
 
 
-def _finite_number(value: Any) -> Optional[float]:
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    result = float(value)
-    return result if math.isfinite(result) else None
-
-
-def _chunk_actual_bounds(chunk: Mapping[str, Any]) -> Optional[Tuple[float, Optional[float]]]:
-    """``(start, end)`` extent of one listed object; ``end=None`` is unbounded."""
-    span = chunk.get('span')
-    if isinstance(span, Mapping):
-        rate = _finite_number(span.get('sample_rate'))
-        start = _finite_number(span.get('start'))
-        samples = _finite_number(span.get('samples'))
-        if rate is None or start is None or samples is None or rate <= 0 or samples <= 0:
-            return None
-        return start, start + samples / rate
-    timestamp = _finite_number(chunk.get('timestamp'))
-    if timestamp is None:
-        return None
-    return timestamp, chunk_end_upper_bound(chunk, SAMPLE_RATE)
-
-
-def _window_covered(extents: List[Tuple[float, float]], start: float, end: float) -> bool:
-    """Whether the union of actual extents covers ``[start, end)``."""
-    position = start
-    while position < end - COVERAGE_TOLERANCE_SECONDS:
-        advanced = [e for s, e in extents if s <= position + COVERAGE_TOLERANCE_SECONDS and e > position]
-        if not advanced:
-            return False
-        position = max(advanced)
-    return True
-
-
 def _verified_read_session(
     uid: str,
     conversation: Conversation,
@@ -532,8 +508,13 @@ def _verified_read_session(
     the requested windows. A failed window abstains; previously proven windows
     remain usable when another window is missing, ambiguous or over budget.
     """
+    # Superseded by per-window abstention for the per_window_evidence cohort
+    per_window = per_window_evidence(uid, conversation.transcript_segments)
     session = AudioChunkReadSession(uid, conversation.id, SAMPLE_RATE)
     session.deadline = min(session.deadline, deadline)
+    if per_window:
+        session.max_downloads = PER_WINDOW_MAX_DOWNLOADS
+        session.max_pcm_bytes = PER_WINDOW_MAX_PCM_BYTES
     if not session.in_budget():
         resolver_reason('read_budget')
         return None
@@ -560,7 +541,7 @@ def _verified_read_session(
     manifest_present = (
         isinstance(audio_files, Sequence) and not isinstance(audio_files, (str, bytes)) and len(audio_files) > 0
     )
-    if manifest_present:
+    if manifest_present and not per_window:
         if len(expected) != len(chunks):
             resolver_reason('inventory_count_mismatch')
             return None
@@ -600,15 +581,22 @@ def _verified_read_session(
             resolver_reason('inventory_metadata_invalid')
             return None
         bounds_by_path[chunk['path']] = bounds
+    unreconciled = _unreconciled_extents(expected, chunks) if manifest_present and per_window else []
     verified: set[str] = set()
     decoded: Dict[str, Tuple[float, float]] = {}
     rejected_extents: List[Tuple[float, float]] = []
+    refusals: Counter = Counter()
     first_refusal = None
     for segment in pending:
         placement = placements.get(segment.id) if segment.id is not None else None
         window = placement.window if placement is not None else None
         if window is None:
             first_refusal = first_refusal or 'no_proven_window'
+            refusals['no_proven_window'] += 1
+            continue
+        if any(start < window[1] and end > window[0] for start, end in unreconciled):
+            first_refusal = first_refusal or 'inventory_pair_mismatch'
+            refusals['inventory_pair_mismatch'] += 1
             continue
         extents = []
         refusal = None
@@ -662,6 +650,7 @@ def _verified_read_session(
             verified.add(segment.id)
         else:
             first_refusal = first_refusal or refusal
+            refusals[refusal or 'no_proven_window'] += 1
     # A contradiction discovered later also revokes earlier provisional proof.
     # Keep its observed extent even after its PCM is removed from the cache.
     verified.difference_update(
@@ -672,7 +661,7 @@ def _verified_read_session(
     )
     logger.info(
         'event=conversation_speaker_audio_evidence pending=%d verified=%d refused=%d '
-        'downloads=%d bytes=%d read_budget_hit=%s reason=%s',
+        'downloads=%d bytes=%d read_budget_hit=%s reason=%s refusals=%s',
         len(pending),
         len(verified),
         len(pending) - len(verified),
@@ -680,9 +669,12 @@ def _verified_read_session(
         getattr(session, 'bytes', 0),
         session.limit_hit,
         first_refusal or 'none',
+        dict(refusals),
     )
     if not verified:
         resolver_reason(first_refusal or 'no_proven_window')
+        if per_window:
+            session.release_pcm()
         return None
     session.verified_segment_ids = verified
     return session
@@ -1378,8 +1370,8 @@ def _resolve(
         # It must never borrow the nearest voice or a bare legacy cache entry.
         # Manifest contradictions and known coverage holes still refuse globally.
         all_usable_invalid = bool(invalid_text) and not any(s.id not in invalid_text_ids for s in embeddable)
-        # refactor: superseded by per-window abstention when SPEAKER_EVIDENCE_MODE=serve
-        if not serving_for('SPEAKER_EVIDENCE_MODE', uid) and (
+        # Superseded by per-window abstention for the per_window_evidence cohort
+        if not per_window_evidence(uid, segments) and (
             index.ambiguity
             or all_usable_invalid
             or any(p.reason in ('uncovered_audio', 'invalid_window') for p in placements.values())
@@ -1432,20 +1424,24 @@ def _resolve(
     speaker_evidence.window_abstentions(placements, abstained)
     diagnostics = EmbeddingDiagnostics()
     measured_windows: Dict[str, Tuple[float, float]] = {}
-    new_embeddings, stop = _embed_missing(
-        uid,
-        conversation,
-        pending,
-        cache,
-        deadline,
-        placements=placements,
-        keys=keys,
-        session=read_session,
-        diagnostics=diagnostics,
-        evidence_seconds=clip_seconds,
-        measured_windows=measured_windows,
-        max_attempts=max_embedding_attempts,
-    )
+    try:
+        new_embeddings, stop = _embed_missing(
+            uid,
+            conversation,
+            pending,
+            cache,
+            deadline,
+            placements=placements,
+            keys=keys,
+            session=read_session,
+            diagnostics=diagnostics,
+            evidence_seconds=clip_seconds,
+            measured_windows=measured_windows,
+            max_attempts=max_embedding_attempts,
+        )
+    finally:
+        if read_session is not None and getattr(read_session, 'max_pcm_bytes', None) is not None:
+            read_session.release_pcm()
     owner_diagnostics.resolver_counts(
         attempted=diagnostics.attempted,
         successful=new_embeddings,

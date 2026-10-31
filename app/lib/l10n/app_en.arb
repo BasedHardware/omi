@@ -17575,6 +17575,14 @@
     "@episodeMoments": {
         "description": "Section title listing the moments (stretches of speech) of an episode."
     },
+    "episodeFollowUps": "Follow-ups",
+    "@episodeFollowUps": {
+        "description": "Section title for the next steps written into a finished episode summary."
+    },
+    "episodeOpenTranscript": "Open transcript",
+    "@episodeOpenTranscript": {
+        "description": "Link from the Summary live card to the Transcript tab."
+    },
     "episodeSoFar": "So far",
     "@episodeSoFar": {
         "description": "Title of the running notes card on a live episode."
@@ -17916,10 +17924,6 @@
     "episodeOnThisPhone": "On this phone",
     "@episodeOnThisPhone": {
         "description": "Tag on notes drafted on-device from the live preview."
-    },
-    "episodeOpenTranscript": "Open transcript",
-    "@episodeOpenTranscript": {
-        "description": "Link from the Summary live card to the Transcript tab."
     },
     "liveCardTitle": "Live",
     "@liveCardTitle": {

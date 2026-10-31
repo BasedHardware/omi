@@ -38,14 +38,17 @@ from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
 from models.agent_edit import HarnessEdit
+from models.agent_refs import base_ref
 from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_prescan, dream_verify
-from utils import dream_required_intake
+from utils import dream_judge, dream_required_intake, dream_state_pass
 from utils.dream_cost import (
     conservative_attempt_micro,
     minute_burndown_tokens,
     price_weighted_tokens,
+    verification_hold_tokens,
     verification_reserve_tokens,
 )
 from utils.agent_capabilities.search import OwnerSearch
@@ -238,6 +241,8 @@ async def run_session(
     bootstrap_tools=None,
     arms=None,
     budget_probe=None,
+    judge=False,
+    state_pass=False,
 ):
     caps = caps or Caps.from_env()
     arms = arms or {}
@@ -287,6 +292,109 @@ async def run_session(
     )
     session.counters['search_embedding_token_upper_bound'] += seed.get('required_intake_embedding_tokens', 0)
     stage = 'session'
+
+    def _pre_effect_rows(loop_staged, pass_report):
+        applied = {
+            row.get('key')
+            for row in pass_report['outcomes']
+            if isinstance(row, dict) and row.get('status') == 'applied'
+        }
+        rows = {}
+        for item in loop_staged:
+            if item.key in applied and item.kind in dream_state_pass.CLEANUP_KINDS:
+                target = base_ref(item.operation.target)
+                if target in item.records:
+                    rows[target] = item.records[target]
+        return rows
+
+    async def _state_pass(loop_staged):
+        nonlocal state_allowance, state_running
+        arm, would_serve = dream_state_pass.mode()
+        if arm == 'off' or lease is None or not dream_state_pass.take_call(dream_telemetry.SWEEP_ID.get()):
+            return
+        run_id = lease['run_id']
+        start_tokens = report['price_weighted_tokens']
+        state_allowance = dream_state_pass.allowance()
+        state_running = True
+        try:
+            summary = await dream_state_pass.run(
+                uid,
+                seed=seed,
+                run_id=run_id,
+                planner_turn=partial(invoke, dream_harness_transport.MAIN_LANE),
+                verify_turn=partial(invoke, dream_harness_transport.VERIFY_LANE),
+                loop_report=report,
+                loop_staged_keys={item.key for item in loop_staged},
+                loop_applied_rows=_pre_effect_rows(loop_staged, report),
+                deadline_seconds=min(
+                    dream_state_pass.seconds(), max(0, deadline - asyncio.get_running_loop().time() - 60)
+                ),
+                verifier_seconds=limits.verifier_seconds,
+                verifier_completion_tokens=limits.verifier_completion_tokens,
+                tokens=state_allowance,
+                spent=lambda: report['price_weighted_tokens'] - start_tokens,
+            )
+            # Stamp the weekly cadence only after a complete run; a failure retries next pass.
+            report['state_pass_done'] = summary.get('status') == 'complete'
+            judge_rows = summary.pop('_judge_rows', [])
+            judged = {}
+            if judge_rows and dream_judge.take_call('shadow:' + str(dream_telemetry.SWEEP_ID.get())):
+                judged = await dream_judge.judge(
+                    [(item.id, dream_judge.projection(view)) for item, view in judge_rows],
+                    partial(invoke, dream_harness_transport.VERIFY_LANE),
+                    tokens=dream_judge.token_allowance(),
+                    deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - 30),
+                )
+                for item, _view in judge_rows[: dream_judge.MAX_ITEMS]:
+                    dream_judge.record(item.kind, 'shadow', judged.get(item.id))
+        finally:
+            state_allowance = 0
+            state_running = False
+        verifier = summary.get('verifier') or {}
+        profile_ops = summary.get('profile_ops') or {}
+        rejected: dict[str, int] = summary.get('rejected') or {}
+        levers['state_pass'] = {
+            'arm': arm,
+            'would_serve': would_serve,
+            'status': summary.get('status'),
+            **{
+                key: summary.get(key, 0)
+                for key in (
+                    'people_n',
+                    'tasks_n',
+                    'memories_n',
+                    'conversations_n',
+                    'projection_bytes',
+                    'planner_tokens',
+                    'total_tokens',
+                    'staged',
+                    'merge_people_proposed',
+                    'capped',
+                    'merge_evidence_rejected',
+                    'loop_applied',
+                    'recall_keys',
+                    'recall_refs',
+                    'extra_agree',
+                    'shadow_value',
+                    'profile_lines',
+                    'stale_refs',
+                    'render_chars',
+                    'trimmed',
+                    'profile_written',
+                    'profile_write',
+                )
+            },
+            'rejected': sum(rejected.values()),
+            'rejected_top': max(rejected, key=lambda reason: rejected[reason]) if rejected else 'none',
+            'agree': verifier.get('agree', 0),
+            'disagree': verifier.get('disagree', 0),
+            'unverified': verifier.get('unverified', 0) + verifier.get('split', 0),
+            'profile_added': profile_ops.get('add', 0),
+            'profile_rejected': profile_ops.get('rejected', 0),
+            'profile_unsupported': profile_ops.get('unsupported', 0),
+            'judged': len(judged),
+            'judged_harmful': sum(1 for judgment in judged.values() if judgment.verdict == 'harmful'),
+        }
 
     async def active():
         nonlocal stage
@@ -434,6 +542,11 @@ async def run_session(
 
     main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
     budget_notice_sent = False
+    # Extra tokens the value judge and the shadow state pass may spend after effects,
+    # outside the pass budget; both run on reserved capacity only.
+    judge_allowance = 0
+    state_allowance = 0
+    state_running = False
 
     def remember_main(result, messages):
         main_history['prompt_tokens'] = result.prompt_tokens
@@ -442,6 +555,62 @@ async def run_session(
         report['last_prompt_tokens'] = result.prompt_tokens
 
     compact_arm = arms.get('history_compact', 'off')
+    hold_arm = arms.get('verify_hold', 'off')
+    hold_row = {'arm': hold_arm, 'held': 0}
+    if hold_arm != 'off':
+        levers['verify_hold'] = hold_row
+    liberal_arm = arms.get('liberal_verifier', 'off')
+    liberal_row = {'arm': liberal_arm, 'would_apply': 0, 'applied': 0}
+    if liberal_arm != 'off':
+        levers['liberal_verifier'] = liberal_row
+    # Scheduled owner passes only; never canary, dry-run or manual runs.
+    judge_mode = dream_judge.mode() if judge else 'off'
+    judging = False
+
+    async def _judge_applied(staged_items, pass_report):
+        nonlocal judge_allowance, judging
+        applied = {
+            row.get('key')
+            for row in pass_report['outcomes']
+            if isinstance(row, dict) and row.get('status') == 'applied'
+        }
+        rows, kinds = [], {}
+        for item in staged_items:
+            if item.key not in applied or not isinstance(item.operation, HarnessEdit):
+                continue
+            label = dream_judge.stratum(str(item.kind), str(item.key))
+            if label is None:
+                continue
+            try:
+                view = dream_change_view.edit_change(uid, item.operation, item.records, item.key)
+            except Exception:
+                continue
+            rows.append((item.id, dream_judge.projection(view)))
+            kinds[item.id] = (item.kind, label)
+        if not rows or not dream_judge.take_call(dream_telemetry.SWEEP_ID.get()):
+            return
+        judge_allowance = dream_judge.token_allowance()
+        judging = True
+        try:
+            judged = await dream_judge.judge(
+                rows,
+                partial(invoke, dream_harness_transport.VERIFY_LANE),
+                tokens=judge_allowance,
+                deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - 30),
+            )
+        finally:
+            judge_allowance = 0
+            judging = False
+        for id_, _row in rows[: dream_judge.MAX_ITEMS]:
+            kind, label = kinds[id_]
+            dream_judge.record(kind, label, judged.get(id_))
+        levers['value_judge'] = {
+            'arm': judge_mode,
+            'sent': min(len(rows), dream_judge.MAX_ITEMS),
+            'judged': len(judged),
+            'harmful': sum(1 for judgment in judged.values() if judgment.verdict == 'harmful'),
+        }
+
     compact_trigger = _tunable('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', COMPACT_TRIGGER_PROMPT_TOKENS_DEFAULT)
     compact_keep = int(_tunable('DREAM_HISTORY_COMPACT_KEEP_RESULTS', COMPACT_KEEP_RECENT_TOOL_RESULTS_DEFAULT))
     compaction = {'arm': compact_arm, 'fired': False, 'compactions': 0, 'elided_chars': 0, 'would_elide_chars': 0}
@@ -513,14 +682,32 @@ async def run_session(
     async def invoke_once(lane, mount, messages):
         nonlocal budget_notice_sent, stage
         await active()
-        if lane == dream_harness_transport.MAIN_LANE and compact_arm != 'off':
+        if lane == dream_harness_transport.MAIN_LANE and compact_arm != 'off' and not state_running:
             compact(messages)
         stage = 'request_sizing'
         remaining = (
-            limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
+            limits.tokens
+            + judge_allowance
+            + state_allowance
+            - report['price_weighted_tokens']
+            - session.counters['search_embedding_token_upper_bound']
         )
+        if lane == dream_harness_transport.MAIN_LANE and hold_arm != 'off':
+            # Keep the staged work's two verifier calls paid for; an unverified item is dropped.
+            try:
+                held = verification_hold_tokens(
+                    list(session.staged.values()),
+                    completion_tokens=limits.verifier_completion_tokens,
+                    pass_tokens=limits.tokens,
+                )
+                hold_row['held'] = max(hold_row['held'], held)
+                if hold_arm == 'serve':
+                    remaining -= held
+            except Exception as error:
+                logger.warning('event=dream_lever_error lever=verify_hold exc=%s', type(error).__name__)
         if (
             lane == dream_harness_transport.MAIN_LANE
+            and not state_running
             and not budget_notice_sent
             and limits.tokens > 0
             and remaining <= limits.tokens * TAIL_BUDGET_NOTICE_THRESHOLD
@@ -546,9 +733,11 @@ async def run_session(
             if lane == dream_harness_transport.VERIFY_LANE
             else limits.completion_tokens
         )
-        prior = main_history['prompt_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
-        prior_count = main_history['messages'] if lane == dream_harness_transport.MAIN_LANE else 0
-        cached_estimate = main_history['cached_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
+        # The state pass starts its own conversation on the main lane; never size it by the loop's history.
+        loop_history = lane == dream_harness_transport.MAIN_LANE and not state_running
+        prior = main_history['prompt_tokens'] if loop_history else None
+        prior_count = main_history['messages'] if loop_history else 0
+        cached_estimate = main_history['cached_tokens'] if loop_history else None
         if type(prior_count) is not int:
             prior_count = 0
         estimate, completion_room = dream_harness_transport.attempt_room(
@@ -612,7 +801,7 @@ async def run_session(
                 result = await turn(uid, lane, mount, messages)
                 report['model_lanes'].append(lane)
                 await usage(result)
-                if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
+                if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens and not state_running:
                     remember_main(result, messages)
                     main_history['cached_tokens'] = (
                         result.cached_tokens
@@ -636,10 +825,11 @@ async def run_session(
                 prior_prompt_tokens=prior,
                 prior_message_count=prior_count,
                 cached_tokens_estimate=cached_estimate,
+                reserved_only=judging or state_running,
             )
             report['model_lanes'].append(lane)
             counted = True
-            if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
+            if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens and not state_running:
                 remember_main(result, messages)
                 main_history['cached_tokens'] = (
                     result.cached_tokens
@@ -764,7 +954,16 @@ async def run_session(
                 verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
                 8 * 24000,
             )
-            verify_budget = min(verify_need, max(0, limits.tokens - report['price_weighted_tokens']))
+            # Same effective budget invoke_once enforces, so batch sizing matches what calls can afford.
+            verify_budget = min(
+                verify_need,
+                max(
+                    0,
+                    limits.tokens
+                    - report['price_weighted_tokens']
+                    - session.counters['search_embedding_token_upper_bound'],
+                ),
+            )
             if budget_stop_without_staged_work:
                 support, calls = {}, 0
             else:
@@ -790,7 +989,10 @@ async def run_session(
             report['verifier_valid_responses'] = sum(
                 isinstance(vote, bool) for votes in support.values() for vote in votes
             )
+            unverified_reasons = verification_telemetry.get('unverified_reasons') or {}
+            report['verify_reasons'] = dict(Counter(unverified_reasons.values()))
             decisions = Counter()
+            by_kind: dict[str, Counter] = {}
             stage = 'demotion_check'
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
             automatic = auto_apply_kinds(uid) - demoted
@@ -808,6 +1010,7 @@ async def run_session(
                         and dream_tools.target_authority_protected(item.operation, item.records)
                     )
                     decisions[decision] += 1
+                    by_kind.setdefault(item.kind, Counter())[decision] += 1
                     category = (
                         'questions'
                         if isinstance(item.operation, HarnessQuestion)
@@ -821,17 +1024,36 @@ async def run_session(
                         }
                     )
                     default_policy = verifiers.is_default_policy(verifiers.policy_for(verifiers.item_kind(item)))
+                    liberal = (
+                        liberal_arm != 'off'
+                        and decision == 'unverified'
+                        and default_policy
+                        and auto_allowed
+                        and item.kind in dream_levers.LIBERAL_VERIFIER_KINDS
+                        and unverified_reasons.get(item.id) in dream_levers.LIBERAL_VERIFIER_REASONS
+                        # Apply unless a verifier disagreed, but only after one actually agreed.
+                        and any(vote is True for vote in support[item.id])
+                        and not any(vote is False for vote in support[item.id])
+                        and not isinstance(item.operation, HarnessQuestion)
+                    )
+                    if liberal:
+                        liberal_row['would_apply'] += 1
+                    liberal_apply = liberal and liberal_arm == 'serve'
                     # The default two-verifier path records unverified and does not
                     # enqueue it. A non-default chain's unverified result uses the
                     # same offer path as a split. Disagreement is never offered.
                     if item.kind == 'resolve_required_memory' and (decision != 'agree' or not auto_allowed):
                         # A split never spills hidden submissions into Review.
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'intake_deferred'})
-                    elif decision == 'disagree' or (decision == 'unverified' and default_policy):
+                    elif decision == 'disagree' or (decision == 'unverified' and default_policy and not liberal_apply):
                         report['outcomes'].append(
                             {'key': item.key, 'kind': item.kind, 'status': 'verifier_' + decision}
                         )
-                    elif decision == 'agree' and auto_allowed and not isinstance(item.operation, HarnessQuestion):
+                    elif (
+                        (decision == 'agree' or liberal_apply)
+                        and auto_allowed
+                        and not isinstance(item.operation, HarnessQuestion)
+                    ):
                         try:
                             if isinstance(item.operation, HarnessEdit):
                                 status = await effect_with_gate_retry(
@@ -856,6 +1078,8 @@ async def run_session(
                                 raise
                             status = 'invalid_evidence'
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
+                        if liberal_apply and status == 'applied':
+                            liberal_row['applied'] += 1
                     elif item.value > 2:
                         offered.append((item, sum(vote is True for vote in support[item.id])))
                     elif decision == 'unverified':
@@ -894,6 +1118,12 @@ async def run_session(
                 dream_writing.reset(token)
                 ACTIVE_RUN.reset(effect_scope)
             report['verifier_outcomes'] = dict(decisions)
+            report['verifier_by_kind'] = {kind: dict(row) for kind, row in by_kind.items()}
+            if judge_mode != 'off' and not dry_run:
+                stage = 'value_judge'
+                await _judge_applied(staged, report)
+            if state_pass and not dry_run and lease is not None and lease.get('state_pass_due'):
+                await _state_pass(staged)
             report.update(
                 status='complete',
                 notes=session.finish.notes if session.finish else '',
@@ -962,6 +1192,7 @@ async def run_pass(
     progress=None,
     dry_run=False,
     bootstrap_tools=None,
+    judge=None,
 ):
     if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         report = {'status': 'not_admitted', 'reason': 'account_pending_deletion'}
@@ -1168,6 +1399,9 @@ async def run_pass(
                 bootstrap_tools=bootstrap_tools,
                 arms=arms,
                 budget_probe=budget_probe,
+                # Scheduled sweep passes only; operator CLIs pass judge=False.
+                judge=(trigger == 'schedule' if judge is None else judge) and not canary and not dry_run,
+                state_pass=(trigger == 'schedule' if judge is None else judge) and not canary and not dry_run,
             )
         if 'prescan' in pass_levers:
             # Recall of the finalized report, merged into the admission-time row

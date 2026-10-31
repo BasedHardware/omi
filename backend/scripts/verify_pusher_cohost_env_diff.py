@@ -239,6 +239,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            # Listen-only Soniox idle-close treatment cohort; pusher opens no Soniox stream.
+            "SONIOX_IDLE_COHORT_PERCENT",
+            "SONIOX_IDLE_COHORT_CLOSE_SECONDS",
+            "SONIOX_IDLE_COHORT_REARM_SECONDS",
+            "SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",

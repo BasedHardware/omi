@@ -14477,6 +14477,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get episodeMoments => 'Моменти';
 
   @override
+  String get episodeFollowUps => 'Наступні кроки';
+
+  @override
+  String get episodeOpenTranscript => 'Відкрити розшифровку';
+
+  @override
   String get episodeSoFar => 'Поки що';
 
   @override
@@ -14695,9 +14701,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'На цьому телефоні';
-
-  @override
-  String get episodeOpenTranscript => 'Відкрити розшифровку';
 
   @override
   String get liveCardTitle => 'Наживо';

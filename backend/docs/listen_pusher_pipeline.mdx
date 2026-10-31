@@ -6,6 +6,16 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Operator recovery of empty terminal captures
+
+The windowed `scripts/capture_empty_recovery.py` tool can re-transcribe retained
+audio into an unchanged empty terminal row or reversibly hide a short row only
+after local VAD measures zero speech. Dry-run is the default. Whole-row revision
+preconditions protect concurrent edits; a private write-ahead ledger supports
+undo of `discarded=True`. It never changes the batch ramp or deletes audio. See
+[empty capture recovery](runbooks/empty-capture-recovery.md) for selection,
+enhanced protection, budgets and the separately authorized apply procedure.
+
 ## Fleet recovery scan coordination
 
 Production maintenance keeps the existing Redis admission lease even when
@@ -179,6 +189,59 @@ desktop without a device WAL is not crash-safe. This policy does not claim a
 new client replay guarantee. Deploy compatible listen/pusher and finalizer
 artifacts together through the lead's release train; local hermetic receipts
 prove code behavior, not production or installed-client acceptance.
+
+## Pusher receive work and committed projection capacity
+
+Pusher counts frames actually received as `pusher_socket_frames_total` with
+closed `kind` (`heartbeat`, `audio`, `control`, `invalid`) and `age_bucket`
+(`<5m`, `5m_to_30m`, `30m_plus`) labels. Receive work is measured separately
+for `record_begin`, `custody_commit`, `projection_enqueue`, `inline_finish` and
+`drain`. Each wait crossing 300 seconds increments
+`pusher_receive_work_stalls_total` once and remains visible in
+`pusher_receive_work_stalled_handlers` until completion or cancellation.
+`pusher_receive_work_duration_seconds` records completed waits; a closed drain's
+observation follows its existing worker through process-owner handoff, including
+a worker already blocked in projection when the socket closes.
+
+`pusher_socket_closed_total` runs in a synchronous finalizer with closed reason,
+age and `frames_seen` (`none`, `control_only`, `audio`) labels. It counts handler
+exit after socket cleanup, not proof that TCP remained open during processing.
+These five families add at most 225 series per emitting process, including optional
+Prometheus creation timestamps. Two label-free process-close measurements add
+three more series (228 maximum total):
+`omi_pusher_record_close_abandoned_outstanding` counts abandoned metadata calls
+until their futures settle, and `omi_pusher_record_close_outstanding_refusals_total`
+counts admissions refused at the outstanding-call cap. Deadline and completion
+race under the same admission lock, so a completed call cannot become abandoned
+or decrement the gauge twice. Twelve never-settling calls can stop further close
+progress in that process; the producer fences remain. This accepted bounded
+behavior is observable rather than a trigger for age-based release.
+The authenticated `/metrics` router and committed
+`pusher-metrics` scrape configuration expose the complete families. Release
+verification must still prove the serving targets are up and all seven families are
+queryable; local exposition does not prove live scrape coverage.
+
+After immutable custody commits, the receipt enters one owned pending projection
+slot before ACK or queue waiting. The slot holds a reference, never PCM. The
+receiver discards its committed window buffer before it waits; only the queue
+capacity wait uses the existing 300-second receive-liveness budget. Expiry stops
+frame admission and enters ordinary close/drain with the slot intact. Queue
+release transfers the pending reference at the tail in capture order. Both
+queued and slotted references participate in per-conversation drain proof before
+producer tokens can clear. The same worker can transfer to the capped closed
+drain owner; refused admission retains the durable producer fence and receipts.
+Peer departure during custody ACK also follows this owned delivery path without
+classifying the closed send as an application failure. Unknown commit outcomes
+retain the fence and are never rerun by shutdown tail cleanup.
+
+`PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED=false` restores unbounded capacity
+waiting for new sockets. Ownership, measurements and ACK classification stay
+active. Unset or malformed values keep the deadline on. No wire capability or
+listen change is required, so old listeners and new listeners work during a
+mixed rollout; old pushers retain their existing behavior until replaced. Quiet
+sessions without a queue wait are unaffected. There is no audio-idle reclaim or
+age-based token release. Production share of handlers retained by this mechanism
+remains unknown until these measurements are deployed.
 
 ## Sync storage round trips
 
@@ -4440,7 +4503,7 @@ The pending-conversation sweep (`pending_convos`) isolates each earlier conversa
 
 The CURRENT session's legacy live persist loop (`TranscriptProcessor.process_loop`, flag-off, resumed, custom-STT and multi-channel drains) answers every permanent Firestore write rejection in-band, not just the 1 MiB ceiling. The loop classifies each failure (`_handle_oversized_legacy_persist`, `is_permanent_firestore_write_rejection`) and splits them: permanent rejections — the document-size 400, a permission-denied row, or a row whose every field-bearing write is refused by policy (`FAILED_PRECONDITION`/`PERMISSION_DENIED`) — must move to storage that still accepts the speech, while transient rejections keep the whole-batch retry. A permanent rejection shrinks the retried batch: when more than `LEGACY_PERSIST_SHRINK_FLOOR` (4) segments are retained, the newest tail is dropped each attempt (bounded so saturation cannot grind the backlog one-segment-per-8s for hours); at or below the floor the batch is kept whole, `omi_fallback_total{component="other",from_mode="live_transcript_persist",reason="document_size_limit"}` counts each rejection, and the generic `Live transcript persist failed; retained ...` error is reserved for transient failures. The mid-session rollover (`create_new_in_progress_conversation(rollover=True)` — the same recovery the no-merge-result path uses) is probed at most once per 60 seconds when the retained batch is at or below the floor, or when a full-cap backlog has survived a hundred rejections (`LEGACY_PERSIST_STALL_REJECTS`, ≈5 minutes of live traffic at the 8s cap) without shrinking — the all-day storm shape where every tail drop was instantly replaced by new speech and the oldest speech never reached the write boundary. The probe keeps the speech queued so it lands on the fresh generation; a failed probe is logged and absorbed, never fatal to the session. The same permanence rule holds one layer up in pusher: when the storage authority's account-deletion write fence (`DestructiveOperationInProgress`) refuses a private-cloud batch upload, the session latches on the first refusal — the queued backlog drops with its byte budget released, later chunks drop at admission, one `Private cloud sync stopped: account writes are fenced by a destructive operation` warning replaces the per-batch retry errors, `omi_fallback_total{component="pusher",from_mode="private_cloud_sync",to_mode="drop",reason="policy",outcome="exhausted"}` counts it once, and the WebSocket still closes 1000 (the fence is policy, not a session fault); every other upload error keeps the three-attempt retry ladder.
 
-After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
+After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. A durable private-cloud worker with record barrier debt transfers to a tracked process owner if it still needs to drain; at most 32 closed workers are retained per process. It keeps the original projection and retries transient finish metadata errors with per-close exponential backoff (equal jitter, 1–2 seconds initially, capped at 30–60 seconds) rather than abandoning the token after three attempts. At most four close metadata operations hold active admission per process; deadline-bounded abandoned calls use the separate capped allowance described below. A deferred retry preserves the close request and producer fence. The queue and close scan account for each conversation independently and process a bounded snapshot, so later recordings cannot require the entire socket queue to empty before an earlier token clears. Projection/tail failures, capacity refusal and SIGTERM retain the durable producer fence; only the existing barrier releases a proven drained token. Closed outcomes are logged as `event=record_closed_finish outcome=retained|completed|failed|cancelled|capacity`; completion is worker settlement, not seal success. See the [durable audio runbook](runbooks/audio-durable-outbox.md#recovery-and-acceptance). The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
 
 ## Offline speech continuity
 
@@ -6458,9 +6521,21 @@ A clean reconnect cannot clear that marker. CPU admission independently refuses
 both failure markers and pending producers. Metadata exceptions never terminate
 the audio upload queue: begin failures refuse sealing locally and attempt a
 persistent failure marker; finish/seal failures leave unsealed debt. Failed
-token clears retain local retry state. Close requests remain queued through three
+token clears retain local retry state. Legacy close requests remain queued through three
 metadata attempts even without another finalize; exhaustion leaves durable repair
-debt. Metadata degradation uses the canonical `record_fallback` contract. The closed-stage
+debt. Durable close requests instead remain pending with the capped jittered
+backoff and process retry admission bound described above. Every durable close metadata
+call has a 30-second admission deadline. Its write outcome remains unknown at timeout:
+the close stays pending and retries the same token-specific clear/transactional seal,
+which remain safe after a late success. A deadline frees one of four active slots.
+A separate admission bound covers all unsettled writes, including abandoned calls:
+at most twelve with the default sixteen-worker pool (reduced for smaller pools to
+reserve one quarter of workers for other barrier work). At this bound no new call
+is submitted until an underlying call settles. Late completion reopens capacity.
+`omi_pusher_record_close_abandoned_total{reason="deadline"}` counts abandoned calls.
+Caller cancellation alone does not free admission before the deadline. Removing a close
+request also removes its retry bookkeeping, including terminal projection failures;
+the failure-map cap never retires a durable close. Metadata degradation uses the canonical `record_fallback` contract. The closed-stage
 `omi_pusher_record_barrier_failures_total{stage}` counter distinguishes begin,
 finish, seal, failure_marker and capacity errors from audio custody failures. If
 both begin registration and its failure-marker write fail, durable failure
@@ -8118,6 +8193,12 @@ uses the same boundary. Previously persisted results reconcile without another
 provider call. The switch does not enable new batch admission or bypass a
 recovery policy, allowance, consent or privacy fence.
 
+Recovery exception boundaries, including the async independent Soniox call,
+emit `event=batch_recovery_stage_failure` with bounded stage/reason and the
+exception type name only. These intermediate warnings do not imply terminal
+failure; another provider may succeed. Logging errors preserve the same
+`RecoveryFailure`, and terminal `event=batch_recovery_failure` is unchanged.
+
 Worker recovery/validation handoffs and CPU recovery failure settlements carry
 `measured_held_vad_speech_seconds` on the job. This is the validated, unpadded
 VAD union, never captured duration or transcript length. A pre-VAD failure
@@ -8405,6 +8486,28 @@ seen during reconciliation restarts that window. Each job allows three revision
 redispatches and at most 600 seconds of total waiting. Exhaustion terminally
 fences the job so the age-bounded orphan sweep can complete its processing row.
 Old task deliveries cannot claim a job while revision replay is waiting.
+
+Stale finalization replay also enforces the worker's durable attempt cap before
+minting another dispatch generation. It uses
+`max(attempt_count, worker_claim_count - 1) >= max_attempts`; reconciliation,
+duplicate deliveries, pusher handoffs, and explicit revision/owner deferrals do
+not consume worker claims. An exhausted platform-key job uses the existing
+atomic dead-letter transition with `last_failure_code=durable_attempts_exhausted`.
+Live leases, fresh dispatches, BYOK waits, and committed fanout retain their
+existing admission rules. The existing
+`LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED=false` kill switch disables both
+worker and replay enforcement.
+
+Worker preflight reads retain their existing waiting behavior. If a worker is
+lost or hangs without recording a failure, lease expiry lets replay enforce the
+durable cap. An exhausted job with a missing or invalid account binding closes
+only the job, without writing a conversation.
+
+Dead-lettering keeps the conversation visible and preserves its transcript,
+audio references, photos, and any existing structured output. It stops automatic
+summary/derived-output and integration fanout attempts for that job; an eligible
+row can still offer the existing user retry action. A deterministic minimum
+title is not a generated summary.
 
 MCP projected list/search hydration and single/batch detail reads carry and
 honor the pending marker. Default counts add one limit-1 pending-deadline probe;

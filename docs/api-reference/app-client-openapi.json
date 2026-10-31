@@ -15942,6 +15942,13 @@
             "title": "Emoji",
             "type": "string"
           },
+          "follow_ups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Follow Ups",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -15949,6 +15956,11 @@
           "last_activity_at": {
             "format": "date-time",
             "title": "Last Activity At",
+            "type": "string"
+          },
+          "lede": {
+            "default": "",
+            "title": "Lede",
             "type": "string"
           },
           "members": {
@@ -16198,6 +16210,13 @@
             "title": "Id",
             "type": "string"
           },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodePoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
           "start_offset": {
             "default": 0.0,
             "title": "Start Offset",
@@ -16216,6 +16235,27 @@
           "ended_at"
         ],
         "title": "EpisodeMoment",
+        "type": "object"
+      },
+      "EpisodePoint": {
+        "description": "One point of a composed moment, with optional supporting specifics under it.",
+        "properties": {
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "EpisodePoint",
         "type": "object"
       },
       "EpisodeProvisionalItem": {
