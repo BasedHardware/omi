@@ -12,12 +12,26 @@ import math
 import re
 from pathlib import Path
 
-SCENARIOS = (
+_SCENARIO_NAMES = (
     "cold_start", "scroll_conversations", "open_conversation",
     "tab_switch", "wal_sync_bg_fg",
     "home_live_preview", "live_episode_page", "device_settings_on_the_way",
-    "home_idle_sync_refresh",
+    "home_idle_sync_refresh", "wal_sync_upload_success",
 )
+# Fixed budgets per run: at most two >100ms stalls, totaling <=500ms.
+# This permits bounded cold decode work but rejects one long freeze or repeated
+# idle blocking, including zero-to-nonzero regressions that spread cannot score.
+# The upload window is mostly a fixed idle wait for reconcile, so its frame p90
+# is a handful of frames; its upload/job evidence is validated separately.
+SCENARIOS = {name: {"sparse": name in ("cold_start", "home_idle_sync_refresh", "wal_sync_upload_success")}
+             for name in _SCENARIO_NAMES}
+SPARSE_STALL_LIMITS = {"stalls_over_100ms": 2, "stall_blocked_over_100ms_us": 500000}
+SCORING_PROTOCOL = "sparse-readiness-stalls/v1"
+
+def scenario_names(report):
+    return tuple(name for name in SCENARIOS
+                 if name != "wal_sync_upload_success" or report["dataset"]["upload"] == "accept")
+
 METRICS = (
     "build_p50_us", "build_p90_us", "build_p99_us",
     "raster_p50_us", "raster_p90_us", "raster_p99_us",
@@ -26,8 +40,7 @@ METRICS = (
     "worst_build_us", "worst_raster_us", "worst_total_us", "frame_count",
 )
 P90_METRICS = ("build_p90_us", "raster_p90_us", "total_p90_us")
-# Main-isolate stalls (HeavyStallProbe): reported for every window, never variance-gated; most
-# windows have none, and a 0-to-1 change is a finding, not noise.
+# Main-isolate stalls are reported everywhere; only sparse windows use fixed budgets.
 STALL_METRICS = ("stalls_over_50ms", "stalls_over_100ms", "stall_blocked_over_100ms_us", "worst_stall_us")
 HEAVY_DATASET = {'conversations': 2000, 'detail_segments': 120, 'wals': 6500,
                  'wal_files': 6500, 'people': 40, 'task_items': 50,
@@ -51,13 +64,28 @@ def validate(report):
         raise ValueError("fixture storage isolation is required")
     if report.get("build_mode") not in ("debug", "profile"):
         raise ValueError("unknown build mode")
-    if set(report.get("scenarios", {})) != set(SCENARIOS):
+    dataset = report.get("dataset", {})
+    if dataset.get("semantics") not in ("on", "off") or dataset.get("upload") not in ("accept", "refuse"):
+        raise ValueError("explicit semantics and upload dataset settings are required")
+    names = scenario_names(report)
+    if dataset['upload'] == 'accept':
+        count = dataset.get('upload_wals')
+        if type(count) is not int or not 1 <= count <= 18:
+            raise ValueError('upload_wals must be 1..18')
+        success = report.get('scenarios', {}).get('wal_sync_upload_success', {})
+        if (type(success.get('uploaded_wals')) is not int or success['uploaded_wals'] != count
+                or type(success.get('completed_jobs')) is not int or not 1 <= success['completed_jobs'] <= count):
+            raise ValueError('missing successful upload/reconcile evidence')
+    if set(report.get("scenarios", {})) != set(names):
         raise ValueError("missing or unexpected scenarios")
-    if report.get('scenario_order') != list(SCENARIOS):
+    if report.get('scenario_order') != list(names):
         raise ValueError('missing or unexpected scenario order')
     if report["scenarios"]["cold_start"].get("restored_from_cache") is not True:
         raise ValueError("heavy conversations were not restored")
-    for scenario in SCENARIOS:
+    ready = report["scenarios"]["cold_start"].get("cache_ready_us")
+    if type(ready) is not int or ready <= 0:
+        raise ValueError("cold_start.cache_ready_us: positive monotonic duration required")
+    for scenario in names:
         metrics = report["scenarios"][scenario]
         for name in METRICS:
             value = metrics.get(name)
@@ -113,7 +141,7 @@ def summarize(directory, expected_runs):
                 raise ValueError(f'{path.name}: missing or truncated streamed timeline')
             timeline = json.loads((directory / expected_timeline).read_text())
             boundaries = {(event.get('name'), event.get('ph')) for event in timeline.get('traceEvents', [])}
-            if not all((f'heavy.{scenario}', phase) in boundaries for scenario in SCENARIOS for phase in ('b', 'e')):
+            if not all((f'heavy.{scenario}', phase) in boundaries for scenario in scenario_names(reports[-1]) for phase in ('b', 'e')):
                 raise ValueError(f'{path.name}: streamed timeline lost scenario boundaries')
         elif capture.get('enabled') is not False:
             raise ValueError(f'{path.name}: timeline mode disagrees with receipt')
@@ -137,19 +165,34 @@ def summarize(directory, expected_runs):
             if report.get(key) != first.get(key):
                 raise ValueError(f"receipts disagree on {key}")
     failures = []
+    names = scenario_names(first)
     print(f"heavy-account: {len(paths)} runs, {first['build_mode']}, dataset={first.get('dataset')}")
-    for scenario in SCENARIOS:
-        print(scenario)
+    for scenario in names:
+        sparse = SCENARIOS[scenario]["sparse"]
+        print(scenario, "sparse" if sparse else "dense")
         for metric in METRICS + STALL_METRICS:
             values = [r["scenarios"][scenario].get(metric) for r in reports]
             suffix = ""
-            if metric in P90_METRICS:
+            if metric in P90_METRICS and not sparse:
                 relative = spread(values)
                 suffix = f" spread={relative:.1%}"
                 if relative > 0.15:
                     failures.append(f"{scenario}.{metric} {relative:.1%}")
+            if sparse and metric in SPARSE_STALL_LIMITS:
+                limit = SPARSE_STALL_LIMITS[metric]
+                suffix = f" limit={limit} per run"
+                for run, value in enumerate(values, 1):
+                    if value > limit:
+                        failures.append(f"{scenario}.{metric} run {run}: {value} > {limit}")
             print(f"  {metric}: {values}{suffix}")
-    heavy_shape = all(first.get('dataset', {}).get(key) == value for key, value in HEAVY_DATASET.items())
+        if scenario == "cold_start":
+            values = [r["scenarios"][scenario]["cache_ready_us"] for r in reports]
+            relative = spread(values)
+            print(f"  cache_ready_us: {values} spread={relative:.1%}")
+            if relative > 0.15:
+                failures.append(f"cold_start.cache_ready_us {relative:.1%}")
+    heavy_shape = (all(first.get('dataset', {}).get(key) == value for key, value in HEAVY_DATASET.items())
+                   and first['dataset'].get('synced_wals', 0) == 0)
     if expected_runs < 3 and first.get('timeline_enabled') is not True:
         raise ValueError('baseline needs at least 3 runs; only opt-in timeline diagnostics permit fewer')
     eligible = heavy_shape and first.get('timeline_enabled') is False and all(r.get("acceptance_eligible") is True and r["build_mode"] == "profile" for r in reports)
@@ -199,12 +242,16 @@ def summarize(directory, expected_runs):
                     raise ValueError(f'warmup differs from measured {key}')
         eligible = False
     summary = {
+        "sparse_scenarios": [name for name in names if SCENARIOS[name]["sparse"]],
+        "scoring_protocol": SCORING_PROTOCOL,
+        "sparse_stall_limits": SPARSE_STALL_LIMITS,
         "runs": len(paths), "build_mode": first["build_mode"],
         "identity": identities[0],
         "dataset": first['dataset'], "frame_policy": first['frame_policy'],
         "pacing": first['pacing'], "timeline_enabled": first['timeline_enabled'],
         "scenarios": {scenario: {metric: [r['scenarios'][scenario][metric] for r in reports]
-                                for metric in METRICS + STALL_METRICS} for scenario in SCENARIOS},
+                                for metric in METRICS + STALL_METRICS + (("cache_ready_us",) if scenario == "cold_start" else ())}
+                      for scenario in names},
         "variance_pass": not failures, "variance_failures": failures,
         "acceptance_eligible": eligible,
         "accepted_baseline": eligible and not failures,
@@ -213,14 +260,14 @@ def summarize(directory, expected_runs):
                                        and first['build_mode'] == 'profile' and not first['timeline_enabled']),
         "heavy_dataset": heavy_shape,
         "cpu_rankings": cpu_rankings,
-        "over_100ms": sum(r["scenarios"][s]["frames_over_100ms"] for r in reports for s in SCENARIOS),
+        "over_100ms": sum(r["scenarios"][s]["frames_over_100ms"] for r in reports for s in names),
     }
     (directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print("VARIANCE:", "FAIL" if failures else "PASS")
     if virtual:
         print('VIRTUAL QUALIFICATION:', 'PASS' if summary['qualified_virtual_baseline'] else 'FAIL/DIAGNOSTIC')
     print("ACCEPTANCE:", "PASS" if eligible and not failures else
-          "FAIL — p90 variance" if eligible else "NOT ELIGIBLE — debug/ablation/timeline diagnostics")
+          "FAIL — scoring gates" if eligible else "NOT ELIGIBLE — debug/ablation/timeline diagnostics")
     return summary
 
 
