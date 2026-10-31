@@ -2488,11 +2488,13 @@ def get_ai_user_profile_v2(uid: str) -> Optional[dict]:
     return (doc.to_dict() or {}).get('ai_user_profile_v2')
 
 
-def update_ai_user_profile_v2(uid: str, profile_v2: dict, *, not_after: float | None = None) -> bool:
+def update_ai_user_profile_v2(uid: str, profile_v2: dict, *, not_after: float | None = None) -> str:
     """Replace only the v2 side field, unless a newer run already wrote it.
 
-    ``profile_v2['run_started_at']`` (ISO) fences late writes from a timed-out run.
-    The served ai_user_profile and its cache are untouched. Returns whether it wrote.
+    ``profile_v2['run_started_at']`` (ISO) fences late writes from an older run, and
+    ``not_after`` (epoch seconds) refuses a write that starts past its run's deadline.
+    The served ai_user_profile and its cache are untouched. Returns 'written',
+    'superseded' (a newer run owns the field) or 'expired'.
     """
     ref = db.collection('users').document(uid)
 
@@ -2500,14 +2502,14 @@ def update_ai_user_profile_v2(uid: str, profile_v2: dict, *, not_after: float | 
     def write(transaction):
         # A run past its deadline never starts (or retries) the write.
         if not_after is not None and time.time() > not_after:
-            return False
+            return 'expired'
         snapshot = ref.get(['ai_user_profile_v2'], transaction=transaction)
         current = (snapshot.to_dict() or {}).get('ai_user_profile_v2') if snapshot.exists else None
         previous = str((current or {}).get('run_started_at') or '')
         if previous and previous > str(profile_v2.get('run_started_at') or ''):
-            return False
+            return 'superseded'
         transaction.update(ref, {'ai_user_profile_v2': profile_v2})
-        return True
+        return 'written'
 
     return write(db.transaction())
 

@@ -361,6 +361,7 @@ async def run(
     if deadline_seconds <= 0:
         summary['status'] = 'skipped_deadline'
         return summary
+    not_after = time.time() + deadline_seconds
     try:
         async with asyncio.timeout(deadline_seconds):
             await _run(
@@ -385,6 +386,27 @@ async def run(
     except Exception as error:
         logger.warning('event=dream_lever_error lever=state_pass exc=%s', type(error).__name__)
         summary['status'] = 'failed'
+    doc = summary.pop('_profile_doc', None)
+    if summary['status'] != 'ready' or doc is None:
+        return summary
+    # The write runs outside the timeout on purpose: a worker thread cannot be
+    # cancelled, so racing it would let a "timed out" pass commit anyway. Instead the
+    # transaction refuses to start past the pass deadline, and the outcome reported
+    # here is the one Firestore actually reached.
+    from database import users as users_db
+
+    try:
+        outcome = await run_blocking(
+            db_executor, partial(users_db.update_ai_user_profile_v2, not_after=not_after), uid, doc
+        )
+    except Exception as error:
+        logger.warning('event=dream_lever_error lever=state_pass exc=%s', type(error).__name__)
+        outcome = 'failed'
+    summary['profile_write'] = outcome
+    summary['profile_written'] = outcome == 'written'
+    # A superseded write means a newer run owns the profile; an expired or failed one
+    # leaves the weekly cadence due so the next sweep retries.
+    summary['status'] = {'written': 'complete', 'superseded': 'complete', 'expired': 'timeout'}.get(outcome, 'failed')
     return summary
 
 
@@ -551,19 +573,15 @@ async def _run(
     }
     if left(5) <= 0:
         raise TimeoutError('state_pass_profile_write_deadline')
-    # The write is fenced by run_started_at, so a late write from a timed-out run
-    # cannot replace a newer run's profile.
-    not_after = time.time() + left(5)
-    summary['profile_written'] = bool(
-        await run_blocking(db_executor, partial(users_db.update_ai_user_profile_v2, not_after=not_after), uid, doc)
-    )
+    # run() writes it after the timed section; see there.
+    summary['_profile_doc'] = doc
     summary.update(
         profile_ops=profile_counts,
         profile_lines=sum(len(section.lines) for section in profile.sections),
         stale_refs=stale,
         render_chars=len(rendered.profile_text),
         total_tokens=spent(),
-        status='complete',
+        status='ready',
     )
     summary['_judge_rows'] = [
         (item, dream_change_view.edit_change(uid, item.operation, item.records, item.key))

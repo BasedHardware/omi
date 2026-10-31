@@ -181,7 +181,7 @@ def state_env(runtime, monkeypatch):
 
     def write(uid, doc, *, not_after=None):
         written.append({**doc, '_not_after': not_after})
-        return True
+        return 'written'
 
     monkeypatch.setattr(users_db, 'update_ai_user_profile_v2', write)
     applied = []
@@ -219,7 +219,7 @@ def test_shadow_state_pass_stages_and_verifies_but_never_applies(runtime, state_
     assert written[0]['notes'] == 'next week'
     # The write is bounded by the pass deadline, so a timed-out run cannot commit.
     assert written[0]['_not_after'] is not None and written[0]['_not_after'] > time.time()
-    assert lever['profile_written'] is True
+    assert lever['profile_written'] is True and lever['profile_write'] == 'written'
     planner = [entry for entry in seen if entry[0] == 'planner']
     assert len(planner) == 1 and planner[0][1] == MAIN_LANE
     assert 'UNTRUSTED STATE DATA' in planner[0][2]
@@ -411,3 +411,75 @@ def test_pre_effect_rows_never_ground_profile_lines(runtime, state_env):
     assert lever['profile_added'] == 1 and lever['profile_rejected'] >= 1
     text = written[0]['rendered']['profile_text']
     assert 'Junk' not in text and text.endswith('- Builds Omi.')
+
+
+@pytest.mark.parametrize(
+    ('outcome', 'status', 'stamped'),
+    [('expired', 'timeout', False), ('superseded', 'complete', True)],
+)
+def test_write_outcome_decides_completion_and_cadence(runtime, state_env, monkeypatch, outcome, status, stamped):
+    from database import users as users_db
+
+    monkeypatch.setattr(users_db, 'update_ai_user_profile_v2', lambda uid, doc, *, not_after=None: outcome)
+    plan = StatePlan(
+        profile_ops=[dream_profile_v2.ProfileLineOp(op='add', section='work', text='Builds Omi.', refs=['memories/m1'])]
+    )
+    report = asyncio.run(dream_agent.run_pass(UID, turn=_loop_and_state_model([], plan)))
+    lever = report['levers']['state_pass']
+    assert lever['status'] == status and lever['profile_written'] is False
+    assert (runtime.rows[('dream_users', UID)].get('last_state_pass_at') is not None) is stamped
+
+
+def test_a_slow_write_is_not_raced_by_the_pass_timeout(monkeypatch):
+    """The write runs after the timed section, so its real outcome is what gets reported."""
+    from database import users as users_db
+
+    async def fake_run(uid, summary, **kwargs):
+        summary.update(status='ready', _profile_doc={'run_started_at': 'x'})
+
+    def slow_write(uid, doc, *, not_after=None):
+        time.sleep(0.3)
+        return 'written'
+
+    monkeypatch.setattr(dream_state_pass, '_run', fake_run)
+    monkeypatch.setattr(users_db, 'update_ai_user_profile_v2', slow_write)
+    summary = asyncio.run(
+        dream_state_pass.run(
+            UID,
+            seed={},
+            run_id='r',
+            planner_turn=None,
+            verify_turn=None,
+            loop_report={},
+            loop_staged_keys=set(),
+            deadline_seconds=0.5,
+            verifier_seconds=1,
+            verifier_completion_tokens=1,
+            tokens=1,
+            spent=lambda: 0,
+        )
+    )
+    assert summary['status'] == 'complete' and summary['profile_written'] is True
+    assert '_profile_doc' not in summary
+
+
+def test_expired_write_does_not_commit(monkeypatch):
+    from database import users as users_db
+
+    class Ref:
+        def get(self, *args, **kwargs):
+            raise AssertionError('an expired write must not read or write')
+
+    class Client:
+        def collection(self, name):
+            return self
+
+        def document(self, uid):
+            return Ref()
+
+        def transaction(self):
+            return object()
+
+    monkeypatch.setattr(users_db, 'db', Client())
+    monkeypatch.setattr(users_db, 'transactional', lambda fn: fn)
+    assert users_db.update_ai_user_profile_v2(UID, {}, not_after=time.time() - 1) == 'expired'

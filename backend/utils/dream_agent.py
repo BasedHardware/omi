@@ -378,6 +378,7 @@ async def run_session(
                     'render_chars',
                     'trimmed',
                     'profile_written',
+                    'profile_write',
                 )
             },
             'rejected': sum((summary.get('rejected') or {}).values()),
