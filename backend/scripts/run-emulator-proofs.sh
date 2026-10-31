@@ -77,6 +77,12 @@ run_proof "summary task recovery, concurrency and expiry" \
 run_proof "job-store conformance (sim + emulator)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py
 
+# PL-194: a later failed pull returns all earlier committed leases. Require both
+# local legs in CI; local qualification uses =all to require Postgres as well.
+run_proof "partial-pull conformance (PL-194, sim + emulator required)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_partial_pull_conformance.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"
