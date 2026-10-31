@@ -455,6 +455,9 @@ def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False, 
 
 def answer_proposal(uid, proposal, source, decision):
     kind = dream_telemetry.dream_kind(source.get('edit_key'))
+    selected_kind = getattr(proposal.operation or proposal.edit, 'kind', None)
+    if kind and isinstance(selected_kind, str):
+        kind = selected_kind
     if decision == 'dismiss':
         review_changes.suppress_agent_change(uid, source['edit_key'])
         if kind:
@@ -476,7 +479,8 @@ def answer_proposal(uid, proposal, source, decision):
         raise review_store.ReviewConflict('Dream proposal no longer valid') from exc
     if status == 'suppressed':
         raise review_store.ReviewConflict('Dream proposal was suppressed')
-    if kind and status == 'applied':
+    # The owner accepted; an already-present vocabulary term still counts as an accept.
+    if kind:
         dream_telemetry.record_outcome(kind, 'accept')
     return status == 'applied'
 

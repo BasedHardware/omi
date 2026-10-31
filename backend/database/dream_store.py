@@ -774,6 +774,8 @@ def vocabulary(uid, *, firestore_client=None):
 
 
 def demoted_types(uid, caps, *, firestore_client=None):
+    from utils import dream_telemetry
+
     since = datetime.now(timezone.utc) - timedelta(days=30)
     query = client(firestore_client).collection('users').document(uid).collection('review_changes')
     rows = (
@@ -789,7 +791,9 @@ def demoted_types(uid, caps, *, firestore_client=None):
         data = _review_store().decode_doc(uid, snapshot.to_dict()) or {}
         if not data.get('edit_key', '').startswith(('dream:', 'agent:')) or data.get('phase', 'applied') != 'applied':
             continue
-        kind = data['edit_key'].split(':')[1]
+        # The policy kind auto-apply checks; key segments differ (memory-target
+        # spelling keys 'memory', accepted proposals 'user').
+        kind = dream_telemetry.change_kind(data) or data['edit_key'].split(':')[1]
         undone_now = int(bool(data['change']['undone']))
         total, undone = counts.get(kind, (0, 0))
         counts[kind] = (total + 1, undone + undone_now)

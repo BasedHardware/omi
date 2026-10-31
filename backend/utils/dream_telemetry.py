@@ -118,14 +118,32 @@ def outcome_payload(kind: Any, decision: Any, *, applied_at: Any = None, now: da
 
 
 def record_outcome(kind: Any, decision: Any, *, applied_at: Any = None) -> None:
-    """One owner decision on a Dream change: Undo, Redo, or a Review accept/dismiss."""
+    """One owner decision on a Dream edit: Undo, Redo, or a Review accept/dismiss. Never raises."""
     try:
         payload = outcome_payload(kind, decision, applied_at=applied_at)
     except Exception as error:
-        ERRORS.labels('outcome').inc()
-        logger.warning('event=dream_telemetry_error record=outcome exc=%s', type(error).__name__)
+        try:
+            ERRORS.labels('outcome').inc()
+            logger.warning('event=dream_telemetry_error record=outcome exc=%s', type(error).__name__)
+        except Exception:
+            pass
         return
     _emit('outcome', payload)
+
+
+def change_kind(data: Any) -> str | None:
+    """Policy kind of a journaled Dream change: its edit_kind, else its key segment.
+
+    Accepted proposals are re-keyed ``agent:user:<uuid>`` and memory-target
+    spelling keys use ``memory``; both keep the real kind in ``edit_kind``.
+    """
+    try:
+        if not isinstance(data, dict) or dream_kind(data.get('edit_key')) is None:
+            return None
+        edit_kind = (data.get('change') or {}).get('edit_kind')
+        return edit_kind if isinstance(edit_kind, str) and edit_kind else dream_kind(data.get('edit_key'))
+    except Exception:
+        return None
 
 
 def dream_kind(edit_key: Any) -> str | None:

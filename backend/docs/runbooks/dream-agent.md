@@ -293,8 +293,10 @@ Internal OIDC routes are `POST /v2/dream-agent/sweep` and
 Count metrics cover outcomes, size buckets, turns, tools, rejection reasons,
 successful resubmits, verifier outcomes, applied/undone kinds, cache usage and
 stale reclaim. Metric labels never contain owner IDs, refs or content.
-Owner decisions on Dream changes emit one `dream_outcome` JSON log record each
-(`kind`, `decision` undo/redo/accept/dismiss, applied-age bucket), and every
+Owner decisions on Dream edits emit one `dream_outcome` JSON log record each
+(`kind`, `decision` undo/redo/accept/dismiss, applied-age bucket): Undo/Redo of a
+Dream-journaled change and Review answers to Dream edit/vocabulary proposals.
+Answers to Review questions (same-person, spelling) are not yet counted. Every
 `dream_pass` record carries `verifier_by_kind`, so Undo, accept and verifier
 rates are aggregable per kind from logs alone.
 
