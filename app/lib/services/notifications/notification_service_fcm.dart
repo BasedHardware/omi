@@ -159,11 +159,14 @@ class _FCMNotificationService with WidgetsBindingObserver implements Notificatio
 
   @override
   Future<bool> requestNotificationPermissions() async {
+    final owner = AuthService.instance.captureSessionSnapshot();
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
       isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
     }
-    if (isAllowed) unawaited(register());
+    if (isAllowed && owner != null && AuthService.instance.isSessionSnapshotCurrent(owner)) {
+      unawaited(register());
+    }
     return isAllowed;
   }
 
