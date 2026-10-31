@@ -153,7 +153,7 @@ env:
   - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
     value: "false"
   - name: PLAYBACK_ON_DEMAND_ENABLED
-    value: "false"
+    value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
   - name: REPEAT_WORK_REVISION_ENABLED
