@@ -415,6 +415,75 @@ async def test_active_close_admission_refusal_is_not_counted_as_outstanding_cap(
     assert barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get() == before
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('with_audio', [False, True])
+async def test_seal_only_admission_retry_keeps_closed_drain_owner(inline_session, monkeypatch, with_audio):
+    client, path, barrier, projected = inline_session
+    active = threading.BoundedSemaphore(4)
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', active)
+    monkeypatch.setattr(barrier_module, '_close_outstanding_slots', threading.BoundedSemaphore(12))
+    monkeypatch.setattr(barrier_module.random, 'uniform', lambda low, high: high)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 1.0)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
+    seal_attempted = asyncio.Event()
+    owners, retained = [], []
+    close_metadata = barrier._close_metadata
+    start = finish_module.start_background_task
+    retain = pusher.retain_closed_record_drain
+    occupied = False
+
+    async def close(cid, fn, *args, **kwargs):
+        nonlocal occupied
+        if fn is barrier_module.record_audio_db.seal_record_audio and not occupied:
+            # The real clear has already completed. Refuse the real seal at
+            # admission, leaving retry_at as the only remaining record debt.
+            assert not barrier.upload_sessions and not barrier.pending_clears
+            assert all(active.acquire(blocking=False) for _ in range(4))
+            occupied = True
+            seal_attempted.set()
+        return await close_metadata(cid, fn, *args, **kwargs)
+
+    def track(coro, **kwargs):
+        owner = start(coro, **kwargs)
+        owners.append(owner)
+        return owner
+
+    def keep(task):
+        retained.append(task)
+        return retain(task)
+
+    monkeypatch.setattr(barrier, '_close_metadata', close)
+    monkeypatch.setattr(finish_module, 'start_background_task', track)
+    monkeypatch.setattr(pusher, 'retain_closed_record_drain', keep)
+    payloads = [b'\x01\x00' * 160] if with_audio else []
+    sock = Socket(_audio_frames('conversation', payloads))
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        await asyncio.wait_for(seal_attempted.wait(), 10)
+        await asyncio.wait_for(handler, 10)
+        assert not barrier.upload_sessions and not barrier.pending_clears and not barrier.close_failures
+        assert barrier.close_retry_at
+        assert not client.rows[path].get('record_upload_sessions')
+        assert not client.rows[path].get('record_audio_closed')
+        assert len(owners) == len(retained) == 1
+        assert retained[0] in finish_module._closed_record_drains
+        assert not retained[0].done()
+        assert len(projected) == len(_sent_receipts(sock)) == int(with_audio)
+        for _ in range(4):
+            active.release()
+        # Capacity is restored; let the same worker reach its real retry time.
+        await asyncio.wait_for(owners[0], 10)
+        assert client.rows[path]['record_audio_closed']
+        assert not barrier.close_retry_at and not barrier.close_failures
+        assert not finish_module._closed_record_drains
+        assert len(projected) == len(_sent_receipts(sock)) == int(with_audio)
+    finally:
+        handler.cancel()
+        for owner in owners:
+            owner.cancel()
+        await asyncio.gather(handler, *owners, return_exceptions=True)
+
+
 def test_close_cap_metrics_have_no_labels_and_are_exposed_by_metrics_router(monkeypatch):
     from routers import metrics as metrics_router
 
