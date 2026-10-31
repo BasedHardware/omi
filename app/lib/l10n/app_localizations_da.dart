@@ -14437,6 +14437,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get episodeMoments => 'Øjeblikke';
 
   @override
+  String get episodeFollowUps => 'Opfølgning';
+
+  @override
+  String get episodeOpenTranscript => 'Åbn transskription';
+
+  @override
   String get episodeSoFar => 'Indtil videre';
 
   @override
@@ -14656,9 +14662,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'På denne telefon';
-
-  @override
-  String get episodeOpenTranscript => 'Åbn transskription';
 
   @override
   String get liveCardTitle => 'Live';
@@ -14921,5 +14924,30 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return '$amount trukket i dag. Fornyes $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dele',
+      many: '$count dele',
+      few: '$count dele',
+      two: '$count dele',
+      one: '$count del',
+      zero: '$count dele',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Send beskeden i $app. Denne skærm opdateres, så snart Omi modtager den.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Få en ny kode, og send den fra $app.';
   }
 }

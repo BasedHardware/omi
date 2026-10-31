@@ -230,7 +230,12 @@ async def test_batch_drains_workers_on_failure_deadline_or_caller_cancel(monkeyp
                 timeout_ms=30 if failure == 'deadline' else 1000,
             )
         )
-        await asyncio.wait_for(started.wait(), timeout=1)
+        # A 30 ms deadline can expire before all eight workers start on a loaded runner;
+        # wait for either the eighth start or the task's own completion.
+        started_wait = asyncio.create_task(started.wait())
+        await asyncio.wait({started_wait, task}, timeout=1, return_when=asyncio.FIRST_COMPLETED)
+        started_wait.cancel()
+        assert started.is_set() or (failure == 'deadline' and task.done())
         if failure == 'cancel':
             task.cancel()
             with pytest.raises(asyncio.CancelledError):

@@ -14375,6 +14375,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get episodeMoments => 'ช่วงเวลา';
 
   @override
+  String get episodeFollowUps => 'สิ่งที่ต้องทำต่อ';
+
+  @override
+  String get episodeOpenTranscript => 'เปิดถอดความ';
+
+  @override
   String get episodeSoFar => 'จนถึงตอนนี้';
 
   @override
@@ -14593,9 +14599,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'บนเครื่องนี้';
-
-  @override
-  String get episodeOpenTranscript => 'เปิดถอดความ';
 
   @override
   String get liveCardTitle => 'แสดงสด';
@@ -14856,5 +14859,30 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'เรียกเก็บ $amount วันนี้ ต่ออายุ $date';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ส่วน',
+      many: '$count ส่วน',
+      few: '$count ส่วน',
+      two: '$count ส่วน',
+      one: '$count ส่วน',
+      zero: '$count ส่วน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'ส่งข้อความในแอป $app หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'ขอรหัสใหม่แล้วส่งจากแอป$app';
   }
 }

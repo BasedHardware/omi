@@ -14343,6 +14343,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get episodeMoments => 'רגעים';
 
   @override
+  String get episodeFollowUps => 'המשך טיפול';
+
+  @override
+  String get episodeOpenTranscript => 'פתח תמליל';
+
+  @override
   String get episodeSoFar => 'עד כה';
 
   @override
@@ -14560,9 +14566,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'בטלפון הזה';
-
-  @override
-  String get episodeOpenTranscript => 'פתח תמליל';
 
   @override
   String get liveCardTitle => 'בשידור חי';
@@ -14819,5 +14822,30 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'חויבו היום $amount. מתחדש ב-$date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count חלקים',
+      many: '$count חלקים',
+      few: '$count חלקים',
+      two: '$count חלקים',
+      one: '$count חלק',
+      zero: '$count חלקים',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'שלחו את ההודעה באפליקציית $app. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'קבלו קוד חדש ושלחו אותו מ$app.';
   }
 }

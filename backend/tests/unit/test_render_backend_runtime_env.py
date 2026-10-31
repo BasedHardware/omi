@@ -723,7 +723,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout == ''
     workflow_outputs = renderer_output.read_text(encoding='utf-8')
     assert (
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":100\\,"batch_privacy_memoize":0\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":5\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":0\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100\\,"usage_month_total":0}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":100\\,"batch_privacy_memoize":0\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":5\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":0\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100\\,"usage_month_total":0}\n'
         in workflow_outputs
     )
     assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
@@ -794,6 +794,9 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             'TELEGRAM_WEBHOOK_SECRET',
             'LINQ_API_KEY',
             'LINQ_WEBHOOK_SECRET',
+            # Keiki iMessage/WhatsApp signing secrets (David, 2026-10-30: build the Keiki integration).
+            'KEIKI_IMESSAGE_SIGNING_SECRET',
+            'KEIKI_WHATSAPP_SIGNING_SECRET',
         },
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
@@ -1321,6 +1324,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         'batch_privacy_memoize': 0,
         'candidates_page': 100,
         'canonical_statuses_dedupe': 100,
+        'conversation_list_cursor': 100,
         'deletion_marker_cache': 100,
         'finjob_candidate_queries': 5,
         'historical_scan_memo': 100,

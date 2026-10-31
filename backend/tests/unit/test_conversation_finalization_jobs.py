@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from database import conversation_processing_recovery as processing_recovery
+
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -1505,7 +1507,8 @@ class _OrphanClient:
 
     def collection(self, name: str):
         self.collection_calls.append(name)
-        raise AssertionError('stale orphan sweep must not use a collection-scoped query')
+        assert name == jobs.FINALIZATION_JOBS_COLLECTION
+        return _Collection(getattr(self, 'jobs', {'job-x': _Ref('job-x', {'status': 'queued'})}))
 
     def document(self, path: str) -> _OrphanDocRef:
         # The persisted sweep cursor resumes a collection-group scan by fetching
@@ -1696,7 +1699,7 @@ def test_stamp_processing_admission_if_absent_only_stamps_a_legacy_processing_ro
     now = _now()
     legacy = _Ref('legacy', {'status': 'processing', 'created_at': now - timedelta(days=1)})
 
-    stamped = jobs._stamp_processing_admission_if_absent_txn(transaction, legacy, now)
+    stamped = processing_recovery._stamp_processing_admission_if_absent_txn(transaction, legacy, now)
 
     assert stamped is True
     assert transaction.updates == [(legacy, {'processing_admitted_at': now})]
@@ -1708,8 +1711,8 @@ def test_stamp_processing_admission_if_absent_is_idempotent_and_fences_non_proce
     already = _Ref('already', {'status': 'processing', 'processing_admitted_at': now - timedelta(hours=2)})
     terminal = _Ref('terminal', {'status': 'completed'})
 
-    assert jobs._stamp_processing_admission_if_absent_txn(transaction, already, now) is False
-    assert jobs._stamp_processing_admission_if_absent_txn(transaction, terminal, now) is False
+    assert processing_recovery._stamp_processing_admission_if_absent_txn(transaction, already, now) is False
+    assert processing_recovery._stamp_processing_admission_if_absent_txn(transaction, terminal, now) is False
     assert transaction.updates == []
 
 
@@ -1728,7 +1731,7 @@ def test_complete_orphan_completes_only_an_unchanged_orphan_generation():
     admitted = now - timedelta(seconds=1000)
     orphan = _Ref('orphan', {'status': 'processing', 'processing_admitted_at': admitted})
 
-    completed = jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now)
+    completed = processing_recovery._complete_orphan_conversation_txn(transaction, orphan, admitted, now)
 
     assert completed is True
     assert transaction.updates == [(orphan, {'status': 'completed'})]
@@ -1748,7 +1751,7 @@ def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
         },
     )
 
-    assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now, 'uid-1') is True
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, orphan, admitted, now, 'uid-1') is True
     assert transaction.updates == [
         (
             orphan,
@@ -1769,7 +1772,7 @@ def test_complete_orphan_fences_a_row_a_finalizer_claimed_after_discovery():
         'claimed', {'status': 'processing', 'processing_admitted_at': admitted, 'finalization_job_id': 'job-1'}
     )
 
-    assert jobs._complete_orphan_conversation_txn(transaction, claimed, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, claimed, admitted, now) is False
     assert transaction.updates == []
 
 
@@ -1780,7 +1783,7 @@ def test_complete_orphan_fences_a_live_processor_that_renewed_its_lease():
     # A live processor renewed its lease after discovery, advancing the generation.
     renewed = _Ref('renewed', {'status': 'processing', 'processing_admitted_at': now - timedelta(seconds=5)})
 
-    assert jobs._complete_orphan_conversation_txn(transaction, renewed, scanned, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, renewed, scanned, now) is False
     assert transaction.updates == []
 
 
@@ -1792,9 +1795,9 @@ def test_complete_orphan_fences_deferred_and_terminal_and_discarded_rows():
     terminal = _Ref('terminal', {'status': 'completed', 'processing_admitted_at': admitted})
     discarded = _Ref('discarded', {'status': 'processing', 'processing_admitted_at': admitted, 'discarded': True})
 
-    assert jobs._complete_orphan_conversation_txn(transaction, deferred, admitted, now) is False
-    assert jobs._complete_orphan_conversation_txn(transaction, terminal, admitted, now) is False
-    assert jobs._complete_orphan_conversation_txn(transaction, discarded, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, deferred, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, terminal, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, discarded, admitted, now) is False
     assert transaction.updates == []
 
 
@@ -1905,3 +1908,21 @@ def test_selfheal_cursor_preserves_verification_deadline(monkeypatch):
     cursor = jobs.get_in_progress_content_sweep_cursor(firestore_client=client)
 
     assert cursor['pending_verifications'] == [entry]
+
+
+def test_stale_processing_terminal_job_is_swept_only_after_admission_age(monkeypatch):
+    now = _now()
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    client = _OrphanClient(
+        [
+            _processing_snapshot('uid', 'fresh', admitted_at=now - timedelta(seconds=899), finalization_job_id='done'),
+            _processing_snapshot('uid', 'stuck', admitted_at=now - timedelta(seconds=901), finalization_job_id='done'),
+            _processing_snapshot('uid', 'legacy', admitted_at=None, finalization_job_id='done'),
+        ]
+    )
+    client.jobs = {'done': _Ref('done', {'status': 'completed', 'finalization_outcome': 'fenced'})}
+    found = jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900), firestore_client=client)
+    assert [(row['conversation_id'], row['legacy']) for row in found['candidates']] == [
+        ('stuck', False),
+        ('legacy', True),
+    ]

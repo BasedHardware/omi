@@ -17575,6 +17575,14 @@
     "@episodeMoments": {
         "description": "Section title listing the moments (stretches of speech) of an episode."
     },
+    "episodeFollowUps": "Follow-ups",
+    "@episodeFollowUps": {
+        "description": "Section title for the next steps written into a finished episode summary."
+    },
+    "episodeOpenTranscript": "Open transcript",
+    "@episodeOpenTranscript": {
+        "description": "Link from the Summary live card to the Transcript tab."
+    },
     "episodeSoFar": "So far",
     "@episodeSoFar": {
         "description": "Title of the running notes card on a live episode."
@@ -17917,10 +17925,6 @@
     "@episodeOnThisPhone": {
         "description": "Tag on notes drafted on-device from the live preview."
     },
-    "episodeOpenTranscript": "Open transcript",
-    "@episodeOpenTranscript": {
-        "description": "Link from the Summary live card to the Transcript tab."
-    },
     "liveCardTitle": "Live",
     "@liveCardTitle": {
         "description": "Title of the live preview card on the Summary tab."
@@ -18242,6 +18246,33 @@
                 "type": "String"
             },
             "date": {
+                "type": "String"
+            }
+        }
+    },
+    "episodePartsCount": "{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}",
+    "@episodePartsCount": {
+        "description": "Number of retained conversations in a closed episode Home row; shown for two or more parts.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "chatAppsWaitingMessageIn": "Send the message in {app}. This screen updates as soon as Omi gets it.",
+    "@chatAppsWaitingMessageIn": {
+        "description": "Waiting step after opening a chat app with the link code. app is a brand name such as WhatsApp.",
+        "placeholders": {
+            "app": {
+                "type": "String"
+            }
+        }
+    },
+    "chatAppsCodeExpiredMessageIn": "Get a new code and send it from {app}.",
+    "@chatAppsCodeExpiredMessageIn": {
+        "description": "The link code expired. app is a brand name such as WhatsApp.",
+        "placeholders": {
+            "app": {
                 "type": "String"
             }
         }

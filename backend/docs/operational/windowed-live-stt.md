@@ -635,7 +635,19 @@ remain in series; allocation 0 sends no window traffic. Monitor real traffic
 before every increase because local memory headroom does not prove GPU
 throughput or transcript quality.
 
-`PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` defaults on. For the internal HTTP
+`PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` defaults on in code. The prod listen
+chart and prod runtime overlay explicitly set it to `false` (2026-10-30);
+ordinary listen deploys retain this override. Replica POST budgets capped by
+the remaining first-text deadline currently turn the chronic first-text tail
+into `timeout` provider-failure votes, incorrectly benching Parakeet in the cost
+router. The two-lane rollout lead owns this temporary override, with review due
+2026-11-06. Re-enable only after the durable fix censors deadline-capped POST
+timeouts as first-text deadlines while full-budget POST timeouts remain provider
+failures, with targeted classification tests and rollout verification. Change
+both prod declarations and recompose the runtime manifest; let the normal cost
+router recovery ladder promote Parakeet without resetting its gate.
+
+When enabled, for the internal HTTP
 family endpoint, each live-window POST selects a fresh DNS-ready GPU IP from
 the existing pressure poller. A 5xx, transport error, malformed response, or
 acquired POST timeout quarantines only that GPU in this listener process for

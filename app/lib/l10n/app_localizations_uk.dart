@@ -14477,6 +14477,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get episodeMoments => 'Моменти';
 
   @override
+  String get episodeFollowUps => 'Наступні кроки';
+
+  @override
+  String get episodeOpenTranscript => 'Відкрити розшифровку';
+
+  @override
   String get episodeSoFar => 'Поки що';
 
   @override
@@ -14695,9 +14701,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'На цьому телефоні';
-
-  @override
-  String get episodeOpenTranscript => 'Відкрити розшифровку';
 
   @override
   String get liveCardTitle => 'Наживо';
@@ -14960,5 +14963,30 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Сьогодні списано $amount. Поновлення $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count частини',
+      many: '$count частин',
+      few: '$count частини',
+      two: '$count частини',
+      one: '$count частина',
+      zero: '$count частини',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Надішліть повідомлення в застосунку «$app». Цей екран оновиться, щойно Omi його отримає.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Отримайте новий код і надішліть його з застосунку «$app».';
   }
 }

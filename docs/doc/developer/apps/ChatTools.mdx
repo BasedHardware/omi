@@ -1,21 +1,21 @@
 ---
-title: "Chat Tools"
+title: "Chat tools"
 icon: "wrench"
 description: "Add custom chat tools to your Omi app that extend Omi's capabilities in user conversations."
 ---
 
 ## Overview
 
-**Chat Tools** allow your app to provide custom functions that become available in Omi chat when users install your app. These tools enable the AI assistant to interact with your service directly through natural language conversations.
+**Chat tools** allow your app to provide custom functions that become available in Omi chat when users install your app. These tools enable the AI assistant to interact with your service directly through natural language conversations.
 
 <CardGroup cols={3}>
-  <Card title="Custom Actions" icon="wand-magic-sparkles">
+  <Card title="Custom actions" icon="wand-magic-sparkles">
     Define tools that perform actions on external services
   </Card>
-  <Card title="Natural Language" icon="comments">
+  <Card title="Natural language" icon="comments">
     Users interact with tools through normal conversation
   </Card>
-  <Card title="Automatic Discovery" icon="magnifying-glass">
+  <Card title="Automatic discovery" icon="magnifying-glass">
     Tools become available when users install your app
   </Card>
 </CardGroup>
@@ -28,12 +28,10 @@ description: "Add custom chat tools to your Omi app that extend Omi's capabiliti
 When a user installs your app, these tools automatically become available in their Omi chat, allowing them to say things like "Send a message to #general saying hello" or "What Slack channels do I have?"
 
 <Info>
-Chat Tools require your app to have the `external_integration` capability enabled. They are not a separate capability, but rather a feature that works with external integration apps.
+Chat tools require your app to have the `external_integration` capability enabled. Chat tools are not a separate capability. They work with external integration apps.
 </Info>
 
----
-
-## How Chat Tools Work
+## How chat tools work
 
 ```mermaid
 sequenceDiagram
@@ -51,33 +49,31 @@ sequenceDiagram
 ```
 
 <Steps>
-  <Step title="User Chats with Omi">
+  <Step title="User chats with Omi">
     User makes a request in natural language
   </Step>
-  <Step title="AI Decides to Use Tool">
+  <Step title="AI decides to use tool">
     Omi's AI determines your tool is the best way to fulfill the request
   </Step>
-  <Step title="Omi Calls Your Endpoint">
+  <Step title="Omi calls your endpoint">
     POST request with `uid`, `app_id`, `tool_name`, plus extracted parameters
   </Step>
-  <Step title="Your Server Processes">
+  <Step title="Your server processes">
     Execute the action and return a result
   </Step>
-  <Step title="User Sees Result">
+  <Step title="User sees result">
     Omi displays your response to the user
   </Step>
 </Steps>
 
----
+## Part 1: Implementing chat tools
 
-## Part 1: Implementing Chat Tools
-
-### Step 1: Create Tool Endpoints
+### Step 1: Create tool endpoints
 
 Your backend server needs to expose endpoints that Omi will call when tools are invoked.
 
 <AccordionGroup>
-  <Accordion title="Endpoint Requirements" icon="list-check">
+  <Accordion title="Endpoint requirements" icon="list-check">
     Your endpoints should:
 
     - Accept POST requests with JSON payload (or GET with query parameters)
@@ -93,7 +89,7 @@ Your backend server needs to expose endpoints that Omi will call when tools are 
   </Accordion>
 </AccordionGroup>
 
-#### Example: Send Message Tool
+#### Example: send message tool
 
 ```python
 from flask import Flask, request, jsonify
@@ -156,7 +152,7 @@ def send_message():
         }), 400
 ```
 
-#### Example: Search Tool
+#### Example: search tool
 
 ```python
 @app.route('/api/search_messages', methods=['POST'])
@@ -223,18 +219,18 @@ def search_messages():
         }), 400
 ```
 
-### Step 2: Handle Authentication
+### Step 2: Handle authentication
 
 If your tools require user authentication:
 
 <CardGroup cols={3}>
-  <Card title="Store Tokens Securely" icon="lock">
+  <Card title="Store tokens securely" icon="lock">
     Save OAuth tokens in a secure database associated with `uid`
   </Card>
-  <Card title="Validate Authentication" icon="shield-check">
+  <Card title="Validate authentication" icon="shield-check">
     Check if user has connected their account before processing
   </Card>
-  <Card title="Return Helpful Errors" icon="message">
+  <Card title="Return helpful errors" icon="message">
     If auth is missing, return a clear error message
   </Card>
 </CardGroup>
@@ -261,7 +257,7 @@ def send_message():
     # ...
 ```
 
-### Step 3: Error Handling Best Practices
+### Step 3: Error handling best practices
 
 <Tip>
 Always return helpful error messages that guide users on how to fix the issue.
@@ -278,28 +274,26 @@ return jsonify({'error': 'Channel not found. Please check the channel name.'}), 
 # ✅ Good: return jsonify({'error': 'Service temporarily unavailable. Please try again later.'}), 500
 ```
 
----
+## Part 2: Adding chat tools in Omi App Store
 
-## Part 2: Adding Chat Tools in Omi App Store
-
-Chat tools are defined via a **manifest endpoint** hosted on your server. When you create or update your app in the Omi App Store, Omi will automatically fetch the tool definitions from your manifest URL.
+Chat tools are defined via a **manifest endpoint** hosted on your server. When you create or update your app in the Omi App Store, Omi fetches the tool definitions from your manifest URL.
 
 <CardGroup cols={2}>
-  <Card title="Single Source of Truth" icon="database">
+  <Card title="Single source of truth" icon="database">
     Tool definitions live on your server
   </Card>
-  <Card title="Easy Updates" icon="rotate">
+  <Card title="Easy updates" icon="rotate">
     Modify your manifest and re-save the app to refresh
   </Card>
-  <Card title="Full Control" icon="sliders">
+  <Card title="Full control" icon="sliders">
     Define parameters with JSON Schema
   </Card>
-  <Card title="Version Control" icon="code-branch">
+  <Card title="Version control" icon="code-branch">
     Track changes in your codebase
   </Card>
 </CardGroup>
 
-### Step 1: Create the Manifest File
+### Step 1: Create the manifest file
 
 Create a JSON file at `/.well-known/omi-tools.json` on your server:
 
@@ -352,7 +346,7 @@ Create a JSON file at `/.well-known/omi-tools.json` on your server:
 }
 ```
 
-### Step 2: Host the Manifest
+### Step 2: Host the manifest
 
 Make sure your manifest is accessible via HTTPS. Common locations:
 
@@ -360,16 +354,16 @@ Make sure your manifest is accessible via HTTPS. Common locations:
 - `https://your-app.com/omi/manifest.json`
 - `https://your-app.com/api/tools-manifest`
 
-### Step 3: Add Manifest URL in Omi App Store
+### Step 3: Add the manifest URL in the Omi App Store
 
 <Steps>
-  <Step title="Open Omi App">
+  <Step title="Open the Omi app">
     Navigate to Apps → Create App (or edit an existing app)
   </Step>
-  <Step title="Select Capability">
+  <Step title="Select a capability">
     Choose External Integration capability
   </Step>
-  <Step title="Enter Manifest URL">
+  <Step title="Enter the manifest URL">
     In the **Chat Tools Manifest URL** field, enter:
     ```
     https://your-app.com/.well-known/omi-tools.json
@@ -384,9 +378,7 @@ Make sure your manifest is accessible via HTTPS. Common locations:
 **Endpoint URLs in Manifest**: You can use relative paths (e.g., `/api/send_message`) in your manifest. Omi will automatically resolve them using your `App Home URL` as the base URL.
 </Note>
 
----
-
-## Manifest Schema Reference
+## Manifest schema reference
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -398,7 +390,7 @@ Make sure your manifest is accessible via HTTPS. Common locations:
 | `auth_required` | boolean | No | Whether user auth is required (default: `true`) |
 | `status_message` | string | No | Message shown to user when tool is called |
 
-### Parameters Schema
+### Parameters schema
 
 ```json
 {
@@ -414,7 +406,7 @@ Make sure your manifest is accessible via HTTPS. Common locations:
 }
 ```
 
-### Example: FastAPI Manifest Endpoint
+### Example: FastAPI manifest endpoint
 
 ```python
 from fastapi import FastAPI
@@ -465,9 +457,7 @@ async def get_omi_tools_manifest():
     }
 ```
 
----
-
-## Sending Chat Messages Proactively
+## Sending chat messages proactively
 
 Your app can send messages directly to a user's chat without waiting for them to invoke a tool. This is useful for:
 
@@ -475,7 +465,7 @@ Your app can send messages directly to a user's chat without waiting for them to
 - Proactive notifications based on external events
 - Asynchronous updates from your service
 
-### Enabling Chat Messages
+### Enabling chat messages
 
 Add the `chat_messages` configuration to your manifest:
 
@@ -496,7 +486,7 @@ Add the `chat_messages` configuration to your manifest:
 | `target` | string | `"app"` | Where messages appear: `"app"` (app-specific chat) or `"main"` (main chat) |
 | `notify` | boolean | `false` | Whether to send a push notification with the message |
 
-### Sending Messages via API
+### Sending messages via API
 
 Once enabled, use the notification API to send messages:
 
@@ -511,7 +501,7 @@ curl -X POST https://api.omi.me/v1/integrations/notification \
   }'
 ```
 
-### API Request Fields
+### API request fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -519,7 +509,7 @@ curl -X POST https://api.omi.me/v1/integrations/notification \
 | `aid` | string | Yes | Your app's ID |
 | `message` | string | Yes | The message content to send |
 
-### Example: Background Task Completion
+### Example: background task completion
 
 ```python
 import httpx
@@ -542,7 +532,7 @@ async def send_task_result(uid: str, result: str):
         return response.status_code == 200
 ```
 
-### Rate Limits
+### Rate limits
 
 Chat messages are rate-limited to prevent notification fatigue:
 
@@ -553,12 +543,10 @@ Chat messages are rate-limited to prevent notification fatigue:
 Abuse of chat messages (spam, excessive notifications) may result in your app being removed from the store.
 </Warning>
 
----
-
-## Tool Definition Best Practices
+## Tool definition best practices
 
 <AccordionGroup>
-  <Accordion title="Tool Names" icon="tag">
+  <Accordion title="Tool names" icon="tag">
     Use descriptive, action-oriented names:
 
     | Good | Bad |
@@ -581,7 +569,7 @@ Abuse of chat messages (spam, excessive notifications) may result in your app be
     Required parameters: channel (e.g., '#general') and message (the text to send).
     ```
   </Accordion>
-  <Accordion title="HTTP Methods" icon="code">
+  <Accordion title="HTTP methods" icon="code">
     Choose the appropriate method:
 
     | Method | Use For |
@@ -591,7 +579,7 @@ Abuse of chat messages (spam, excessive notifications) may result in your app be
     | `PUT/PATCH` | Updating resources |
     | `DELETE` | Deleting resources |
   </Accordion>
-  <Accordion title="Status Messages" icon="spinner">
+  <Accordion title="Status messages" icon="spinner">
     Provide custom messages shown during tool execution:
 
     - "Searching Slack..."
@@ -602,11 +590,9 @@ Abuse of chat messages (spam, excessive notifications) may result in your app be
   </Accordion>
 </AccordionGroup>
 
----
+## Request and response format
 
-## Request and Response Format
-
-### Request Format
+### Request format
 
 **POST Request:**
 ```json
@@ -668,7 +654,7 @@ def add_product_entry():
 Location data is cached server-side for 30 minutes. If the user moves significantly, your tool will receive updated coordinates on the next call.
 </Tip>
 
-### Response Format
+### Response format
 
 <Tabs>
   <Tab title="Success" icon="check">
@@ -689,32 +675,30 @@ Location data is cached server-side for 30 minutes. If the user moves significan
   </Tab>
 </Tabs>
 
----
-
-## Best Practices
+## Best practices
 
 <CardGroup cols={2}>
-  <Card title="Clear Responses" icon="message">
+  <Card title="Clear responses" icon="message">
     Keep responses concise but informative
 
-    - ✅ "Successfully sent message to #general"
-    - ❌ "OK"
+    - Good: "Successfully sent message to #general"
+    - Bad: "OK"
   </Card>
-  <Card title="Helpful Errors" icon="circle-exclamation">
+  <Card title="Helpful errors" icon="circle-exclamation">
     Guide users on how to fix issues
 
-    - ✅ "Slack not connected. Please connect your account."
-    - ❌ "Error 401"
+    - Good: "Slack not connected. Please connect your account."
+    - Bad: "Error 401"
   </Card>
-  <Card title="Secure Auth" icon="lock">
+  <Card title="Secure auth" icon="lock">
     Store tokens encrypted and implement token refresh for long sessions
   </Card>
-  <Card title="Rate Limiting" icon="gauge-high">
+  <Card title="Rate limiting" icon="gauge-high">
     Protect your endpoints from abuse
   </Card>
 </CardGroup>
 
-### Rate Limiting Example
+### Rate limiting example
 
 ```python
 from functools import wraps
@@ -752,12 +736,10 @@ def send_message():
     # ...
 ```
 
----
-
-## Testing Your Tools
+## Testing your tools
 
 <Steps>
-  <Step title="Test Endpoints Directly">
+  <Step title="Test endpoints directly">
     Use curl or Postman before adding to your app:
 
     ```bash
@@ -772,16 +754,16 @@ def send_message():
       }'
     ```
   </Step>
-  <Step title="Create the App">
+  <Step title="Create the app">
     Add your tool definitions in the Omi App Store
   </Step>
-  <Step title="Install the App">
+  <Step title="Install the app">
     Install it in your test account
   </Step>
-  <Step title="Connect Your Account">
+  <Step title="Connect your account">
     If auth is required, click the connect button in app settings
   </Step>
-  <Step title="Test in Chat">
+  <Step title="Test in chat">
     Try using the tools naturally:
     - "Send a message to #general saying hello"
     - "What Slack channels do I have?"
@@ -789,25 +771,23 @@ def send_message():
   </Step>
 </Steps>
 
----
-
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title="Tool Not Appearing in Chat" icon="eye-slash">
+  <Accordion title="Tool not appearing in chat" icon="eye-slash">
     - Verify the app is installed and enabled (`enabled: true`)
     - Check that `chat_tools` array is properly formatted
     - Ensure endpoints are accessible and return proper responses
     - Verify the app has `external_integration` capability
   </Accordion>
-  <Accordion title="Tool Calls Failing" icon="circle-xmark">
+  <Accordion title="Tool calls failing" icon="circle-xmark">
     - Check endpoint logs for errors
     - Verify authentication is working
     - Ensure response format matches specification
     - Test endpoints directly with curl/Postman
     - Check that required parameters are being sent
   </Accordion>
-  <Accordion title="AI Not Using Your Tool" icon="robot">
+  <Accordion title="AI not using your tool" icon="robot">
     - Improve tool description to be more specific about when to use it
     - Add examples in the description
     - Ensure tool name is descriptive
@@ -815,32 +795,28 @@ def send_message():
   </Accordion>
 </AccordionGroup>
 
----
+## Complete example
 
-## Complete Example
-
-<Card title="Slack Integration Example" icon="slack" href="/doc/developer/apps/examples/Slack">
+<Card title="Slack integration example" icon="slack" href="/doc/developer/apps/examples/Slack">
   See a complete working example that demonstrates OAuth authentication, multiple chat tools, handling invocations, and error handling
 </Card>
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Developer API" icon="code" href="/doc/developer/api">
+  <Card title="Developer API" icon="code" href="/doc/developer/api/overview">
     Access your own personal Omi data programmatically
   </Card>
-  <Card title="Data Import APIs" icon="file-import" href="/doc/developer/apps/Import">
+  <Card title="Data import APIs" icon="file-import" href="/doc/developer/apps/Import">
     Create conversations and memories via REST API
   </Card>
-  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+  <Card title="Integration apps" icon="plug" href="/doc/developer/apps/Integrations">
     Learn about external integrations
   </Card>
-  <Card title="OAuth Guide" icon="key" href="/doc/developer/apps/Oauth">
+  <Card title="OAuth guide" icon="key" href="/doc/developer/apps/Oauth">
     Set up authentication for your app
   </Card>
-  <Card title="Submit Your App" icon="rocket" href="/doc/developer/apps/Submitting">
+  <Card title="Submit your app" icon="rocket" href="/doc/developer/apps/Submitting">
     Publish your app to the store
   </Card>
   <Card title="Notifications" icon="bell" href="/doc/developer/apps/Notifications">

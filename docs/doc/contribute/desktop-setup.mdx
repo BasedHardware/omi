@@ -1,0 +1,33 @@
+---
+title: "Desktop setup"
+icon: "desktop"
+description: "Build and run the Omi macOS desktop app from source."
+---
+
+The Omi desktop app for macOS lives in [`desktop/macos/`](https://github.com/BasedHardware/omi/tree/main/desktop/macos). It is a Swift Package Manager project, and `run.sh` builds and launches it. There is no Xcode project to open.
+
+## Setup
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/BasedHardware/omi.git
+    cd omi/desktop/macos
+    ```
+  </Step>
+  <Step title="Install the prerequisites">
+    Install the toolchain and code-signing identity listed in the [desktop README](https://github.com/BasedHardware/omi/blob/main/desktop/macos/README.md#development).
+  </Step>
+  <Step title="Build and run a named bundle">
+    ```bash
+    OMI_APP_NAME="omi-dev" ./run.sh
+    ```
+    This builds the app, starts a local Python backend, and launches the bundle. Always use a named `omi-*` bundle, so you never install over the production Omi or Omi Beta apps.
+  </Step>
+</Steps>
+
+## Where the details live
+
+The macOS component keeps its own guides next to the code: [`desktop/macos/README.md`](https://github.com/BasedHardware/omi/blob/main/desktop/macos/README.md) and `desktop/macos/docs/` cover the build flavors, signing, testing, and release process. Those docs are the source of truth; this page only points you there.
+
+For what the shipped app does (capture modes, permissions, surfaces), see [Omi for Mac](/onboarding/omi-macos).

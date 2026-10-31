@@ -45,6 +45,9 @@ generated_route_overrides:
   - feature: daily_summary_simple
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
+  - feature: episode_composer
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: low}
   - feature: episode_incremental
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}

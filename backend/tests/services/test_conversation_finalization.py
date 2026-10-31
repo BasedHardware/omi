@@ -193,7 +193,9 @@ def test_reconcile_listen_finalization_jobs_success(mock_dependencies):
         'advanced': 0,
         'error': 0,
     }
-    mock_dependencies["claim_replay"].assert_called_once_with("job1", stale_after="stale_after", firestore_client=None)
+    mock_dependencies["claim_replay"].assert_called_once_with(
+        "job1", stale_after="stale_after", firestore_client=None, max_attempts=5
+    )
     mock_dependencies["enqueue_job"].assert_called_once_with("job1", 1)
     mock_dependencies["record_reconciliation"].assert_called_once_with('requeued')
     mock_dependencies["inc_retries"].assert_called_once()

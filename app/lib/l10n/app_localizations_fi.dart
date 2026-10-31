@@ -14451,6 +14451,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeMoments => 'Hetket';
 
   @override
+  String get episodeFollowUps => 'Jatkotoimet';
+
+  @override
+  String get episodeOpenTranscript => 'Avaa litterointi';
+
+  @override
   String get episodeSoFar => 'Tähän mennessä';
 
   @override
@@ -14669,9 +14675,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Tässä puhelimessa';
-
-  @override
-  String get episodeOpenTranscript => 'Avaa litterointi';
 
   @override
   String get liveCardTitle => 'Live';
@@ -14933,5 +14936,30 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Tänään veloitettiin $amount. Uusiutuu $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count osaa',
+      many: '$count osaa',
+      few: '$count osaa',
+      two: '$count osaa',
+      one: '$count osa',
+      zero: '$count osaa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Lähetä viesti $app-sovelluksessa. Tämä näkymä päivittyy heti, kun Omi saa sen.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Hae uusi koodi ja lähetä se $app-sovelluksesta.';
   }
 }

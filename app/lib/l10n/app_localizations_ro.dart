@@ -14510,6 +14510,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeMoments => 'Momente';
 
   @override
+  String get episodeFollowUps => 'Pași următori';
+
+  @override
+  String get episodeOpenTranscript => 'Deschide transcrierea';
+
+  @override
   String get episodeSoFar => 'Până acum';
 
   @override
@@ -14728,9 +14734,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Pe acest telefon';
-
-  @override
-  String get episodeOpenTranscript => 'Deschide transcrierea';
 
   @override
   String get liveCardTitle => 'Live';
@@ -14992,5 +14995,30 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Azi s-au încasat $amount. Se reînnoiește pe $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de părți',
+      many: '$count de părți',
+      few: '$count părți',
+      two: '$count de părți',
+      one: '$count parte',
+      zero: '$count de părți',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Trimite mesajul din $app. Acest ecran se actualizează de îndată ce Omi îl primește.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Obține un cod nou și trimite-l din $app.';
   }
 }

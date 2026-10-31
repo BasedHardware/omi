@@ -1,6 +1,7 @@
 """Content-free recovery failures and strict, in-memory silence evidence."""
 
 import io
+import logging
 import wave
 from collections.abc import Callable
 from typing import Any
@@ -17,6 +18,8 @@ from utils.observability.reasons import (
 
 STAGES = reason_values(RecoveryFailureStage)
 REASONS = reason_values(RecoveryFailureReason)
+AUDIO_DURATION_TOLERANCE_SECONDS = 0.1
+logger = logging.getLogger(__name__)
 
 
 class RecoveryFailure(ValueError):
@@ -28,6 +31,21 @@ class RecoveryFailure(ValueError):
         super().__init__(self.reason)
 
 
+def stage_failure(stage: str, reason: str, error: Exception) -> RecoveryFailure:
+    """Build the same bounded failure even when diagnostic logging fails."""
+    failure = RecoveryFailure(stage, reason)
+    try:
+        logger.warning(
+            'event=batch_recovery_stage_failure stage=%s reason=%s exception_type=%s',
+            failure.stage,
+            failure.reason,
+            type(error).__name__,
+        )
+    except Exception:
+        pass
+    return failure
+
+
 def at_stage(stage: str, reason: str, operation: Callable[[], Any]):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
@@ -35,8 +53,8 @@ def at_stage(stage: str, reason: str, operation: Callable[[], Any]):
         return operation()
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
-    except Exception:
-        raise RecoveryFailure(stage, reason) from None
+    except Exception as error:
+        raise stage_failure(stage, reason, error) from None
 
 
 def inspect_audio(item, audio, *, vad=None):
@@ -47,7 +65,7 @@ def inspect_audio(item, audio, *, vad=None):
             if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, 16000):
                 raise ValueError('shape')
             duration = wav.getnframes() / 16000
-            if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
+            if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > AUDIO_DURATION_TOLERANCE_SECONDS:
                 raise ValueError('duration')
             pcm = wav.readframes(wav.getnframes())
             if len(pcm) != wav.getnframes() * 2:
@@ -111,7 +129,25 @@ def result_outcome(payload):
             payload.get('words') != []
             or payload.get('words_provider') != 'exhausted_recognizers'
             or payload.get('recognition_evidence')
-            not in (EMPTY_EVIDENCE, TWO_PROVIDER_EMPTY_EVIDENCE, LANGUAGE_GUARD_EMPTY_EVIDENCE)
+            not in (
+                EMPTY_EVIDENCE,
+                TWO_PROVIDER_EMPTY_EVIDENCE,
+                LANGUAGE_GUARD_EMPTY_EVIDENCE,
+                SECOND_CHANCE_EMPTY_EVIDENCE,
+            )
+            or (
+                payload.get('recognition_evidence') == SECOND_CHANCE_EMPTY_EVIDENCE
+                and payload.get('recognizer_receipts')
+                != {
+                    provider: {
+                        'provider': provider,
+                        'outcome': 'empty',
+                        'word_count': 0,
+                        'vad_speech_seconds': payload.get('speech_seconds'),
+                    }
+                    for provider in ('modulate', 'soniox')
+                }
+            )
         ):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
         at_stage(
@@ -173,6 +209,12 @@ TWO_PROVIDER_EMPTY_EVIDENCE = {
     'multilingual_recovery': 'empty',
     'second_multilingual_recovery': 'empty',
 }
+# No fabricated GPU retry evidence for validation/short/oversize holds. Both
+# valid-empty recognizer receipts accompany this shape in the result artifact.
+SECOND_CHANCE_EMPTY_EVIDENCE = {
+    'multilingual_recovery': 'empty',
+    'second_multilingual_recovery': 'empty',
+}
 LANGUAGE_GUARD_EMPTY_EVIDENCE = {
     'gpu_language_guard': 'unsupported_language',
     'multilingual_recovery': 'empty',
@@ -213,7 +255,7 @@ def padded_long_speech(job):
     return job.get('worker_empty_evidence') == {'padded_retry': 'skipped_long_speech', 'version': 1}
 
 
-def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE):
+def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE, *, recognizer_receipts=None):
     if not terminal_empty_allowed(spans):
         raise MultilingualEmpty(duration, spans)
     payload = {
@@ -226,6 +268,7 @@ def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE):
         'recovery_version': 1,
         'outcome': 'no_recoverable_speech',
         'recognition_evidence': dict(evidence),
+        **({'recognizer_receipts': recognizer_receipts} if recognizer_receipts is not None else {}),
     }
     result_outcome(payload)
     return payload
