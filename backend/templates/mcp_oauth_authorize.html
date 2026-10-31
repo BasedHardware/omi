@@ -173,10 +173,9 @@
         const loader = document.getElementById('loader');
         const errorMessage = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
-        const signInOptions = [firebase.auth.GoogleAuthProvider.PROVIDER_ID];
-        if (/Mac|iPod|iPhone|iPad/.test(navigator.platform)) {
-            signInOptions.push('apple.com');
-        }
+        // Offer Apple on every platform: accounts created with Apple on iOS must be able
+        // to sign in from Windows, Linux and Android browsers too.
+        const signInOptions = [firebase.auth.GoogleAuthProvider.PROVIDER_ID, 'apple.com'];
 
         function setLoading(isLoading) {
             loader.classList.toggle('is-visible', isLoading);
