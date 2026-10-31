@@ -70,8 +70,14 @@ cloud_run:
     # 2026-10-24 costcut (live 22:48Z): cap 80 -> 50; warm floor 1 -> 5 so the sync
     # pump keeps conversation-finalization headroom (min 5 x concurrency 20, the
     # shape deploy-backend-stack sizes its queue against).
-    max_instances: 50
-    min_instances: 5
+    # 2026-10-29 retire100: batch at 100% takes consented mobile off per-segment
+    # sync; live measured 140-165k req/h on ~19 instances (7.4k req/h each).
+    # Residual sizing formula in retire100-changeset-2026-10-29.md; cap 20 =
+    # 35% headroom over the high residual case, floor 5 -> 3 (60 concurrent
+    # finalization handlers still exceed the 10-24 sizing rationale).
+    # Rollback: 50/5.
+    max_instances: 20
+    min_instances: 3
   backend-sync-backfill:
     env:
       SYNC_TASKS_QUEUE: sync-backfill-fresh
@@ -92,10 +98,14 @@ cloud_run:
       MEETING_NOTES_EVIDENCE_WAIT_SECONDS: '25'
       MEMORY_MODE: 'off'
       TYPESENSE_HOST_PORT: '443'
-    # redis_guard.sh moves this between 8 and 40 from Redis memory. It is
+    # redis_guard.sh moves this between its bounds from Redis memory. It is
     # deleted with the sequencer (C10); until then the config-train only
     # enforces the bounds.
-    max_instances: {owner: redis_guard, floor: 8, ceiling: 40}
+    # 2026-10-29 retire100: ceiling 40 -> 10. Live ran mean 6.0 / peak 7.5
+    # instances at 12-16k req/h (24h, ro-prod); the backfill fleet is paused
+    # at 22/54 cohorts so the cap only needs the fresh-reconciliation load,
+    # which collapses further at batch-100%. Rollback: ceiling 40 (live 16).
+    max_instances: {owner: redis_guard, floor: 8, ceiling: 10}
   backend-integration:
     env:
       SYNC_TASKS_QUEUE: sync-jobs-fresh

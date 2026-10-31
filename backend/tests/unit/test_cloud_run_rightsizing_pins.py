@@ -6,9 +6,9 @@ costcut. These pins hold every deploy source -- the workflow fallback, the
 deploy-action flags, the ops-train values and the staging shape -- to the
 costcut values, so the next train can no longer silently revert them.
 
-Live reference (ro-prod, 2026-10-24 22:50Z): backend 8Gi/cpu 2/concurrency 20/
-min 3/max 100; backend-sync 6Gi/cpu 2/min 5/max 50; backend-sync-backfill
-4Gi/cpu 2/concurrency 6/min 0 (cap redis_guard-bounded, live 16);
+Live reference (ro-prod, 2026-10-29 retire100): backend 8Gi/cpu 2/concurrency 20/
+min 3/max 100; backend-sync 6Gi/cpu 2/min 3/max 20; backend-sync-backfill
+4Gi/cpu 2/concurrency 6/min 0 (cap redis_guard-bounded, ceiling 10);
 backend-integration 2Gi/cpu 2/concurrency 40/min 3/max 50.
 """
 
@@ -66,13 +66,17 @@ def test_ops_train_values_match_the_live_right_sizing():
     model = dc.source_model('prod')
 
     sync = model['backend-sync'].ops_scale
-    assert (sync['service_min'], sync['service_max']) == (5, 50)
+    # 2026-10-29 retire100: cap 50 -> 20, floor 5 -> 3 after batch-100%
+    # (measured 140-165k req/h on ~19 instances; residual sizing in the
+    # retire100 changeset). Rollback: (5, 50).
+    assert (sync['service_min'], sync['service_max']) == (3, 20)
 
-    # redis_guard owns the backfill cap between its bounds (live 16).
+    # redis_guard owns the backfill cap between its bounds (post-retire100
+    # ceiling 10; live was 16 pre-apply and is pulled under the ceiling).
     backfill = model['backend-sync-backfill'].ops_scale
     assert backfill['service_min'] is None
     assert backfill['service_max']['owner'] == 'redis_guard'
-    assert backfill['service_max']['floor'] <= 16 <= backfill['service_max']['ceiling']
+    assert backfill['service_max']['floor'] <= 10 <= backfill['service_max']['ceiling']
 
     # Equal to the deploy flag (prod && 3): the ops file must never fight the deploy.
     integration = model['backend-integration'].ops_scale
