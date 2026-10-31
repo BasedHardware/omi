@@ -114,3 +114,52 @@ def test_legacy_fallback_uses_a_deterministic_document_order(monkeypatch):
 
     assert result['id'] == 'a'
     query.order_by.assert_any_call('__name__', direction=chat_db.firestore.Query.ASCENDING)
+
+
+# The session this returns is fed straight into `ChatSession(**session)` by
+# POST /v2/messages (quota and happy paths) and the initial-message stream.
+# `created_at` and `id` are required there, so handing back a legacy document
+# as-is turned "still found" into a 500 on every message the user sent.
+
+
+def _legacy_doc(session_id, **fields):
+    doc = MagicMock()
+    doc.to_dict.return_value = dict(fields)
+    doc.id = session_id
+    return doc
+
+
+def test_a_session_without_created_at_satisfies_the_chat_session_model(monkeypatch):
+    from models.chat import ChatSession
+
+    result, _ = _run(monkeypatch, [_doc('legacy')])
+
+    session = ChatSession(**result)
+    assert session.id == 'legacy'
+    assert session.created_at is not None
+
+
+def test_a_missing_created_at_falls_back_to_updated_at(monkeypatch):
+    updated = NOW - timedelta(hours=3)
+
+    result, _ = _run(monkeypatch, [_legacy_doc('legacy', id='legacy', updated_at=updated)])
+
+    assert result['created_at'] == updated
+
+
+def test_a_session_document_without_an_id_field_uses_the_document_id(monkeypatch):
+    from models.chat import ChatSession
+
+    result, _ = _run(monkeypatch, [_legacy_doc('doc-id', plugin_id='app')])
+
+    assert result['id'] == 'doc-id'
+    assert ChatSession(**result).id == 'doc-id'
+
+
+def test_normalizing_does_not_change_which_session_wins(monkeypatch):
+    # Defaults are filled only on the session already chosen: an untimestamped
+    # legacy document must keep losing to a real one, not win with `now()`.
+    result, _ = _run(monkeypatch, [_doc('legacy'), _doc('current', NOW)])
+
+    assert result['id'] == 'current'
+    assert result['created_at'] == NOW
