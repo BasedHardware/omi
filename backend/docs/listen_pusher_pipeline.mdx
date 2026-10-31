@@ -8412,6 +8412,28 @@ redispatches and at most 600 seconds of total waiting. Exhaustion terminally
 fences the job so the age-bounded orphan sweep can complete its processing row.
 Old task deliveries cannot claim a job while revision replay is waiting.
 
+Stale finalization replay also enforces the worker's durable attempt cap before
+minting another dispatch generation. It uses
+`max(attempt_count, worker_claim_count - 1) >= max_attempts`; reconciliation,
+duplicate deliveries, pusher handoffs, and explicit revision/owner deferrals do
+not consume worker claims. An exhausted platform-key job uses the existing
+atomic dead-letter transition with `last_failure_code=durable_attempts_exhausted`.
+Live leases, fresh dispatches, BYOK waits, and committed fanout retain their
+existing admission rules. The existing
+`LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED=false` kill switch disables both
+worker and replay enforcement.
+
+Worker preflight reads retain their existing waiting behavior. If a worker is
+lost or hangs without recording a failure, lease expiry lets replay enforce the
+durable cap. An exhausted job with a missing or invalid account binding closes
+only the job, without writing a conversation.
+
+Dead-lettering keeps the conversation visible and preserves its transcript,
+audio references, photos, and any existing structured output. It stops automatic
+summary/derived-output and integration fanout attempts for that job; an eligible
+row can still offer the existing user retry action. A deterministic minimum
+title is not a generated summary.
+
 MCP projected list/search hydration and single/batch detail reads carry and
 honor the pending marker. Default counts add one limit-1 pending-deadline probe;
 only users with active candidates open the exact-count stream (one document read
