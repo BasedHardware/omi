@@ -3,17 +3,17 @@ import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/notifications/fcm_token_registration.dart';
 import 'package:omi/services/notifications.dart' show NotificationUtil;
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
@@ -28,7 +28,7 @@ import 'package:omi/utils/notification_channel_strings.dart';
 
 /// Firebase Cloud Messaging enabled notification service
 /// Supports iOS, Android, macOS, web, and Linux with full FCM functionality
-class _FCMNotificationService implements NotificationInterface {
+class _FCMNotificationService with WidgetsBindingObserver implements NotificationInterface {
   _FCMNotificationService._();
 
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
@@ -37,6 +37,30 @@ class _FCMNotificationService implements NotificationInterface {
   late final NotificationChannel channel;
 
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
+  bool _registrationReady = false;
+  bool _registrationListenersInstalled = false;
+  bool _messageListenersInstalled = false;
+  late final FcmTokenRegistration _registration = FcmTokenRegistration(
+    capture: () => AuthService.instance.captureSessionSnapshot(),
+    isCurrent: (owner) => AuthService.instance.isSessionSnapshotCurrent(owner),
+    readApns: _firebaseMessaging.getAPNSToken,
+    readToken: _firebaseMessaging.getToken,
+    readTimeZone: getTimeZone,
+    requiresApns: Platform.isIOS,
+    persist: (token, zone, owner) async {
+      bool current() => AuthService.instance.isSessionSnapshotCurrent(owner);
+      final accepted = await saveFcmTokenServer(token: token, timeZone: zone, canSend: current);
+      if (!accepted || !current()) return false;
+      unawaited(Future<void>.sync(() async {
+        try {
+          if (current()) await IntercomManager.instance.sendTokenToIntercom(token);
+        } catch (error) {
+          Logger.debug('Intercom push registration deferred: ${error.runtimeType}');
+        }
+      }));
+      return current();
+    },
+  );
 
   @override
   Future<void> initialize() async {
@@ -51,9 +75,20 @@ class _FCMNotificationService implements NotificationInterface {
     );
     await _initializeAwesomeNotifications();
     if (PhysicalQualification.enabled) return;
-    // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
-    // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
-    await _firebaseMessaging.getAPNSToken();
+    if (!_registrationListenersInstalled) {
+      _registrationListenersInstalled = true;
+      WidgetsBinding.instance.addObserver(this);
+      // Install before the first token lookup; startup/permission timing cannot
+      // lose a rotation, and repeated sign-ins cannot add duplicate listeners.
+      _firebaseMessaging.onTokenRefresh.listen((token) {
+        if (_registrationReady) unawaited(saveFcmToken(token));
+      }, onError: (Object error) {
+        Logger.debug('Push token stream deferred: ${error.runtimeType}');
+      });
+      AuthService.instance.sessionGenerationEvents.listen((_) {
+        if (_registrationReady) unawaited(register());
+      });
+    }
     listenForMessages();
   }
 
@@ -121,13 +156,22 @@ class _FCMNotificationService implements NotificationInterface {
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
       isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
-      register();
     }
+    if (isAllowed) unawaited(register());
     return isAllowed;
   }
 
   @override
-  Future<void> register() async {}
+  Future<void> register() async {
+    if (PhysicalQualification.enabled) return;
+    _registrationReady = true;
+    await _registration.refresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _registrationReady) unawaited(register());
+  }
 
   @override
   Future<String> getTimeZone() async {
@@ -137,44 +181,14 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<void> saveFcmToken(String? token) async {
-    if (token == null) return;
-    String timeZone = await getTimeZone();
-    if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
-      await saveFcmTokenServer(token: token, timeZone: timeZone);
-
-      try {
-        await IntercomManager.instance.sendTokenToIntercom(token);
-      } catch (e) {
-        print(e);
-      }
-    }
+    if (PhysicalQualification.enabled || token == null || token.isEmpty) return;
+    _registrationReady = true;
+    await _registration.refresh(token: token);
   }
 
   @override
   void saveNotificationToken() async {
-    if (PhysicalQualification.enabled) return;
-    try {
-      if (Platform.isIOS) {
-        String? apnsToken;
-        for (int i = 0; i < 10; i++) {
-          apnsToken = await _firebaseMessaging.getAPNSToken();
-          if (apnsToken != null) break;
-          await Future.delayed(const Duration(seconds: 1));
-        }
-
-        if (apnsToken == null) {
-          Logger.debug('APNS token not available yet, will retry on refresh');
-          return;
-        }
-      }
-
-      String? token = await _firebaseMessaging.getToken();
-      await saveFcmToken(token);
-    } catch (e) {
-      Logger.debug('Failed to save notification token: $e');
-    } finally {
-      _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
-    }
+    await register();
   }
 
   @override
@@ -207,6 +221,8 @@ class _FCMNotificationService implements NotificationInterface {
   @override
   Future<void> listenForMessages() async {
     if (PhysicalQualification.enabled) return;
+    if (_messageListenersInstalled) return;
+    _messageListenersInstalled = true;
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;

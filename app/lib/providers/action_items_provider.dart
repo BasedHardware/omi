@@ -14,6 +14,7 @@ import 'package:omi/pages/action_items/services/action_item_export_service.dart'
 import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
+import 'package:omi/services/integrations/automatic_apple_reminders_export.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -57,13 +58,17 @@ class ActionItemsProvider extends ChangeNotifier {
     UpdateDueDateRequest? updateDueDateRequest,
     api.ActionItemsApi? actionItemsApi,
     TaskSuggestionsApi? taskSuggestionsApi,
+    AutomaticAppleRemindersExport? automaticAppleRemindersExport,
+    Future<ExportResult> Function(ActionItemWithMetadata, TaskIntegrationApp)? exportActionItem,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
         _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
         _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
         _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
         _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
-        _actionItemsApi = actionItemsApi {
+        _actionItemsApi = actionItemsApi,
+        _automaticAppleRemindersExport = automaticAppleRemindersExport ?? AutomaticAppleRemindersExport(),
+        _exportActionItem = exportActionItem ?? ActionItemExportService.export {
     suggestions = taskSuggestionsApi == null
         ? null
         : TaskSuggestionsController(api: taskSuggestionsApi, onTaskSaved: receiveSavedTask);
@@ -80,6 +85,8 @@ class ActionItemsProvider extends ChangeNotifier {
   final CreateActionItemRequest _createActionItemRequest;
   final UpdateDueDateRequest _updateDueDateRequest;
   final api.ActionItemsApi? _actionItemsApi;
+  final AutomaticAppleRemindersExport _automaticAppleRemindersExport;
+  final Future<ExportResult> Function(ActionItemWithMetadata, TaskIntegrationApp) _exportActionItem;
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
@@ -968,8 +975,13 @@ class ActionItemsProvider extends ChangeNotifier {
       if (newItem != null) {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
         _receiveCanonicalTask(newItem);
-        // Direct sync to Apple Reminders — no FCM roundtrip needed
-        _syncToAppleRemindersIfNeeded(newItem);
+        unawaited(() async {
+          final exported = await _automaticAppleRemindersExport.export(newItem,
+              canContinue: () => !_disposed && generation == _sessionGeneration);
+          if (exported && !_disposed && generation == _sessionGeneration) {
+            PlatformManager.instance.analytics.appleReminderDirectSync(actionItemId: newItem.id);
+          }
+        }());
         return newItem;
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
@@ -1022,39 +1034,6 @@ class ActionItemsProvider extends ChangeNotifier {
     _listViewState = ApiViewState(phase: ApiViewPhase.data, data: _actionItems);
     SiriIntegration.current.queueUpsertTasks([item]);
     notifyListeners();
-  }
-
-  /// Directly create an Apple Reminder without waiting for FCM roundtrip.
-  /// Fire-and-forget — doesn't block the UI.
-  void _syncToAppleRemindersIfNeeded(ActionItemWithMetadata item) {
-    if (!PlatformService.isApple) return;
-
-    final service = AppleRemindersService();
-    if (!service.isAvailable) return;
-
-    () async {
-      try {
-        if (!await service.hasPermission()) return;
-
-        final calendarItemId = await service.addReminder(
-          title: item.description,
-          notes: 'From Omi',
-          dueDate: item.dueAt,
-        );
-
-        if (calendarItemId != null) {
-          await api.updateActionItem(
-            item.id,
-            exported: true,
-            exportPlatform: 'apple_reminders',
-            appleReminderId: calendarItemId,
-          );
-          PlatformManager.instance.analytics.appleReminderDirectSync(actionItemId: item.id);
-        }
-      } catch (e) {
-        Logger.debug('Direct Apple Reminders sync failed: $e');
-      }
-    }();
   }
 
   /// Push a field update to the linked Apple Reminder immediately.
@@ -1445,7 +1424,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
     OmiFeedback.progress(context, context.l10n.bulkExportInProgress);
 
-    final results = await Future.wait(items.map((i) => ActionItemExportService.export(i, platform)));
+    final results = await Future.wait(items.map((i) => _exportActionItem(i, platform)));
     final successCount = results.where((r) => r == ExportResult.success).length;
 
     // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
