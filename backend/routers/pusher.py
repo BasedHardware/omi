@@ -9,6 +9,7 @@ from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_record_barrier import PusherRecordBarrier
+from utils.pusher_record_finish import RecordProjectionQueue, retain_closed_record_drain
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -411,7 +412,7 @@ async def _websocket_util_trigger(
     # The bounded lane holds generation-pinned references, never the only PCM.
     # A crash after commit but before queue.put is recoverable via raw-live's
     # existing per-conversation playback index, independent of this process.
-    durable_queue: asyncio.Queue[AudioProjection] = asyncio.Queue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
+    durable_queue = RecordProjectionQueue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     inline_finish_conversation: Optional[str] = None
     inline_projection_drained = asyncio.Event()
     inline_finish_done = asyncio.Event()
@@ -594,8 +595,15 @@ async def _websocket_util_trigger(
             logger.warning('Durable audio projection deferred after retries; archive receipt retained')
 
         while websocket_active or not durable_queue.empty() or pending_refs or record_close_requests:
-            await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
-            while not durable_queue.empty():
+            if websocket_active:
+                await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+            else:
+                # This worker may now belong to the process. The socket's
+                # shutdown event is set; do not spin on metadata failures.
+                await asyncio.sleep(PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+            # A continuously replenished later recording must not prevent the
+            # close scan. Process a bounded snapshot before flushing/finishing.
+            for _ in range(durable_queue.qsize()):
                 ref = durable_queue.get_nowait()
                 conv_id = ref.conversation_id
                 if conv_id is not None:
@@ -625,7 +633,11 @@ async def _websocket_util_trigger(
                 ):
                     await flush_refs(conv_id)
             for conv_id in list(record_close_requests):
-                if conv_id == inline_finish_conversation and conv_id not in pending_refs and durable_queue.empty():
+                if (
+                    conv_id == inline_finish_conversation
+                    and conv_id not in pending_refs
+                    and not durable_queue.has_conversation(conv_id)
+                ):
                     # Wake even on projection failure so the receiver can
                     # observe its sticky failure without waiting out the budget.
                     inline_projection_drained.set()
@@ -636,13 +648,13 @@ async def _websocket_util_trigger(
                     conv_id not in record_barrier.failed_recordings
                     and not record_barrier.record_upload_failed
                     and conv_id not in pending_refs
-                    and durable_queue.empty()
+                    and not durable_queue.has_conversation(conv_id)
                 ):
                     if not await record_barrier.finish_recording(conv_id):
                         continue
-                elif conv_id in pending_refs or not durable_queue.empty():
+                elif conv_id in pending_refs or durable_queue.has_conversation(conv_id):
                     continue
-                record_close_requests.discard(conv_id)
+                retire_record_close(conv_id)
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
 
@@ -674,6 +686,13 @@ async def _websocket_util_trigger(
     v2_replay_seen: set[str] = set()
     record_close_requests: set[str] = set()
     record_barrier = PusherRecordBarrier(uid)
+    # Durable workers can outlive socket cleanup; transient metadata errors
+    # keep their close pending until success or process shutdown.
+    record_barrier.keep_close_pending = durable_audio
+
+    def retire_record_close(conv_id: str) -> None:
+        record_close_requests.discard(conv_id)
+        record_barrier.retire_close(conv_id)
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
@@ -911,8 +930,10 @@ async def _websocket_util_trigger(
             await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
 
             if record_barrier.record_upload_failed or upload_fenced:
-                record_close_requests.clear()
-            record_close_requests.difference_update(record_barrier.failed_recordings)
+                for conv_id in list(record_close_requests):
+                    retire_record_close(conv_id)
+            for conv_id in record_close_requests.intersection(record_barrier.failed_recordings):
+                retire_record_close(conv_id)
 
             # Drain queue into pending batches
             if private_cloud_queue:
@@ -988,7 +1009,7 @@ async def _websocket_util_trigger(
                     and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
                 ):
                     if await record_barrier.finish_recording(conv_id):
-                        record_close_requests.discard(conv_id)
+                        retire_record_close(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
         # and eligibility precedes the eight-pass selection limit.
@@ -1611,7 +1632,7 @@ async def _websocket_util_trigger(
                             and not record_barrier.record_upload_failed
                         ):
                             if await record_barrier.finish_recording(current_conversation_id):
-                                record_close_requests.discard(current_conversation_id)
+                                retire_record_close(current_conversation_id)
                 except TimeoutError:
                     logger.info('event=record_inline_finish outcome=timeout')
                 finally:
@@ -1661,7 +1682,19 @@ async def _websocket_util_trigger(
                 pass
 
         shutdown_event.set()
-        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
+        if durable_audio:
+            # Preserve the *same* worker and its in-flight projection. Cancelling
+            # and restarting would lose the drain proof for a thread still doing
+            # storage I/O. All other socket tasks keep bounded cleanup.
+            await asyncio.wait(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT)
+            private_worker = bg_main_tasks[1]
+            has_record_debt = (
+                record_barrier.upload_sessions or record_barrier.pending_clears or record_barrier.close_failures
+            )
+            if has_record_debt and retain_closed_record_drain(private_worker):
+                bg_main_tasks.remove(private_worker)
+        else:
+            await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
 
     except asyncio.CancelledError:
         websocket_close_code = 1006
