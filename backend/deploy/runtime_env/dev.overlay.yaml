@@ -5,6 +5,14 @@ data_plane_project: based-hardware
 overlay:
   llm_gateway:
     static_address_name: dev-llm-gateway-ilb-ip-address
+    env:
+      # Dev still reads proactivity_v2 from PostHog; prod reads the Omi flag store.
+      PROACTIVITY_V2_POSTHOG_TOKEN:
+        value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+        category: rollout
+      PROACTIVITY_V2_POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: rollout
   gke:
     backend-listen:
       env:

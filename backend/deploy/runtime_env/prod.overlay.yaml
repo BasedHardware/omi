@@ -7,7 +7,7 @@ overlay:
     env:
       OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
       OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
-      OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+      OMI_FLAGS_SOURCE: {value: omi, category: rollout}
       # Retirement is an operator decision; expiring evidence can revive old ACTIVE state.
       OMI_VERTEX_RESERVATION_STATES:
         value: '{"gemini-2.5-flash":"inactive"}'

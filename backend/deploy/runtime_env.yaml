@@ -7,9 +7,9 @@ environments:
       release_name: dev-omi-llm-gateway
       ingress_name: dev-omi-llm-gateway
       env:
+        DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-        DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
       static_address_name: dev-llm-gateway-ilb-ip-address
     gcp_project: based-hardware-dev
     gke:
@@ -2056,8 +2056,6 @@ environments:
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
       env:
-        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
-        PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         OMI_FLAGS_FIRESTORE_PROJECT:
           value: based-hardware
@@ -2065,7 +2063,7 @@ environments:
         OMI_FLAGS_FIRESTORE_DATABASE:
           value: omi-flags
           category: service_discovery
-        OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+        OMI_FLAGS_SOURCE: {value: omi, category: rollout}
         OMI_VERTEX_RESERVATION_STATES:
           value: '{"gemini-2.5-flash":"inactive"}'
           category: ops_kill
