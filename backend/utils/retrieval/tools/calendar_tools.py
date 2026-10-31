@@ -110,7 +110,7 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
     except httpx.HTTPError as e:
         _log_failure("Network error searching My Contacts", e)
     except Exception as e:
-        logger.error(f"⚠️ Error searching My Contacts: {e}")
+        _log_failure("Error searching My Contacts", e)
 
     # If not found in My Contacts, search in "Other Contacts"
     try:
@@ -175,7 +175,7 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
     except httpx.HTTPError as e:
         _log_failure("Network error searching Other Contacts", e)
     except Exception as e:
-        logger.error(f"⚠️ Error searching Other Contacts: {e}")
+        _log_failure("Error searching Other Contacts", e)
 
     logger.info(f"⚠️ No contacts found in My Contacts or Other Contacts for: {sanitize_pii(query)}")
     return None

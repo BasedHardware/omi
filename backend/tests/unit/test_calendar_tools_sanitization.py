@@ -531,6 +531,20 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Network error searching Other Contacts: code=", logged)
         self.assertNotIn(self.SENSITIVE, logged)
 
+    async def test_contacts_unexpected_failures_log_without_exception_text(self):
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=RuntimeError(self.SENSITIVE))
+        with (
+            patch.object(ct, "get_auth_client", return_value=client),
+            patch.object(ct.httpx, "HTTPError", ConnectError),  # the stub's HTTPError would catch everything
+            self.assertLogs(ct.logger, level="ERROR") as logs,
+        ):
+            self.assertIsNone(await ct.search_google_contacts("token", "Avery"))
+        logged = "\n".join(logs.output)
+        self.assertIn("Error searching My Contacts: code=", logged)
+        self.assertIn("Error searching Other Contacts: code=", logged)
+        self.assertNotIn(self.SENSITIVE, logged)
+
 
 if __name__ == "__main__":
     unittest.main()
