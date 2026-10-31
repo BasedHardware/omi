@@ -19,6 +19,7 @@ def partial_barrier(row):
     mark = row.get('record_audio_partial')
     return bool(
         isinstance(mark, dict)
+        and type(mark.get('version')) is int
         and mark.get('version') == 1
         and mark.get('reason') in REASONS
         and mark.get('upload_revision') == row.get('record_upload_revision')

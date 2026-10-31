@@ -114,9 +114,10 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
     units, _ = await run_blocking(sync_executor, collect)
     plan = {'version': 1, 'fingerprint': fingerprint, 'units': units, 'prior_coverage': coverage}
     uri = await run_blocking(storage_executor, artifacts.stage_record_plan, seed, plan)
+    generation = int((previous or {}).get('generation', 0)) + 1
     run = {
         'fingerprint': fingerprint,
-        'generation': int((previous or {}).get('generation', 0)) + 1,
+        'generation': generation,
         'page': 0,
         'units': len(units),
         'coverage': coverage,
@@ -135,9 +136,7 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
         now=now,
         applied=not units,
     )
-    event(
-        'scheduled' if changed and units else 'no_new_audio' if changed else 'state_changed', late=run['generation'] > 1
-    )
+    event('scheduled' if changed and units else 'no_new_audio' if changed else 'state_changed', late=generation > 1)
     return run if changed else None
 
 

@@ -4,7 +4,7 @@ from bisect import bisect_right
 import hashlib
 import json
 
-from config.record_partial import MAX_SOURCES, MAX_UNITS
+from config.record_partial import MAX_SOURCES, MAX_UNITS, UNIT_REFERENCES
 
 RATE = 16000
 
@@ -68,18 +68,22 @@ def missing_units(units, coverage):
                 selected.append((ref, left, cursor, right))
         if not selected:
             continue
-        new_origin = selected[0][2]
-        sliced = [
-            {
-                **ref,
-                'start_frame': left - new_origin,
-                'offset_frame': ref['offset_frame'] + left - source_left,
-                'frames': right - left,
-            }
-            for ref, source_left, left, right in selected
-        ]
         added.extend([left, right] for _, _, left, right in selected)
-        result.append((new_origin / RATE, (selected[-1][3] - new_origin) / RATE, sliced))
-        if len(result) > MAX_UNITS:
-            raise ValueError('partial unit budget exceeded')
+        # Subtraction can split one source into thousands of holes. Reapply
+        # the worker reference bound after slicing, not only before it.
+        for index in range(0, len(selected), UNIT_REFERENCES):
+            group = selected[index : index + UNIT_REFERENCES]
+            new_origin = group[0][2]
+            sliced = [
+                {
+                    **ref,
+                    'start_frame': left - new_origin,
+                    'offset_frame': ref['offset_frame'] + left - source_left,
+                    'frames': right - left,
+                }
+                for ref, source_left, left, right in group
+            ]
+            result.append((new_origin / RATE, (group[-1][3] - new_origin) / RATE, sliced))
+            if len(result) > MAX_UNITS:
+                raise ValueError('partial unit budget exceeded')
     return result, union([*coverage, *added])

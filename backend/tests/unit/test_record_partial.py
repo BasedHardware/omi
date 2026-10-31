@@ -3,6 +3,7 @@
 from copy import deepcopy
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
+import hashlib
 import io
 import json
 from types import SimpleNamespace
@@ -24,6 +25,7 @@ from utils.batch_pipeline import record_seal_cluster_repair as cluster, record_s
 from utils.batch_pipeline.record_seal_budget import SweepBudget
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.record_partial_audio import missing_units, union
+from utils.batch_pipeline.source_audio import MAGIC, materialize
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.record_seal_nojob import registration
 from diarizer.batch_pipeline_models import decode_pcm16_wav
@@ -145,6 +147,13 @@ def test_partial_requires_fresh_inventory_even_without_tokens(source):
     assert not source[1].rows[ROW].get('record_audio_partial')
 
 
+def test_malformed_partial_version_never_opens_the_barrier(source):
+    assert finish(source) == 'partial_finished'
+    source[1].rows[ROW]['record_audio_partial']['version'] = True
+    with pytest.raises(ValueError, match='barrier'):
+        require_record_audio_barrier(source[1].rows[ROW])
+
+
 def test_producer_finishing_between_check_and_apply_is_not_raced(source):
     source[1].rows[ROW]['record_upload_sessions'] = {'producer': {'pod': 'alive', 'process_started_at': 100}}
     source[2]['pods'] = {'alive': 100}
@@ -229,6 +238,80 @@ def test_user_edit_before_partial_fill_survives_even_inside_enclosing_span(sourc
         ('edited', 'User wording'),
         ('new', 'Late speech'),
     ]
+
+
+def test_late_object_filling_4100_holes_reapplies_worker_reference_bound():
+    origin, frames = 1600000, 9000
+    pcm = b'\x01\x00' * frames
+    ref = {
+        'start_frame': 0,
+        'frames': frames,
+        'offset_frame': 0,
+        'pcm_sha256': hashlib.sha256(pcm).hexdigest(),
+        'bucket': 'retained',
+        'path': 'chunks/synthetic/record/late',
+        'generation': 1,
+    }
+    coverage = [[origin + 2 * i, origin + 2 * i + 1] for i in range(4100)]
+    units, covered = missing_units([(100, frames / 16000, [ref])], coverage)
+    assert len(units) == 17
+    assert max(len(refs) for _, _, refs in units) <= 256
+    assert sum(r['frames'] for _, _, refs in units for r in refs) == frames - 4100
+    assert covered == [{'start': origin, 'end': origin + frames}]
+    recognized_frames = 0
+    downloads = []
+    for start, duration, refs in units:
+        item = SimpleNamespace(
+            owner_id='synthetic', conversation_id='record', capture_at=start, duration_seconds=duration
+        )
+        body = (
+            MAGIC
+            + json.dumps(
+                {
+                    'owner_id': item.owner_id,
+                    'conversation_id': item.conversation_id,
+                    'capture_at': start,
+                    'references': refs,
+                    'context': {},
+                }
+            ).encode()
+        )
+        wav = materialize(body, item, lambda reference: downloads.append(reference['generation']) or pcm)
+        with wave.open(io.BytesIO(wav), 'rb') as stream:
+            recognized_frames += stream.readframes(stream.getnframes()).count(b'\x01\x00')
+    assert recognized_frames == frames - 4100
+    assert len(downloads) == len(units)  # One pinned source read per bounded unit, not per hole.
+
+
+@pytest.mark.parametrize('change', [{'generation': 2}, {'path': 'chunks/synthetic/record/other'}, {'bucket': 'other'}])
+def test_source_reuse_never_crosses_a_pinned_identity(change):
+    pcm = b'\x01\x00' * 2
+    ref = {
+        'bucket': 'retained',
+        'path': 'chunks/synthetic/record/late',
+        'generation': 1,
+        'pcm_sha256': hashlib.sha256(pcm).hexdigest(),
+        'start_frame': 0,
+        'offset_frame': 0,
+        'frames': 1,
+    }
+    item = SimpleNamespace(owner_id='synthetic', conversation_id='record', capture_at=100, duration_seconds=2 / 16000)
+    refs = [ref, {**ref, **change, 'start_frame': 1, 'offset_frame': 1}]
+    body = (
+        MAGIC
+        + json.dumps(
+            {
+                'owner_id': item.owner_id,
+                'conversation_id': item.conversation_id,
+                'capture_at': 100,
+                'references': refs,
+                'context': {},
+            }
+        ).encode()
+    )
+    calls = []
+    materialize(body, item, lambda source: calls.append(source) or pcm)
+    assert len(calls) == 2
 
 
 @pytest.fixture
