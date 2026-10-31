@@ -266,6 +266,14 @@ def _clock(value: Any, lo: datetime, hi: datetime, tz: ZoneInfo) -> Optional[dat
     return None
 
 
+def _speech_end(row: Mapping[str, Any]) -> Optional[datetime]:
+    """When a member's last transcript segment ends, on the same clock as its lines."""
+    origin, segments = _origin(row), _segments(row)
+    if origin is None or not segments:
+        return None
+    return origin + timedelta(seconds=max(float(s.get('end') or s.get('start') or 0) for s in segments))
+
+
 def _line(value: Any, limit: int) -> str:
     return re.sub(r'\s+', ' ', str(value or '')).strip().strip('•-* ').strip()[:limit].rstrip()
 
@@ -321,6 +329,7 @@ def to_updates(
         (cid, a, b) for cid, a, b in spans if a is not None and b is not None
     ]
     origins = {str(row.get('id')): _origin(row) for row in members}
+    speech_ends = {str(row.get('id')): _speech_end(row) for row in members}
     drafts = []
     if known:
         lo, hi = min(a for _, a, _ in known), max(b for _, _, b in known)
@@ -348,13 +357,12 @@ def to_updates(
             # The last line the chapter owns: before the next chapter, on its own recording.
             inside = [t for t in times.get(owner) or [] if t >= start and (following is None or t < following)]
             end = max(inside) if inside else start
-        last = max(times.get(owner) or [start])
-        if end > last:
-            # A chapter runs on into the next recording: it stays on its own, whose transcript it opens.
-            inside = [t for t in times.get(owner) or [] if t >= start]
-            end = max(inside) if inside else start
+        # The moment stays inside its own recording's speech, whose transcript it opens.
+        limit = speech_ends.get(owner) or max(times.get(owner) or [start])
+        start = min(start, limit)
         if end <= start:
             end = start + timedelta(seconds=30)
+        end = max(start, min(end, limit))
         origin = origins.get(owner)
         moments.append(
             {

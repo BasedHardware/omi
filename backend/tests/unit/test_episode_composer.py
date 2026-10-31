@@ -543,13 +543,17 @@ def test_a_chapter_running_into_the_next_recording_stays_inside_its_own():
         'moments'
     ][0]
     assert moment['conversation_id'] == 'c1'
-    # Ends at c1's last line, so the transcript offset stays inside c1.
-    assert moment['ended_at'] == T0 + timedelta(minutes=10, seconds=-30)
-    assert moment['end_offset'] == 570.0
-    # Even a few seconds past the last line is clamped to it.
-    near = {**chapter, 'end': '15:06:00'}
-    clamped = composer.to_updates({'title': 't', 'lede': 'l', 'chapters': [near]}, [a, b], ZoneInfo('Asia/Bangkok'))
-    assert clamped['moments'][0]['end_offset'] == 570.0
+    # Ends where c1's last segment ends (570 s + 5 s), so the transcript offset stays inside c1.
+    assert moment['end_offset'] == 575.0
+
+    def offsets(start, end):
+        near = {**chapter, 'start': start, 'end': end}
+        m = composer.to_updates({'title': 't', 'lede': 'l', 'chapters': [near]}, [a], ZoneInfo('Asia/Bangkok'))
+        return m['moments'][0]['start_offset'], m['moments'][0]['end_offset']
+
+    # Past the last segment, start and end are both held to it, never pushed beyond.
+    assert offsets('14:56:00', '15:06:00') == (0.0, 575.0)
+    assert offsets('15:05:40', '15:05:45') == (575.0, 575.0)
 
 
 def test_a_failed_version_recompose_backs_off():
