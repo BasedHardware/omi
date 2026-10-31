@@ -1794,12 +1794,9 @@ async def _run_websocket_util_trigger(
                 record_drain_observed = True
             await asyncio.wait(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT)
             has_record_debt = (
-                record_barrier.upload_sessions
-                or record_barrier.pending_clears
-                or record_barrier.close_failures
-                or record_barrier.close_retry_at
+                record_barrier.upload_sessions or record_barrier.pending_clears or record_barrier.close_failures
             )
-            if has_record_debt and retain_closed_record_drain(private_worker):
+            if (has_record_debt or record_barrier.close_retry_at) and retain_closed_record_drain(private_worker):
                 bg_main_tasks.remove(private_worker)
         else:
             with observe_work('drain'):
