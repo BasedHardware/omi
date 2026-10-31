@@ -74,7 +74,6 @@ def get_canonical_goals(
 
 
 _KNOWN_GOAL_CONFLICTS = {
-    "focus full",
     "account generation mismatch",
     "ended goals cannot be focused",
     "idempotency key was reused with different content",
@@ -83,6 +82,11 @@ _KNOWN_GOAL_CONFLICTS = {
     "focus_rank is already occupied",
     "use explicit focus management after creating a goal",
     "progress event idempotency key was reused with different content",
+    "first-open account authority unavailable",
+    "first-open account authority malformed",
+    "first-open account/source generation mismatch",
+    "idempotent goal mutation receipt is incomplete",
+    "too many relationships to detach atomically",
 }
 
 _KNOWN_GOAL_VALIDATIONS = {

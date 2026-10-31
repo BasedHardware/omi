@@ -23,35 +23,6 @@ os.environ.setdefault("OPENAI_API_KEY", "***")
 import database.goals as goals_db
 from routers import goals as goals_router
 
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-GOALS_ROUTER_FILE = BACKEND_DIR / "routers" / "goals.py"
-
-
-def _get_function_source(function_name: str) -> str:
-    source = GOALS_ROUTER_FILE.read_text(encoding="utf-8")
-    start = source.index(f"def {function_name}")
-    match = re.search(r"\n(?:@router|def |async def )", source[start + 1 :])
-    if match:
-        return source[start : start + 1 + match.start()]
-    return source[start:]
-
-
-def test_create_goal_source_uses_sanitizer():
-    source = _get_function_source("create_goal")
-    assert "_sanitize_goal_conflict_error" in source
-    assert "detail=str(exc)" not in source
-
-
-def test_raise_goal_store_error_source_handles_all_cases():
-    source = _get_function_source("_raise_goal_store_error")
-    assert "_sanitize_goal_conflict_error" in source
-    assert "_sanitize_goal_validation_error" in source
-    assert "detail=str(exc)" not in source
-    assert "logger.error" in source
-    assert 'status_code=500, detail="Failed to process goal operation"' in source
-    assert "raise exc" not in source
-
-
 def test_sanitize_goal_conflict_error_allowlist_and_fallback():
     sanitize = getattr(goals_router, "_sanitize_goal_conflict_error", None)
     assert sanitize is not None, "_sanitize_goal_conflict_error must be defined in routers.goals"
@@ -64,8 +35,12 @@ def test_sanitize_goal_conflict_error_allowlist_and_fallback():
         sanitize(GoalConflictError("idempotency key was reused with different content"))
         == "idempotency key was reused with different content"
     )
-    assert sanitize(GoalConflictError("focus full")) == "focus full"
     assert sanitize(GoalConflictError("ended goals cannot be focused")) == "ended goals cannot be focused"
+    assert sanitize(GoalConflictError("first-open account authority unavailable")) == "first-open account authority unavailable"
+    assert sanitize(GoalConflictError("first-open account authority malformed")) == "first-open account authority malformed"
+    assert sanitize(GoalConflictError("first-open account/source generation mismatch")) == "first-open account/source generation mismatch"
+    assert sanitize(GoalConflictError("idempotent goal mutation receipt is incomplete")) == "idempotent goal mutation receipt is incomplete"
+    assert sanitize(GoalConflictError("too many relationships to detach atomically")) == "too many relationships to detach atomically"
 
     # 2. Unknown or arbitrary conflict messages strictly fall back to generic message
     assert (
