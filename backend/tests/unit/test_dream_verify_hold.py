@@ -12,7 +12,7 @@ from models.agent_tools import Verification, VerificationBatch
 from tests.unit.test_dream_cleanup_edits import records, UID
 from tests.unit.test_dream_harness_runtime import runtime, store  # noqa: F401  (fixtures)
 from tests.unit.test_dream_session import call
-from utils import dream_agent, dream_seed, dream_telemetry
+from utils import dream_agent, dream_judge, dream_seed, dream_telemetry
 from utils.agent_capabilities.evidence import EvidenceRecords
 from utils.dream_harness_transport import MAIN_LANE, VERIFY_LANE
 from utils.dream_verify import verify
@@ -30,18 +30,35 @@ def _limited(runtime, monkeypatch):
     )
 
 
-def _spender(votes=(True, True), late=False):
+def _spender(votes=(True, True), late=False, overshoot=0):
     """Stage one dismissal, then read until the budget stops the loop.
 
     ``late`` stages the dismissal together with finish on the turn that reaches the
     budget edge instead of on the first turn. A ``None`` vote is a failed call.
+    ``overshoot`` makes the edge turn cost that much past its allowance, as a cache
+    miss on a long history does.
     """
     main = []
     verified = []
+    judged = []
 
     async def model(uid, lane, mount, messages):
         if lane == VERIFY_LANE:
             batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+            if mount.schema is dream_judge.JudgmentBatch:
+                judged.append(1)
+                return Turn(
+                    tokens=200,
+                    prompt_tokens=200,
+                    value=dream_judge.JudgmentBatch(
+                        decisions=[
+                            dream_judge.Judgment(
+                                id=row['id'], grounded=2, owner_appropriate=2, useful=1, verdict='good'
+                            )
+                            for row in batch
+                        ]
+                    ),
+                )
             vote = votes[len(verified)]
             verified.append(1)
             if vote is None:
@@ -80,6 +97,8 @@ def _spender(votes=(True, True), late=False):
             )
         # Spend the weighted budget the turn was allowed, as a long uncached prompt would.
         spend = max(0, min(150000, (mount.budget.tokens or 0) - 500))
+        if edge:
+            spend += overshoot
         return Turn(
             tokens=1000,
             prompt_tokens=1000,
@@ -90,6 +109,7 @@ def _spender(votes=(True, True), late=False):
             messages=({'role': 'assistant', 'content': None, 'tool_calls': calls},),
         )
 
+    model.judged = judged
     return model, verified
 
 
@@ -138,6 +158,41 @@ def test_hold_covers_a_proposal_staged_with_finish_at_the_budget_edge(runtime, m
     model, verified = _spender(late=True)
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
     assert len(verified) == 2 and _status(report) == ['applied'], report['verify_reasons']
+
+
+def test_served_hold_still_verifies_after_a_main_turn_overshoots_the_pass(runtime, monkeypatch):
+    monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
+    _limited(runtime, monkeypatch)
+    model, verified = _spender(overshoot=200000)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert report['price_weighted_tokens'] > LIMITS.tokens
+    assert len(verified) == 2 and _status(report) == ['applied'], report['verify_reasons']
+    assert report['levers']['verify_hold']['allowance'] > 0
+
+
+def test_verify_allowance_never_funds_the_judge_after_an_overshoot(runtime, monkeypatch):
+    monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
+    monkeypatch.setenv(dream_judge.COMMON_PERCENT_ENV, '100')
+    monkeypatch.setenv(dream_judge.TOKENS_ENV, '20000')
+    monkeypatch.setattr(dream_judge, 'record', lambda kind, label, judgment: None)
+    _limited(runtime, monkeypatch)
+    model, verified = _spender(overshoot=200000)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert len(verified) == 2 and _status(report) == ['applied'], report['verify_reasons']
+    # The judge's own 20k allowance cannot cover a 200k overshoot; a leaked verify allowance would.
+    assert not model.judged
+
+
+def test_shadow_hold_grants_no_allowance_after_an_overshoot(runtime, monkeypatch):
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'shadow')
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
+    _limited(runtime, monkeypatch)
+    model, verified = _spender(overshoot=200000)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert not verified and _status(report) == ['verifier_unverified']
+    assert 'allowance' not in report['levers']['verify_hold']
 
 
 @pytest.mark.parametrize('arm,status', [('shadow', 'verifier_unverified'), ('serve', 'applied')])
