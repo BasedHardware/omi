@@ -276,7 +276,7 @@ def reprocess_one(observed, *, decode, encode, cas, transcribe, speech_seconds=N
         return 'authority_blocked'
     claimed = replace(observed, row={**observed.row, MARKER: marker}, revision=revision)
     try:
-        segments = transcribe(observed)
+        segments = transcribe(claimed)
         # Encoding uses the row's persisted protection level, never today's
         # user preference. No plaintext fallback is permitted for enhanced.
         if not isinstance(segments, list) or not segments:

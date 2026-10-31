@@ -138,7 +138,7 @@ class Census:
 
     def converge(self, observed):
         # Reconciliation reads current durable projection, never a stale patch.
-        self.authorize(observed)
+        self.privacy.check(observed, match_revision=False)
         index = importlib.import_module('utils.conversations.typesense_index')
         client = MaskedClient(self.client, self.reads, 'index')
         with redirect_stdout(DiscardOutput()), redirect_stderr(DiscardOutput()):
@@ -274,6 +274,7 @@ class Audio:
         bucket = self.client.bucket(CUSTODY_BUCKET)
         prefix = f'chunks/{observed.uid}/{observed.conversation_id}/'
         chunks, listed_clocks = [], set()
+        self.counts['object_lists'] += 1
         for blob in bucket.list_blobs(prefix=prefix, page_size=200, timeout=30, retry=None):
             require(len(chunks) < 4096, 'audio_object_cap')
             extension = self.modules.timeline.get_extension_for_path(blob.name)
@@ -281,10 +282,11 @@ class Audio:
             filename = self.modules.timeline.strip_extension(blob.name.rsplit('/', 1)[-1])
             timestamp = float(filename.split('-', 1)[0])
             require(math.isfinite(timestamp), 'audio_clock_unproven')
-            listed_clocks.add(round(timestamp * 1000))
+            clock = round(timestamp * 1000)
+            require(clock not in listed_clocks, 'audio_duplicate_clock_objects')
+            listed_clocks.add(clock)
             span = self.modules.timeline.parse_span_blob_metadata(blob.metadata)
             chunks.append((span['start'] if span else timestamp, blob, span))
-        self.counts['object_lists'] += 1
         require(chunks, 'audio_missing')
         # A partial prefix cannot prove silence. Every chunk referenced by the
         # row must still be present, and every file needs an explicit clock set.

@@ -40,7 +40,9 @@ class MaskedReference:
         self.owner.reads[self.owner.category] += 1
         kwargs.setdefault('timeout', 30)
         kwargs.setdefault('retry', None)
-        return self.reference.get(field_paths=mask, transaction=transaction, **kwargs)
+        snapshot = self.reference.get(field_paths=mask, transaction=transaction, **kwargs)
+        self.owner.snapshots[self.path] = snapshot
+        return snapshot
 
 
 class MaskedCollection:
@@ -54,6 +56,7 @@ class MaskedCollection:
 class MaskedClient:
     def __init__(self, client: Any, reads: Counter, category='privacy'):
         self.client, self.reads, self.category = client, reads, category
+        self.snapshots = {}
 
     def collection(self, name):
         return MaskedCollection(self.client.collection(name), self)
@@ -66,11 +69,12 @@ class Privacy:
     def __init__(self, client, reads):
         self.client, self.reads = client, reads
 
-    def check(self, observed: Observed, transaction=None):
+    def check(self, observed: Observed, transaction=None, *, match_revision=True):
         try:
             snapshots = {}
+            client = MaskedClient(self.client, self.reads)
             generation = assert_batch_write_allowed(
-                MaskedClient(self.client, self.reads),
+                client,
                 transaction,
                 observed.uid,
                 conversation_ids=(observed.conversation_id,),
@@ -78,8 +82,14 @@ class Privacy:
                 snapshots=snapshots,
             )
             row = snapshots.get('conversations', {}).get(observed.conversation_id) or {}
+            source = client.snapshots.get(f'users/{observed.uid}/conversations/{observed.conversation_id}')
             if (
-                row.get('uses_custom_stt')
+                source is None
+                or not source.exists
+                or (match_revision and source.update_time != observed.revision)
+                or row.get('is_locked')
+                or row.get('record_lane_owner')
+                or row.get('uses_custom_stt')
                 or row.get('listen_finalization_requires_byok')
                 or row.get('deleted')
                 or row.get('sync_merged_into')

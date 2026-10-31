@@ -42,7 +42,8 @@ record owner are protected. Unknown structured fields abstain.
 
 Retained audio comes only from the existing private-cloud custody bucket. Every
 manifest chunk clock must still exist and the retained prefix must have no extra
-unreferenced clocks. Reads pin object generations and reuse
+unreferenced clocks or multiple objects sharing a clock. Ambiguous aliases
+abstain instead of contributing an unreferenced tail. Reads pin object generations and reuse
 the batch source decoder. Missing, malformed, conflicting overlap, unsupported
 or oversized audio abstains. The tool never deletes, uploads or saves audio.
 Reprocessing uses the existing batch CPU multilingual recovery recognizer and its
@@ -62,7 +63,9 @@ attempt and fences the transcript fill afterward. It reuses the batch privacy
 authority: account-deletion marker, existing account/protection policy, hashed
 privacy generation, conversation tombstone and redirect fences. All are in the
 same transaction read set as the row. Fresh checks also run before audio reads
-and after VAD immediately before provider dispatch. The original jobs must
+and after VAD immediately before provider dispatch. The latter requires the
+exact claimed row revision and rechecks both lock and native record ownership.
+The original jobs must
 explicitly declare `requires_byok=False`, remain dead-lettered and still name
 this row. BYOK, custom STT and unknown payer authority abstain. The census checks
 deletion markers before fetching row content. Any concurrent row change

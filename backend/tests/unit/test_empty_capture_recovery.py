@@ -560,6 +560,7 @@ class ProjectedStrictClient:
         # The fixture models ordering only. Attach a synthetic commit receipt
         # here; real SDK write_results extraction is exercised by atomic_write.
         tx.write_results = [SimpleNamespace(update_time=self.revision + timedelta(microseconds=1))]
+        tx._commit = lambda: setattr(self, 'revision', tx.write_results[0].update_time)
         self.transactions.append(tx)
         return tx
 
@@ -569,7 +570,7 @@ def test_real_transaction_adapter_fences_all_privacy_and_job_reads_before_write(
     client = ProjectedStrictClient(observed)
     census = cli.Census(client, 0.1)
     revision = census.cas(observed, {recovery.MARKER: {'state': 'claimed'}})
-    assert revision == client.revision + timedelta(microseconds=1)
+    assert revision == observed.revision + timedelta(microseconds=1) == client.revision
     assert len(client.transactions) == 1 and len(client.transactions[0].updates) == 1
     assert f'account_deletions/{observed.uid}' in client.read_paths
     assert f'batch_pipeline_privacy/{privacy_owner_key(observed.uid)}' in client.read_paths
@@ -650,6 +651,63 @@ def test_orphan_unreferenced_object_never_enters_vad_or_stt(codec, audio_modules
     with pytest.raises(cli.Refused, match='audio_unreferenced_objects'):
         audio.measure(observed)
     assert audio.counts['object_reads'] == 0
+
+
+def test_second_object_at_same_manifest_clock_never_enters_vad_or_stt(codec, audio_modules):
+    observed, audio, _ = audio_store(codec, audio_modules, 'standard')
+    original = next(audio.client.bucket('synthetic').list_blobs())
+    extra = deepcopy(original)
+    extra.name = extra.name.replace('.opus', '-longer.opus')
+    extra.metadata = audio_modules.timeline.span_blob_metadata(
+        {'start': 1000.0, 'samples': 16000, 'sample_rate': 16000}
+    )
+    audio.client.bucket('synthetic').list_blobs = lambda **_: iter([original, extra])
+    with pytest.raises(cli.Refused, match='audio_duplicate_clock_objects'):
+        audio.measure(observed)
+    assert audio.counts['object_reads'] == 0
+
+
+@pytest.mark.parametrize('change', [{'is_locked': True}, {'record_lane_owner': 'batch_sync_v1'}, {'starred': True}])
+def test_claimed_revision_and_fresh_owner_are_required_immediately_before_dispatch(
+    codec, audio_modules, monkeypatch, change
+):
+    observed = candidate(codec)
+    client = ProjectedStrictClient(observed)
+    census = cli.Census(client, 0.1)
+    audio = cli.Audio(None, audio_modules, authorize=census.authorize)
+    recognizers = importlib.import_module('utils.batch_pipeline.recovery_recognizers')
+    provider = importlib.import_module('utils.stt.pre_recorded')
+
+    def inspect(*_):
+        client.store.rows[('users', observed.uid, 'conversations', observed.conversation_id)].update(change)
+        client.revision += timedelta(microseconds=1)
+        return b'', 5, [{'start': 0, 'end': 3}]
+
+    monkeypatch.setattr(recognizers, 'inspect_audio', inspect)
+    monkeypatch.setattr(
+        provider, 'modulate_prerecorded_from_bytes', lambda *_, **__: pytest.fail('lost owner reached STT')
+    )
+    outcome = reprocess(codec, observed, census.cas, lambda claimed: audio.transcribe_pcm(claimed, bytes(5 * 32000)))
+    assert outcome == 'authority_blocked'
+    assert census.writes == 1
+    row = client.store.rows[('users', observed.uid, 'conversations', observed.conversation_id)]
+    assert codec.decode(observed.uid, row['transcript_segments'], True) == []
+
+
+def test_transaction_claim_receipt_is_passed_to_provider_and_fill(codec):
+    observed = candidate(codec)
+    client = ProjectedStrictClient(observed)
+    census = cli.Census(client, 0.1)
+    calls = []
+
+    def provider(claimed):
+        assert claimed.revision == client.revision == observed.revision + timedelta(microseconds=1)
+        census.authorize(claimed)
+        calls.append(claimed.revision)
+        return [{'text': 'Synthetic result.', 'start': 1, 'end': 2}]
+
+    assert reprocess(codec, observed, census.cas, provider) == 'filled'
+    assert len(calls) == 1 and census.writes == 2
 
 
 @pytest.mark.parametrize('fail_index', [False, True])
