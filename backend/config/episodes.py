@@ -239,6 +239,9 @@ COMPOSER_MAX_CHAPTERS = 8
 COMPOSER_MAX_SCHEDULED_PER_READ = 2
 # A read-side caller re-queues the same episode at most this often per process.
 COMPOSER_READ_THROTTLE_SECONDS = 600
+# The per-conversation lookup runs once per Home row: cap the distinct episodes it queues per user
+# per throttle window, per process.
+COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
 # One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
 COMPOSER_LEASE_SECONDS = 240
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
