@@ -56,10 +56,17 @@ is one Keiki agent with `harness: external`, push mode, its `dispatchUrl` set to
   arrivals are acknowledged and ignored.
 - `queue` steering keeps the inbox FIFO authoritative: a newer message waits at Keiki
   until the open turn settles, so Keiki channels do not supersede a reply in progress.
-- Files are not sent or read yet: the turn API sends only Keiki sandbox paths. An inbound
-  attachment gets the unsupported-file reply, and `media_out` is empty, so no file tool is
-  offered and the sink refuses files. Deferred replies and Omi-initiated messages are not
-  delivered on Keiki channels; a closed turn refuses them (`409 turn_closed`).
+- Files (Keiki channels 0.1.6, 2026-10-31): each turn message carries
+  `attachments[{id, filename, mimeType, size, url}]`. Omi downloads through
+  `GET {turnUrl}/attachments/{id}` with the turn credential, which lasts the whole turn
+  (the payload `url` expires in 15 minutes), and feeds the shared media path: voice notes
+  are transcribed, and images and documents become chat files. Keiki's own
+  `[Voice note: …; attachment_id=…]` annotation is dropped from the text. GIFs read as a
+  reaction. An annotation with no `attachments` entry still gets the unsupported-file reply.
+  Outbound files upload as raw bytes to `POST {turnUrl}/attachments?filename=…`, then go
+  out through the `send_file` action with that `attachmentId`; iMessage does not offer Ogg.
+- Deferred replies and Omi-initiated messages are not delivered on Keiki channels; a
+  closed turn refuses them (`409 turn_closed`).
 - A declined turn is settled in the background after the webhook is acknowledged. A failed
   settle increments `FAILURES{reason="settle_failed"}`; the turn then stays open until
   Keiki's deadline (ten minutes), blocking that contact's next turn. Expired rows settle
