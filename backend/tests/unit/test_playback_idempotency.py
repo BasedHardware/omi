@@ -98,6 +98,7 @@ async def test_locked_obsolete_job_is_consumed_but_current_job_keeps_retrying(mo
     from utils.sync.playback import conversation_merge_fingerprint
 
     app, sync = route_app
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true' if demand else 'false')
     monkeypatch.setattr(sync, 'account_deletion_blocks_user_work', lambda *_: False)
     monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: None)
