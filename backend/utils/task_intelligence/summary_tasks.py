@@ -50,4 +50,3 @@ def prepare_summary_task(
         idempotency_key=idempotency_key,
         account_generation=account_generation,
     )
-
