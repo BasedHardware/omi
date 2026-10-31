@@ -141,6 +141,17 @@ def _closed_fields(reason: str, closed_at: datetime) -> dict[str, Any]:
     return {'status': 'closed', 'close_reason': reason, 'closed_at': closed_at}
 
 
+def _cleared_notes() -> dict[str, Any]:
+    """Every note field a newly hidden member may have shaped, cleared until the next compose."""
+    return {key: '' if key in ('title', 'lede') else [] for key in CONTENT_FIELDS if key not in _KEPT_ON_DISCARD} | {
+        'summary_needs_regeneration': True
+    }
+
+
+# Already filtered per member by conversation id above, so they survive a discard.
+_KEPT_ON_DISCARD = ('moments', 'provisional_items')
+
+
 def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str, Any]:
     """A notes CAS must not overwrite speech retained while its model call ran."""
     merged = {**raw, **updates}
@@ -170,9 +181,7 @@ def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str
     for field in ('moments', 'provisional_items'):
         merged[field] = [item for item in merged.get(field) or [] if item.get('conversation_id') not in excluded]
     if hidden - set(raw.get('discarded_conversation_ids') or []):
-        merged.update(
-            title='', bullets=[], lede='', follow_ups=[], people=[], open_questions=[], summary_needs_regeneration=True
-        )
+        merged.update(_cleared_notes())
     return merged
 
 
@@ -258,7 +267,7 @@ def retained_bounds(transaction, client, uid, raw, merged):
             item for item in merged.get(field) or [] if item.get('conversation_id') not in hidden | duplicates
         ]
     if hidden - set(raw.get('discarded_conversation_ids') or []):
-        merged.update(title='', bullets=[], people=[], open_questions=[], summary_needs_regeneration=True)
+        merged.update(_cleared_notes())
     return merged
 
 

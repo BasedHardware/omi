@@ -546,6 +546,10 @@ def test_a_chapter_running_into_the_next_recording_stays_inside_its_own():
     # Ends at c1's last line, so the transcript offset stays inside c1.
     assert moment['ended_at'] == T0 + timedelta(minutes=10, seconds=-30)
     assert moment['end_offset'] == 570.0
+    # Even a few seconds past the last line is clamped to it.
+    near = {**chapter, 'end': '15:06:00'}
+    clamped = composer.to_updates({'title': 't', 'lede': 'l', 'chapters': [near]}, [a, b], ZoneInfo('Asia/Bangkok'))
+    assert clamped['moments'][0]['end_offset'] == 570.0
 
 
 def test_a_failed_version_recompose_backs_off():
@@ -572,3 +576,8 @@ def test_discarding_a_member_clears_the_composed_lede_and_follow_ups():
     }
     merged = episodes_db._merge_state(raw, {'discarded_conversation_ids': ['c2']})
     assert merged['lede'] == '' and merged['follow_ups'] == [] and merged['summary_needs_regeneration'] is True
+    # Both discard paths share one cleared set, so a new note field cannot be missed again.
+    cleared = episodes_db._cleared_notes()
+    assert set(cleared) == set(episodes_db.CONTENT_FIELDS) - {'moments', 'provisional_items'} | {
+        'summary_needs_regeneration'
+    }

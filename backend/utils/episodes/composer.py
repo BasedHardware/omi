@@ -349,7 +349,7 @@ def to_updates(
             inside = [t for t in times.get(owner) or [] if t >= start and (following is None or t < following)]
             end = max(inside) if inside else start
         last = max(times.get(owner) or [start])
-        if end > last + timedelta(seconds=30):
+        if end > last:
             # A chapter runs on into the next recording: it stays on its own, whose transcript it opens.
             inside = [t for t in times.get(owner) or [] if t >= start]
             end = max(inside) if inside else start
