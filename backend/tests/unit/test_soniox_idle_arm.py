@@ -10,7 +10,6 @@ import pytest
 from config.soniox_idle import COHORT_SALT
 from config.policy.batch import cohort_bucket
 from models.users import PlanType
-import utils.transcribe_store as store
 from utils.observability import demand_cohort, soniox_idle_arm
 from utils.observability.soniox_idle_arm import IdleArmLedger
 
@@ -186,11 +185,10 @@ def test_pin_plan_reads_once_in_the_background(monkeypatch):
             calls.append(uid)
             return fn(uid)
 
-    monkeypatch.setattr(store.user_db, 'get_user_valid_subscription', lambda uid: SimpleNamespace(plan=PlanType.plus))
     telemetry = demand_cohort.DemandTelemetry('ineligible')
     telemetry.idle_arm = IdleArmLedger(None)
     host = SimpleNamespace(demand_telemetry=telemetry, persistence=_Persistence(), request=SimpleNamespace(uid='u1'))
-    asyncio.run(soniox_idle_arm.pin_plan(host))
+    asyncio.run(soniox_idle_arm.pin_plan(host, lambda uid: SimpleNamespace(plan=PlanType.plus)))
     assert calls == ['u1']
     assert telemetry.idle_arm.plan == 'paid'
 
@@ -210,7 +208,7 @@ def test_start_plan_pin_without_supervisor_does_not_raise():
         def spawn(self, coro, *, name):
             raise AttributeError('no task_supervisor')
 
-    soniox_idle_arm.start_plan_pin(_Host())
+    soniox_idle_arm.start_plan_pin(_Host(), lambda uid: None)
     assert telemetry.idle_arm.plan == 'unknown'
 
 
@@ -222,5 +220,5 @@ def test_pin_plan_failure_leaves_plan_unknown(monkeypatch):
     telemetry = demand_cohort.DemandTelemetry('ineligible')
     telemetry.idle_arm = IdleArmLedger(None)
     host = SimpleNamespace(demand_telemetry=telemetry, persistence=_Persistence(), request=SimpleNamespace(uid='u1'))
-    asyncio.run(soniox_idle_arm.pin_plan(host))
+    asyncio.run(soniox_idle_arm.pin_plan(host, lambda uid: None))
     assert telemetry.idle_arm.plan == 'unknown'

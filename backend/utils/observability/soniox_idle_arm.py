@@ -20,7 +20,7 @@ scope rotations and live speaker-ID decisions (owner/person by outcome). Never u
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from prometheus_client import Counter, Histogram
 
@@ -268,26 +268,24 @@ def note_speaker_decision(host: Any, target: str, decision: str) -> None:
         ledger.speaker_decision(target, decision)
 
 
-async def pin_plan(host: Any) -> None:
+async def pin_plan(host: Any, read_subscription: Callable[[str], Any]) -> None:
     """The only plan source: a background read at admission. A failed read leaves the plan
     ``unknown`` (a ramp hold), never a later snapshot. Never raises."""
     ledger = host_ledger(host)
     if ledger is None:
         return
     try:
-        from utils.transcribe_store import user_db
-
-        subscription = await host.persistence.call(user_db.get_user_valid_subscription, host.request.uid)
+        subscription = await host.persistence.call(read_subscription, host.request.uid)
         ledger.set_plan(subscription)
     except Exception as error:
         logger.warning('Soniox idle arm plan read failed type=%s', type(error).__name__)
 
 
-def start_plan_pin(host: Any) -> None:
+def start_plan_pin(host: Any, read_subscription: Callable[[str], Any]) -> None:
     """Schedule ``pin_plan`` on the session's supervisor; a host without one keeps plan unknown."""
     if host_ledger(host) is None:
         return
-    coro = pin_plan(host)
+    coro = pin_plan(host, read_subscription)
     try:
         host.spawn(coro, name='soniox_idle_arm_plan')
     except Exception:

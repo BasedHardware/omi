@@ -639,7 +639,7 @@ class ListenSessionRuntime:
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         capture_demand_admission(self)
-        soniox_idle_arm.start_plan_pin(self)
+        soniox_idle_arm.start_plan_pin(self, user_db.get_user_valid_subscription)
         demand_vendor_start = self._demand_cohort == 'admitted'
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
         demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
