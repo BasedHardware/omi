@@ -9,7 +9,13 @@ import pytest
 
 from utils.batch_pipeline import live, record_seal_repair as repair
 from utils.batch_pipeline.record_barrier import validate_record_tail
-from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, proof_reason
+from utils.batch_pipeline.record_seal_reasons import (
+    PROOF_REASONS,
+    TAIL_GAP_BUCKETS,
+    proof_reason,
+    proof_diagnostics,
+    tail_gap_bucket,
+)
 
 
 def audio_client(pcm, metadata=None):
@@ -103,8 +109,9 @@ def test_precheck_short_tail_avoids_prefix_but_eligible_keeps_full_proof(monkeyp
     job = {'owner_id': 'synthetic', 'conversation_id': 'capture', 'segment_id': 'pending', 'privacy_generation': 0}
     row = {'finished_at': datetime.fromtimestamp(103, timezone.utc)}
     job['record_snapshot'] = row
-    with pytest.raises(ValueError, match='tail not durable'):
+    with pytest.raises(ValueError, match='tail not durable') as refusal:
         repair.retained_tail_proof(job, row, None, artifacts)
+    assert proof_diagnostics(refusal.value) == {'proof_reason': 'tail_lagging', 'tail_gap_bucket': '1_to_5s'}
     assert reads == ['1.pcm']
     reads.clear()
     row['finished_at'] = datetime.fromtimestamp(102, timezone.utc)
@@ -130,3 +137,42 @@ def test_reason_mapping_is_exact_and_closed(message, reason):
         assert proof_reason(ValueError(message + private)) == 'other'
         assert private not in json.dumps({'proof_reason': proof_reason(ValueError(private))})
     assert reason in PROOF_REASONS
+
+
+@pytest.mark.parametrize(
+    'gap,bucket',
+    [
+        (-1, 'negative_or_unknown'),
+        (0, 'under_1s'),
+        (0.999999, 'under_1s'),
+        (1, '1_to_5s'),
+        (4.999999, '1_to_5s'),
+        (5, '5_to_30s'),
+        (29.999999, '5_to_30s'),
+        (30, '30_to_120s'),
+        (120, '30_to_120s'),
+        (120.000001, 'over_120s'),
+    ],
+)
+def test_tail_gap_boundaries(gap, bucket):
+    assert tail_gap_bucket(datetime.fromtimestamp(200 + gap, timezone.utc), 200) == bucket
+    assert bucket in TAIL_GAP_BUCKETS
+
+
+@pytest.mark.parametrize('end', [float('nan'), float('inf'), float('-inf'), None])
+def test_unknown_gap_stays_closed(end):
+    assert tail_gap_bucket(datetime.fromtimestamp(200, timezone.utc), end) == 'negative_or_unknown'
+    assert tail_gap_bucket(None, 200) == 'negative_or_unknown'
+
+
+def test_full_walk_tail_diagnostic_uses_validated_finish():
+    units = [(100, 2, [])]
+    for finish, bucket in ((102.5, 'under_1s'), (107, '5_to_30s'), (300, 'over_120s')):
+        with pytest.raises(ValueError, match='tail not durable') as refusal:
+            repair.validate_repair_tail(units, datetime.fromtimestamp(finish, timezone.utc))
+        assert proof_diagnostics(refusal.value) == {'proof_reason': 'tail_lagging', 'tail_gap_bucket': bucket}
+    # Existing tolerance and missing-finish refusal remain unchanged.
+    repair.validate_repair_tail(units, datetime.fromtimestamp(102.1, timezone.utc))
+    with pytest.raises(ValueError, match='finish missing') as refusal:
+        repair.validate_repair_tail(units, None)
+    assert proof_diagnostics(refusal.value) == {'proof_reason': 'finish_missing'}

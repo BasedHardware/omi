@@ -19,7 +19,7 @@ import time
 from typing import Any
 
 from config import record_seal_repair as config
-from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS
+from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
@@ -99,6 +99,9 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     if disposition == 'proof_refused' and reason_out is not None:
         reason = entries[0].get('proof_reason')
         reason_out['proof_reason'] = reason if reason in PROOF_REASONS else 'other'
+        if reason == 'tail_lagging':
+            bucket = entries[0].get('tail_gap_bucket')
+            reason_out['tail_gap_bucket'] = bucket if bucket in TAIL_GAP_BUCKETS else 'negative_or_unknown'
     if disposition != 'eligible' or mode == 'plan':
         return disposition if disposition in DISPOSITIONS else 'unknown'
     require_fresh_proof(proof)  # Tail downloads can exhaust the five-minute inventory window.
@@ -225,6 +228,7 @@ def coordinate(
 ):
     """Bound total concurrency and wall time; reap every child, including on failure."""
     pending, active, counts, reasons = deque(rows), [], Counter(), Counter()
+    gaps = Counter()
     started = clock()
     deadline = started + run_seconds
     max_age, sealed_age = 0, 0
@@ -247,6 +251,7 @@ def coordinate(
             for process, expires, age in active[:]:
                 disposition = None
                 reason = 'other'
+                gap = 'negative_or_unknown'
                 if process.poll() is not None:
                     try:
                         payload = process.stdout.read(1025)
@@ -254,6 +259,8 @@ def coordinate(
                         disposition = result.get('disposition')
                         candidate = result.get('proof_reason')
                         reason = candidate if candidate in PROOF_REASONS else 'other'
+                        candidate = result.get('tail_gap_bucket')
+                        gap = candidate if candidate in TAIL_GAP_BUCKETS else 'negative_or_unknown'
                     except Exception:
                         disposition = 'error'
                     if process.returncode != 0 or disposition not in DISPOSITIONS:
@@ -266,6 +273,8 @@ def coordinate(
                     counts[disposition] += 1
                     if disposition == 'proof_refused':
                         reasons[reason] += 1
+                        if reason == 'tail_lagging':
+                            gaps[gap] += 1
                     age += max(0, int(clock() - started))
                     sealed = disposition in {'sealed', 'sealed_registered'}
                     if sealed:
@@ -277,6 +286,11 @@ def coordinate(
                             'disposition': disposition,
                             'seal_age_seconds': age if sealed else 0,
                             **({'proof_reason': reason} if disposition == 'proof_refused' else {}),
+                            **(
+                                {'tail_gap_bucket': gap}
+                                if disposition == 'proof_refused' and reason == 'tail_lagging'
+                                else {}
+                            ),
                         }
                     )
             if active:
@@ -287,6 +301,7 @@ def coordinate(
     return {
         'dispositions': dict(sorted(counts.items())),
         'proof_reasons': dict(sorted(reasons.items())),
+        'tail_gap_buckets': dict(sorted(gaps.items())),
         'rows': sum(counts.values()),
         'oldest_unsealed_seconds': max_age,
         'oldest_seal_age_seconds': sealed_age,

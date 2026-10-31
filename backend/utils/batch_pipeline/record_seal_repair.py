@@ -15,7 +15,7 @@ from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
-from utils.batch_pipeline.record_seal_reasons import proof_reason
+from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
 
 ROW_FIELDS = (
@@ -105,10 +105,21 @@ def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lam
         iterator.close()
     if not units:
         raise ValueError('retained capture not durable yet')
-    validate_record_tail(units, row.get('finished_at'), require_finish=True)
-    validate_record_tail(units, (job.get('record_snapshot') or {}).get('finished_at'), require_finish=True)
+    validate_repair_tail(units, row.get('finished_at'))
+    validate_repair_tail(units, (job.get('record_snapshot') or {}).get('finished_at'))
     check_budget()
     return plan_digest(units)
+
+
+def validate_repair_tail(units, finish, *, diagnostic_end=None):
+    """Keep validation unchanged; carry only a closed bucket on tail refusal."""
+    try:
+        validate_record_tail(units, finish, require_finish=True)
+    except ValueError as error:
+        if proof_reason(error) == 'tail_lagging':
+            end = units[-1][0] + units[-1][1] if diagnostic_end is None else diagnostic_end
+            raise TailGapRefusal(tail_gap_bucket(finish, end)) from None
+        raise
 
 
 def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, check_budget=lambda: None):
@@ -140,7 +151,8 @@ def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, che
         try:
             validate_record_tail([tail], finish, require_finish=True)
         except ValueError:
-            validate_record_tail([(ceiling, 0, [])], finish, require_finish=True)
+            # Diagnose the actual decoded end, never the conservative ceiling.
+            validate_repair_tail([(ceiling, 0, [])], finish, diagnostic_end=end)
 
 
 def plan_seals(
@@ -179,7 +191,7 @@ def plan_seals(
             entry['disposition'] = 'privacy_refused'
         except (ValueError, TypeError, AttributeError, KeyError) as error:
             entry['disposition'] = 'proof_refused'
-            entry['proof_reason'] = proof_reason(error)
+            entry.update(proof_diagnostics(error))
         except Exception:
             entry['disposition'] = 'read_error'
         entries.append(entry)
