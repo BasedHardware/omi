@@ -31,15 +31,20 @@ def test_update_task_success(monkeypatch):
     mock_doc.update.assert_called_once_with({"status": "completed"})
 
 
-def test_update_task_toctou_race_guard(monkeypatch):
+def test_update_task_toctou_race_guard(monkeypatch, caplog):
+    import logging
+
     mock_client = MagicMock()
     mock_doc = MagicMock()
-    mock_doc.update.side_effect = _NotFound("Document deleted concurrently")
+    mock_doc.update.side_effect = _NotFound("Document deleted concurrently with secret token")
     mock_client.collection.return_value.document.return_value = mock_doc
     monkeypatch.setattr(tasks_db, "db", mock_client)
 
-    res = tasks_db.update("task-raced", {"status": "failed"})
+    with caplog.at_level(logging.WARNING):
+        res = tasks_db.update("task-raced", {"status": "failed"})
     assert res is False
+    assert "Document deleted concurrently with secret token" not in caplog.text
+    assert "Task task-raced not found during update (concurrent deletion): " in caplog.text
 
 
 def test_update_task_empty_id():
