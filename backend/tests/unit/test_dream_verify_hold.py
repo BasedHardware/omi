@@ -222,11 +222,11 @@ def test_reasons_name_oversized_invalid_ids_failed_calls_and_budget():
         raise ValueError('dream_input_token_budget')
 
     async def slow(mount, messages):
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(2.0)
         return await agree(mount, messages)
 
     assert _reasons(refused, [_item()], tokens=100000, deadline_seconds=5) == {'synthetic-proposal': 'budget_tokens'}
-    assert _reasons(slow, [_item()], tokens=100000, deadline_seconds=0.05) == {'synthetic-proposal': 'budget_deadline'}
+    assert _reasons(slow, [_item()], tokens=100000, deadline_seconds=0.5) == {'synthetic-proposal': 'budget_deadline'}
 
 
 def test_reserve_pays_two_calls_per_batch():
@@ -261,14 +261,14 @@ def test_budget_limited_skip_is_budget_tokens_and_per_call_timeout_is_deadline()
         )
 
     async def slow(mount, messages):
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(2.0)
         return await agree(mount, messages)
 
     # Within the verifier ceiling but beyond what this budget affords: a budget skip.
     assert _reasons(agree, [_item(name='n' * 6000)], tokens=6000, deadline_seconds=5) == {
         'synthetic-proposal': 'budget_tokens'
     }
-    assert _reasons(slow, [_item()], tokens=100000, deadline_seconds=5, verifier_seconds=0.01) == {
+    assert _reasons(slow, [_item()], tokens=100000, deadline_seconds=5, verifier_seconds=0.5) == {
         'synthetic-proposal': 'budget_deadline'
     }
 
