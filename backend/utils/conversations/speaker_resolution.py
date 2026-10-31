@@ -12,7 +12,7 @@ from config.batch_conversation_speakers import (
     has_batch_authority,
     sync_off_enabled,
 )
-from config.refactor_modes import serving_for
+from utils.conversations.speaker_window_cohort import per_window_evidence
 from utils.speakers import processing as speaker_evidence
 
 import bisect
@@ -508,8 +508,8 @@ def _verified_read_session(
     the requested windows. A failed window abstains; previously proven windows
     remain usable when another window is missing, ambiguous or over budget.
     """
-    # refactor: superseded by per-window abstention when SPEAKER_EVIDENCE_MODE=serve
-    per_window = serving_for('SPEAKER_EVIDENCE_MODE', uid)
+    # Superseded by per-window abstention for the per_window_evidence cohort
+    per_window = per_window_evidence(uid, conversation.transcript_segments)
     session = AudioChunkReadSession(uid, conversation.id, SAMPLE_RATE)
     session.deadline = min(session.deadline, deadline)
     if per_window:
@@ -1370,8 +1370,8 @@ def _resolve(
         # It must never borrow the nearest voice or a bare legacy cache entry.
         # Manifest contradictions and known coverage holes still refuse globally.
         all_usable_invalid = bool(invalid_text) and not any(s.id not in invalid_text_ids for s in embeddable)
-        # refactor: superseded by per-window abstention when SPEAKER_EVIDENCE_MODE=serve
-        if not serving_for('SPEAKER_EVIDENCE_MODE', uid) and (
+        # Superseded by per-window abstention for the per_window_evidence cohort
+        if not per_window_evidence(uid, segments) and (
             index.ambiguity
             or all_usable_invalid
             or any(p.reason in ('uncovered_audio', 'invalid_window') for p in placements.values())
