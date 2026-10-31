@@ -26,7 +26,7 @@ def _configurable(config: Any) -> Dict[str, Any]:
 def owner(config):
     config = config or {}
     configurable = config.get('configurable') if isinstance(config, dict) else None
-    uid = (configurable or {}).get('user_id') or (config.get('user_id') if isinstance(config, dict) else None)
+    uid = (configurable or {}).get('user_id')
     if not uid or not isinstance(uid, str) or not uid.strip():
         raise PermissionError('Authenticated owner required')
     return uid.strip()
