@@ -9,12 +9,6 @@ environment_shared:
     release_name: '{env}-omi-llm-gateway'
     ingress_name: '{env}-omi-llm-gateway'
     env:
-      PROACTIVITY_V2_POSTHOG_TOKEN:
-        value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-        category: rollout
-      PROACTIVITY_V2_POSTHOG_HOST:
-        value: https://us.posthog.com
-        category: rollout
       DREAM_ON_DEMAND_ENABLED:
         value: 'true'
         category: rollout
