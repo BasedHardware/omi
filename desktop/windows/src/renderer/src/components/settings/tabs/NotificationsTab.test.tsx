@@ -16,6 +16,10 @@ import { NotificationsTab } from './NotificationsTab'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
 import type { AssistantSettingsView } from '../../../../../shared/types'
 
+vi.mock('../../../hooks/useAuth', () => ({
+  useAuth: () => ({ user: { uid: 'settings-owner-test' } })
+}))
+
 // The tab renders nothing until assistantsGetSettings() (an async mock) resolves
 // and React commits, so every test opens on `findByText('Frequency')`. That
 // findBy defaults to a 1000ms wall-clock ceiling — fine in isolation, but under
@@ -108,7 +112,7 @@ describe('NotificationsTab', () => {
     act(() => {
       fireEvent.click(sw('Notifications')) // turn the master off
     })
-    expect(setSettings).toHaveBeenCalledWith({ notificationsEnabled: false })
+    expect(setSettings).toHaveBeenCalledWith({ notificationsEnabled: false }, 'settings-owner-test')
     expect(sw('Focus notifications').disabled).toBe(true)
     expect(sw('Extract memories from your screen').disabled).toBe(true)
     expect(sw('Focus glow').disabled).toBe(true)
@@ -121,7 +125,7 @@ describe('NotificationsTab', () => {
     act(() => {
       fireEvent.keyDown(thumb, { key: 'ArrowRight' })
     })
-    expect(setSettings).toHaveBeenCalledWith({ notificationFrequency: 1 })
+    expect(setSettings).toHaveBeenCalledWith({ notificationFrequency: 1 }, 'settings-owner-test')
   })
 
   it('toggling a per-assistant row writes just that flag', async () => {
@@ -130,7 +134,7 @@ describe('NotificationsTab', () => {
     act(() => {
       fireEvent.click(sw('Extract memories from your screen'))
     })
-    expect(setSettings).toHaveBeenCalledWith({ memoryEnabled: true })
+    expect(setSettings).toHaveBeenCalledWith({ memoryEnabled: true }, 'settings-owner-test')
   })
 
   it('updates rendered state from a broadcast (another window wrote the flag)', async () => {

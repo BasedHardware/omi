@@ -4,13 +4,13 @@ import { renderHook, act, cleanup } from '@testing-library/react'
 
 // C9: the backend binds PATCH /v3/memories/{id} and /v3/memories/{id}/visibility
 // `value` as a QUERY param (a plain `value: str` function arg — see edit_memory /
-// update_memory_visibility in backend/routers/memories.py), not a JSON body. Mac
-// sends `{value}` as a body and may 422 in production; these tests pin the
-// query-param form so a future edit can't silently regress to Mac's shape.
+// update_memory_visibility in backend/routers/memories.py). A JSON body may
+// accompany it, but must never replace the required query parameter.
 const omiApiGet = vi.fn()
 const omiApiPost = vi.fn()
 const omiApiPatch = vi.fn()
 const omiApiDelete = vi.fn()
+let authGeneration = 0
 
 vi.mock('../lib/apiClient', () => ({
   omiApi: {
@@ -19,6 +19,11 @@ vi.mock('../lib/apiClient', () => ({
     patch: (...args: unknown[]) => omiApiPatch(...args),
     delete: (...args: unknown[]) => omiApiDelete(...args)
   }
+}))
+
+vi.mock('../lib/authSessionScope', () => ({
+  getAuthSessionGeneration: () => authGeneration,
+  captureAuthRequestScope: (generation: number) => ({ __authGeneration: generation })
 }))
 
 import { useMemories, type Memory } from './useMemories'
@@ -33,6 +38,7 @@ const memory = (id: string, content: string, visibility?: string): unknown => ({
 })
 
 beforeEach(() => {
+  authGeneration = 0
   omiApiGet.mockReset().mockResolvedValue({ data: [memory('m1', 'Original content', 'private')] })
   omiApiPost.mockReset()
   omiApiPatch.mockReset().mockResolvedValue({ data: { status: 'ok' } })
@@ -56,12 +62,8 @@ function fakeBackend(total: number, deviceScopeHeader?: string, lifecycleHeader?
     return {
       data,
       headers: {
-        ...(deviceScopeHeader
-          ? { 'x-omi-memory-device-scope-supported': deviceScopeHeader }
-          : {}),
-        ...(lifecycleHeader
-          ? { 'x-omi-memory-canonical-lifecycle-exposed': lifecycleHeader }
-          : {})
+        ...(deviceScopeHeader ? { 'x-omi-memory-device-scope-supported': deviceScopeHeader } : {}),
+        ...(lifecycleHeader ? { 'x-omi-memory-canonical-lifecycle-exposed': lifecycleHeader } : {})
       }
     }
   }
@@ -82,13 +84,14 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     await act(async () => {
       await result.current.createMemory('Added memory', { category: 'manual' })
     })
-    expect(omiApiPost).toHaveBeenCalledWith('/v3/memories', {
-      content: 'Added memory',
-      category: 'manual'
-    })
+    expect(omiApiPost).toHaveBeenCalledWith(
+      '/v3/memories',
+      { content: 'Added memory', category: 'manual' },
+      { __authGeneration: 0 }
+    )
   })
 
-  it('editMemory sends the new content as a query param, not a JSON body', async () => {
+  it('editMemory preserves the required query param alongside the JSON body', async () => {
     const { result } = renderHook(() => useMemories())
     await act(async () => {
       await result.current.refresh()
@@ -101,8 +104,8 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     expect(omiApiPatch).toHaveBeenCalledTimes(1)
     const [path, body, config] = omiApiPatch.mock.calls[0]
     expect(path).toBe('/v3/memories/m1')
-    expect(body).toBeNull() // never a {value} JSON body — that's Mac's 422-prone shape
-    expect(config).toEqual({ params: { value: 'Updated content' } })
+    expect(body).toEqual({ value: 'Updated content' })
+    expect(config).toEqual({ params: { value: 'Updated content' }, __authGeneration: 0 })
   })
 
   it('setMemoryVisibility sends the new value as a query param on the /visibility route', async () => {
@@ -118,8 +121,80 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     expect(omiApiPatch).toHaveBeenCalledTimes(1)
     const [path, body, config] = omiApiPatch.mock.calls[0]
     expect(path).toBe('/v3/memories/m1/visibility')
-    expect(body).toBeNull()
-    expect(config).toEqual({ params: { value: 'public' } })
+    expect(body).toEqual({ value: 'public' })
+    expect(config).toEqual({ params: { value: 'public' }, __authGeneration: 0 })
+  })
+
+  it('publishes the canonical replacement returned by a successful edit', async () => {
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    omiApiPatch.mockResolvedValueOnce({
+      data: { memory: memory('canonical-id', 'Canonical content', 'private') }
+    })
+    await act(async () => {
+      const replacement = await result.current.editMemory('m1', 'Updated content')
+      expect(replacement?.id).toBe('canonical-id')
+    })
+    expect(result.current.memories.find((m) => m.id === 'm1')).toBeUndefined()
+    expect(result.current.memories.find((m) => m.id === 'canonical-id')?.content).toBe(
+      'Canonical content'
+    )
+  })
+
+  it('rejects an old edit after same-account reauthentication without replacing the new cache', async () => {
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    let finish = (_value: unknown): void => {
+      throw new Error('request not started')
+    }
+    omiApiPatch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    await act(async () => {
+      const old = result.current.editMemory('m1', 'old session draft')
+      authGeneration += 1
+      omiApiGet.mockResolvedValue({ data: [memory('m1', 'new session content', 'private')] })
+      await result.current.refresh()
+      finish({
+        data: { status: 'ok', memory: memory('old-replacement', 'stale result', 'private') }
+      })
+      await expect(old).rejects.toThrow('sign-in changed')
+    })
+    expect(result.current.memories.map((m) => [m.id, m.content])).toEqual([
+      ['m1', 'new session content']
+    ])
+  })
+
+  it('does not roll back an unrelated successful edit when an earlier edit fails', async () => {
+    omiApiGet.mockResolvedValue({ data: [memory('m1', 'first'), memory('m2', 'second')] })
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    let fail = (_error: Error): void => {
+      throw new Error('request not started')
+    }
+    omiApiPatch.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        })
+    )
+    await act(async () => {
+      const first = result.current.editMemory('m1', 'failed draft')
+      await result.current.editMemory('m2', 'saved second')
+      fail(new Error('first failed'))
+      await expect(first).rejects.toThrow('first failed')
+    })
+    expect(result.current.memories.find((m) => m.id === 'm1')?.content).toBe('first')
+    expect(result.current.memories.find((m) => m.id === 'm2')?.content).toBe('saved second')
   })
 
   it('reverts the local cache and rethrows when the edit request fails', async () => {
@@ -204,7 +279,14 @@ describe('useMemories — pagination and delete', () => {
     expect(result.current.memories[0]).not.toHaveProperty('kind')
     expect(result.current.memories[1]).toMatchObject({ kind: 'fact', status: 'active' })
     expect(result.current.memories[1]).toMatchObject({ slot: 'home_city' })
-    for (const field of ['currency', 'currency_band', 'as_of', 'belief_class', 'half_life_days', 'belief_computed_at']) {
+    for (const field of [
+      'currency',
+      'currency_band',
+      'as_of',
+      'belief_class',
+      'half_life_days',
+      'belief_computed_at'
+    ]) {
       expect(result.current.memories[1]).not.toHaveProperty(field)
     }
     expect(result.current.memories[1].evidence).toEqual([
@@ -246,7 +328,8 @@ describe('useMemories — pagination and delete', () => {
     expect(result.current.memories).toHaveLength(1200)
     expect(result.current.memories.some((m) => m.id === 'm1199')).toBe(true)
     expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
-      params: { limit: 500, offset: 500 }
+      params: { limit: 500, offset: 500 },
+      __authGeneration: authGeneration
     })
   })
 
@@ -300,7 +383,7 @@ describe('useMemories — pagination and delete', () => {
     await act(async () => {
       await result.current.deleteMemory('m1')
     })
-    expect(omiApiDelete).toHaveBeenCalledWith('/v3/memories/m1')
+    expect(omiApiDelete).toHaveBeenCalledWith('/v3/memories/m1', { __authGeneration: 0 })
     expect(result.current.memories.some((m) => m.id === 'm1')).toBe(false)
 
     omiApiDelete.mockRejectedValueOnce(new Error('offline'))
@@ -312,5 +395,4 @@ describe('useMemories — pagination and delete', () => {
     // The failed delete is walked back — the row is still present.
     expect(result.current.memories.some((m) => m.id === 'm0')).toBe(true)
   })
-
 })

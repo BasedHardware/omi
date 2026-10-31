@@ -370,7 +370,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "FIREBASE_PROJECT_ID": cfg.project_id,
         "FIRESTORE_DATABASE_ID": cfg.database_id,
         "FIREBASE_API_KEY": LOCAL_FIREBASE_API_KEY,
-        "MEMORY_MODE": "read",
+        "MEMORY_ENABLED": "on",
         "MEMORY_CANONICAL_CONSOLIDATION_ENABLED": "true",
         "REDIS_DB_HOST": cfg.redis_host,
         "REDIS_DB_PORT": str(cfg.redis_port),
