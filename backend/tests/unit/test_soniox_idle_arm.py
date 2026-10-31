@@ -212,3 +212,15 @@ def test_start_plan_pin_without_supervisor_does_not_raise():
 
     soniox_idle_arm.start_plan_pin(_Host())
     assert telemetry.idle_arm.plan == 'unknown'
+
+
+def test_pin_plan_failure_leaves_plan_unknown(monkeypatch):
+    class _Persistence:
+        async def call(self, fn, uid):
+            raise RuntimeError('firestore down')
+
+    telemetry = demand_cohort.DemandTelemetry('ineligible')
+    telemetry.idle_arm = IdleArmLedger(None)
+    host = SimpleNamespace(demand_telemetry=telemetry, persistence=_Persistence(), request=SimpleNamespace(uid='u1'))
+    asyncio.run(soniox_idle_arm.pin_plan(host))
+    assert telemetry.idle_arm.plan == 'unknown'

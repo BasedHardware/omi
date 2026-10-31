@@ -853,7 +853,6 @@ class ListenSessionRuntime:
         admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
         now = time.time()
         subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
-        soniox_idle_arm.note_plan(self, subscription)
         ladder_session = (
             ladder_enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
             and ladder_policy.entitlements(subscription) is not None
@@ -1471,16 +1470,18 @@ class ListenSessionRuntime:
                     await self.pusher_close()
                 except Exception as error:
                     logger.error('Pusher close failed type=%s', type(error).__name__)
-        if self.onboarding_handler:
-            self.onboarding_handler.cleanup()
-        if self.language_observations is not None:
-            await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
-        if not owner_persistence_blocked:
-            await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-        # After the transcript loop drained and before the matcher's maps clear:
-        # the ordinal ledger needs both the final segments and final naming.
-        speakers = record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
-        soniox_idle_arm.record_session(self, speakers)
+        try:
+            if self.onboarding_handler:
+                self.onboarding_handler.cleanup()
+            if self.language_observations is not None:
+                await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
+            if not owner_persistence_blocked:
+                await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
+        finally:
+            # After the transcript loop drained and before the matcher's maps clear (also when
+            # cleanup failed): the ordinal ledger needs both the final segments and final naming.
+            speakers = record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
+            soniox_idle_arm.record_session(self, speakers)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()

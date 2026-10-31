@@ -250,12 +250,6 @@ def host_ledger(host: Any) -> Optional[IdleArmLedger]:
     return session_ledger(getattr(host, 'demand_telemetry', None))
 
 
-def note_plan(host: Any, subscription: Any) -> None:
-    ledger = host_ledger(host)
-    if ledger is not None:
-        ledger.set_plan(subscription)
-
-
 def note_outcome(host: Any, outcome: str) -> None:
     ledger = host_ledger(host)
     if ledger is not None:
@@ -275,7 +269,8 @@ def note_speaker_decision(host: Any, target: str, decision: str) -> None:
 
 
 async def pin_plan(host: Any) -> None:
-    """Background read at admission so short sessions carry a plan; never raises."""
+    """The only plan source: a background read at admission. A failed read leaves the plan
+    ``unknown`` (a ramp hold), never a later snapshot. Never raises."""
     ledger = host_ledger(host)
     if ledger is None:
         return
