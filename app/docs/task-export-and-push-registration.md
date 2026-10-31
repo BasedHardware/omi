@@ -38,10 +38,10 @@ Tokens and task contents are excluded from the new diagnostic logs.
 
 ## Verification and rollout checklist
 
-- [ ] Focused registrar, automatic export, saved-default and bulk-button tests.
-- [ ] Production HTTP/provider/UI flow on an isolated iOS simulator: both apps
+- [x] Focused registrar, automatic export, saved-default and bulk-button tests.
+- [x] Production HTTP/provider/UI flow on an isolated iOS simulator: both apps
       connected, Todoist selected, create and bulk export, zero Apple writes.
-- [ ] Local HTTP retry after delayed APNs and refused registration receipt.
+- [x] Local HTTP retry after delayed APNs and refused registration receipt.
 - [ ] Repository mobile journeys, preflight, final diff and exact-head CI.
 - [ ] Merge and mobile store release (no backend deployment/schema change).
 
