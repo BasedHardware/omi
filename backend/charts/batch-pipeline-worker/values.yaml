@@ -2,6 +2,7 @@
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
 recordSealRules:
+  partialEnabled: true
   overlapTrimEnabled: true
   uploadFailedRepairEnabled: true
 image:

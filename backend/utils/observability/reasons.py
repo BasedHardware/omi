@@ -50,6 +50,7 @@ class ReasonFamily(StrEnum):
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
+    RECORD_PARTIAL_RERUN = 'record_partial_rerun'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
