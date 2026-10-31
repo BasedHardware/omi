@@ -14874,6 +14874,16 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'ส่งข้อความในแอป $app หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'ขอรหัสใหม่แล้วส่งจากแอป$app';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'คุณตั้งค่าโปรไฟล์เสียงได้ทุกเมื่อในการตั้งค่า';
 
   @override

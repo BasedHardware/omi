@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Maksat nyt vuosittain",
     "yearlySwitchDoneBody": "Tänään veloitettiin {amount}. Uusiutuu {date}.",
     "episodePartsCount": "{count, plural, zero{{count} osaa} one{{count} osa} two{{count} osaa} few{{count} osaa} many{{count} osaa} other{{count} osaa}}",
+    "chatAppsWaitingMessageIn": "Lähetä viesti {app}-sovelluksessa. Tämä näkymä päivittyy heti, kun Omi saa sen.",
+    "chatAppsCodeExpiredMessageIn": "Hae uusi koodi ja lähetä se {app}-sovelluksesta.",
     "voiceProfileCardDismissed": "Voit määrittää ääniprofiilin milloin tahansa asetuksissa.",
     "homeNewRecordingButton": "Uusi tallennus",
     "chatWelcomeMessage": "Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi.",

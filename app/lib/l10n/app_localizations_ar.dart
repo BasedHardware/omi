@@ -14859,6 +14859,16 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'أرسل الرسالة من تطبيق $app. تتحدث هذه الشاشة فور وصولها إلى Omi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'احصل على رمز جديد وأرسله من $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.';
 
   @override

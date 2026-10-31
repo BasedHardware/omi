@@ -14978,6 +14978,16 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Надішліть повідомлення в застосунку «$app». Цей екран оновиться, щойно Omi його отримає.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Отримайте новий код і надішліть його з застосунку «$app».';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.';
 
   @override

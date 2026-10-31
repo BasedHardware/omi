@@ -15010,6 +15010,16 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$appలో మెసేజ్ పంపండి. Omiకి అందగానే ఈ స్క్రీన్ అప్‌డేట్ అవుతుంది.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'కొత్త కోడ్ తీసుకుని $app నుండి పంపండి.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'సెట్టింగ్‌లలో ఎప్పుడైనా వాయిస్ ప్రొఫైల్ సెటప్ చేయవచ్చు.';
 
   @override

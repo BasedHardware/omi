@@ -4551,6 +4551,8 @@
     "yearlySwitchDoneTitle": "Płacisz teraz rocznie",
     "yearlySwitchDoneBody": "Dziś pobrano {amount}. Odnowienie {date}.",
     "episodePartsCount": "{count, plural, zero{{count} części} one{{count} część} two{{count} części} few{{count} części} many{{count} części} other{{count} części}}",
+    "chatAppsWaitingMessageIn": "Wyślij wiadomość w aplikacji {app}. Ten ekran odświeży się, gdy tylko Omi ją odbierze.",
+    "chatAppsCodeExpiredMessageIn": "Pobierz nowy kod i wyślij go z aplikacji {app}.",
     "voiceProfileCardDismissed": "Profil głosowy możesz skonfigurować w każdej chwili w Ustawieniach.",
     "homeNewRecordingButton": "Nowe nagranie",
     "chatWelcomeMessage": "Cześć, jestem Omi. Pytaj mnie o wszystko, o czym rozmawiałeś: co ktoś powiedział, co obiecałeś albo jak minął ci dzień. Mogę też dodawać zadania i zapamiętywać rzeczy za ciebie.",

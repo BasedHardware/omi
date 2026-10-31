@@ -14960,6 +14960,16 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Mesajı $app\'dan gönder. Omi\'ye ulaşır ulaşmaz bu ekran güncellenir.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Yeni bir kod al ve $app\'dan gönder.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Ses profilini istediğin zaman Ayarlar\'dan kurabilirsin.';
 
   @override

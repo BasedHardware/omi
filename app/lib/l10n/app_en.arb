@@ -18255,6 +18255,24 @@
             }
         }
     },
+    "chatAppsWaitingMessageIn": "Send the message in {app}. This screen updates as soon as Omi gets it.",
+    "@chatAppsWaitingMessageIn": {
+        "description": "Waiting step after opening a chat app with the link code. app is a brand name such as WhatsApp.",
+        "placeholders": {
+            "app": {
+                "type": "String"
+            }
+        }
+    },
+    "chatAppsCodeExpiredMessageIn": "Get a new code and send it from {app}.",
+    "@chatAppsCodeExpiredMessageIn": {
+        "description": "The link code expired. app is a brand name such as WhatsApp.",
+        "placeholders": {
+            "app": {
+                "type": "String"
+            }
+        }
+    },
     "voiceProfileCardDismissed": "You can set up Voice Profile anytime in Settings.",
     "@voiceProfileCardDismissed": {
         "description": "Toast after dismissing the Teach Omi your voice card on Home; points to Settings > Voice Profile."

@@ -21,6 +21,7 @@ from utils.conversations.relevance import (
     decide_relevance,
     find_neighbor,
 )
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.conversations.wake_word import find_wake_word_matches
 from utils.integration_telemetry import emit_posthog_event
 from utils.metrics import record_conversation_relevance
@@ -79,7 +80,7 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
 
     if not enabled():
         return None
-    from database import episodes
+    from database import episodes, episode_timeline
     from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 
     cid = conversation_id or getattr(conversation, 'id', None)
@@ -112,9 +113,20 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
                         'last_speech_at',
                         'status',
                         'capture_evidence',
+                        'relevance_decision',
+                        'sync_relevance_user_kept',
+                        'has_photos',
+                        'photos',
+                        'user_title',
+                        'starred',
+                        'folder_user_set',
                     ],
                 )
-                if not other or any(other.get(key) for key in ('discarded', 'deleted', 'sync_merged_into')):
+                if (
+                    not other
+                    or is_relevance_discarded(other)
+                    or any(other.get(key) for key in ('deleted', 'sync_merged_into'))
+                ):
                     continue
                 # Check the other member's span, not an envelope this clip may
                 # already have extended. Attachment order cannot widen proof.
@@ -123,10 +135,33 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
                     continue
                 evidence = dict(episode, started_at=other_span.recorded_start, last_activity_at=other_span.recorded_end)
                 if choose_recorded_episode([evidence], start, end):
+                    from config.recorded_time import recorded_episodes_enabled
+                    from utils.episodes.client_gate import episode_work_enabled
+
+                    # Context remains useful outside episode admission, but a
+                    # keep receipt must not claim membership we cannot write.
+                    if not recorded_episodes_enabled() or not episode_work_enabled(uid):
+                        return 'occasion_context'
+                    if not cid:
+                        return 'occasion_lookup_unavailable'
+                    source = (
+                        conversation.get('source')
+                        if isinstance(conversation, dict)
+                        else getattr(conversation, 'source', None)
+                    )
+                    episode_timeline.attach_existing_recorded(
+                        uid,
+                        cid,
+                        getattr(source, 'value', source),
+                        start,
+                        end,
+                        episode_id=episode['id'],
+                        choose=choose_recorded_episode,
+                    )
                     return 'occasion_member'
         if adjacent_conversation(uid, conversation, cid, require_complete=True):
             return 'occasion_neighbor'
-    except Exception:
+    except Exception as error:
         from utils.observability.fallback import record_fallback
 
         record_fallback(
@@ -136,7 +171,7 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
             reason='lookup_unavailable',
             outcome='degraded',
         )
-        logger.warning('event=occasion_retention outcome=lookup_unavailable')
+        logger.warning('event=occasion_retention outcome=lookup_unavailable exception_type=%s', type(error).__name__)
         return 'occasion_lookup_unavailable'
     return None
 

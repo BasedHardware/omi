@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Teraz platíte ročne",
     "yearlySwitchDoneBody": "Dnes účtované {amount}. Obnovenie {date}.",
     "episodePartsCount": "{count, plural, zero{{count} častí} one{{count} časť} two{{count} častí} few{{count} časti} many{{count} častí} other{{count} častí}}",
+    "chatAppsWaitingMessageIn": "Pošlite správu v aplikácii {app}. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.",
+    "chatAppsCodeExpiredMessageIn": "Získajte nový kód a pošlite ho z aplikácie {app}.",
     "voiceProfileCardDismissed": "Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.",
     "homeNewRecordingButton": "Nový záznam",
     "chatWelcomeMessage": "Ahoj, som Omi. Opýtaj sa ma na čokoľvek, o čom si hovoril: čo kto povedal, čo si sľúbil alebo zhrnutie tvojho dňa. Viem aj pridávať úlohy a pamätať si veci za teba.",

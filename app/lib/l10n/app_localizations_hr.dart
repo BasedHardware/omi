@@ -14983,6 +14983,16 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošalji poruku u aplikaciji $app. Ovaj se zaslon ažurira čim je Omi primi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dohvati novi kôd i pošalji ga iz aplikacije $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Glasovni profil možete postaviti bilo kada u Postavkama.';
 
   @override

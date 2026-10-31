@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Du betaler nå årlig",
     "yearlySwitchDoneBody": "{amount} belastet i dag. Fornyes {date}.",
     "episodePartsCount": "{count, plural, zero{{count} deler} one{{count} del} two{{count} deler} few{{count} deler} many{{count} deler} other{{count} deler}}",
+    "chatAppsWaitingMessageIn": "Send meldingen i {app}. Denne skjermen oppdateres så snart Omi får den.",
+    "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}.",
     "voiceProfileCardDismissed": "Du kan sette opp stemmeprofilen når som helst i Innstillinger.",
     "homeNewRecordingButton": "Ny opptak",
     "chatWelcomeMessage": "Hei, jeg er Omi. Spør meg om alt du har snakket om: hva noen sa, hva du lovet, eller et sammendrag av dagen din. Jeg kan også legge til oppgaver og huske ting for deg.",

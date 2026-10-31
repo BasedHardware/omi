@@ -14969,6 +14969,16 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Išsiųskite žinutę programoje $app. Šis ekranas atsinaujins, kai tik Omi ją gaus.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Gaukite naują kodą ir išsiųskite jį per $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Balso profilį galite nustatyti bet kada nustatymuose.';
 
   @override

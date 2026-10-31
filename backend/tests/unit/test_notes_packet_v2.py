@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from database import users as users_db
+from database import users as users_db, redis_db
 
 from config.refactor_modes import serving_for, uid_digest
 from models.speaker_evidence import SpeakerEvidence, VoiceCluster, SpeakerCandidate, ClusterSimilarity
@@ -42,6 +42,7 @@ def isolated_flags(monkeypatch):
         known_spellings, 'conversation_people_names', lambda *_args: FIXTURES['contact_spelling']['people']
     )
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: 'en')
+    monkeypatch.setattr(redis_db, 'get_user_preferred_app', lambda *_args: None)
 
 
 def prefix(**kwargs):
@@ -314,7 +315,11 @@ def test_episode_shadow_has_exact_legacy_text(monkeypatch, mode):
 def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum):
     monkeypatch.setenv(packet.FLAG, 'serve')
     conversation = SimpleNamespace(
-        transcript_segments=[SimpleNamespace(text='word ' * words)], started_at=START, finished_at=START, photos=[]
+        transcript_segments=[SimpleNamespace(text='word ' * words)],
+        started_at=START,
+        finished_at=START,
+        photos=[],
+        language='en',
     )
     result = notes_short_clip.quiet_minimum('synthetic-account', conversation, tz='UTC')
     assert (result is not None) is minimum
@@ -324,6 +329,7 @@ def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum)
 
 
 def test_short_clip_shadow_does_not_serve_minimum(monkeypatch):
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     monkeypatch.setenv(packet.FLAG, 'shadow')
     conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='A brief synthetic remark')], photos=[])
     assert notes_short_clip.quiet_minimum('synthetic-account', conversation) is None
@@ -410,6 +416,7 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
     )
     conversation = SimpleNamespace(
         transcript_segments=[SimpleNamespace(text='A brief synthetic remark')],
+        language='en',
         started_at=START,
         photos=[],
         source='omi',
@@ -425,7 +432,8 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
         recovery_minimum_fallback_observer=lambda: minimum.append(True),
     )
     assert structured.title and structured.emoji == '💬' and not discarded
-    assert decisions[0].trigger == trigger and minimum == [True]
+    assert decisions[0].trigger == trigger
+    assert minimum == ([True] if trigger_name in ('SERVER_RECOVERY', 'SILENT_BACKFILL') else [])
 
 
 def test_no_names_when_whole_conversation_speaker_resolution_is_unavailable():
@@ -578,7 +586,9 @@ def test_shadow_moment_name_projection_is_the_exact_existing_labels(monkeypatch)
 
 def test_external_audio_fragments_also_get_the_model_free_minimum(monkeypatch):
     monkeypatch.setenv(packet.FLAG, 'serve')
-    audio = SimpleNamespace(text_source='audio', text='A short synthetic utterance', started_at=START, photos=[])
+    audio = SimpleNamespace(
+        text_source='audio', text='A short synthetic utterance', started_at=START, photos=[], language='en'
+    )
     minimum = notes_short_clip.quiet_minimum('synthetic-account', audio)
     assert minimum.title == 'A short synthetic utterance' and minimum.emoji == '💬'
 

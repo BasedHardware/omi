@@ -15011,6 +15011,16 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Испратете ја пораката во $app. Овој екран се ажурира штом Omi ќе ја добие.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Добијте нов код и испратете го од $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Гласовниот профил можете да го поставите во секое време во Поставки.';
 
   @override

@@ -11942,6 +11942,8 @@
     "yearlySwitchDoneTitle": "اکنون سالانه پرداخت می‌کنید",
     "yearlySwitchDoneBody": "امروز {amount} کسر شد. تمدید در {date}.",
     "episodePartsCount": "{count, plural, zero{{count} بخش} one{{count} بخش} two{{count} بخش} few{{count} بخش} many{{count} بخش} other{{count} بخش}}",
+    "chatAppsWaitingMessageIn": "پیام را در {app} ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.",
+    "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید.",
     "voiceProfileCardDismissed": "هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.",
     "homeNewRecordingButton": "ضبط جدید",
     "chatWelcomeMessage": "سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم.",

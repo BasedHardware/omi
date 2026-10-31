@@ -11942,6 +11942,8 @@
     "yearlySwitchDoneTitle": "اب آپ سالانہ پلان پر ہیں",
     "yearlySwitchDoneBody": "آج {amount} وصول کیے گئے۔ تجدید {date} کو۔",
     "episodePartsCount": "{count, plural, zero{{count} حصے} one{{count} حصے} two{{count} حصے} few{{count} حصے} many{{count} حصے} other{{count} حصے}}",
+    "chatAppsWaitingMessageIn": "پیغام کو {app} میں بھیجیں۔ Omi کو ملتے ہی یہ اسکرین اپ ڈیٹ ہو جائے گی۔",
+    "chatAppsCodeExpiredMessageIn": "نیا کوڈ حاصل کریں اور اسے {app} سے بھیجیں۔",
     "voiceProfileCardDismissed": "آپ کسی بھی وقت سیٹنگز میں وائس پروفائل سیٹ کر سکتے ہیں۔",
     "homeNewRecordingButton": "نئی ریکارڈنگ",
     "chatWelcomeMessage": "ہیلو، میں Omi ہوں۔ آپ نے جس بارے میں بات کی، اس کے بارے میں کچھ بھی پوچھیں: کسی نے کیا کہا، آپ نے کیا وعدہ کیا یا آپ کے دن کا خلاصہ۔ میں کام بھی شامل کر سکتا ہوں اور آپ کے لیے باتیں یاد بھی رکھ سکتا ہوں۔",

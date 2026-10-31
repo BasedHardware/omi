@@ -15046,6 +15046,16 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Στείλε το μήνυμα από τα $app. Αυτή η οθόνη ενημερώνεται μόλις το λάβει το Omi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Πάρε νέο κωδικό και στείλ\' τον από τα $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Μπορείτε να ρυθμίσετε το προφίλ φωνής ανά πάσα στιγμή από τις Ρυθμίσεις.';
 
   @override

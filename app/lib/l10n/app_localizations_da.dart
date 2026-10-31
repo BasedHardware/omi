@@ -14939,6 +14939,16 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Send beskeden i $app. Denne skærm opdateres, så snart Omi modtager den.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Få en ny kode, og send den fra $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Du kan altid oprette din stemmeprofil under Indstillinger.';
 
   @override

@@ -4612,6 +4612,8 @@
     "yearlySwitchDoneTitle": "Mostantól évente fizet",
     "yearlySwitchDoneBody": "Ma terhelve: {amount}. Megújul: {date}.",
     "episodePartsCount": "{count, plural, zero{{count} rész} one{{count} rész} two{{count} rész} few{{count} rész} many{{count} rész} other{{count} rész}}",
+    "chatAppsWaitingMessageIn": "Küldd el az üzenetet az {app} alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.",
+    "chatAppsCodeExpiredMessageIn": "Kérj új kódot, és küldd el az {app} alkalmazásból.",
     "voiceProfileCardDismissed": "A hangprofilt bármikor beállíthatod a Beállításokban.",
     "homeNewRecordingButton": "Új felvétel",
     "chatWelcomeMessage": "Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted.",

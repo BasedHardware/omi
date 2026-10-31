@@ -15050,6 +15050,16 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app-இல் மெசேஜை அனுப்புங்கள். Omi-க்குக் கிடைத்தவுடன் இந்தத் திரை புதுப்பிக்கப்படும்.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'புதிய குறியீட்டைப் பெற்று $app-இலிருந்து அனுப்புங்கள்.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.';
 
   @override

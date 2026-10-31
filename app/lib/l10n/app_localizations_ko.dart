@@ -14740,6 +14740,16 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app에서 메시지를 보내세요. Omi가 받는 즉시 이 화면이 업데이트됩니다.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return '새 코드를 받아 $app 앱에서 보내세요.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => '음성 프로필은 설정에서 언제든지 설정할 수 있어요.';
 
   @override

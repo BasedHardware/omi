@@ -11942,6 +11942,8 @@
     "yearlySwitchDoneTitle": "Taunan ka na",
     "yearlySwitchDoneBody": "{amount} ang siningil ngayon. Magre-renew sa {date}.",
     "episodePartsCount": "{count, plural, zero{{count} bahagi} one{{count} bahagi} two{{count} bahagi} few{{count} bahagi} many{{count} bahagi} other{{count} bahagi}}",
+    "chatAppsWaitingMessageIn": "Ipadala ang mensahe sa {app}. Mag-a-update ang screen na ito pagkatanggap ni Omi.",
+    "chatAppsCodeExpiredMessageIn": "Kumuha ng bagong code at ipadala ito mula sa {app}.",
     "voiceProfileCardDismissed": "Maaari mong i-set up ang Voice Profile anumang oras sa Settings.",
     "homeNewRecordingButton": "Bagong Recording",
     "chatWelcomeMessage": "Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.",

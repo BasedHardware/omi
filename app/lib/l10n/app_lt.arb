@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Dabar mokate kas metus",
     "yearlySwitchDoneBody": "Šiandien nuskaičiuota {amount}. Atnaujinama {date}.",
     "episodePartsCount": "{count, plural, zero{{count} dalių} one{{count} dalis} two{{count} dalių} few{{count} dalys} many{{count} dalies} other{{count} dalių}}",
+    "chatAppsWaitingMessageIn": "Išsiųskite žinutę programoje {app}. Šis ekranas atsinaujins, kai tik Omi ją gaus.",
+    "chatAppsCodeExpiredMessageIn": "Gaukite naują kodą ir išsiųskite jį per {app}.",
     "voiceProfileCardDismissed": "Balso profilį galite nustatyti bet kada nustatymuose.",
     "homeNewRecordingButton": "Naujas įrašas",
     "chatWelcomeMessage": "Labas, aš Omi. Klausk manęs apie bet ką, apie ką kalbėjai: ką kas nors pasakė, ką pažadėjai ar tavo dienos santrauką. Taip pat galiu pridėti užduočių ir prisiminti dalykus už tave.",

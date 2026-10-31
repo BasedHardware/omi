@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Είστε πλέον σε ετήσια χρέωση",
     "yearlySwitchDoneBody": "Χρεώθηκαν σήμερα {amount}. Ανανέωση στις {date}.",
     "episodePartsCount": "{count, plural, zero{{count} μέρη} one{{count} μέρος} two{{count} μέρη} few{{count} μέρη} many{{count} μέρη} other{{count} μέρη}}",
+    "chatAppsWaitingMessageIn": "Στείλε το μήνυμα από τα {app}. Αυτή η οθόνη ενημερώνεται μόλις το λάβει το Omi.",
+    "chatAppsCodeExpiredMessageIn": "Πάρε νέο κωδικό και στείλ' τον από τα {app}.",
     "voiceProfileCardDismissed": "Μπορείτε να ρυθμίσετε το προφίλ φωνής ανά πάσα στιγμή από τις Ρυθμίσεις.",
     "homeNewRecordingButton": "Νέα ηχογράφηση",
     "chatWelcomeMessage": "Γεια, είμαι το Omi. Ρώτα με οτιδήποτε έχεις συζητήσει: τι είπε κάποιος, τι υποσχέθηκες ή μια σύνοψη της μέρας σου. Μπορώ επίσης να προσθέτω εργασίες και να θυμάμαι πράγματα για σένα.",

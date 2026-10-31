@@ -15010,6 +15010,16 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Trimite mesajul din $app. Acest ecran se actualizează de îndată ce Omi îl primește.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Obține un cod nou și trimite-l din $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Poți configura profilul vocal oricând din Setări.';
 
   @override

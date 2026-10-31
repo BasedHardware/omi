@@ -14942,6 +14942,16 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app অ্যাপে মেসেজটি পাঠান। Omi পাওয়ামাত্র এই স্ক্রিন আপডেট হবে।';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'নতুন কোড নিন এবং $app অ্যাপ থেকে পাঠান।';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।';
 
   @override

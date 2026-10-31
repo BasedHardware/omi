@@ -36,6 +36,17 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   EpisodeProvider? _episodes;
   int? _peopleKey;
   int _people = 0;
+  (CaptureProvider, int, DateTime?)? _coverageKey;
+  LivePreviewCoverage? _coverage;
+
+  LivePreviewCoverage _previewCoverage(CaptureProvider capture) {
+    final key = (capture, capture.segmentsPhotosVersion, capture.liveTranscriptStartedAt);
+    if (_coverageKey != key) {
+      _coverageKey = key;
+      _coverage = LivePreviewCoverage.forFinals(capture.segments, capture.liveTranscriptStartedAt);
+    }
+    return _coverage!;
+  }
 
   /// How many people the transcript names: the owner plus speakers resolved to the user's people,
   /// as the live page's header names them. Raw diarization ids are not people (a long session
@@ -68,20 +79,29 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   Widget build(BuildContext context) {
     final episodes = context.watch<EpisodeProvider>();
     // Only what the row draws: the capture state, its start, whether it streams, and whether
-    // the reader's Reconnect is still running (the button waits on it). Transcript lines,
-    // socket chatter and BLE samples no longer rebuild the row (the 1 s clock still ticks).
-    final (state, _, _, reconnecting) =
-        context.select<CaptureProvider, (CaptureDisplayState, DateTime?, String?, bool)>(
+    // the reader's Reconnect is still running, plus transcript/preview revisions.
+    // Unrelated socket chatter and BLE samples do not rebuild the row.
+    final (state, _, _, reconnecting, _, _, _) = context
+        .select<CaptureProvider, (CaptureDisplayState, DateTime?, String?, bool, int, LivePreviewController?, bool)>(
       (c) => (
         EpisodePresentation.displayState(c),
         c.liveCaptureStartedAt,
         EpisodePresentation.streamingSource(c),
         c.pendantReconnectInFlight,
+        c.segmentsPhotosVersion,
+        c.livePreview,
+        c.localPreviewAdmitted,
       ),
     );
-    return LiveEpisodeClock(
-      clock: episodes.now,
-      builder: (context, now) => _row(context, episodes, context.read<CaptureProvider>(), state, now, reconnecting),
+    final capture = context.read<CaptureProvider>();
+    final preview = capture.localPreviewAdmitted ? capture.livePreview : null;
+    // Share one snippet between the visible subtitle and its spoken label.
+    return ListenableBuilder(
+      listenable: preview ?? const AlwaysStoppedAnimation<double>(0),
+      builder: (context, _) => LiveEpisodeClock(
+        clock: episodes.now,
+        builder: (context, now) => _row(context, episodes, capture, state, now, reconnecting),
+      ),
     );
   }
 
@@ -112,10 +132,17 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     // start so the latest words stay visible, for the whole session: words the final
     // transcript already covers drop out, the rest stay. The duration lives in the tile.
     final preview = listening && capture.localPreviewAdmitted ? capture.livePreview : null;
-    String previewText() => preview == null
-        ? ''
-        : _previewTail(LivePreviewCoverage.uncovered(preview.lines, capture.segments, capture.liveTranscriptStartedAt));
-    // Coverage walks every final segment; the spoken label reads it once per clock tick, not twice.
+    String previewText() {
+      if (!listening) return '';
+      final uncovered = preview == null
+          ? ''
+          : _textTail(_previewCoverage(capture).excludeCovered(preview.lines).reversed.map((line) => line.text));
+      // Cloud sessions have no local preview. When final segments cover local
+      // words, keep those words visible instead of replacing them with "Live".
+      return uncovered.isNotEmpty ? uncovered : _textTail(capture.segments.reversed.map((segment) => segment.text));
+    }
+
+    // Final coverage is reused across preview notifications and clock ticks.
     final spokenPreview = previewText();
     final status = noAudio
         ? l10n.captureNoAudioDetail
@@ -200,23 +227,16 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 3),
-                          // Words land as the recognizer hears them, not on the clock's tick.
-                          ListenableBuilder(
-                            listenable: preview ?? const AlwaysStoppedAnimation<double>(0),
-                            builder: (context, _) {
-                              final text = previewText();
-                              return text.isNotEmpty
-                                  ? StartTrimmedText(
-                                      key: const Key('home_live_episode_preview'),
-                                      runs: [(text: text, style: null)],
-                                      style: subtitleStyle,
-                                      // At accessibility sizes one line holds a word or two; a
-                                      // second keeps the newest words readable.
-                                      maxLines: MediaQuery.textScalerOf(context).scale(10) > 16 ? 2 : 1,
-                                    )
-                                  : Text(rest, style: subtitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
-                            },
-                          ),
+                          spokenPreview.isNotEmpty
+                              ? StartTrimmedText(
+                                  key: const Key('home_live_episode_preview'),
+                                  runs: [(text: spokenPreview, style: null)],
+                                  style: subtitleStyle,
+                                  // At accessibility sizes one line holds a word or two; a
+                                  // second keeps the newest words readable.
+                                  maxLines: MediaQuery.textScalerOf(context).scale(10) > 16 ? 2 : 1,
+                                )
+                              : Text(rest, style: subtitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
@@ -242,11 +262,11 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   }
 
   /// The newest preview words, a few lines' worth: enough to fill one trimmed line.
-  static String _previewTail(List<LivePreviewLine> lines) {
+  static String _textTail(Iterable<String> lines) {
     final tail = <String>[];
     var length = 0;
-    for (final line in lines.reversed) {
-      final text = line.text.trim();
+    for (final line in lines) {
+      final text = line.trim();
       if (text.isEmpty) continue;
       tail.insert(0, text);
       length += text.length;

@@ -34,6 +34,7 @@ def isolated_flags(monkeypatch):
     from database import users as users_db
 
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: 'en')
+    monkeypatch.setattr(processing.redis_db, 'get_user_preferred_app', lambda *_args: None)
 
 
 def _segments(words: int, *, start: float, end: float) -> list[SimpleNamespace]:

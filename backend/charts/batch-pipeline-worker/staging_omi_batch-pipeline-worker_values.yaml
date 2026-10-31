@@ -46,3 +46,7 @@ worker:
   headPriorityEnabled: true
   workerSilenceDispositionEnabled: true
   correctnessMetricsEnabled: true
+recordSealSweeper:
+  enabled: false
+recordSealRepair:
+  enabled: false

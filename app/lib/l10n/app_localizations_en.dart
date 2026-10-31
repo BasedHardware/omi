@@ -14932,6 +14932,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Send the message in $app. This screen updates as soon as Omi gets it.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Get a new code and send it from $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'You can set up Voice Profile anytime in Settings.';
 
   @override

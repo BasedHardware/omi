@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Вече плащате годишно",
     "yearlySwitchDoneBody": "Днес са таксувани {amount}. Подновяване на {date}.",
     "episodePartsCount": "{count, plural, zero{{count} части} one{{count} част} two{{count} части} few{{count} части} many{{count} части} other{{count} части}}",
+    "chatAppsWaitingMessageIn": "Изпрати съобщението от {app}. Този екран се обновява веднага щом Omi го получи.",
+    "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}.",
     "voiceProfileCardDismissed": "Можете да настроите гласовия профил по всяко време от Настройки.",
     "homeNewRecordingButton": "Нов запис",
     "chatWelcomeMessage": "Здравей, аз съм Omi. Питай ме за всичко, за което си говорил: какво е казал някой, какво си обещал или обобщение на деня ти. Мога и да добавям задачи и да запомням неща вместо теб.",

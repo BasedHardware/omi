@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Tagad jūs maksājat par gadu",
     "yearlySwitchDoneBody": "Šodien iekasēti {amount}. Atjaunojas {date}.",
     "episodePartsCount": "{count, plural, zero{{count} daļu} one{{count} daļa} two{{count} daļas} few{{count} daļas} many{{count} daļas} other{{count} daļas}}",
+    "chatAppsWaitingMessageIn": "Nosūtiet ziņu lietotnē {app}. Šis ekrāns atjaunosies, tiklīdz Omi to saņems.",
+    "chatAppsCodeExpiredMessageIn": "Iegūstiet jaunu kodu un nosūtiet to no lietotnes {app}.",
     "voiceProfileCardDismissed": "Balss profilu varat iestatīt jebkurā laikā iestatījumos.",
     "homeNewRecordingButton": "Jauns ieraksts",
     "chatWelcomeMessage": "Sveiki, es esmu Omi. Jautā man jebko par to, par ko esi runājis: ko kāds teica, ko tu apsolīji vai kopsavilkumu par tavu dienu. Es varu arī pievienot uzdevumus un atcerēties lietas tavā vietā.",

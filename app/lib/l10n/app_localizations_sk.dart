@@ -14941,6 +14941,16 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošlite správu v aplikácii $app. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Získajte nový kód a pošlite ho z aplikácie $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.';
 
   @override

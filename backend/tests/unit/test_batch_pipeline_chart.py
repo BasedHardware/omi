@@ -15,6 +15,9 @@ def render(*arguments, namespace='synthetic'):
     helm = shutil.which('helm')
     if helm is None:
         pytest.skip('Helm unavailable; render check runs on the packaging host')
+    # Production sweeps require their real namespace even in offline templates.
+    if namespace == 'synthetic' and any('prod_omi_' in arg for arg in arguments):
+        namespace = 'prod-omi-backend'
     return subprocess.run(
         [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', namespace, *arguments],
         capture_output=True,
@@ -106,6 +109,12 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert '@sha256:' in container['image']
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
     env = {v['name']: v.get('value') for v in container['env']}
+    soniox = next(v for v in container['env'] if v['name'] == 'SONIOX_API_KEY')
+    assert soniox['valueFrom']['secretKeyRef'] == {
+        'name': 'synthetic-secret',
+        'key': 'SONIOX_API_KEY',
+        'optional': True,
+    }
     assert env['BATCH_PIPELINE_MODEL_BATCH_SIZE'] == '8'
     assert env['BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_FLIGHT_BATCH_SECONDS'] == '1800'

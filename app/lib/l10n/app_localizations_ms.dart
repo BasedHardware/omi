@@ -14984,6 +14984,16 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Hantar mesej dalam $app. Skrin ini dikemas kini sebaik sahaja Omi menerimanya.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dapatkan kod baharu dan hantar daripada $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.';
 
   @override

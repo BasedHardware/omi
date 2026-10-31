@@ -23597,5 +23597,138 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-pusher-db-executor-saturated",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - DB executor saturated",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "range",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum without (task) (omi_executor_task_active{job=\"pusher-metrics\",executor=\"db\"}) / omi_executor_max_workers{job=\"pusher-metrics\",executor=\"db\"}",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.99
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-30T10:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/c758b698-01a0-4b5c-b58c-e81e4ff33ccd",
+      "runbook": "backend/docs/runbooks/pusher-degraded.md",
+      "threshold": "All configured DB workers active for 10 minutes (per scrape target, summed across task kinds)",
+      "summary": "Pusher shared DB executor has no spare worker capacity.",
+      "user_impact": "Transcript integrations can drop queued items and audio-byte integrations can close sessions with 1011.",
+      "scope": "Each production pusher metrics target; capacity follows PUSHER_DB_EXECUTOR_WORKERS.",
+      "verification": "Compare active and queued DB work against omi_executor_max_workers and inspect record_barrier pool pressure.",
+      "safe_next_action": "Escalate to the pusher rollout lead. Preserve record custody semantics; verify release attribution before mitigation."
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-pusher-db-executor-saturated",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    }
   }
 ]

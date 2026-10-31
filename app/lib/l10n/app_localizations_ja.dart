@@ -14734,6 +14734,16 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$appでメッセージを送信してください。Omiが受信するとすぐにこの画面が更新されます。';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return '新しいコードを取得して、$appアプリから送信してください。';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'ボイスプロフィールは設定からいつでも設定できます。';
 
   @override

@@ -109,7 +109,13 @@ Capture must never fetch transcript/audio or invent observed production spans.
 
 `regressions.json` is a separate fully synthetic incident-shape corpus. Its
 one-sample EOF VAD overrun and discarded backfill chain head reproduce the
-mechanisms of #23926/#23932. It is **not captured production data**.
+mechanisms of #23926/#23932. A sub-second provider-word EOF overrun also runs
+through the real `PipelineWorker` before projection. `worker_results` records
+its validation stage/reason or persisted numeric word clocks; synthetic provider
+hypotheses are refused on captured corpora. It is **not captured production data**.
+Each worker fixture must declare `expected_worker_result`: the actual persisted
+outcome and numeric clocks must match it exactly before projection. A different
+valid clock or worker outcome blocks the synthetic gate.
 
 ```bash
 /Users/dazheng/workspace/omi/bin/omi-heavy run -- nice -n 19 make batch-replay \

@@ -14981,6 +14981,16 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Nosūtiet ziņu lietotnē $app. Šis ekrāns atjaunosies, tiklīdz Omi to saņems.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Iegūstiet jaunu kodu un nosūtiet to no lietotnes $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Balss profilu varat iestatīt jebkurā laikā iestatījumos.';
 
   @override

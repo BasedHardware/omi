@@ -14996,6 +14996,16 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app ನಲ್ಲಿ ಸಂದೇಶ ಕಳುಹಿಸಿ. Omi ಗೆ ಅದು ಸಿಕ್ಕ ತಕ್ಷಣ ಈ ಪರದೆ ನವೀಕರಣಗೊಳ್ಳುತ್ತದೆ.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'ಹೊಸ ಕೋಡ್ ಪಡೆದು $app ನಿಂದ ಕಳುಹಿಸಿ.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.';
 
   @override

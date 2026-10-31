@@ -14930,6 +14930,16 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app ऐप में मैसेज भेजें। Omi को मिलते ही यह स्क्रीन अपडेट हो जाएगी।';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'नया कोड लें और उसे $app ऐप से भेजें।';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।';
 
   @override

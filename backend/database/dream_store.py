@@ -18,8 +18,8 @@ from config.dream_agent import (
     Caps,
     canary_eligible,
     canary_uid,
+    backed_off_hunt_interval,
     eligible,
-    hunt_interval,
     may_be_eligible,
     mode,
     DRAIN_TIMEOUT_SECONDS,
@@ -248,8 +248,15 @@ def acquire(
         if trigger == 'manual' and manual_runs >= caps.manual_runs:
             raise AdmissionDenied('dream_manual_limit')
         last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or EPOCH
-        interval = hunt_interval(data.get('size_bucket'))
+        from database.dream_scheduler import owner_hunt_interval
+
+        interval = owner_hunt_interval(uid, data)
         hunt_due = not canary and (not isinstance(last_pass, datetime) or now - last_pass >= interval)
+        # Hunt-backoff shadow: this hunt would have waited for the backed-off interval.
+        backed_off = backed_off_hunt_interval(data.get('size_bucket'), data.get('dry_hunts'))
+        backoff_would_defer = bool(
+            hunt_due and isinstance(last_pass, datetime) and now - last_pass < backed_off and interval < backed_off
+        )
         has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
         tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         if trigger != 'manual' and passes >= caps.passes:
@@ -291,7 +298,7 @@ def acquire(
             )
             from database.dream_scheduler import due_time
 
-            return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now))}
+            return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now, uid))}
         lease = {
             'run_id': run_id,
             'day': day,
@@ -306,6 +313,8 @@ def acquire(
             'daily_cap': caps.daily_usd,
             'passes_per_day': caps.passes,
             'hunt': not has_dirty,
+            'dry_hunts': _dry_hunts(data),
+            'backoff_would_defer': backoff_would_defer and not has_dirty,
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
             'size_bucket': data.get('size_bucket', 'light'),
@@ -454,6 +463,13 @@ def assert_lease(uid, run_id, *, firestore_client=None):
     data = state_ref(client(firestore_client), uid).get().to_dict() or {}
     if (data.get('lease') or {}).get('run_id') != run_id:
         raise RuntimeError('dream_lease_lost')
+
+
+def _dry_hunts(data):
+    try:
+        return max(0, int(data.get('dry_hunts', 0) or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def finish(
@@ -686,6 +702,11 @@ def finish(
             patch['last_yield'] = sum(
                 1 for row in report.get('outcomes') or [] if isinstance(row, dict) and row.get('status') == 'applied'
             )
+            # Hunt backoff: consecutive hunts that applied nothing; any yield resets the streak.
+            if patch['last_yield']:
+                patch['dry_hunts'] = 0
+            elif lease.get('hunt') and not lease.get('canary') and lease.get('trigger') == 'schedule':
+                patch['dry_hunts'] = min(16, _dry_hunts(data) + 1)
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
         for ref in sorted(deferred if release else ())[:8]:
@@ -706,7 +727,7 @@ def finish(
         tx.update(state, patch)
         from database.dream_scheduler import due_time
 
-        next_due = due_time({**data, **patch}, now)
+        next_due = due_time({**data, **patch}, now, uid)
         if data.get('day') == now.date().isoformat() and data.get('passes', 0) >= current_lease.get(
             'passes_per_day', 2
         ):

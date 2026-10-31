@@ -110,6 +110,10 @@ def _observe_embedding_admission(speaker, raw, enabled):
         _observe_refusal(speaker, 'already_mapped', raw.get('speaker_id_scope'))
 
 
+class LateTranscriptReplyError(RuntimeError):
+    """Late speech committed, but its read-side reply could not be built."""
+
+
 class ConversationCache:
     """Cache one live conversation without hiding its freshness contract."""
 
@@ -475,7 +479,25 @@ class TranscriptProcessor:
             )
             if getattr(self.host.state, 'capture_timeline_v2', False):
                 self._v2_committed_ids.update(str(segment.id) for segment in segments)
-            saved = deserialize_conversation(assigned)
+            try:
+                # Assignment returns a write plan: encrypted fields and delete
+                # transforms are not a Conversation. Let the normal read path
+                # resolve transforms and decode every protected field.
+                read_row = await self._load_conversation(assigned['id'])
+                if not read_row:
+                    raise ValueError('Committed late conversation unavailable for reply')
+                saved = deserialize_conversation(read_row)
+            except Exception as error:
+                record_fallback(
+                    component='other',
+                    from_mode='late_transcript_reply',
+                    to_mode='none',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
+                logger.warning('Late transcript committed; reply unavailable type=%s', type(error).__name__)
+                raise LateTranscriptReplyError from error
             late_ids = getattr(self, '_late_conversation_ids', set())
             if len(late_ids) >= 256:
                 late_ids.pop()
@@ -1104,6 +1126,13 @@ class TranscriptProcessor:
                     await self.host.conversations.create_new_in_progress_conversation(rollover=True)
                     result = await self._write_fresh(transcript_segments, photos, finished_at, started_at)
                     rolled_over = True
+            except LateTranscriptReplyError:
+                # The assignment is durable. Retrying this batch here would
+                # wedge live persistence on an unrelated read/validation fault.
+                self._legacy_persist_failures = 0
+                self._legacy_retry_until = 0.0
+                self._legacy_persist_rejects = 0
+                continue
             except asyncio.CancelledError:
                 self._requeue_legacy_persist(legacy_retry_segments, photos)
                 raise
@@ -1409,15 +1438,19 @@ class TranscriptProcessor:
                         segment.speaker_identity_status = SpeakerIdentityStatus.user
                     new_segments.append(segment)
             current = deserialize_conversation(data)
-            result = await self._update_live_conversation(
-                current,
-                new_segments,
-                photos if is_current else [],
-                finished_at,
-                pin_started_at,
-                audio_timeline=pin_marker,
-                update_finished_at=is_current or data.get('status') == 'in_progress',
-            )
+            try:
+                result = await self._update_live_conversation(
+                    current,
+                    new_segments,
+                    photos if is_current else [],
+                    finished_at,
+                    pin_started_at,
+                    audio_timeline=pin_marker,
+                    update_finished_at=is_current or data.get('status') == 'in_progress',
+                )
+            except LateTranscriptReplyError:
+                # _v2_committed_ids already records the durable assignment.
+                continue
             if result is None:
                 if not is_current:
                     self._reroute_unplaced(segments, base=started_ts)

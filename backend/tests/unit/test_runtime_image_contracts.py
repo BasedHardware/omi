@@ -891,10 +891,18 @@ def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, n
 
 def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module):
     contract = _contract(contracts_module, 'batch-pipeline-worker')
-    closure = contracts_module.first_party_import_closure(contract, contract.entrypoints)
+    # The image also hosts the separate CPU seal-sweeper CronJob. Preserve this
+    # process boundary on the GPU entrypoint rather than unioning both hosts.
+    gpu_contract = replace(contract, entrypoints=('diarizer.batch_pipeline_runtime',))
+    closure = contracts_module.first_party_import_closure(gpu_contract, gpu_contract.entrypoints)
     assert 'utils.capture.retry_cap' in closure
     assert 'utils.sync.retry_hygiene' not in closure
     assert 'utils.cloud_tasks' not in closure
     assert not any(
-        module.startswith('google.cloud.tasks') for module in contracts_module.third_party_dependency_modules(contract)
+        module.startswith('google.cloud.tasks')
+        for module in contracts_module.third_party_dependency_modules(gpu_contract)
     )
+    sweeper = contracts_module.first_party_import_closure(contract, ('scripts.record_seal_sweep',))
+    assert 'utils.batch_pipeline.record_seal_repair' in sweeper
+    assert 'diarizer.batch_pipeline_runtime' not in sweeper
+    assert 'diarizer.batch_pipeline_models' not in sweeper

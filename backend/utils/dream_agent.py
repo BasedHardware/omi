@@ -40,7 +40,7 @@ from models.agent_tools import HarnessQuestion
 from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import verifiers
-from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
+from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_prescan, dream_verify
 from utils import dream_required_intake
 from utils.dream_cost import (
     conservative_attempt_micro,
@@ -1082,6 +1082,13 @@ async def run_pass(
                     'arm': idle_arm,
                     'would_skip': bool(lease.get('hunt')) and trigger == 'schedule' and not backlog,
                 }
+            backoff_arm = arms.get('hunt_backoff', 'off')
+            if backoff_arm != 'off' and lease.get('hunt'):
+                pass_levers['hunt_backoff'] = {
+                    'arm': backoff_arm,
+                    'dry_hunts': int(lease.get('dry_hunts', 0) or 0),
+                    'would_defer': bool(lease.get('backoff_would_defer')) and trigger == 'schedule',
+                }
         if not dry_run and not canary:
             assert lease is not None
             intake_scope = ACTIVE_RUN.set((uid, lease['run_id']))
@@ -1090,6 +1097,23 @@ async def run_pass(
             finally:
                 ACTIVE_RUN.reset(intake_scope)
         material = len(dirty) + len(seed.get('required_intake_candidates') or [])
+        prescan_arm = arms.get('prescan', 'off')
+        prescan = None
+        if prescan_arm != 'off' and trigger == 'schedule' and lease is not None:
+            # Pre-scan after admission only: bounded projected reads hand hunts
+            # concrete targets. Any failure leaves the pass exactly as today.
+            try:
+                prescan = await asyncio.wait_for(run_blocking(db_executor, dream_prescan.scan, uid), timeout=5.0)
+                pass_levers['prescan'] = {'arm': prescan_arm, 'targets': len(prescan['refs']), **prescan['counts']}
+                # Serve only hunts: a pass admitted for dirty work keeps its targets first, and an
+                # owner parked as an empty-bucket idle pass is never woken into a model session.
+                served = 0
+                if prescan_arm == 'serve' and lease.get('hunt') and limits.bucket != 'empty':
+                    served = dream_prescan.serve_targets(seed, prescan['refs'], limits)
+                pass_levers['prescan']['served'] = served
+            except Exception as error:
+                logger.warning('event=dream_lever_error lever=prescan exc=%s', type(error).__name__)
+                prescan = None
         budget_arm = arms.get('material_budget', 'off')
         budget_probe = None
         if budget_arm != 'off':
@@ -1145,6 +1169,13 @@ async def run_pass(
                 arms=arms,
                 budget_probe=budget_probe,
             )
+        if 'prescan' in pass_levers:
+            # Recall of the finalized report, merged into the admission-time row
+            # like the material-budget tail merge.
+            try:
+                pass_levers['prescan']['hits'] = dream_prescan.applied_hits(report, (prescan or {}).get('refs'))
+            except Exception as error:
+                logger.warning('event=dream_lever_error lever=prescan exc=%s', type(error).__name__)
         session_levers = report.get('levers') or {}
         report['levers'] = {
             **pass_levers,
@@ -1208,7 +1239,9 @@ RESERVED_RECHECKS = (PROBE_SECONDS + PROBE_TIMEOUT_SECONDS) // RESERVED_RECHECK_
 # A pass starting late in the drain gets only the drain's remaining budget, so
 # it ends through its own deadline (and finish) instead of being cancelled by the
 # drain's outer timeout; below this floor the owner waits for the next sweep.
-MIN_PASS_SECONDS = 300
+# 10-29: passes started with under 5 minutes left made 20 edits in 116 passes (most of
+# that window is gateway wait), so an owner waits for the next half-hour sweep instead.
+MIN_PASS_SECONDS = 600
 
 
 async def drain(*, limit=5000, sweep=None):

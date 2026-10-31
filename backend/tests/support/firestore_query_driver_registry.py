@@ -165,8 +165,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
-    # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
-    'database.dream_scheduler.discover': 'aa527730515a41f875712b46b2b1b7d7e36cc20564c1ad8178180e0b46b4fd14',
+    # Re-reviewed 2026-10-30: due_time now takes the owner id for hunt backoff; query shape is unchanged.
+    'database.dream_scheduler.discover': 'e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
@@ -193,6 +193,8 @@ BODY_DIGEST = {
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
     'database.smart_merge.absorb_conversation': '531806c3dc28aa6d728effd0a0ff8037b7621128037ed7350cf06beb3bd5674b',
+    'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
+    'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.
@@ -1088,7 +1090,29 @@ _add(
             'choose': lambda rows, start, end: None,
             'new_episode': {'id': 'recorded-1'},
         },
+        neutrals={'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape')},
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.episode_timeline.attach_existing_recorded',
+        base={
+            'uid': UID,
+            'conversation_id': 'recorded-1',
+            'source': 'desktop',
+            'started': T0,
+            'finished': T1,
+            'episode_id': 'owner',
+            'choose': lambda rows, start, end: {'id': 'owner'},
+        },
+        patchers=(
+            _stub(
+                'database.episodes.unseal',
+                {'id': 'owner', 'started_at': T0, 'last_activity_at': T1, 'status': 'live', 'state_version': 1},
+            ),
+            _stub('database.episodes.seal', {'id': 'owner'}),
+        ),
     )
 )
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
@@ -3225,6 +3249,25 @@ _add(
         '(no query filters); the ingest path is the registered driver via '
         'database.client_telemetry.accept_batch.',
         body_digest='65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
+    )
+)
+
+_add(
+    SkipEntry(
+        'database.omi_flags.read_all',
+        reason='Omi flag store lives in its own Firestore project (OMI_FLAGS_FIRESTORE_PROJECT), not the '
+        'customer database this index contract covers; streams the ~30-doc omi_flags collection with no '
+        'filters, once per process per version change.',
+        body_digest='58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
+    )
+)
+
+_add(
+    SkipEntry(
+        'database.omi_flags.read_audit',
+        reason='Operator CLI history read in the separate flag project: one equality filter on key over the '
+        'small omi_flags_audit collection (single-field index, sorted in Python); never a serving path.',
+        body_digest='12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     )
 )
 

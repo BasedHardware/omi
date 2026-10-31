@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "अब आप सालाना प्लान पर हैं",
     "yearlySwitchDoneBody": "आज {amount} चार्ज किए गए। नवीनीकरण {date} को।",
     "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}",
+    "chatAppsWaitingMessageIn": "{app} ऐप में मैसेज भेजें। Omi को मिलते ही यह स्क्रीन अपडेट हो जाएगी।",
+    "chatAppsCodeExpiredMessageIn": "नया कोड लें और उसे {app} ऐप से भेजें।",
     "voiceProfileCardDismissed": "आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।",
     "homeNewRecordingButton": "नई रिकॉर्डिंग",
     "chatWelcomeMessage": "नमस्ते, मैं Omi हूँ। आपने जिस बारे में बात की है, उसके बारे में कुछ भी पूछें: किसी ने क्या कहा, आपने क्या वादा किया, या आपके दिन का सारांश। मैं काम जोड़ सकता हूँ और आपके लिए चीज़ें याद भी रख सकता हूँ।",

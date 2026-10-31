@@ -15066,6 +15066,16 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Ipadala ang mensahe sa $app. Mag-a-update ang screen na ito pagkatanggap ni Omi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Kumuha ng bagong code at ipadala ito mula sa $app.';
+  }
+
+  @override
   String get voiceProfileCardDismissed => 'Maaari mong i-set up ang Voice Profile anumang oras sa Settings.';
 
   @override
