@@ -112,7 +112,25 @@ def result_outcome(payload):
             payload.get('words') != []
             or payload.get('words_provider') != 'exhausted_recognizers'
             or payload.get('recognition_evidence')
-            not in (EMPTY_EVIDENCE, TWO_PROVIDER_EMPTY_EVIDENCE, LANGUAGE_GUARD_EMPTY_EVIDENCE)
+            not in (
+                EMPTY_EVIDENCE,
+                TWO_PROVIDER_EMPTY_EVIDENCE,
+                LANGUAGE_GUARD_EMPTY_EVIDENCE,
+                SECOND_CHANCE_EMPTY_EVIDENCE,
+            )
+            or (
+                payload.get('recognition_evidence') == SECOND_CHANCE_EMPTY_EVIDENCE
+                and payload.get('recognizer_receipts')
+                != {
+                    provider: {
+                        'provider': provider,
+                        'outcome': 'empty',
+                        'word_count': 0,
+                        'vad_speech_seconds': payload.get('speech_seconds'),
+                    }
+                    for provider in ('modulate', 'soniox')
+                }
+            )
         ):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
         at_stage(
@@ -174,6 +192,12 @@ TWO_PROVIDER_EMPTY_EVIDENCE = {
     'multilingual_recovery': 'empty',
     'second_multilingual_recovery': 'empty',
 }
+# No fabricated GPU retry evidence for validation/short/oversize holds. Both
+# valid-empty recognizer receipts accompany this shape in the result artifact.
+SECOND_CHANCE_EMPTY_EVIDENCE = {
+    'multilingual_recovery': 'empty',
+    'second_multilingual_recovery': 'empty',
+}
 LANGUAGE_GUARD_EMPTY_EVIDENCE = {
     'gpu_language_guard': 'unsupported_language',
     'multilingual_recovery': 'empty',
@@ -214,7 +238,7 @@ def padded_long_speech(job):
     return job.get('worker_empty_evidence') == {'padded_retry': 'skipped_long_speech', 'version': 1}
 
 
-def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE):
+def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE, *, recognizer_receipts=None):
     if not terminal_empty_allowed(spans):
         raise MultilingualEmpty(duration, spans)
     payload = {
@@ -227,6 +251,7 @@ def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE):
         'recovery_version': 1,
         'outcome': 'no_recoverable_speech',
         'recognition_evidence': dict(evidence),
+        **({'recognizer_receipts': recognizer_receipts} if recognizer_receipts is not None else {}),
     }
     result_outcome(payload)
     return payload

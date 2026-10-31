@@ -47,6 +47,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
 from utils.conversations.recorded_time import conversation_span, is_late, at_offset as _wall
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
@@ -73,7 +74,7 @@ from database import users as users_db
 from database.auth import get_user_name
 from utils.episodes import moment_render, boundary_runtime
 from utils.episodes import output_language as episode_language
-from utils.episodes import client_gate, incremental, metrics, policy, recovery
+from utils.episodes import client_gate, composer, incremental, metrics, policy, recovery
 from utils.episodes import capture_groups as episode_groups
 from utils.episodes.capture_groups import calendar_identity as _calendar_identity
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
@@ -412,6 +413,7 @@ def _close(
             carried_items.extend(transferred)
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
+        composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
     return closed is not None
 
 
@@ -830,7 +832,7 @@ def _record_moment_once(
         else (set(), False)
     )
     segments, selected_ids, selected_content = recovery.select_segments(
-        moment.segments,
+        recovery.uncovered_segments(moment, episode),
         consumed,
         consumed_content,
         applied_until,
@@ -939,6 +941,7 @@ def _record_moment_once(
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'
 
+    compose_owns = closed is not None and composer.owns_closed_notes(uid, closed, moment.conversation_id, c)
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     output_language, repair = '', None
     conversation_language = moment.language or ''
@@ -950,7 +953,7 @@ def _record_moment_once(
         if prior and not episode_language.languages_match(prior, output_language):
             repair = episode_language.repair_instruction(prior, output_language)
     try:
-        result = incremental.run_incremental_update(
+        result = (composer.notes_free if compose_owns else incremental.run_incremental_update)(
             uid,
             render_state(base),
             text.text,
@@ -985,7 +988,7 @@ def _record_moment_once(
 
     end_offset = max((_segment_end(s) for s in segments), default=0.0)
     start_offset = min((_segment_start(s) for s in segments), default=0.0)
-    changes = apply_update(
+    changes = (composer.no_changes if compose_owns else apply_update)(
         base, result.update, conversation_id=moment.conversation_id, segment_offset=end_offset, now=now
     )
     detected_output_language = (
@@ -997,13 +1000,14 @@ def _record_moment_once(
     heading = result.update.moment_heading or clean_text(result.update.title, 48)
     last = moments[-1] if moments else None
     if (
-        last
+        not compose_owns
+        and last
         and last.get('conversation_id') == moment.conversation_id
         and heading
         and str(last.get('heading') or '').casefold() == heading.casefold()
     ):
         last.update({'ended_at': moment.current_ended_at or moment.ended_at, 'end_offset': end_offset})
-    else:
+    elif not compose_owns:
         moments.append(
             {
                 'id': uuid4().hex[:12],
@@ -1068,7 +1072,9 @@ def _record_moment_once(
         # A prompt instruction does not prove the model followed it. Only stamp
         # observed state text; otherwise the next update detects and repairs it.
         updates['output_language'] = (
-            output_language if episode_language.languages_match(detected_output_language, output_language) else None
+            output_language
+            if compose_owns or episode_language.languages_match(detected_output_language, output_language)
+            else None
         )
     if pending is not None:
         updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
@@ -1103,7 +1109,7 @@ def _record_moment_once(
         )
     metrics.record_moment_update(
         trigger=moment.trigger,
-        outcome='applied',
+        outcome='composer_owned' if compose_owns else 'applied',
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         latency_seconds=result.latency_seconds,
@@ -1138,7 +1144,9 @@ def on_conversation_finalized(
             # No app of this user can show episodes: no tail update, no reconciliation reads.
             metrics.record_moment_skipped_no_client('finalize')
             return 'skipped_no_client'
-        return _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c)
+        return composer.after_finalized(
+            uid, conversation_id, _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c), c
+        )
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
         return 'error'
@@ -1432,6 +1440,9 @@ def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapp
 def _attach_synced(
     uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
 ) -> str:
+    if is_relevance_discarded(row) or hidden_conversation(uid, conversation_id, firestore_client=c.firestore_client):
+        _end_discarded(uid, conversation_id, row, SYNC_UPDATE, c)
+        return 'skipped_discarded'
     if canonical := episode_groups.canonical_row(uid, conversation_id, row, firestore_client=c.firestore_client):
         primary = str(canonical.get('id') or episode_groups.primary_id(row))
         owner = episodes_db.get_episode_for_conversation(uid, primary, firestore_client=c.firestore_client)
@@ -1502,7 +1513,7 @@ def attach_synced_intake(
     try:
         if not client_gate.client_seen_cached(uid):
             return 'skipped_no_client'
-        if row.get('discarded') or row.get('deleted') or row.get('sync_merged_into'):
+        if is_relevance_discarded(row) or row.get('deleted') or row.get('sync_merged_into'):
             # Only isolated final verdicts skip intake; occasion-aware sync intake
             # defers fragment discards, so their content joins before finalization.
             return 'skipped_discarded'
@@ -1545,7 +1556,7 @@ def _on_finalized(
     absorbed_from: Optional[str],
     c: Collaborators,
 ) -> str:
-    if row.get('deleted') or row.get('discarded'):
+    if row.get('deleted') or is_relevance_discarded(row):
         _end_discarded(uid, conversation_id, row, trigger, c)
         return 'skipped_discarded'
     if episode_groups.canonical_row(uid, conversation_id, row, firestore_client=c.firestore_client):
@@ -1606,31 +1617,24 @@ def _on_finalized(
 
 def _end_discarded(uid: str, conversation_id: str, row: Mapping[str, Any], trigger: str, c: Collaborators) -> None:
     """Hide discarded members and remove their contribution to recorded activity."""
-    episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-    if not episode:
-        return
-    activity = dict(episode.get('member_activity') or {})
-    if any(cid not in activity for cid in episode.get('conversation_ids') or []):
-        # Legacy episodes lack per-member clocks. Reconstruct from recorded speech,
-        # never processing/upload finished_at, on this conversation's normal finalizer.
-        for cid in episode.get('conversation_ids') or []:
-            if cid == conversation_id or cid in activity:
-                continue
-            member = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
-            if member and not any(member.get(k) for k in ('discarded', 'deleted', 'sync_merged_into')):
-                span = conversation_span(member)
-                if span:
-                    activity[cid] = span.recorded_end
-    episode = episodes_db.update_episode(
-        uid,
-        str(episode['id']),
-        expected_version=int(episode.get('state_version') or 0),
-        updates={
-            'member_activity': activity,
-            'discarded_conversation_ids': [*(episode.get('discarded_conversation_ids') or []), conversation_id],
-        },
-        firestore_client=c.firestore_client,
-    )
+    for attempt in range(3):
+        episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+        if not episode:
+            return
+        try:
+            episodes_db.update_episode(
+                uid,
+                str(episode['id']),
+                expected_version=int(episode.get('state_version') or 0),
+                updates={
+                    'discarded_conversation_ids': [*(episode.get('discarded_conversation_ids') or []), conversation_id],
+                },
+                firestore_client=c.firestore_client,
+            )
+            return
+        except episodes_db.EpisodeConflict:
+            if attempt == 2:
+                raise
 
 
 def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survivor_id: str, c: Collaborators) -> None:
@@ -1874,7 +1878,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'closed_at': episode.get('closed_at'),
         'close_reason': episode.get('close_reason'),
         'title': clean_text(episode.get('title'), 240),
-        'bullets': [clean_text(line, 400) for line in episode.get('bullets') or []],
+        'bullets': [clean_text(line, composer.COMPOSER_MAX_PARAGRAPH_CHARS) for line in episode.get('bullets') or []],
         'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [
             {

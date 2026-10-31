@@ -8,6 +8,12 @@ def _asc(field):
 
 
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
+    FirestoreIndexRequirement(
+        'record_seal_repair_oldest_completed',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('record_lane_owner'), _asc('status'), _asc('finished_at'), _asc('__name__')),
+    ),
     *(
         FirestoreIndexRequirement(
             f'{stage}_batch_ramp_owner_load',

@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "Ročná platba teraz nie je pre váš plán dostupná.",
     "yearlySwitchDoneTitle": "Teraz platíte ročne",
     "yearlySwitchDoneBody": "Dnes účtované {amount}. Obnovenie {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} častí} one{{count} časť} two{{count} častí} few{{count} časti} many{{count} častí} other{{count} častí}}"
+    "episodePartsCount": "{count, plural, zero{{count} častí} one{{count} časť} two{{count} častí} few{{count} časti} many{{count} častí} other{{count} častí}}",
+    "chatAppsWaitingMessageIn": "Pošlite správu v aplikácii {app}. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.",
+    "chatAppsCodeExpiredMessageIn": "Získajte nový kód a pošlite ho z aplikácie {app}."
 }

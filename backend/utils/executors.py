@@ -5,6 +5,8 @@ Provides shared executors with strict separation (bulkhead pattern):
   small session/code cache reads. Must never starve — gates every request.
 - quiet_replay_executor: bounded quiet-check replay leaves, separate from the DB coordinator.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
+- record_barrier_executor: pusher recording custody transactions, isolated from
+  integrations and webhook DB work even during Firestore retries.
 - context_executor: optional context reads and fresh mount fences, four workers,
   zero queue, isolated from setup's Firestore work even after caller cancellation.
 - llm_executor: persona generation, onboarding LLM, slow model-backed work. Bulkhead
@@ -35,6 +37,7 @@ import atexit
 import contextvars
 import functools
 import logging
+import os
 import queue
 import threading
 from collections import deque
@@ -76,21 +79,19 @@ _TASKS = frozenset(
 )
 
 
-def _gauge(name: str, description: str) -> Gauge:
+def _gauge(name: str, description: str, labelnames: tuple[str, ...] = ('executor', 'task')) -> Gauge:
     try:
-        return Gauge(name, description, ['executor', 'task'])
+        return Gauge(name, description, labelnames)
     except ValueError:
         existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
-        if getattr(existing, '_type', None) != 'gauge' or getattr(existing, '_labelnames', None) != (
-            'executor',
-            'task',
-        ):
+        if getattr(existing, '_type', None) != 'gauge' or getattr(existing, '_labelnames', None) != labelnames:
             raise ValueError(f'executor metric {name} already has a different shape')
         return cast(Gauge, existing)
 
 
 EXECUTOR_ACTIVE = _gauge('omi_executor_task_active', 'Active worker tasks by bounded task kind.')
 EXECUTOR_QUEUED = _gauge('omi_executor_task_queued', 'Queued worker tasks by bounded task kind.')
+EXECUTOR_MAX_WORKERS = _gauge('omi_executor_max_workers', 'Configured worker capacity.', ('executor',))
 
 
 def _task_label(fn, args=()) -> str:
@@ -114,6 +115,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     ):
         super().__init__(**kwargs)
         self.name = name
+        EXECUTOR_MAX_WORKERS.labels(executor=name).set(self._max_workers)
         self._active_count = 0
         self._active_lock = threading.Lock()
         self.max_queue_size = max_queue_size
@@ -271,7 +273,18 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 critical_executor = MonitoredThreadPoolExecutor(
     name="critical", max_workers=8, max_queue_size=64, thread_name_prefix="critical"
 )
-db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=24, thread_name_prefix="db")
+# Before the record-barrier rollout the measured DB peak was 20/24 workers.
+# Isolate barrier retries and retain 12 workers of headroom over that peak.
+db_executor = MonitoredThreadPoolExecutor(
+    name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
+)
+record_barrier_executor = MonitoredThreadPoolExecutor(
+    name="record_barrier",
+    max_workers=int(os.getenv('PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS', '16')),
+    max_queue_size=64,
+    wait_on_saturation=True,
+    thread_name_prefix="record-barrier",
+)
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
@@ -306,6 +319,7 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    record_barrier_executor,
     llm_executor,
     stripe_executor,
     sync_executor,

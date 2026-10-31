@@ -67,6 +67,15 @@ def _driver(
     DRIVERS[function] = entry
 
 
+_driver(
+    'utils.batch_pipeline.record_seal_nojob.discover',
+    domains={'after': [None, f'users/{UID}/conversations/record']},
+    neutrals={'limit': (128, 'bounds the operator discovery page only')},
+    profile='operational-record-seal-nojob-backfill',
+    serving=False,
+)
+
+
 def _feedback_rows(client, combo, trial):
     session = 'session-1' if trial == 1 else None
     client.queue_results(

@@ -1,4 +1,4 @@
--- Offline/PostHog SQL projection: bind one namespace and build; properties carry only the closed channel enum (telegram, imessage).
+-- Offline/PostHog SQL projection: bind one namespace and build; properties carry only the closed channel enum (telegram, imessage, whatsapp).
 SELECT event, COUNT(*) AS emitted
 FROM events
 WHERE app_namespace = :app_namespace AND build_number = :build_number

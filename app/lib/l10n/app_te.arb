@@ -11941,5 +11941,7 @@
     "yearlySwitchUnavailable": "ప్రస్తుతం మీ ప్లాన్‌కు వార్షిక బిల్లింగ్ అందుబాటులో లేదు.",
     "yearlySwitchDoneTitle": "మీరు ఇప్పుడు వార్షిక ప్లాన్‌లో ఉన్నారు",
     "yearlySwitchDoneBody": "ఈరోజు {amount} వసూలు చేశాం. పునరుద్ధరణ {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} భాగాలు} one{{count} భాగాలు} two{{count} భాగాలు} few{{count} భాగాలు} many{{count} భాగాలు} other{{count} భాగాలు}}"
+    "episodePartsCount": "{count, plural, zero{{count} భాగాలు} one{{count} భాగాలు} two{{count} భాగాలు} few{{count} భాగాలు} many{{count} భాగాలు} other{{count} భాగాలు}}",
+    "chatAppsWaitingMessageIn": "{app}లో మెసేజ్ పంపండి. Omiకి అందగానే ఈ స్క్రీన్ అప్‌డేట్ అవుతుంది.",
+    "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి."
 }

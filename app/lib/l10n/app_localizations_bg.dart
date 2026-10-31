@@ -14996,4 +14996,14 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Изпрати съобщението от $app. Този екран се обновява веднага щом Omi го получи.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Вземи нов код и го изпрати от $app.';
+  }
 }

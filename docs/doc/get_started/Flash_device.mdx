@@ -1,7 +1,7 @@
 ---
-title: "Update Omi Firmware"
+title: "Update Omi firmware"
 icon: "bolt"
-description: "Keep your Omi device up to date with the latest firmware. Use the app for easy updates or follow the manual process."
+description: "Keep your Omi device on the latest firmware. Use the app for updates, or follow the manual steps."
 ---
 
 ## Overview
@@ -9,12 +9,12 @@ description: "Keep your Omi device up to date with the latest firmware. Use the 
 There are two ways to update your Omi device firmware:
 
 <CardGroup cols={2}>
-  <Card title="Via Omi App" icon="mobile">
-    **Recommended** - The easiest way to update
+  <Card title="Via Omi app" icon="mobile">
+    **Recommended**: the easiest way to update
 
     Go to **Settings → Device Settings → Product Update**
   </Card>
-  <Card title="Manual Update" icon="terminal">
+  <Card title="Manual update" icon="terminal">
     For advanced users or troubleshooting
 
     Follow the instructions below for your device
@@ -23,10 +23,10 @@ There are two ways to update your Omi device firmware:
 
 <Tabs>
   <Tab title="DevKit (DK1 & DK2)" icon="microchip">
-    ## Manual Update for DevKit
+    ## Manual update for DevKit
 
     <Steps>
-      <Step title="Download Required Files" icon="download">
+      <Step title="Download required files" icon="download">
         **Bootloader** (required for first-time setup or if corrupted):
         - Download [bootloader0.9.0.uf2](https://github.com/BasedHardware/omi/releases/download/v2.0.1-Omi/bootloader0.9.0.uf2)
         - Compatible with Seeed XIAO nRF52840 Sense (SoftDevice S140 7.3.0)
@@ -36,12 +36,12 @@ There are two ways to update your Omi device firmware:
         - [DevKit 2 Firmware](https://github.com/BasedHardware/omi/releases?q=release_firmware+DK2)
       </Step>
       <Step title="Prepare Your Device" icon="check">
-        Before starting, ensure:
-        - Battery is above 50%
-        - Using a direct USB connection (avoid USB hubs)
-        - Have a small pin ready for the reset button
+        Before you start, check that:
+        - The battery is reasonably charged
+        - You are using a direct USB connection, not a USB hub
+        - You have a small pin ready for the reset button
       </Step>
-      <Step title="Enter DFU Mode" icon="power-off">
+      <Step title="Enter DFU mode" icon="power-off">
         1. Connect your device via USB
         2. Locate the reset button:
 
@@ -61,7 +61,7 @@ There are two ways to update your Omi device firmware:
         3. **Double-click** the reset button quickly
         4. Your computer should show a drive named `/Volumes/XIAO-SENSE`
       </Step>
-      <Step title="Flash the Device" icon="bolt">
+      <Step title="Flash the device" icon="bolt">
         **Install Bootloader** (if needed):
         1. Drag `bootloader0.9.0.uf2` to the `/Volumes/XIAO-SENSE` drive
         2. Wait for the drive to eject automatically
@@ -84,7 +84,7 @@ There are two ways to update your Omi device firmware:
       </Accordion>
       <Accordion title="Update fails" icon="rotate">
         - Retry the process from the beginning
-        - Make sure battery is above 50%
+        - Charge the battery
         - Try double-clicking the reset button faster
       </Accordion>
       <Accordion title="'Transfer incomplete' message" icon="clock">
@@ -96,8 +96,8 @@ There are two ways to update your Omi device firmware:
     </AccordionGroup>
   </Tab>
 
-  <Tab title="Consumer Version (CV1)" icon="microchip">
-    ## Flashing Consumer Version 1
+  <Tab title="Consumer version (CV1)" icon="microchip">
+    ## Flashing consumer version 1
 
     <Warning>
     Wired recovery requires a **SWD connection** to a J-Link programmer. For normal updates, use **Product Update** in the Omi app over Bluetooth; no flashing cable is needed.
@@ -106,31 +106,31 @@ There are two ways to update your Omi device firmware:
     ### Prerequisites
 
     <CardGroup cols={2}>
-      <Card title="Hardware Required" icon="plug">
+      <Card title="Hardware required" icon="plug">
         - Omi CV1 device
         - J-Link programmer
         - Special SWD flashing cable
         - USB cable
       </Card>
-      <Card title="Software Required" icon="download">
+      <Card title="Software required" icon="download">
         - [J-Link Software](https://www.segger.com/downloads/jlink/)
         - Latest firmware files from GitHub
       </Card>
     </CardGroup>
 
-    ### Step 1: Download Latest Firmware
+    ### Step 1: Download latest firmware
 
     <Steps>
-      <Step title="Get Firmware Files" icon="download">
+      <Step title="Get firmware files" icon="download">
         1. Go to [Omi GitHub Releases for CV1](https://github.com/BasedHardware/omi/releases?q=Omi_CV1_v)
         2. Find the latest `Omi_CV1_v<version>` release
         3. Download both recovery files:
-           - `Omi_CV1_v<version>.hex` — Application core firmware
-           - `Omi_CV1_v<version>_CPUNET.hex` — Network core firmware
+           - `Omi_CV1_v<version>.hex`: application core firmware
+           - `Omi_CV1_v<version>_CPUNET.hex`: network core firmware
 
         The `Omi_CV1_OTA_v<version>.zip` asset is for Bluetooth OTA updates. For the J-Link scripts in `omi/firmware/FLASH_3.0.8/`, save the downloaded HEX files as `merged.hex` and `merged_CPUNET.hex` in the appropriate `MAC/` or `WINDOWS/` folder. The bundled images are stale 3.0.8 recovery images.
       </Step>
-      <Step title="Replace Existing Files" icon="copy">
+      <Step title="Replace existing files" icon="copy">
         <Tabs>
           <Tab title="macOS">
             ```bash
@@ -156,14 +156,14 @@ There are two ways to update your Omi device firmware:
           </Tab>
         </Tabs>
       </Step>
-      <Step title="Verify Files" icon="check">
+      <Step title="Verify files" icon="check">
         Ensure both files are updated:
         - File sizes should match downloaded versions
         - Modification dates should reflect the replacement
       </Step>
     </Steps>
 
-    ### Step 2: Flash the Firmware
+    ### Step 2: Flash the firmware
 
     <Tabs>
       <Tab title="macOS" icon="apple">
@@ -230,15 +230,13 @@ There are two ways to update your Omi device firmware:
   </Tab>
 </Tabs>
 
----
-
 ## Success!
 
 <Tip>
-Your Omi device is now updated with the latest firmware. Enjoy the enhanced features and improvements!
+Your Omi device now runs the latest firmware.
 </Tip>
 
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
   <Card title="Build Your Device" icon="hammer" href="/doc/assembly/Build_the_device">
@@ -247,7 +245,7 @@ Your Omi device is now updated with the latest firmware. Enjoy the enhanced feat
   <Card title="Buying Guide" icon="cart-shopping" href="/doc/assembly/Buying_Guide">
     Components needed to build Omi
   </Card>
-  <Card title="Get Started" icon="rocket" href="/doc/get_started/introduction">
+  <Card title="What is Omi" icon="rocket" href="/doc/get_started/what-is-omi">
     Introduction to Omi
   </Card>
 </CardGroup>
