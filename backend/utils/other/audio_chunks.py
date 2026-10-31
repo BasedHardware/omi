@@ -31,6 +31,11 @@ class AudioChunkReadSession:
         self.reason = 'missing_blob'
         self.downloads = 0
         self.bytes = 0
+        self.pcm_bytes = 0
+        # Callers that keep a window-level proof may widen the object count; decoded
+        # PCM stays cached for the session, so that caller also caps its memory.
+        self.max_downloads: Optional[int] = None
+        self.max_pcm_bytes: Optional[int] = None
         self.deadline = time.monotonic() + MAX_SPEAKER_READ_SECONDS
         self.lock = threading.Lock()
         self.limit_hit = False
@@ -113,7 +118,8 @@ class AudioChunkReadSession:
                         maximum = MAX_SPEAKER_BYTES - session.bytes
                         if (
                             not session.in_budget()
-                            or session.downloads >= MAX_SPEAKER_DOWNLOADS
+                            or session.downloads
+                            >= (MAX_SPEAKER_DOWNLOADS if session.max_downloads is None else session.max_downloads)
                             or maximum <= 0
                             or (size is not None and size > maximum)
                         ):
@@ -160,6 +166,9 @@ class AudioChunkReadSession:
                     self.sample_rate,
                     on_failure=self._failure,
                 )
+                self.pcm_bytes += len(pcm or b'')
+                if self.max_pcm_bytes is not None and self.pcm_bytes > self.max_pcm_bytes:
+                    self.reason, self.limit_hit = 'download_limit', True
                 if not self.in_budget():
                     return None
                 self.cache[path] = (pcm, self.reason)

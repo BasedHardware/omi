@@ -16,6 +16,7 @@ from config.refactor_modes import serving_for
 from utils.speakers import processing as speaker_evidence
 
 import bisect
+from collections import Counter
 from collections.abc import Sequence
 import json
 import logging
@@ -113,6 +114,10 @@ MIN_RESOLVED_COVERAGE = 0.9
 CAPTURE_SPAN_KEY_PREFIX = 'capture-span:'
 MAX_ADVISORY_PLACEMENTS = 1500
 MAX_PLACEMENT_SPANS = 10000
+# Ring-drained pendant audio arrives as ~10s objects, so the teaching budget of 32
+# proves only the first minutes of a long recording. The read deadline still applies.
+PER_WINDOW_MAX_DOWNLOADS = 600
+PER_WINDOW_MAX_PCM_BYTES = 128 * 1024 * 1024
 
 
 def resolver_reason(reason: str) -> None:
@@ -518,6 +523,56 @@ def _window_covered(extents: List[Tuple[float, float]], start: float, end: float
     return True
 
 
+def _unreconciled_extents(
+    expected: List[Tuple[float, Optional[Tuple[float, float]]]],
+    chunks: Sequence[Mapping[str, Any]],
+) -> List[Tuple[float, float]]:
+    """Audio extents where the manifest and the listed objects disagree.
+
+    An entry on one side only, or a pair with different bounds, says nothing
+    about audio elsewhere in the recording, so it refuses only the windows it
+    touches. Unknown ends stay unbounded, as in the window proof.
+    """
+    listed = []
+    for chunk in chunks:
+        bounds = _chunk_actual_bounds(chunk)
+        if bounds is not None:
+            listed.append((bounds[0], bounds[1], chunk.get('span') is not None))
+    listed.sort(key=lambda item: item[0])
+    manifest = sorted(expected, key=lambda item: item[0])
+    disputed: List[Tuple[float, float]] = []
+
+    def from_manifest(timestamp: float, bounds: Optional[Tuple[float, float]]) -> Tuple[float, float]:
+        return bounds if bounds is not None else (timestamp, math.inf)
+
+    def from_listing(start: float, end: Optional[float]) -> Tuple[float, float]:
+        return start, end if end is not None else math.inf
+
+    m = n = 0
+    while m < len(manifest) or n < len(listed):
+        if n == len(listed) or (m < len(manifest) and manifest[m][0] < listed[n][0] - COVERAGE_TOLERANCE_SECONDS):
+            disputed.append(from_manifest(*manifest[m]))
+            m += 1
+        elif m == len(manifest) or listed[n][0] < manifest[m][0] - COVERAGE_TOLERANCE_SECONDS:
+            disputed.append(from_listing(*listed[n][:2]))
+            n += 1
+        else:
+            timestamp, bounds = manifest[m]
+            start, end, has_span = listed[n]
+            if (bounds is not None) != has_span or (
+                bounds is not None
+                and (
+                    abs(bounds[0] - start) > COVERAGE_TOLERANCE_SECONDS
+                    or end is None
+                    or abs(bounds[1] - end) > COVERAGE_TOLERANCE_SECONDS
+                )
+            ):
+                disputed.extend((from_manifest(timestamp, bounds), from_listing(start, end)))
+            m += 1
+            n += 1
+    return disputed
+
+
 def _verified_read_session(
     uid: str,
     conversation: Conversation,
@@ -532,8 +587,13 @@ def _verified_read_session(
     the requested windows. A failed window abstains; previously proven windows
     remain usable when another window is missing, ambiguous or over budget.
     """
+    # refactor: superseded by per-window abstention when SPEAKER_EVIDENCE_MODE=serve
+    per_window = serving_for('SPEAKER_EVIDENCE_MODE', uid)
     session = AudioChunkReadSession(uid, conversation.id, SAMPLE_RATE)
     session.deadline = min(session.deadline, deadline)
+    if per_window:
+        session.max_downloads = PER_WINDOW_MAX_DOWNLOADS
+        session.max_pcm_bytes = PER_WINDOW_MAX_PCM_BYTES
     if not session.in_budget():
         resolver_reason('read_budget')
         return None
@@ -560,7 +620,7 @@ def _verified_read_session(
     manifest_present = (
         isinstance(audio_files, Sequence) and not isinstance(audio_files, (str, bytes)) and len(audio_files) > 0
     )
-    if manifest_present:
+    if manifest_present and not per_window:
         if len(expected) != len(chunks):
             resolver_reason('inventory_count_mismatch')
             return None
@@ -600,15 +660,22 @@ def _verified_read_session(
             resolver_reason('inventory_metadata_invalid')
             return None
         bounds_by_path[chunk['path']] = bounds
+    unreconciled = _unreconciled_extents(expected, chunks) if manifest_present and per_window else []
     verified: set[str] = set()
     decoded: Dict[str, Tuple[float, float]] = {}
     rejected_extents: List[Tuple[float, float]] = []
+    refusals: Counter = Counter()
     first_refusal = None
     for segment in pending:
         placement = placements.get(segment.id) if segment.id is not None else None
         window = placement.window if placement is not None else None
         if window is None:
             first_refusal = first_refusal or 'no_proven_window'
+            refusals['no_proven_window'] += 1
+            continue
+        if any(start < window[1] and end > window[0] for start, end in unreconciled):
+            first_refusal = first_refusal or 'inventory_pair_mismatch'
+            refusals['inventory_pair_mismatch'] += 1
             continue
         extents = []
         refusal = None
@@ -662,6 +729,7 @@ def _verified_read_session(
             verified.add(segment.id)
         else:
             first_refusal = first_refusal or refusal
+            refusals[refusal or 'no_proven_window'] += 1
     # A contradiction discovered later also revokes earlier provisional proof.
     # Keep its observed extent even after its PCM is removed from the cache.
     verified.difference_update(
@@ -672,7 +740,7 @@ def _verified_read_session(
     )
     logger.info(
         'event=conversation_speaker_audio_evidence pending=%d verified=%d refused=%d '
-        'downloads=%d bytes=%d read_budget_hit=%s reason=%s',
+        'downloads=%d bytes=%d read_budget_hit=%s reason=%s refusals=%s',
         len(pending),
         len(verified),
         len(pending) - len(verified),
@@ -680,6 +748,7 @@ def _verified_read_session(
         getattr(session, 'bytes', 0),
         session.limit_hit,
         first_refusal or 'none',
+        dict(refusals),
     )
     if not verified:
         resolver_reason(first_refusal or 'no_proven_window')
