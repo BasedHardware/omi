@@ -75,7 +75,7 @@ def test_get_support_activity(caplog):
 def test_write_support_audit_trace_and_lookup():
     mock_client = MagicMock()
     mock_doc = MagicMock()
-    mock_client.collection.return_value.document.return_value.get.return_value = mock_doc
+    mock_client.collection.return_value.document.return_value = mock_doc
 
     # Action lookup
     support_db.write_support_audit(
