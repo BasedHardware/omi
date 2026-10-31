@@ -6,6 +6,16 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Operator recovery of empty terminal captures
+
+The windowed `scripts/capture_empty_recovery.py` tool can re-transcribe retained
+audio into an unchanged empty terminal row or reversibly hide a short row only
+after local VAD measures zero speech. Dry-run is the default. Whole-row revision
+preconditions protect concurrent edits; a private write-ahead ledger supports
+undo of `discarded=True`. It never changes the batch ramp or deletes audio. See
+[empty capture recovery](runbooks/empty-capture-recovery.md) for selection,
+enhanced protection, budgets and the separately authorized apply procedure.
+
 ## Fleet recovery scan coordination
 
 Production maintenance keeps the existing Redis admission lease even when
