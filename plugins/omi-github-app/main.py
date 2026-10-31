@@ -22,6 +22,23 @@ try:
     from .github_tools_auth import require_github_tools_auth
 except (ImportError, AttributeError):
     from github_tools_auth import require_github_tools_auth
+
+try:
+    from .github_settings_auth import (
+        COOKIE_MAX_AGE_SECONDS,
+        COOKIE_NAME,
+        require_settings_session,
+        session_matches,
+        session_value,
+    )
+except (ImportError, AttributeError):
+    from github_settings_auth import (
+        COOKIE_MAX_AGE_SECONDS,
+        COOKIE_NAME,
+        require_settings_session,
+        session_matches,
+        session_value,
+    )
 from fastapi.responses import HTMLResponse, RedirectResponse
 from dotenv import load_dotenv
 
@@ -867,7 +884,10 @@ async def tool_add_comment(request: Request):
 # ============================================
 
 @app.get("/")
-async def root(uid: str = Query(None)):
+async def root(
+    request: Request = None,
+    uid: str = Query(None),
+):
     """Root endpoint - Homepage with repo selection (mobile-first UI)."""
     if not uid:
         return {
@@ -1119,6 +1139,16 @@ async def root(uid: str = Query(None)):
             </div>
 
             <script>
+                function checkAuth(response) {{
+                    if (response.status === 401) {{
+                        if (confirm('Session expired or unauthorized. Would you like to reconnect your GitHub account?')) {{
+                            window.location.href = '/auth?uid={safe_uid}';
+                        }}
+                        return false;
+                    }}
+                    return true;
+                }}
+
                 async function updateRepo() {{
                     const select = document.getElementById('repoSelect');
                     const repo = select.value;
@@ -1132,6 +1162,8 @@ async def root(uid: str = Query(None)):
                         const response = await fetch('/update-repo?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
 
                         const data = await response.json();
 
@@ -1153,11 +1185,13 @@ async def root(uid: str = Query(None)):
                             method: 'POST'
                         }});
 
+                        if (!checkAuth(response)) return;
+
                         const data = await response.json();
 
                         if (data.success) {{
                             alert('Repositories refreshed! Reloading page...');
-                            window.location.reload();
+                            window.location.href = '/?uid={safe_uid}';
                         }} else {{
                             alert('Failed to refresh: ' + data.error);
                         }}
@@ -1179,6 +1213,9 @@ async def root(uid: str = Query(None)):
                         const response = await fetch('/check-repo-access?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
+
                         const data = await response.json();
 
                         if (data.success) {{
@@ -1213,6 +1250,9 @@ async def root(uid: str = Query(None)):
                         const response = await fetch('/save-agent-provider?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
+
                         const data = await response.json();
 
                         if (data.success) {{
@@ -1236,9 +1276,11 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        await fetch('/save-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
+                        const response = await fetch('/save-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
 
                         alert('API key saved successfully!');
                     }} catch (error) {{
@@ -1251,9 +1293,11 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Remove the API key for this provider?')) return;
 
                     try {{
-                        await fetch('/delete-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
+                        const response = await fetch('/delete-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
+
+                        if (!checkAuth(response)) return;
 
                         document.getElementById('agentKey').value = '';
                         alert('API key removed successfully!');
@@ -1290,6 +1334,12 @@ async def root(uid: str = Query(None)):
                                 all: sendAll
                             }})
                         }});
+
+                        if (!checkAuth(response)) {{
+                            logsEl.value = 'Error 401: Session expired or unauthorized. Please reconnect your GitHub account.';
+                            return;
+                        }}
+
                         const data = await response.json();
 
                         if (data.success) {{
@@ -1327,7 +1377,9 @@ async def root(uid: str = Query(None)):
 
 
 @app.get("/auth")
-async def auth_start(uid: str = Query(..., description="User ID from OMI")):
+async def auth_start(
+    uid: str = Query(..., description="User ID from OMI"),
+):
     """Start OAuth flow for GitHub authentication."""
     redirect_uri = os.getenv("OAUTH_REDIRECT_URL", "http://localhost:8000/auth/callback")
 
@@ -1375,8 +1427,8 @@ async def auth_callback(
         )
 
     # Verify state and get uid
-    uid = oauth_states.get(state)
-    if not uid:
+    state_payload = oauth_states.get(state)
+    if not state_payload:
         return HTMLResponse(
             content=f"""
             <html>
@@ -1397,6 +1449,8 @@ async def auth_callback(
             status_code=400
         )
 
+    uid = state_payload if isinstance(state_payload, str) else state_payload.get("uid")
+
     try:
         # Exchange code for access token
         token_data = github_client.exchange_code_for_token(code)
@@ -1406,8 +1460,43 @@ async def auth_callback(
         user_info = github_client.get_user_info(access_token)
         github_username = user_info.get("login", "Unknown")
 
+        # Check existing binding to prevent account hijacking
+        existing_user = SimpleUserStorage.get_user(uid)
+        if isinstance(existing_user, dict) and existing_user.get("access_token"):
+            stored_username = str(existing_user.get("github_username") or "").strip().lower()
+            new_username = str(github_username or "").strip().lower()
+            same_account = bool(stored_username) and stored_username == new_username
+            if not session_matches(request, uid) and not same_account:
+                if state in oauth_states:
+                    del oauth_states[state]
+                return HTMLResponse(
+                    content=f"""
+                    <html>
+                        <head>
+                            <meta name="viewport" content="width=device-width, initial-scale=1">
+                            <style>{get_mobile_css()}</style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
+                                    <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Already Connected</h2>
+                                    <p style="margin-bottom: 0;">This OMI account is already linked to a GitHub account. Disconnect it from the existing session before linking a different account.</p>
+                                </div>
+                            </div>
+                        </body>
+                    </html>
+                    """,
+                    status_code=403,
+                )
+
         # Get user's repositories
         repos = github_client.list_user_repos(access_token)
+
+        cookie_val = None
+        try:
+            cookie_val = session_value(uid)
+        except HTTPException:
+            cookie_val = None
 
         # Save user data
         SimpleUserStorage.save_user(
@@ -1425,7 +1514,7 @@ async def auth_callback(
         safe_username = html.escape(str(github_username), quote=True)
         safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
 
-        return HTMLResponse(
+        response = HTMLResponse(
             content=f"""
             <html>
                 <head>
@@ -1467,6 +1556,16 @@ async def auth_callback(
             </html>
             """
         )
+        if cookie_val:
+            response.set_cookie(
+                key=COOKIE_NAME,
+                value=cookie_val,
+                max_age=COOKIE_MAX_AGE_SECONDS,
+                httponly=True,
+                samesite="lax",
+                secure=getattr(getattr(request, "url", None), "scheme", "") == "https",
+            )
+        return response
 
     except Exception as e:
         import traceback
@@ -1505,12 +1604,15 @@ async def check_setup(uid: str = Query(..., description="User ID from OMI")):
     }
 
 
-@app.post("/update-repo")
+@app.post("/update-repo", dependencies=[Depends(require_settings_session)])
 async def update_repo(
+    request: Request = None,
     uid: str = Query(...),
     repo: str = Query(...)
 ):
     """Update user's selected repository."""
+    if request is not None:
+        require_settings_session(request, uid)
     try:
         user = SimpleUserStorage.get_user(uid)
         if not user:
@@ -1526,14 +1628,21 @@ async def update_repo(
             return {"success": True, "message": f"Repository updated to {resolved_repo}"}
         else:
             return {"success": False, "error": "Failed to update repository selection"}
+    except HTTPException:
+        raise
     except Exception as e:
         log(f"Error updating repository: {e}")
         return {"success": False, "error": "Failed to update repository"}
 
 
-@app.post("/refresh-repos")
-async def refresh_repos(uid: str = Query(...)):
+@app.post("/refresh-repos", dependencies=[Depends(require_settings_session)])
+async def refresh_repos(
+    request: Request = None,
+    uid: str = Query(...)
+):
     """Refresh user's repository list from GitHub."""
+    if request is not None:
+        require_settings_session(request, uid)
     try:
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -1552,17 +1661,22 @@ async def refresh_repos(uid: str = Query(...)):
         )
 
         return {"success": True, "repos_count": len(repos)}
+    except HTTPException:
+        raise
     except Exception as e:
         log(f"Error refreshing repositories: {e}")
         return {"success": False, "error": "Failed to refresh repositories"}
 
 
-@app.post("/check-repo-access")
+@app.post("/check-repo-access", dependencies=[Depends(require_settings_session)])
 async def check_repo_access(
+    request: Request = None,
     uid: str = Query(...),
     repo: str = Query(None)
 ):
     """Check authenticated user's permissions for a repository."""
+    if request is not None:
+        require_settings_session(request, uid)
     try:
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -1596,17 +1710,22 @@ async def check_repo_access(
             "permissions": permissions,
             "message": f"{level} access"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         log(f"Error checking repo access: {e}")
         return {"success": False, "error": "Failed to check repository access"}
 
 
-@app.post("/save-agent-provider")
+@app.post("/save-agent-provider", dependencies=[Depends(require_settings_session)])
 async def save_agent_provider(
+    request: Request = None,
     uid: str = Query(...),
     provider: str = Query(...)
 ):
     """Save user's agent provider selection."""
+    if request is not None:
+        require_settings_session(request, uid)
     try:
         provider = provider.lower().strip()
         if provider not in PROVIDERS:
@@ -1620,18 +1739,23 @@ async def save_agent_provider(
         if success:
             return {"success": True, "message": "Agent provider saved"}
         return {"success": False, "error": "Failed to save"}
+    except HTTPException:
+        raise
     except Exception as e:
         log(f"Error saving agent provider: {e}")
         return {"success": False, "error": "Failed to save agent provider"}
 
 
-@app.post("/save-agent-key")
+@app.post("/save-agent-key", dependencies=[Depends(require_settings_session)])
 async def save_agent_key(
+    request: Request = None,
     uid: str = Query(...),
     provider: str = Query(...),
     key: str = Query(...)
 ):
     """Save user's API key for an agent provider."""
+    if request is not None:
+        require_settings_session(request, uid)
     try:
         provider = provider.lower().strip()
         if provider not in PROVIDERS:
@@ -1645,17 +1769,22 @@ async def save_agent_key(
         if success:
             return {"success": True, "message": "Agent API key saved"}
         return {"success": False, "error": "Failed to save"}
+    except HTTPException:
+        raise
     except Exception as e:
         log(f"Error saving agent key: {e}")
         return {"success": False, "error": "Failed to save agent key"}
 
 
-@app.post("/delete-agent-key")
+@app.post("/delete-agent-key", dependencies=[Depends(require_settings_session)])
 async def delete_agent_key(
+    request: Request = None,
     uid: str = Query(...),
     provider: str = Query(...)
 ):
     """Delete user's API key for an agent provider."""
+    if request is not None:
+        require_settings_session(request, uid)
     try:
         provider = provider.lower().strip()
         if provider not in PROVIDERS:
@@ -1665,16 +1794,18 @@ async def delete_agent_key(
         if success:
             return {"success": True, "message": "Agent API key deleted"}
         return {"success": False, "error": "Key not found"}
+    except HTTPException:
+        raise
     except Exception as e:
         log(f"Error deleting agent key: {e}")
         return {"success": False, "error": "Failed to delete agent key"}
 
 
 @app.post("/test-agent")
-async def test_agent(request: Request):
+async def test_agent(request: Request = None):
     """Send a direct test command to the selected agent provider."""
     try:
-        body = await request.json()
+        body = await request.json() if request is not None else {}
         uid = body.get("uid")
         prompt = body.get("prompt")
         repo = body.get("repo")
@@ -1683,6 +1814,9 @@ async def test_agent(request: Request):
 
         if not uid or not prompt:
             return {"success": False, "error": "User ID and prompt are required"}
+
+        if request is not None:
+            require_settings_session(request, uid)
 
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -1780,6 +1914,8 @@ async def test_agent(request: Request):
 
         return {"success": True, "logs": logs}
 
+    except HTTPException:
+        raise
     except Exception as e:
         log(f"Error testing agent: {e}")
         return {"success": False, "error": "Failed to execute agent test"}
