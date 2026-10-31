@@ -42,7 +42,7 @@ def at_stage(stage: str, reason: str, operation: Callable[[], Any]):
         failure = RecoveryFailure(stage, reason)
         try:
             logger.warning(
-                'event=batch_recovery_failure stage=%s reason=%s exception_type=%s',
+                'event=batch_recovery_stage_failure stage=%s reason=%s exception_type=%s',
                 failure.stage,
                 failure.reason,
                 type(error).__name__,

@@ -19,7 +19,7 @@ def test_at_stage_logs_type_without_private_message_or_traceback(caplog, stage):
     assert (failure.stage, failure.reason, str(failure)) == (stage, 'provider_failed', 'provider_failed')
     assert failure.__cause__ is None and failure.__suppress_context__
     assert caplog.messages == [
-        f'event=batch_recovery_failure stage={stage} reason=provider_failed exception_type=ConnectionError'
+        f'event=batch_recovery_stage_failure stage={stage} reason=provider_failed exception_type=ConnectionError'
     ]
     assert all(record.exc_info is None for record in caplog.records)
     assert 'PRIVATE_SYNTHETIC_SENTINEL' not in caplog.text
