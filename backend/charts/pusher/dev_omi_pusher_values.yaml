@@ -153,7 +153,7 @@ env:
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
-    value: "false"
+    value: "true"
   - name: REPEAT_WORK_REVISION_ENABLED
     value: "false"
   - name: REPEAT_WORK_LLM_VERSION
