@@ -59,7 +59,7 @@ def test_seal_rules_have_independent_chart_rollback_switches():
 
 def test_cpu_admission_switch_is_declared_in_runtime_manifest_and_listen_chart():
     backend = Path(__file__).resolve().parents[2]
-    manifest = yaml.safe_load((backend / 'deploy/runtime_env.yaml').read_text())
+    manifest = yaml.load((backend / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     key = 'RECORD_SEAL_OVERLAP_TRIM_ENABLED'
     for stage, config in manifest['environments'].items():
         assert config['gke']['backend-listen']['env'][key]['value'] == 'true'
@@ -67,7 +67,7 @@ def test_cpu_admission_switch_is_declared_in_runtime_manifest_and_listen_chart()
         for service in config['cloud_run']['services'].values():
             assert service['env'][key]['value'] == 'true'
         values = backend / f'charts/backend-listen/{stage}_omi_backend_listen_values.yaml'
-        entries = yaml.safe_load(values.read_text())['env']
+        entries = yaml.load(values.read_text(), Loader=yaml.CSafeLoader)['env']
         assert next(e for e in entries if e['name'] == key)['value'] == 'true'
         rendered = subprocess.run(
             [
@@ -86,11 +86,13 @@ def test_cpu_admission_switch_is_declared_in_runtime_manifest_and_listen_chart()
             text=True,
         )
         assert rendered.returncode == 0
-        deployment = next(d for d in yaml.safe_load_all(rendered.stdout) if d and d['kind'] == 'Deployment')
+        deployment = next(
+            d for d in yaml.load_all(rendered.stdout, Loader=yaml.CSafeLoader) if d and d['kind'] == 'Deployment'
+        )
         entries = deployment['spec']['template']['spec']['containers'][0]['env']
         assert [e['value'] for e in entries if e['name'] == key] == ['false']
         pusher_values = backend / f'charts/pusher/{stage}_omi_pusher_values.yaml'
-        pusher_entries = yaml.safe_load(pusher_values.read_text())['env']
+        pusher_entries = yaml.load(pusher_values.read_text(), Loader=yaml.CSafeLoader)['env']
         assert next(e for e in pusher_entries if e['name'] == key)['value'] == 'true'
 
 
