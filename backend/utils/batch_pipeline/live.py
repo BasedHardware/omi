@@ -15,7 +15,8 @@ import os
 import time
 
 from config.policy import resolve_batch_policy
-from config.record_audio import require_record_audio_barrier
+from config.record_audio import require_record_audio_barrier, record_identity
+from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -29,6 +30,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
 from utils.batch_pipeline.record_barrier import validate_record_tail
+from utils.batch_pipeline.record_partial import drain_partial
 from config.record_seal_rules import overlap_trim_enabled
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.local_storage import create_storage_client
@@ -39,11 +41,6 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
-
-
-def record_identity(uid: str, conversation_id: str) -> tuple[str, str]:
-    content = hashlib.sha256(f'record-v1:{uid}:{conversation_id}'.encode()).hexdigest()
-    return content, hashlib.sha256(f'{content}:0'.encode()).hexdigest()
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -140,10 +137,12 @@ def register_recording(
 
 
 def retained_record_units(
-    uid, conversation_id, chunks, client, key, *, diagnostics=None
+    uid, conversation_id, chunks, client, key, *, diagnostics=None, partial=False
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
     """Bounded one-hour units; earlier retained objects own overlapping frames."""
     trim_divergent = overlap_trim_enabled()
+    unit_frames = (UNIT_SECONDS if partial else 3600) * 16000
+    reference_limit = UNIT_REFERENCES if partial else MAX_REFERENCES
     allowed = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
     references, start, end, previous_pcm = [], None, None, b''
     capture_origin = None
@@ -199,13 +198,13 @@ def retained_record_units(
             if start is None:
                 start = capture + offset / 32000
             position = round((capture + offset / 32000 - start) * 16000)
-            if position >= 3600 * 16000:
+            if position >= unit_frames or partial and len(references) >= reference_limit:
                 if end is None:
                     raise ValueError('unit has no capture end')
                 yield start, end - start, references
                 references, start = [], None
                 continue
-            frames = min(len(pcm[offset:]) // 2, 3600 * 16000 - position)
+            frames = min((len(pcm) - offset) // 2, unit_frames - position)
             references.append(
                 {
                     **ref,
@@ -219,7 +218,7 @@ def retained_record_units(
                 raise ValueError('retained capture reference budget exceeded')
             offset += frames * 2
             end = capture + offset / 32000
-            if position + frames == 3600 * 16000:
+            if position + frames == unit_frames:
                 yield start, end - start, references
                 references, start = [], None
         previous_pcm = comparison_pcm
@@ -252,6 +251,8 @@ async def admit_recording(store, pending, *, now=None):
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
+    if current.get('record_audio_partial'):
+        return await drain_partial(store, pending, current, client, artifacts, retained_record_units, now=now)
     # A failed raw-archive listing raises (drain retries in 60 s) rather than
     # admitting a recording whose later packs are silently missing.
     chunks = await run_blocking(
@@ -378,16 +379,18 @@ async def drain_recordings(store):
             continue
         try:
             await admit_recording(store, pending)
+            if not pending.get('partial_coordinator'):
+                continue
         except BatchPrivacyBlocked:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
             continue
         except Exception as error:
             logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
 
-            def defer(tx):
-                latest = tx.get('jobs', segment)
-                if latest.get('state') == 'record_pending':
-                    latest['available_at'] = time.time() + 60
-                    tx.put('jobs', segment, latest)
+        def defer(tx):
+            latest = tx.get('jobs', segment)
+            if latest.get('state') == 'record_pending':
+                latest['available_at'] = time.time() + 60
+                tx.put('jobs', segment, latest)
 
-            await run_blocking(db_executor, store.run, defer)
+        await run_blocking(db_executor, store.run, defer)

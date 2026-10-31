@@ -65,11 +65,24 @@ def admit(
             # Redis ownership. Its existing recovery path remains authoritative.
             return {'outcome': 'busy', 'job_id': existing.get('job_id')}
         pending = tx.get('jobs', binding.segment_ids[0])
+        partial_metadata = intake or {}
+        partial_parent = partial_metadata.get('record_partial_parent')
+        if partial_parent:
+            pending = tx.get('jobs', partial_parent)
+            run = pending.get('partial_run') or {}
+            if (
+                not pending.get('partial_coordinator')
+                or run.get('complete')
+                or run.get('generation') != partial_metadata.get('record_partial_generation')
+                or run.get('page') != partial_metadata.get('record_partial_page')
+                or binding.content_id != partial_metadata.get('record_partial_content')
+            ):
+                raise ValueError('partial continuation ownership changed')
         reserved_recording = (
             pending.get('state') == 'record_pending'
             and pending.get('owner_id') == binding.owner_id
             and pending.get('conversation_id') == binding.target_conversation_id
-            and pending.get('record_content_id') == binding.content_id
+            and (partial_parent or pending.get('record_content_id') == binding.content_id)
         )
         admission = policy
         if reserved_recording:
@@ -91,7 +104,11 @@ def admit(
             if binding.native_record:
                 require_record_protocol_ready()
                 require_record_audio_barrier(row, expected=record_barrier)
-            expected = 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            expected = (
+                row.get('record_lane_owner')
+                if partial_parent and reserved_recording
+                else 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            )
             if row.get('record_lane_owner') not in {None, expected}:
                 raise ValueError('record owner is immutable')
             if row.get('record_lane_owner') != expected:

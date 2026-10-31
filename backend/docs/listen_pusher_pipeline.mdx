@@ -6,6 +6,52 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Partial finishes for retained recordings
+
+[ADR 0007](adr/0007-partial-retained-recordings.md) separates availability from
+complete-tail proof. Repair may mark a completed, batch-owned recording partial
+after 1,800 seconds when complete proof refuses its tail or size budget. Fresh
+producer inventory is still required. A live or unidentified producer waits
+for its own drain or the existing death proof, without an age expiry. The
+transaction rechecks the current row, pending job, deletion/tombstone/PCS and
+privacy generation. Custom-STT/BYOK rows remain excluded. No audio is deleted.
+
+`record_audio_partial` carries a closed reason, upload revision, finish time,
+generation and applied generation. `record_audio_closed` stays false. The
+separate partial barrier must match the upload revision and have no pending
+producer tokens. A late producer's clean close cannot upgrade this receipt to
+complete. `RECORD_AUDIO_PARTIAL_ENABLED` is on unless explicitly `false`; off
+stops new partial finishes and continuation admission, preserving accepted jobs.
+
+The existing record-pending drainer owns an encrypted, generation-pinned plan.
+Partial units are at most 300 seconds and 256 references; bindings stay at most
+128 siblings. Pages advance only after their content ledger is durably complete.
+The continuation and sample coverage use the same transactional privacy fence
+and recorded payer policy as ordinary batch work. The source snapshot and
+coverage are bounded at 8,192 entries, and the encrypted plan at 8 MiB. Exceeding
+a bound retries with audio retained; it never truncates a listing or manifest.
+
+The drainer polls at most once per minute per partial coordinator. A changed
+storage inventory creates a new generation only after the prior generation
+settles. It subtracts actual recognized source-frame coverage, including gaps
+inside earlier padded units, and sends only newly stored audio to the normal
+worker. No duplicate speech usage is charged for the previous frames. Replayed
+pages share immutable content identities and projection receipts. Late fills
+preserve existing text, IDs, translations and user edits. An applied-generation
+receipt replaces the prior partial result while remaining explicitly partial.
+
+The conversation API exposes optional reason/generation metadata; existing
+clients render the available transcript with their current UI. The paired seal
+census selects only the partial receipt's version, reason and generation fields,
+counts partial/applied/pending and unprovable separately, and excludes explicit
+partial finishes from unfinished. Old rows retain their classification. The
+lead installs the collector patch with the release; no hard-3 threshold changes.
+
+Closed metrics: `omi_record_audio_partial_reruns_total{outcome}` on the CPU
+serving process; the repair log metric `omi_record_audio_partial_finishes` by
+reason. Repair row/pass logs include partial counts separately from complete
+seals. These are observed transitions; the durable marker is the census.
+
 ## Operator recovery of empty terminal captures
 
 The windowed `scripts/capture_empty_recovery.py` tool can re-transcribe retained

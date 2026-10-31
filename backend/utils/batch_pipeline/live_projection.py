@@ -34,6 +34,11 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
     start, end = span['start'] - origin, span['end'] - origin
     old = current.get('transcript_segments') or []
     covered = [s for s in old if start <= (s['start'] + s['end']) / 2 < end]
+    if span.get('preserve_existing'):
+        # Partial continuation contains only newly durable source frames.
+        # Earlier sentences, including user edits, cannot be replaced by a
+        # later fill whose enclosing unit spans a previously recognized gap.
+        covered = []
     retained = [s for s in old if s not in covered]
     new = deepcopy(incoming['transcript_segments'])
     shift = incoming['started_at'].timestamp() - origin

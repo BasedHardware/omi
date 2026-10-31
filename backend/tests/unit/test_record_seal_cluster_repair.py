@@ -331,7 +331,7 @@ def test_discovery_pages_past_closed_rows_and_preserves_oldest_order():
             return self
 
         def select(self, fields):
-            assert fields == ('finished_at', 'record_audio_closed')
+            assert fields == ('finished_at', 'record_audio_closed', 'record_audio_partial')
             return self
 
         def limit(self, _):

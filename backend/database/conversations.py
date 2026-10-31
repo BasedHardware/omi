@@ -1116,6 +1116,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         summary_receipt = None
         summary_changed = False
         write_data = copy.deepcopy(conversation_data)
+        write_data.pop('record_audio_partial', None)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         conversation_recorded_time.adopt_membership(transaction, user_ref, write_data)
@@ -1129,6 +1130,12 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 write_data['record_lane_owner'] = existing['record_lane_owner']
             else:
                 write_data.pop('record_lane_owner', None)
+            # The partial coordinator alone owns this receipt, including its
+            # internal barrier fields omitted by the public response model.
+            if existing.get('record_audio_partial'):
+                write_data['record_audio_partial'] = existing['record_audio_partial']
+            else:
+                write_data.pop('record_audio_partial', None)
 
             # Processing owns generated content, while these fields are explicitly
             # user-owned. The transaction retries if a concurrent mutation lands,
@@ -1278,6 +1285,10 @@ def persist_processing_result_with_lifecycle(
         preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
+        if existing.get('record_audio_partial'):
+            write_data['record_audio_partial'] = existing['record_audio_partial']
+        else:
+            write_data.pop('record_audio_partial', None)
         if (
             existing.get('deleted')
             or summary_delivery.repair_fenced(existing)
