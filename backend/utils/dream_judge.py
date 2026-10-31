@@ -186,7 +186,7 @@ def record(kind: str, stratum_label: str, judgment: Judgment | None) -> None:
             {
                 'event': 'dream_judge',
                 'kind': kind if kind in KNOWN_KINDS else 'other',
-                'stratum': stratum_label if stratum_label in {'always', 'sampled'} else 'other',
+                'stratum': stratum_label if stratum_label in {'always', 'sampled', 'shadow'} else 'other',
                 'verdict': judgment.verdict if judgment else 'unjudged',
                 'grounded': judgment.grounded if judgment else -1,
                 'owner_appropriate': judgment.owner_appropriate if judgment else -1,

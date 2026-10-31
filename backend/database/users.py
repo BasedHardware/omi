@@ -2479,6 +2479,19 @@ def get_ai_user_profile(uid: str) -> Optional[dict]:
     return get_or_fetch(_USER_AI_PROFILE_CACHE, uid, lambda: _get_ai_user_profile_from_firestore(uid))
 
 
+def get_ai_user_profile_v2(uid: str) -> Optional[dict]:
+    """Dream's shadow profile v2 side field; no product reader yet, so never cached."""
+    doc = db.collection('users').document(uid).get(['ai_user_profile_v2'])
+    if not doc.exists:
+        return None
+    return (doc.to_dict() or {}).get('ai_user_profile_v2')
+
+
+def update_ai_user_profile_v2(uid: str, profile_v2: dict) -> None:
+    """Replace only the v2 side field; the served ai_user_profile and its cache are untouched."""
+    db.collection('users').document(uid).update({'ai_user_profile_v2': profile_v2})
+
+
 def update_ai_user_profile(
     uid: str, profile_text: str = None, generated_at=None, data_sources_used: int = None
 ) -> dict:
