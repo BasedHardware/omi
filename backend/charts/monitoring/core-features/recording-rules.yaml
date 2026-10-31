@@ -1,5 +1,7 @@
 # The lead installs this with kubectl apply. It records series only and changes no alert.
 # A tile reads one with sum_over_time(<rule>[$__range]) * 60, because the group runs each minute.
+# Nothing recorded exists before the install, so a panel moves here only once these series
+# cover its longest offered range. Summed trailing rates smooth bursts across a trend's steps.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
