@@ -1,6 +1,9 @@
 # Rendering defaults creates no resources. Enabling this release only drains
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
+recordSealRules:
+  overlapTrimEnabled: true
+  uploadFailedRepairEnabled: true
 image:
   repository: ""
   digest: ""
@@ -100,6 +103,16 @@ autoscaling:
   targetQueuedUnitsPerWorker: 16
 podMonitoring:
   enabled: true
+recordSealRepair:
+  # Independent CPU CronJob: never extends or consumes the sweeper's 240s loop.
+  enabled: true
+  runtimeEnabled: true
+  mode: apply
+  workers: 8
+  rowSeconds: 270
+  # Lead supplies current serving-role policy flags; absent/invalid refuses IO.
+  # Refresh this map per ramp rung with --reuse-values; no worker restart.
+  serverFlags: {}
 recordSealSweeper:
   # Ship on with the worker release; false removes the CronJob and its pods-list RBAC.
   enabled: true

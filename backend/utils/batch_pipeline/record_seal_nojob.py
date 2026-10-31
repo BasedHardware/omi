@@ -5,6 +5,8 @@ Discovery scans at most 128 batch-live rows per page, including refused rows.
 """
 
 from collections import Counter
+from config.record_seal_rules import overlap_trim_enabled
+from utils.batch_pipeline.record_seal_reasons import proof_diagnostics
 import math
 import time
 
@@ -86,7 +88,7 @@ class RegistrationPlan:
         self.job = value
 
 
-def refusal(row, producer_proof):
+def refusal(row, producer_proof, *, repair_upload_failed=False):
     if row.get('record_lane_owner') != 'batch_live_v1':
         return 'not_batch_owned'
     if row.get('uses_custom_stt') or row.get('data_protection_level') not in {None, 'standard', 'enhanced'}:
@@ -96,7 +98,10 @@ def refusal(row, producer_proof):
         return 'upload_pending'
     # Never offer a producers-stopped escape hatch: token rows need pod proof.
     return seal_refusal(
-        {'state': 'record_pending', 'record_content_id': 'candidate'}, row, producer_proof=producer_proof
+        {'state': 'record_pending', 'record_content_id': 'candidate'},
+        row,
+        producer_proof=producer_proof,
+        repair_upload_failed=repair_upload_failed,
     )
 
 
@@ -116,13 +121,16 @@ def registration(tx, uid, cid, row, server_flags):
     return capture.job
 
 
-def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, producer_proof=None):
+def plan_backfill(
+    store, paths, storage_client, artifacts, *, server_flags, producer_proof=None, repair_upload_failed=False
+):
     validate_server_flags(server_flags)
     if len(paths) > 128 or len(set(paths)) != len(paths):
         raise ValueError('bounded unique discovery page required')
     entries = []
     for path in sorted(paths):
         entry = {'path': path, 'disposition': 'unavailable'}
+        diagnostics = {}
         try:
             uid, cid = conversation_path(path)
             _, job_id = record_identity(uid, cid)
@@ -132,7 +140,7 @@ def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, prod
                 row = tx.get('conversations', f'{uid}/{cid}')
                 if job_ref.get(transaction=tx.transaction).exists:
                     return row, None, 'already_registered'
-                reason = refusal(row, producer_proof)
+                reason = refusal(row, producer_proof, repair_upload_failed=repair_upload_failed)
                 if reason:
                     return row, None, reason
                 return row, registration(tx, uid, cid, row, server_flags), None
@@ -141,16 +149,18 @@ def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, prod
             if reason:
                 entry['disposition'] = reason
             else:
-                proof = retained_tail_proof(job, row, storage_client, artifacts)
+                proof = retained_tail_proof(job, row, storage_client, artifacts, diagnostics=diagnostics)
                 # Refusals grant no write authority. Do not bind their volatile
                 # upload revisions into approval for unrelated completed rows.
-                entry.update(row=row_state(row), job=job, disposition='eligible', proof_sha256=proof)
+                entry.update(row=row_state(row), job=job, disposition='eligible', proof_sha256=proof, **diagnostics)
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_refused'
-        except (ValueError, TypeError, AttributeError, KeyError):
+        except (ValueError, TypeError, AttributeError, KeyError) as error:
             entry['disposition'] = 'proof_refused'
+            entry.update(proof_diagnostics(error))
         except Exception:
             entry['disposition'] = 'read_error'
+        entry.update(diagnostics)
         entries.append(entry)
     body = {
         'operation': OPERATION,
@@ -158,6 +168,8 @@ def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, prod
         'entries': entries,
         'producer_proof': producer_proof,
         'server_flags': server_flags,
+        'repair_upload_failed': repair_upload_failed,
+        'overlap_trim_enabled': overlap_trim_enabled(),
     }
     return {**body, 'plan_sha256': plan_digest(body)}
 
@@ -173,6 +185,9 @@ def apply_backfill(store, plan, approved_digest):
         if entry['disposition'] != 'eligible':
             outcomes[entry['disposition']] += 1
             continue
+        if plan.get('overlap_trim_enabled') and not overlap_trim_enabled():
+            outcomes['state_changed'] += 1
+            continue
         uid, cid = conversation_path(entry['path'])
         job_id = entry['job']['segment_id']
         job_ref = store.client.collection(f'{store.namespace}_jobs').document(job_id)
@@ -187,7 +202,7 @@ def apply_backfill(store, plan, approved_digest):
                 return 'already_registered'
             if row_state(row) != entry['row']:
                 return 'state_changed'
-            reason = refusal(row, plan['producer_proof'])
+            reason = refusal(row, plan['producer_proof'], repair_upload_failed=plan.get('repair_upload_failed', False))
             if reason:
                 return reason
             tx.check_privacy(uid, (cid,), expected_generation=entry['job']['privacy_generation'])
@@ -201,9 +216,10 @@ def apply_backfill(store, plan, approved_digest):
                 {
                     'record_upload_sessions': {},
                     'record_audio_closed': True,
+                    **({'record_upload_failed': False} if row.get('record_upload_failed') else {}),
                 },
             )
-            return 'sealed_registered'
+            return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed_registered'
 
         try:
             outcomes[run_transactional(store.client, commit, transient=True)] += 1

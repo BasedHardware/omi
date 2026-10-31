@@ -1,8 +1,8 @@
-{{- if and .Values.enabled .Values.recordSealSweeper.enabled (eq .Values.stage "prod") }}
+{{- if and .Values.enabled (or .Values.recordSealSweeper.enabled .Values.recordSealRepair.enabled) (eq .Values.stage "prod") }}
 {{- if ne .Release.Namespace "prod-omi-backend" }}
 {{- fail "record seal sweeper requires prod-omi-backend; dev verification uses hermetic fixtures" }}
 {{- end }}
-{{- if not (has .Values.recordSealSweeper.mode (list "plan" "apply")) }}
+{{- if and .Values.recordSealSweeper.enabled (not (has .Values.recordSealSweeper.mode (list "plan" "apply"))) }}
 {{- fail "recordSealSweeper.mode must be plan or apply" }}
 {{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
@@ -27,6 +27,7 @@ roleRef:
   kind: Role
   name: record-seal-sweeper
 ---
+{{- if .Values.recordSealSweeper.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -39,6 +40,8 @@ spec:
   failedJobsHistoryLimit: 2
   jobTemplate:
     spec:
+      # Runtime cancels IO after 150s (maximum 180s), leaving import/startup
+      # headroom while staying below the five-minute producer-proof window.
       activeDeadlineSeconds: 240
       backoffLimit: 0
       template:
@@ -71,7 +74,11 @@ spec:
               command: [python, scripts/record_seal_sweep.py]
               env:
                 - {name: RECORD_SEAL_SWEEPER_ENABLED, value: {{ .Values.recordSealSweeper.runtimeEnabled | quote }}}
+                - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
                 - {name: RECORD_SEAL_SWEEPER_MODE, value: {{ .Values.recordSealSweeper.mode | quote }}}
+                - {name: RECORD_SEAL_SWEEPER_BUDGET_SECONDS, value: "150"}
+                - {name: RECORD_SEAL_SWEEPER_DISCOVERY_LIMIT, value: "32"}
+                - {name: RECORD_SEAL_SWEEPER_SEAL_LIMIT, value: "4"}
                 - {name: OMI_ENV_STAGE, value: prod}
                 - {name: OMI_LOG_FORMAT, value: json}
                 - {name: OMI_FIRESTORE_DATA_PLANE_PROJECT, value: {{ .Values.dataPlaneProject | quote }}}
@@ -97,4 +104,5 @@ spec:
           volumes:
             - name: tmp
               emptyDir: {sizeLimit: 64Mi}
+{{- end }}
 {{- end }}

@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "La fatturazione annuale non è disponibile per il tuo piano in questo momento.",
     "yearlySwitchDoneTitle": "Ora sei sull'annuale",
     "yearlySwitchDoneBody": "Addebitati {amount} oggi. Rinnovo il {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} parti} one{{count} parte} two{{count} parti} few{{count} parti} many{{count} parti} other{{count} parti}}"
+    "episodePartsCount": "{count, plural, zero{{count} parti} one{{count} parte} two{{count} parti} few{{count} parti} many{{count} parti} other{{count} parti}}",
+    "chatAppsWaitingMessageIn": "Invia il messaggio in {app}. Questa schermata si aggiorna appena Omi lo riceve.",
+    "chatAppsCodeExpiredMessageIn": "Ottieni un nuovo codice e invialo da {app}."
 }

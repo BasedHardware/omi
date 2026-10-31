@@ -276,7 +276,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
             }
         ],
     )
-    monkeypatch.setattr(live, 'read_reference', lambda *args: b'\x01\x00' * 16000)
+    monkeypatch.setattr(live, 'read_reference', lambda *args, **kwargs: b'\x01\x00' * 16000)
     manifests = []
 
     def stage(item, body):

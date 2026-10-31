@@ -234,6 +234,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_MAX_SESSIONS",
             "PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS",
             "PARAKEET_WINDOW_MAX_EMPTY_STREAK",
+            # Listen-only live-window kill switch (routerbench 2026-10-30).
+            "PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED",
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",

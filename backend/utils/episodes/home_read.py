@@ -1,12 +1,20 @@
 """Client read projection with only retained, extant episode members."""
 
-from datetime import datetime, timedelta
+import logging
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.episodes import MAX_EPISODE_SECONDS
+from config.episodes import (
+    COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
+    COMPOSER_MAX_SCHEDULED_PER_READ,
+    COMPOSER_READ_THROTTLE_SECONDS,
+    MAX_EPISODE_SECONDS,
+)
 from database import conversations, episodes
 from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
@@ -14,6 +22,8 @@ from utils.episodes.policy import utc
 from models.episode import EpisodeCloseReason
 from utils.episodes import service
 from utils.conversations.fragment_visibility import is_relevance_discarded
+
+logger = logging.getLogger(__name__)
 
 
 def list_episode_window(
@@ -117,7 +127,81 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
 
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
     members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
-    return [wire for row in rows if (wire := project_episode(uid, row, members=members)) is not None]
+    wires = [wire for row in rows if (wire := project_episode(uid, row, members=members)) is not None]
+    schedule_missed_composes(uid, rows, wires)
+    return wires
+
+
+def project_lookup(uid: str, episode: dict[str, Any] | None) -> dict[str, Any] | None:
+    """One episode for the per-conversation lookup; it carries the same safety net as the list read.
+
+    A fully hidden episode projects to nothing but is still checked, so the composer clears its notes.
+    Lookups arrive one per conversation row, so a per-user budget caps distinct episodes queued across them.
+    """
+    wire = project_episode(uid, episode)
+    if episode is not None and (claim := _lookup_reserve(uid)) is not None:
+        if not schedule_missed_composes(uid, [episode], [wire] if wire is not None else []):
+            _lookup_refund(uid, claim)
+    return wire
+
+
+_lookup_lock = threading.Lock()
+_lookup_spend: dict[str, list[float]] = {}
+
+
+def _lookup_reserve(uid: str) -> float | None:
+    """Claim one of the user's lookup schedules for this window atomically; refunded if nothing queues."""
+    now = time.monotonic()
+    with _lookup_lock:
+        if len(_lookup_spend) > 10_000:
+            # Drop only users with no spend left in the window, so active budgets survive the bound.
+            for key in [k for k, ats in _lookup_spend.items() if not _live(ats, now)]:
+                del _lookup_spend[key]
+        recent = _live(_lookup_spend.get(uid, []), now)
+        if len(recent) >= COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW:
+            _lookup_spend[uid] = recent
+            return None
+        _lookup_spend[uid] = [*recent, now]
+        return now
+
+
+def _lookup_refund(uid: str, claim: float) -> None:
+    """Return this lookup's own reservation, never a concurrent lookup's."""
+    with _lookup_lock:
+        spent = _lookup_spend.get(uid)
+        if spent and claim in spent:
+            spent.remove(claim)
+
+
+def _live(spent: list[float], now: float) -> list[float]:
+    return [at for at in spent if now - at < COMPOSER_READ_THROTTLE_SECONDS]
+
+
+def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> int:
+    """Safety net for the composer: a closed episode that is uncomposed, drifted, or whose visible
+    members changed since its compose (a direct discard or delete) gets one, at most a few per read.
+    Returns how many were queued."""
+    from utils.episodes import composer
+
+    queued = 0
+    try:
+        visible = {wire['id']: [m['id'] for m in wire.get('members') or []] for wire in wires}
+        now = datetime.now(timezone.utc)
+        for row in rows:
+            if queued >= COMPOSER_MAX_SCHEDULED_PER_READ:
+                break
+            closed_at = utc(row.get('closed_at'))
+            if closed_at is None or (now - closed_at).total_seconds() < 60:
+                continue
+            if not composer.needs_compose(row, visible_member_ids=visible.get(str(row.get('id')), [])):
+                continue
+            if composer.schedule(uid, str(row.get('id')), throttle=True):
+                queued += 1
+    except Exception as error:
+        logger.warning(
+            'event=episode_compose_schedule outcome=error source=read exception_type=%s', type(error).__name__
+        )
+    return queued
 
 
 def project_episode(

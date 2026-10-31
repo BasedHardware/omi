@@ -18,11 +18,15 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// Connect iMessage: the person texts Omi a one-time code from the number to link. Messages opens
 /// prefilled; the sheet then waits for the backend to see the text. Resolves to the new link, or
 /// null when closed first.
-Future<ChannelLink?> showIMessageConnectSheet(BuildContext context) {
+Future<ChannelLink?> showIMessageConnectSheet(BuildContext context) =>
+    showCodeConnectSheet(context, ChatChannel.imessage);
+
+/// The same one-time-code flow for any phone-number channel (iMessage, WhatsApp).
+Future<ChannelLink?> showCodeConnectSheet(BuildContext context, ChatChannel channel) {
   return showOmiSheet<ChannelLink>(
     context: context,
     padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-    builder: (_) => const IMessageConnectSheet(),
+    builder: (_) => IMessageConnectSheet(channel: channel),
   );
 }
 
@@ -41,9 +45,15 @@ Future<void> _addContact(String name, String number) async {
 
 const _messagesBlue = Color(0xFF0A84FF); // omi-ux-allow: color-literal -- the Messages bubble, a brand colour
 const _onMessagesBlue = Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- text on the Messages bubble
+const _whatsAppBubble =
+    Color(0xFFD9FDD3); // omi-ux-allow: color-literal -- the WhatsApp outgoing bubble, a brand colour
+const _onWhatsAppBubble = Color(0xFF111B21); // omi-ux-allow: color-literal -- text on the WhatsApp bubble
 
 class IMessageConnectSheet extends StatefulWidget {
-  const IMessageConnectSheet({super.key});
+  const IMessageConnectSheet({super.key, this.channel = ChatChannel.imessage});
+
+  /// iMessage or WhatsApp: both link a phone number by texting a one-time code.
+  final ChatChannel channel;
 
   @override
   State<IMessageConnectSheet> createState() => _IMessageConnectSheetState();
@@ -60,9 +70,14 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
   Timer? _clock;
 
   @override
-  ChatChannel get waitChannel => ChatChannel.imessage;
+  ChatChannel get waitChannel => widget.channel;
 
-  ChatChannelEndpoint? get _endpoint => context.read<MessagingChannelsProvider>().config.endpoint(ChatChannel.imessage);
+  bool get _isIMessage => widget.channel == ChatChannel.imessage;
+
+  /// The app the code is sent from: Apple's Messages, or the channel itself.
+  String get _appName => _isIMessage ? context.l10n.chatAppsMessagesApp : widget.channel.displayName;
+
+  ChatChannelEndpoint? get _endpoint => context.read<MessagingChannelsProvider>().config.endpoint(widget.channel);
 
   String? _address(wire.GeneratedChannelLinkProof? proof) {
     final fromApi = proof?.address?.trim();
@@ -88,7 +103,7 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
 
   @override
   void onLinked(ChannelLink link) {
-    ChatAppsAnalytics.connected(ChatChannel.imessage);
+    ChatAppsAnalytics.connected(widget.channel);
     Navigator.of(context).pop(link);
   }
 
@@ -102,7 +117,7 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
       _problem = null;
     });
     final result = await context.read<MessagingChannelsProvider>().mintProof(
-          ChatChannel.imessage,
+          widget.channel,
           kind: 'code',
         );
     if (!mounted) return;
@@ -132,9 +147,9 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     final endpoint = _endpoint;
     final proof = _proof;
     if (endpoint == null || proof == null) return;
-    if (!_sent) ChatAppsAnalytics.connectStarted(ChatChannel.imessage);
+    if (!_sent) ChatAppsAnalytics.connectStarted(widget.channel);
     final opened = await openChatAppProof(
-      ChatChannel.imessage,
+      widget.channel,
       endpoint,
       deepLink: proof.deepLink,
       address: proof.address,
@@ -144,7 +159,7 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     if (!opened) {
       OmiFeedback.error(
         context,
-        context.l10n.chatAppsCouldNotOpen(context.l10n.chatAppsMessagesApp),
+        context.l10n.chatAppsCouldNotOpen(_appName),
       );
     }
     // Waiting starts either way: the code can also be sent by hand.
@@ -158,11 +173,12 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     try {
       await addContactLauncher('Omi', _address(_proof) ?? endpoint.address);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         OmiFeedback.error(
           context,
           context.l10n.chatAppsCouldNotOpen(context.l10n.chatAppsContactsApp),
         );
+      }
     }
   }
 
@@ -184,7 +200,7 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Center(child: ChatAppLogo(ChatChannel.imessage, size: 56)),
+        Center(child: ChatAppLogo(widget.channel, size: 56)),
         const SizedBox(height: OmiSpacing.md),
         ChatAppsSheetHeading(
           title: l10n.chatAppsConnectIMessageTitle,
@@ -235,14 +251,14 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
                           horizontal: OmiSpacing.sm + 2,
                           vertical: OmiSpacing.sm - 2,
                         ),
-                        decoration: const BoxDecoration(
-                          color: _messagesBlue,
-                          borderRadius: BorderRadius.all(Radius.circular(18)),
+                        decoration: BoxDecoration(
+                          color: _isIMessage ? _messagesBlue : _whatsAppBubble,
+                          borderRadius: const BorderRadius.all(Radius.circular(18)),
                         ),
                         child: Text(
                           _body(proof.proof),
                           style: OmiType.callout.copyWith(
-                            color: _onMessagesBlue,
+                            color: _isIMessage ? _onMessagesBlue : _onWhatsAppBubble,
                           ),
                         ),
                       ),
@@ -272,7 +288,7 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
         else
           OmiButton(
             key: const ValueKey('chat_apps_open_messages'),
-            label: l10n.chatAppsOpenMessages,
+            label: _isIMessage ? l10n.chatAppsOpenMessages : l10n.chatAppsOpenApp(widget.channel.displayName),
             expand: true,
             isLoading: _minting,
             onPressed: proof == null || _expired ? null : _openMessages,
@@ -314,7 +330,9 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
         const SizedBox(height: OmiSpacing.xl),
         ChatAppsSheetHeading(
           title: expired ? l10n.chatAppsCodeExpiredTitle : l10n.chatAppsWaitingTitle,
-          message: expired ? l10n.chatAppsCodeExpiredMessage : l10n.chatAppsWaitingMessage,
+          message: _isIMessage
+              ? (expired ? l10n.chatAppsCodeExpiredMessage : l10n.chatAppsWaitingMessage)
+              : (expired ? l10n.chatAppsCodeExpiredMessageIn(_appName) : l10n.chatAppsWaitingMessageIn(_appName)),
         ),
         const SizedBox(height: OmiSpacing.xl),
         if (!expired)
@@ -396,7 +414,7 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
         else
           OmiButton.secondary(
             key: const ValueKey('chat_apps_open_messages_again'),
-            label: l10n.chatAppsOpenMessagesAgain,
+            label: _isIMessage ? l10n.chatAppsOpenMessagesAgain : l10n.chatAppsOpenApp(widget.channel.displayName),
             expand: true,
             onPressed: _openMessages,
           ),

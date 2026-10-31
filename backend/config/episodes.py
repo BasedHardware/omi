@@ -54,6 +54,7 @@ EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
+EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
 APP_CHANNELS = frozenset({'beta', 'store'})
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
@@ -118,6 +119,14 @@ def episode_carry_on_session_end_enabled() -> bool:
 def episode_moment_output_validator_enabled() -> bool:
     """Whether live moment output validation and its one bounded repair call are enabled."""
     return modes_default_on(EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV)
+
+
+def episode_composer_enabled() -> bool:
+    """Whether closed episodes get one whole-episode summary (``utils/episodes/composer.py``).
+
+    Off keeps the live incremental notes as the final episode notes, as before.
+    """
+    return modes_default_on(EPISODE_COMPOSER_ENV)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -217,3 +226,27 @@ INCREMENTAL_MAX_OUTPUT_TOKENS = 700
 # openai.gpt-5-nano.2026-07-17. The gateway attempt ledger stays authoritative.
 EST_INPUT_USD_PER_MTOK = 0.05
 EST_OUTPUT_USD_PER_MTOK = 0.40
+
+# Closed-episode composer: one strong call over member summaries plus the full transcript.
+COMPOSER_FEATURE = 'episode_composer'
+COMPOSER_VERSION = 'episode_composer_v1'
+COMPOSER_TIMEOUT_SECONDS = 90.0
+# About 60k tokens. With the 4h episode cap almost every episode fits whole; beyond it the
+# densest 10-minute windows are kept in time order.
+COMPOSER_MAX_TRANSCRIPT_CHARS = 240_000
+COMPOSER_MAX_CHAPTERS = 8
+# Read-side safety net: at most this many closed, uncomposed episodes queued per list read.
+COMPOSER_MAX_SCHEDULED_PER_READ = 2
+# A read-side caller re-queues the same episode at most this often per process.
+COMPOSER_READ_THROTTLE_SECONDS = 600
+# The per-conversation lookup runs once per Home row: cap the distinct episodes it queues per user
+# per throttle window, per process.
+COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
+# One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
+COMPOSER_LEASE_SECONDS = 240
+# After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
+# the evidence changes (a member finalize still composes).
+COMPOSER_RETRY_MINUTES = 10
+COMPOSER_MAX_FAILURES = 4
+# Wire budget per composed paragraph (to_wire serves bullets up to this length).
+COMPOSER_MAX_PARAGRAPH_CHARS = 1200

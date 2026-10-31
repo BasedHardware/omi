@@ -8805,6 +8805,78 @@
         "title": "ClickUpTeamsResponse",
         "type": "object"
       },
+      "ClientFlag": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "payload_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "JSON-encoded payload when enabled",
+            "title": "Payload Json"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Multivariate value when enabled; null for boolean flags",
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "key",
+          "enabled"
+        ],
+        "title": "ClientFlag",
+        "type": "object"
+      },
+      "ClientFlagsResponse": {
+        "properties": {
+          "flags": {
+            "description": "Only keys the Omi store owns. A key not listed keeps the client's previous source.",
+            "items": {
+              "$ref": "#/components/schemas/ClientFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Store version; null when the store is unconfigured or unreadable",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "version",
+          "flags"
+        ],
+        "title": "ClientFlagsResponse",
+        "type": "object"
+      },
       "ClientProcessing": {
         "additionalProperties": false,
         "properties": {
@@ -57509,6 +57581,95 @@
         "tags": [
           "fair_use"
         ]
+      }
+    },
+    "/v1/flags": {
+      "get": {
+        "operationId": "client_flags_v1_flags_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "surface",
+            "required": true,
+            "schema": {
+              "enum": [
+                "macos",
+                "mobile",
+                "web-app",
+                "windows"
+              ],
+              "title": "Surface",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientFlagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Client Flags"
       }
     },
     "/v1/folders": {

@@ -2073,7 +2073,8 @@ async def test_finalizer_fences_before_memory_extraction_on_fanout_loss(monkeypa
 
 
 @pytest.mark.anyio
-async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(monkeypatch):
+@pytest.mark.parametrize('revision_advanced', [False, True])
+async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(monkeypatch, revision_advanced):
     """#10468 r4: when process_conversation reports that lifecycle persistence
     lost (discard/terminal), the finalizer must skip extract_memories entirely
     without even attempting the fanout claim."""
@@ -2101,6 +2102,8 @@ async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(mon
             'id': 'conversation-1',
             'status': ConversationStatus.processing.value,
             'discarded': False,
+            'finalization_job_id': 'job-1',
+            'sync_content_revision': 18,
         },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
@@ -2108,6 +2111,9 @@ async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(mon
     monkeypatch.setattr(persisted_finalizer, 'process_conversation', losing_process)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', extract)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim_fanout)
+
+    replay = MagicMock(return_value=revision_advanced)
+    monkeypatch.setattr(persisted_finalizer.finalization_jobs_db, 'defer_sync_revision_fence', replay)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -2117,7 +2123,12 @@ async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(mon
         lease_epoch=3,
     )
 
-    assert disposition == ConversationFinalizationDisposition.fenced
+    assert disposition == (
+        ConversationFinalizationDisposition.deferred
+        if revision_advanced
+        else ConversationFinalizationDisposition.fenced
+    )
+    replay.assert_called_once_with('job-1', 2, 3, 18)
     extract.assert_not_called()
     claim_fanout.assert_not_called()
 
@@ -2355,7 +2366,7 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     ],
 )
 @pytest.mark.parametrize('terminal', [False, True])
-@pytest.mark.parametrize('vector_case', ['success', 'embedding_error', 'stale', 'index_unavailable'])
+@pytest.mark.parametrize('vector_case', ['success', 'embedding_error', 'stale', 'index_unavailable', 'minimum'])
 async def test_finalizer_summary_vector_requires_visible_structure_and_winning_claim(
     monkeypatch, claim_status, deleted, discarded, structured, emits, vector_case, caplog, terminal
 ):
@@ -2363,8 +2374,13 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
         id='conversation-1',
         status=ConversationStatus.completed,
         discarded=discarded,
-        structured=SimpleNamespace(title='Meeting') if structured else None,
+        structured=(
+            SimpleNamespace(title='Meeting', title_provenance='server_minimum' if vector_case == 'minimum' else None)
+            if structured
+            else None
+        ),
     )
+    emits = emits and vector_case != 'minimum'
     events = []
 
     async def inline_run_blocking(_executor, func, *args, **kwargs):

@@ -11,12 +11,15 @@ from threading import Lock
 from typing import Any
 
 from config.proactivity_v2 import ProactivityDenied
+from utils import omi_flags
+from utils.metrics import OMI_FLAG_DUAL_READ_TOTAL
 
 logger = logging.getLogger(__name__)
 
 FLAG_TTL_SECONDS = 300
 ERROR_TTL_SECONDS = 60
 MAX_CACHE_ENTRIES = 4096
+FLAG_KEY = 'proactivity_v2'
 
 
 @dataclass(frozen=True)
@@ -98,7 +101,40 @@ def _cached_result(uid: str) -> _FlagResult | None:
         return result
 
 
+def flag_source() -> str:
+    """``OMI_FLAGS_SOURCE``: ``posthog`` (default), ``dual`` (serve PostHog, compare Omi) or ``omi``."""
+    raw = os.getenv('OMI_FLAGS_SOURCE', '').strip().lower()
+    return raw if raw in ('dual', 'omi') else 'posthog'
+
+
 def enabled(uid: str) -> bool:
+    source = flag_source()
+    if source == 'omi':
+        resolved = omi_flags.resolve(FLAG_KEY, uid)
+        if resolved is None:
+            # Absent or unreadable store: fail closed exactly like a PostHog error.
+            _log_flag_error(_FlagResult(0.0, error_type='omi_flag_absent'))
+            raise ProactivityFlagUnavailable('omi_flag_absent', None)
+        return resolved.enabled
+    value = _posthog_enabled(uid)
+    if source == 'dual':
+        _compare_omi(uid, value)
+    return value
+
+
+def _compare_omi(uid: str, served: bool) -> None:
+    try:
+        resolved = omi_flags.resolve(FLAG_KEY, uid)
+    except Exception:
+        OMI_FLAG_DUAL_READ_TOTAL.labels(flag=FLAG_KEY, outcome='omi_error').inc()
+        return
+    OMI_FLAG_DUAL_READ_TOTAL.labels(
+        flag=FLAG_KEY,
+        outcome='omi_absent' if resolved is None else ('match' if resolved.enabled == served else 'mismatch'),
+    ).inc()
+
+
+def _posthog_enabled(uid: str) -> bool:
     """Cache true/false for 300s and failures for 60s, failing closed on errors."""
     # Hits never wait for an unrelated user's in-flight lookup in the same stripe.
     result = _cached_result(uid)
@@ -111,7 +147,7 @@ def enabled(uid: str) -> bool:
                     variants = flag_client().get_feature_variants(uid)
                     if not isinstance(variants, dict):
                         raise ProactivityDenied('flag_unavailable')
-                    result = _FlagResult(now + FLAG_TTL_SECONDS, enabled=variants.get('proactivity_v2') is True)
+                    result = _FlagResult(now + FLAG_TTL_SECONDS, enabled=variants.get(FLAG_KEY) is True)
                 except Exception as exc:
                     result = _error_result(exc, now + ERROR_TTL_SECONDS)
                 with _cache_lock:

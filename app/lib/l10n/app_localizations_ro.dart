@@ -15008,4 +15008,14 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Trimite mesajul din $app. Acest ecran se actualizează de îndată ce Omi îl primește.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Obține un cod nou și trimite-l din $app.';
+  }
 }

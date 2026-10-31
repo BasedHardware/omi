@@ -14967,4 +14967,14 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Išsiųskite žinutę programoje $app. Šis ekranas atsinaujins, kai tik Omi ją gaus.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Gaukite naują kodą ir išsiųskite jį per $app.';
+  }
 }

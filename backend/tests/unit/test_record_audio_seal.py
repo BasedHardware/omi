@@ -26,12 +26,15 @@ from database import record_audio as record_audio_db
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_record_barrier import RECORD_BARRIER_FAILURES
 from utils.pusher_record_barrier import RECORD_SEAL_REFUSED
+import utils.pusher_record_barrier as barrier_module
 
 PATH = ('users', 'uid-at', 'conversations', 'record')
 
 
 @pytest.fixture
 def records(env, monkeypatch):
+    registry = barrier_module._ProcessRecordTokens()
+    monkeypatch.setattr(barrier_module, '_process_record_tokens', lambda: registry)
     client = StrictFirestore()
     client.rows[PATH] = {'record_lane_owner': 'batch_live_v1', 'status': 'completed', 'opaque_content': 'preserved'}
     monkeypatch.setattr(record_audio_db, 'get_firestore_client', lambda: client)
@@ -330,3 +333,173 @@ async def test_cancelled_finish_retains_token_for_background_retry(records, monk
     monkeypatch.setattr(module, 'run_blocking', original)
     assert await barrier.finish_recording('record')
     assert records.rows[PATH]['record_audio_closed']
+
+
+async def test_held_token_then_later_successful_socket_seals(records, caplog):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    earlier.hold_recording('record', tail_committed=True)
+    held_token = earlier.upload_sessions['record']
+    assert await earlier.finish_recording('record')
+    assert held_token in records.rows[PATH]['record_upload_sessions']
+    with caplog.at_level('INFO', logger='utils.pusher_record_barrier'):
+        await _run(FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE), _finalize()]))
+    assert records.rows[PATH]['record_upload_sessions'] == {}
+    assert records.rows[PATH]['record_audio_closed']
+    assert 'event=record_tokens_recleared count=1' in [r.getMessage() for r in caplog.records]
+    assert barrier_module._process_record_tokens().size == 0
+
+
+async def test_empty_reconnect_cannot_certify_held_tail(records):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    earlier.hold_recording('record')
+    held = dict(records.rows[PATH]['record_upload_sessions'])
+    await _run(FakeWebSocket([_conversation('record'), _finalize()]))
+    assert records.rows[PATH]['record_upload_sessions'] == held
+    assert not records.rows[PATH]['record_audio_closed']
+
+
+async def test_later_new_audio_never_certifies_an_uncommitted_held_tail(records):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    earlier.hold_recording('record')
+    held = dict(records.rows[PATH]['record_upload_sessions'])
+    await _run(FakeWebSocket([_conversation('record'), _audio(200, b'\x01\x00' * RATE), _finalize()]))
+    assert records.rows[PATH]['record_upload_sessions'] == held
+    assert not records.rows[PATH]['record_audio_closed']
+
+
+async def test_recovery_uses_mint_order_when_registration_returns_out_of_order(records, monkeypatch):
+    earlier, later = PusherRecordBarrier('uid-at'), PusherRecordBarrier('uid-at')
+    registered = asyncio.Event()
+    release = asyncio.Event()
+    original = barrier_module.run_blocking
+    pending_calls = 0
+
+    async def delayed(executor, function, *args, **kwargs):
+        nonlocal pending_calls
+        first = False
+        if function is record_audio_db.set_record_upload_pending and args[3] is True:
+            pending_calls += 1
+            first = pending_calls == 1
+        result = await original(executor, function, *args, **kwargs)
+        if first:
+            registered.set()
+            await release.wait()
+        return result
+
+    monkeypatch.setattr(barrier_module, 'run_blocking', delayed)
+    first = asyncio.create_task(earlier.begin_recording('record'))
+    try:
+        await asyncio.wait_for(registered.wait(), 5)
+        await later.begin_recording('record')
+    finally:
+        release.set()
+        await asyncio.wait_for(first, 5)
+    earlier.hold_recording('record', tail_committed=True)
+    assert await later.finish_recording('record')
+    assert records.rows[PATH]['record_upload_sessions'] == {}
+    assert records.rows[PATH]['record_audio_closed']
+
+
+@pytest.mark.parametrize('other_process', [False, True])
+async def test_later_success_preserves_active_and_foreign_producers(records, other_process):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    token = earlier.upload_sessions['record']
+    if other_process:
+        earlier.hold_recording('record', tail_committed=True)
+        # Same hostname/start metadata alone is not ownership; an independent
+        # process has no minting receipt in this process-local registry.
+        barrier_module._process_record_tokens().forget('uid-at', 'record', token)
+    later = PusherRecordBarrier('uid-at')
+    await later.begin_recording('record')
+    assert await later.finish_recording('record')
+    assert set(records.rows[PATH]['record_upload_sessions']) == {token}
+    assert not records.rows[PATH]['record_audio_closed']
+
+
+async def test_later_success_never_erases_permanent_failure(records):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    await earlier.fail_recording('record')
+    later = PusherRecordBarrier('uid-at')
+    await later.begin_recording('record')
+    assert await later.finish_recording('record')
+    assert records.rows[PATH]['record_upload_failed']
+    assert not records.rows[PATH]['record_audio_closed']
+
+
+async def test_failure_marker_outage_preserves_terminal_token_across_later_success(records, monkeypatch):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    held = earlier.upload_sessions['record']
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', Mock(side_effect=OSError('synthetic outage')))
+    await earlier.fail_recording('record')
+    later = PusherRecordBarrier('uid-at')
+    await later.begin_recording('record')
+    assert await later.finish_recording('record')
+    assert set(records.rows[PATH]['record_upload_sessions']) == {held}
+    assert not records.rows[PATH]['record_audio_closed']
+
+
+async def test_reclear_failure_keeps_retry_state_after_own_token_clears(records, monkeypatch):
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    earlier.hold_recording('record', tail_committed=True)
+    held = earlier.upload_sessions['record']
+    later = PusherRecordBarrier('uid-at')
+    await later.begin_recording('record')
+    real_pending = record_audio_db.set_record_upload_pending
+
+    def pending(uid, cid, token, active, **kwargs):
+        if token == held and not active:
+            raise OSError('synthetic held clear failure')
+        return real_pending(uid, cid, token, active, **kwargs)
+
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', pending)
+    assert not await later.finish_recording('record')
+    assert ('record', held) in later.pending_clears
+    assert not records.rows[PATH]['record_audio_closed']
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', real_pending)
+    assert await later.finish_recording('record')
+    assert records.rows[PATH]['record_audio_closed']
+    assert barrier_module._process_record_tokens().size == 0
+
+
+@pytest.mark.parametrize('eviction', ['capacity', 'ttl', 'fork'])
+async def test_registry_eviction_only_forgets_hint_and_never_clears_durable_token(records, monkeypatch, eviction):
+    registry = barrier_module._process_record_tokens()
+    earlier = PusherRecordBarrier('uid-at')
+    await earlier.begin_recording('record')
+    earlier.hold_recording('record', tail_committed=True)
+    held = earlier.upload_sessions['record']
+    if eviction == 'capacity':
+        registry.max_tokens = 1
+        registry.remember('synthetic-other-user', 'other', 'other-token')
+    elif eviction == 'ttl':
+        with monkeypatch.context() as clock:
+            clock.setattr(barrier_module.time, 'monotonic', lambda: float('inf'))
+            registry._prune()
+    else:
+        registry.pid = -1
+        registry._prune()
+    assert registry.recoverable_before('uid-at', 'record', held) == []
+    later = PusherRecordBarrier('uid-at')
+    await later.begin_recording('record')
+    assert await later.finish_recording('record')
+    assert set(records.rows[PATH]['record_upload_sessions']) == {held}
+    assert not records.rows[PATH]['record_audio_closed']
+
+
+def test_registry_scopes_recovery_to_user_conversation_and_earlier_tokens():
+    registry = barrier_module._ProcessRecordTokens()
+    for uid, cid, token in [('u', 'c', 'old'), ('other', 'c', 'foreign-user'), ('u', 'other', 'foreign-cid')]:
+        registry.remember(uid, cid, token)
+        registry.ready(uid, cid, token)
+    registry.remember('u', 'c', 'success')
+    registry.remember('u', 'c', 'newer')
+    registry.ready('u', 'c', 'newer')
+    assert registry.recoverable_before('u', 'c', 'success') == ['old']
+    assert registry.recoverable_before('u', 'c', 'unknown') == []

@@ -147,13 +147,17 @@ class _ListingDb:
 def _matches(data: dict[str, Any], field: str | None, op: str, value: Any) -> bool:
     if not field:
         return True
-    if field not in data:
-        return False
-    actual = data[field]
+    actual = data
+    for part in field.split('.'):
+        if not isinstance(actual, dict) or part not in actual:
+            return False
+        actual = actual[part]
     if op == '==':
         return actual == value
     if op == 'in':
         return actual in value
+    if op == '>':
+        return actual > value
     if op == '>=':
         return actual >= value
     if op == '<=':
