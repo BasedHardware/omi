@@ -461,7 +461,7 @@ async def run_session(
         for item in staged_items:
             if item.key not in applied or not isinstance(item.operation, HarnessEdit):
                 continue
-            label = dream_judge.stratum(item.kind, item.key)
+            label = dream_judge.stratum(str(item.kind), str(item.key))
             if label is None:
                 continue
             try:
