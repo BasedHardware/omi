@@ -4,6 +4,7 @@ import json
 import re
 
 import yaml
+from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS
 
 from tests.unit.test_record_seal_sweeper_deploy import render, CHART
 
@@ -29,7 +30,7 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert pod['containers'][0]['command'] == ['python', 'scripts/record_seal_repair_job.py']
     env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
     assert env['RECORD_SEAL_REPAIR_WORKERS'] == '8'
-    assert env['RECORD_SEAL_REPAIR_ROW_SECONDS'] == '240'
+    assert env['RECORD_SEAL_REPAIR_ROW_SECONDS'] == '270'
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
     assert env['RECORD_SEAL_REPAIR_MODE'] == 'apply'
     assert json.loads(env['RECORD_SEAL_REPAIR_SERVER_FLAGS']) == {}
@@ -92,3 +93,12 @@ def test_log_metrics_use_only_allowlisted_row_counts_and_numeric_age():
     assert all('jsonPayload.message' in metric['filter'] for metric in metrics)
     assert extract(metrics[1]['valueExtractor'], {'seal_age_seconds': 1801}) == '1801'
     assert extract(metrics[2]['valueExtractor'], {'oldest_unsealed_seconds': 1802}) == '1802'
+    proof = next(metric for metric in metrics if metric['name'].endswith('_proof_refused'))
+    assert list(proof['labelExtractors']) == ['proof_reason']
+    assert 'proof_refused' in proof['filter']
+    for reason in PROOF_REASONS:
+        assert extract(proof['labelExtractors']['proof_reason'], {'proof_reason': reason}) == reason
+    expression = proof['labelExtractors']['proof_reason']
+    pattern = json.loads(expression.split(', ', 1)[1][:-1])
+    for private in ('A' * 28, 'private@example.invalid', 'users/private/conversations/private', 'other_private'):
+        assert re.search(pattern, json.dumps({'proof_reason': private})) is None

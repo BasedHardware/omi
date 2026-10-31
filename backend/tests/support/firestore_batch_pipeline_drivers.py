@@ -25,6 +25,7 @@ def entries():
                 'max_rows': (1024, 'in-memory candidate cap only'),
                 'max_scan': (10000, 'aggregate scan bound only'),
                 'advance_rows': (1024, 'resume checkpoint only; no filter or ordering change'),
+                'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
             },
         ),
         DriverEntry(

@@ -55,5 +55,26 @@
         "scale": 1
       }
     }
+  },
+  {
+    "name": "omi_record_seal_repair_proof_refused",
+    "description": "Proof refusals by closed sub-reason; counts only, no terminal classification.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.logger=\"record-seal-repair\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_repair_row\\\"\" AND jsonPayload.message=~\"\\\"disposition\\\": \\\"proof_refused\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1",
+      "labels": [
+        {
+          "key": "proof_reason",
+          "valueType": "STRING",
+          "description": "Closed proof refusal reason."
+        }
+      ]
+    },
+    "valueExtractor": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"count\\\": ([0-9]+)\")",
+    "labelExtractors": {
+      "proof_reason": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"proof_reason\\\": \\\"(tail_lagging|tail_lost_or_unproven|overlap_conflict|decode_or_checksum|budget_limit|finish_missing|registration_refused|other)\\\"\")"
+    }
   }
 ]

@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import datetime
 import hashlib
 import json
+import math
 from typing import Any
 
 from google.cloud import firestore
@@ -14,6 +15,7 @@ from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
+from utils.batch_pipeline.record_seal_reasons import proof_reason
 from utils.other.storage import list_audio_chunks
 
 ROW_FIELDS = (
@@ -89,8 +91,10 @@ def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lam
     check_budget()
     chunks = list_audio_chunks(uid, cid, max_count=4096, require_archive=True)
     check_budget()
+    key = artifacts.key_for_owner(uid)
+    precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, check_budget=check_budget)
     units = []
-    iterator = retained_record_units(uid, cid, chunks, storage_client, artifacts.key_for_owner(uid))
+    iterator = retained_record_units(uid, cid, chunks, storage_client, key)
     try:
         for unit in iterator:
             check_budget()
@@ -99,10 +103,44 @@ def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lam
                 raise ValueError('retained capture unit budget exceeded')
     finally:
         iterator.close()
+    if not units:
+        raise ValueError('retained capture not durable yet')
     validate_record_tail(units, row.get('finished_at'), require_finish=True)
     validate_record_tail(units, (job.get('record_snapshot') or {}).get('finished_at'), require_finish=True)
     check_budget()
     return plan_digest(units)
+
+
+def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, check_budget=lambda: None):
+    """Refusal-only necessary condition; passing still requires the full walk.
+
+    Consistent overlap trimming preserves the final end within half a 16 kHz
+    sample. A wholly covered final chunk either ends at that same boundary or
+    conflicts in the full walk. Keep the full walk near the rounding boundary
+    (and for nonfinite clocks), where singleton and trimmed ends may differ.
+    """
+    if not chunks:
+        return
+    tail = None
+    iterator = retained_record_units(uid, cid, chunks[-1:], storage_client, key)
+    try:
+        for tail in iterator:
+            check_budget()
+    finally:
+        iterator.close()
+    if tail is None:
+        return
+    end = tail[0] + tail[1]
+    if not math.isfinite(end):
+        return
+    # Be conservative about sample rounding and floating point addition in the
+    # full walk. This can only send an uncertain case back to existing proof.
+    ceiling = end + 1 / 16000 + 4 * math.ulp(end)
+    for finish in (row.get('finished_at'), (job.get('record_snapshot') or {}).get('finished_at')):
+        try:
+            validate_record_tail([tail], finish, require_finish=True)
+        except ValueError:
+            validate_record_tail([(ceiling, 0, [])], finish, require_finish=True)
 
 
 def plan_seals(
@@ -139,8 +177,9 @@ def plan_seals(
                 entry.update(disposition='eligible', proof_sha256=proof)
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_refused'
-        except (ValueError, TypeError, AttributeError, KeyError):
+        except (ValueError, TypeError, AttributeError, KeyError) as error:
             entry['disposition'] = 'proof_refused'
+            entry['proof_reason'] = proof_reason(error)
         except Exception:
             entry['disposition'] = 'read_error'
         entries.append(entry)

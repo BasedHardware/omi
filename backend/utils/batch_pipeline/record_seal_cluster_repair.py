@@ -7,7 +7,7 @@ maintenance frontier persists; no planner/apply semantics are reimplemented here
 
 from collections import Counter, deque
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 from config import record_seal_repair as config
+from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
@@ -70,7 +71,7 @@ def silent_dependencies():
             os.close(fd)
 
 
-def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mode='apply'):
+def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mode='apply', reason_out=None):
     """Fresh proof for every row, singleton canonical plan and same-digest apply."""
     from utils.batch_pipeline import record_seal_nojob as nojob, record_seal_repair as repair
     from utils.batch_pipeline.live import record_identity
@@ -95,6 +96,9 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     if len(entries) != 1:
         return 'unknown'
     disposition = entries[0].get('disposition')
+    if disposition == 'proof_refused' and reason_out is not None:
+        reason = entries[0].get('proof_reason')
+        reason_out['proof_reason'] = reason if reason in PROOF_REASONS else 'other'
     if disposition != 'eligible' or mode == 'plan':
         return disposition if disposition in DISPOSITIONS else 'unknown'
     require_fresh_proof(proof)  # Tail downloads can exhaust the five-minute inventory window.
@@ -106,7 +110,9 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     return disposition if disposition in DISPOSITIONS else 'unknown'
 
 
-def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN, advance_rows=MAX_ROWS):
+def discover(
+    client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN, advance_rows=MAX_ROWS, selected_cursors=None
+):
     """Page past closed rows; oldest finished first within each bounded pass.
 
     Both owners use the canonical record identity. Sync rows without a job are
@@ -117,6 +123,9 @@ def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN
     from google.cloud.firestore_v1 import FieldFilter
 
     rows, scanned, cursor = [], 0, after
+    # Freeze each pass's upper finish boundary. Continuous newer inflow must
+    # not prevent wrap and indefinitely starve the oldest refused rows.
+    horizon = (after or {}).get('horizon') or datetime.now(timezone.utc)
     resume = None
     while scanned < max_scan and len(rows) < max_rows:
         budget.check()
@@ -124,6 +133,7 @@ def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN
             client.collection_group('conversations')
             .where(filter=FieldFilter('record_lane_owner', 'in', ['batch_live_v1', 'batch_sync_v1']))
             .where(filter=FieldFilter('status', '==', 'completed'))
+            .where(filter=FieldFilter('finished_at', '<=', horizon))
             .order_by('finished_at')
             .order_by('__name__')
             .select(('finished_at', 'record_audio_closed'))
@@ -142,9 +152,11 @@ def discover(client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN
             scanned += 1
             data = doc.to_dict() or {}
             finished = data.get('finished_at')
-            cursor = {'path': doc.reference.path, 'finished_at': finished}
+            cursor = {'path': doc.reference.path, 'finished_at': finished, 'horizon': horizon}
             if not data.get('record_audio_closed') and isinstance(finished, datetime) and finished.tzinfo is not None:
                 rows.append((doc.reference.path, max(0, int(time.time() - finished.timestamp()))))
+                if selected_cursors is not None:
+                    selected_cursors[doc.reference.path] = cursor
                 if len(rows) <= advance_rows:
                     resume = cursor
                 if len(rows) == max_rows:
@@ -208,10 +220,11 @@ def coordinate(
     launch=launch_row,
     clock=time.monotonic,
     pause=time.sleep,
-    progress=lambda _: None
+    progress=lambda _: None,
+    attempted=lambda _: None,
 ):
     """Bound total concurrency and wall time; reap every child, including on failure."""
-    pending, active, counts = deque(rows), [], Counter()
+    pending, active, counts, reasons = deque(rows), [], Counter(), Counter()
     started = clock()
     deadline = started + run_seconds
     max_age, sealed_age = 0, 0
@@ -223,6 +236,7 @@ def coordinate(
                 pending.clear()
             while pending and len(active) < workers and now < deadline:
                 path, age = pending.popleft()
+                attempted(path)
                 max_age = max(max_age, age)
                 seconds = min(row_seconds, deadline - now)
                 try:
@@ -232,11 +246,14 @@ def coordinate(
                     counts['error'] += 1
             for process, expires, age in active[:]:
                 disposition = None
+                reason = 'other'
                 if process.poll() is not None:
                     try:
                         payload = process.stdout.read(1025)
                         result = json.loads(payload) if len(payload) <= 1024 else {}
                         disposition = result.get('disposition')
+                        candidate = result.get('proof_reason')
+                        reason = candidate if candidate in PROOF_REASONS else 'other'
                     except Exception:
                         disposition = 'error'
                     if process.returncode != 0 or disposition not in DISPOSITIONS:
@@ -247,6 +264,8 @@ def coordinate(
                     stop(process)
                     active.remove((process, expires, age))
                     counts[disposition] += 1
+                    if disposition == 'proof_refused':
+                        reasons[reason] += 1
                     age += max(0, int(clock() - started))
                     sealed = disposition in {'sealed', 'sealed_registered'}
                     if sealed:
@@ -257,6 +276,7 @@ def coordinate(
                             'count': 1,
                             'disposition': disposition,
                             'seal_age_seconds': age if sealed else 0,
+                            **({'proof_reason': reason} if disposition == 'proof_refused' else {}),
                         }
                     )
             if active:
@@ -266,6 +286,7 @@ def coordinate(
             stop(process)
     return {
         'dispositions': dict(sorted(counts.items())),
+        'proof_reasons': dict(sorted(reasons.items())),
         'rows': sum(counts.values()),
         'oldest_unsealed_seconds': max_age,
         'oldest_seal_age_seconds': sealed_age,
@@ -276,6 +297,7 @@ def row_main(payload):
     from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
 
     result = 'error'
+    reason = {}
     try:
         if not config.enabled():
             return {'disposition': 'disabled'}
@@ -300,12 +322,13 @@ def row_main(payload):
                     inventory=read_pusher_pod_proof,
                     budget=budget,
                     mode=payload['mode'],
+                    reason_out=reason,
                 )
     except BudgetExhausted:
         result = 'budget_exhausted'
     except Exception:
         pass
-    return {'disposition': result}
+    return {'disposition': result, **reason}
 
 
 def run(*, progress=lambda _: None):
@@ -325,13 +348,40 @@ def run(*, progress=lambda _: None):
         with budget.interrupt_io():
             client = get_firestore_client()
             frontier = RepairCursor(client, config.cursor_secret())
-            rows, saturated, cursor = discover(client, budget=budget, after=frontier.read(budget), advance_rows=workers)
+            selected_cursors = {}
+            rows, saturated, cursor = discover(
+                client,
+                budget=budget,
+                after=frontier.read(budget),
+                advance_rows=workers,
+                selected_cursors=selected_cursors,
+            )
             # Advance before slow proofs: refused, hung, deferred or killed rows
             # cannot monopolize the next run. Wrap revisits them on a later pass.
             # A preview never writes even this maintenance frontier.
             if mode == 'apply':
                 frontier.write(cursor, budget)
+    last_attempted = None
+
+    def attempted(path):
+        nonlocal last_attempted
+        last_attempted = selected_cursors[path]
+
     report = coordinate(
-        rows, workers=workers, row_seconds=row_seconds, run_seconds=run_seconds, mode=mode, progress=progress
+        rows,
+        workers=workers,
+        row_seconds=row_seconds,
+        run_seconds=run_seconds,
+        mode=mode,
+        progress=progress,
+        attempted=attempted,
     )
+    if mode == 'apply' and last_attempted:
+        # Preserve exact Firestore nanoseconds, not an age reconstructed clock.
+        # The second point write (lead ruling 4cbd2a) advances past ALL attempts,
+        # never past a deferred row. Initial checkpoint survives interruption;
+        # end-of-pass wrap revisits even the oldest chronic/interrupted row.
+        budget = SweepBudget(30)
+        with silent_dependencies(), budget.interrupt_io():
+            frontier.write(last_attempted, budget)
     return {'event': 'record_seal_repair', 'outcome': 'ok', 'mode': mode, 'discovery_saturated': saturated, **report}
