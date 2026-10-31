@@ -233,6 +233,10 @@ def parse(content: str) -> dict[str, Any]:
             data[key] = ' '.join(str(part) for part in data[key] if str(part).strip())
     if not str(data.get('lede') or '').strip():
         data['lede'] = str(data.get('overview') or '').strip()
+    for key in ('chapters', 'follow_ups', 'people'):
+        if not isinstance(data.get(key), list):
+            data[key] = []
+    data['chapters'] = [chapter for chapter in data['chapters'] if isinstance(chapter, Mapping)]
     if not str(data.get('title') or '').strip() or not str(data.get('lede') or '').strip():
         raise ComposeFailed('parse_error')
     return data
@@ -268,9 +272,11 @@ def _line(value: Any, limit: int) -> str:
 
 def _points(chapter: Mapping[str, Any]) -> list[dict[str, Any]]:
     points = []
-    for raw in chapter.get('points') or []:
+    raw_points = chapter.get('points')
+    for raw in raw_points if isinstance(raw_points, list) else []:
         if isinstance(raw, Mapping):
-            text, details = _line(raw.get('text'), COMPOSER_MAX_POINT_CHARS), raw.get('details') or []
+            text, details = _line(raw.get('text'), COMPOSER_MAX_POINT_CHARS), raw.get('details')
+            details = details if isinstance(details, list) else []
         else:
             text, details = _line(raw, COMPOSER_MAX_POINT_CHARS), []
         if not text:
@@ -285,12 +291,15 @@ def _points(chapter: Mapping[str, Any]) -> list[dict[str, Any]]:
 def wire_points(value: Any) -> list[dict[str, Any]]:
     """The stored points of a moment as the client sees them; anything malformed is dropped."""
     out = []
-    for point in value or []:
+    for point in value if isinstance(value, list) else []:
         if not isinstance(point, Mapping):
             continue
         text = _line(point.get('text'), COMPOSER_MAX_POINT_CHARS)
+        raw = point.get('details')
         if text:
-            details = [d for d in (_line(d, COMPOSER_MAX_POINT_CHARS) for d in point.get('details') or []) if d]
+            details = [
+                d for d in (_line(d, COMPOSER_MAX_POINT_CHARS) for d in (raw if isinstance(raw, list) else [])) if d
+            ]
             out.append({'text': text, 'details': details[:COMPOSER_MAX_DETAILS]})
     return out[:COMPOSER_MAX_POINTS]
 
@@ -338,6 +347,11 @@ def to_updates(
         if end is None or end <= start:
             # The last line the chapter owns: before the next chapter, on its own recording.
             inside = [t for t in times.get(owner) or [] if t >= start and (following is None or t < following)]
+            end = max(inside) if inside else start
+        last = max(times.get(owner) or [start])
+        if end > last + timedelta(seconds=30):
+            # A chapter runs on into the next recording: it stays on its own, whose transcript it opens.
+            inside = [t for t in times.get(owner) or [] if t >= start]
             end = max(inside) if inside else start
         if end <= start:
             end = start + timedelta(seconds=30)
@@ -591,12 +605,14 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         if isinstance(content, list):
             content = ''.join(part.get('text', '') if isinstance(part, Mapping) else str(part) for part in content)
         data = parse(str(content))
+        times = {str(row['id']): [at for at, _ in transcript_lines(row, owner, tz)] for row in members}
+        spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
+        composed = to_updates(data, members, tz, spans, times)
+        if not any(m['points'] for m in composed['moments']):
+            raise ComposeFailed('no_sections')  # Speech was there: a page with no sections is a failed compose.
     except Exception:
         _record_failure(uid, episode_id, c, print_)
         raise
-    times = {str(row['id']): [at for at, _ in transcript_lines(row, owner, tz)] for row in members}
-    spans = [(cid, min(ts), max(ts)) if ts else (cid, None, None) for cid, ts in times.items()]
-    composed = to_updates(data, members, tz, spans, times)
     input_tokens, output_tokens = _usage(reply)
 
     # The model call took seconds: re-read the evidence. A discard, a transcript upgrade or a
@@ -662,7 +678,7 @@ def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: O
     if episode.get('summary_needs_regeneration'):
         return True
     if episode.get('composed_fingerprint') and episode.get('composer_version') != COMPOSER_VERSION:
-        return True  # A new composer: recompose once on read.
+        return not _backed_off(episode)  # A new composer: recompose once on read, backing off on failure.
     return not episode.get('composed_fingerprint') and not _backed_off(episode)
 
 

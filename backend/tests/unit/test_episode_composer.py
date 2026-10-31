@@ -520,3 +520,55 @@ def test_composed_sections_reach_the_wire_and_validate():
     assert wire['moments'][0]['points'] == [{'text': 'Ship Friday', 'details': ['QA first']}]
     assert wire['moments'][0]['start_offset'] == 60.0
     assert Episode.model_validate(wire).moments[0].points[0].details == ['QA first']
+
+
+@pytest.mark.parametrize(
+    'reply',
+    [
+        {'chapters': 'not a list'},
+        {'chapters': [{'start': '15:00:00', 'title': 'x', 'points': 'oops'}, 'junk'], 'follow_ups': 'none'},
+        {'chapters': []},
+    ],
+)
+def test_malformed_or_sectionless_output_is_a_backed_off_failure(store, reply):
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=lambda u, m: _reply(**reply))) == 'error'
+    assert store.episode['compose_failures'] == 1 and store.episode['compose_lease'] is None
+    assert not any('lede' in w for w in store.writes)
+
+
+def test_a_chapter_running_into_the_next_recording_stays_inside_its_own():
+    a, b = _row('c1', T0, 10), _row('c2', T0 + timedelta(minutes=10), 10)
+    chapter = {'start': '14:56:00', 'end': '15:15:00', 'title': 'Long', 'points': ['p']}
+    moment = composer.to_updates({'title': 't', 'lede': 'l', 'chapters': [chapter]}, [a, b], ZoneInfo('Asia/Bangkok'))[
+        'moments'
+    ][0]
+    assert moment['conversation_id'] == 'c1'
+    # Ends at c1's last line, so the transcript offset stays inside c1.
+    assert moment['ended_at'] == T0 + timedelta(minutes=10, seconds=-30)
+    assert moment['end_offset'] == 570.0
+
+
+def test_a_failed_version_recompose_backs_off():
+    stale = {
+        'status': 'closed',
+        'started_at': T0,
+        'composed_fingerprint': 'x',
+        'composer_version': 'episode_composer_v1',
+        'compose_failures': 4,
+        'compose_failed_at': datetime.now(timezone.utc),
+    }
+    assert composer.needs_compose(stale) is False
+
+
+def test_discarding_a_member_clears_the_composed_lede_and_follow_ups():
+    from database import episodes as episodes_db
+
+    raw = {
+        'started_at': T0,
+        'conversation_ids': ['c1', 'c2'],
+        'discarded_conversation_ids': [],
+        'lede': 'L',
+        'follow_ups': ['F'],
+    }
+    merged = episodes_db._merge_state(raw, {'discarded_conversation_ids': ['c2']})
+    assert merged['lede'] == '' and merged['follow_ups'] == [] and merged['summary_needs_regeneration'] is True

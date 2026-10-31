@@ -170,7 +170,9 @@ def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str
     for field in ('moments', 'provisional_items'):
         merged[field] = [item for item in merged.get(field) or [] if item.get('conversation_id') not in excluded]
     if hidden - set(raw.get('discarded_conversation_ids') or []):
-        merged.update(title='', bullets=[], people=[], open_questions=[], summary_needs_regeneration=True)
+        merged.update(
+            title='', bullets=[], lede='', follow_ups=[], people=[], open_questions=[], summary_needs_regeneration=True
+        )
     return merged
 
 
