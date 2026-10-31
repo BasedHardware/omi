@@ -350,8 +350,23 @@ def test_home_read_safety_net_schedules_uncomposed_and_changed_episodes(monkeypa
         {'id': 'live', 'status': 'live', 'started_at': now},
     ]
     wires = [{'id': r['id'], 'members': [{'id': 'a'}]} for r in rows]
-    home_read._schedule_missed_composes(UID, rows, wires)
+    home_read.schedule_missed_composes(UID, rows, wires)
     assert queued == ['old1', 'shrunk']
+
+
+def test_per_conversation_lookup_carries_the_safety_net(monkeypatch):
+    # Home reads episodes through /by-conversation, not the window list: the lookup must schedule too.
+    from utils.episodes import home_read
+
+    queued = []
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: queued.append(eid) or True)
+    old = datetime.now(timezone.utc) - timedelta(minutes=5)
+    episode = {'id': 'e1', 'status': 'closed', 'started_at': old, 'closed_at': old}
+    monkeypatch.setattr(home_read, 'project_episode', lambda uid, ep: ep and {'id': ep['id'], 'members': [{'id': 'a'}]})
+    assert home_read.project_lookup(UID, episode) == {'id': 'e1', 'members': [{'id': 'a'}]}
+    assert home_read.project_lookup(UID, None) is None
+    assert queued == ['e1']
 
 
 def test_a_second_replica_does_not_pay_for_the_same_evidence(store):

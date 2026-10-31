@@ -1,5 +1,6 @@
 """Client read projection with only retained, extant episode members."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
@@ -14,6 +15,8 @@ from utils.episodes.policy import utc
 from models.episode import EpisodeCloseReason
 from utils.episodes import service
 from utils.conversations.fragment_visibility import is_relevance_discarded
+
+logger = logging.getLogger(__name__)
 
 
 def list_episode_window(
@@ -118,11 +121,19 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
     members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
     wires = [wire for row in rows if (wire := project_episode(uid, row, members=members)) is not None]
-    _schedule_missed_composes(uid, rows, wires)
+    schedule_missed_composes(uid, rows, wires)
     return wires
 
 
-def _schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> None:
+def project_lookup(uid: str, episode: dict[str, Any] | None) -> dict[str, Any] | None:
+    """One episode for the per-conversation lookup Home actually calls; it carries the same safety net."""
+    wire = project_episode(uid, episode)
+    if episode is not None and wire is not None:
+        schedule_missed_composes(uid, [episode], [wire])
+    return wire
+
+
+def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> None:
     """Safety net for the composer: a closed episode that is uncomposed, drifted, or whose visible
     members changed since its compose (a direct discard or delete) gets one, at most a few per read."""
     from utils.episodes import composer
@@ -141,8 +152,10 @@ def _schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[
                 continue
             if composer.schedule(uid, str(row.get('id')), throttle=True):
                 queued += 1
-    except Exception:
-        pass
+    except Exception as error:
+        logger.warning(
+            'event=episode_compose_schedule outcome=error source=read exception_type=%s', type(error).__name__
+        )
 
 
 def project_episode(
