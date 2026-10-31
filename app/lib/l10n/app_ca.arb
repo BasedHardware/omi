@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Ara pagues anualment",
     "yearlySwitchDoneBody": "Avui s'han cobrat {amount}. Es renova el {date}.",
     "episodePartsCount": "{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}",
+    "chatAppsWaitingMessageIn": "Envia el missatge a {app}. Aquesta pantalla s'actualitzarà quan l'Omi el rebi.",
+    "chatAppsCodeExpiredMessageIn": "Obtén un codi nou i envia'l des de {app}.",
     "consentShortMessage": "Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.",
     "consentAiProviders": "Processat amb {providers}."
 }

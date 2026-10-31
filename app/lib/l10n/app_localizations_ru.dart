@@ -14995,6 +14995,16 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Отправьте сообщение в приложении «$app». Этот экран обновится, как только Omi его получит.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Получите новый код и отправьте его из приложения «$app».';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi с помощью ИИ превращает ваши разговоры в заметки. Их можно удалить в любой момент.';
 

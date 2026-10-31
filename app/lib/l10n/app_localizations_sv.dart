@@ -14956,6 +14956,16 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Skicka meddelandet i $app. Den här skärmen uppdateras så fort Omi får det.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Hämta en ny kod och skicka den från $app.';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi använder AI för att göra dina samtal till anteckningar. Du kan radera dem när som helst.';
 

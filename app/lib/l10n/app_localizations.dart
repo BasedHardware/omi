@@ -26283,6 +26283,18 @@ abstract class AppLocalizations {
   /// **'{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}'**
   String episodePartsCount(int count);
 
+  /// Waiting step after opening a chat app with the link code. app is a brand name such as WhatsApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the message in {app}. This screen updates as soon as Omi gets it.'**
+  String chatAppsWaitingMessageIn(String app);
+
+  /// The link code expired. app is a brand name such as WhatsApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a new code and send it from {app}.'**
+  String chatAppsCodeExpiredMessageIn(String app);
+
   /// Onboarding data & privacy consent: one-line summary of storage and AI processing
   ///
   /// In en, this message translates to:

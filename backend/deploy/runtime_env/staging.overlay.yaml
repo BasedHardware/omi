@@ -58,6 +58,8 @@ cloud_run:
     OMI_ENV_STAGE: prod
     GOOGLE_CLOUD_PROJECT: based-hardware-dev
     OMI_CUSTOMER_DATA_PROJECT: based-hardware-dev
+    # Keep staging off the prod flag store; dev has no omi-flags database, and dual still serves PostHog.
+    OMI_FLAGS_FIRESTORE_PROJECT: based-hardware-dev
     FIRESTORE_DATABASE_ID: staging
     FIREBASE_AUTH_PROJECT_ID: based-hardware-dev
     SYNC_TASKS_PROJECT: based-hardware-dev

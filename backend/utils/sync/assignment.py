@@ -8,7 +8,7 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
-from utils.sync import processing_hold
+from utils.sync import processing_hold, bridge_pending
 from config.recorded_time import late_audio_intake_enabled
 from models.conversation_continuity import DEFAULT_GAP_SECONDS
 import time
@@ -42,7 +42,7 @@ from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry, merge_before_processing
 import config.speaker_match_scores as match_scores
-from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
+from utils.conversations.fragment_visibility import superseded_intake_discard, is_user_curated
 from config.occasion_relevance import enabled as occasion_relevance_enabled
 from utils.conversations.recorded_time import recorded_span, sync_recorded_end, write_span
 from utils.conversations.relevance import sync_intake_decision
@@ -64,12 +64,18 @@ from utils.sync.live_speech_dedupe import (
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
 from utils.sync.bridge_observation import bridge_observation
+from utils.sync.absorption_metrics import capture_assignment_metrics
 from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
 from utils.sync.assignment_telemetry import created_sync_row_observation
 from utils.capture.dedupe import choose_segments
 from utils.capture.identity import assignment_keys_compatible, persist_identity
 from utils.sync.assignment_index import AssignmentIndex
-from utils.sync.live_overlap import choose_live_overlap, compatible_capture, live_overlap_enabled
+from utils.sync.live_overlap import (
+    choose_live_overlap,
+    compatible_capture,
+    discoverable_live_overlap,
+    live_overlap_enabled,
+)
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 from models.conversation_continuity import intervals_connect
@@ -874,7 +880,7 @@ def assign_in_transaction(
         )
         if result['discarded']:
             result['relevance_decision'] = sync_intake_decision(rule)
-        elif is_rule_discard_decision(result.get('relevance_decision')):
+        elif superseded_intake_discard(result, bool(survivors or transfers)):
             result['relevance_decision'] = None
         result['is_locked'] = bool(incoming.get('is_locked'))
         result['private_cloud_sync_enabled'] = any(
@@ -910,6 +916,31 @@ def assign_in_transaction(
             ancestors = {cid for row in records for cid in row.get('sync_merged_from', [])}
             ancestors.update(cid for cid in matched if cid != canonical)
         result['sync_merged_from'] = sorted(ancestors)
+        if result['sync_live_target']:
+            result.pop(bridge_pending.FIELD, None)
+        elif (
+            not is_user_curated(result)
+            and not merge_before_processing.already_processed(result)
+            and result.get('status') == 'completed'
+            and live_overlap_enabled()
+        ):
+            # A coarse live hint is enough to hold visibility, never enough to
+            # transfer speech. The bridge revalidates recorded overlap later.
+            pending_targets = [
+                raw
+                for cid in live_candidate_ids
+                if (raw := load(cid))
+                and not tombstoned(cid)
+                and raw.get('status') in ('in_progress', 'processing')
+                and capture_mismatch(raw, incoming, user_ref.id) == 'none'
+                and discoverable_live_overlap(raw, incoming)
+            ]
+            if pending_targets and bridge_pending.FIELD not in result:
+                pending_target = min(pending_targets, key=lambda raw: raw['id'])
+                result[bridge_pending.FIELD] = {
+                    'target_id': pending_target['id'],
+                    'expires_at': time.time() + bridge_pending.MAX_WAIT_SECONDS,
+                }
         if incoming.get('geolocation') and not result.get('geolocation'):
             result['geolocation'] = incoming['geolocation']
 
@@ -1277,8 +1308,7 @@ def assign_in_transaction(
     if chosen.bridge is not None:
         result['_sync_lineage_bridge'] = chosen.bridge
     if created and lineage_eligible and sync_lineage_resolve_enabled():
-        # The adapter emits only the final successful transaction's observation,
-        # after commit. Neither this marker nor eligibility enters the write codec.
+        # Only the final successful transaction's observation is emitted after commit.
         candidates_read = all(cid in read for cid in live_candidate_ids)
         result['_sync_lineage_created'] = created_sync_row_observation(
             [row for row in read.values() if row is not None],
@@ -1289,7 +1319,6 @@ def assign_in_transaction(
             candidates_read=candidates_read,
         )
     if chosen.append_stats is not None:
-        # Transient telemetry only: the encoded plan already committed above.
         result['_sync_lineage_dedupe'] = chosen.append_stats
     if stamp_fallback_live and canonical == target_id and not created and result.get('sync_live_target'):
         result['_sync_lineage_stamp_append'] = _lineage_span_delta_bucket(
@@ -1300,6 +1329,7 @@ def assign_in_transaction(
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
     result['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
+    capture_assignment_metrics(result, [chosen, *extra_plans])
     return result, created, survivors
 
 

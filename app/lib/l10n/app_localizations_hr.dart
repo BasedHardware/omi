@@ -14983,6 +14983,16 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošalji poruku u aplikaciji $app. Ovaj se zaslon ažurira čim je Omi primi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dohvati novi kôd i pošalji ga iz aplikacije $app.';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi koristi AI kako bi vaše razgovore pretvorio u bilješke. Možete ih izbrisati bilo kada.';
 

@@ -46,6 +46,7 @@ LLM_FEATURES = frozenset(
         'conversation_processing',
         'daily_summary',
         'episode_boundary',
+        'episode_composer',
         'episode_incremental',
         'episode_moment',
         'followup',

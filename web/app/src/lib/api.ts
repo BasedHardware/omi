@@ -37,6 +37,7 @@ import type {
   ActionItemsResponse,
   FairUseStatusResponse,
   StoreRecordingPermissionResponse,
+  ClientFlagsResponse,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -174,6 +175,11 @@ export interface GetConversationsParams {
   endDate?: Date;
   folderId?: string;
   starred?: boolean;
+}
+
+/** Flags owned by Omi's flag store for this account; unlisted keys keep reading PostHog. */
+export async function getClientFlags(): Promise<ClientFlagsResponse> {
+  return fetchWithAuth<ClientFlagsResponse>('/v1/flags?surface=web-app');
 }
 
 export async function getConversations(

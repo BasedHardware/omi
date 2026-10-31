@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Dabar mokate kas metus",
     "yearlySwitchDoneBody": "Šiandien nuskaičiuota {amount}. Atnaujinama {date}.",
     "episodePartsCount": "{count, plural, zero{{count} dalių} one{{count} dalis} two{{count} dalių} few{{count} dalys} many{{count} dalies} other{{count} dalių}}",
+    "chatAppsWaitingMessageIn": "Išsiųskite žinutę programoje {app}. Šis ekranas atsinaujins, kai tik Omi ją gaus.",
+    "chatAppsCodeExpiredMessageIn": "Gaukite naują kodą ir išsiųskite jį per {app}.",
     "consentShortMessage": "Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.",
     "consentAiProviders": "Apdorojama su {providers}."
 }

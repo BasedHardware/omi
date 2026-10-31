@@ -63,7 +63,8 @@ class ChatAppsIntegrationsEntry extends StatelessWidget {
 /// Whether the account holds the plan the gateway admits. Unknown until the subscription loads.
 enum _ProStatus { unknown, pro, free }
 
-/// Connect Telegram and iMessage, see what is connected, and join the WhatsApp waitlist.
+/// Connect Telegram, iMessage and WhatsApp, see what is connected, and join the WhatsApp waitlist
+/// while WhatsApp is not configured.
 class ChatAppsPage extends StatefulWidget {
   const ChatAppsPage({super.key});
 
@@ -104,7 +105,7 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     final sheet = switch (channel) {
       ChatChannel.telegram => showTelegramConnectSheet(context),
       ChatChannel.imessage => showIMessageConnectSheet(context),
-      ChatChannel.whatsapp => Future<ChannelLink?>.value(),
+      ChatChannel.whatsapp => showCodeConnectSheet(context, ChatChannel.whatsapp),
     };
     final link = await sheet;
     if (link != null && mounted) setState(() => _justConnected = channel);
@@ -158,7 +159,7 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     final pro = _proStatus(context.watch<UsageProvider>());
     final online = context.watch<ConnectivityProvider>().isConnected;
     final justConnected = _justConnected;
-    final anyConnected = [ChatChannel.telegram, ChatChannel.imessage].any((c) => provider.linkFor(c) != null);
+    final anyConnected = ChatChannel.values.any((c) => provider.linkFor(c) != null);
 
     final Widget body;
     if (!provider.linksLoaded && provider.linksProblem == null) {
@@ -242,7 +243,8 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
         onTap: () => routeToPage(context, ChannelSettingsPage(linkId: link.id)),
       );
     }
-    if (channel == ChatChannel.whatsapp) {
+    // WhatsApp stays a waitlist until the server config names its number.
+    if (channel == ChatChannel.whatsapp && provider.config.endpoint(channel) == null) {
       final joined = provider.whatsAppWaitlisted;
       return OmiSettingsRow(
         key: key,

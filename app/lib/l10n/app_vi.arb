@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "Bạn đã chuyển sang trả theo năm",
     "yearlySwitchDoneBody": "Đã thu {amount} hôm nay. Gia hạn vào {date}.",
     "episodePartsCount": "{count, plural, zero{{count} phần} one{{count} phần} two{{count} phần} few{{count} phần} many{{count} phần} other{{count} phần}}",
+    "chatAppsWaitingMessageIn": "Gửi tin nhắn trong {app}. Màn hình này sẽ cập nhật ngay khi Omi nhận được.",
+    "chatAppsCodeExpiredMessageIn": "Lấy mã mới và gửi từ {app}.",
     "consentShortMessage": "Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.",
     "consentAiProviders": "Được xử lý bằng {providers}."
 }

@@ -376,6 +376,9 @@ jobs:
             DEMAND_PROCESSING_PERCENT=0
             PROACTIVITY_V2_POSTHOG_TOKEN=phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
             PROACTIVITY_V2_POSTHOG_HOST=https://us.posthog.com
+            OMI_FLAGS_FIRESTORE_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            OMI_FLAGS_FIRESTORE_DATABASE=omi-flags
+            OMI_FLAGS_SOURCE=dual
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             USE_VERTEX_AI=true
             TTS_PROVIDER=gemini

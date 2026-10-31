@@ -184,6 +184,7 @@ Widget chatAppsHost(
       ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity ?? StubConnectivity()),
     ],
     child: MaterialApp(
+      debugShowCheckedModeBanner: false,
       theme: buildOmiTheme(brightness: brightness),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

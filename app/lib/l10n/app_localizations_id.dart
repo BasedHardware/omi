@@ -14962,6 +14962,16 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Kirim pesan di $app. Layar ini akan diperbarui segera setelah Omi menerimanya.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dapatkan kode baru lalu kirim dari $app.';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi menggunakan AI untuk mengubah percakapanmu menjadi catatan. Kamu bisa menghapusnya kapan saja.';
 

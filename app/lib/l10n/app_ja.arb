@@ -4516,6 +4516,8 @@
     "yearlySwitchDoneTitle": "年払いに切り替わりました",
     "yearlySwitchDoneBody": "本日{amount}を請求しました。次回更新は{date}です。",
     "episodePartsCount": "{count, plural, zero{{count} パート} one{{count} パート} two{{count} パート} few{{count} パート} many{{count} パート} other{{count} パート}}",
+    "chatAppsWaitingMessageIn": "{app}でメッセージを送信してください。Omiが受信するとすぐにこの画面が更新されます。",
+    "chatAppsCodeExpiredMessageIn": "新しいコードを取得して、{app}アプリから送信してください。",
     "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
     "consentAiProviders": "{providers} で処理されます。"
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -48,6 +49,52 @@ class _EpisodeCapture extends AuditCaptureProvider {
 
 final episodeScenarios = <AuditScenario>[
   AuditScenario(
+    id: 'episodes-home-processing',
+    title: 'Home closing episode: one processing row, then the completed episode',
+    page: 'lib/pages/home/home_content.dart (HomeContentPage with HomeFrame chrome)',
+    state: 'Fictional dinner episode with two processing members, followed by completion',
+    run: (a) async {
+      final now = DateTime.now();
+      final closed = _closedFixture(day: DateTime(now.year, now.month, now.day));
+      final pending = [
+        for (final member in closed.members)
+          ServerConversation(
+            id: member.id,
+            createdAt: member.createdAt,
+            startedAt: member.startedAt,
+            status: ConversationStatus.processing,
+            structured: Structured('', ''),
+          )
+      ];
+      final history = ConversationProvider(isSignedIn: () => false)
+        ..isLoadingConversations = false
+        ..processingConversations = pending;
+      final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed])),
+      )
+        ..debugSetLive(null)
+        ..debugSetHomeEpisodes([closed]);
+      addTearDown(history.dispose);
+      addTearDown(episodes.dispose);
+      await a.pump(const HomeFrame(), scaffold: false, providers: [
+        ChangeNotifierProvider<ConversationProvider>.value(value: history),
+        ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+      ]);
+      expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+      expect(find.text('Dinner and plans for the weekend'), findsNothing);
+      await a.shot('Episode ended; both members processing in one row', step: 'processing');
+      history
+        ..processingConversations = []
+        ..conversations = closed.members
+        ..groupConversationsByDate();
+      await a.tester.pump();
+      expect(find.byKey(const Key('home_processing_row')), findsNothing);
+      expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
+      await a.shot('Processing finished; same slot becomes the episode row', step: 'complete');
+    },
+  ),
+  AuditScenario(
     id: 'episodes-home-chrome',
     title: 'Full Home with a live episode today and closed episodes yesterday',
     page: 'lib/pages/home/home_content.dart (HomeContentPage with HomeFrame chrome)',
@@ -97,6 +144,9 @@ final episodeScenarios = <AuditScenario>[
       expect(find.text('Today'), findsOneWidget);
       expect(find.text('Yesterday'), findsOneWidget);
       expect(find.text('Planning Saturday’s trail'), findsOneWidget);
+      final snippet = a.tester.widget<Text>(
+          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
+      expect(snippet.textSpan!.toPlainText(), endsWith('The newest line keeps my label.'));
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
       expect(find.text('A quick call about the garden'), findsOneWidget);
       await a.shot('Open full Home with its header, Today live episode and Yesterday rows');

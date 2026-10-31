@@ -14975,6 +14975,16 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošljite sporočilo v aplikaciji $app. Ta zaslon se posodobi, takoj ko ga Omi prejme.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Pridobite novo kodo in jo pošljite iz aplikacije $app.';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.';
 

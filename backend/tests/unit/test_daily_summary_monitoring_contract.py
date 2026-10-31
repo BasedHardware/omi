@@ -114,12 +114,15 @@ def test_feature_health_row_carries_the_daily_recap_outcome():
     next_row = next(i for i, p in enumerate(top) if i > feature_row and p['type'] == 'row')
     stats = top[feature_row + 1 : next_row]
     recap = [p for p in stats if p['title'].startswith(('Daily recap', 'Recap'))]
-    assert [p['title'] for p in recap] == [
-        'Daily recap generation (3h)',
+    assert [p['title'] for p in recap] == ['Daily recaps (3h)']
+    recap_row = next(p for p in top if p['title'] == 'Daily recaps — generation and delivery job health')
+    detail = recap_row['panels'][:3]
+    assert [p['title'] for p in detail] == [
         'Daily recaps generated (24h)',
         'Recap generation failures (3h)',
         'Recap job passes (1h, expect 4)',
     ]
+    recap = recap + detail
     success = recap[0]
     assert success['fieldConfig']['defaults']['unit'] == 'percent'
     assert success['fieldConfig']['defaults']['thresholds']['steps'][1] == {'color': 'orange', 'value': 90}
@@ -148,7 +151,7 @@ def test_recap_dashboard_row_and_no_grid_overlap():
     doc = json.loads(DASHBOARD.read_text())
     row = next(p for p in doc['panels'] if p['title'] == 'Daily recaps — generation and delivery job health')
     assert row['collapsed'] is True
-    panels = row['panels']
+    panels = row['panels'][3:]
     assert [p['title'] for p in panels] == [
         'Recap outcomes per 15 minutes',
         'Cohort passes: all vs incomplete',

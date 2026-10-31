@@ -14975,6 +14975,16 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Envie a mensagem no app $app. Esta tela é atualizada assim que a Omi a receber.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Gere um novo código e envie pelo app $app.';
+  }
+
+  @override
   String get consentShortMessage =>
       'O Omi usa IA para transformar suas conversas em notas. Você pode excluí-las quando quiser.';
 

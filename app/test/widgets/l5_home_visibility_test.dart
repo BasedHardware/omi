@@ -254,9 +254,15 @@ void main() {
     await tester.pumpWidget(screen);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(ConversationListItem), findsOneWidget);
-    expect(find.byType(ProcessingConversationRow), findsNothing);
+    expect(find.byType(ConversationListItem), findsNothing);
+    expect(find.byType(ProcessingConversationRow), findsOneWidget);
     expect(find.text('Wrapping up lunch'), findsOneWidget);
+    final completed = ServerConversation.fromJson({...member.toJson(), 'status': 'completed'});
+    history.removeProcessingConversation(member.id);
+    await history.addConversation(completed);
+    await tester.pump();
+    expect(find.byType(ProcessingConversationRow), findsNothing);
+    expect(find.byType(ConversationListItem), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

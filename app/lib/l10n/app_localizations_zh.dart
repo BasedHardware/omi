@@ -14715,6 +14715,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '在“$app”中发送这条消息。Omi 一收到，此屏幕就会更新。';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return '获取新验证码，并从“$app”中发送。';
+  }
+
+  @override
   String get consentShortMessage => 'Omi 用 AI 把你的对话整理成笔记。你可以随时删除。';
 
   @override

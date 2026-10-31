@@ -448,6 +448,7 @@ def test_link_availability_reports_reason_per_channel(monkeypatch):
     assert router._availability(Store(), 'uid') == {
         'telegram': {'available': True, 'reason': None, 'waitlisted': False},
         'imessage': {'available': False, 'reason': 'channel_plan', 'waitlisted': False},
+        'whatsapp': {'available': True, 'reason': None, 'waitlisted': False},
     }
 
 

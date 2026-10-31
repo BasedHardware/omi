@@ -14959,6 +14959,16 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'پیغام کو $app میں بھیجیں۔ Omi کو ملتے ہی یہ اسکرین اپ ڈیٹ ہو جائے گی۔';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'نیا کوڈ حاصل کریں اور اسے $app سے بھیجیں۔';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi AI کی مدد سے آپ کی گفتگو کو نوٹس میں بدلتا ہے۔ آپ انہیں کسی بھی وقت حذف کر سکتے ہیں۔';
 

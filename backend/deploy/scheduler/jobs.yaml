@@ -207,7 +207,9 @@ environments:
         owner: backend/routers/enrichment.py
       - name: dream-agent-sweep-hourly
         region: us-central1
-        schedule: "0 * * * *"
+        # :00 and :30 (David 2026-10-30: fill idle reservation); each drain is 28 min, so ticks never
+        # overlap. Kill switch for the :30 tick: DREAM_HALF_HOUR_SWEEP_ENABLED=false on backend-sync.
+        schedule: "0,30 * * * *"
         time_zone: UTC
         state: ENABLED
         target:
