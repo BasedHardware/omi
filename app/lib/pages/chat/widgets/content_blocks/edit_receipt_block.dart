@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -21,6 +20,7 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/services/auth_service.dart';
 
 import 'chat_block_chrome.dart';
 import 'conversation_link_blocks.dart';
@@ -250,12 +250,12 @@ Future<bool> openEditReceiptTarget(
       }
       if (memory == null) {
         // Older than the loaded page: walk the owner-wide index like a deep link does.
-        final uid = FirebaseAuth.instance.currentUser?.uid;
+        final uid = AuthService.instance.currentUser?.uid;
         if (uid == null) return false;
         memory = await resolveIndexedMemoryById(
           id,
           uid: uid,
-          ownerIsCurrent: () => FirebaseAuth.instance.currentUser?.uid == uid,
+          ownerIsCurrent: () => AuthService.instance.currentUser?.uid == uid,
         );
       }
       if (!context.mounted || memory == null) return false;

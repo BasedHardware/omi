@@ -339,7 +339,7 @@ Future _init() async {
   }
 
   if (PhysicalQualification.enabled) {
-    final restored = FirebaseAuth.instance.currentUser;
+    final restored = AuthService.instance.currentUser;
     if (restored != null && restored.uid != PhysicalQualification.fixtureUid) {
       throw StateError('Physical qualification refuses a different persisted principal.');
     }
@@ -371,7 +371,7 @@ Future _init() async {
     }
     // Fail-closed cutover gate before product traffic / offline uploads.
     // Anonymous Firebase sessions are not cutover product owners.
-    final bootstrapUser = FirebaseAuth.instance.currentUser;
+    final bootstrapUser = AuthService.instance.currentUser;
     if (bootstrapUser != null && !bootstrapUser.isAnonymous) {
       await PhysicalQualification.startupStage(
         'bind_owner',
@@ -400,13 +400,13 @@ Future _init() async {
   }
   if (isAuth) {
     PlatformManager.instance.crashReporter.identifyUser(
-      FirebaseAuth.instance.currentUser?.email ?? '',
+      AuthService.instance.currentUser?.email ?? '',
       SharedPreferencesUtil().fullName,
       SharedPreferencesUtil().uid,
     );
   }
   if (!PhysicalQualification.enabled) {
-    AnalyticsManager().bindIdentity(FirebaseAuth.instance.currentUser?.uid);
+    AnalyticsManager().bindIdentity(AuthService.instance.currentUser?.uid);
   } else {
     FlutterError.onError = (details) {
       unawaited(PhysicalQualification.runtimeEvent('flutter_error', error: details.exception, stack: details.stack));
@@ -622,7 +622,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     // Apply fresh cutover control before waking WAL recovery so a stale
     // legacy/allow projection cannot admit one offline upload.
-    final resumeUser = FirebaseAuth.instance.currentUser;
+    final resumeUser = AuthService.instance.currentUser;
     final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
     await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
     SyncReconciler.instance.onForeground();

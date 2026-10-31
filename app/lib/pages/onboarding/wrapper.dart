@@ -9,7 +9,6 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
@@ -628,9 +627,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         goNext: () {
           _goNext(); // Go to Primary Language page
           IntercomManager.instance.updateUser(
-            FirebaseAuth.instance.currentUser!.email,
-            FirebaseAuth.instance.currentUser!.displayName,
-            FirebaseAuth.instance.currentUser!.uid,
+            AuthService.instance.currentUser!.email,
+            AuthService.instance.currentUser!.displayName,
+            AuthService.instance.currentUser!.uid,
           );
           PlatformManager.instance.analytics.onboardingStepCompleted('Name');
         },
