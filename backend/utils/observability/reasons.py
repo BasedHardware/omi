@@ -49,6 +49,7 @@ class ReasonFamily(StrEnum):
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -77,6 +78,15 @@ class SyncProcessingHoldOutcome(StrEnum):
     UNCHANGED = 'unchanged'
     IMMATERIAL = 'immaterial'
     LATE_CAP = 'late_cap'
+
+
+class ListenSessionTranscriptOutcome(StrEnum):
+    """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
+
+    UNKNOWN = 'unknown'
+    TRANSCRIBED = 'transcribed'
+    NO_TRANSCRIPT = 'no_transcript'
+    TOO_SHORT = 'too_short'
 
 
 class PersonVoiceQualityReason(StrEnum):

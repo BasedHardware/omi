@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from config.soniox_idle import COHORT_SALT
 from config.policy.batch import cohort_bucket
 from models.users import PlanType
+import utils.transcribe_store as store
 from utils.observability import demand_cohort, soniox_idle_arm
 from utils.observability.soniox_idle_arm import IdleArmLedger
 
@@ -109,9 +111,9 @@ def test_unknown_outcome_and_plan_fall_back_to_closed_labels():
     ledger = IdleArmLedger(None)
     ledger.outcome = 'surprise'
     ledger.plan = 'enterprise'
-    before = _value(soniox_idle_arm.SESSIONS, arm='control', plan='unknown', outcome='none')
+    before = _value(soniox_idle_arm.SESSIONS, arm='control', plan='unknown', outcome='unknown')
     ledger.record(None)
-    assert _value(soniox_idle_arm.SESSIONS, arm='control', plan='unknown', outcome='none') == before + 1
+    assert _value(soniox_idle_arm.SESSIONS, arm='control', plan='unknown', outcome='unknown') == before + 1
 
 
 def test_demand_telemetry_feeds_the_ledger(monkeypatch):
@@ -138,3 +140,75 @@ def test_demand_telemetry_feeds_the_ledger(monkeypatch):
 def test_session_ledger_ignores_missing_or_foreign_values():
     assert soniox_idle_arm.session_ledger(None) is None
     assert soniox_idle_arm.session_ledger(SimpleNamespace(idle_arm='x')) is None
+
+
+def test_plan_is_pinned_once():
+    ledger = IdleArmLedger(None)
+    ledger.set_plan(SimpleNamespace(plan=PlanType.plus))
+    ledger.set_plan(None)
+    assert ledger.plan == 'paid'
+
+
+def test_word_overflow_sessions_are_excluded_from_the_word_bar(monkeypatch):
+    monkeypatch.setattr(soniox_idle_arm, 'MAX_TRACKED_SEGMENTS', 1)
+    ledger = IdleArmLedger(None)
+    ledger.add_capture(10.0)
+    ledger.segments([{'id': 'a', 'text': 'one two'}, {'id': 'b', 'text': 'three'}], [])
+    assert ledger.words_truncated
+    labels = {'arm': 'control', 'plan': 'unknown'}
+    words = _value(soniox_idle_arm.TRANSCRIPT_WORDS, **labels)
+    word_capture = _value(soniox_idle_arm.WORD_CAPTURE_SECONDS, **labels)
+    overflow = _value(soniox_idle_arm.WORD_OVERFLOW_SESSIONS, **labels)
+    ledger.record(None)
+    assert _value(soniox_idle_arm.TRANSCRIPT_WORDS, **labels) == words
+    assert _value(soniox_idle_arm.WORD_CAPTURE_SECONDS, **labels) == word_capture
+    assert _value(soniox_idle_arm.WORD_OVERFLOW_SESSIONS, **labels) == overflow + 1
+
+
+def test_live_speaker_decisions_by_arm_with_bounded_labels():
+    ledger = IdleArmLedger(None)
+    ledger.speaker_decision('owner', 'accepted')
+    ledger.speaker_decision('owner', 'accepted')
+    ledger.speaker_decision('robot', 'maybe')
+    labels = {'arm': 'control', 'plan': 'unknown'}
+    accepted = _value(soniox_idle_arm.SPEAKER_DECISIONS, target='owner', decision='accepted', **labels)
+    fallback = _value(soniox_idle_arm.SPEAKER_DECISIONS, target='person', decision='rejected', **labels)
+    ledger.record(None)
+    assert _value(soniox_idle_arm.SPEAKER_DECISIONS, target='owner', decision='accepted', **labels) == accepted + 2
+    assert _value(soniox_idle_arm.SPEAKER_DECISIONS, target='person', decision='rejected', **labels) == fallback + 1
+
+
+def test_pin_plan_reads_once_in_the_background(monkeypatch):
+    calls = []
+
+    class _Persistence:
+        async def call(self, fn, uid):
+            calls.append(uid)
+            return fn(uid)
+
+    monkeypatch.setattr(store.user_db, 'get_user_valid_subscription', lambda uid: SimpleNamespace(plan=PlanType.plus))
+    telemetry = demand_cohort.DemandTelemetry('ineligible')
+    telemetry.idle_arm = IdleArmLedger(None)
+    host = SimpleNamespace(demand_telemetry=telemetry, persistence=_Persistence(), request=SimpleNamespace(uid='u1'))
+    asyncio.run(soniox_idle_arm.pin_plan(host))
+    assert calls == ['u1']
+    assert telemetry.idle_arm.plan == 'paid'
+
+
+def test_record_session_tolerates_missing_runtime():
+    soniox_idle_arm.record_session(None, None)
+    soniox_idle_arm.note_speaker_decision(None, 'owner', 'accepted')
+
+
+def test_start_plan_pin_without_supervisor_does_not_raise():
+    telemetry = demand_cohort.DemandTelemetry('ineligible')
+    telemetry.idle_arm = IdleArmLedger(None)
+
+    class _Host:
+        demand_telemetry = telemetry
+
+        def spawn(self, coro, *, name):
+            raise AttributeError('no task_supervisor')
+
+    soniox_idle_arm.start_plan_pin(_Host())
+    assert telemetry.idle_arm.plan == 'unknown'

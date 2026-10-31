@@ -639,6 +639,7 @@ class ListenSessionRuntime:
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         capture_demand_admission(self)
+        soniox_idle_arm.start_plan_pin(self)
         demand_vendor_start = self._demand_cohort == 'admitted'
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
         demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
@@ -1495,6 +1496,7 @@ async def run_listen_session(request: ListenRequest) -> None:
         runtime = ListenSessionRuntime(request)
         await runtime.run()
     finally:
+        soniox_idle_arm.record_session(runtime, None)  # idempotent; covers exits that skip teardown
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
             record_listen_no_audio_teardown(
                 source=request.source,
