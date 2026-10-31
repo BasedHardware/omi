@@ -204,6 +204,70 @@ void main() {
       await transport.dispose();
     });
 
+    test('in full mode: passes glasses HFP UID when another headset is first in the list', () async {
+      String? capturedUid;
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['full']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[
+            BluetoothHfpInput(uid: 'airpods-uid', name: 'AirPods Pro'),
+            BluetoothHfpInput(uid: 'glasses-uid', name: 'Ray-Ban Meta'),
+          ],
+        ],
+      );
+      setRayBanMetaHostApiHandler('startAudioCapture', (message) async {
+        capturedUid = (message as List<Object?>).first as String?;
+        return <Object?>[];
+      });
+
+      final transport = RayBanMetaTransport('meta-device-1', deviceName: 'Ray-Ban Meta');
+      await transport.startAudioCapture();
+
+      expect(capturedUid, 'glasses-uid');
+      await transport.dispose();
+    });
+
+    test('in full mode: throws when no glasses HFP input is available', () async {
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['full']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[BluetoothHfpInput(uid: 'airpods-uid', name: 'AirPods Pro')],
+        ],
+      );
+
+      final transport = RayBanMetaTransport('meta-device-1', deviceName: 'Ray-Ban Meta');
+      expect(
+        () => transport.startAudioCapture(),
+        throwsA(
+          isA<StateError>().having((e) => e.message, 'message', contains('Ray-Ban Meta microphone is unavailable')),
+        ),
+      );
+      await transport.dispose();
+    });
+
+    test('in full mode: matches glasses by deviceName if custom named', () async {
+      String? capturedUid;
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['full']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[BluetoothHfpInput(uid: 'custom-uid', name: 'My Special Meta Frames')],
+        ],
+      );
+      setRayBanMetaHostApiHandler('startAudioCapture', (message) async {
+        capturedUid = (message as List<Object?>).first as String?;
+        return <Object?>[];
+      });
+
+      final transport = RayBanMetaTransport('meta-device-1', deviceName: 'My Special Meta Frames');
+      await transport.startAudioCapture();
+
+      expect(capturedUid, 'custom-uid');
+      await transport.dispose();
+    });
+
     test('connects a renamed input only when its stable UID matches', () async {
       setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
       setRayBanMetaHostApiHandler(
