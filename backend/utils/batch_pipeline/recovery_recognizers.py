@@ -13,6 +13,7 @@ from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
     at_stage,
+    stage_failure,
     RecoveryFailure,
     MultilingualEmpty,
     WordsWithoutVad,
@@ -113,8 +114,8 @@ async def second_transcribe_async(item, audio, empty, second_chance=False):
     output, duration, spans = await run_blocking(sync_executor, independent_audio, item, audio, empty)
     try:
         response = await soniox_transcribe_async(output, duration, second_chance=second_chance)
-    except Exception:
-        raise RecoveryFailure('provider', 'provider_failed') from None
+    except Exception as error:
+        raise stage_failure('provider', 'provider_failed', error) from None
     return await run_blocking(
         sync_executor, independent_payload, response, duration, spans, getattr(empty, 'worker_speech', None)
     )

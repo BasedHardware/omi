@@ -8118,6 +8118,12 @@ uses the same boundary. Previously persisted results reconcile without another
 provider call. The switch does not enable new batch admission or bypass a
 recovery policy, allowance, consent or privacy fence.
 
+Recovery exception boundaries, including the async independent Soniox call,
+emit `event=batch_recovery_stage_failure` with bounded stage/reason and the
+exception type name only. These intermediate warnings do not imply terminal
+failure; another provider may succeed. Logging errors preserve the same
+`RecoveryFailure`, and terminal `event=batch_recovery_failure` is unchanged.
+
 Worker recovery/validation handoffs and CPU recovery failure settlements carry
 `measured_held_vad_speech_seconds` on the job. This is the validated, unpadded
 VAD union, never captured duration or transcript length. A pre-VAD failure
