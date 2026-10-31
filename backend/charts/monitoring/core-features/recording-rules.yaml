@@ -25,8 +25,8 @@ spec:
           expr: sum by (journey, outcome) (rate(omi_journey_terminal_total[5m]))
         - record: job_journey_outcome:omi_client_journey_terminal:rate5m
           expr: sum by (job, journey, outcome) (rate(omi_client_journey_terminal_total[5m]))
-        - record: outcome:llm_gateway_requests:rate5m
-          expr: sum by (outcome) (rate(llm_gateway_requests_total[5m]))
+        - record: lane_outcome:llm_gateway_requests:rate5m
+          expr: sum by (lane_id, outcome) (rate(llm_gateway_requests_total[5m]))
         - record: outcome:omi_conversation_summary_vector_upserts:rate5m
           expr: sum by (outcome) (rate(omi_conversation_summary_vector_upserts_total[5m]))
         - record: event_plan:omi_subscription_events:rate5m

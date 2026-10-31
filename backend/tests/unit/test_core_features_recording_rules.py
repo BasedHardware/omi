@@ -28,7 +28,7 @@ def test_rules_only_record_and_drop_instance_labels():
         'source:omi_listen_accepted:rate5m': 'sum by (transcription_source) (rate(omi_listen_accepted_total[5m]))',
         'journey_outcome:omi_journey_terminal:rate5m': 'sum by (journey, outcome) (rate(omi_journey_terminal_total[5m]))',
         'job_journey_outcome:omi_client_journey_terminal:rate5m': 'sum by (job, journey, outcome) (rate(omi_client_journey_terminal_total[5m]))',
-        'outcome:llm_gateway_requests:rate5m': 'sum by (outcome) (rate(llm_gateway_requests_total[5m]))',
+        'lane_outcome:llm_gateway_requests:rate5m': 'sum by (lane_id, outcome) (rate(llm_gateway_requests_total[5m]))',
         'outcome:omi_conversation_summary_vector_upserts:rate5m': 'sum by (outcome) (rate(omi_conversation_summary_vector_upserts_total[5m]))',
         'event_plan:omi_subscription_events:rate5m': 'sum by (event, plan) (rate(omi_subscription_events_total[5m]))',
     }
