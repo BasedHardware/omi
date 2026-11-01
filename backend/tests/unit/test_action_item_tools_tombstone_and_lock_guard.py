@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from database import chat_edits, notifications as notification_db
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.retrieval.tool_services import action_items as service
 from utils.retrieval.tools import action_item_tools as tools
 
@@ -154,52 +155,36 @@ class TestActionItemsToolServiceLockAndTombstoneGuards:
         assert out == "Error: Action item 'deleted-1' not found."
         mock_update.assert_not_called()
 
+    def test_update_action_item_text_passes_expected_chat_state_fence(self, patched_env, monkeypatch):
+        live = _make_item('task-1', description='Old title', deleted=False, completed=False)
+        updated = _make_item('task-1', description='New title', deleted=False, completed=True)
+        calls = {'get': 0}
+
+        def fake_get(uid, item_id):
+            calls['get'] += 1
+            return live if calls['get'] == 1 else updated
+
+        monkeypatch.setattr(service.action_items_db, 'get_action_item', fake_get)
+        mock_update = MagicMock(return_value=True)
+        monkeypatch.setattr(service.action_items_db, 'update_action_item', mock_update)
+
+        out = service.update_action_item_text('uid-1', 'task-1', completed=True, description='New title')
+
+        assert "Updated 'New title'" in out
+        mock_update.assert_called_once()
+        _, kwargs = mock_update.call_args
+        assert 'expected_chat_state' in kwargs
+        assert kwargs['expected_chat_state']['before']['description'] == 'Old title'
+        assert kwargs['expected_chat_state']['before']['deleted'] is False
+
 
 class TestChatEditsDeletedTaskTombstoneFence:
     """`chat_edits.apply_update` must block overwriting already soft-deleted task tombstones while allowing soft-delete of live tasks."""
 
-    def _make_fake_client(self, stored_doc: dict):
-        state = {'doc': dict(stored_doc), 'updated_with': None}
-
-        class FakeSnapshot:
-            exists = True
-
-            def to_dict(self):
-                return dict(state['doc'])
-
-        class FakeRef:
-            def get(self, transaction=None):
-                return FakeSnapshot()
-
-            def collection(self, name):
-                return self
-
-            def document(self, doc_id):
-                return self
-
-        class FakeTx:
-            def update(self, ref, updates):
-                state['updated_with'] = dict(updates)
-                state['doc'].update(updates)
-
-        class FakeClient:
-            def collection(self, name):
-                return FakeRef()
-
-            def transaction(self):
-                return FakeTx()
-
-        return FakeClient(), state
-
-    def test_apply_update_rejects_already_deleted_task_tombstone(self, monkeypatch):
-        monkeypatch.setattr(chat_edits.firestore, 'transactional', lambda fn: fn)
-        monkeypatch.setattr(
-            chat_edits,
-            'run_with_transaction_contention_retry',
-            lambda tx_factory, fn, operation_name=None: fn(tx_factory()),
-        )
+    def test_apply_update_rejects_already_deleted_task_tombstone(self):
         tombstone = {'description': 'Old task', 'completed': False, 'deleted': True}
-        client, state = self._make_fake_client(tombstone)
+        path = ('users', 'uid-1', 'action_items', 'task-1')
+        client = StrictFirestore(rows={path: dict(tombstone)})
         expected = chat_edits.encode(tombstone)
 
         with pytest.raises(PermissionError, match='Edit target unavailable'):
@@ -211,17 +196,13 @@ class TestChatEditsDeletedTaskTombstoneFence:
                 {'description': 'Resurrected task', 'completed': True},
                 firestore_client=client,
             )
-        assert state['updated_with'] is None
+        assert client.rows[path] == tombstone
+        assert client.transactions[-1].updates == []
 
-    def test_apply_update_allows_soft_deleting_live_task(self, monkeypatch):
-        monkeypatch.setattr(chat_edits.firestore, 'transactional', lambda fn: fn)
-        monkeypatch.setattr(
-            chat_edits,
-            'run_with_transaction_contention_retry',
-            lambda tx_factory, fn, operation_name=None: fn(tx_factory()),
-        )
+    def test_apply_update_allows_soft_deleting_live_task(self):
         live_task = {'description': 'Live task', 'completed': False}
-        client, state = self._make_fake_client(live_task)
+        path = ('users', 'uid-1', 'action_items', 'task-1')
+        client = StrictFirestore(rows={path: dict(live_task)})
         expected = chat_edits.encode(live_task)
         now = datetime(2026, 1, 2, tzinfo=timezone.utc)
 
@@ -233,5 +214,5 @@ class TestChatEditsDeletedTaskTombstoneFence:
             {'deleted': True, 'deleted_at': now},
             firestore_client=client,
         )
-        assert state['updated_with'] == {'deleted': True, 'deleted_at': now}
+        assert client.transactions[-1].updates == [(path, {'deleted': True, 'deleted_at': now})]
         assert chat_edits.decode(after)['deleted'] is True

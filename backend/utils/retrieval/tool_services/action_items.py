@@ -280,7 +280,12 @@ def update_action_item_text(
         return "No changes specified."
 
     try:
-        action_items_db.update_action_item(uid, action_item_id, update_data)
+        from database import chat_edits
+
+        write_state = {
+            'before': chat_edits.encode({key: existing[key] for key in chat_edits.FIELDS['task'] if key in existing})
+        }
+        action_items_db.update_action_item(uid, action_item_id, update_data, expected_chat_state=write_state)
 
         # Re-fetch the authoritative post-write state so reminder reconciliation can't act on a stale
         # pre-update value (matches the update_action_item_tool path).
