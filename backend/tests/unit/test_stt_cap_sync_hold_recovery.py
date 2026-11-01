@@ -50,12 +50,22 @@ def test_sync_holds_enter_recovery_scope_with_live_only_lanes(prod_scope):
         ({'STT_CAP_RECOVERY_COHORT': 'uid:someone-else'}, False),
         ({'STT_CAP_RECOVERY_COHORT': 'uid:owner,typo'}, False),  # malformed denies all recovery
         ({'STT_CAP_DISPATCH_LANES': 'live,sync'}, True),  # explicit selection still works
+        ({'STT_CAP_DISPATCH_LANES': 'live,typo'}, False),  # malformed list denies, as selected() does
+        ({'STT_CAP_DISPATCH_LANES': 'live,'}, False),  # empty token is malformed too
+        ({'STT_CAP_DISPATCH_LANES': ' '}, True),  # blank list is the live default, sync not required
     ],
 )
 def test_sync_recovery_scope_follows_offline_switch_and_cohorts(prod_scope, monkeypatch, env, expected):
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     assert policy.recovery_admission_enabled(UID, 'sync') is expected
+
+
+def test_malformed_lane_list_denies_every_recovery_surface(prod_scope, monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,syncc')
+    assert not policy.selected(UID, 'live')
+    assert not policy.recovery_admission_enabled(UID, 'sync')
+    assert not policy.any_recovery_admission_enabled(UID)
 
 
 def test_empty_cap_cohort_admits_no_sync_recovery(prod_scope, monkeypatch):

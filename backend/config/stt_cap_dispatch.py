@@ -54,7 +54,8 @@ def execution_admission_configured() -> bool:
     )
 
 
-def selected(uid: str, lane: str) -> bool:
+def _selected_lanes() -> frozenset[str] | None:
+    """Parsed lane list; None when malformed, which denies every lane."""
     raw = os.getenv('STT_CAP_DISPATCH_LANES')
     lanes = (
         frozenset({'live'})
@@ -63,7 +64,12 @@ def selected(uid: str, lane: str) -> bool:
     )
     # An unknown/empty list token invalidates the whole selection. Never
     # map unknown call-site provenance to a permitted execution lane.
-    if not lanes <= LANES:
+    return lanes if lanes <= LANES else None
+
+
+def selected(uid: str, lane: str) -> bool:
+    lanes = _selected_lanes()
+    if lanes is None:
         return False
     if 'batch' in lanes and not _BATCH_LANE_READY:
         _warn_batch_not_ready()
@@ -134,10 +140,12 @@ def _offline_hold_recovery_selected(uid: str, lane: str) -> bool:
 
     Offline enforcement creates sync holds without consulting the lane list, so a
     live-only lane list must not strand them. Only recovery widens: intake and
-    consent gating keep reading ``execution_admission_enabled``.
+    consent gating keep reading ``execution_admission_enabled``. A malformed list
+    still denies, as it does in ``selected``; ``sync`` itself need not be listed.
     """
     return (
         lane == 'sync'
+        and _selected_lanes() is not None
         and offline_enforcement_enabled(lane)
         and execution_admission_configured()
         and cohort_admits(uid, cohort_tokens())
