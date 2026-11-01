@@ -45,6 +45,15 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+# L4 stockout (l4capacity 2026-11-01): out-of-resources in us-central1-a/b/c
+# alike, so nodes Parakeet frees as its floor falls go to up to 3 borrower
+# workers, not to GCE. Parakeet keeps priority 0 and preempts a borrower, which
+# stops within 120s (leases retry; no audio is lost). The OD floor above is
+# untouched. All three pools are on-demand g2-standard-8 + L4 with only the
+# nvidia.com/gpu taint. Kill switch: enabled false (removes -borrow and its HPA).
+borrowedNodePools:
+  enabled: true
+  pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
@@ -56,6 +65,10 @@ worker:
   shadowPercent: 25
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
+  # Strict-VAD shadow at 10% (batchdesign §9 PR-3, 2026-11-01): the shadow cost
+  # up to 0.6s of the 2.55s/unit flight. 100 restores full sampling for the
+  # silence qualification; 0 turns the shadow off entirely.
+  strictVadShadowPercent: 10
   apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
   audience: https://backend-sync-hhibjajaja-uc.a.run.app
   emptyAsrRecoveryEnabled: true
