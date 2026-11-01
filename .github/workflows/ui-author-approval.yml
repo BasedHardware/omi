@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # Never check out or execute the PR head with these credentials.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
