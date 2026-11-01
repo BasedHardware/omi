@@ -21,6 +21,7 @@ from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
 from utils.episodes.policy import utc
 from models.episode import EpisodeCloseReason
+from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
 from utils.conversations.fragment_visibility import is_relevance_discarded, is_user_curated
 
@@ -255,6 +256,7 @@ def project_episode(
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
     retained: list[dict[str, Any]] = []
+    hidden = 0
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
         if (
@@ -262,8 +264,10 @@ def project_episode(
             or not conversations.is_visible_conversation(row)
             or is_relevance_discarded(row)
             or row.get('sync_merged_into')
-            or (list_row and _too_short_for_a_home_row(row))
         ):
+            continue
+        if list_row and _too_short_for_a_home_row(row):
+            hidden += 1
             continue
         structured: dict[str, Any] = row.get('structured') or {}
         retained.append(
@@ -276,6 +280,8 @@ def project_episode(
                 'status': row.get('status') or 'completed',
             }
         )
+    if list_row:
+        episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None
     ids = {member['id'] for member in retained}

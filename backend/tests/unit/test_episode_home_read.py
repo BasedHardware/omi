@@ -328,3 +328,14 @@ def test_short_row_stays_when_anything_says_it_matters(monkeypatch, extra):
 def test_short_row_hide_has_a_kill_switch(monkeypatch):
     monkeypatch.setenv('HOME_HIDE_BELOW_FLOOR_ROWS', 'false')
     assert home_read.project_episode('u', _episode('c'), members={'c': _short_row()}, list_row=True) is not None
+
+
+def test_home_list_counts_shown_and_hidden_members_without_identity(monkeypatch):
+    monkeypatch.delenv('HOME_HIDE_BELOW_FLOOR_ROWS', raising=False)
+    counted = []
+    monkeypatch.setattr(home_read.episode_metrics, 'record_home_members', lambda **k: counted.append(k))
+    long_row = _short_row(summary_blocked_reason=None, structured={'title': 'long', 'overview': 'notes'})
+    home_read.project_episode('u', _episode('c', 'd'), members={'c': _short_row(), 'd': long_row}, list_row=True)
+    home_read.project_episode('u', _episode('c'), members={'c': _short_row()}, list_row=True)
+    home_read.project_episode('u', _episode('c'), members={'c': _short_row()})
+    assert counted == [{'shown': 1, 'hidden': 1}, {'shown': 0, 'hidden': 1}]
