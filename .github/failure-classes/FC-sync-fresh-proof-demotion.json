@@ -2,12 +2,12 @@
   "schema_version": 1,
   "id": "FC-sync-fresh-proof-demotion",
   "violated_contract": "Recent offline recordings from released clients without server capture proof must have a bounded path to fresh processing rather than joining the entire historical recovery backlog. Client timestamps must never authorize unbounded fresh capacity.",
-  "canonical_prevention": "Keep provenance classification distinct from recency. Promote recent LEGACY uploads only behind an explicit flag and an atomic per-user upload-count and byte budget. Demote budget exhaustion and store failure to isolated backfill, preserving invalid, future and lookback handling and persisted worker lane.",
+  "canonical_prevention": "Keep provenance classification distinct from recency. Promote recent LEGACY uploads only behind an explicit flag and an atomic per-user upload-count and byte budget. Demote budget exhaustion and store failure to isolated backfill, preserving invalid, future and lookback handling and persisted worker lane. Dormant since legacy-retire C9 (lr/10-delete-c9) deleted the legacy path this class guarded; the legacy-dark fence (test_legacy_dark.py) answers its remaining traffic.",
   "canonical_prevention_artifact": [
-    "backend/tests/unit/test_sync_legacy_fresh.py",
     "backend/tests/unit/test_sync_cloud_tasks.py"
   ],
   "evidence_prs": [],
   "scope_hints": ["backend/utils/sync/", "backend/routers/sync.py"],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-10-19T16:58:49Z"
 }

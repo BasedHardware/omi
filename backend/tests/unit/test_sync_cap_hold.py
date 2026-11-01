@@ -9,7 +9,8 @@ import wave
 
 import pytest
 
-from utils.sync import cap_hold, pipeline
+from utils.sync import cap_hold
+from utils.sync import legacy_segment_core as pipeline
 from utils import stt_cap_dispatch as cap
 
 
@@ -543,7 +544,7 @@ def test_late_denial_holds_without_spending_next_provider_call(tmp_path, monkeyp
     monkeypatch.setattr(pipeline, 'prerecorded', stt)
     monkeypatch.setattr(pipeline, 'modulate_prerecorded_from_bytes', alternate)
     monkeypatch.setattr(pipeline, 'sync_safety_wal_enabled', lambda: False)
-    monkeypatch.setattr(pipeline.minimal_redrive, 'paid_recovery_enabled', lambda _: True)
+    monkeypatch.setattr(pipeline.empty_recovery, 'enabled', lambda: True)
 
     def recover(path, *, transcribe, authorize, observe):
         authorize()

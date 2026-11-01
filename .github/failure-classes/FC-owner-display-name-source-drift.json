@@ -16,7 +16,7 @@
     "backend/utils/llm/chat.py",
     "backend/routers/listen/speakers.py",
     "backend/routers/listen/transcripts.py",
-    "backend/utils/sync/pipeline.py"
+    "backend/utils/sync/legacy_segment_core.py"
   ],
   "status": "open"
 }

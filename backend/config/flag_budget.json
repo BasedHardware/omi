@@ -19,8 +19,8 @@
     "config/policy": "policy snapshot (E1) owner"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 169,
-  "count": 196,
+  "budget": 157,
+  "count": 184,
   "names": {
     "BATCH_PIPELINE_RECORD_PROTOCOL_READY": {"owner": "two-lane lead", "review_by": "2026-11-01"},
     "CONVERSATION_OCCASION_RELEVANCE_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
@@ -184,29 +184,17 @@
     "SYNC_BACKFILL_GLOBAL_DAILY_HOURS": {"seeded": "2026-10-25"},
     "SYNC_BACKFILL_INFLIGHT_LIMIT": {"seeded": "2026-10-25"},
     "SYNC_BACKFILL_MAX_AGE_SECONDS": {"seeded": "2026-10-25"},
-    "SYNC_BACKFILL_ORDER": {"seeded": "2026-10-25"},
-    "SYNC_BACKFILL_ORDER_PERCENT": {"seeded": "2026-10-25"},
-    "SYNC_BACKFILL_ORDER_UID_ALLOWLIST": {"seeded": "2026-10-25"},
-    "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM": {"seeded": "2026-10-25"},
     "SYNC_BACKFILL_USER_DAILY_HOURS": {"seeded": "2026-10-25"},
     "SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_CLOCK_RUN_PARTITION_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_CONTENT_ID_SECRET": {"seeded": "2026-10-25"},
-    "SYNC_DURABLE_REDRIVE_GUARD": {"seeded": "2026-10-25"},
     "SYNC_DURABLE_STATUS_RECONCILIATION": {"seeded": "2026-10-25"},
     "SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_EMPTY_SUCCESS_GUARD_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_FRESH_CONVERSATION_TURN": {"seeded": "2026-10-25"},
     "SYNC_FRESH_MAX_AGE_SECONDS": {"seeded": "2026-10-25"},
-    "SYNC_INLINE_BACKFILL_CONCURRENCY": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_COMPLETION_CONVERGENCE": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_BURST_TOKENS": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_ENABLED": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_HOURLY_TOKENS": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_PERCENT": {"seeded": "2026-10-25"},
     "SYNC_LIVE_OVERLAP_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_MAX_VAD_SEGMENT_SECONDS": {"seeded": "2026-10-25"},
-    "SYNC_MINIMAL_REDRIVE_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_RETIRED_HANDLE_ACK_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_TASKS_INVOKER_SA": {"seeded": "2026-10-25"},
     "SYNC_TASKS_QUEUE": {"seeded": "2026-10-25"},
@@ -222,6 +210,54 @@
   "retired": {
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_FRESH_BURST_TOKENS": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_FRESH_ENABLED": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_FRESH_HOURLY_TOKENS": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_FRESH_PERCENT": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_ORDER": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_ORDER_PERCENT": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_ORDER_UID_ALLOWLIST": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_DURABLE_REDRIVE_GUARD": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_INLINE_BACKFILL_CONCURRENCY": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_COMPLETION_CONVERGENCE": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_MINIMAL_REDRIVE_ENABLED": {
+      "on": "2026-11-01",
       "replaced_by": null
     }
   }

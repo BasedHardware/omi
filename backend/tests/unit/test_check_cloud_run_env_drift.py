@@ -82,16 +82,12 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
                     *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend-sync'])),
                     {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_BACKFILL_ORDER_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
-                    {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
-                    {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
                 ]
             },
             'backend-sync-backfill': {
                 'env': [
                     *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend-sync-backfill'])),
                     {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
-                    {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
-                    {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
                 ]
             },
             'backend-integration': {

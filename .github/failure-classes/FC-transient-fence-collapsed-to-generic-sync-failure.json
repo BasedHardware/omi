@@ -5,7 +5,7 @@
   "canonical_prevention": "Do not swallow DestructiveOperationInProgress on the sync reprocess path: re-raise it from merged conversation enrichment and from process_segment's generic except. Run _save_action_items inline when is_reprocess=True so the fence is observable. At the Cloud Tasks handler, map the fence to error_code destructive_operation_in_progress before failure_from_exception, keep it retryable (HTTP 500 + fenced_mark_job_queued_for_retry), and record that code in the sync failure-reason ledger.",
   "canonical_prevention_artifact": [
     "backend/utils/stt/outcomes.py",
-    "backend/utils/sync/pipeline.py",
+    "backend/utils/sync/legacy_segment_core.py",
     "backend/utils/conversations/process_conversation.py",
     "backend/routers/sync.py",
     "backend/tests/unit/test_sync_cloud_tasks.py",

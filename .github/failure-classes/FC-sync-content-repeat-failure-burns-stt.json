@@ -9,7 +9,7 @@
   "evidence_prs": [],
   "scope_hints": [
     "backend/database/sync_ledger.py",
-    "backend/utils/sync/pipeline.py",
+    "backend/utils/sync/legacy_segment_core.py",
     "backend/routers/sync.py"
   ],
   "status": "open"

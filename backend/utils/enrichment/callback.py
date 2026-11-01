@@ -1,9 +1,9 @@
 """Enrichment callback: re-run conversation processing after new segments land (plan C2).
 
-Extracted verbatim from ``utils/sync/pipeline.py:_reprocess_conversation_after_update`` so the
-``sr-`` outbox no longer imports legacy transcription. The legacy copy stays for the non-coalescing
-direct path until pipeline.py is unfrozen (#21932/#20662) or deleted (C11);
-``tests/unit/test_enrichment_callback_parity.py`` keeps the two bodies identical until then.
+Extracted from the deleted ``utils/sync/pipeline.py:_reprocess_conversation_after_update`` so the
+``sr-`` outbox does not import legacy transcription. Since legacy-retire C11 this module is the
+canonical owner; the cap-hold core (``utils/sync/legacy_segment_core.py``) keeps its own frozen copy
+until lane 8's batch cap-hold rehome deletes it.
 """
 
 from __future__ import annotations

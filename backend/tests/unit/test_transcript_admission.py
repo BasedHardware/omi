@@ -126,7 +126,7 @@ def test_real_listen_enqueue_filters_before_either_queue(monkeypatch, v2):
 
 def test_live_and_sync_hooks_import_one_authority():
     root = Path(__file__).resolve().parents[2]
-    for path in (root / 'routers/listen/transcripts.py', root / 'utils/sync/pipeline.py'):
+    for path in (root / 'routers/listen/transcripts.py', root / 'utils/sync/legacy_segment_core.py'):
         tree = ast.parse(path.read_text())
         assert any(isinstance(n, ast.ImportFrom) and n.module == 'utils.stt.transcript_admission' for n in tree.body)
     # Both sources invoke the same admission policy, with no second model call.

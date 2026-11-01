@@ -26,7 +26,7 @@ from utils.observability.reasons import SyncCaptureTimeReason
 from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import capture_clock, lanes
 from utils.sync.capture_clock import CaptureTimeWindowError, SyncCaptureTimeRejected, capture_time_rejection
-from utils.sync.pipeline import _retrieve_file_paths_v2
+from utils.sync.legacy_segment_core import _retrieve_file_paths_v2
 
 
 def _capture_time_counter(outcome: str) -> float:
@@ -162,15 +162,26 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(router, 'resolve_transcription_allowance', lambda _: Mock(reason='plan_allowance_exhausted'))
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', lambda *_a, **_k: [])
     monkeypatch.setattr(router, '_cleanup_files', Mock())
-    monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
     monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
     from config.policy import BatchUnitPolicy
+    from fastapi.responses import JSONResponse
 
     monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda *_a: 'content-1')
-    monkeypatch.setattr(router, 'create_sync_job', Mock())
-    monkeypatch.setattr(router, 'claim_sync_content', lambda *_a: {'outcome': 'held', 'result': {}})
-    monkeypatch.setattr(router, 'mark_job_completed', Mock())
+    # Legacy admission is retired (C9): batch is the only admission. Its seams are stubbed here; a test reads
+    # router.accept_batch_upload.calls to see what was admitted.
+    calls = Mock()
+
+    async def record_response(**_kwargs):
+        return router.RecordUploadRoute.BATCH
+
+    async def accept(**kwargs):
+        calls(**kwargs)
+        return JSONResponse(status_code=202, content={'job_id': 'j', 'status': 'queued'})
+
+    accept.calls = calls
+    monkeypatch.setattr(router, 'registered_record_response', record_response)
+    monkeypatch.setattr(router, 'accept_batch_upload', accept)
 
     app = FastAPI()
     app.include_router(router.router)
@@ -190,7 +201,8 @@ def test_v2_route_accepts_capture_time_ahead_of_server_within_tolerance(client):
     response = _post_sync(client, _filename(170))
 
     assert response.status_code == 202, response.text
-    assert response.json()['status'] == 'completed'
+    assert response.json()['status'] == 'queued'
+    router.accept_batch_upload.calls.assert_called_once()
 
 
 def test_v2_route_rejects_five_year_future_stamp_with_typed_400(client):
@@ -331,10 +343,10 @@ def test_v2_route_shifts_recording_session_bounds_to_server_clock(client, monkey
     assert intake['audio_end_seconds'] <= server_now + 2.0
 
 
-@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
-@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
-@patch('utils.sync.pipeline.postprocess_words')
-@patch('utils.sync.pipeline.get_timestamp_from_path')
+@patch('utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.legacy_segment_core.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.legacy_segment_core.postprocess_words')
+@patch('utils.sync.legacy_segment_core.get_timestamp_from_path')
 def _run_skewed_segment(
     raw_start, request_offset, bind_closest, mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
 ):
@@ -353,7 +365,7 @@ def _run_skewed_segment(
 
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
     from tests.unit.test_sync_cross_job_assignment import chunk, intake
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     now_test = datetime.now(timezone.utc).timestamp()
     mock_timestamp.return_value = raw_start
@@ -374,13 +386,17 @@ def _run_skewed_segment(
 
     response = {'new_memories': set(), 'updated_memories': set()}
     errors: list = []
-    with patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', side_effect=fake_closest), patch(
+    with patch(
+        'utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', side_effect=fake_closest
+    ), patch(
         'utils.conversations.lifecycle.ingest_sync_conversation',
         side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
-    ), patch('utils.sync.pipeline.identify_speakers_for_segments'), patch(
-        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
     ), patch(
-        'utils.sync.pipeline.get_wav_duration', return_value=10
+        'utils.sync.legacy_segment_core.identify_speakers_for_segments'
+    ), patch(
+        'utils.sync.legacy_segment_core.conversations_db.get_manual_speaker_receipt', return_value={}
+    ), patch(
+        'utils.sync.legacy_segment_core.get_wav_duration', return_value=10
     ):
         result = pipeline.process_segment(
             'seg_123.wav',
@@ -421,63 +437,6 @@ def test_skewed_segment_stores_the_full_duration_pair():
     assert duration == pytest.approx(10.0, abs=0.05)
     assert stored['started_at'].timestamp() == pytest.approx(now_test - 10, abs=1.0)
     assert stored['finished_at'].timestamp() <= datetime.now(timezone.utc).timestamp()
-
-
-@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
-@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
-@patch('utils.sync.pipeline.postprocess_words')
-@patch('utils.sync.pipeline.get_timestamp_from_path')
-def test_minimal_redrive_attach_lookup_compares_on_server_clock(
-    mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
-):
-    """The attach-first fallback lookup also receives server-clock bounds."""
-    from models.transcript_segment import TranscriptSegment
-
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-    from tests.unit.test_sync_cross_job_assignment import conversations, intake
-    from utils.sync import pipeline
-
-    now_test = datetime.now(timezone.utc).timestamp()
-    mock_timestamp.return_value = now_test + 171
-    mock_postprocess.return_value = [
-        TranscriptSegment(text='Skewed capture speech', start=0.0, end=10.0, is_user=False)
-    ]
-    attached = {}
-
-    def fake_attach(_uid, start, end, _capture):
-        attached.update(start=start, end=end)
-        return None
-
-    response = {'new_memories': set(), 'updated_memories': set()}
-    errors: list = []
-    store = StrictFirestore()
-    with patch.object(
-        pipeline.minimal_redrive, 'select_service', lambda *a, **k: ('modulate', 'multi', 'velma-2')
-    ), patch.object(pipeline.minimal_redrive, 'attach_target', fake_attach), patch(
-        'utils.conversations.lifecycle.ingest_sync_conversation',
-        side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
-    ), patch(
-        'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
-    ), patch(
-        'utils.sync.pipeline.identify_speakers_for_segments'
-    ), patch(
-        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
-    ), patch(
-        'utils.sync.pipeline.get_wav_duration', return_value=10
-    ):
-        result = pipeline.process_segment(
-            'seg_123.wav',
-            'u',
-            response,
-            MagicMock(),
-            errors,
-            redrive_mode='minimal',
-            capture_time_offset=181.0,
-        )
-    assert result and errors == []
-    assert attached['start'] == pytest.approx(now_test - 10, abs=1.0)
-    assert attached['end'] == pytest.approx(now_test, abs=1.0)
-    assert len(conversations(store)) == 1
 
 
 # --- fix round 2: v1 staging keeps the pre-PR zero future tolerance ---
@@ -588,10 +547,10 @@ def test_lineage_planner_binds_skewed_segment_on_server_clock(monkeypatch):
     assert unshifted_reasons['segment.wav'] == 'unbound'
 
 
-@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
-@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
-@patch('utils.sync.pipeline.postprocess_words')
-@patch('utils.sync.pipeline.get_timestamp_from_path')
+@patch('utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.legacy_segment_core.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.legacy_segment_core.postprocess_words')
+@patch('utils.sync.legacy_segment_core.get_timestamp_from_path')
 def test_lineage_bound_skewed_segment_never_consults_the_closest_lookup(
     mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
 ):
@@ -600,7 +559,7 @@ def test_lineage_bound_skewed_segment_never_consults_the_closest_lookup(
 
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
     from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     now_test = datetime.now(timezone.utc).timestamp()
     mock_timestamp.return_value = now_test + 171
@@ -613,13 +572,13 @@ def test_lineage_bound_skewed_segment_never_consults_the_closest_lookup(
     store.rows[('users', 'u', 'conversations', 'live')] = dict(live)
     response = {'new_memories': set(), 'updated_memories': set()}
     errors: list = []
-    with patch('utils.sync.pipeline.get_closest_conversation_to_timestamps') as mock_closest, patch(
+    with patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps') as mock_closest, patch(
         'utils.conversations.lifecycle.ingest_sync_conversation',
         side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
-    ), patch('utils.sync.pipeline.identify_speakers_for_segments'), patch(
-        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+    ), patch('utils.sync.legacy_segment_core.identify_speakers_for_segments'), patch(
+        'utils.sync.legacy_segment_core.conversations_db.get_manual_speaker_receipt', return_value={}
     ), patch(
-        'utils.sync.pipeline.get_wav_duration', return_value=10
+        'utils.sync.legacy_segment_core.get_wav_duration', return_value=10
     ):
         result = pipeline.process_segment(
             'seg_123.wav',
@@ -755,10 +714,10 @@ def test_store_sync_audio_chunk_passes_playback_start_to_the_upload():
     assert uploaded == [{'timestamp': raw_start, 'playback_start': raw_start - 171, 'bytes': b'\x00' * 3200}]
 
 
-@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
-@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
-@patch('utils.sync.pipeline.postprocess_words')
-@patch('utils.sync.pipeline.get_timestamp_from_path')
+@patch('utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.legacy_segment_core.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.legacy_segment_core.postprocess_words')
+@patch('utils.sync.legacy_segment_core.get_timestamp_from_path')
 def test_skewed_private_cloud_chunk_persist_normalized_playback_start(
     mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
 ):
@@ -767,7 +726,7 @@ def test_skewed_private_cloud_chunk_persist_normalized_playback_start(
 
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
     from tests.unit.test_sync_cross_job_assignment import intake
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     now_test = datetime.now(timezone.utc).timestamp()
     mock_timestamp.return_value = now_test + 171
@@ -782,23 +741,23 @@ def test_skewed_private_cloud_chunk_persist_normalized_playback_start(
     response = {'new_memories': set(), 'updated_memories': set()}
     errors: list = []
     store = StrictFirestore()
-    with patch('utils.sync.pipeline._store_intake_audio', side_effect=fake_store_intake_audio), patch(
+    with patch('utils.sync.legacy_segment_core._store_intake_audio', side_effect=fake_store_intake_audio), patch(
         # The bridge finalize follows a real private-cloud conversation; the
         # store-chain kwargs under test are already captured by then.
-        'utils.sync.pipeline.finish_sync_segment'
+        'utils.sync.legacy_segment_core.finish_sync_segment'
     ), patch(
         'utils.conversations.lifecycle.ingest_sync_conversation',
         side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
     ), patch(
-        'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
+        'utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None
     ), patch(
-        'utils.sync.pipeline.identify_speakers_for_segments'
+        'utils.sync.legacy_segment_core.identify_speakers_for_segments'
     ), patch(
-        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+        'utils.sync.legacy_segment_core.conversations_db.get_manual_speaker_receipt', return_value={}
     ), patch(
-        'utils.sync.pipeline.get_wav_duration', return_value=10
+        'utils.sync.legacy_segment_core.get_wav_duration', return_value=10
     ), patch(
-        'utils.sync.pipeline._download_audio_bytes', return_value=b'wav'
+        'utils.sync.legacy_segment_core._download_audio_bytes', return_value=b'wav'
     ):
         result = pipeline.process_segment(
             'seg_123.wav',
@@ -824,7 +783,7 @@ def test_v2_empty_or_torn_header_is_noop_even_with_invalid_clock(client, payload
     response = client.post('/v2/sync-local-files', files=[('files', (_filename(5 * 365 * 86400), payload))])
     assert response.status_code == 200
     assert response.json() == {'new_memories': [], 'updated_memories': []}
-    router.create_sync_job.assert_not_called()
+    router.accept_batch_upload.calls.assert_not_called()
 
 
 def test_v2_mixed_empty_invalid_clock_and_valid_audio_keeps_audio(client):
@@ -836,7 +795,7 @@ def test_v2_mixed_empty_invalid_clock_and_valid_audio_keeps_audio(client):
         ],
     )
     assert response.status_code == 202
-    router.create_sync_job.assert_called_once()
+    router.accept_batch_upload.calls.assert_called_once()
 
 
 def test_v2_invalid_filename_returns_closed_code_with_legacy_string_detail(client):

@@ -10,7 +10,6 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
-from types import SimpleNamespace
 import pytest
 
 from google.cloud import tasks_v2
@@ -25,39 +24,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
 
 
-def test_concurrent_lease_probe_holds_stt_instead_of_deferred_full_processing():
-    """Execute the provider leaf: hold policy may defer the full note processor."""
-    source = _REPO_ROOT / 'backend/testing/sync_cloud_tasks_stack/app.py'
-    tree = ast.parse(source.read_text())
-    provider = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == '_local_prerecorded')
-    events = []
-    namespace = {
-        'Any': object,
-        'os': SimpleNamespace(getenv=lambda name, default: default),
-        '_wait_for_stt_gate': lambda job_id: events.append(('gate', job_id)),
-        'write_event': lambda channel, row: events.append((row['event'], row['job_id'])),
-    }
-    exec(compile(ast.Module(body=[provider], type_ignores=[]), str(source), 'exec'), namespace)
-    namespace['_local_prerecorded']('http://local/opaque-job')
-    assert events == [('gate', 'opaque-job'), ('stt_completed', 'opaque-job')]
-    processor = next(
-        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == '_local_process_conversation'
-    )
-    assert not any(
-        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_wait_for_stt_gate'
-        for n in ast.walk(processor)
-    )
-
-
 def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:
     workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
     package = json.loads((_REPO_ROOT / 'package.json').read_text(encoding='utf-8'))
     contracts = json.loads((_REPO_ROOT / 'backend' / 'testing' / 'workflow_contracts.json').read_text(encoding='utf-8'))
 
     assert '  sync-cloud-tasks-stack-gauntlet:' in workflow
-    job = workflow.split('  sync-cloud-tasks-stack-gauntlet:\n', 1)[1].split(
-        '\n  replay-harness-phase0a-gauntlet:\n', 1
-    )[0]
+    job = workflow.split('  sync-cloud-tasks-stack-gauntlet:\n', 1)[1].split('\n  merge-gate:\n', 1)[0]
 
     assert 'timeout-minutes: 20' in job
     assert 'needs: scope' in job

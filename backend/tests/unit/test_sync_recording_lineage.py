@@ -1,57 +1,43 @@
-"""Safety-WAL uploads bind per segment to the live recording's rollover generations.
-
-Synthetic replay of the live+sync duplicate: one phone recording (origin id
-``REC-ORIGIN``) becomes one live row per silence rollover, while every WAL
-carries the origin id. A batch stamped for generation L starts before L and
-runs past its end; an unstamped batch straddles the next two generations. The
-whole-batch resolver (kill switch off, today's behavior) finds only the first
-generation, drops the stamp and creates a sync row. Per-segment lineage binding
-appends every segment to the live row that owns its audio. All ids are
-synthetic.
-"""
+"""Retained shared and recovery-core cases after legacy coordinator retirement."""
 
 import logging
-import sys
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-
 import pytest
-
 import tests.unit.test_listen_reconnect_continuity as continuity
-import tests.unit.test_sync_v2 as sync_v2_harness
 from config import sync_lineage
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import conversations, intake
-from utils.sync import recording_lineage, recording_session_target
+from utils.sync import recording_lineage
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
-from utils.sync.recording_lineage import (
-    lineage_resolution_requested,
-    resolve_segment_targets,
-    select_segment_targets,
-)
+from utils.sync.recording_lineage import lineage_resolution_requested, resolve_segment_targets, select_segment_targets
 
 ORIGIN = 'REC-ORIGIN'
+
+
 T0 = 1_760_000_000
+
+
 PERIOD = 360  # one rollover generation every six minutes
+
+
 DURATION = 232  # live speech, then more than two minutes of silence
+
+
 GENERATIONS = 50
+
+
 L = 11  # the generation the phone stamped
 
 
 @pytest.fixture(scope='module', autouse=True)
 def dependencies():
     from database import conversations  # noqa: F401
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     return pipeline
-
-
-@pytest.fixture(autouse=True)
-def default_flag(monkeypatch):
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
 
 def at(seconds):
@@ -172,7 +158,11 @@ def texts(store, cid):
 
 
 PROOF_ROOT = 'a1b2c3d4-1111-4222-8333-444455556666'
+
+
 PROOF_FRAMES = 500000
+
+
 PROOF_SPF = 160
 
 
@@ -232,9 +222,6 @@ def replay_proven(store, chunks, targets):
     for chunk in chunks:
         prove(chunk, store, targets[chunk['id']])
     return replay(store, chunks, targets)
-
-
-# --- Synthetic replay -------------------------------------------------------
 
 
 def test_stamped_batch_straddling_generation_lands_on_its_live_row():
@@ -376,31 +363,6 @@ def test_early_sync_append_preserves_a_pinned_live_clock(monkeypatch, flag):
     assert result['started_at'].timestamp() + fresh['start'] == origin + 20
 
 
-@pytest.mark.asyncio
-async def test_kill_switch_off_reproduces_the_whole_batch_outcome(monkeypatch, dependencies):
-    """Today's behavior: only the origin-id row is a candidate, so the batch loses its stamp."""
-    pipeline = dependencies
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, 'off')
-    store = seeded_store()
-    candidates = [row for row in lineage(store) if row['external_data']['recording_session_id'] == ORIGIN]
-    monkeypatch.setattr(recording_session_target, '_candidate_rows', lambda *_args, **_kwargs: candidates)
-
-    async def run_inline(_executor, fn, *args):
-        return fn(*args)
-
-    monkeypatch.setattr(pipeline, 'run_blocking', run_inline)
-    chunks = upload_stamped_for_l()
-    start, end = chunks[0]['started_at'].timestamp() - 1, chunks[-1]['finished_at'].timestamp()
-    assert not lineage_resolution_requested('u', ORIGIN, start, end)
-    target = await pipeline._resolve_safety_wal_target(
-        'u', gen_id(L), ORIGIN, pipeline.ConversationSource.omi, 'pendant', False, start, end
-    )
-    assert target is None
-    before = {row['id'] for row in conversations(store)}
-    replay(store, chunks, {chunk['id']: target for chunk in chunks})
-    assert {row['id'] for row in conversations(store)} - before == {chunks[0]['id']}
-
-
 def test_upload_without_recording_id_keeps_temporal_assignment():
     assert not lineage_resolution_requested('u', None, 1.0, 2.0)
     store = seeded_store()
@@ -408,9 +370,6 @@ def test_upload_without_recording_id_keeps_temporal_assignment():
     chunk = sync_chunk(s + 61, s + 69, 'an old client upload without recording proof')
     _, created, _ = intake(store, chunk)
     assert created  # temporal intake never adopts a live row, exactly as before
-
-
-# --- Fallback and override --------------------------------------------------
 
 
 def test_unique_generation_overrides_a_stale_stamp():
@@ -525,9 +484,6 @@ def test_generation_created_before_the_origin_stamp_binds_through_the_origin_row
     assert result.targets == {chunk['id']: ORIGIN}
 
 
-# --- Tombstones and user-managed live rows ----------------------------------
-
-
 def smart_merged(store, survivor_k, donor_k):
     survivor = store.rows[('users', 'u', 'conversations', gen_id(survivor_k))]
     donor = store.rows[('users', 'u', 'conversations', gen_id(donor_k))]
@@ -593,9 +549,6 @@ def test_user_managed_live_generation_keeps_its_identity_and_markers(managed):
     row = store.rows[('users', 'u', 'conversations', gen_id(L + 1))]
     assert {row['id'] for row in conversations(store)} == {gen_id(L + 1)}
     assert all(row[key] == value for key, value in managed.items())
-
-
-# --- Lookup, truncation, fail-open, telemetry --------------------------------
 
 
 class _LineageDb:
@@ -1109,9 +1062,6 @@ def test_projected_discard_flag_reaches_the_planner(monkeypatch):
     assert reasons == {'seg.wav': 'bound'}
 
 
-# --- Kill switch --------------------------------------------------------------
-
-
 @pytest.mark.parametrize(('value', 'enabled'), [('', True), ('true', True), ('on', True), ('1', True)])
 def test_unset_or_on_values_keep_the_feature_on(monkeypatch, value, enabled):
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, value)
@@ -1125,164 +1075,6 @@ def test_off_and_unrecognized_values_disable_it(monkeypatch, value, caplog):
     with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
         assert not lineage_resolution_requested('u', ORIGIN, 1.0, 2.0)
     assert 'event=sync_lineage_resolve outcome=disabled' in caplog.text
-
-
-# --- Coordinator call site ----------------------------------------------------
-
-
-@pytest.fixture
-def coordinator():
-    """The routers.sync behavioral harness; import-heavy, so built outside the call budget."""
-    module, stubs = sync_v2_harness.TestAsyncCoordinatorBehavioral._load_sync_module()
-    try:
-        yield module, stubs
-    finally:
-        sync_v2_harness.TestAsyncCoordinatorBehavioral._cleanup(stubs['saved_modules'])
-
-
-_DEFAULT_S1_CLAIMS = object()
-
-
-def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=_DEFAULT_S1_CLAIMS):
-    pipeline = stubs['pipeline']
-    paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
-    wav_path = '/tmp/job-lineage/w.wav'
-
-    def decode(raw_paths, decoded_frames=None):
-        if decoded_frames is not None:
-            decoded_frames[wav_path] = [16000]
-        return [wav_path]
-
-    pipeline.decode_files_to_wav = MagicMock(side_effect=decode)
-    pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors, **_kwargs: segmented.update(paths)
-    pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
-    pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
-    pipeline.users_db = MagicMock()
-    pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-    pipeline.build_person_embeddings_cache = MagicMock(return_value={})
-    pipeline.record_usage = MagicMock()
-    captured = {}
-
-    def capture(path, uid, response, lock, errors, source, is_locked, prefs, cache, target, *args, **kwargs):
-        captured[paths[path]['id']] = target
-        response['updated_memories'].add(target or 'sync-row')
-        return True
-
-    pipeline.process_segment = capture
-    if hasattr(pipeline, 'plan_segment_targets'):
-        # Also supports replaying the coordinator against origin/main's
-        # pipeline, which has no lineage call. Its observed targets must still
-        # satisfy the assertion below; absence is not the failure criterion.
-        monkeypatch.setattr(
-            sys.modules[pipeline.plan_segment_targets.__module__],
-            '_load_lineage',
-            lambda *_args, **_kwargs: ([generation(k) for k in range(GENERATIONS)], None, False),
-        )
-    candidates = [generation(0)]
-    monkeypatch.setattr(
-        sys.modules[pipeline.resolve_recording_session_sync_target.__module__],
-        '_candidate_rows',
-        lambda *_args, **_kwargs: candidates,
-    )
-    if s1_claims is _DEFAULT_S1_CLAIMS:
-        s1_claims = {
-            'f.opus': {
-                'capture_root': '12345678-1234-4234-8234-123456789abc',
-                'clock_epoch': 0,
-                'source_frame_start': 0,
-                'frame_count': 100,
-                'rate_hz': 16000,
-                'channel': 'mono',
-                'codec': 'opus',
-            }
-        }
-    if s1_claims:
-        mapping = {'claim': next(iter(s1_claims.values())), 'offsets': [0, 16000], 'incomplete': False}
-
-        async def observed_maps(_uid, _source, _lock, _device, _session, _claims, wav_paths, _frames, **_kwargs):
-            return wav_paths, {path: dict(mapping) for path in wav_paths}, False
-
-        monkeypatch.setattr(pipeline, 'apply_sync_wal_audio_coverage', observed_maps)
-    return captured, SimpleNamespace(
-        target_conversation_id=stamp,
-        client_device_id='pendant',
-        recording_session_id=ORIGIN,
-        audio_start_seconds=chunks[0]['started_at'].timestamp() - 8,
-        audio_end_seconds=chunks[-1]['finished_at'].timestamp(),
-        capture_evidence_claims=s1_claims,
-    )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('flag', ['', 'off'])
-async def test_coordinator_forwards_each_segment_its_generation(coordinator, monkeypatch, flag):
-    module, stubs = coordinator
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
-
-    chunks = upload_straddling_next_two()
-    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
-    )
-    expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if flag == '' else [None] * 4
-    assert [captured[chunk['id']] for chunk in chunks] == expected
-
-
-@pytest.mark.asyncio
-async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(coordinator, monkeypatch, caplog):
-    module, stubs = coordinator
-
-    chunks = upload_straddling_next_two()
-    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp='STAMP')
-
-    def failed(*_args, **_kwargs):
-        raise RuntimeError('synthetic planner failure')
-
-    monkeypatch.setattr(stubs['pipeline'], 'plan_segment_targets', failed)
-    metrics = MagicMock()
-    lineage_module = sys.modules[stubs['pipeline'].fallback_segment_targets.__module__]
-    monkeypatch.setattr(lineage_module, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
-    caplog.set_level(logging.INFO, logger=lineage_module.__name__)
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
-    )
-    assert captured == {chunk['id']: 'STAMP' for chunk in chunks}
-    metrics.labels.assert_called_once_with(
-        outcome='lookup_failed', stage='none', claim_count_bucket='none', file_count_bucket='none'
-    )
-    metrics.labels.return_value.inc.assert_called_once()
-    assert sum('event=sync_lineage_resolve' in r.getMessage() for r in caplog.records) == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('flag', ['', 'off'])
-async def test_retry_after_append_before_enrichment_reprocesses_the_landed_row(coordinator, monkeypatch, flag):
-    module, stubs = coordinator
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
-
-    chunks = upload_straddling_next_two()[:1]
-    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
-    pipeline = stubs['pipeline']
-    pipeline.get_sync_job = MagicMock(
-        return_value={
-            'partial_result': {'updated_memories': [gen_id(L + 1), 'FENCED'], 'fenced_conversation_ids': ['FENCED']}
-        }
-    )
-    pipeline.get_processed_segments = MagicMock(
-        return_value={f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav" for chunk in chunks}
-    )
-    enriched = []
-
-    def reprocess(_uid, response, *_args, **_kwargs):
-        enriched.append(dict(response.pop('_merged', {})))
-
-    pipeline._reprocess_merged_conversations = reprocess
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
-    )
-    assert captured == {}  # landed audio never returns to STT or assignment
-    assert enriched == ([{gen_id(L + 1): pipeline._LINEAGE_RETRY_LANGUAGE}] if flag == '' else [{}])
 
 
 def test_sync_reprocess_does_not_complete_an_open_live_recording(dependencies, monkeypatch):
@@ -1334,9 +1126,6 @@ def test_resumed_enrichment_uses_stored_language(dependencies, monkeypatch, flag
     assert process.call_args.kwargs['language_code'] == ('es' if flag == '' else 'en')
 
 
-# --- Live origin stamp ----------------------------------------------------------
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize('flag', ['', 'off'])
 async def test_every_live_generation_names_its_origin_recording(monkeypatch, flag):
@@ -1353,3 +1142,9 @@ async def test_every_live_generation_names_its_origin_recording(monkeypatch, fla
     assert harness.rows[generation_id]['external_data']['recording_session_id'] != 'original'
     origins = [harness.rows[cid]['external_data'].get('recording_origin_id') for cid in ('fresh', generation_id)]
     assert origins == (['fresh', 'original'] if flag == '' else [None, None])
+
+
+@pytest.fixture(autouse=True)
+def default_flag(monkeypatch):
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')

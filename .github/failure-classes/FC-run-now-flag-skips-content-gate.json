@@ -14,7 +14,7 @@
     "backend/utils/conversations/relevance_rules.py",
     "backend/utils/conversations/process_conversation.py",
     "backend/utils/conversations/fragment_visibility.py",
-    "backend/utils/sync/pipeline.py",
+    "backend/utils/sync/legacy_segment_core.py",
     "backend/utils/sync/assignment.py"
   ],
   "status": "open"

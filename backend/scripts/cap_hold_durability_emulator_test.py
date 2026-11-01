@@ -189,7 +189,7 @@ def prove_sigkill_resume(client, directory, prefix):
 
 
 def prove_pipeline_result_restart(client, directory, uid):
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     path = Path(directory) / '1792152000.wav'
     with wave.open(str(path), 'wb') as output:

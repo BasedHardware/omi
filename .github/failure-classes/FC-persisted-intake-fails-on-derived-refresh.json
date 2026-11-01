@@ -10,7 +10,7 @@
   "evidence_prs": [],
   "scope_hints": [
     "backend/utils/sync/bridge.py",
-    "backend/utils/sync/pipeline.py",
+    "backend/utils/sync/legacy_segment_core.py",
     "backend/database/action_item_refresh.py"
   ],
   "status": "open"

@@ -30,7 +30,7 @@ from utils.sync.held_coverage import piece_state, covered_receipt
 from utils.sync.held_piece_split import delegate, attempt_floor
 from utils.sync.cap_recovery_receipts import settled_empty as _settled_empty
 from models.geolocation import Geolocation
-from utils.sync.pipeline import (
+from utils.sync.legacy_segment_core import (
     process_segment,
     build_person_embeddings_cache,
     finalize_recovered_sync_segment,

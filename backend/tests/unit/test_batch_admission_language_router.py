@@ -109,14 +109,15 @@ async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeyp
         )
         assert not world.store.rows  # No batch ledger, jobs, intakes or queue writes.
         staging.assert_not_called()
+        # C9 retired legacy admission: no mode creates a legacy job, and the client keeps its audio and retries.
+        # An `on` read still records the route owner (draining/dark re-homes it to batch on the next upload);
+        # the cohort-scoped exclusion bypass in draining/dark lands with #24219.
+        assert response.status_code == 409 and b'sync_content_in_progress' in response.body
+        jobs.create_sync_job.assert_not_called()  # C11: the router no longer imports it at all.
         if mode is LegacySyncMode.ON:
-            assert response.status_code == 202
             assert world.claims == ['legacy_final_pass_v1']
-            module.create_sync_job.assert_called_once()
         else:
-            assert response.status_code == 409 and b'sync_content_retry_later' in response.body
             assert not world.claims and world.client.rows == before
-            module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)
 

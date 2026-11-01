@@ -11,7 +11,7 @@
   "scope_hints": [
     "backend/utils/conversations/fragment_visibility.py",
     "backend/utils/sync/assignment.py",
-    "backend/utils/sync/pipeline.py",
+    "backend/utils/sync/legacy_segment_core.py",
     "backend/database/conversations.py",
     "backend/routers/conversations.py"
   ],

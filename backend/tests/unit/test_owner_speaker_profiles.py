@@ -10,7 +10,8 @@ import numpy as np
 import pytest
 
 from routers.listen import speakers
-from utils.sync import pipeline
+from utils.sync import legacy_segment_core as pipeline
+from utils.sync.speaker_identity import USER_SELF_PERSON_ID
 
 
 class _Persistence:
@@ -47,8 +48,8 @@ def test_live_loads_stored_embedding_and_resolved_name_without_audio(profile_sou
 
 def test_sync_owner_cache_uses_resolved_name(profile_sources):
     cache = pipeline.build_person_embeddings_cache('u')
-    assert cache[pipeline.USER_SELF_PERSON_ID]['name'] == 'David'
-    np.testing.assert_array_equal(cache[pipeline.USER_SELF_PERSON_ID]['embedding'], [[1.0, 0.0]])
+    assert cache[USER_SELF_PERSON_ID]['name'] == 'David'
+    np.testing.assert_array_equal(cache[USER_SELF_PERSON_ID]['embedding'], [[1.0, 0.0]])
     profile_sources.assert_called_once_with('u')
 
 

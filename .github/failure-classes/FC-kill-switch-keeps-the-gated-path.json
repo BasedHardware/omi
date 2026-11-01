@@ -9,7 +9,7 @@
   "evidence_prs": [],
   "scope_hints": [
     "backend/routers/sync.py",
-    "backend/utils/sync/uid_sequencer.py"
+    "backend/utils/sync/legacy_dark.py"
   ],
   "status": "open"
 }

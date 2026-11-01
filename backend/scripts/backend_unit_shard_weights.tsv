@@ -1795,7 +1795,6 @@ tests/unit/test_sync_source_detection.py	2.7
 tests/unit/test_sync_speaker_evidence.py	10.7
 tests/unit/test_sync_stack_postgres_hook.py	2.7
 tests/unit/test_sync_stage_isolation.py	2.7
-tests/unit/test_sync_staging_custody.py	3.7
 tests/unit/test_sync_staging_lifecycle_guard.py	2.7
 tests/unit/test_sync_status_read_ownership.py	11.7
 tests/unit/test_sync_terminal_compaction.py	12.7

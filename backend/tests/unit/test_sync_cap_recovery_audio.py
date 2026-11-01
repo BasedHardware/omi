@@ -84,7 +84,7 @@ async def test_live_short_tail_runs_vad_without_wal_coverage(monkeypatch):
 async def test_live_source_offset_matches_pydub_slice_at_twenty_four_khz(tmp_path, monkeypatch):
     import struct
     import wave
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     path = str(tmp_path / '1792152000.wav')
     with wave.open(path, 'wb') as source:
