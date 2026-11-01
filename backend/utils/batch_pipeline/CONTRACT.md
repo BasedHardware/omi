@@ -63,6 +63,11 @@ record. Live transcription is a preview; the batch result is the record.
   `BATCH_SHARD_SPREAD_ENABLED=false` restores legacy pulls (Helm:
   `worker.shardSpreadEnabled=false`). Retry logs include only static
   `operation=batch_claim|batch_pull shard=scheduler_NN`, never worker/user IDs.
+  One claimed shard transaction leases up to the pull's remaining batch,
+  continuing the same DRR walk (each new head re-checks privacy, policy and
+  pool; `MAX_VISITS` bounds the walk per lease; one token per lease).
+  `BATCH_PULL_MULTI_LEASE_ENABLED=false` restores one lease per transaction
+  (Helm: `worker.pullMultiLeaseEnabled=false`).
   The existing Sync Cloud Tasks batch emulator gate runs the three-puller
   concurrency regression after its process-level batch scenarios.
 - **Receipts**: durable upload status via `intake.py:durable_status`
