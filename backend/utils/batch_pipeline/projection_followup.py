@@ -18,7 +18,7 @@ from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_store import PROJECTION_FINISH_STATES
 from database.batch_pipeline_projection_claim import projection_claim
-from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.projection import error_site_field, error_type, projection_phase
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
@@ -46,6 +46,9 @@ class ProjectionFollowups:
         self.owed: dict[str, None] = {}
         self.closed = False
         self.discovery = ProjectionDiscovery(projector.store.store)
+        self.page = 0
+        self.pages: dict[str, int] = {}
+        self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
 
     def candidates(self):
         if projection_followup_page_enabled():
@@ -97,6 +100,8 @@ class ProjectionFollowups:
             # segment claims and receipt fences are unchanged; discovery resumes
             # once the queue drains.
             first = [segment for segment in dict.fromkeys(priority) if segment not in self.tasks]
+            for segment in first:
+                self.pages.pop(segment, None)  # Targeted recovery wakes always probe completion.
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
             self.launch()
@@ -118,6 +123,12 @@ class ProjectionFollowups:
         # ahead of the discovered page instead of replacing the queue.
         queued = list(self.pending)
         discovered = [segment for segment in segments if segment not in self.tasks and segment not in queued]
+        # Only this discovered page shares completion probes. No negative hint
+        # survives another discovery pass, restart, priority wake or owed walk.
+        self.page += 1
+        self.completion_attempts.clear()
+        for segment in discovered:
+            self.pages[segment] = self.page
         owed = [
             segment
             for segment in self.owed
@@ -143,12 +154,15 @@ class ProjectionFollowups:
 
     def finished(self, segment, task):
         self.tasks.pop(segment, None)
+        self.pages.pop(segment, None)
         if task.cancelled():
             # Global background-task shutdown must not replenish a cancelled
             # worker with another task after the shutdown snapshot was taken.
             self.closed = True
             self.pending.clear()
             self.owed.clear()
+            self.pages.clear()
+            self.completion_attempts.clear()
         self.launch()  # Refill immediately, without another 20s serving sleep.
 
     def read_persisted(self, segment):
@@ -191,6 +205,9 @@ class ProjectionFollowups:
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 if not policy.async_projection:
                     return  # The synchronous sweep owns these receipts.
+            was_ready = entry['projection']['state'] == 'ready' and all(
+                part.get('state') == 'ready' for part in (entry.get('projection_parts') or {}).values()
+            )
             item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
             parts = entry.get('projection_parts')
             for index, receipt in (
@@ -199,7 +216,21 @@ class ProjectionFollowups:
                 await self.finish_part(item, binding, receipt, int(index) if index is not None else None)
             # Usage is resolved only when every sibling has ready receipts;
             # complete() atomically fences ledger/usage/client status as before.
-            await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
+            page = self.pages.get(segment, 0)
+            key = (page, binding)
+            coalesce = projection_followup_page_enabled() and was_ready and page != 0
+            if coalesce:
+                if key in self.completion_attempts:
+                    return
+                self.completion_attempts.add(key)
+            try:
+                await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
+            except BaseException:
+                # Failure/cancellation is not a readiness result. Another
+                # sibling in this page may immediately retry the probe.
+                if coalesce:
+                    self.completion_attempts.discard(key)
+                raise
         except (ProjectionBlocked, BatchPrivacyBlocked):
             logger.info('event=batch_projection_followup outcome=blocked')
         except Exception as error:

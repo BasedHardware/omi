@@ -7442,7 +7442,8 @@ an accounting diagnostic, not a serving-failure abort.
 `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
 `false` restores oldest-100 discovery). Assignment and async follow-ups each
 advance their own bounded 100-row keyset scan. Assignment scans pending
-results; async follow-ups scan persisted/ready results by default. The cursor uses `(committed_at, document ID)`, so equal timestamps
+results; async follow-ups scan persisted/ready results by default. The cursor
+uses `(committed_at, document ID)`, so equal timestamps
 and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
 restart begins at the head without dropping any durable obligations. Follow-ups
 launch the whole bounded page before fetching the next one. Discovery order is
@@ -7454,13 +7455,25 @@ Follow-up discovery uses only the persisted/ready result page, plus one job
 read per receipt for its pinned policy. It no longer fetches each result twice
 after the query. Synchronous receipts are filtered before queueing so they
 cannot delay async recovery wakeups. Legacy unpinned policies still use the
-existing privacy-aware resolution; execution rechecks policy and receipt fences. Setting the switch to `false` restores the mixed page and
+existing privacy-aware resolution; execution rechecks policy and receipt
+fences. Setting the switch to `false` restores the mixed page and
 per-candidate reads. Pagination's separate kill switch still controls rotation.
 Pending partial assignments and quarantine-held rows do not enter the finish
 page; recovery and repair still return them through pending assignment to
 persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
 or destination can unblock them without changing their own result version.
-No cooldown or version cache delays that retry, including priority/owed wakes.
+Already-ready siblings in one discovered page share a content-completion
+probe for their exact immutable binding. Every row still rechecks its receipt
+and privacy fences; persisted rows still finish their own side effects and
+probe completion. Failed/cancelled probes clear the shared hint. The next
+discovery pass resets it, and priority/owed recovery wakes bypass it. Thus an
+unchanged ready row gets a fresh probe each cycle even when its dependency
+changed elsewhere. No cooldown or version cache is used.
+
+The execution read origin `task:batch_projection_followup` covers these row
+fences and sibling completion scans; candidate discovery runs in its caller's
+origin. Measure them separately: reducing candidate reads alone does not
+establish a reduction in the execution-origin read counter.
 
 The query reuses the declared prod/dev results composite index:
 `projection_state ASC, committed_at ASC, __name__ ASC` in
