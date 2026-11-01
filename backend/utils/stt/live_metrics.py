@@ -387,6 +387,8 @@ class SonioxIdleMetrics(NamedTuple):
     cohort_failures: Counter
     cohort_avoided: Counter
     cohort_closes_by_trigger: Counter
+    drains: Counter
+    close_refusals: Counter
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
@@ -453,7 +455,21 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     'Planned paid transport closes by trigger and treatment arm',
                     ['arm', 'trigger'],
                 ),
+                Counter(
+                    'omi_soniox_idle_drains_total',
+                    'Planned-close drains by outcome (drained within the cap, or timeout and abort)',
+                    ['outcome'],
+                ),
+                Counter(
+                    'omi_soniox_idle_close_refusals_total',
+                    'Idle episodes whose planned close was refused (rearm floor or hourly cap), once per episode',
+                    ['reason'],
+                ),
             )
+            for _outcome in ('drained', 'timeout'):
+                _soniox_idle_metrics.drains.labels(outcome=_outcome)
+            for _reason in ('rearm', 'cap'):
+                _soniox_idle_metrics.close_refusals.labels(reason=_reason)
             for _trigger in ('vad', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
                 for _arm in SONIOX_IDLE_COHORT_ARMS:
