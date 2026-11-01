@@ -119,6 +119,8 @@ async def verify(
             telemetry=telemetry,
         )
         _record_strong(staged, support, used, time.monotonic() - started)
+        if telemetry is not None:
+            telemetry['used_tokens'] = used
         return support, calls
     return await verify_chain(
         staged,
