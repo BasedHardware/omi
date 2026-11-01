@@ -130,6 +130,11 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
       }
 
       if (target == null) {
+        if (integrations.hasLoadError) {
+          OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain,
+              actionLabel: context.l10n.tryAgain, onAction: () => _handleExport(context, provider));
+          return;
+        }
         OmiFeedback.error(
           context,
           context.l10n.connectTaskAppToExport,

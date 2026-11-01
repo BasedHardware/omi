@@ -53,18 +53,20 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool get hasLoadError => _hasLoadError;
 
   /// Load default app and connection details from backend
-  Future<void> loadFromBackend({bool forceRefresh = false, bool silent = false}) {
+  Future<void> loadFromBackend({bool forceRefresh = false, bool silent = false, bool refreshApplePermission = true}) {
     final existing = _inFlightLoad;
     if (existing != null && !forceRefresh) return existing;
     late final Future<void> started;
-    started = _loadFromBackendBody(++_readGeneration, silent: silent).whenComplete(() {
+    started = _loadFromBackendBody(++_readGeneration, silent: silent, refreshApplePermission: refreshApplePermission)
+        .whenComplete(() {
       if (identical(_inFlightLoad, started)) _inFlightLoad = null;
     });
     _inFlightLoad = started;
     return started;
   }
 
-  Future<void> _loadFromBackendBody(int readGeneration, {required bool silent}) async {
+  Future<void> _loadFromBackendBody(int readGeneration,
+      {required bool silent, required bool refreshApplePermission}) async {
     final generation = _sessionGeneration;
     bool isCurrent() => generation == _sessionGeneration && readGeneration == _readGeneration;
     if (!silent) {
@@ -114,7 +116,12 @@ class TaskIntegrationProvider extends ChangeNotifier {
         userId: _connectionDetails['clickup']?['user_id'],
       );
 
-      if (_supportsAppleReminders && !_appleRemindersPermissionManuallySet) {
+      // Resolving a cloud export needs the server's saved destination, not
+      // EventKit. Apple exports still require a fresh native permission check;
+      // ordinary Settings loads continue refreshing all connected apps.
+      if (_supportsAppleReminders &&
+          !_appleRemindersPermissionManuallySet &&
+          (refreshApplePermission || response.defaultApp == 'apple_reminders')) {
         final permission = await _readApplePermission();
         if (!isCurrent()) return;
         _appleRemindersPermission = permission;
@@ -201,7 +208,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
     await writes;
     if (generation != _sessionGeneration || !identical(writes, _defaultWrites)) return null;
     final choice = _defaultChoice;
-    final loading = loadFromBackend(forceRefresh: true, silent: true);
+    final loading = loadFromBackend(forceRefresh: true, silent: true, refreshApplePermission: false);
     final readGeneration = _readGeneration;
     // Native permission/status repair is also asynchronous. A stalled refresh
     // must release the Export button without authorizing a cached destination.
@@ -213,6 +220,9 @@ class TaskIntegrationProvider extends ChangeNotifier {
     try {
       await read.future;
     } catch (_) {
+      if (generation == _sessionGeneration && readGeneration == _readGeneration) {
+        _hasLoadError = true;
+      }
       return null;
     } finally {
       _activeReads.remove(read);

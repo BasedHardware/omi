@@ -88,7 +88,7 @@ void main() {
     expect(await resolving, TaskIntegrationApp.todoist);
   });
 
-  testWidgets('a stalled permission read releases export without using cached choice', (tester) async {
+  testWidgets('Todoist resolution does not wait for unrelated Apple permission', (tester) async {
     final permission = Completer<bool>();
     final provider = TaskIntegrationProvider(
         supportsAppleReminders: true,
@@ -98,10 +98,39 @@ void main() {
     addTearDown(provider.dispose);
     final result = provider.resolveExportTarget();
     await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    expect(await result, isNull);
+    var completed = false;
+    unawaited(result.then((_) => completed = true));
+    await tester.pump();
+    expect(completed, isTrue);
+    expect(await result, TaskIntegrationApp.todoist);
     permission.complete(true);
     await tester.pump();
+  });
+
+  test('Todoist export remains available when Apple permission API throws', () async {
+    final provider = TaskIntegrationProvider(
+        supportsAppleReminders: true,
+        readApplePermission: () async => throw StateError('EventKit unavailable'),
+        fetchStatus: () async => status('todoist'));
+    addTearDown(provider.dispose);
+    expect(await provider.resolveExportTarget(), TaskIntegrationApp.todoist);
+  });
+
+  testWidgets('Apple export still requires its own bounded permission check', (tester) async {
+    final permission = Completer<bool>();
+    final provider = TaskIntegrationProvider(
+        supportsAppleReminders: true,
+        readApplePermission: () => permission.future,
+        fetchStatus: () async => status('apple_reminders'),
+        statusTimeout: const Duration(seconds: 1));
+    addTearDown(provider.dispose);
+    final result = provider.resolveExportTarget();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(await result, isNull);
+    permission.complete(false);
+    await tester.pump();
+    expect(await provider.resolveExportTarget(), isNull);
   });
   test('a superseding status load cannot authorize export from the cached selection', () async {
     final pending = <Completer<TaskIntegrationsResponse?>>[];
@@ -197,5 +226,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(writes, isEmpty);
     expect(tasks.isSelectionMode, isFalse);
+  });
+
+  testWidgets('failed destination lookup offers retry rather than reconnecting a verified app', (tester) async {
+    var offline = true;
+    final writes = <TaskIntegrationApp>[];
+    final provider = integrations(() async => offline ? null : status('todoist'));
+    await pumpBar(tester, provider, writes);
+    await tester.tap(find.text('Export · 1'));
+    await tester.pumpAndSettle();
+    expect(writes, isEmpty);
+    expect(find.text('Try Again'), findsOneWidget);
+    expect(find.text('Connect'), findsNothing);
+    offline = false;
+    await tester.tap(find.text('Try Again'));
+    await tester.pumpAndSettle();
+    expect(writes, [TaskIntegrationApp.todoist]);
   });
 }

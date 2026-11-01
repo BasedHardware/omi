@@ -47,6 +47,8 @@ Future<void> main() async {
   var cloudCreates = 0;
   var tokenSaves = 0;
   var apnsReady = false;
+  var refuseStatus = false;
+  var stallApplePermission = false;
   void publish() {
     receipts.value = 'Todoist writes: $cloudCreates; Apple writes: $nativeCreates; token saves: $tokenSaves';
     debugPrint('CAELIS_RECEIPT ${receipts.value}');
@@ -58,6 +60,7 @@ Future<void> main() async {
     if (request.headers.value(HttpHeaders.authorizationHeader) != 'Bearer synthetic-only') {
       request.response.statusCode = 401;
     } else if (request.uri.path == '/v1/task-integrations') {
+      if (refuseStatus) request.response.statusCode = 503;
       body = {
         'default_app': 'todoist',
         'integrations': {
@@ -100,7 +103,8 @@ Future<void> main() async {
     },
   ));
   await tasks.ensureLoaded();
-  final connections = TaskIntegrationProvider(readApplePermission: () async => true);
+  final connections = TaskIntegrationProvider(
+      readApplePermission: () => stallApplePermission ? Completer<bool>().future : Future.value(true));
   await connections.loadFromBackend();
   final registration = FcmTokenRegistration(
     capture: () => AuthService.instance.captureSessionSnapshot(),
@@ -150,6 +154,20 @@ Future<void> main() async {
                       });
                     },
                     child: const Text('Test late APNs and refused save')),
+                FilledButton(
+                    key: const Key('qa_stall_apple'),
+                    onPressed: () {
+                      stallApplePermission = true;
+                      debugPrint('CAELIS_APPLE_PERMISSION_STALLED');
+                    },
+                    child: const Text('Stall unrelated Apple permission')),
+                FilledButton(
+                    key: const Key('qa_status_failure'),
+                    onPressed: () {
+                      refuseStatus = !refuseStatus;
+                      debugPrint('CAELIS_STATUS_REFUSED $refuseStatus');
+                    },
+                    child: const Text('Toggle status failure')),
                 const SizedBox(height: 24),
                 ValueListenableBuilder<String>(
                     valueListenable: receipts,

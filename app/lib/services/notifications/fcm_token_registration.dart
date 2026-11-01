@@ -117,6 +117,10 @@ class FcmTokenRegistration {
       }
       final token = _offeredToken ?? await _bounded(readToken);
       if (!_current(owner, epoch) || token == null || token.isEmpty) return false;
+      // A rotation received while acquiring APNs may already be this attempt's
+      // token. Only a subsequent rotation needs another attempt; re-reading the
+      // SDK after consuming this one could overwrite it with an older value.
+      if (_offeredToken == token) _again = false;
       final zone = await _bounded(readTimeZone);
       if (!_current(owner, epoch)) return false;
       if (_saved == (token, zone)) return true;

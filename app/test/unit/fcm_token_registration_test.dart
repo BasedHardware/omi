@@ -202,6 +202,25 @@ void main() {
     expect(saves.map((row) => row.$1), ['synthetic-fcm', 'rotated-fcm']);
   });
 
+  test('rotation consumed during APNs acquisition is not replaced by an older SDK read', () async {
+    final pending = Completer<String?>();
+    var reads = 0;
+    final service = registrar(apnsRead: () {
+      reads++;
+      return reads == 1 ? pending.future : Future.value(apns);
+    });
+    addTearDown(service.dispose);
+    final work = service.refresh();
+    unawaited(service.refresh(token: 'rotated-fcm'));
+    pending.complete(apns);
+    await work;
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.value();
+    }
+    expect(saves.map((row) => row.$1), ['rotated-fcm']);
+    expect(tokenReads, 0, reason: 'the coalesced rotation was already accepted by this attempt');
+  });
+
   test('a hanging SDK is deadline bounded and exhausts only the retry budget', () {
     fakeAsync((clock) {
       var reads = 0;
