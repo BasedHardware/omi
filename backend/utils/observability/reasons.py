@@ -315,6 +315,7 @@ class VendorRouteReason(StrEnum):
     SOLE_CAPABLE = 'sole_capable'
     FAILOVER = 'failover'
     NO_HEALTHY_ROUTE = 'no_healthy_route'
+    GPU_OVERFLOW = 'gpu_overflow'
     KILL_SWITCH = 'kill_switch'
     NOT_IN_COHORT = 'not_in_cohort'
 

@@ -8,9 +8,10 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import known_unsupported_batch_language, language_inheritance_enabled, priority_for
+from config.batch_pipeline import Priority, known_unsupported_batch_language, language_inheritance_enabled, priority_for
 from config.batch_language_recovery import inherited_language
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
+from config.batch_pipeline_vendor_overflow import legacy_capacity_fallback_enabled, overflow_enabled
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
@@ -32,6 +33,7 @@ from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from database.outbox import OutboxKind, outbox_for
+from utils.batch_pipeline import gpu_overflow
 from utils.batch_pipeline.provider_stt import provider_enqueue
 from utils.batch_pipeline.route_selection import select_route
 from utils.sync import legacy_dark
@@ -423,6 +425,25 @@ async def accept_upload(
                 if evidence is not None:
                     evidence.language_excluded = True
                 return None
+        fresh = seed.priority == Priority.FRESH
+        if (
+            fresh
+            and mode is LegacySyncMode.ON
+            and target.get('record_lane_owner') != 'batch_sync_v1'
+            and legacy_capacity_fallback_enabled()
+            and gpu_overflow.saturated(store)
+        ):
+            # Capacity fallback: the GPU ring is past its fresh-backlog SLO and this owner still
+            # has legacy sync, which serves the upload now instead of queueing it (same exit as
+            # heavy-owner exclusion; nothing was written). Backfill waits for the ring.
+            record_fallback(
+                component='sync_dispatch',
+                from_mode='batch',
+                to_mode='legacy',
+                reason='capacity_full',
+                outcome='recovered',
+            )
+            return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
                 return None
@@ -491,13 +512,15 @@ async def accept_upload(
         if inherited:
             input_language = inherited
         # All-vendor routing: outside its cohort, with its kill switch off, or while this
-        # owner's legacy is on, this is resolve_route exactly (today's routing).
+        # owner's legacy is on, this is resolve_route exactly (today's routing). Only fresh
+        # units may overflow to a vendor when the GPU ring is past its SLO; backfill waits.
         route = select_route(
             language,
             byok=byok_enabled,
             uid=uid,
             batch_percent=policy.batch_percent,
             vendor_eligible=mode is not LegacySyncMode.ON,
+            gpu_saturated=(lambda: overflow_enabled() and gpu_overflow.saturated(store)) if fresh else None,
         ).route
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback; inside the
