@@ -198,6 +198,7 @@ def test_mirror_is_bounded(stores):
     assert shadow.pool.waits == [0.2]
     assert conn_statements == [
         'SET LOCAL statement_timeout = 200',
+        'SELECT pg_advisory_xact_lock_shared(hashtextextended(%s, 0))',  # A5 purge barrier, before the primary read
         'SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))',  # per-key, inside the bounded transaction
     ]
 
@@ -257,7 +258,8 @@ def test_mirror_locks_every_key_in_one_sorted_order():
     finally:
         FakeConn.execute = real
     ns = shadow.namespace
-    assert locked == [f'{ns}/owners/z', f'{ns}/queues/a', f'{ns}/queues/b']
+    # The A5 purge barrier (shared) comes first, then every key in one sorted order.
+    assert locked == [f'{ns}/__purge_barrier__', f'{ns}/owners/z', f'{ns}/queues/a', f'{ns}/queues/b']
 
 
 def test_full_queue_drops_without_blocking_the_caller():

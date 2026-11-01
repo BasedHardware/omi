@@ -115,6 +115,64 @@ def test_shard_control_is_reconciled_with_the_owner(stores):
     assert _postgres(shadow, 'control', shard) == {'rings': {'1': []}, 'p1_active': False}
 
 
+def test_shared_gpu_reservation_is_followed_through_the_owners_job(stores):
+    customer, primary, shadow, dual = stores
+    uid = 'synthetic-gpu'
+    customer.add_user(uid)
+    rows = _owner_rows(uid, 'gp1')
+    rows[0][2]['shared_gpu_key'] = 'gpu-a'
+    rows.append(('gpus', 'gpu-a', {'token': 't1', 'segment_id': 'gp1', 'lease_until': 99.0}))
+    _write(dual, rows)
+    primary.delete('jobs', 'gp1')
+    primary.apply(('gpus', 'gpu-a'), {'token': '', 'lease_until': 0.0, 'released_token': 't1'})  # refresh dropped
+
+    dual.purge_owner_now(uid)
+    assert _postgres(shadow, 'gpus', 'gpu-a') == {'token': '', 'lease_until': 0.0, 'released_token': 't1'}
+
+
+def test_purge_waits_for_a_mirror_copy_that_read_the_pre_purge_primary(stores):
+    """A copy that read the primary before the purge but has not committed must not survive the purge."""
+    import threading
+    import time
+
+    customer, primary, shadow, dual = stores
+    uid = 'synthetic-race'
+    customer.add_user(uid)
+    _write(dual, _owner_rows(uid, 'r1'))
+    late = {**primary.get('jobs', 'r1')}
+    primary.delete('jobs', 'r1')
+    with shadow.pool.connection() as conn:
+        shadow.delete_doc(conn, 'jobs', 'r1')  # Postgres has not seen the job yet: only the slow copy will add it
+    read, release, purged = threading.Event(), threading.Event(), threading.Event()
+
+    def slow_reader(_primary, keys):
+        read.set()
+        assert release.wait(10)
+        return {address: late for address in keys}  # the pre-purge state it read
+
+    def mirror():
+        with shadow.pool.connection() as conn:
+            with conn.transaction():
+                dual.copy_current(conn, [('jobs', 'r1')], reader=slow_reader)
+
+    def purge():
+        dual.purge_owner_now(uid)
+        purged.set()
+
+    copier = threading.Thread(target=mirror)
+    copier.start()
+    assert read.wait(10)
+    purger = threading.Thread(target=purge)
+    purger.start()
+    time.sleep(0.5)
+    assert not purged.is_set(), 'the purge scan must wait for the in-flight copy'
+    release.set()
+    copier.join(10)
+    purger.join(30)
+    assert purged.is_set()
+    assert _postgres(shadow, 'jobs', 'r1') == {}
+
+
 def test_a_failed_reconcile_raises_so_the_deletion_retries(stores, monkeypatch):
     customer, primary, shadow, dual = stores
     uid = 'synthetic-failure'
