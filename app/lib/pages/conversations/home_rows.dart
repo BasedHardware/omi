@@ -47,9 +47,11 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
           id: 'episode:${episode.id}',
           createdAt: episode.startedAt,
           startedAt: episode.startedAt,
+          finishedAt: episode.lastActivityAt,
           structured: pending.first.structured,
         ),
         episodeConversationIds: episode.conversationIds.toSet(),
+        episode: episode,
         isProcessing: true,
       ));
       continue;
@@ -68,24 +70,22 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
       continue;
     }
     final primary = members.first;
-    if (!episode.composed) {
-      if (episode.awaitingSummary(now ?? DateTime.now())) {
-        rows.add(HomeRow(
-          ServerConversation(
-            id: 'episode:${episode.id}',
-            createdAt: episode.startedAt,
-            startedAt: episode.startedAt,
-            structured: primary.structured,
-          ),
-          episodeConversationIds: episode.conversationIds.toSet(),
-          isProcessing: true,
-        ));
-      } else {
-        // The summary never landed. Its members stand alone rather than exposing draft notes.
-        hidden.removeAll(members.map((m) => m.id).where((id) => !liveConversationIds.contains(id)));
-      }
+    if (!episode.composed && episode.awaitingSummary(now ?? DateTime.now())) {
+      rows.add(HomeRow(
+        ServerConversation(
+          id: 'episode:${episode.id}',
+          createdAt: episode.startedAt,
+          startedAt: episode.startedAt,
+          finishedAt: episode.lastActivityAt,
+          structured: primary.structured,
+        ),
+        episodeConversationIds: episode.conversationIds.toSet(),
+        episode: episode.copyWith(members: members),
+        isProcessing: true,
+      ));
       continue;
     }
+    // A summary that never landed keeps its one row, and the page reads the running notes.
     final end = episode.lastActivityAt;
     // The adapter gives the existing row widget its exact typography, emoji tile and spacing.
     // It is never passed to a conversation mutation or detail API.

@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Notities beginnen wanneer de definitieve transcriptie binnenkomt.",
     "episodeOnDeviceNotesFootnote": "Opgesteld op je telefoon terwijl je praat. De volledige notities komen met de definitieve transcriptie.",
     "episodeOnThisPhone": "Op deze telefoon",
-    "liveCardTitle": "Live",
     "livePreviewBehind": "Definitieve transcriptie ongeveer {duration} achter",
     "livePreviewCatchingUp": "Definitieve transcriptie loopt bij",
     "livePreviewNoEngineBody": "Je woorden verschijnen hier een à twee minuten nadat je ze hebt gezegd.",
     "livePreviewNoEngineTitle": "Neemt veilig op",
-    "livePreviewOnPhoneDivider": "Live op deze telefoon",
+    "livePreviewOnPhoneDivider": "Zojuist, op deze telefoon",
     "livePreviewTurnOnLiveText": "Live-tekst inschakelen",
     "deviceCatchUpOnItsWay": "onderweg",
     "deviceCatchUpWhenOnline": "als je online bent",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Jaarlijks betalen is nu niet beschikbaar voor je abonnement.",
     "yearlySwitchDoneTitle": "Je betaalt nu jaarlijks",
     "yearlySwitchDoneBody": "Vandaag {amount} afgeschreven. Verlengt op {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} delen} one{{count} deel} two{{count} delen} few{{count} delen} many{{count} delen} other{{count} delen}}",
     "chatAppsWaitingMessageIn": "Stuur het bericht in {app}. Dit scherm wordt bijgewerkt zodra Omi het ontvangt.",
-    "chatAppsCodeExpiredMessageIn": "Vraag een nieuwe code aan en stuur die vanuit {app}."
+    "chatAppsCodeExpiredMessageIn": "Vraag een nieuwe code aan en stuur die vanuit {app}.",
+    "episodeWritingNotes": "Notities schrijven…",
+    "episodeWritingNotesDetail": "Eerst maken we het transcript af. Je kunt deze pagina verlaten.",
+    "episodeCoversUpTo": "Tot {time} · volledige notities aan het eind",
+    "liveTranscribedUpTo": "Getranscribeerd tot {time}",
+    "liveAudioSaved": "{duration} opgeslagen",
+    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden."
 }

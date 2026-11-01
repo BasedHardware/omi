@@ -14472,9 +14472,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeOnThisPhone => '이 휴대전화에서';
 
   @override
-  String get liveCardTitle => '라이브';
-
-  @override
   String livePreviewBehind(Object duration) {
     return '최종 스크립트가 약 $duration 뒤처져 있습니다';
   }
@@ -14489,7 +14486,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get livePreviewNoEngineTitle => '안전하게 기록 중입니다';
 
   @override
-  String get livePreviewOnPhoneDivider => '이 휴대전화에서 실시간';
+  String get livePreviewOnPhoneDivider => '방금, 이 휴대전화에서';
 
   @override
   String get livePreviewTurnOnLiveText => '실시간 텍스트 켜기';
@@ -14728,21 +14725,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count개 부분',
-      many: '$count개 부분',
-      few: '$count개 부분',
-      two: '$count개 부분',
-      one: '$count개 부분',
-      zero: '$count개 부분',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return '$app에서 메시지를 보내세요. Omi가 받는 즉시 이 화면이 업데이트됩니다.';
   }
@@ -14751,4 +14733,28 @@ class AppLocalizationsKo extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return '새 코드를 받아 $app 앱에서 보내세요.';
   }
+
+  @override
+  String get episodeWritingNotes => '메모 작성 중…';
+
+  @override
+  String get episodeWritingNotesDetail => '먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time까지 · 끝나면 전체 메모 제공';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time까지 변환됨';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration 저장됨';
+  }
+
+  @override
+  String get liveAudioSavedDetail => '업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.';
 }
