@@ -24,6 +24,24 @@ class MigrationNotReady(RuntimeError):
     """A failed qualification leaves the old route active."""
 
 
+def bounded_upsert_batches(records: list[dict], namespace: str) -> Iterator[list[dict]]:
+    """Keep wide vectors and metadata below Pinecone's 2 MB request limit."""
+    overhead = len(json.dumps({'namespace': namespace, 'vectors': []}).encode())
+    batch: list[dict] = []
+    size = overhead
+    for record in records:
+        encoded_size = len(json.dumps(record, allow_nan=False).encode()) + 2
+        if overhead + encoded_size > 1_800_000:
+            raise MigrationNotReady('Individual vector exceeds the safe upload size')
+        if batch and (size + encoded_size > 1_800_000 or len(batch) == 1000):
+            yield batch
+            batch, size = [], overhead
+        batch.append(record)
+        size += encoded_size
+    if batch:
+        yield batch
+
+
 def record_digest(record: dict) -> str:
     def normalize(value: Any) -> Any:
         if isinstance(value, dict):
@@ -328,8 +346,9 @@ class OwnerMigration:
                 groups.setdefault(selector, {})[vector_id] = expected[vector_id]
                 if len(samples) < 3:
                     samples.append(record['values'])
-            last_target_lsn = self._write(token, 'vectors/upsert', target, [r['id'] for r in records], vectors=records)
-            owned_revision_increments += 2
+            for batch in bounded_upsert_batches(records, target):
+                last_target_lsn = self._write(token, 'vectors/upsert', target, [r['id'] for r in batch], vectors=batch)
+                owned_revision_increments += 2
         # Remove target-only records, including records deleted during a prior
         # interrupted attempt. No namespace-wide deletion is ever used.
         for records in self.transport.owned_pages(target, self.key.uid):

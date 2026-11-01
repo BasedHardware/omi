@@ -445,6 +445,75 @@ def test_large_owner_qualifies_complete_inventory_and_every_payload_group(setup)
     commit(key, db, receipt)
 
 
+def wide_record(id):
+    row = record(id, values=[0.1234567890123456] * 3072)
+    row['metadata']['context'] = '日本語"\\\n' * 1000
+    return row
+
+
+def test_wide_page_splits_by_complete_serialized_payload_without_losing_records():
+    records = [wide_record(str(i)) for i in range(100)]
+    before = deepcopy(records)
+    namespace = 'ns2-p1-00'
+    assert len(json.dumps({'namespace': namespace, 'vectors': records}).encode()) > 1_800_000
+    batches = list(migration.bounded_upsert_batches(records, namespace))
+    assert len(batches) > 1
+    assert [row for batch in batches for row in batch] == before
+    assert records == before
+    assert all(len(json.dumps({'namespace': namespace, 'vectors': batch}).encode()) <= 1_800_000 for batch in batches)
+    assert all(0 < len(batch) <= 1000 for batch in batches)
+
+
+def test_upsert_batch_record_limit_applies_even_when_bytes_are_small():
+    rows = [record(str(i)) for i in range(1001)]
+    namespace = 'ns2-p1-00'
+    assert len(json.dumps({'namespace': namespace, 'vectors': rows}).encode()) < 1_800_000
+    batches = list(migration.bounded_upsert_batches(rows, namespace))
+    assert [len(batch) for batch in batches] == [1000, 1]
+    assert [row['id'] for batch in batches for row in batch] == [row['id'] for row in rows]
+    assert list(migration.bounded_upsert_batches([], namespace)) == []
+
+
+def test_one_oversize_record_is_rejected_before_customer_write_admission(setup):
+    key, db, provider, runner = setup
+    row = record('oversize')
+    row['metadata']['context'] = 'x' * 1_800_000
+    provider.records[key.family] = {'oversize': row}
+    with pytest.raises(migration.MigrationNotReady):
+        runner.qualify('oversize', dimension=2)
+    route = state.get_route(key, firestore_client=db)
+    assert route.pending_count == route.uncertain_count == 0
+    assert route.primary_namespace == key.family
+    customer_upserts = [
+        payload
+        for path, payload in provider.calls
+        if path == 'vectors/upsert' and any('uid' in item['metadata'] for item in payload['vectors'])
+    ]
+    assert customer_upserts == []
+    assert owned(provider, key.partition_namespace) == {}
+
+
+def test_qualify_counts_every_split_upsert_in_generation_and_can_commit(setup):
+    key, db, provider, runner = setup
+    provider.page_size = 100
+    provider.records[key.family] = {str(i): wide_record(str(i)) for i in range(40)}
+    receipt = runner.qualify('split-page', dimension=3072)
+    copies = [
+        payload
+        for path, payload in provider.calls
+        if path == 'vectors/upsert'
+        and payload['namespace'] == key.partition_namespace
+        and any('uid' in row['metadata'] for row in payload['vectors'])
+    ]
+    assert len(copies) > 1
+    assert all(len(json.dumps(payload).encode()) <= 1_800_000 for payload in copies)
+    assert sorted(row['id'] for payload in copies for row in payload['vectors']) == sorted(owned(provider, key.family))
+    assert receipt['revision'] == 1 + 2 * (len(copies) + 2)
+    assert receipt['records'] == 40
+    assert owned(provider, key.partition_namespace) == owned(provider, key.family)
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
 @pytest.mark.parametrize('missing_field', [False, True])
 def test_large_inventory_rejects_unknown_identity_and_missing_metadata(setup, missing_field):
     key, _, provider, _ = setup
