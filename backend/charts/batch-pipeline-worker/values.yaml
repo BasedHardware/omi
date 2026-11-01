@@ -107,9 +107,20 @@ autoscaling:
     spotNodePool: batch-pipeline-pool-spot
   # External metrics from the supplied Prometheus adapter rules must be installed
   # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
-  # PROVISIONAL development target: slot bound only, NOT throughput evidence.
-  # Qualify useful throughput/queue latency before the production apply.
+  # Max-of-two (batchdesign 2026-11-01 PR-2): the HPA keeps the admissible-ready
+  # backlog target AND adds GPU-chain occupancy, sizing on the higher
+  # recommendation. The ready count holds capacity through claim-chain wedges
+  # (occupancy alone sheds lanes whenever claims bind rather than flights);
+  # occupancy keeps capacity through healthy drains where backlog reads low but
+  # flights are real (hpafit 2026-11-01 replay: 0 starved minutes over 24h and
+  # replica dominance over the ready-only answer whenever backlog exceeds the
+  # per-worker target).
   targetQueuedUnitsPerWorker: 16
+  # GPU-chain (worker_flight) busy seconds per second per worker; 0.5 is ~89%
+  # of the measured healthy chain ceiling (hpafit 2026-11-01 replay).
+  targetChainBusyPerWorker: "0.5"
+  # Stockout-aware scale-down window; with 1 pod / 600s this sheds ~6 nodes/hour.
+  scaleDownStabilizationSeconds: 1800
 podMonitoring:
   enabled: true
 recordSealRepair:
