@@ -2254,3 +2254,101 @@ def test_notifications_job_renders_the_verified_gateway_endpoint():
     assert "--github-output" in steps[gate]["run"]
     assert steps[render]["env"]["OMI_LLM_GATEWAY_URL"] == "${{ steps.gateway-serving.outputs.gateway_url }}"
     assert "http://127.0.0.1:9" in steps[render]["run"]
+
+
+def _gcp_backend_workflow() -> dict:
+    return yaml.safe_load((BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8'))
+
+
+def test_backend_dispatch_input_names_its_requester():
+    """Every manual backend dispatch names who requested it (lead ruling 310a7c).
+
+    Prod run 40214727824 (2026-10-25) could not be traced to any session: every
+    agent dispatches as the shared account, so the run itself must carry the
+    requester. `required` alone is not enough -- the REST API does not enforce
+    required string inputs -- so the prod boundary step checks it again.
+    """
+    workflow = _gcp_backend_workflow()
+    triggers = workflow.get('on', workflow.get(True))
+    inputs = triggers['workflow_dispatch']['inputs']
+
+    requested_by = inputs['requested_by']
+    assert requested_by['type'] == 'string'
+    assert requested_by['required'] is True
+    assert 'lane label or session' in requested_by['description']
+
+    run_name = workflow['run-name']
+    assert 'inputs.requested_by' in run_name
+    # Non-dispatch triggers still render the event and actor instead of blanks.
+    assert 'inputs.environment || github.event_name' in run_name
+    assert 'inputs.requested_by || github.actor' in run_name
+
+
+def test_backend_prod_boundary_rejects_dispatches_without_a_requester(tmp_path):
+    """The prod boundary check fails closed when requested_by is empty or
+    whitespace, echoes the requester into the log, and ignores it for
+    development dispatches."""
+    workflow = _gcp_backend_workflow()
+    job = workflow['jobs']['validate-production-boundary']
+    step = next(step for step in job['steps'] if step.get('env', {}).get('DEPLOY_ENVIRONMENT') is not None)
+    assert step['env']['REQUESTED_BY'] == '${{ github.event.inputs.requested_by }}'
+
+    script = tmp_path / 'boundary.sh'
+    # Expand the inline deploy_gateway expressions the way the dispatcher does;
+    # literal ${{ }} is not valid bash and is irrelevant to the requester check.
+    script.write_text(re.sub(r'\$\{\{[^}]*\}\}', 'false', step['run']), encoding='utf-8')
+
+    def run_boundary(environment: str, requested_by: str) -> subprocess.CompletedProcess:
+        env = {
+            **os.environ,
+            'DEPLOY_ENVIRONMENT': environment,
+            'DEPLOY_TARGETS': 'cloud-run-only',
+            'WORKFLOW_MODE': 'deploy',
+            'SERVICE_IMAGES': '',
+            'REQUESTED_BY': requested_by,
+        }
+        return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+
+    rejected = run_boundary('prod', '   ')
+    assert rejected.returncode != 0
+    assert '::error::' in rejected.stdout and 'requested_by' in rejected.stdout
+
+    accepted = run_boundary('prod', 'train:nightly-42')
+    assert accepted.returncode == 0, accepted.stderr
+    assert 'requested_by=train:nightly-42' in accepted.stdout
+
+    development = run_boundary('development', '')
+    assert development.returncode == 0, development.stderr
+
+
+def test_backend_traffic_repair_prod_dispatch_needs_a_requester(tmp_path):
+    """repair-traffic-only is an independent prod mutation path: it skips
+    validate-production-boundary and validates in its own first step, so the
+    requester check must live there too (Luna round 1, PR #23694)."""
+    workflow = _gcp_backend_workflow()
+    steps = workflow['jobs']['repair-traffic']['steps']
+    step = next(step for step in steps if step.get('name') == 'Validate Environment Input')
+    assert step['env']['REQUESTED_BY'] == '${{ github.event.inputs.requested_by }}'
+
+    script = tmp_path / 'repair.sh'
+    # Expand the inline github.event.inputs.environment expressions the way the
+    # dispatcher does; literal ${{ }} is not valid bash.
+    script.write_text(
+        re.sub(r'\$\{\{\s*github\.event\.inputs\.(\w+)\s*\}\}', r'${INPUT_\1}', step['run']),
+        encoding='utf-8',
+    )
+
+    def run_repair(environment: str, requested_by: str) -> subprocess.CompletedProcess:
+        env = {**os.environ, 'INPUT_environment': environment, 'REQUESTED_BY': requested_by}
+        return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+
+    rejected = run_repair('prod', '')
+    assert rejected.returncode != 0
+    assert '::error::' in rejected.stdout and 'requested_by' in rejected.stdout
+
+    accepted = run_repair('prod', 'op1')
+    assert accepted.returncode == 0, accepted.stderr
+    assert 'requested_by=op1' in accepted.stdout
+
+    development = run_repair('development', '')
+    assert development.returncode == 0, development.stderr
