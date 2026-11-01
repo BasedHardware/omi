@@ -580,6 +580,7 @@ and an explicit empty literal renders as `''`.
 | `STALE_IN_PROGRESS_RECOVERY_ENABLED` | Incident stop for reconnect stale in-progress recovery; default on | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | — | keep | keep | — | backend listen |
 | `STT_CAP_FINALIZE_FORWARD_ENABLED` | Default on; preserve provider-specific finalize arguments through the funded STT cap proxy | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STT_CAP_OFFLINE_ENFORCEMENT` | Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `STT_IDLE_PARAKEET_FAILBACK_ENABLED` | Default on unless false; one idle-onset return to Parakeet per English session that a transient exit left on Soniox | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STT_IDLE_REOPEN_COST_RESELECT_ENABLED` | Default off after the 2026-10-27 first-text regression; explicit true re-enables managed cost reselection at Soniox idle onset | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STT_NO_TEXT_RESCUE_ENABLED` | Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled | backend | env | closed | — | — | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | backend |
 | `STT_PRERECORDED_LANGUAGE_GATE_SHADOW` | Default on unless false; every unknown-language prerecorded probe also asks the self-hosted Parakeet /v2/language gate (Whisper-base) and records agreement with the vendor probe; routing unchanged | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1182,6 +1183,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `STT_CAP_FINALIZE_FORWARD_ENABLED` — Default on; preserve provider-specific finalize arguments through the funded STT cap proxy (fail: open)
 - `STT_CAP_OFFLINE_ENFORCEMENT` — Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope (fail: open)
 - `STT_CAP_RECOVERY_COHORT` — Optional recovery-only cohort intersection; unset preserves dispatch scope, malformed denies all recovery (fail: closed)
+- `STT_IDLE_PARAKEET_FAILBACK_ENABLED` — Default on unless false; one idle-onset return to Parakeet per English session that a transient exit left on Soniox (fail: open)
 - `STT_IDLE_REOPEN_COST_RESELECT_ENABLED` — Default off after the 2026-10-27 first-text regression; explicit true re-enables managed cost reselection at Soniox idle onset (fail: open)
 - `STT_LANGUAGE_HINTS_MODE` — Single-language Soniox hint overlay; preserves existing learned/multi-language policy and all prerecorded gates; default shadow (fail: closed)
 - `STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT` — Serve cohort percentage; default 0 (fail: closed)

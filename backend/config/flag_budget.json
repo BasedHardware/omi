@@ -183,6 +183,7 @@
     "STT_CIRCUIT_GAUGE_REFRESH_SECONDS": {"seeded": "2026-10-25"},
     "STT_FAILOVER_RECOVERY_ENABLED": {"seeded": "2026-10-25"},
     "STT_IDLE_REOPEN_COST_RESELECT_ENABLED": {"owner": "idlereopen / two-lane lead", "review_by": "2026-11-26"},
+    "STT_IDLE_PARAKEET_FAILBACK_ENABLED": {"owner": "liveoptimal / two-lane lead", "review_by": "2026-12-01"},
     "STT_FALLBACK_LIVENESS_GRACE_SECONDS": {"seeded": "2026-10-25"},
     "STT_MULTI_LANGUAGE_HINTS": {"seeded": "2026-10-25"},
     "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT": {"seeded": "2026-10-25"},

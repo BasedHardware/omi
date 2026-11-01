@@ -32,7 +32,7 @@ from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
-from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from config.live_stt_registry import DEFAULT_IDS, Target, registry, routing_on
 from config.stt_provider_policy import provider_for_model_token
 from utils.stt.live_chain import connect_configured_chain
 from config.audio_timeline import soniox_wire_ledger_enabled
@@ -45,6 +45,7 @@ from config.live_stt_replay import (
 )
 from config.audio_timeline import live_capture_window_translator_sends_enabled
 from config.live_stt_recovery import session_recovery_enabled
+from config.live_stt_idle import idle_parakeet_failback_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.no_text_rescue import NoTextRescue
@@ -88,6 +89,42 @@ class LiveChainSession:
         self.vad_mode = 'off'
         self._routing_target_entry: Target | None = None
         self.speaker_provider_epoch: SpeakerProviderEpoch | None = None
+        self.parakeet_failbacks = 0
+
+    def window_eligible(self) -> bool:
+        host = self.receiver.host
+        demand = getattr(self.receiver, 'live_demand', None)
+        if demand is not None and not demand.eligible:
+            demand = None
+        uid = host.request.uid
+        return bool(
+            window_allocation(uid)
+            and (demand.window_permitted if demand is not None else True)
+            and window_language_supported(host.language, host.stt_language, uid)
+            and window_endpoint(window_language(host.language, host.stt_language))
+        )
+
+    def parakeet_failback_due(self, service: st.STTService) -> bool:
+        """Spend this session's one idle-onset return to Parakeet (see config.live_stt_idle)."""
+        if self.parakeet_failbacks or service != st.STTService.soniox or not idle_parakeet_failback_enabled():
+            return False
+        if st.normalized_stt_language(self.receiver.host.language) != 'en' or not self.window_eligible():
+            return False
+        if 'parakeet-window' not in {model.strip() for model in service_models(st.stt_service_models)}:
+            return False  # The chain could not select the window: a handoff would only spend the attempt.
+        from utils.stt import parakeet_window
+
+        if not parakeet_window.admission.available() or st.parakeet_family_circuit_state() != 'closed':
+            return False
+        try:  # A benched or trial-stage window would reselect Soniox again: pure churn.
+            target = next(entry for entry in registry() if entry.id == 'parakeet-window')
+            state = health.cost_snapshot([target], 'en').get(target.id)
+        except Exception:
+            return False
+        if state is None or state.stage < 100:
+            return False
+        self.parakeet_failbacks += 1
+        return True
 
     def consume_speech_ms_delta(self) -> int:
         delta, self.speech_ms = self.speech_ms, 0
@@ -1278,7 +1315,10 @@ class LiveLegSocket(STTSocket):
     def _configure_idle_cost_reselect(self) -> None:
         configure = getattr(self.raw, 'set_cost_reselect_managed', None)
         if callable(configure):
-            configure(self.session.recovery_enabled and getattr(self.session.receiver, 'recovery', None) is not None)
+            configure(
+                self.session.recovery_enabled and getattr(self.session.receiver, 'recovery', None) is not None,
+                lambda: self.session.parakeet_failback_due(self.service),
+            )
 
     async def complete_send(self) -> bool:
         if getattr(self.raw, 'idle_reopen_cost_reselect_pending', False) is True:

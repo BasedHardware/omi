@@ -139,6 +139,7 @@ class IdleSonioxSocket(STTSocket):
         self.idle_cost_reselect_requested = False
         self._cost_reselect_managed = False
         self._cost_reselect_onset = False
+        self._failback_due: Callable[[], bool] = lambda: False
         self._reason: str | None = None
         self._silent_since: float | None = None
         self._idle_since: float | None = None
@@ -348,7 +349,9 @@ class IdleSonioxSocket(STTSocket):
                 # Pin the dispatch decision before the cap wrapper accounts
                 # this send. Pending PCM has not reached the closed vendor;
                 # a managed successor owns its one funded dispatch instead.
-                self._cost_reselect_onset = self._cost_reselect_managed and idle_reopen_cost_reselect_enabled()
+                self._cost_reselect_onset = self._cost_reselect_managed and (
+                    idle_reopen_cost_reselect_enabled() or self._failback_due()
+                )
             self._pending.extend(data)
             if self._wire_epoch is not None:
                 audio = observed_audio(data, self._wire_epoch, capture_spans.get())
@@ -373,8 +376,10 @@ class IdleSonioxSocket(STTSocket):
     def idle_reopen_pending(self) -> bool:
         return self._idle_since is not None and bool(self._pending)
 
-    def set_cost_reselect_managed(self, enabled: bool) -> None:
+    def set_cost_reselect_managed(self, enabled: bool, failback_due: Callable[[], bool] | None = None) -> None:
         self._cost_reselect_managed = enabled
+        if failback_due is not None:
+            self._failback_due = failback_due
 
     @property
     def idle_reopen_cost_reselect_pending(self) -> bool:
