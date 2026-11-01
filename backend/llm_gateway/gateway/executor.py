@@ -474,13 +474,16 @@ PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
 # Flex-first: try OpenAI Flex (Batch-API token rates, 50% below Standard) on
 # background conversation lanes, then fall straight back to Standard on any
 # provider failure. Prod 7d on memory-l2-flex (gpt-6-luna): 92% served, 8%
-# Flex 429, p50 7.3s vs 5.2s Standard. The Flex attempt is capped so Standard
-# keeps most of the route budget and the backend's 60s foreground client
-# timeout. Kill switch: LLM_GATEWAY_FLEX_FIRST_LANES=off.
+# Flex 429, p50 7.3s vs 5.2s Standard. Callers of these lanes give up at the
+# backend's 60s foreground timeout, which the gateway cannot see, so each lane's
+# Flex cap leaves Standard well above its own 7d p99 (conv-structure 35.9s,
+# memory-l1 18.8s): 60-15=45s and 60-10=50s. A Flex 429 returns fast and costs
+# almost none of that. Kill switch: LLM_GATEWAY_FLEX_FIRST_LANES=off.
 FLEX_FIRST_LANES_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_LANES'
 FLEX_FIRST_TIMEOUT_MS_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_TIMEOUT_MS'
 DEFAULT_FLEX_FIRST_LANES = frozenset({'omi:auto:conv-structure', 'omi:auto:memory-l1'})
-DEFAULT_FLEX_FIRST_TIMEOUT_MS = 25_000
+DEFAULT_FLEX_FIRST_TIMEOUT_MS = 10_000
+FLEX_FIRST_LANE_TIMEOUT_MS = {'omi:auto:conv-structure': 15_000, 'omi:auto:memory-l1': 10_000}
 
 
 def flex_first_lanes() -> frozenset[str]:
@@ -493,11 +496,15 @@ def flex_first_lanes() -> frozenset[str]:
     return frozenset(part.strip() for part in value.split(',') if part.strip())
 
 
-def flex_first_timeout_ms(remaining_ms: int) -> int:
-    try:
-        cap = int(os.getenv(FLEX_FIRST_TIMEOUT_MS_ENV_VAR, '') or DEFAULT_FLEX_FIRST_TIMEOUT_MS)
-    except ValueError:
-        cap = DEFAULT_FLEX_FIRST_TIMEOUT_MS
+def flex_first_timeout_ms(lane_id: str, remaining_ms: int) -> int:
+    """Flex attempt cap: the env override when set, else the lane's cap; never over half the budget."""
+    cap = FLEX_FIRST_LANE_TIMEOUT_MS.get(lane_id, DEFAULT_FLEX_FIRST_TIMEOUT_MS)
+    raw = os.getenv(FLEX_FIRST_TIMEOUT_MS_ENV_VAR, '').strip()
+    if raw:
+        try:
+            cap = int(raw)
+        except ValueError:
+            pass
     return max(1, min(cap, remaining_ms // 2))
 
 
@@ -731,7 +738,7 @@ async def _attempt_provider(
             )
         if flex_attempt:
             provider_request['service_tier'] = 'flex'
-            timeout_ms = flex_first_timeout_ms(timeout_ms)
+            timeout_ms = flex_first_timeout_ms(route.lane_id, timeout_ms)
         try:
             response = await provider.create_chat_completion(
                 provider_request,

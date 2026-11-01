@@ -980,14 +980,20 @@ def test_flex_first_default_lanes_and_kill_switch(monkeypatch):
     assert executor.flex_first_lanes() == {LANE_ID, 'omi:auto:goals'}
 
 
-def test_flex_first_timeout_is_capped_and_leaves_standard_half_the_budget(monkeypatch):
+def test_flex_first_timeout_leaves_standard_above_its_p99_inside_the_60s_caller(monkeypatch):
     monkeypatch.delenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, raising=False)
-    assert executor.flex_first_timeout_ms(120_000) == 25_000
-    assert executor.flex_first_timeout_ms(30_000) == 15_000
-    monkeypatch.setenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, '40000')
-    assert executor.flex_first_timeout_ms(120_000) == 40_000
+    # 7d Standard p99 (2026-11-01): conv-structure 35.9s, memory-l1 18.8s; callers time out at 60s.
+    caller_ms = 60_000
+    for lane_id, standard_p99_ms in (('omi:auto:conv-structure', 35_900), ('omi:auto:memory-l1', 18_800)):
+        assert caller_ms - executor.flex_first_timeout_ms(lane_id, 120_000) > standard_p99_ms + 5_000
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 15_000
+    assert executor.flex_first_timeout_ms('omi:auto:memory-l1', 120_000) == 10_000
+    assert executor.flex_first_timeout_ms(LANE_ID, 120_000) == executor.DEFAULT_FLEX_FIRST_TIMEOUT_MS
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 20_000) == 10_000
+    monkeypatch.setenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, '5000')
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 5_000
     monkeypatch.setenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, 'junk')
-    assert executor.flex_first_timeout_ms(120_000) == 25_000
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 15_000
 
 
 @pytest.mark.asyncio
@@ -1004,7 +1010,7 @@ async def test_flex_first_success_sends_flex_once(monkeypatch):
 
     assert len(provider.calls) == 1
     assert provider.calls[0].request['service_tier'] == 'flex'
-    assert provider.calls[0].timeout_ms == 25_000
+    assert provider.calls[0].timeout_ms == executor.DEFAULT_FLEX_FIRST_TIMEOUT_MS
     assert [attempt.retry_ordinal for attempt in trace.attempts] == [1]
     assert not result.fallback_used
 
