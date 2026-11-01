@@ -1,4 +1,4 @@
-// The shared HTTP layer every API call goes through: auth header with a
+// The shared HTTP layer for backend API calls (OAuth exchange is separate): auth header with a
 // five-minute expiry buffer and forced refresh, the standard request headers,
 // and the raw call path with retry and clock-skew handling.
 //
