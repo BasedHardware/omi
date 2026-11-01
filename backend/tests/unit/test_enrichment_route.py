@@ -86,11 +86,13 @@ def test_lifecycle_fence_settles_as_superseded(rows):
     assert KEY not in rows[0]
 
 
-def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
+def _defer_open_live_target(rows, monkeypatch, *, waited):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     state_rows, tasks = rows
     token = state_rows[KEY]['task_token']
+    # The consumer reads the wall clock, so the obligation's age is set against it.
+    state_rows[KEY]['first_pending_at'] = time.time() - waited
 
     def live(*_):
         from utils.conversations.summary_delivery import PROCESS_CONTEXT
@@ -101,8 +103,18 @@ def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
 
     result = _deliver(rows, live)
     assert (result.outcome, result.reason) == ('deferred', 'not_due')
-    assert state_rows[KEY]['due_at'] == pytest.approx(time.time() + reprocess.LIVE_DEFER_SECONDS, abs=5)
     assert state_rows[KEY]['task_token'] != token and tasks[-1]['task_token'] == state_rows[KEY]['task_token']
+    return state_rows[KEY]['due_at']
+
+
+def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
+    due_at = _defer_open_live_target(rows, monkeypatch, waited=0)
+    assert due_at == pytest.approx(time.time() + reprocess.LIVE_DEFER_SECONDS, abs=5)
+
+
+def test_long_stuck_open_live_target_polls_hourly(rows, monkeypatch):
+    due_at = _defer_open_live_target(rows, monkeypatch, waited=reprocess.STUCK_DEFER_GRACE_SECONDS + 60)
+    assert due_at == pytest.approx(time.time() + reprocess.STUCK_DEFER_POLL_SECONDS, abs=5)
 
 
 def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch):

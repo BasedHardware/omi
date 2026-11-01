@@ -113,6 +113,63 @@ def test_invalid_redirect_retains_deferred_debt_without_processing(admitted, pip
     assert rows[reprocess.key('u', 'c')]['deferred_reason'] == 'redirect_unresolved'
 
 
+def _stuck_redirect(pipeline, monkeypatch):
+    process = callback(pipeline, monkeypatch, {'deleted': True, 'sync_merged_into': 'unresolved'})
+    monkeypatch.setattr(pipeline.conversations_db, 'resolve_sync_conversation_redirect', lambda *_: None)
+    return process
+
+
+def test_unresolved_redirect_polls_hourly_only_after_the_grace(admitted, pipeline, monkeypatch):
+    rows, tasks = admitted
+    key, process = reprocess.key('u', 'c'), _stuck_redirect(pipeline, monkeypatch)
+    assert reprocess.run(key, tasks[-1]['task_token'], process, now=120) == 'deferred'
+    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS
+    late = reprocess.STUCK_DEFER_GRACE_SECONDS
+    assert reprocess.run(key, tasks[-1]['task_token'], process, now=late) == 'deferred'
+    assert rows[key]['due_at'] == rows[key]['task_due_at'] == late + reprocess.STUCK_DEFER_POLL_SECONDS
+    assert tasks[-1] == rows[key] and rows[key]['deferred_reason'] == 'redirect_unresolved'
+    assert rows[key]['first_pending_at'] == 0 and not rows[key].get('dormant')
+
+
+def test_stuck_redirect_deliveries_per_day_drop_from_719_to_197(admitted, pipeline, monkeypatch):
+    rows, tasks = admitted
+    key, process = reprocess.key('u', 'c'), _stuck_redirect(pipeline, monkeypatch)
+    initial = deepcopy(rows[key]), list(tasks)
+
+    def deliveries_over_a_day():
+        now, times = 120, []
+        while now < 86400:
+            assert reprocess.run(key, tasks[-1]['task_token'], process, now=now) == 'deferred'
+            times.append(now)
+            now = rows[key]['due_at']
+        return times
+
+    grace = reprocess.STUCK_DEFER_GRACE_SECONDS
+    monkeypatch.setattr(reprocess, 'STUCK_DEFER_GRACE_SECONDS', float('inf'))  # the pre-change cadence
+    before = deliveries_over_a_day()
+    rows[key], tasks[:] = deepcopy(initial[0]), initial[1]
+    monkeypatch.setattr(reprocess, 'STUCK_DEFER_GRACE_SECONDS', grace)
+    after = deliveries_over_a_day()
+    assert (len(before), len(after)) == (719, 197)
+    # Unchanged inside the grace; afterwards the worst added wait is one poll interval.
+    assert after[:179] == before[:179]
+    assert max(b - a for a, b in zip(after, after[1:])) == reprocess.STUCK_DEFER_POLL_SECONDS
+
+
+def test_custody_defer_until_extends_only_stuck_reasons_past_the_grace():
+    late = reprocess.STUCK_DEFER_GRACE_SECONDS + 10
+    poll, live = reprocess.STUCK_DEFER_POLL_SECONDS, reprocess.LIVE_DEFER_SECONDS
+    defer_until = reprocess.custody_defer_until
+    assert defer_until({'defer_reason': 'pending_live_bridge', 'defer_until': 40}, 0, 10) == 40
+    assert defer_until({'defer_reason': 'pending_live_bridge', 'defer_until': late + 30}, 0, late) == late + poll
+    assert defer_until({'defer_reason': 'conversation_missing'}, 0, late) == late + poll
+    assert defer_until({'defer_reason': 'open_live_target'}, late - 60, late) == late + live
+    assert defer_until({'defer_reason': 'open_live_target'}, None, late) == late + live
+    assert defer_until({'defer_reason': 'quiet_wait', 'defer_until': late + 30}, 0, late) == late + 30
+    far = late + 2 * poll
+    assert defer_until({'defer_reason': 'redirect_unresolved', 'defer_until': far}, 0, late) == far
+
+
 def test_watchdog_replaces_only_absent_exhausted_wake(admitted, sweep_query, monkeypatch):
     rows, tasks = admitted
     key, original = reprocess.key('u', 'c'), tasks[0]['task_token']
