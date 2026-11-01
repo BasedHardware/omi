@@ -60,6 +60,11 @@ T = TypeVar('T')
 
 BUDGET_S = 0.2
 QUEUE_LIMIT = 1000
+# A5 owner purge: deletion-flow work, so a real budget instead of the mirror's 200 ms, in bounded chunks.
+PURGE_TIMEOUT_S = 30.0
+PURGE_CHUNK = 200
+# Second-scan delay: longer than a mirror copy's pool wait plus one primary get_all in practice.
+PURGE_SETTLE_S = 2.0
 MIRRORED_TABLES = frozenset({'jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts'})
 _OFF = {'0', 'false', 'off', 'no'}
 _QUERY_CANCELED = '57014'
@@ -372,7 +377,13 @@ class DualStore:
         transactional read takes Firestore locks that contend with the pipeline's own writers while the
         Postgres locks are held, and the SDK does not retry an ``Aborted`` raised on a transaction's read
         path (staging 10-20: every ``op=refresh outcome=error`` was ``Aborted``).
+
+        Every copy first takes the namespace's purge barrier SHARED, before it reads the primary, and holds it
+        to commit. An owner purge takes it exclusively while it scans (``purge_owner_now``), so a copy that read
+        the primary before the purge has committed by then and is visible to the scan, and any later copy
+        reads the already-purged primary.
         """
+        conn.execute('SELECT pg_advisory_xact_lock_shared(hashtextextended(%s, 0))', (self._purge_barrier(),))
         for table, key in keys:
             conn.execute(
                 'SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (f'{self.shadow.namespace}/{table}/{key}',)
@@ -386,6 +397,77 @@ class DualStore:
                 self.shadow.write_doc(conn, table, key, doc)
             else:
                 self.shadow.delete_doc(conn, table, key)
+
+    def _purge_barrier(self) -> str:
+        return f'{self.shadow.namespace}/__purge_barrier__'
+
+    def owner_rows(self, conn: Any, owner_id: str) -> list[tuple[str, str]]:
+        """Every mirrored Postgres row that belongs to ``owner_id``, plus its scheduler shard (sorted)."""
+        from config.batch_pipeline import scheduler_control_key
+        from database.batch_pipeline_privacy import privacy_owner_key
+
+        namespace, key = self.shadow.namespace, privacy_owner_key(owner_id)
+        rows = {('control', scheduler_control_key(key)), ('owners', key)}
+        rows.update(('queues', f'{priority}_{key}') for priority in range(3))
+        owner_match = "(doc->>'owner_key' = %s OR doc->>'owner_id' = %s)"
+        jobs = conn.execute(
+            f"SELECT key, doc->>'shared_gpu_key' FROM jobs WHERE namespace = %s AND {owner_match}",
+            (namespace, key, owner_id),
+        ).fetchall()
+        rows.update(('jobs', row[0]) for row in jobs)
+        found = conn.execute(
+            f'SELECT key FROM results WHERE namespace = %s AND {owner_match}', (namespace, key, owner_id)
+        ).fetchall()
+        rows.update(('results', row[0]) for row in found)
+        found = conn.execute(
+            f'SELECT tbl, key FROM docs WHERE namespace = %s AND tbl = ANY(%s) AND {owner_match}',
+            (namespace, sorted(MIRRORED_TABLES - {'jobs', 'results', 'control'}), key, owner_id),
+        ).fetchall()
+        rows.update((row[0], row[1]) for row in found)
+        # Shared GPU reservations are keyed by GPU and name the leased segment, not the owner, and the job that
+        # linked them may already be gone from Postgres. There is one row per physical GPU, so reconcile them all.
+        found = conn.execute("SELECT key FROM docs WHERE namespace = %s AND tbl = 'gpus'", (namespace,)).fetchall()
+        rows.update(('gpus', row[0]) for row in found)
+        return sorted(rows)
+
+    def _reconcile_owner(self, owner_id: str) -> list[tuple[str, str]]:
+        with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
+            with conn.transaction():
+                conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
+                # Exclusive barrier: in-flight copies that read the pre-purge primary commit first.
+                conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (self._purge_barrier(),))
+                rows = self.owner_rows(conn, owner_id)
+        for start in range(0, len(rows), PURGE_CHUNK):
+            with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
+                with conn.transaction():
+                    conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
+                    self.copy_current(conn, rows[start : start + PURGE_CHUNK])
+        return rows
+
+    def purge_owner_now(self, owner_id: str) -> int:
+        """A5: after the primary's purge, make Postgres hold exactly the primary's state for one owner.
+
+        Account and conversation deletion must not depend on the best-effort mirror (a full queue or the
+        200 ms budget drops a refresh), so this runs in the deletion flow, synchronously, and RAISES on any
+        failure: the caller's purge is already bounded and retryable. Every Postgres row of the owner is
+        re-copied from the primary under its key lock (deleted when the primary no longer has it, or
+        overwritten with the erased form a conversation purge keeps), in bounded chunks. Returns the rows
+        reconciled.
+
+        A second scan after ``PURGE_SETTLE_S`` covers copies from mirror workers that predate the purge
+        barrier (a rolling deploy): such a copy that read the pre-purge primary and committed after the first
+        scan is found and erased, provided it finishes within the settle window.
+        """
+        try:
+            rows = set(self._reconcile_owner(owner_id))
+            time.sleep(PURGE_SETTLE_S)
+            rows.update(self._reconcile_owner(owner_id))
+        except Exception:
+            _count('other', 'purge', ShadowParityOutcome.ERROR)
+            raise
+        for table, _ in rows:
+            _count(table, 'purge', ShadowParityOutcome.MIRRORED)
+        return len(rows)
 
     def refresh_now(self, keys: list[tuple[str, str]]) -> None:
         """Re-copy ``keys`` from the primary into Postgres (upsert, or delete when gone). Never raises."""
@@ -643,6 +725,27 @@ def shadow_from_env(primary: Any) -> Any:
         _SHADOWED[namespace] = DualStore(primary, shadow)
         logger.info('event=jobstore_shadow outcome=enabled')
         return _SHADOWED[namespace]
+
+
+def purge_owner(namespace: str, owner_id: str) -> int:
+    """A5 deletion hook: reconcile ``owner_id``'s Postgres rows with the purged primary. RAISES on failure.
+
+    A no-op (0, nothing constructed) unless this process runs ``BATCH_JOBSTORE_MODE=shadow`` on an admitted
+    namespace with Postgres configured, exactly when the mirror could have copied the owner's documents.
+    ``JOBSTORE_SHADOW_WRITES=off`` stops new copies, not erasure of old ones, so it does not skip this.
+    """
+    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or not jobstore_shadow_admits(
+        namespace
+    ):
+        return 0
+    store = _SHADOWED.get(namespace)
+    if store is None:
+        from database.batch_pipeline_store import FirestoreStore
+
+        store = shadow_from_env(FirestoreStore(namespace))
+    if not isinstance(store, DualStore):
+        return 0  # shadow refused (unconfigured or no driver): the mirror never ran here
+    return store.purge_owner_now(owner_id)
 
 
 def mirror_refresh(namespace: str, keys) -> None:

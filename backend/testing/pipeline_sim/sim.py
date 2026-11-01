@@ -856,9 +856,12 @@ class Simulation:
                 f'{record.spec.owner}/{record.spec.content_id}',
                 lambda row: row.update(status='completed', updated_at=now),
             )
-            # Production ProjectionStore re-copies its siblings to the A2 shadow after commit (no-op otherwise).
+            # Production ProjectionStore re-copies its siblings AND the owner row (projection_watermark) to the
+            # A2 shadow after commit (ProjectionStore._mirror; no-op outside shadow mode).
+            owners = {('owners', self.store.rows[('results', s)]['owner_key']) for s in record.segment_ids}
             mirror_refresh(
-                getattr(self.store, 'namespace', ''), [(t, s) for s in record.segment_ids for t in ('jobs', 'results')]
+                getattr(self.store, 'namespace', ''),
+                [*((t, s) for s in record.segment_ids for t in ('jobs', 'results')), *sorted(owners)],
             )
             record.projected_at = now
             if record.has_words:

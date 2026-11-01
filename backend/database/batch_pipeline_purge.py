@@ -10,7 +10,7 @@ from google.cloud import firestore
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
-from database.batch_pipeline_shadow_hook import mirror_refresh
+from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
@@ -232,6 +232,9 @@ def purge_batch_owner(
                 from utils.batch_pipeline.retention import purge_batch_storage_owner
 
                 purge_batch_storage_owner(uid, namespace)
+        # A5: the Postgres copy (A2 shadow) is erased in the same retryable flow, before the purge is
+        # recorded as finished; a failure raises and the caller retries. No-op outside shadow mode.
+        purge_jobstore_owner(namespace, uid)
     if conversation_id is None:
         finish_privacy_purge(client, uid, generation)
     return deleted
