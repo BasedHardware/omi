@@ -179,7 +179,12 @@ def test_prod_pool_placement_preserves_current_cpu_pools(chart):
 def test_parakeet_scales_conservatively_without_relaxing_admission():
     objects = render('parakeet')
     hpa = objects['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 8
+    assert hpa['minReplicas'] == 6, (
+        'each replica pins one g2-standard-8 + L4 node (~$13.7/day); floor 6 '
+        'matches the HPA Pods metric (~6 desired at 0.857 avg active requests '
+        'vs target 2, 7d GPU engine active avg 5.6%, lead 2026-11-01). Ladder '
+        'below 6 only after the batch-100 live-demand read.'
+    )
     assert hpa['maxReplicas'] == 12
     assert hpa['behavior']['scaleUp'] == {
         'stabilizationWindowSeconds': 0,
