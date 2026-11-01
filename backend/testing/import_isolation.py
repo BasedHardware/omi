@@ -32,6 +32,7 @@ D3). Do not extend it; migrate its consumers to the mechanisms here.
 from __future__ import annotations
 
 import sys
+import sysconfig
 from contextlib import contextmanager
 from importlib.machinery import ExtensionFileLoader
 from pathlib import Path
@@ -39,15 +40,9 @@ from types import ModuleType
 from typing import Any, Iterable, Iterator, Mapping
 from unittest.mock import MagicMock
 
-import zoneinfo  # noqa: F401  # binds the real family objects below
-
-# Stdlib modules that ``stub_modules`` keeps once loaded; see the eviction step. Matched by
-# identity so a fake installed under one of these names is still evicted.
-_ZONEINFO_FAMILY = {
-    name: sys.modules[name]
-    for name in ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
-    if name in sys.modules
-}
+# Stdlib modules that ``stub_modules`` keeps once loaded; see the eviction step.
+_ZONEINFO_FAMILY = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+_STDLIB_DIRS = tuple({Path(sysconfig.get_path(key)).resolve() for key in ("stdlib", "platstdlib")})
 
 
 class AutoMockModule(ModuleType):
@@ -71,6 +66,18 @@ def _has_existing_file_origin(module: ModuleType | None) -> bool:
     spec = getattr(module, "__spec__", None)
     origin = getattr(spec, "origin", None) if spec else None
     return isinstance(origin, str) and Path(origin).is_file()
+
+
+def _is_real_stdlib_module(module: ModuleType | None) -> bool:
+    """True for a module the interpreter loaded from its own stdlib; fakes carry no such spec."""
+    spec = getattr(module, "__spec__", None)
+    origin = getattr(spec, "origin", None) if spec else None
+    if origin == "built-in":
+        return True
+    if not (isinstance(origin, str) and Path(origin).is_file()):
+        return False
+    resolved = Path(origin).resolve()
+    return any(resolved.is_relative_to(stdlib_dir) for stdlib_dir in _STDLIB_DIRS)
 
 
 def _is_existing_extension_module(module: ModuleType | None) -> bool:
@@ -223,7 +230,9 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         # it. An evicted copy collected after a later re-import nulls the globals under
         # the live type, and ZoneInfo(...) raises "null argument to internal routine".
         preserve_for_import_safety.update(
-            name for name, real in _ZONEINFO_FAMILY.items() if name in extra_name_set and sys.modules.get(name) is real
+            name
+            for name in _ZONEINFO_FAMILY
+            if name in extra_name_set and _is_real_stdlib_module(sys.modules.get(name))
         )
         for extra in extra_names:
             if extra in preserve_for_import_safety:

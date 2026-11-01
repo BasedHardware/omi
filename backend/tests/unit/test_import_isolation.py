@@ -304,6 +304,24 @@ def test_stub_modules_keeps_zoneinfo_first_imported_inside_the_block(monkeypatch
     assert originals["_zoneinfo"].ZoneInfo("UTC").key == "UTC"
 
 
+def test_stub_modules_keeps_a_fresh_zoneinfo_reimported_inside_the_block(monkeypatch: pytest.MonkeyPatch):
+    # Re-import the pure-Python members only: a second _zoneinfo object would itself null
+    # the shared C globals once monkeypatch restores the original and drops it.
+    python_names = ("zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+    originals = {name: importlib.import_module(name) for name in python_names}
+    for name in python_names:
+        monkeypatch.delitem(sys.modules, name)
+
+    with stub_modules({}):
+        fresh = importlib.import_module("zoneinfo")
+
+    assert fresh is not originals["zoneinfo"]
+    assert sys.modules["zoneinfo"] is fresh
+    for name in python_names:
+        assert sys.modules[name] is not originals[name]
+    assert fresh.ZoneInfo("UTC").key == "UTC"
+
+
 def test_stub_modules_still_evicts_a_fake_installed_under_a_zoneinfo_name(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delitem(sys.modules, "_zoneinfo")
     fake = ModuleType("_zoneinfo")
