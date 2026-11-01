@@ -14448,6 +14448,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeMoments => 'Khoảnh khắc';
 
   @override
+  String get episodeFollowUps => 'Việc cần làm tiếp';
+
+  @override
+  String get episodeOpenTranscript => 'Mở bản ghi chép';
+
+  @override
   String get episodeSoFar => 'Cho đến giờ';
 
   @override
@@ -14667,9 +14673,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Trên điện thoại này';
-
-  @override
-  String get episodeOpenTranscript => 'Mở bản ghi chép';
 
   @override
   String get liveCardTitle => 'Trực tiếp';

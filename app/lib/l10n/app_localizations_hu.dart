@@ -14505,6 +14505,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeMoments => 'Pillanatok';
 
   @override
+  String get episodeFollowUps => 'Következő lépések';
+
+  @override
+  String get episodeOpenTranscript => 'Átirat megnyitása';
+
+  @override
   String get episodeSoFar => 'Eddig';
 
   @override
@@ -14723,9 +14729,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Ezen a telefonon';
-
-  @override
-  String get episodeOpenTranscript => 'Átirat megnyitása';
 
   @override
   String get liveCardTitle => 'Élő';

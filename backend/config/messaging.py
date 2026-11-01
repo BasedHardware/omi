@@ -2,6 +2,8 @@
 
 import json
 import os
+from dataclasses import dataclass
+from datetime import date
 
 from config.rollout_cohorts import in_rollout_cohort
 from config.refactor_switches import default_off as rollout_default_off
@@ -65,13 +67,63 @@ def channel_enabled(channel):
     return channel_policy(channel)['enabled']
 
 
-def public_link_fields(channel, proof):
+@dataclass(frozen=True)
+class ChannelLine:
+    """One phone line that takes new links. Defaults are 80% of Keiki's per-line guidance."""
+
+    address: str
+    max_users: int = 400
+    new_per_day: int = 40
+    started: date | None = None
+
+    def new_limit(self, today):
+        """A line grows gradually: 10 new people a day in its first week, 10 more each week after."""
+        if self.started is None:
+            return self.new_per_day
+        return min(self.new_per_day, 10 * ((today - self.started).days // 7 + 1))
+
+
+def _parse_line(row):
+    address = row['address']
+    if not isinstance(address, str) or not address.strip() or '/' in address:
+        raise ValueError('Invalid line address')
+    max_users, new_per_day = row.get('max_users', 400), row.get('new_per_day', 40)
+    if type(max_users) is not int or type(new_per_day) is not int or max_users < 0 or new_per_day < 0:
+        raise ValueError('Invalid line limits')
+    started = date.fromisoformat(row['started']) if 'started' in row else None
+    return ChannelLine(address.strip(), max_users, new_per_day, started)
+
+
+def channel_lines(channel):
+    """The lines taking new links, or None when the channel does not use lines.
+
+    A line with `"enabled": false` takes no new links and keeps the people already on it. An
+    empty result means no line has room. A malformed `lines` value closes linking rather than
+    lifting the limits, the same way a malformed channel policy fails closed.
+    """
+    try:
+        row = json.loads(os.getenv('OMI_MESSAGING_LINK_TARGETS', ''))[channel]
+    except (ValueError, TypeError, KeyError):
+        return None
+    if not isinstance(row, dict) or 'lines' not in row:
+        return None
+    try:
+        rows = row['lines']
+        if not isinstance(rows, list) or any(not isinstance(item.get('enabled', True), bool) for item in rows):
+            raise ValueError('Invalid lines')
+        lines = tuple(_parse_line(item) for item in rows if item.get('enabled', True))
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return ()
+    return lines if len({line.address for line in lines}) == len(lines) else ()
+
+
+def public_link_fields(channel, proof, *, address=None):
     """Deep link and public address from server config, keyed by the requested channel.
 
     ``OMI_MESSAGING_LINK_TARGETS`` is a JSON object. A channel entry may set ``address``
     and ``deep_link_template`` containing ``{proof}``. Missing or malformed config yields
     empty fields so the app can fall back to its flag payload. The proof is URL-encoded
-    and never logged here.
+    and never logged here. ``address`` is the line assigned to this link, when there is one.
     """
     raw = os.getenv('OMI_MESSAGING_LINK_TARGETS', '')
     try:
@@ -81,7 +133,7 @@ def public_link_fields(channel, proof):
     row = targets.get(channel) if isinstance(targets, dict) else None
     if not isinstance(row, dict):
         return None, None
-    address = row.get('address')
+    address = address or row.get('address')
     address = address.strip() if isinstance(address, str) and address.strip() else None
     template = row.get('deep_link_template')
     deep_link = None

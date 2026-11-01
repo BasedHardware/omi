@@ -38,9 +38,18 @@ legacy provider clients into the GPU image is unnecessary.
 `BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` (Helm `worker.pipelineDepth`, default
 `2`, range 1-4) runs that many pump lanes in one process. Lease claim, compute
 admission, completion and ordered merge of one lane overlap another lane's GPU
-chain; the chain itself (fetch/decode, VAD, ASR, diarization, persist and CUDA
-quiescence) stays exclusive behind one asyncio lock, so device and host memory
-remain one flight. Each lane renews its own leases while it waits for the GPU.
+chain; the model chain (VAD, ASR, diarization and CUDA quiescence) stays
+exclusive behind one asyncio lock. Each waiting lane can prepare its first
+decode within one shared 1800-audio-second budget, using the same artifact IO
+pool (default five). Final persist settlement runs after releasing the GPU lock,
+before publication, with renewal still active. A pull admits at most 32 units,
+so each lane retains at most 32 persist payloads/receipts; the IO pool bounds
+simultaneous uploads rather than waiting for a free upload slot under the GPU
+lock. Even a slow first upload cannot stall the sixth short unit's GPU work.
+Active decoded groups remain
+bounded to 7200 audio seconds; at most the configured pump depth of result
+tails can remain resident. Model precision, batching and CUDA concurrency stay
+unchanged. Each lane renews its own leases while it waits for the GPU.
 On SIGTERM or a fatal GPU error a lane still waiting refunds its leases without
 an attempt charge instead of starting another chain. Periodic recovery,
 result-ready drains and queue metrics run in their own task on the same 5s/15s

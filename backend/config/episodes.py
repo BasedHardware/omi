@@ -52,6 +52,7 @@ EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
 EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
+HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
@@ -109,6 +110,11 @@ def episode_output_language_pinned() -> bool:
 def episode_hard_cap_across_conversations_enabled() -> bool:
     """Whether the strict episode-wide hard cap runs on attachment and moment boundaries."""
     return modes_default_on(EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV)
+
+
+def home_hide_below_floor_rows_enabled() -> bool:
+    """Whether Home leaves out short captures under the notes floor."""
+    return modes_default_on(HOME_HIDE_BELOW_FLOOR_ROWS_ENV)
 
 
 def episode_carry_on_session_end_enabled() -> bool:
@@ -173,6 +179,8 @@ MOMENT_MIN_WORDS = 25
 MOMENT_TEXT_MAX_CHARS = 6_000
 # One live update per episode at most this often; a burst folds into the next.
 MOMENT_MIN_INTERVAL_SECONDS = 60
+# Recovered audio refreshes draft notes at most this often: the composer rewrites them at close.
+RECOVERY_NOTES_MIN_INTERVAL_SECONDS = MOMENT_MAX_SECONDS
 
 # --------------------------------------------------------------------------- close detection
 
@@ -229,7 +237,7 @@ EST_OUTPUT_USD_PER_MTOK = 0.40
 
 # Closed-episode composer: one strong call over member summaries plus the full transcript.
 COMPOSER_FEATURE = 'episode_composer'
-COMPOSER_VERSION = 'episode_composer_v1'
+COMPOSER_VERSION = 'episode_composer_v2'
 COMPOSER_TIMEOUT_SECONDS = 90.0
 # About 60k tokens. With the 4h episode cap almost every episode fits whole; beyond it the
 # densest 10-minute windows are kept in time order.
@@ -250,3 +258,7 @@ COMPOSER_RETRY_MINUTES = 10
 COMPOSER_MAX_FAILURES = 4
 # Wire budget per composed paragraph (to_wire serves bullets up to this length).
 COMPOSER_MAX_PARAGRAPH_CHARS = 1200
+# A composed moment's points (each with a few supporting details) are the episode page's sections.
+COMPOSER_MAX_POINTS = 6
+COMPOSER_MAX_DETAILS = 4
+COMPOSER_MAX_POINT_CHARS = 400

@@ -363,6 +363,10 @@ _KNOWN_PATTERNS = frozenset(
         'users/memory_outbox',
         'users/memory_historical_overrides',
         'users/memory_state',
+        # Commit-boundary list projection (database/list_projection.py); hot on the write probe.
+        'users/list_serving_versions',
+        'users/conversation_list_rows',
+        'users/action_item_list_rows',
         'users/memories',
         'users/candidates',
         'users/knowledge_nodes',
@@ -503,6 +507,10 @@ def _is_plumbing_module(module: str) -> bool:
     if not module or module == __name__ or module in _PLUMBING_MODULES or module in _PLUMBING_EXACT:
         return True
     return module.startswith(_PLUMBING_PREFIXES)
+
+
+# Shared with the write probe, which skips the same SDK and runtime frames.
+is_plumbing_module = _is_plumbing_module
 
 
 def bound_caller(label: str) -> str:

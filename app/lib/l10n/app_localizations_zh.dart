@@ -14222,6 +14222,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get episodeMoments => '片段';
 
   @override
+  String get episodeFollowUps => '后续事项';
+
+  @override
+  String get episodeOpenTranscript => '打开转写';
+
+  @override
   String get episodeSoFar => '目前为止';
 
   @override
@@ -14439,9 +14445,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => '在本机';
-
-  @override
-  String get episodeOpenTranscript => '打开转写';
 
   @override
   String get liveCardTitle => '实时';

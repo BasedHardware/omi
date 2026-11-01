@@ -132,6 +132,8 @@ re-entry; recovery must reconcile a reply event whose external delivery was inte
 | `users/{uid}/messages/{id}` | Existing chat fields plus surface, channel_link_id, data_usage=`user_serving_only`; channel text is encrypted using existing per-user encryption. |
 | `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted bounded awareness tail: id, kind, at, role, content; numeric sequence plus separate deterministic content-free fences. Re-entry evidence is hidden from message listing; this log is not shaped model context. |
 | `channel_capacity/{channel}` / `members/{uid}` | Initialized count of distinct linked users and each member's linked identity IDs; transactional seat admission and release. |
+| `channel_capacity/{channel}/lines/{address}` | Per-line `users` count and `starts`, a map of sha256(uid) to at and linked, kept for 24 hours. Content-free. |
+| `users/{uid}/channel_lines/{channel}` | The line assigned to this user, kept after unlink so a returning user keeps their conversation. Deleted with the account. |
 | `users/{uid}/channel_waitlist/{channel}` | Content-free waitlist with updated_at and expires_at; no proactive notification. |
 | `users/{uid}/channel_turn_leases/{surface_hash}` | token and created_at; fail-closed serialization. |
 
@@ -142,7 +144,9 @@ alone is never proof. Linking cannot transfer another uid's existing identity. T
 transaction reads everything before any write. App endpoints expose mint/list/unlink
 and per-link settings; OpenAPI and generated Dart wire models include those schemas.
 Mint returns `deep_link` and `address` from `OMI_MESSAGING_LINK_TARGETS` when that
-channel entry is configured, and nulls otherwise. `GET /v2/chat-sessions` includes
+channel entry is configured, and nulls otherwise. A channel entry with `lines` returns the
+line assigned to this user; when no line has room, mint answers like a full seat cap (409,
+waitlist). `GET /v2/chat-sessions` includes
 optional `channel`, `channel_link_id` and `surface`. Channel retrieval drops memories
 marked private and memories with a restricted sensitivity label while
 `keep_private_memories_in_app` is on. Insights is stored and not yet applied.

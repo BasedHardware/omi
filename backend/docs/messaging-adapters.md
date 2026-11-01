@@ -73,8 +73,9 @@ is one Keiki agent with `harness: external`, push mode, its `dispatchUrl` set to
   their turn as failed. A turn whose reply was delivered but whose row then failed is
   still settled `failed`; Keiki shows nothing to the contact for that.
 - Line health is Keiki's (fewer than 50 new conversations per line per day, about
-  400–500 active users per line). Omi links one address per channel, so add lines and
-  spread new links before that cap. The link target's `provider` in
+  400–500 active users per line). Omi spreads new links across the `lines` list in
+  `OMI_MESSAGING_LINK_TARGETS`; see the channel runbook for adding or closing a line. The
+  link target's `provider` in
   `OMI_MESSAGING_LINK_TARGETS` and in the app's `mobile-chat-apps` flag payload must be
   `keiki`, or minted proofs name the wrong audience.
 

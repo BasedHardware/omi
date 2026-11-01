@@ -14491,6 +14491,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get episodeMoments => 'Momenty';
 
   @override
+  String get episodeFollowUps => 'Dalsze kroki';
+
+  @override
+  String get episodeOpenTranscript => 'Otwórz transkrypcję';
+
+  @override
   String get episodeSoFar => 'Na razie';
 
   @override
@@ -14709,9 +14715,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Na tym telefonie';
-
-  @override
-  String get episodeOpenTranscript => 'Otwórz transkrypcję';
 
   @override
   String get liveCardTitle => 'Na żywo';

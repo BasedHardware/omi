@@ -67,7 +67,7 @@ Current source declaration for the **2026-10-27 #23797 train**:
 
 | Reader surface | Enable percent | `FSR_USAGE_MONTH_TOTAL_EPOCH` |
 | --- | --- | --- |
-| Prod Cloud Run backend, backend-sync, backend-sync-backfill, backend-integration | 100 | `c2fs_20261026_r1` |
+| Prod Cloud Run backend, backend-sync, backend-sync-backfill, backend-integration | 0 (WQ31 guard flag-off, #24194 — umt itself 5xx-flagged; epoch preserved for re-enable) | `c2fs_20261026_r1` (inactive) |
 | Base, listen/pusher in both environments, jobs, desktop backend, all dev services | 0 | `v1` (inactive) |
 
 The October 24 initial rollout schedule is superseded by this scope and sequence.

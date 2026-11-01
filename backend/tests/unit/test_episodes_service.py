@@ -904,6 +904,8 @@ def test_reads_close_idle_episodes_lazily_and_wire_projection_hides_internals():
         'close_reason',
         'title',
         'bullets',
+        'lede',
+        'follow_ups',
         'people',
         'provisional_items',
         'moments',

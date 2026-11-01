@@ -14454,6 +14454,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get episodeMoments => 'Тренуци';
 
   @override
+  String get episodeFollowUps => 'Следећи кораци';
+
+  @override
+  String get episodeOpenTranscript => 'Отвори транскрипт';
+
+  @override
   String get episodeSoFar => 'До сада';
 
   @override
@@ -14672,9 +14678,6 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'На овом телефону';
-
-  @override
-  String get episodeOpenTranscript => 'Отвори транскрипт';
 
   @override
   String get liveCardTitle => 'Уживо';

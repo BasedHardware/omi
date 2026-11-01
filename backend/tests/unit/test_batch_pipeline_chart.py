@@ -116,6 +116,7 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
         'optional': True,
     }
     assert env['BATCH_PIPELINE_MODEL_BATCH_SIZE'] == '8'
+    assert env['BATCH_PIPELINE_WORKER_IO_CONCURRENCY'] == '5'
     assert env['BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_FLIGHT_BATCH_SECONDS'] == '1800'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false' and env['BATCH_PIPELINE_PERCENT'] == '0'
