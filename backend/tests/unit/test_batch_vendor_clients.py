@@ -13,7 +13,7 @@ from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.observability.reasons import VendorAttemptOutcome
 from utils.stt import batch_language as lid
 from utils.stt import language_gate, soniox_batch
-from utils.stt import pre_recorded
+from utils.stt import modulate_batch, pre_recorded
 
 
 def wav(seconds=5):
@@ -35,7 +35,7 @@ def keys(monkeypatch):
 def modulate(handler):
     async def call():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            return await pre_recorded.modulate_batch_async(wav(), language='ja', client=client)
+            return await modulate_batch.modulate_batch_async(wav(), language='ja', client=client)
 
     return asyncio.run(call())
 
@@ -58,7 +58,7 @@ def test_velma_batch_async_posts_once_and_parses_like_the_sync_client():
     words, language = modulate(handler)
     assert calls == ['/api/velma-2-stt-batch'] and language == 'ja'
     assert words == [{'timestamp': [0.5, 1.4], 'speaker': 'SPEAKER_00', 'text': 'synthetic fixture words'}]
-    assert (words, language) == pre_recorded._modulate_batch_words(UTTERANCES, True, 'ja')
+    assert (words, language) == pre_recorded.modulate_batch_words(UTTERANCES, True, 'ja')
 
 
 @pytest.mark.parametrize(
@@ -80,7 +80,7 @@ def test_velma_batch_async_types_every_refusal_without_retry(status, body, kind)
         calls.append(1)
         return httpx.Response(status, text=body)
 
-    with pytest.raises(pre_recorded.ModulateBatchError) as raised:
+    with pytest.raises(modulate_batch.ModulateBatchError) as raised:
         modulate(handler)
     assert raised.value.kind == kind and raised.value.posted and len(calls) == 1
     assert 'synthetic' not in str(raised.value) and str(raised.value) == 'modulate_batch_failed'
@@ -95,7 +95,7 @@ def test_velma_batch_async_types_every_refusal_without_retry(status, body, kind)
     ],
 )
 def test_velma_batch_async_types_transport_and_shape_failures(handler, kind):
-    with pytest.raises(pre_recorded.ModulateBatchError) as raised:
+    with pytest.raises(modulate_batch.ModulateBatchError) as raised:
         modulate(handler)
     assert raised.value.kind == kind
 
@@ -165,18 +165,18 @@ def test_soniox_failure_after_submission_counts_as_paid():
 @pytest.mark.parametrize(
     'error,outcome',
     [
-        (pre_recorded.ModulateBatchError('breaker_open'), VendorAttemptOutcome.RATE_LIMITED),
-        (pre_recorded.ModulateBatchError('credit_refusal', posted=True), VendorAttemptOutcome.CREDIT_REFUSAL),
-        (pre_recorded.ModulateBatchError('timeout', posted=True), VendorAttemptOutcome.TIMEOUT),
-        (pre_recorded.ModulateBatchError('error_5xx', posted=True), VendorAttemptOutcome.ERROR_5XX),
-        (pre_recorded.ModulateBatchError('invalid_response', posted=True), VendorAttemptOutcome.INVALID_RESPONSE),
+        (modulate_batch.ModulateBatchError('breaker_open'), VendorAttemptOutcome.RATE_LIMITED),
+        (modulate_batch.ModulateBatchError('credit_refusal', posted=True), VendorAttemptOutcome.CREDIT_REFUSAL),
+        (modulate_batch.ModulateBatchError('timeout', posted=True), VendorAttemptOutcome.TIMEOUT),
+        (modulate_batch.ModulateBatchError('error_5xx', posted=True), VendorAttemptOutcome.ERROR_5XX),
+        (modulate_batch.ModulateBatchError('invalid_response', posted=True), VendorAttemptOutcome.INVALID_RESPONSE),
     ],
 )
 def test_stage_transcribe_maps_typed_client_failures_onto_attempt_outcomes(monkeypatch, error, outcome):
     async def failing(*args, **kwargs):
         raise error
 
-    monkeypatch.setattr(pre_recorded, 'modulate_batch_async', failing)
+    monkeypatch.setattr(modulate_batch, 'modulate_batch_async', failing)
     item = WorkItem('p1', 'synthetic-owner', 10, 'gs://synthetic/audio/p1', 5.0, Priority.FRESH)
     inspected = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}])
     with pytest.raises(provider_stt.VendorCallFailure) as raised:
@@ -188,7 +188,7 @@ def test_stage_transcribe_keeps_vendor_speaker_turns_discarded(monkeypatch):
     async def words(*args, **kwargs):
         return [{'text': 'synthetic', 'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_01'}], 'ja'
 
-    monkeypatch.setattr(pre_recorded, 'modulate_batch_async', words)
+    monkeypatch.setattr(modulate_batch, 'modulate_batch_async', words)
     item = WorkItem('p1', 'synthetic-owner', 10, 'gs://synthetic/audio/p1', 5.0, Priority.FRESH)
     inspected = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}])
     payload = asyncio.run(provider_stt.transcribe_async(item, 'ja', inspected, service='modulate'))

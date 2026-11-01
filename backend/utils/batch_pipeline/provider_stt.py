@@ -540,7 +540,7 @@ def _wav(pcm: bytes) -> bytes:
 async def _vendor_words(service: str, wav: bytes, duration: float, language: str | None) -> Any:
     """One awaited vendor call; failures become ``VendorCallFailure`` with a typed outcome."""
     if service == 'modulate':
-        from utils.stt.pre_recorded import ModulateBatchError, modulate_batch_async
+        from utils.stt.modulate_batch import ModulateBatchError, modulate_batch_async
 
         try:
             return await modulate_batch_async(wav, language=language)
@@ -839,16 +839,9 @@ class ProviderSttStage:
             except RecoveryFailure as error:
                 response = error
         if not isinstance(response, dict):
-            failure = (
-                {'stage': response.stage, 'reason': response.reason}
-                if isinstance(response, RecoveryFailure)
-                else plan.failure or {'stage': 'provider', 'reason': 'operation_failed'}
-            )
-            outcome = (
-                attempt_outcome_for(response)
-                if isinstance(response, RecoveryFailure) and plan.failure is None
-                else VendorAttemptOutcome.LOCAL_FAILURE
-            )
+            failure = {'stage': response.stage, 'reason': response.reason}
+            # A failed inspection never reached a vendor: ours, terminal, unbilled audio.
+            outcome = attempt_outcome_for(response) if plan.failure is None else VendorAttemptOutcome.LOCAL_FAILURE
             audio = 0.0 if plan.failure is not None else duration
             failover_to = plan.failover_to if failover_enabled() else ()
             settled = self.protocol.settle(
