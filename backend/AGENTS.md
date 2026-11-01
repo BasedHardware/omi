@@ -161,7 +161,7 @@ Subscription plan contract: edit `config/plan_catalog.json`, then run `python sc
 
 Firestore schema rollout, readiness, and change controls are documented in [Firestore queries and indexes](../.github/agent-docs/firestore-queries-and-indexes.md).
 
-Update this map for inter-service call changes. For audio, transcription, conversation lifecycle (including advisory cross-device overlap links), speakers, or listen/pusher WebSocket changes, update `backend/docs/listen_pusher_pipeline.mdx` in the same PR; it owns the overlap env/wire contract.
+Update this map for inter-service call changes. For audio, transcription, conversation lifecycle (including advisory cross-device overlap links), speakers, or listen/pusher WebSocket changes, add a note under `docs/listen_pusher_pipeline/changes/` in the same PR (see its README); edit `docs/listen_pusher_pipeline.mdx` only for env/wire/payload contract changes.
 
 ## Import Rules
 
