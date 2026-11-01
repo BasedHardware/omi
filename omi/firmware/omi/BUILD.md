@@ -27,10 +27,12 @@ west zephyr-export
 ## Build (the blessed command)
 
 The production config is `omi.conf` — Zephyr builds `prj.conf` by default, so
-copy it across first (CI does exactly this):
+copy it across first (CI does exactly this). Additionally, install the repo-committed
+custom MCUboot entry point before sysbuild to ensure SD card deinit releases the SPI3 bus:
 
 ```bash
 cp ../omi/omi.conf ../omi/prj.conf
+cp ../bootloader/mcuboot_boot_zephyr.c bootloader/mcuboot/boot/zephyr/main.c
 
 west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always \
   -- -DBOARD_ROOT=..
@@ -41,6 +43,9 @@ west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always \
   DevKit (nRF52840) target.
 - `--sysbuild` is required: it builds the application, MCUboot, and the
   network-core image together.
+- Custom MCUboot main (`mcuboot_boot_zephyr.c`): Required for OTA firmware updates.
+  It performs SD card init and deinit prior to `boot_go()`, releasing SPI3 so MCUboot
+  can read the external SPI NOR flash and copy the staged image on reboot.
 - The firmware version the device advertises over BLE is
   `CONFIG_BT_DIS_FW_REV_STR` in `omi.conf`.
 
