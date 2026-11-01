@@ -99,7 +99,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BUCKET_BATCH_PIPELINE", "value": ""},
         {"name": "BATCH_PIPELINE_UNIT_SECONDS", "value": "3600"},
         {"name": "BATCH_PIPELINE_SHARED_LIVE_ENABLED", "value": "false"},
-        {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "false"},
+        {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_REVISION_ENABLED", "value": "false"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
@@ -3356,3 +3356,19 @@ def test_prod_backend_billing_key_rejects_non_public_binding(monkeypatch, mutati
         entry['valueFrom'] = {'secretKeyRef': {'name': 'POSTHOG_PROJECT_API_KEY', 'key': 'latest'}}
     errors = validator._validate_cloud_run(env_config, deployed, strict_provisional=False)
     assert any(error.scope == 'cloud_run/backend' and 'POSTHOG_BILLING_API_KEY' in error.message for error in errors)
+
+
+def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
+    from scripts.runtime_env_validation import manifest as manifest_validation
+
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = copy.deepcopy(validator._get_env_config(manifest, 'prod'))
+    gateway_env = env_config['llm_gateway']['env']
+    assert gateway_env['OMI_FLAGS_SOURCE']['value'] == 'omi'
+    assert 'PROACTIVITY_V2_POSTHOG_TOKEN' not in gateway_env
+    assert manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config) == []
+
+    gateway_env['OMI_FLAGS_SOURCE']['value'] = 'dual'
+    errors = manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config)
+    assert [error.scope for error in errors] == ['prod/llm_gateway']

@@ -37,6 +37,7 @@ from utils.sync.size_telemetry import (
     size_backstop_scope,
     size_fields,
 )
+from utils.conversations.word_pieces import drop_replayed_words, drop_repeated_word_runs, join_word_pieces
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
@@ -787,6 +788,9 @@ def assign_in_transaction(
                 conversation_rows=records,
                 proof=capture_covered_indices,
             )
+        survivors = drop_repeated_word_runs(
+            existing, drop_replayed_words(existing, survivors, clock='timestamp'), clock='timestamp'
+        )
         append_stats = None
         if (
             live_row is not None
@@ -829,10 +833,19 @@ def assign_in_transaction(
                 # claim playback alignment for that line.
                 segment['audio_alignment'] = 'unplaced'
                 segment['audio_capture_run'] = None
+        receipt = result.get('manual_speaker_assignments') or {}
+        # Capture receipts name segment IDs, so a batch that carries them keeps its pieces.
+        segments = join_word_pieces(
+            segments,
+            joinable_ids=(
+                set() if incoming.get('capture_evidence') else {str(segment.get('id')) for segment in survivors}
+            ),
+            protected_ids=set(receipt.get('segments') or ()),
+        )
         result.update(
             started_at=capture_start,
             finished_at=extent['finished_at'],
-            transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
+            transcript_segments=apply_manual_assignments(segments, receipt),
         )
         if late_audio_intake_enabled():
             merged_span = recorded_span(capture_start, segments)

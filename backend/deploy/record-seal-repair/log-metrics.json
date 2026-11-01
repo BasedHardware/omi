@@ -97,5 +97,26 @@
     "labelExtractors": {
       "tail_gap_bucket": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"tail_gap_bucket\\\": \\\"(under_1s|1_to_5s|5_to_30s|30_to_120s|over_120s|negative_or_unknown)\\\"\")"
     }
+  },
+  {
+    "name": "omi_record_audio_partial_finishes",
+    "description": "Explicit partial finishes by closed reason; never complete seals.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.logger=\"record-seal-repair\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_repair_row\\\"\" AND jsonPayload.message=~\"\\\"disposition\\\": \\\"partial_finished\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1",
+      "labels": [
+        {
+          "key": "reason",
+          "valueType": "STRING",
+          "description": "Closed partial reason."
+        }
+      ]
+    },
+    "valueExtractor": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"count\\\": ([0-9]+)\")",
+    "labelExtractors": {
+      "reason": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"partial_reason\\\": \\\"(tail_lagging|budget_limit|tail_lost_or_unproven)\\\"\")"
+    }
   }
 ]

@@ -1,6 +1,12 @@
 """Spend authorization is fenced, current, conservative and provider-independent."""
 
+import asyncio
+from copy import deepcopy
 from dataclasses import replace
+from io import BytesIO
+import json
+import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -13,8 +19,13 @@ from database.batch_pipeline_intake import admit
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline import admission
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkResult
+from utils.batch_pipeline.compute_client import ComputeClient
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+
+
+def authorize(*args, **kwargs):
+    return asyncio.run(admission.authorize(*args, **kwargs))
 
 
 def setup(monkeypatch, *, fresh=False, priority=None, lane=None):
@@ -52,10 +63,137 @@ def tokens(lease):
     return [{'segment_id': lease.item.segment_id, 'token': lease.token}]
 
 
+@pytest.mark.asyncio
+async def test_deadline_preserves_partial_receipt_and_current_client_contract(monkeypatch):
+    store, queue, lease, reserve = setup(monkeypatch)
+    leases = tokens(lease)
+    for segment in ('second', 'unreached'):
+        store.rows['jobs', segment] = deepcopy(store.rows['jobs', 'segment'])
+        leases.append({'segment_id': segment, 'token': lease.token})
+    original_run = store.run
+    release, finished = threading.Event(), threading.Event()
+    calls = []
+
+    def slow_second_read(fn):
+        calls.append(fn.__name__)
+        if len(calls) == 3:
+            try:
+                release.wait(2)
+                return original_run(fn)
+            finally:
+                finished.set()
+        return original_run(fn)
+
+    monkeypatch.setattr(store, 'run', slow_second_read)
+    monkeypatch.setattr(admission, 'AUTHORIZE_SECONDS', 0.1)
+    start = time.monotonic()
+    try:
+        receipt = await admission.authorize(store, leases, now=1)
+        assert time.monotonic() - start < 1
+        assert receipt == {
+            'allowed': ['segment'],
+            'retry_after': {'second': 30, 'unreached': 30},
+            'held_reason': {},
+        }
+        # Feed the actual server response through the unchanged worker decoder.
+        client = ComputeClient(
+            'https://synthetic.invalid',
+            'synthetic',
+            'dev',
+            token=lambda: 'synthetic',
+            send=lambda *a, **k: BytesIO(json.dumps(receipt).encode()),
+        )
+        client_leases = [replace(lease, item=replace(lease.item, segment_id=row['segment_id'])) for row in leases]
+        assert client(client_leases) == receipt
+    finally:
+        release.set()
+        assert await admission.run_blocking(admission.db_executor, finished.wait, 2)
+    assert calls == ['read', 'seal', 'read']
+    assert reserve.call_count == 1
+    assert 'compute_admission_token' not in store.rows['jobs', 'second']
+    assert 'compute_admission_token' not in store.rows['jobs', 'unreached']
+    assert queue.defer('second', lease.token, 2, 30, admission_refused=True)
+    assert store.rows['jobs', 'second']['attempt'] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('slow_stage', ['funding', 'restriction', 'backfill_reservation', 'seal'])
+async def test_slow_dependency_cannot_grant_after_deadline(monkeypatch, slow_stage):
+    store, _, lease, _ = setup(monkeypatch, fresh=slow_stage == 'restriction')
+    release, finished = threading.Event(), threading.Event()
+    monkeypatch.setattr(admission, 'AUTHORIZE_SECONDS', 0.05)
+    monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *a: slow_stage == 'funding')
+
+    def pause(result):
+        try:
+            release.wait(2)
+            return result()
+        finally:
+            finished.set()
+
+    if slow_stage == 'funding':
+        monkeypatch.setattr(admission, 'batch_admission', lambda *a, **k: pause(lambda: (True, 'entitled')))
+    elif slow_stage == 'restriction':
+        monkeypatch.setattr(admission, 'get_hard_restriction_status', lambda *a: pause(lambda: (False, None)))
+    elif slow_stage == 'backfill_reservation':
+        monkeypatch.setattr(
+            admission, 'reserve_backfill_speech', lambda *a: pause(lambda: SimpleNamespace(allowed=True))
+        )
+    else:
+        original_run = store.run
+        monkeypatch.setattr(
+            store, 'run', lambda fn: pause(lambda: original_run(fn)) if fn.__name__ == 'seal' else original_run(fn)
+        )
+    try:
+        started = time.monotonic()
+        receipt = await admission.authorize(store, tokens(lease), now=1)
+        assert time.monotonic() - started < 1
+        assert receipt == {'allowed': [], 'retry_after': {'segment': 30}, 'held_reason': {}}
+    finally:
+        release.set()
+        assert await admission.run_blocking(admission.db_executor, finished.wait, 2)
+    assert receipt['allowed'] == []
+    assert 'compute_admission_token' not in store.rows['jobs', 'segment']
+
+
+def test_same_owner_funding_checks_stay_serial(monkeypatch):
+    store, _, lease, reserve = setup(monkeypatch)
+    store.rows['jobs', 'second'] = deepcopy(store.rows['jobs', 'segment'])
+    monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *a: True)
+    active, remaining, observed = 0, 1, []
+
+    def funded(*args, **kwargs):
+        nonlocal active, remaining
+        active += 1
+        time.sleep(0.01)
+        observed.append(active)
+        permitted = remaining > 0
+        remaining -= int(permitted)
+        active -= 1
+        return permitted, 'entitled' if permitted else 'allowance_exhausted'
+
+    monkeypatch.setattr(admission, 'batch_admission', funded)
+    receipt = authorize(store, tokens(lease) + [{'segment_id': 'second', 'token': lease.token}], now=1)
+    assert observed == [1, 1]
+    assert receipt['allowed'] == ['segment']
+    assert receipt['held_reason'] == {'second': 'allowance_exhausted'}
+    assert reserve.call_count == 1
+
+
+def test_exception_diagnostics_are_bounded_and_identifier_free(monkeypatch, caplog):
+    store, _, lease, reserve = setup(monkeypatch)
+    untrusted = 'sensitive-synthetic-value'
+    exception_type = type(untrusted, (Exception,), {})
+    reserve.side_effect = exception_type(untrusted)
+    assert authorize(store, tokens(lease), now=1)['allowed'] == []
+    assert 'event=batch_compute_admission_unevaluated exception_class=OtherException' in caplog.text
+    assert untrusted not in caplog.text
+
+
 def test_backfill_reserves_content_upper_bound_and_seals_matching_lease(monkeypatch):
     store, queue, lease, reserve = setup(monkeypatch)
     assert not queue.complete(WorkResult('segment', 'gs://synthetic/result'), lease.token, 1)
-    receipt = admission.authorize(store, tokens(lease), now=1)
+    receipt = authorize(store, tokens(lease), now=1)
     assert receipt['allowed'] == ['segment']
     reserve.assert_called_once_with('synthetic-owner', 'content', 3_600_000)
     assert queue.complete(WorkResult('segment', 'gs://synthetic/result'), lease.token, 2)
@@ -64,7 +202,7 @@ def test_backfill_reserves_content_upper_bound_and_seals_matching_lease(monkeypa
 def test_fresh_lane_catch_up_at_recent_priority_keeps_fresh_fair_use_checks(monkeypatch):
     store, queue, lease, reserve = setup(monkeypatch, priority=1, lane='fresh')
     admission.get_hard_restriction_status.return_value = (True, 900)
-    assert admission.authorize(store, tokens(lease), now=1) == {
+    assert authorize(store, tokens(lease), now=1) == {
         'allowed': [],
         'retry_after': {'segment': 900},
         'held_reason': {'segment': 'fair_use_restricted'},
@@ -72,7 +210,7 @@ def test_fresh_lane_catch_up_at_recent_priority_keeps_fresh_fair_use_checks(monk
     reserve.assert_not_called()
     admission.get_hard_restriction_status.return_value = (False, None)
     admission.is_daily_audio_ceiling_exceeded.return_value = True
-    daily = admission.authorize(store, tokens(lease), now=1)
+    daily = authorize(store, tokens(lease), now=1)
     assert daily['allowed'] == [] and 1 <= daily['retry_after']['segment'] <= 86400
     assert daily['held_reason'] == {'segment': 'daily_audio_ceiling'}
     reserve.assert_not_called()
@@ -80,7 +218,7 @@ def test_fresh_lane_catch_up_at_recent_priority_keeps_fresh_fair_use_checks(monk
 
 def test_backfill_lane_reserves_whatever_the_priority(monkeypatch):
     store, queue, lease, reserve = setup(monkeypatch, priority=1, lane='backfill')
-    assert admission.authorize(store, tokens(lease), now=1)['allowed'] == ['segment']
+    assert authorize(store, tokens(lease), now=1)['allowed'] == ['segment']
     reserve.assert_called_once_with('synthetic-owner', 'content', 3_600_000)
     admission.get_hard_restriction_status.assert_not_called()
 
@@ -88,7 +226,7 @@ def test_backfill_lane_reserves_whatever_the_priority(monkeypatch):
 def test_refusal_defers_without_spending_provider_failure_budget(monkeypatch):
     store, queue, lease, reserve = setup(monkeypatch)
     reserve.return_value = SimpleNamespace(allowed=False, retry_after=600)
-    receipt = admission.authorize(store, tokens(lease), now=1)
+    receipt = authorize(store, tokens(lease), now=1)
     assert receipt == {
         'allowed': [],
         'retry_after': {'segment': 600},
@@ -107,7 +245,7 @@ def test_refusal_defers_without_spending_provider_failure_budget(monkeypatch):
 
 def test_stale_or_replaced_lease_cannot_charge_or_seal(monkeypatch):
     store, queue, lease, reserve = setup(monkeypatch)
-    admission.authorize(store, [{'segment_id': 'segment', 'token': 'stale'}], now=1)
+    authorize(store, [{'segment_id': 'segment', 'token': 'stale'}], now=1)
     reserve.assert_not_called()
 
     def replace_owner(*args):
@@ -115,24 +253,24 @@ def test_stale_or_replaced_lease_cannot_charge_or_seal(monkeypatch):
         return SimpleNamespace(allowed=True)
 
     reserve.side_effect = replace_owner
-    assert admission.authorize(store, tokens(lease), now=1)['allowed'] == []
+    assert authorize(store, tokens(lease), now=1)['allowed'] == []
     assert 'compute_admission_token' not in store.rows['jobs', 'segment']
 
 
 def test_fresh_rechecks_restrictions_without_backfill_reservation(monkeypatch):
     store, _, lease, reserve = setup(monkeypatch, fresh=True)
     admission.get_hard_restriction_status.return_value = (True, 120)
-    assert admission.authorize(store, tokens(lease), now=1)['retry_after'] == {'segment': 120}
+    assert authorize(store, tokens(lease), now=1)['retry_after'] == {'segment': 120}
     reserve.assert_not_called()
 
 
 def test_policy_backend_failure_and_missing_duration_fail_closed(monkeypatch):
     store, _, lease, reserve = setup(monkeypatch)
     reserve.side_effect = TimeoutError('synthetic Redis unavailable')
-    assert admission.authorize(store, tokens(lease), now=1)['allowed'] == []
+    assert authorize(store, tokens(lease), now=1)['allowed'] == []
     store.rows['intakes', 'bp_job']['total_audio_seconds'] = float('nan')
     reserve.reset_mock()
-    assert admission.authorize(store, tokens(lease), now=1)['allowed'] == []
+    assert authorize(store, tokens(lease), now=1)['allowed'] == []
     reserve.assert_not_called()
 
 
@@ -145,7 +283,7 @@ def test_cap_rechecked_after_queueing_before_gpu_authorization(monkeypatch, enfo
     monkeypatch.setattr(
         cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
     )
-    receipt = admission.authorize(store, tokens(lease), now=1)
+    receipt = authorize(store, tokens(lease), now=1)
     if enforce:
         assert receipt == {
             'allowed': [],
@@ -169,7 +307,7 @@ def test_flag_off_never_parses_new_dispatch_duration(monkeypatch, enforce, durat
     store.rows['jobs', 'segment']['duration_seconds'] = duration
     gate = Mock(side_effect=AssertionError('unparseable duration must not reach dispatch policy'))
     monkeypatch.setattr(admission, 'sync_admission', gate)
-    receipt = admission.authorize(store, tokens(lease), now=1)
+    receipt = authorize(store, tokens(lease), now=1)
     assert receipt == (
         {'allowed': [], 'retry_after': {'segment': 30}, 'held_reason': {}}
         if enforce
@@ -195,7 +333,7 @@ def test_ladder_rechecked_at_execution_after_queue_admission(monkeypatch, dispat
             'resolve_transcription_allowance',
             lambda *a, **k: SimpleNamespace(managed=False, reason='usage_budget_exhausted'),
         )
-    receipt = admission.authorize(store, tokens(lease), now=1)
+    receipt = authorize(store, tokens(lease), now=1)
     # dispatch=False keeps the ladder-only resolver, whose stub snapshot has no
     # budget_units/used_units keys, so it degrades to allowance_unavailable.
     # Either way the durable reason mirrors the bounded DispatchReason the
@@ -217,7 +355,7 @@ def test_byok_admission_is_not_re_held_at_dispatch(monkeypatch, policy, held):
         store.rows['jobs', 'segment']['policy'] = policy
     gate = Mock(return_value=(False, 'allowance_exhausted'))  # no funded consent or allowance for this owner
     monkeypatch.setattr(admission, 'sync_admission', gate)
-    receipt = admission.authorize(store, tokens(lease), now=1)
+    receipt = authorize(store, tokens(lease), now=1)
     if held:
         assert receipt == {
             'allowed': [],
@@ -249,7 +387,7 @@ def test_queued_authorization_uses_owner_and_batch_scope(monkeypatch, ladder, co
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
     allowance = Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
     monkeypatch.setattr(cap, 'funded_allowance', allowance)
-    result = admission.authorize(store, tokens(lease), now=1)
+    result = authorize(store, tokens(lease), now=1)
     assert result['allowed'] == ([] if held else ['segment'])
     assert allowance.call_count == int(held)
     if held:
@@ -272,7 +410,7 @@ def test_default_on_gpu_allowance_is_independent_of_batch_readiness(monkeypatch,
         return_value=SimpleNamespace(managed=access in {'reviewer', 'paid'}, reason='plan_allowance_exhausted')
     )
     monkeypatch.setattr(cap, 'funded_allowance', resolver)
-    receipt = admission.authorize(store, tokens(lease), now=1)
+    receipt = authorize(store, tokens(lease), now=1)
     assert receipt['allowed'] == ([] if access == 'capped' else ['segment'])
     if access == 'capped':
         assert 'compute_admission_token' not in store.rows['jobs', 'segment']
@@ -291,7 +429,7 @@ def test_allow_seals_latest_decision_with_the_lease_transition(monkeypatch):
     monkeypatch.setattr(
         cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=True, reason='plan_allowance_available'))
     )
-    receipt = admission.authorize(store, tokens(lease), now=5)
+    receipt = authorize(store, tokens(lease), now=5)
     assert receipt == {'allowed': ['segment'], 'retry_after': {}, 'held_reason': {}}
     job = store.rows['jobs', 'segment']
     assert job['compute_admission_token'] == lease.token
@@ -306,7 +444,7 @@ def test_latest_decision_overwrites_a_prior_hold(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     allowance = Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
     monkeypatch.setattr(cap, 'funded_allowance', allowance)
-    held = admission.authorize(store, tokens(lease), now=1)
+    held = authorize(store, tokens(lease), now=1)
     assert held['held_reason'] == {'segment': 'allowance_exhausted'}
     assert queue.defer('segment', lease.token, 2, held['retry_after']['segment'], held_reason='allowance_exhausted')
     assert store.rows['jobs', 'segment']['compute_decision'] == {
@@ -321,20 +459,20 @@ def test_latest_decision_overwrites_a_prior_hold(monkeypatch):
     queue.recover(3)
     lease = queue.pull(3)[0]
     allowance.return_value = SimpleNamespace(managed=True, reason='plan_allowance_available')
-    assert admission.authorize(store, tokens(lease), now=4)['allowed'] == ['segment']
+    assert authorize(store, tokens(lease), now=4)['allowed'] == ['segment']
     assert store.rows['jobs', 'segment']['compute_decision'] == {'reason': 'entitled', 'outcome': 'allowed', 'at': 4}
 
 
 def test_policy_backend_failure_leaves_the_prior_decision_untouched(monkeypatch):
     store, queue, lease, reserve = setup(monkeypatch)
-    assert admission.authorize(store, tokens(lease), now=1)['allowed'] == ['segment']
+    assert authorize(store, tokens(lease), now=1)['allowed'] == ['segment']
     sealed = dict(store.rows['jobs', 'segment']['compute_decision'])
     # A later lease whose policy backend fails must not invent a decision.
     store.rows['jobs', 'segment'].update(state='retry', token='', available_at=0)
     queue.recover(2)
     lease = queue.pull(2)[0]
     reserve.side_effect = TimeoutError('synthetic Redis unavailable')
-    failed = admission.authorize(store, tokens(lease), now=3)
+    failed = authorize(store, tokens(lease), now=3)
     assert failed['allowed'] == [] and failed['held_reason'] == {}
     assert queue.defer('segment', lease.token, 4, failed['retry_after']['segment'])
     assert store.rows['jobs', 'segment']['compute_decision'] == sealed
@@ -351,7 +489,7 @@ def test_privacy_fence_hold_records_its_reason(monkeypatch):
         raise BatchPrivacyBlocked('synthetic deletion')
 
     monkeypatch.setattr(MemoryTransaction, 'check_privacy', fenced)
-    receipt = admission.authorize(store, tokens(lease), now=1)
+    receipt = authorize(store, tokens(lease), now=1)
     assert receipt['held_reason'] == {'segment': 'privacy_blocked'}
     assert queue.defer('segment', lease.token, 2, 30, held_reason='privacy_blocked')
     assert store.rows['jobs', 'segment']['compute_decision'] == {
@@ -368,7 +506,7 @@ def test_allowed_decision_ends_the_parked_hold_for_the_age_proxy(monkeypatch):
     assert store.rows['jobs', 'segment']['last_policy_hold'] == {'reason': 'allowance_exhausted', 'at': 1}
     queue.recover(61)
     lease = queue.pull(61)[0]
-    assert admission.authorize(store, tokens(lease), now=61)['allowed'] == ['segment']
+    assert authorize(store, tokens(lease), now=61)['allowed'] == ['segment']
     job = store.rows['jobs', 'segment']
     assert job['compute_decision']['outcome'] == 'allowed' and 'last_policy_hold' not in job
     # A later unevaluated dispatch recheck pops the allow (BLIND); with the

@@ -196,10 +196,8 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
           excludeSemantics: true,
           child: Material(
             key: const Key('home_live_episode_row'),
-            // Outlined, not filled: the one row still happening reads as distinct from finished
-            // ones without a colored tile.
-            color: Colors.transparent,
-            shape: RoundedRectangleBorder(borderRadius: OmiRadius.xlAll, side: BorderSide(color: OmiColors.border)),
+            color: OmiColors.surface1,
+            shape: const RoundedRectangleBorder(borderRadius: OmiRadius.xlAll),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: open,

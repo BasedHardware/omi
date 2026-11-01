@@ -14343,6 +14343,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get episodeMoments => 'רגעים';
 
   @override
+  String get episodeFollowUps => 'המשך טיפול';
+
+  @override
+  String get episodeOpenTranscript => 'פתח תמליל';
+
+  @override
   String get episodeSoFar => 'עד כה';
 
   @override
@@ -14560,9 +14566,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'בטלפון הזה';
-
-  @override
-  String get episodeOpenTranscript => 'פתח תמליל';
 
   @override
   String get liveCardTitle => 'בשידור חי';

@@ -27,6 +27,7 @@ from database.people_generation import bump_people_generation
 from database.action_items_cache import bump_action_items_list_version
 from database import review_exact_undo
 from database.review_field_states import read_field_state, write_field_state
+from utils import dream_telemetry
 from utils.dream_metrics import record_undo
 from utils.review_projection import sync_conversations
 from config.dream_agent import dream_journal_key, eligible
@@ -303,9 +304,17 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     data = store.decode_doc(uid, ref.get().to_dict())
 
-    def tracked(change):
+    def tracked(change, transitioned=None):
         if undone and data and not data['change']['undone']:
             record_undo(change)
+        # The main path knows its transaction committed a transition; special paths
+        # compare with the pre-read state.
+        if transitioned is None:
+            transitioned = bool(data) and bool(data['change']['undone']) != undone
+        kind = dream_telemetry.change_kind(data or result) if transitioned else None
+        if kind:
+            source = data or result
+            dream_telemetry.record_outcome(kind, 'undo' if undone else 'redo', applied_at=source.get('created_at'))
         return change
 
     if data and data.get('memory_hygiene'):
@@ -457,7 +466,7 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     sync_conversations(uid, result['edits'], firestore_client=store.client())
     if any(edit.get('collection') == 'action_items' for edit in result.get('edits', [])):
         bump_action_items_list_version(uid)
-    return tracked(_wire(result))
+    return tracked(_wire(result), transitioned=True)
 
 
 _DIFF_CONTEXT = 120

@@ -508,7 +508,11 @@ def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> lis
     errors: list[ValidationError] = []
     for name, host in hosts:
         env_map = _as_config_dict((_as_config_dict(host) or {}).get('env')) or {}
-        errors.extend(validate_proactivity_v2_posthog_token(scope=f'{env}/{name}', env_entries=env_map, required=True))
+        # A host serving proactivity_v2 from the Omi flag store no longer needs the PostHog token.
+        source = (_as_config_dict(env_map.get('OMI_FLAGS_SOURCE')) or {}).get('value')
+        errors.extend(
+            validate_proactivity_v2_posthog_token(scope=f'{env}/{name}', env_entries=env_map, required=source != 'omi')
+        )
 
     # Gateway has its own manifest section, outside _validate_gke's service loop.
     gateway = _as_config_dict(env_config.get('llm_gateway')) or {}

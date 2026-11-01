@@ -41,10 +41,20 @@ At graceful finish, two independent verifier calls see only each staged edit,
 its cited evidence and minimal context, never planner history, seed notes or each
 other's response or the proposer's reason. The two mounts use distinct audit/falsification framing. Batches use server proposal IDs; duplicate/missing IDs fail
 verification. Staging budgets reserve verification capacity, so turn/tool/read
-exhaustion can still verify accepted proposals.
+exhaustion can still verify accepted proposals. `DREAM_VERIFY_HOLD_MODE`
+(default serve) also holds the two verifier calls' token reserve, sized from the
+staged evidence, out of the main loop's budget, so a pass that stops on its token
+budget still verifies what it staged; `off` restores the old split. Each item
+left without two votes is counted in `verify_reasons` on the `dream_pass` record:
+`oversized`, `ids_invalid`, `call_failed`, `single_vote`, `budget_tokens` or
+`budget_deadline`.
 
 Both agree plus auto eligibility plus no Undo-rate demotion permits journaled
-apply. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review. Eligible proposals are ranked by value then verifier support.
+apply. A kind is demoted for an owner when more than `DREAM_AGENT_UNDO_RATE`
+(0.2) of its last-30-day changes were undone with at least
+`DREAM_AGENT_UNDO_MIN_SAMPLES` (10), or when `DREAM_AGENT_UNDO_RECENT_COUNT` (3)
+of its changes applied in the last `DREAM_AGENT_UNDO_RECENT_DAYS` (7) were
+undone, so low-volume owners are protected too. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review, except under `DREAM_LIBERAL_VERIFIER_MODE=serve` (default shadow, which only counts `would_apply`): an auto-eligible `dismiss_person`, `spelling`, `title`, `overview`, `set_language` or `vocabulary` item unverified by budget, deadline or a failed call, where at least one verifier agreed and none disagreed, applies with the usual journal and Undo. Oversized evidence and invalid verifier ids never apply. Eligible proposals are ranked by value then verifier support.
 Values 1–2 are never offered; proposal/answer attention shares three UTC-day
 slots. User-authored facts (`direct_user_statement`, `explicit_remember`,
 `onboarding`) require explicit Review acceptance even when both verifiers agree.
@@ -289,6 +299,50 @@ Internal OIDC routes are `POST /v2/dream-agent/sweep` and
 Count metrics cover outcomes, size buckets, turns, tools, rejection reasons,
 successful resubmits, verifier outcomes, applied/undone kinds, cache usage and
 stale reclaim. Metric labels never contain owner IDs, refs or content.
+Owner decisions on Dream edits emit one `dream_outcome` JSON log record each
+(`kind`, `decision` undo/redo/accept/dismiss, applied-age bucket): Undo/Redo of a
+Dream-journaled change and Review answers to Dream edit/vocabulary proposals.
+Answers to Review questions (same-person, spelling) are not yet counted. Every
+`dream_pass` record carries `verifier_by_kind`, so Undo, accept and verifier
+rates are aggregable per kind from logs alone.
+
+The value judge (`DREAM_VALUE_JUDGE_MODE`, default shadow) asks whether the owner
+is better off for each sampled applied edit: every rare high-stakes kind, and
+`DREAM_JUDGE_COMMON_PERCENT` (2) of common cleanup kinds by salted edit key. It
+sees the owner-visible change view (kind, before/after, cited speech, record
+labels and speaker-marked cited speech), never the proposer's reason or verifier
+votes. It runs only after scheduled owner passes (never canary, dry-run or manual),
+once per pass on reserved capacity only (never on-demand), within
+`DREAM_JUDGE_TOKENS_PER_PASS` (60000) and at most `DREAM_JUDGE_MAX_CALLS_PER_SWEEP`
+(4) calls per sweep, and emits only content-free `dream_judge` records (kind,
+stratum, verdict, three 0-2 scores).
+Calibration: `backend/scripts/dream-label-export.py --uid <authorized-owner>` runs
+in an isolated operator pod only for an owner listed (as a uid sha256 digest) in
+`DREAM_LABEL_EXPORT_UID_SHA256S`, i.e. who agreed to label their own changes,
+judges the same projection of their journaled changes, and prints decision-mill
+proposal items to operator stdout (labels directories are never in git). Judge
+scores gate nothing until their agreement with owner labels reaches 0.7.
+
+The state pass (`DREAM_STATE_PASS_MODE`, default off; serve runs as shadow) is a
+weekly whole-corpus review per owner, run after a scheduled pass's effects and
+judge (`DREAM_STATE_PASS_WEEK_DAYS`, stamped as `last_state_pass_at` at finish).
+One planning call sees a byte-stable projection: unprotected people (no voice
+fields), generated tasks, canonical memory facts, and 14 days of conversation
+titles, with slow-moving sections first so the prompt prefix caches across
+weeks. Its people/task cleanup proposals go through ordinary staging and the two
+verifiers and are never applied or offered; at most 2 person merges per pass,
+each citing evidence beyond the name; staging and verification read the full
+records the plan cites, exactly as the loop would. It maintains a ref-grounded profile v2 in
+`users/{uid}.ai_user_profile_v2` (line 1 is always the user-doc name; people
+lines must cite an owner-side record; every new or changed line must pass a
+verifier check that its cited records support it as a fact about the owner),
+plus the planner's notes for next week, that nothing reads yet. A run that does
+not complete leaves the weekly cadence due. It runs on
+reserved capacity only, within `DREAM_STATE_PASS_TOKENS_PER_PASS` (120000),
+`DREAM_STATE_PASS_SECONDS` (480) and `DREAM_STATE_PASS_MAX_PER_SWEEP` (4), and
+reports `levers.state_pass` on `dream_pass` (recall of the loop's applied edits,
+extra verified proposals, tokens, profile counts); sampled shadow proposals are
+judged with stratum `shadow`.
 
 The canary stages a fixed synthetic correction through real tools, calls the
 reserved verifier lane, and checks admission, execution, journal, Undo and report.

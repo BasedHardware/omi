@@ -723,7 +723,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout == ''
     workflow_outputs = renderer_output.read_text(encoding='utf-8')
     assert (
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":100\\,"batch_privacy_memoize":0\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":5\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":0\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100\\,"usage_month_total":0}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"batch_privacy_memoize":0\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":0\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":0\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0\\,"usage_month_total":0}\n'
         in workflow_outputs
     )
     assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
@@ -1320,24 +1320,24 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
     assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
     expected = {
         'action_items_page': 100,
-        'backfill_task_reads': 100,
+        'backfill_task_reads': 0,
         'batch_privacy_memoize': 0,
         'candidates_page': 100,
         'canonical_statuses_dedupe': 100,
         'conversation_list_cursor': 100,
         'deletion_marker_cache': 100,
-        'finjob_candidate_queries': 5,
-        'historical_scan_memo': 100,
-        'ledger_purge_coalesce': 100,
+        'finjob_candidate_queries': 0,
+        'historical_scan_memo': 0,
+        'ledger_purge_coalesce': 0,
         'mcp_conversation_cards_cache': 100,
         'memory_list_index_window': 0,
         'people_scan_dedupe': 0,
-        'queue_age_sample_budget': 100,
+        'queue_age_sample_budget': 0,
         'request_read_dedupe': 100,
         'serving_config_cache': 100,
-        'singleton_loops': 100,
+        'singleton_loops': 0,
         'subscription_cache': 100,
-        'usage_month_cache': 100,
+        'usage_month_cache': 0,
         'usage_month_total': 0,
     }
     hosts = [(f'gke/{name}', config['gke'][name]['env']) for name in ('backend-listen', 'pusher')]
@@ -1349,7 +1349,15 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         enabled = environment == 'prod' and name.startswith('cloud_run/')
         literal = env['FIRESTORE_READ_LEVERS']
         assert set(literal) == {'value', 'category'}, name
-        wanted = {**expected, 'usage_month_total': 100 if enabled else 0}
+        # Only prod backend-sync restores monthly reads for compute admission (admitscope 2026-11-01).
+        # All other services/jobs (including listen/pusher) retain the guard literal.
+        wanted = {**expected}
+        if environment == 'prod' and name == 'cloud_run/backend-sync':
+            wanted.update(usage_month_cache=100, usage_month_total=100)
+            assert {key for key in wanted if wanted[key] != expected[key]} == {
+                'usage_month_cache',
+                'usage_month_total',
+            }
         assert json.loads(literal['value']) == wanted, name
         epoch = 'c2fs_20261026_r1' if enabled else 'v1'
         assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name

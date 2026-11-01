@@ -14510,6 +14510,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeMoments => 'Momente';
 
   @override
+  String get episodeFollowUps => 'Pași următori';
+
+  @override
+  String get episodeOpenTranscript => 'Deschide transcrierea';
+
+  @override
   String get episodeSoFar => 'Până acum';
 
   @override
@@ -14728,9 +14734,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Pe acest telefon';
-
-  @override
-  String get episodeOpenTranscript => 'Deschide transcrierea';
 
   @override
   String get liveCardTitle => 'Live';

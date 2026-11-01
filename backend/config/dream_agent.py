@@ -204,6 +204,10 @@ class Caps:
     tokens_per_minute: int = 2000000
     undo_rate: float = 0.2
     undo_min_samples: int = 10
+    # A low-volume owner never reaches undo_min_samples; this many undos of one kind
+    # among changes applied in the last undo_recent_days pause that kind for them.
+    undo_recent_count: int = 3
+    undo_recent_days: int = 7
     anonymous_k: int = 20
     manual_runs: int = 3
     # Main-lane reply ceiling. Gemini 3.x counts thinking inside it, so 4096 truncated medium-effort turns.
@@ -221,6 +225,8 @@ class Caps:
             tokens_per_minute=int(number('DREAM_AGENT_TOKENS_PER_MINUTE', 2000000)),
             undo_rate=number('DREAM_AGENT_UNDO_RATE', 0.2),
             undo_min_samples=int(number('DREAM_AGENT_UNDO_MIN_SAMPLES', 10)),
+            undo_recent_count=max(1, int(number('DREAM_AGENT_UNDO_RECENT_COUNT', 3))),
+            undo_recent_days=max(1, int(number('DREAM_AGENT_UNDO_RECENT_DAYS', 7))),
             anonymous_k=max(2, int(number('DREAM_AGENT_FEEDBACK_K', 20))),
             manual_runs=int(number('DREAM_AGENT_MANUAL_RUNS_PER_DAY', 3)),
         )

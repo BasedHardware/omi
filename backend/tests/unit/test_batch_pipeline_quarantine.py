@@ -67,7 +67,7 @@ async def test_pump_drains_already_ready_sibling_when_last_lease_quarantines(mon
     leases = {v.item.segment_id: v for v in queue.pull(0, 2)}
     queue.complete(WorkResult('later', 'gs://synthetic/later'), leases['later'].token, 1)
     queue.defer('poison', leases['poison'].token, 1, 1)
-    worker = Mock()
+    worker = Mock(spec=['process_batch'])
     worker.process_batch.return_value = []
     pump = Pump(queue, worker, capacity=lambda: PoolCapacity(time.time(), 8))
     assert await pump.run_once() == 1
