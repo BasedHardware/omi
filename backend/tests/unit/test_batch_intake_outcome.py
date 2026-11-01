@@ -34,8 +34,10 @@ from utils.sync.final_pass_rehome import RehomeOutcome
 from utils.sync.legacy_dark import LegacySyncMode
 
 UID, CID = 'test-uid', 'synthetic-conversation'
+RSID = 'synthetic-session'
 USER = ('users', UID)
 CONVERSATION = (*USER, 'conversations', CID)
+RECORDING_SESSION = (*USER, 'recording_sessions', RSID)
 ON = LegacySyncMode.ON
 
 
@@ -119,6 +121,10 @@ def test_legacy_landing_priority_and_residual():
     assert legacy_landing_outcome(language, candidate_batch_enabled=False) == 'language_excluded'
     assert legacy_landing_outcome(IntakeRouteEvidence(), candidate_batch_enabled=False) == 'not_cohort'
     assert legacy_landing_outcome(IntakeRouteEvidence(), candidate_batch_enabled=True) is None
+    # Luna r2 P1: a final-pass owner follow is not a fresh decision on either landing,
+    # even when the ramp marked a heavy exclusion before the session resolved.
+    followed = IntakeRouteEvidence(heavy_owner_excluded=True, final_pass_owner_followed=True)
+    assert legacy_landing_outcome(followed, candidate_batch_enabled=True) is None
 
 
 # --- evidence provenance -------------------------------------------------------------------------
@@ -208,12 +214,12 @@ async def test_accept_upload_marks_evidence_only_on_a_fresh_admission(monkeypatc
         return ProtectionContext('standard', 0)
 
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
-    monkeypatch.setattr(intake, 'admit', lambda *a, **k: {'outcome': 'batch', 'job_id': 'bp_new'})
+    monkeypatch.setattr(intake, 'admit', lambda *a, **k: {'outcome': 'batch', 'job_id': 'bp_job'})
     monkeypatch.setattr(
         intake,
         'durable_status',
         lambda *a, **k: {
-            'job_id': 'bp_new',
+            'job_id': 'bp_job',
             'status': 'queued',
             'total_files': 1,
             'total_segments': 0,
@@ -260,6 +266,44 @@ async def test_accept_upload_marks_evidence_only_on_a_fresh_admission(monkeypatc
     response = await intake.accept_upload(**arguments, evidence=reupload)
     assert response.status_code == 202
     assert not reupload.batch_accepted
+
+    # Luna r2 P2: a concurrent winner already committed this content; admit
+    # returns its existing job, which is a re-ACK, not this request's admission.
+    monkeypatch.setattr(intake, 'admit', lambda *a, **k: {'outcome': 'batch', 'job_id': 'bp_other'})
+    raced = IntakeRouteEvidence()
+    store.rows = {}
+    response = await intake.accept_upload(**arguments, evidence=raced)
+    assert response.status_code == 202
+    assert not raced.batch_accepted
+
+
+async def test_session_resolved_final_pass_owner_marks_the_follow(monkeypatch):
+    """Luna r2 P1: a recording session can resolve to a final-pass conversation
+    only after the ramp already marked a heavy exclusion; the follow flag must
+    still suppress the outcome at the legacy landing."""
+
+    row = {'status': 'completed', 'record_lane_owner': 'legacy_final_pass_v1', '_test_revision': 1}
+    client = StrictFirestore({USER: {'language': 'en'}, RECORDING_SESSION: {'conversation_id': CID}, CONVERSATION: row})
+    store = MemoryStore()
+    store.client, store.namespace = client, 'batch_pipeline_dev'
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
+    monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: RehomeOutcome.NOT_APPLICABLE)
+    evidence = IntakeRouteEvidence(heavy_owner_excluded=True)  # The ramp ran first.
+    response = await live_upload.registered_record_response(
+        uid=UID,
+        conversation_id=None,
+        recording_session_id=RSID,
+        content_id='content',
+        paths=[],
+        source='omi',
+        client_device_id=None,
+        policy=enabled_policy(),
+        legacy_mode=ON,
+        evidence=evidence,
+    )
+    assert response is RecordUploadRoute.LEGACY
+    assert evidence.final_pass_owner_followed
+    assert legacy_landing_outcome(evidence, candidate_batch_enabled=True) is None
 
 
 # --- one counter branch per upload outcome, through the real router ------------------------------

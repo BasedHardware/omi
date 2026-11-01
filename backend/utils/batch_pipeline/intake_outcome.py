@@ -61,12 +61,17 @@ def legacy_landing_outcome(
 ) -> BatchIntakeOutcome | None:
     """Outcome for an upload landing on a legacy job, or None outside the set.
 
-    Heavy-owner exclusion outranks language: it is decided first in the request
+    An upload that followed a final-pass owner has no fresh decision on either
+    landing (Luna r2: a recording session can resolve to a final-pass
+    conversation only after the ramp already marked its exclusion). Otherwise
+    heavy-owner exclusion outranks language: it is decided first in the request
     (the ramp runs before record routing), so while both exclusions hold the
     upload stays legacy whichever language toggle moves. ``not_cohort`` is the
     cohort decision itself (the candidate policy never enabled batch).
     """
 
+    if evidence.final_pass_owner_followed:
+        return None
     if evidence.heavy_owner_excluded:
         return BatchIntakeOutcome.HEAVY_EXCLUDED
     if evidence.language_excluded:

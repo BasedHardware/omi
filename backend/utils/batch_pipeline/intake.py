@@ -670,9 +670,10 @@ async def accept_upload(
         if adopt is not None and outcome['outcome'] == 'batch' and outcome.get('job_id') == public_job_id:
             legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.LEGACY_STRANDED_ADOPTED)
         if outcome['outcome'] == 'batch':
-            # This request admitted fresh work (the earlier non-None returns are
-            # re-ACKs of prior custody); mark it for the caller's outcome counter.
-            if evidence is not None:
+            # Only this request's own admission is fresh work: a concurrent
+            # winner commits the same content and admit returns its existing
+            # job (Luna r2), which is a re-ACK, not a new admission.
+            if evidence is not None and outcome.get('job_id') == public_job_id:
                 evidence.batch_accepted = True
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
