@@ -48,9 +48,18 @@ def get_app_by_id_db(app_id: str) -> Optional[Dict[str, Any]]:
 def get_audio_apps_count(app_ids: List[str]) -> int:
     if not app_ids or len(app_ids) == 0:
         return 0
-    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
-    apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).count().get()
-    return apps_ref[0][0].value
+    deduped_ids = list(dict.fromkeys(app_ids))
+    total_count = 0
+    batch_size = 30
+    for i in range(0, len(deduped_ids), batch_size):
+        chunk = deduped_ids[i : i + batch_size]
+        filters = [
+            FieldFilter('id', 'in', chunk),
+            FieldFilter('external_integration.triggers_on', '==', 'audio_bytes'),
+        ]
+        apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).count().get()
+        total_count += apps_ref[0][0].value
+    return total_count
 
 
 def get_private_apps_db(uid: str) -> List[Dict[str, Any]]:
@@ -210,9 +219,15 @@ def get_apps_for_tester_db(uid: str) -> List[Dict[str, Any]]:
         apps = _typed_doc(doc).get('apps', [])
         if not apps:
             return []
-        filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps)]
-        public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
-        return [_typed_doc(doc) for doc in public_apps]
+        apps = list(dict.fromkeys(apps))
+        results: List[Dict[str, Any]] = []
+        batch_size = 30
+        for i in range(0, len(apps), batch_size):
+            chunk = apps[i : i + batch_size]
+            filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', chunk)]
+            public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
+            results.extend([_typed_doc(doc) for doc in public_apps])
+        return results
     return []
 
 
