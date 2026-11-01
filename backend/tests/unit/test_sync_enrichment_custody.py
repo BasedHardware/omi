@@ -113,6 +113,103 @@ def test_invalid_redirect_retains_deferred_debt_without_processing(admitted, pip
     assert rows[reprocess.key('u', 'c')]['deferred_reason'] == 'redirect_unresolved'
 
 
+def _stuck_redirect(pipeline, monkeypatch):
+    process = callback(pipeline, monkeypatch, {'deleted': True, 'sync_merged_into': 'unresolved'})
+    monkeypatch.setattr(pipeline.conversations_db, 'resolve_sync_conversation_redirect', lambda *_: None)
+    return process
+
+
+def _defer_with(pipeline, **deferral):
+    def process(*_):
+        pipeline.PROCESS_CONTEXT.get().update(deferral)
+
+    return process
+
+
+def test_unresolved_redirect_polls_hourly_only_after_the_grace(admitted, pipeline, monkeypatch):
+    rows, tasks = admitted
+    key, process = reprocess.key('u', 'c'), _stuck_redirect(pipeline, monkeypatch)
+    assert reprocess.run(key, tasks[-1]['task_token'], process, now=120) == 'deferred'
+    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS and rows[key]['deferred_since'] == 120
+    late = 120 + reprocess.STUCK_DEFER_GRACE_SECONDS
+    assert reprocess.run(key, tasks[-1]['task_token'], process, now=late) == 'deferred'
+    assert rows[key]['due_at'] == rows[key]['task_due_at'] == late + reprocess.STUCK_DEFER_POLL_SECONDS
+    assert tasks[-1] == rows[key] and rows[key]['deferred_reason'] == 'redirect_unresolved'
+    assert rows[key]['deferred_since'] == 120 and not rows[key].get('dormant')
+
+
+def test_new_deferral_reason_on_an_old_obligation_restarts_the_grace(admitted, pipeline, monkeypatch):
+    rows, tasks = admitted
+    key = reprocess.key('u', 'c')
+    assert reprocess.run(key, tasks[-1]['task_token'], _stuck_redirect(pipeline, monkeypatch), now=120) == 'deferred'
+    late = 120 + reprocess.STUCK_DEFER_GRACE_SECONDS
+    bridge = _defer_with(pipeline, defer_reason='pending_live_bridge', defer_until=late + 30)
+    assert reprocess.run(key, tasks[-1]['task_token'], bridge, now=late) == 'deferred'
+    assert rows[key]['due_at'] == late + 30 and rows[key]['deferred_since'] == late
+    assert rows[key]['deferred_reason'] == 'pending_live_bridge'
+
+
+def test_completed_callback_ends_the_deferral_episode(admitted, pipeline, monkeypatch):
+    rows, tasks = admitted
+    key = reprocess.key('u', 'c')
+    assert reprocess.run(key, tasks[-1]['task_token'], _stuck_redirect(pipeline, monkeypatch), now=120) == 'deferred'
+
+    def processed_while_appended(*_):
+        rows[key]['version'] += 1  # an append landed during processing, so the obligation stays open
+        return SimpleNamespace(structured={'overview': 'Synthetic committed summary'})
+
+    assert reprocess.run(key, tasks[-1]['task_token'], processed_while_appended, now=240) == 'processed'
+    assert not rows[key].get('dormant') and 'deferred_since' not in rows[key]
+
+
+def test_stuck_redirect_deliveries_per_day_drop_from_719_to_198(admitted, pipeline, monkeypatch):
+    rows, tasks = admitted
+    key, process = reprocess.key('u', 'c'), _stuck_redirect(pipeline, monkeypatch)
+    initial = deepcopy(rows[key]), list(tasks)
+
+    def deliveries_over_a_day():
+        now, times = 120, []
+        while now < 86400:
+            assert reprocess.run(key, tasks[-1]['task_token'], process, now=now) == 'deferred'
+            times.append(now)
+            now = rows[key]['due_at']
+        return times
+
+    grace = reprocess.STUCK_DEFER_GRACE_SECONDS
+    monkeypatch.setattr(reprocess, 'STUCK_DEFER_GRACE_SECONDS', float('inf'))  # the pre-change cadence
+    before = deliveries_over_a_day()
+    rows[key], tasks[:] = deepcopy(initial[0]), initial[1]
+    monkeypatch.setattr(reprocess, 'STUCK_DEFER_GRACE_SECONDS', grace)
+    after = deliveries_over_a_day()
+    assert (len(before), len(after)) == (719, 198)
+    # Unchanged inside the grace; afterwards the worst added wait is one poll interval.
+    assert after[:181] == before[:181]
+    assert max(b - a for a, b in zip(after, after[1:])) == reprocess.STUCK_DEFER_POLL_SECONDS
+
+
+def test_custody_defer_until_extends_only_stuck_reasons_past_the_grace():
+    late = reprocess.STUCK_DEFER_GRACE_SECONDS + 10
+    poll, live = reprocess.STUCK_DEFER_POLL_SECONDS, reprocess.LIVE_DEFER_SECONDS
+    defer_until = reprocess.custody_defer_until
+    assert defer_until({'defer_reason': 'pending_live_bridge', 'defer_until': 40}, 0, 10) == 40
+    assert defer_until({'defer_reason': 'pending_live_bridge', 'defer_until': late + 30}, 0, late) == late + poll
+    assert defer_until({'defer_reason': 'conversation_missing'}, 0, late) == late + poll
+    assert defer_until({'defer_reason': 'open_live_target'}, late - 60, late) == late + live
+    assert defer_until({'defer_reason': 'quiet_wait', 'defer_until': late + 30}, 0, late) == late + 30
+    far = late + 2 * poll
+    assert defer_until({'defer_reason': 'redirect_unresolved', 'defer_until': far}, 0, late) == far
+
+
+def test_deferral_episode_belongs_to_one_reason_and_the_current_obligation():
+    since = reprocess.custody_deferred_since
+    open_row = {'deferred_reason': 'redirect_unresolved', 'deferred_since': 100, 'first_pending_at': 0}
+    assert since(open_row, 'redirect_unresolved', 9000) == 100
+    assert since(open_row, 'pending_live_bridge', 9000) == 9000
+    assert since({'deferred_reason': 'redirect_unresolved', 'first_pending_at': 0}, 'redirect_unresolved', 9000) == 9000
+    # A dormant receipt reopened at 5000 keeps its old episode fields but not their age.
+    assert since({**open_row, 'first_pending_at': 5000}, 'redirect_unresolved', 9000) == 5000
+
+
 def test_watchdog_replaces_only_absent_exhausted_wake(admitted, sweep_query, monkeypatch):
     rows, tasks = admitted
     key, original = reprocess.key('u', 'c'), tasks[0]['task_token']
