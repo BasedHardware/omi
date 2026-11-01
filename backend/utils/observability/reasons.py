@@ -49,6 +49,7 @@ class ReasonFamily(StrEnum):
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    ADMISSION_HOLD = 'admission_hold'
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
     VENDOR_ROUTE = 'vendor_route'
@@ -194,10 +195,10 @@ class BatchIntakeOutcome(StrEnum):
     """`omi_batch_intake_outcome_total{outcome}`: where one v2 sync upload's batch routing landed.
 
     Owner: `utils/batch_pipeline/intake_outcome.py`. `batch` is an upload batch
-    intake accepted; `heavy_excluded`/`language_excluded` are this request's
-    fresh exclusions that landed it on legacy; `not_cohort` is the ramp cohort
-    decision. An upload following a prior durable owner carries no fresh
-    decision and is not counted.
+    intake admitted fresh work; `heavy_excluded`/`language_excluded` are this
+    request's fresh exclusions that landed it on legacy; `not_cohort` is the
+    ramp cohort decision. An upload following a prior durable owner carries no
+    fresh decision and is not counted.
     """
 
     UNKNOWN = 'unknown'
@@ -205,6 +206,27 @@ class BatchIntakeOutcome(StrEnum):
     HEAVY_EXCLUDED = 'heavy_excluded'
     LANGUAGE_EXCLUDED = 'language_excluded'
     NOT_COHORT = 'not_cohort'
+
+
+class AdmissionHoldReason(StrEnum):
+    """Closed reasons a compute-admission lease was held at defer time.
+
+    Owner: `utils/batch_pipeline/admission.py`. The literals are that module's
+    fair-use/ceiling/reservation/privacy holds; the spend-gate members mirror
+    the refusal subset of `utils.observability.stt_cap_dispatch.DispatchReason`.
+    Anything else folds to `unknown` by `reason_label`, never free text.
+    """
+
+    UNKNOWN = 'unknown'
+    FAIR_USE_RESTRICTED = 'fair_use_restricted'
+    DAILY_AUDIO_CEILING = 'daily_audio_ceiling'
+    BACKFILL_RESERVATION = 'backfill_reservation'
+    PRIVACY_BLOCKED = 'privacy_blocked'
+    CONSENT_DENIED = 'consent_denied'
+    ALLOWANCE_EXHAUSTED = 'allowance_exhausted'
+    BUDGET_EXHAUSTED = 'budget_exhausted'
+    ALLOWANCE_UNAVAILABLE = 'allowance_unavailable'
+    ACCESS_DENIED = 'access_denied'
 
 
 class WorkOutcome(StrEnum):
@@ -337,6 +359,9 @@ class VendorAttemptOutcome(StrEnum):
     INVALID_RESPONSE = 'invalid_response'
     ABANDONED = 'abandoned'
     SUPERSEDED = 'superseded'
+    # Slice D (bus ask fe314f): our own failure on the attempt (invalid audio before the POST, an
+    # invalid payload or unexpected local error after it). Billable, never fails over.
+    LOCAL_FAILURE = 'local_failure'
 
 
 class VendorHoldReason(StrEnum):

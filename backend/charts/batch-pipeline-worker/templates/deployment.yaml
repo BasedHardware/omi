@@ -71,6 +71,7 @@ spec:
             - {name: http, containerPort: 8080}
           env:
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
+            - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
             - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
             {{- if ne .Values.worker.stageProfilingEnabled nil }}
             - {name: BATCH_PIPELINE_STAGE_PROFILING_ENABLED, value: {{ .Values.worker.stageProfilingEnabled | quote }}}
@@ -104,6 +105,10 @@ spec:
             - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR, value: {{ .Values.worker.shadowPaidRecoveryPerHour | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_RECOVERY_API_URL, value: {{ .Values.worker.shadowRecoveryApiUrl | quote }}}
+            # Sampled strict-VAD shadow; 100 restores full, 0 turns the shadow off.
+            # No `default` here: Helm's default treats 0 as empty, which would
+            # silently turn the documented 0-disable into 10.
+            - {name: BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT, value: {{ .Values.worker.strictVadShadowPercent | quote }}}
             - {name: BATCH_PIPELINE_UID_ALLOWLIST, value: ""}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}

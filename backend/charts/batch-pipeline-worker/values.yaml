@@ -32,6 +32,8 @@ tolerations:
 worker:
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
+  # One shard transaction leases up to the pull batch; false leases one per transaction.
+  pullMultiLeaseEnabled: true
   # Ship-on bounded Firestore transaction retry; false restores legacy behavior.
   contentionRetryEnabled: true
   # null preserves the runtime's stage-dependent profiling default.
@@ -54,6 +56,9 @@ worker:
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
+  # CPU strict-VAD shadow sampling percent; 0 disables the shadow, 100
+  # restores full sampling (the silence qualification reads this evidence).
+  strictVadShadowPercent: 10
   unitSeconds: 3600
   paddedSeconds: 272
   # Pack pyannote segmentation/embedding forwards across one flight's units.

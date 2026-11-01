@@ -82,8 +82,9 @@ def test_vendor_capability_is_code_owned_policy_admission():
     for service in c.VENDOR_SERVICES:
         assert c.route_capable(service, 'en') == provider_is_enabled(service, STTServingSurface.PRERECORDED)
     assert not c.route_capable('deepgram', 'en')
-    # Pinned on purpose: Soniox failover needs slice D's reviewed prerecorded admission, not a table edit.
-    assert not c.route_capable('soniox', 'en')
+    # Pinned on purpose: Soniox failover comes from slice D's reviewed prerecorded admission, not a table
+    # edit; tables still mark it failover_only (RouteConfig), so selection never picks it as cheapest.
+    assert c.route_capable('soniox', 'en')
     assert c.route_capable('gpu', None)  # unknown is multi, which Parakeet serves
     assert not c.route_capable('gpu', 'ja')
 
