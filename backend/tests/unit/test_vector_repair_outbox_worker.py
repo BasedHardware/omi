@@ -1186,8 +1186,9 @@ class TestEntrypoint:
         assert "MEMORY_VECTOR_REPAIR_OUTBOX_UID" in source
 
     def test_production_dependency_resolver_builds_lazy_clients_and_loader_from_env(self, monkeypatch):
-        monkeypatch.setattr(entrypoint, "owner_index", lambda raw, uid, **kwargs: raw)
         calls = []
+        raw_index = object()
+        routes = []
         docs = {
             "users/u1/memory_items/mem1": {
                 "memory_id": "mem1",
@@ -1251,13 +1252,21 @@ class TestEntrypoint:
                 calls.append(("upsert", kwargs))
                 return {"upserted": 1}
 
+        scoped_index = Index()
+
+        def route(raw, uid, **kwargs):
+            routes.append((raw, uid, kwargs))
+            return scoped_index
+
+        monkeypatch.setattr(entrypoint, "owner_index", route)
+
         class PineconeClient:
             def __init__(self, api_key):
                 calls.append(("pinecone", api_key))
 
             def Index(self, name):
                 calls.append(("index", name))
-                return Index()
+                return raw_index
 
         class PineconeModule:
             Pinecone = PineconeClient
@@ -1297,6 +1306,7 @@ class TestEntrypoint:
         deps.vector_deleter({"vector_id": "vec1", "uid": "u1", "memory_id": "mem1"})
         deps.vector_repairer({"required_projection_commit_id": "projection-1"}, item)
 
+        assert routes == [(raw_index, "u1", {"index_name": "memory-index"})]
         assert ("pinecone", "pc-key") in calls
         assert ("index", "memory-index") in calls
         assert ("get", "users/u1/memory_items/mem1") in calls
@@ -1313,4 +1323,8 @@ class TestEntrypoint:
             == 2
         )
         assert ("embed", "User prefers concise updates.") in calls
-        assert any(call[0] == "upsert" and call[1]["namespace"] == "ns2" for call in calls)
+        upserts = [kwargs for operation, kwargs in calls if operation == "upsert"]
+        assert len(upserts) == 1
+        assert upserts[0]["namespace"] == "ns2"
+        assert upserts[0]["vectors"][0]["metadata"]["uid"] == "u1"
+        assert upserts[0]["vectors"][0]["metadata"]["memory_id"] == "mem1"

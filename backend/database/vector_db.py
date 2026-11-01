@@ -1388,7 +1388,7 @@ def delete_transcript_chunk_vectors_batch(
 def delete_all_user_vector_copies(uid: str) -> None:
     """Purge every feature and retained migration copy for an account wipe."""
     if index is None:
-        return
+        raise RuntimeError('Pinecone index is required to verify account vector deletion')
     scoped = owner_index(index, uid, index_name=_pinecone_index_name)
     for namespace in (
         "ns1",

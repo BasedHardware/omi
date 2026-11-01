@@ -540,6 +540,7 @@ def test_completed_normal_mutations_do_not_accumulate_journal_rows(db, key):
     assert not operation.get().exists
 
 
+@pytest.mark.integration
 def test_real_firestore_mutation_cutover_contention():
     """Optional real transaction proof; strict fixture cannot model contention."""
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
@@ -581,6 +582,7 @@ def test_real_firestore_mutation_cutover_contention():
         client.close()
 
 
+@pytest.mark.integration
 def test_real_firestore_deletion_marker_migration_contention():
     """A migration may commit before deletion, but never after its marker wins."""
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
@@ -624,6 +626,7 @@ def test_real_firestore_deletion_marker_migration_contention():
         client.close()
 
 
+@pytest.mark.integration
 def test_real_firestore_completion_deletes_only_completed_normal_operation():
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
     if not host:
@@ -664,6 +667,7 @@ def test_real_firestore_completion_deletes_only_completed_normal_operation():
         client.close()
 
 
+@pytest.mark.integration
 def test_real_firestore_first_read_never_reverts_concurrent_cutover():
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
     if not host:

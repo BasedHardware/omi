@@ -365,6 +365,7 @@ def _install_hermetic_privacy_projection_fakes() -> None:
         embeddings = DeterministicEmbeddings()
         vector_db.embeddings = embeddings
         vector_db.index = FakeVectorIndex(embeddings)
+        vector_db._pinecone_index_name = "hermetic-e2e-index"
 
     real_vector_delete = vector_db.delete_canonical_memory_vectors
 
@@ -527,6 +528,20 @@ DEV_UID = "123"
 DEV_AUTH_HEADERS = {"Authori" + "zation": "Bearer dev-token"}
 
 
+def _clear_hermetic_vector_state():
+    from fakes.firestore import clear_partition_routes
+    from fakes.vector_search import DeterministicEmbeddings, FakeVectorIndex
+
+    clear_partition_routes()
+    vector_db = sys.modules.get('database.vector_db')
+    if vector_db is not None and isinstance(vector_db.index, FakeVectorIndex):
+        # A fresh provider also resets request/indexed LSNs and embedding text caches.
+        embeddings = DeterministicEmbeddings()
+        vector_db.embeddings = embeddings
+        vector_db.index = FakeVectorIndex(embeddings)
+        vector_db._pinecone_index_name = 'hermetic-e2e-index'
+
+
 @pytest.fixture(autouse=True)
 def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
     """Clear mutable fake service state before and after each test."""
@@ -535,6 +550,7 @@ def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
 
     def clear_state():
         clear_user_data(DEV_UID)
+        _clear_hermetic_vector_state()
         fake_redis.flushall()
         clear_fake_storage()
         # Memory reads share a process-wide admission burst. Independent E2E

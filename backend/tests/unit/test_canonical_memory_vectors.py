@@ -737,16 +737,30 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
 
 def test_canonical_writer_routes_by_authoritative_owner(monkeypatch):
     vector_db, fake_index = _install_recording_vector_db(monkeypatch)
-    routed_owners = []
+    scoped_index = _RecordingIndex()
+    routes = []
 
     def route(raw_index, uid, **kwargs):
         assert raw_index is fake_index
-        routed_owners.append(uid)
-        return raw_index
+        routes.append((uid, kwargs))
+        return scoped_index
 
     monkeypatch.setattr(vector_db, 'owner_index', route)
-    vector_db.upsert_canonical_memory_vector(_item(uid='owner-1'))
-    assert routed_owners == ['owner-1', 'owner-1']
+    item = _item(uid='owner-1')
+    vector_db.upsert_canonical_memory_vector(item)
+    assert routes == [('owner-1', {'index_name': vector_db._pinecone_index_name})] * 2
+    assert fake_index.deletes == fake_index.upserts == []
+    assert len(scoped_index.deletes) == len(scoped_index.upserts) == 1
+    assert scoped_index.deletes[0] == {
+        'ids': None,
+        'filter': vector_db.build_canonical_memory_vector_delete_filter(item.uid, item.memory_id),
+        'namespace': vector_db.MEMORIES_NAMESPACE,
+    }
+    assert scoped_index.upserts[0]['namespace'] == vector_db.MEMORIES_NAMESPACE
+    assert scoped_index.upserts[0]['vectors'][0]['metadata']['uid'] == item.uid
+    assert scoped_index.upserts[0]['vectors'][0]['id'] == vector_db.canonical_memory_provider_id(
+        item.uid, item.memory_id
+    )
 
 
 def test_account_purge_covers_every_feature_and_retained_copy(monkeypatch):

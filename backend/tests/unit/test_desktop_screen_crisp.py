@@ -252,12 +252,17 @@ def test_screen_activity_storage_ids_are_device_scoped():
 
 def test_screen_activity_vector_treats_canonical_naive_timestamp_as_utc(monkeypatch):
     upserts = []
+    routes = []
+    raw_index = object()
+    scoped = SimpleNamespace(upsert=lambda **kwargs: upserts.append(kwargs))
+
+    def route(raw, uid, **kwargs):
+        routes.append((raw, uid, kwargs))
+        return scoped
+
     monkeypatch.setattr(vector_db, "external_write_fence", lambda *_args, **_kwargs: nullcontext())
-    monkeypatch.setattr(
-        vector_db,
-        "index",
-        SimpleNamespace(upsert=lambda **kwargs: upserts.append(kwargs)),
-    )
+    monkeypatch.setattr(vector_db, "index", raw_index)
+    monkeypatch.setattr(vector_db, "owner_index", route)
 
     written = vector_db.upsert_screen_activity_vectors(
         "user-1",
@@ -272,6 +277,8 @@ def test_screen_activity_vector_treats_canonical_naive_timestamp_as_utc(monkeypa
     )
 
     assert written == 1
+    assert routes == [(raw_index, 'user-1', {'index_name': vector_db._pinecone_index_name})]
+    assert upserts[0]['vectors'][0]['metadata']['uid'] == 'user-1'
     assert upserts[0]["vectors"][0]["metadata"]["timestamp"] == 1785024000
 
 

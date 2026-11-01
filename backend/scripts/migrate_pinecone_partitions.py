@@ -18,6 +18,11 @@ from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
+from pinecone import Pinecone
+
 from database import pinecone_partition_state as state
 from database._client import get_data_plane_firestore_client
 from database.pinecone_partition_migration import MigrationNotReady, OwnerMigration, PartitionTransport
@@ -186,10 +191,7 @@ def select_keys(args: argparse.Namespace, db: Any) -> tuple[list[state.Partition
             'route_documents_scanned': 0,
             'scan_complete': True,
         }
-    from google.cloud.firestore_v1.base_query import FieldFilter
-
-    owners: set[str] = set()
-    keys: dict[str, state.PartitionKey] = {}
+    owners: dict[str, None] = {}
     scanned = 0
     deferred_owners: set[str] = set()
     # One indexed field per query; spend a shared document budget across modes.
@@ -207,7 +209,7 @@ def select_keys(args: argparse.Namespace, db: Any) -> tuple[list[state.Partition
             scanned += 1
             mode_scanned += 1
             row = snapshot.to_dict()
-            if row.get('index_name') != args.index or row.get('family') not in families:
+            if row.get('index_name') != args.index or row.get('family') not in state.FAMILIES:
                 continue
             uid = row.get('uid')
             if not isinstance(uid, str) or not uid:
@@ -218,11 +220,13 @@ def select_keys(args: argparse.Namespace, db: Any) -> tuple[list[state.Partition
             key = state.PartitionKey(args.index, row['family'], uid)
             if snapshot.id != key.document_id:
                 raise OperatorGateError('route document identity does not match its contents')
-            owners.add(uid)
-            keys[key.document_id] = key
+            owners[uid] = None
         if mode_scanned == remaining:
             scan_complete = False
-    return list(keys.values()), {
+    # One registered family discovers an owner whose other families may still
+    # have legacy vectors without route documents. The family option limits work,
+    # not owner discovery.
+    return [state.PartitionKey(args.index, family, uid) for uid in owners for family in sorted(families)], {
         'owners': len(owners),
         'route_documents_scanned': scanned,
         'queried_modes': modes,
@@ -356,9 +360,6 @@ def main(argv: list[str] | None = None) -> int:
     transport = None
     try:
         if args.emulator_project:
-            from google.auth.credentials import AnonymousCredentials
-            from google.cloud import firestore
-
             db = firestore.Client(project=args.emulator_project, credentials=AnonymousCredentials())
         else:
             db = get_data_plane_firestore_client()
@@ -366,8 +367,6 @@ def main(argv: list[str] | None = None) -> int:
         report['inventory'] = inventory
         report['gates'] = production_gate(args, list({key.uid for key in keys}))
         if args.apply:
-            from pinecone import Pinecone
-
             api_key = os.environ.get('PINECONE_API_KEY')
             if not api_key:
                 raise OperatorGateError('PINECONE_API_KEY must be provided through the existing secret environment')

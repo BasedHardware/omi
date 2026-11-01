@@ -4,6 +4,10 @@ from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -202,7 +206,8 @@ def test_sweep_resume_discovers_owned_copy_and_completes_cas(args, key, monkeypa
     args.uid, args.sweep, args.resume, args.apply = None, True, True, True
     db = SweepDB({'copying': [key]})
     keys, inventory = cli.select_keys(args, db)
-    assert keys == [key]
+    assert {item.uid for item in keys} == {key.uid}
+    assert {item.family for item in keys} == state.FAMILIES
     assert db.filters == ['copying', 'legacy']
     assert inventory['scan_complete']
     cli.atomic_json(
@@ -230,7 +235,8 @@ def test_sweep_owner_limit_and_document_limit_are_reported(args, key):
     other = state.PartitionKey(cli.DEV_INDEX, 'ns1', 'other')
     db = SweepDB({'copying': [key], 'legacy': [other]})
     keys, inventory = cli.select_keys(args, db)
-    assert keys == [key]
+    assert {item.uid for item in keys} == {key.uid}
+    assert {item.family for item in keys} == state.FAMILIES
     assert inventory['deferred_owners_in_scan'] == 1
     assert not inventory['scan_complete']
     args.max_route_docs = 1
@@ -238,6 +244,22 @@ def test_sweep_owner_limit_and_document_limit_are_reported(args, key):
     _, inventory = cli.select_keys(args, db)
     assert db.filters == ['copying']
     assert not inventory['scan_complete']
+
+
+@pytest.mark.parametrize('selected', [None, ['ns2'], ['ns2', 'ns_tchunks']])
+def test_sweep_discovers_owner_once_and_expands_selected_families(args, key, selected):
+    args.uid, args.sweep, args.family = None, True, selected
+    # Only ns1 has a durable row; old vectors can still exist in all other families.
+    other_family = state.PartitionKey(cli.DEV_INDEX, 'ns3', key.uid)
+    foreign_index = state.PartitionKey('unrelated-index', 'ns1', 'unrelated-owner')
+    db = SweepDB({'legacy': [key, other_family, foreign_index]})
+    keys, inventory = cli.select_keys(args, db)
+    expected_families = set(selected or state.FAMILIES)
+    assert {(item.uid, item.family) for item in keys} == {(key.uid, family) for family in expected_families}
+    assert len(keys) == len(expected_families)
+    assert inventory['owners'] == 1
+    assert inventory['route_documents_scanned'] == 3
+    assert inventory['scan_complete']
 
 
 def test_budget_refuses_before_durable_write_admission(args, key, monkeypatch):
@@ -252,3 +274,21 @@ def test_budget_refuses_before_durable_write_admission(args, key, monkeypatch):
         parent_write.assert_not_called()
     finally:
         transport.client.close()
+
+
+def test_qualification_script_direct_execution_reaches_safety_gate(tmp_path):
+    script = Path(cli.__file__).with_name('qualify_pinecone_partitions.py')
+    env = {key: value for key, value in os.environ.items() if key != 'PYTHONPATH'}
+    env.update(PINECONE_INDEX_NAME='memories-backend', FIRESTORE_EMULATOR_HOST='127.0.0.1:1')
+    result = subprocess.run(
+        [sys.executable, str(script), str(tmp_path / 'unused-proof.json')],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode != 0
+    assert 'This qualification permits only a dev index and loopback Firestore emulator' in result.stderr
+    assert 'ModuleNotFoundError' not in result.stderr
+    assert not (tmp_path / 'unused-proof.json').exists()

@@ -13,8 +13,10 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import tempfile
 import time
 from urllib.parse import urlparse
+from urllib.request import Request as URLRequest, urlopen
 from uuid import uuid4
 
 import pytest
@@ -126,9 +128,6 @@ def test_real_action_item_user_path(monkeypatch):
         and state.PartitionKey(index_name, 'ns4', candidate).partition_namespace == owner_key.partition_namespace
     )
     owners = (owner, other)
-    for uid in owners:
-        db.collection('users').document(uid).set({'name': 'Synthetic partition API fixture'})
-
     allowed_hosts = {'127.0.0.1', 'localhost', '::1', 'api.openai.com', 'api.pinecone.io', description.host}
     real_resolver = socket.getaddrinfo
 
@@ -171,17 +170,19 @@ def test_real_action_item_user_path(monkeypatch):
         'excluded': ['production deployment', 'mobile UI', 'Firebase token verification', 'other six vector families'],
     }
     transport = PartitionTransport(description.host, pinecone_key)
-    output = Path(
-        os.getenv(
-            'PINECONE_USER_PATH_EVIDENCE',
-            '/Users/kodjimini/mobile-ux-agent/metrics/pinecone-partition-rollout-2026-11-01/user-api-proof.json',
-        )
+    output_override = os.getenv('PINECONE_USER_PATH_EVIDENCE')
+    output = (
+        Path(output_override)
+        if output_override
+        else Path(tempfile.mkdtemp(prefix='pinecone-user-api-proof-')) / 'user-api-proof.json'
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(evidence, indent=2) + '\n')
     output.chmod(0o600)
 
     try:
+        for uid in owners:
+            db.collection('users').document(uid).set({'name': 'Synthetic partition API fixture'})
         with TestClient(app) as client:
 
             def request(method, path, uid=owner, **kwargs):
@@ -314,12 +315,28 @@ def test_real_action_item_user_path(monkeypatch):
                     cleanup.append({'uid': uid, 'namespace': namespace, 'empty_verified': True})
                 except NotFoundException as exc:
                     if 'Namespace not found' not in str(exc):
-                        raise
-                    cleanup.append({'uid': uid, 'namespace': namespace, 'absent_namespace': True})
+                        cleanup.append({'uid': uid, 'namespace': namespace, 'error': type(exc).__name__})
+                    else:
+                        cleanup.append({'uid': uid, 'namespace': namespace, 'absent_namespace': True})
                 except Exception as exc:
                     cleanup.append({'uid': uid, 'namespace': namespace, 'error': type(exc).__name__})
         evidence['cleanup'] = cleanup
-        evidence['cleanup_verified'] = all('error' not in entry for entry in cleanup)
+        firestore_cleanup = {'project': project, 'empty_verified': False}
+        try:
+            # This unique project exists only in the loopback emulator. Its
+            # purge endpoint removes nested operation/task documents as well.
+            assert project == f'demo-pinecone-api-{run_id}'
+            purge_url = f'http://{host}/emulator/v1/projects/{project}/databases/(default)/documents'
+            with urlopen(URLRequest(purge_url, method='DELETE'), timeout=30) as response:
+                assert response.status == 200
+            assert not list(db.collections())
+            firestore_cleanup['empty_verified'] = True
+        except Exception as exc:
+            firestore_cleanup['error'] = type(exc).__name__
+        evidence['firestore_cleanup'] = firestore_cleanup
+        evidence['cleanup_verified'] = (
+            all('error' not in entry for entry in cleanup) and firestore_cleanup['empty_verified']
+        )
         evidence['finished_at'] = datetime.now(timezone.utc).isoformat()
         output.write_text(json.dumps(evidence, indent=2) + '\n')
         output.chmod(0o600)

@@ -1,4 +1,4 @@
-"""Regression: vector_db functions must fail open when no Pinecone index is configured.
+"""Optional vector operations fail open without an index; verified account erasure cannot.
 
 database.vector_db.index is None on deploys without Pinecone (self-hosted, offline, local dev).
 20+ functions guard `if index is None`, but query_vectors_by_metadata, upsert_vector2, and
@@ -8,6 +8,13 @@ unlogged AttributeError on the structured-vector save. The guards restore the fa
 """
 
 import database.vector_db as vector_db
+import pytest
+
+
+def test_account_purge_refuses_to_claim_erasure_without_index(monkeypatch):
+    monkeypatch.setattr(vector_db, 'index', None)
+    with pytest.raises(RuntimeError, match='Pinecone index is required'):
+        vector_db.delete_all_user_vector_copies('uid1')
 
 
 def test_query_vectors_by_metadata_returns_empty_without_index(monkeypatch):
