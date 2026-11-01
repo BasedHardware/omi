@@ -786,7 +786,10 @@ class Scheduler:
         deferred = self.store.run(commit)
         if deferred and admission_refused and self.metrics:
             try:
-                self.metrics.record('admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred')
+                self.metrics.record(
+                    'admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred',
+                    reason=held_reason,
+                )
             except Exception:
                 pass  # Metrics cannot turn a committed defer into a retry.
         return deferred
