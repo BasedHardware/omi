@@ -162,8 +162,7 @@ def _transcribe_from_gpu_result(result: Dict[str, Any]) -> Dict[str, Any]:
         )
     if not segments and text:
         segments = [{"text": text, "start": 0.0, "end": 0.0}]
-    else:
-        segments = _split_cjk_sentences(segments, cast(List[Any], timestamp.get("char", []) or []))
+    segments = _split_cjk_sentences(segments, cast(List[Any], timestamp.get("char", []) or []))
     return {"text": text, "segments": segments}
 
 

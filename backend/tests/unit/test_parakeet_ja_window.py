@@ -90,12 +90,30 @@ def test_router_capability_and_ramp(ja_env):
     assert not window_ja_admits(target, _uid_out(25), 'ja')
     assert window_ja_admits(target, _uid_out(25), 'en')
     assert window_ja_admits(Target('soniox', 'soniox', 0.0754), _uid_out(25), 'ja')
-    window_engine = {'parakeet': 'parakeet-window'}
-    assert live_router._family_supports(target, 'ja', window_engine)
+    ja_pool = {'parakeet': 'parakeet-window', 'parakeet_window_language': 'ja'}
+    v3_pool = {'parakeet': 'parakeet-window', 'parakeet_window_language': 'en'}
+    assert live_router._family_supports(target, 'ja', ja_pool)
+    assert not live_router._family_supports(target, 'ja', v3_pool)
     assert not live_router._family_supports(target, 'ja', {'parakeet': 'parakeet'})
     ja_env.setenv(parakeet_ja.JA_PERCENT_ENV, '0')
     assert not target.capable('ja')
-    assert not live_router._family_supports(target, 'ja', window_engine)
+    assert not live_router._family_supports(target, 'ja', ja_pool)
+
+
+def test_required_languages_never_cross_pools(ja_env):
+    ja_env.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
+    target = Target('parakeet-window', 'parakeet', 0.02)
+    ja_pool = {'parakeet': 'parakeet-window', 'parakeet_window_language': 'ja'}
+    v3_pool = {'parakeet': 'parakeet-window', 'parakeet_window_language': 'en'}
+    inside = _uid_in(25)
+    # A Japanese session that also expects English can't use the ja-only pool.
+    assert live_router.permission_reason(target, inside, 'ja', ('en',), ja_pool) == 'capability'
+    assert live_router.permission_reason(target, inside, 'ja', (), ja_pool) is None
+    # An English session that also expects Japanese can't send it to v3.
+    assert live_router.permission_reason(target, inside, 'en', ('ja',), v3_pool) == 'capability'
+    # The router's ramp gate covers required languages too.
+    assert live_router.select([target], {}, _uid_in(25), 'en', required_languages=('ja',)) == [target]
+    assert live_router.select([target], {}, _uid_out(25), 'en', required_languages=('ja',)) == []
 
 
 def test_full_width_sentence_ends_anchor():
@@ -130,6 +148,16 @@ def test_server_splits_japanese_window_into_sentences():
     assert out['segments'] == [
         {'text': '今日は晴れ。', 'start': 0.0, 'end': 0.9},
         {'text': '明日も', 'start': 1.6, 'end': 2.1},
+    ]
+
+
+def test_server_splits_when_only_token_timestamps_exist():
+    result = _ja_result([('今日', 0.0, 0.4), ('。', 0.4, 0.4), ('明日', 1.0, 1.4)])
+    result['timestamp']['segment'] = []
+    out = _transcribe_from_gpu_result(result)
+    assert out['segments'] == [
+        {'text': '今日。', 'start': 0.0, 'end': 0.4},
+        {'text': '明日', 'start': 1.0, 'end': 1.4},
     ]
 
 

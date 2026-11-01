@@ -148,6 +148,9 @@ class LiveChainSession:
         parakeet_allowed = parakeet_token is not None
         engine_models = {
             'parakeet': parakeet_token,
+            # Which window pool the session posts to; the router checks every
+            # required language against that pool's model.
+            'parakeet_window_language': window_lang if window else None,
             'modulate': 'velma-2',
             'soniox': 'soniox',
             'deepgram': dg_model,
