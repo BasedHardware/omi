@@ -303,6 +303,25 @@ jobs:
             fi
             echo "deploy/$TARGET_RELEASE is ready on $EXPECTED_DIGEST"
           fi
+          # The T4 stockout fallback keeps its operator-set replicas across upgrades;
+          # when it is serving, it must roll out the same digest too.
+          if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+            fallback="$TARGET_RELEASE-t4"
+            fallback_replicas="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$fallback" --request-timeout=30s \
+              --ignore-not-found -o jsonpath='{.spec.replicas}')"
+            if [[ -n "$fallback_replicas" && "$fallback_replicas" != "0" ]]; then
+              kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$fallback" --timeout="$rollout_timeout" || exit 1
+              if [[ -n "${EXPECTED_DIGEST:-}" ]]; then
+                fallback_image="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$fallback" --request-timeout=30s \
+                  -o jsonpath='{.spec.template.spec.containers[0].image}')"
+                if [[ "$fallback_image" != *"@$EXPECTED_DIGEST" ]]; then
+                  echo "::error::deploy/$fallback rolled out $fallback_image, not the expected digest $EXPECTED_DIGEST"
+                  exit 1
+                fi
+              fi
+              echo "deploy/$fallback ($fallback_replicas replicas) is ready"
+            fi
+          fi
           timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE"
 
       - name: Generate deployment summary

@@ -400,7 +400,7 @@ def test_rollout_wait_covers_worker_startup_and_still_fails_on_timeout(tmp_path,
     step = next(step for step in workflow['jobs']['deploy']['steps'] if step.get('name') == 'Verify rollout')
     receipt = tmp_path / 'kubectl-arguments'
     kubectl = tmp_path / 'kubectl'
-    kubectl.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$RECEIPT"\nexit "$ROLLOUT_EXIT"\n')
+    kubectl.write_text('#!/bin/sh\n[ "$3" = get ] && exit 0\nprintf "%s\\n" "$@" > "$RECEIPT"\nexit "$ROLLOUT_EXIT"\n')
     kubectl.chmod(0o755)
     reporter = tmp_path / 'python3'
     reporter.write_text('#!/bin/sh\nexit 0\n')
@@ -634,3 +634,42 @@ def test_t4_fallback_is_off_outside_production_values():
     assert result.returncode == 0, result.stderr
     names = [d['metadata']['name'] for d in yaml.safe_load_all(result.stdout) if d and d['kind'] == 'Deployment']
     assert names == ['synthetic-worker']
+
+
+@pytest.mark.parametrize(
+    'fallback_replicas,expected', [('', []), ('0', []), ('2', ['synthetic-batch-pipeline-worker-t4'])]
+)
+def test_rollout_verify_waits_for_a_serving_t4_fallback(tmp_path, fallback_replicas, expected):
+    workflow = yaml.safe_load((CHART.parents[2] / '.github/workflows/gcp_diarizer.yml').read_text())
+    step = next(step for step in workflow['jobs']['deploy']['steps'] if step.get('name') == 'Verify rollout')
+    log = tmp_path / 'rollouts'
+    kubectl = tmp_path / 'kubectl'
+    kubectl.write_text(
+        '#!/bin/sh\n'
+        'case "$3 $4" in\n'
+        '  "rollout status") echo "${5#deploy/}" >> "$LOG";;\n'
+        '  get*) case "$*" in *spec.replicas*) printf "%s" "$FALLBACK";; *) printf "img@sha256:%s" "$DIGEST";; esac;;\n'
+        'esac\n'
+    )
+    kubectl.chmod(0o755)
+    (tmp_path / 'python3').write_text('#!/bin/sh\nexit 0\n')
+    (tmp_path / 'python3').chmod(0o755)
+    result = subprocess.run(
+        ['bash', '-e', '-c', step['run']],
+        env={
+            **os.environ,
+            'PATH': f'{tmp_path}:{os.environ["PATH"]}',
+            'SERVICE': 'batch-pipeline-worker',
+            'DEPLOY_NAMESPACE': 'synthetic',
+            'DEPLOY_ENV': 'dev',
+            'TARGET_RELEASE': 'synthetic-batch-pipeline-worker',
+            'EXPECTED_DIGEST': 'sha256:' + 'a' * 64,
+            'DIGEST': 'a' * 64,
+            'FALLBACK': fallback_replicas,
+            'LOG': str(log),
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert log.read_text().splitlines() == ['synthetic-batch-pipeline-worker', *expected]
