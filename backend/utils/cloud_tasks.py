@@ -241,22 +241,28 @@ def is_listen_finalization_dispatch_enabled() -> bool:
     return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
+def _listen_finalization_tasks_binding() -> tuple[str, str, str, str, str]:
+    return (
+        os.getenv('SYNC_TASKS_PROJECT', ''),
+        os.getenv('SYNC_TASKS_LOCATION', ''),
+        os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+        _listen_finalization_handler_url(),
+        _listen_finalization_invoker_sa(),
+    )
+
+
 def is_listen_finalization_dispatch_configured() -> bool:
-    """Whether the durable finalizer can be admitted without an inline fallback."""
-    return is_listen_finalization_dispatch_enabled() and is_listen_finalization_tasks_configured()
+    """Retain the existing live-admission mode and nonempty-binding contract."""
+    return is_listen_finalization_dispatch_enabled() and all(_listen_finalization_tasks_binding())
 
 
 def is_listen_finalization_tasks_configured() -> bool:
-    """Validate the static worker binding without changing live admission mode.
+    """Validate the replay worker binding without changing live admission.
 
     This is syntax validation, not a queue-existence or IAM probe. Validate the
     raw values used by enqueue, rather than accepting whitespace after strip().
     """
-    project = os.getenv('SYNC_TASKS_PROJECT', '')
-    location = os.getenv('SYNC_TASKS_LOCATION', '')
-    queue = os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', '')
-    url = _listen_finalization_handler_url()
-    invoker = _listen_finalization_invoker_sa()
+    project, location, queue, url, invoker = _listen_finalization_tasks_binding()
     if not (
         re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:-]*', project)
         and re.fullmatch(r'[a-z]+(?:-[a-z]+)+[0-9]+', location)

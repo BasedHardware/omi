@@ -441,6 +441,23 @@ def test_finalization_binding_accepts_invoker_fallback_and_loopback_harness(monk
     assert cloud_tasks.is_listen_finalization_tasks_configured()
 
 
+@pytest.mark.parametrize('mode', ['inline', 'cloud_tasks'])
+def test_replay_syntax_guard_keeps_existing_live_admission_contract(monkeypatch, mode):
+    monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', mode)
+    for key in (
+        'SYNC_TASKS_PROJECT',
+        'SYNC_TASKS_LOCATION',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+    ):
+        monkeypatch.setenv(key, 'synthetic-nonempty')
+    # Live admission has always used mode + presence, with actual enqueue
+    # validation owned by Cloud Tasks. This change validates replay only.
+    assert cloud_tasks.is_listen_finalization_dispatch_configured() is (mode == 'cloud_tasks')
+    assert not cloud_tasks.is_listen_finalization_tasks_configured()
+
+
 def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
     monkeypatch.setattr(
         lifecycle_service.conversations_db,

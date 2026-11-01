@@ -2790,6 +2790,8 @@ Every host, including a Cloud Tasks admission host, requires valid bindings
 before replay selection. Syntax validation does not prove queue existence,
 IAM permission, handler health, or the queue's retry policy; verify these when
 rolling out a binding.
+This replay-only check leaves live admission's existing mode-and-presence
+configuration contract unchanged, including its handling of malformed bindings.
 
 This binding does not enable stale `in_progress` admission, which still requires
 `LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks`. Inline replay skips quiet-check
