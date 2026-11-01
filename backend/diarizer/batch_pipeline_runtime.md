@@ -117,9 +117,33 @@ The chart `charts/batch-pipeline-worker` pins a qualified image digest, existing
 Workload Identity service account, explicit data-plane project, secrets and
 staging bucket. It selects the dedicated `batch-pipeline-pool` with
 `service=batch-pipeline` and `env=<env>` labels, requests one GPU, and prevents
-surge GPUs. **An NVIDIA L4 on `g2-standard-8` is required**: the joint chain was
-qualified on L4 and ASR requires native BF16; T4 (`sm75`) is unsupported. The
-live `diarizer-batch-pool` is separate and must not host this worker.
+surge GPUs. **The primary pool is an NVIDIA L4 on `g2-standard-8`.** The live
+`diarizer-batch-pool` is separate and must not host this worker.
+
+**T4 stockout fallback.** `t4Fallback.enabled` renders a `<release>-t4`
+Deployment pinned to `batch-pipeline-t4-pool` (`n1-standard-8` + one T4, same
+labels and taints, zones a/b/c/f, autoscaling `0..N`), with no HPA. The same
+image runs there unchanged: Torch reports emulated BF16 as supported on `sm75`.
+A 2026-11-01 dev bench of the worker's own VAD, Parakeet and pyannote loaders on
+the public gpuqual corpus (226 cases, 7,187 s, AMI + FLEURS in 7 languages)
+measured, against L4 BF16:
+
+| Device / ASR dtype | Audio-h per GPU-busy-h | Words differing | AMI WER | Diarization agreement | VAD |
+| --- | ---: | ---: | ---: | ---: | --- |
+| L4 BF16 (production) | 34.5 | — | 23.70% | — | — |
+| L4 FP16 | 32.0 | 0.61% | 23.61% | 1.0000, 155/155 speaker counts | identical |
+| T4 BF16 (emulated) | 16.6 | 0.36% | 23.64% | 1.0000, 155/155 speaker counts | identical |
+| T4 FP16 | 15.9 | 0.57% | 23.64% | 1.0000, 155/155 speaker counts | identical |
+
+A T4 is about 0.48x an L4. At us-central1 list prices (`n1-standard-8` + T4
+$0.730/h, `g2-standard-8` $0.854/h) that is about 1.8x the L4 cost per
+audio-hour, so the fallback carries work only while L4 workers are Pending:
+scale it with `kubectl scale deploy/<release>-t4 --replicas=N` (N at most the
+Pending L4 count) and back to 0 when they schedule. Helm upgrades keep the live
+count. The L4 HPA's chain-busy metric is namespace-wide, so serving T4 replicas
+raise the L4 recommendation; scale the fallback to 0 as L4 workers schedule
+and the 1800s scale-down window sheds the excess. The bench did not cover flight batching, pipeline depth 2 or lease and
+storage IO; watch the T4 replicas' stage timings and peak memory on first use.
 
 An operator creates the pool out-of-band, not through IaC or this chart, with
 labels `env=<env>,service=batch-pipeline` (`env=dev` or `env=prod`), taints

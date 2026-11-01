@@ -35,6 +35,15 @@ on Spot capacity. */}}
     (dict "name" .Release.Name "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $od)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "capacityTarget" (mul $readyTarget 2) "chainTarget" (mulf $chainTarget 2.0) "scaleDownStabilizationSeconds" $downStab)
     (dict "name" (printf "%s-spot" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $spot)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "capacityTarget" (mul $readyTarget 2) "chainTarget" (mulf $chainTarget 2.0) "scaleDownStabilizationSeconds" $downStab) -}}
 {{- end -}}
+{{/* L4 stockout fallback: a T4-pinned sibling with no HPA. It starts at
+t4Fallback.replicas and an operator scales it only while L4 workers are
+Pending; the primary instance keeps queue sampling and the HPA. */}}
+{{- if .Values.t4Fallback.enabled -}}
+{{- $t4 := required "t4Fallback.nodePool required" .Values.t4Fallback.nodePool -}}
+{{- if eq $t4 (index .Values.nodeSelector "cloud.google.com/gke-nodepool") -}}{{- fail "t4Fallback.nodePool must differ from the primary node pool" -}}{{- end -}}
+{{- if lt (int .Values.t4Fallback.replicas) 0 -}}{{- fail "t4Fallback.replicas must be >= 0" -}}{{- end -}}
+{{- $instances = append $instances (dict "name" (printf "%s-t4" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $t4)) "fixedReplicas" (int .Values.t4Fallback.replicas)) -}}
+{{- end -}}
 {{- with .Values.borrowedNodePools -}}
 {{- if .enabled -}}
 {{- $own := index $.Values.nodeSelector "cloud.google.com/gke-nodepool" | default "" -}}
@@ -61,7 +70,7 @@ on nodes the owner left free. The OD instance above is unchanged. */ -}}
     "borrowedPools" $pools
     "terminationGracePeriodSeconds" $grace
     "minReplicas" 1 "maxReplicas" $max "baselineReplicas" 1
-    "capacityTarget" $target) -}}
+    "capacityTarget" $readyTarget "chainTarget" $chainTarget "scaleDownStabilizationSeconds" $downStab) -}}
 {{- end -}}
 {{- end -}}
 {{- toYaml $instances -}}

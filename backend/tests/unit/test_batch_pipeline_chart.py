@@ -234,8 +234,13 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
-        # OD worker plus the stockout borrower (l4capacity); the OD one is unchanged.
-        assert sorted(d['metadata']['name'] for d in deployments) == ['synthetic-worker', 'synthetic-worker-borrow']
+        # OD worker plus the stockout borrower (l4capacity) and the zero-replica T4
+        # fallback; the OD one is unchanged.
+        assert sorted(d['metadata']['name'] for d in deployments) == [
+            'synthetic-worker',
+            'synthetic-worker-borrow',
+            'synthetic-worker-t4',
+        ]
         assert deployment['spec']['replicas'] == 4  # Preserve baseline/live count for HPA.
         hpa = next(
             doc['spec']
@@ -424,6 +429,9 @@ def test_production_cutover_is_single_od_hpa_min4_max16():
     assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'batch-pipeline-pool'
     assert pod['terminationGracePeriodSeconds'] == 1500
     assert 'affinity' not in pod and 'priorityClassName' not in pod
+    # The T4 stockout fallback ships at zero replicas with no HPA.
+    assert by_name(docs, 'Deployment')['synthetic-worker-t4']['spec']['replicas'] == 0
+    assert 'synthetic-worker-t4' not in hpas
 
 
 PROD_BORROWED = ['parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2']
@@ -471,7 +479,7 @@ def test_borrowing_off_renders_exactly_the_od_worker():
     assert result.returncode == 0, result.stderr
     off = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
     assert not [d for d in off if d['kind'] == 'PriorityClass']
-    assert list(by_name(off, 'Deployment')) == ['synthetic-worker']
+    assert list(by_name(off, 'Deployment')) == ['synthetic-worker', 'synthetic-worker-t4']
     assert list(by_name(off, 'HorizontalPodAutoscaler')) == ['synthetic-worker']
     assert by_name(off, 'Deployment')['synthetic-worker'] == by_name(on, 'Deployment')['synthetic-worker']
 
@@ -504,7 +512,7 @@ def test_rollout_wait_covers_worker_startup_and_still_fails_on_timeout(tmp_path,
     step = next(step for step in workflow['jobs']['deploy']['steps'] if step.get('name') == 'Verify rollout')
     receipt = tmp_path / 'kubectl-arguments'
     kubectl = tmp_path / 'kubectl'
-    kubectl.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$RECEIPT"\nexit "$ROLLOUT_EXIT"\n')
+    kubectl.write_text('#!/bin/sh\n[ "$3" = get ] && exit 0\nprintf "%s\\n" "$@" > "$RECEIPT"\nexit "$ROLLOUT_EXIT"\n')
     kubectl.chmod(0o755)
     reporter = tmp_path / 'python3'
     reporter.write_text('#!/bin/sh\nexit 0\n')
@@ -582,11 +590,12 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert config['image']['digest'] == ''  # Workflow supplies the built prod digest.
     result = render('-f', str(values), '--set-string', 'image.digest=sha256:' + 'c' * 64)
     assert result.returncode == 0, result.stderr
-    # The OD worker: the stockout borrower is a second `-borrow` Deployment/HPA.
+    # The OD worker: the stockout borrower is a second `-borrow` Deployment/HPA
+    # and the T4 fallback a zero-replica `-t4` Deployment.
     docs = {
         doc['kind']: doc
         for doc in yaml.safe_load_all(result.stdout)
-        if doc and not doc['metadata']['name'].endswith('-borrow')
+        if doc and not doc['metadata']['name'].endswith(('-borrow', '-t4'))
     }
     env = {e['name']: e.get('value') for e in docs['Deployment']['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_ENABLED'] == 'true'
@@ -699,3 +708,82 @@ def test_worker_dispatch_scope_can_be_bound_without_changing_other_admission():
     assert env['STT_CAP_DISPATCH_COHORT'] == 'uid:synthetic'
     assert env['STT_CAP_DISPATCH_LANES'] == 'batch'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
+
+
+def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'autoscaling.enabled=true,autoscaling.minReplicas=4,autoscaling.maxReplicas=16,t4Fallback.enabled=true',
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    deployments = {d['metadata']['name']: d for d in docs if d['kind'] == 'Deployment'}
+    hpas = {d['metadata']['name'] for d in docs if d['kind'] == 'HorizontalPodAutoscaler'}
+    monitors = {d['metadata']['name'] for d in docs if d['kind'] == 'PodMonitoring'}
+    assert set(deployments) == monitors == {'synthetic-worker', 'synthetic-worker-t4'}
+    assert hpas == {'synthetic-worker'}
+    primary, t4 = deployments['synthetic-worker'], deployments['synthetic-worker-t4']
+    assert t4['spec']['replicas'] == 0
+    pod = t4['spec']['template']
+    assert pod['metadata']['labels']['app.kubernetes.io/instance'] == 'synthetic-worker-t4'
+    assert t4['spec']['selector']['matchLabels'] == pod['metadata']['labels']
+    assert pod['spec']['nodeSelector'] == {
+        **primary['spec']['template']['spec']['nodeSelector'],
+        'cloud.google.com/gke-nodepool': 'batch-pipeline-t4-pool',
+    }
+    assert pod['spec']['tolerations'] == primary['spec']['template']['spec']['tolerations']
+    assert pod['spec']['containers'][0]['image'] == primary['spec']['template']['spec']['containers'][0]['image']
+    assert t4['spec']['strategy']['type'] == 'Recreate'
+
+
+@pytest.mark.parametrize('setting', ['t4Fallback.nodePool=batch-pipeline-pool', 't4Fallback.replicas=-1'])
+def test_t4_fallback_refuses_the_primary_pool_or_negative_replicas(setting):
+    result = render(*enabled_arguments(), '--set', 't4Fallback.enabled=true', '--set', setting)
+    assert result.returncode != 0
+
+
+def test_t4_fallback_is_off_outside_production_values():
+    result = render(*enabled_arguments())
+    assert result.returncode == 0, result.stderr
+    names = [d['metadata']['name'] for d in yaml.safe_load_all(result.stdout) if d and d['kind'] == 'Deployment']
+    assert names == ['synthetic-worker']
+
+
+@pytest.mark.parametrize(
+    'fallback_replicas,expected', [('', []), ('0', []), ('2', ['synthetic-batch-pipeline-worker-t4'])]
+)
+def test_rollout_verify_waits_for_a_serving_t4_fallback(tmp_path, fallback_replicas, expected):
+    workflow = yaml.safe_load((CHART.parents[2] / '.github/workflows/gcp_diarizer.yml').read_text())
+    step = next(step for step in workflow['jobs']['deploy']['steps'] if step.get('name') == 'Verify rollout')
+    log = tmp_path / 'rollouts'
+    kubectl = tmp_path / 'kubectl'
+    kubectl.write_text(
+        '#!/bin/sh\n'
+        'case "$3 $4" in\n'
+        '  "rollout status") echo "${5#deploy/}" >> "$LOG";;\n'
+        '  get*) case "$*" in *spec.replicas*) printf "%s" "$FALLBACK";; *) printf "img@sha256:%s" "$DIGEST";; esac;;\n'
+        'esac\n'
+    )
+    kubectl.chmod(0o755)
+    (tmp_path / 'python3').write_text('#!/bin/sh\nexit 0\n')
+    (tmp_path / 'python3').chmod(0o755)
+    result = subprocess.run(
+        ['bash', '-e', '-c', step['run']],
+        env={
+            **os.environ,
+            'PATH': f'{tmp_path}:{os.environ["PATH"]}',
+            'SERVICE': 'batch-pipeline-worker',
+            'DEPLOY_NAMESPACE': 'synthetic',
+            'DEPLOY_ENV': 'dev',
+            'TARGET_RELEASE': 'synthetic-batch-pipeline-worker',
+            'EXPECTED_DIGEST': 'sha256:' + 'a' * 64,
+            'DIGEST': 'a' * 64,
+            'FALLBACK': fallback_replicas,
+            'LOG': str(log),
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert log.read_text().splitlines() == ['synthetic-batch-pipeline-worker', *expected]

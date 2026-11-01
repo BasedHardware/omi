@@ -140,6 +140,15 @@ autoscaling:
   targetChainBusyPerWorker: "0.5"
   # Stockout-aware scale-down window; with 1 pod / 600s this sheds ~6 nodes/hour.
   scaleDownStabilizationSeconds: 1800
+# L4 stockout fallback. Renders <release>-t4 pinned to a T4 pool (operator-made,
+# same labels and taints as the L4 pool), with no HPA. The same image runs there
+# (emulated BF16): the 2026-11-01 public-corpus bench gave identical VAD and
+# diarization, words within FP16/BF16 noise, ~0.48x L4 throughput. Scale it with
+# kubectl only while L4 workers are Pending; Helm upgrades keep the live count.
+t4Fallback:
+  enabled: false
+  nodePool: batch-pipeline-t4-pool
+  replicas: 0
 podMonitoring:
   enabled: true
 recordSealRepair:
