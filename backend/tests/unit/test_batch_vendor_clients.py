@@ -184,6 +184,30 @@ def test_stage_transcribe_maps_typed_client_failures_onto_attempt_outcomes(monke
     assert raised.value.outcome is outcome and provider_stt.attempt_outcome_for(raised.value) is outcome
 
 
+@pytest.mark.parametrize(
+    'kind,submitted,outcome',
+    [
+        ('rate_limited', False, VendorAttemptOutcome.RATE_LIMITED),
+        ('credit_refusal', False, VendorAttemptOutcome.CREDIT_REFUSAL),
+        # Refused on a poll after the paid submission: billed, so Soniox is never submitted twice.
+        ('rate_limited', True, VendorAttemptOutcome.ERROR_5XX),
+        ('credit_refusal', True, VendorAttemptOutcome.ERROR_5XX),
+        ('timeout', True, VendorAttemptOutcome.TIMEOUT),
+        ('refused', False, VendorAttemptOutcome.LOCAL_FAILURE),
+    ],
+)
+def test_soniox_refusals_are_unbilled_only_before_the_paid_submission(monkeypatch, kind, submitted, outcome):
+    async def failing(*args, **kwargs):
+        raise soniox_batch.SonioxBatchError(kind, submitted=submitted)
+
+    monkeypatch.setattr(soniox_batch, 'transcribe_async', failing)
+    item = WorkItem('p1', 'synthetic-owner', 10, 'gs://synthetic/audio/p1', 5.0, Priority.FRESH)
+    inspected = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}])
+    with pytest.raises(provider_stt.VendorCallFailure) as raised:
+        asyncio.run(provider_stt.transcribe_async(item, 'ja', inspected, service='soniox'))
+    assert raised.value.outcome is outcome
+
+
 def test_stage_transcribe_keeps_vendor_speaker_turns_discarded(monkeypatch):
     async def words(*args, **kwargs):
         return [{'text': 'synthetic', 'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_01'}], 'ja'

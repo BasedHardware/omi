@@ -209,6 +209,7 @@ class SimConfig:
     vendor_outages: tuple[tuple[str, float, float], ...] = ()
     vendor_failover_routes: tuple[str, ...] = ()
     vendor_health_aware: bool = True
+    vendor_routing_armed: bool = False  # a configured route table is served (failover and holds arm)
 
     def __post_init__(self):
         if isinstance(self.policy, dict):
@@ -386,6 +387,7 @@ class Simulation:
                 clock=self.clock.time,
                 health=_SimVendorHealth(self),
                 failover_routes=lambda language: ('modulate', *self.config.vendor_failover_routes),
+                armed=lambda: self.config.vendor_routing_armed,
             )
         )
         self._seed_customers()

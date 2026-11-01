@@ -21,6 +21,7 @@ TERMINAL_FAILURES = {'quarantined', 'privacy_blocked', 'provider_superseded', 'd
 
 
 def drill(**changes):
+    changes.setdefault('vendor_routing_armed', True)
     sim = Simulation(replace(GOLDEN_CONFIGS['provider_stt_ja'](), **changes))
     result = sim.run()
     jobs = {key: row for (table, key), row in result.store.rows.items() if table == 'jobs'}
@@ -99,6 +100,22 @@ def test_all_vendors_down_holds_every_unit_with_custody_and_drains_after_recover
         assert row['vendor_hold']['waiting_for'] == ['modulate', 'soniox']
         # Recovery returns to the admitted vendor first; Soniox stays failover capacity only.
         assert [(a['service'], a['outcome']) for a in row['provider_attempts']] == [('modulate', 'ok')]
+
+
+def test_unarmed_modulate_outage_keeps_todays_terminal_failed_held():
+    """No configured route table (dormant default): one Modulate call, then today's terminal
+    failed_held for every unit, never a failover or a hold a pre-D worker could mishandle."""
+    sim, _, jobs = drill(
+        vendor_outages=(('modulate', 0.0, 7200.0),),
+        vendor_failover_routes=('soniox',),
+        vendor_health_aware=False,
+        vendor_routing_armed=False,
+    )
+    assert_paid_once_per_vendor(sim)
+    assert calls(sim, 'soniox') == 0
+    for row in jobs.values():
+        assert (row['state'], row['recovery_state']) == ('quarantined', 'failed_held')
+        assert VENDOR_HELD != row['state'] and 'vendor_hold' not in row
 
 
 def test_soniox_down_alone_changes_nothing():

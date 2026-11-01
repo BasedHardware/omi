@@ -138,7 +138,7 @@ def store(monkeypatch):
     return sim
 
 
-def stage(store, artifacts, vendors, *, now=200.0, health=None, routes=BOTH, inspect=lambda *_: SPEECH):
+def stage(store, artifacts, vendors, *, now=200.0, health=None, routes=BOTH, inspect=lambda *_: SPEECH, armed=True):
     return ProviderSttStage(
         store,
         artifacts,
@@ -148,6 +148,7 @@ def stage(store, artifacts, vendors, *, now=200.0, health=None, routes=BOTH, ins
         clock=lambda: now,
         health=health,
         failover_routes=routes,
+        armed=lambda: armed,
     )
 
 
@@ -245,6 +246,40 @@ def test_silence_spends_no_vendor_and_ignores_health(store):
     assert stage(store, artifacts, vendors, health=health, inspect=lambda *_: SILENCE).run('p1').reason == 'processed'
     assert vendors.calls == [] and job(store)['result']['outcome'] == 'silence'
     assert attempts(store) == [('modulate', 'silence', 0.0)]
+
+
+# --- not armed (no configured route table): pre-D semantics ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        failure(VendorAttemptOutcome.RATE_LIMITED),
+        failure(VendorAttemptOutcome.CREDIT_REFUSAL),
+        failure(VendorAttemptOutcome.ERROR_5XX),
+    ],
+)
+def test_unarmed_stage_never_fails_over_or_holds_so_pre_d_workers_stay_safe(store, error):
+    """A pre-D worker would re-call on a failed-over pending unit and strand a held one; until a
+    configured table is served every failure stays terminal, as before slice D."""
+    artifacts, vendors = Artifacts(), Vendors(modulate=[error])
+    outcome = stage(store, artifacts, vendors, armed=False).run('p1')
+    assert (outcome.outcome, outcome.provider_reason) == ('done', 'provider_failed')
+    assert job(store)['state'] == 'quarantined' and vendors.calls == ['modulate']
+
+
+def test_unarmed_stage_ignores_health_and_calls_the_admitted_vendor(store):
+    artifacts, vendors = Artifacts(), Vendors()
+    health = Health(modulate=VendorHealthReason.BREAKER_OPEN, soniox=VendorHealthReason.BREAKER_OPEN)
+    assert stage(store, artifacts, vendors, health=health, armed=False).run('p1').reason == 'processed'
+    assert vendors.calls == ['modulate'] and job(store)['state'] == 'result_ready'
+
+
+def test_a_hold_from_an_armed_period_still_redrives_after_disarming(store):
+    artifacts, vendors = Artifacts(), Vendors()
+    stage(store, artifacts, vendors, health=all_down()).run('p1')
+    done = stage(store, artifacts, vendors, now=500.0, health=all_down(), armed=False).run('p1')
+    assert done.reason == 'processed' and vendors.calls == ['modulate']
 
 
 # --- unbilled refusals ----------------------------------------------------------------------------

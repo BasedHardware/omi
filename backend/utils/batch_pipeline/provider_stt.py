@@ -560,7 +560,12 @@ async def _vendor_words(service: str, wav: bytes, duration: float, language: str
                 semaphore=get_batch_vendor_semaphore(),
             )
         except soniox_batch.SonioxBatchError as error:
-            raise VendorCallFailure('provider', 'provider_failed', _SONIOX_OUTCOMES[error.kind]) from None
+            outcome = _SONIOX_OUTCOMES[error.kind]
+            if error.submitted and outcome in contracts.UNBILLED_OUTCOMES:
+                # The paid transcription exists (a later poll was refused): billed, so Soniox is
+                # never submitted twice for this unit.
+                outcome = VendorAttemptOutcome.ERROR_5XX
+            raise VendorCallFailure('provider', 'provider_failed', outcome) from None
     raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.LOCAL_FAILURE)
 
 
@@ -650,6 +655,18 @@ def _default_health() -> VendorHealth:
     return contracts.AlwaysHealthy()
 
 
+def _default_armed() -> bool:
+    """Whether a configured route table is served. Until then the stage keeps pre-D semantics.
+
+    Failover back to ``provider_pending`` and ``vendor_held`` are transitions a pre-D worker
+    mishandles (it would re-call the admitted vendor, or ack a held unit and strand it). They arm
+    only once the lead serves a configured table, which happens after every provider-STT worker runs
+    this build; before rolling back past it, unset the table and let holds drain.
+    """
+    # Slice B's route_selection.current_table() replaces this when it lands (configured/last_valid).
+    return False
+
+
 def _default_failover_routes(language: str | None) -> tuple[str, ...]:
     """Vendor routes the route table lists for the language, in row order.
 
@@ -677,6 +694,7 @@ class ProviderSttStage:
         clock: Callable[[], float] = time.time,
         health: VendorHealth | None = None,
         failover_routes: Callable[[str | None], tuple[str, ...]] = _default_failover_routes,
+        armed: Callable[[], bool] = _default_armed,
     ):
         self.protocol = ProviderSttStore(store)
         self.artifacts, self.stt, self.allowed, self.inspect, self.clock = artifacts, stt, allowed, inspect, clock
@@ -684,6 +702,7 @@ class ProviderSttStage:
         self.stt_async = stt_async if stt_async is not None else (transcribe_async if stt is transcribe else None)
         self.health = health if health is not None else _default_health()
         self.failover_routes = failover_routes
+        self.armed = armed
 
     # -- drivers ----------------------------------------------------------------------------------
 
@@ -804,8 +823,9 @@ class ProviderSttStage:
             if self.protocol.terminal(segment_id, self.clock(), reason):
                 self._log('failed_held', reason['reason'])
             return UnitOutcome('done', 'processed', provider_reason='provider_failed')
-        if failure is not None or inspected is None or not inspected[2]:
-            # No vendor call (invalid audio, or strict-VAD silence): no health gate, no failover.
+        if failure is not None or inspected is None or not inspected[2] or not self._armed():
+            # No vendor call (invalid audio, or strict-VAD silence), or routing not armed: the
+            # admitted vendor, no health gate, no hold (pre-D semantics).
             service = open_services[0]
         else:
             # A vendor that just refused unbilled (429, credits, client breaker) is not re-called on
@@ -843,7 +863,7 @@ class ProviderSttStage:
             # A failed inspection never reached a vendor: ours, terminal, unbilled audio.
             outcome = attempt_outcome_for(response) if plan.failure is None else VendorAttemptOutcome.LOCAL_FAILURE
             audio = 0.0 if plan.failure is not None else duration
-            failover_to = plan.failover_to if failover_enabled() else ()
+            failover_to = plan.failover_to if failover_enabled() and self._armed() else ()
             settled = self.protocol.settle(
                 segment_id,
                 token,
@@ -900,7 +920,7 @@ class ProviderSttStage:
         """The admitted vendor first, then the table's other vendors when failover is on."""
         primary = route.provider_service
         candidates = [primary] if primary in _CALLABLE_SERVICES else []
-        if failover_enabled():
+        if failover_enabled() and self._armed():
             try:
                 listed = self.failover_routes(route.language)
             except Exception:
@@ -967,6 +987,12 @@ class ProviderSttStage:
         self._log('redriven', hold.reason.value if hold else 'malformed_hold')
         return None
 
+    def _armed(self) -> bool:
+        try:
+            return bool(self.armed())
+        except Exception:
+            return False
+
     def _allows_quietly(self, service: str) -> bool:
         try:
             return bool(self.health.allows(service)[0])
@@ -1010,7 +1036,7 @@ class ProviderSttStage:
                 failure=failure,
                 attempt_outcome=VendorAttemptOutcome.ABANDONED,
                 audio_seconds=item.duration_seconds,
-                failover_to=tuple(self._candidates(route)) if failover_enabled() else (),
+                failover_to=tuple(self._candidates(route)) if failover_enabled() and self._armed() else (),
             )
             if not settled:
                 return UnitOutcome('done', 'superseded')
