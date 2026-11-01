@@ -1041,6 +1041,7 @@ class Projector:
                         incoming['_batch_replace_live'] = {
                             'start': item.capture_at,
                             'end': item.capture_at + item.duration_seconds,
+                            **({'preserve_existing': True} if binding.partial_record else {}),
                         }
                     if (binding.record_origin or policy.require_live_target) and context.target_id:
                         incoming['_batch_require_live_target'] = True

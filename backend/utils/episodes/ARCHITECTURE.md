@@ -236,10 +236,17 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   episode's full transcript with clock times. Above `COMPOSER_MAX_TRANSCRIPT_CHARS`
   (about 60k tokens; the 4h cap makes this rare) the densest 10-minute windows
   are kept in time order and the gaps are marked.
-- Output replaces `title`, `emoji`, `bullets` (the overview's paragraphs),
-  `people` and `moments` (1-8 chapters with real start/end times; placeholder
-  or out-of-span chapters are dropped). Member ends move `member_activity`, so a
-  late member extends the episode's end.
+- Output (v2) replaces `title`, `emoji`, `lede` (one or two sentences; also
+  `bullets` = [lede] for released clients), `follow_ups`, `people` and `moments`:
+  1-8 chapters, each with 2-5 `points` (text plus up to a few `details`). The
+  episode page renders each chapter as a section, like a conversation summary,
+  and opens it in its conversation's transcript via `start_offset`/`end_offset`.
+  Transcript labels and chapter times are HH:MM:SS; a chapter without an end runs
+  to its recording's last line before the next chapter. Placeholder or
+  out-of-span chapters are dropped. Member ends move `member_activity`, so a late
+  member extends the episode's end. `lede` and `follow_ups` live in the encrypted
+  `content` blob with the other notes.
+- `composer_version` changes recompose an episode once on read.
 - `composed_fingerprint` covers retained members, every member's transcript text
   and timing, and its own summary and action items. Unchanged evidence never
   spends a second call; a late member, a sync upgrade, a transcript edit or a
@@ -262,6 +269,11 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).
   Runs on a small background pool, one run per episode at a time; never raises.
+- `project_episodes` leaves out a member that closed in under a minute with no notes
+  because it fell under the notes floor, unless the user curated it. Lookups and
+  search still reach it. Kill switch `HOME_HIDE_BELOW_FLOOR_ROWS` (on unless set off, read
+  per request; changing it takes a new backend revision). Telemetry:
+  `omi_episode_home_members_total{outcome}`.
 - Kill switch `EPISODE_COMPOSER` (on unless set off): off restores the live
   notes as the final notes. Telemetry: `omi_episode_compose_total{outcome}` and
   `omi_episode_compose_seconds`; usage adds `composer_*` counters.

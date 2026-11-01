@@ -54,17 +54,13 @@ ingress:
   tls: []
 
 env:
-  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
-  - name: PROACTIVITY_V2_POSTHOG_TOKEN
-    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
-  - name: PROACTIVITY_V2_POSTHOG_HOST
-    value: "https://us.posthog.com"
+  # proactivity_v2 is served from the Omi flag store, so the gateway no longer reads PostHog.
   - name: OMI_FLAGS_FIRESTORE_PROJECT
     value: "based-hardware"
   - name: OMI_FLAGS_FIRESTORE_DATABASE
     value: "omi-flags"
   - name: OMI_FLAGS_SOURCE
-    value: "dual"
+    value: "omi"
   # Cohort admission uses a separate Redis connection from reservation evidence.
   - name: MENTOR_PIPELINE
     value: cohort

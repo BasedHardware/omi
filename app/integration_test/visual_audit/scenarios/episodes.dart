@@ -55,7 +55,7 @@ final episodeScenarios = <AuditScenario>[
     state: 'Fictional dinner episode with two processing members, followed by completion',
     run: (a) async {
       final now = DateTime.now();
-      final closed = _closedFixture(day: DateTime(now.year, now.month, now.day));
+      final closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: true);
       final pending = [
         for (final member in closed.members)
           ServerConversation(
@@ -103,7 +103,7 @@ final episodeScenarios = <AuditScenario>[
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final yesterday = today.subtract(const Duration(days: 1));
-      final closed = _closedFixture(day: yesterday);
+      final closed = _closedFixture(day: yesterday, composed: true);
       final unrelated = ServerConversation(
           id: 'garden',
           createdAt: yesterday.add(const Duration(hours: 15, minutes: 20)),
@@ -158,7 +158,7 @@ final episodeScenarios = <AuditScenario>[
     page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage)',
     state: 'Fictional dinner episode with two retained parts, a single-member episode and an unrelated conversation',
     run: (a) async {
-      final closed = _closedFixture();
+      final closed = _closedFixture(composed: true);
       final morning = ServerConversation(
           id: 'morning',
           createdAt: DateTime(2026, 10, 29, 9, 15),
@@ -244,7 +244,7 @@ final episodeScenarios = <AuditScenario>[
   ),
 ];
 
-Episode _closedFixture({DateTime? day}) {
+Episode _closedFixture({DateTime? day, bool composed = false}) {
   final date = day ?? DateTime(2026, 10, 29);
   final start = DateTime(date.year, date.month, date.day, 18, 56);
   final middle = DateTime(date.year, date.month, date.day, 20, 5);
@@ -270,6 +270,15 @@ Episode _closedFixture({DateTime? day}) {
           startedAt: middle,
           finishedAt: end,
           structured: Structured('A weekend in the mountains', '', emoji: '🏕️')),
+    ],
+    moments: [
+      if (composed)
+        EpisodeMoment(
+            id: 'dinner-moment',
+            conversationId: 'dinner',
+            startedAt: start,
+            endedAt: middle,
+            points: const [EpisodePoint('Picked a trail for Saturday.')]),
     ],
     bullets: const [
       'Caught up over dinner and picked a trail for Saturday.',
