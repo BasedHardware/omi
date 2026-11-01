@@ -661,7 +661,9 @@ def _default_armed() -> bool:
     Failover back to ``provider_pending`` and ``vendor_held`` are transitions a pre-D worker
     mishandles (it would re-call the admitted vendor, or ack a held unit and strand it). They arm
     only once the lead serves a configured table, which happens after every provider-STT worker runs
-    this build; before rolling back past it, unset the table and let holds drain.
+    this build. Before rolling back past it: unset the table, then wait until no `vendor_held` unit and
+    no `provider_pending` unit with a settled attempt (a failover awaiting its immediate redelivery)
+    remains; a pre-D worker ignores `provider_attempts` and would re-call the admitted vendor.
     """
     # Slice B's route_selection.current_table() replaces this when it lands (configured/last_valid).
     return False
