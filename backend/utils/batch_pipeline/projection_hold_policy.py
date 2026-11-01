@@ -36,8 +36,10 @@ def quarantines_assignment_conflict(error: BaseException, job: dict | None, *, n
     # waits under the existing durable 24-hour bound rather than guessing old.
     capture, duration = (job or {}).get('capture_at'), (job or {}).get('duration_seconds')
     if not (
-        type(capture) in (int, float)
-        and type(duration) in (int, float)
+        isinstance(capture, (int, float))
+        and not isinstance(capture, bool)
+        and isinstance(duration, (int, float))
+        and not isinstance(duration, bool)
         and math.isfinite(capture)
         and math.isfinite(duration)
         and capture >= 0

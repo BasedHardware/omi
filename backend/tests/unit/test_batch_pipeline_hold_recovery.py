@@ -63,6 +63,18 @@ def test_terminal_conflicts_hold_even_on_recent_capture(reason):
     )
 
 
+@pytest.mark.parametrize(
+    'capture,duration',
+    [(None, 1), (True, 1), (1, None), (1, True), (float('nan'), 1), (1, float('inf')), (-1, 1), (1, 0)],
+)
+def test_unknown_capture_age_keeps_the_bounded_retry(capture, duration):
+    assert not projection.quarantines_assignment_conflict(
+        SyncAssignmentConflict('synthetic', subtype=Reason.RECORD_FINALIZE_PENDING),
+        {'fresh_capture': False, 'capture_at': capture, 'duration_seconds': duration},
+        now=100000,
+    )
+
+
 @pytest.fixture
 def real_projection(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
