@@ -47,8 +47,11 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env, ip, domain):
         listen = source['gke']['backend-listen']['env']
         assert listen['HOSTED_TRANSLATION_API_URL']['value'] == gke_translation
         assert listen['HOSTED_PARAKEET_API_URL']['value'] == f'http://parakeet.{domain}'
-    for chart in ('backend-listen', 'pusher', 'parakeet'):
+    for chart in ('backend-listen', 'pusher'):
         assert _chart(chart, env)['HOSTED_SPEAKER_EMBEDDING_API_URL'] == gke_embedding
+    # Parakeet's helm gate allows only two dark flags and the language path to
+    # drift from main, so its speaker-embedding URL stays on the gateway.
+    assert _chart('parakeet', env)['HOSTED_SPEAKER_EMBEDDING_API_URL'] == f'http://{ip}/diarizer'
     listen_chart = _chart('backend-listen', env)
     assert listen_chart['HOSTED_TRANSLATION_API_URL'] == gke_translation
     assert listen_chart['HOSTED_VAD_API_URL'] == gke_vad
@@ -59,14 +62,19 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env, ip, domain):
 
 
 def test_prod_in_cluster_callers_stay_off_internal_alb_routes():
-    """Prod GKE charts route every same-cluster dependency by ClusterIP DNS."""
+    """Prod listen and pusher route same-cluster dependencies by ClusterIP DNS.
+
+    Parakeet stays on the shared gateway: its helm contract forbids this
+    template change until a separate qualification. The diarizer-batch cohort
+    stage is the other exception and still binds the gateway route.
+    """
     listen_chart = _chart('backend-listen', 'prod')
     assert listen_chart['HOSTED_PUSHER_API_URL'] == IN_CLUSTER_PUSHER
     assert listen_chart['HOSTED_VAD_API_URL'] == IN_CLUSTER_VAD
     assert listen_chart['HOSTED_SPEAKER_EMBEDDING_API_URL'] == IN_CLUSTER_EMBEDDING
     assert listen_chart['HOSTED_TRANSLATION_API_URL'] == IN_CLUSTER_NLLB
     assert _chart('pusher', 'prod')['HOSTED_SPEAKER_EMBEDDING_API_URL'] == IN_CLUSTER_EMBEDDING
-    assert _chart('parakeet', 'prod')['HOSTED_SPEAKER_EMBEDDING_API_URL'] == IN_CLUSTER_EMBEDDING
+    assert _chart('parakeet', 'prod')['HOSTED_SPEAKER_EMBEDDING_API_URL'] == 'http://172.16.160.20/diarizer'
     # The reviewed diarizer-batch cohort stage still binds pusher and Cloud Run to the
     # shared gateway route (config/diarization-cohort-stages.json pins the URL).
     assert _chart('pusher', 'prod')['HOSTED_DIARIZATION_API_URL'] == 'http://172.16.160.20/diarizer-batch'

@@ -244,6 +244,13 @@ SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
     ('cloud_run', 'backend-integration'),
 )
 _CLUSTER_LOCAL_DNS = '.svc.cluster.local'
+# Cloud Run cannot resolve cluster DNS. These are the internal-ALB routes
+# (gateway IP + /diarizer); admission rejects any other literal, including a
+# value that merely agrees across Cloud Run hosts.
+_CLOUD_RUN_SPEAKER_EMBEDDING_URL = {
+    'dev': 'http://172.16.48.49/diarizer',
+    'prod': 'http://172.16.160.20/diarizer',
+}
 
 
 def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
@@ -252,9 +259,9 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
     Live capture (GKE listen/pusher) and offline sync (Cloud Run) share
     ``utils.stt.speaker_embedding``. Omitting the URL on one host disables
     voice matching there while the others keep working. Cloud Run cannot use
-    in-cluster DNS, so its hosts must keep the internal-ALB route and agree
-    with each other; GKE hosts share one route too (ClusterIP service DNS in
-    prod, the shared internal gateway in dev).
+    in-cluster DNS, so each Cloud Run host must use that environment's
+    approved internal-ALB route. GKE hosts share one route (ClusterIP service
+    DNS in prod, the shared internal gateway in dev).
     """
     errors: list[ValidationError] = []
     gke_values: dict[str, str] = {}
@@ -285,6 +292,14 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
                 ValidationError(
                     scope,
                     f'{SPEAKER_EMBEDDING_ENV} must be the reachable ILB hostname, not cluster-local DNS',
+                )
+            )
+        approved = _CLOUD_RUN_SPEAKER_EMBEDDING_URL.get(env) if platform == 'cloud_run' else None
+        if approved and value != approved:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be the approved internal-ALB route {approved!r}',
                 )
             )
         (gke_values if platform == 'gke' else cloud_run_values)[scope] = value
