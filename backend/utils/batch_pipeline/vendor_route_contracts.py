@@ -104,7 +104,7 @@ def _finite(value: Any, *, upper: float | None = None, allow_none: bool = False)
 
 
 def _exact_keys(raw: Any, keys: frozenset[str], what: str) -> Mapping[str, Any]:
-    if not isinstance(raw, Mapping) or set(raw) != keys:
+    if not isinstance(raw, Mapping) or frozenset(raw) != keys:
         raise RouteTableInvalid(f'{what} requires exactly its schema keys')
     return raw
 
@@ -415,10 +415,17 @@ class VendorAttempt:
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> 'VendorAttempt':
+        number, token = raw['attempt'], raw['token']
+        if not isinstance(number, int) or isinstance(number, bool) or not 1 <= number <= MAX_ATTEMPT_RECORDS:
+            raise ValueError('bounded attempt number required')
+        if raw['service'] not in VENDOR_SERVICES:
+            raise ValueError('vendor service required')
+        if not isinstance(token, str) or not token:
+            raise ValueError('attempt token required')
         attempt = cls(
-            attempt=raw['attempt'],
+            attempt=number,
             service=raw['service'],
-            token=raw['token'],
+            token=token,
             privacy_generation=raw.get('privacy_generation'),
             started_at=raw['started_at'],
             table_version=raw['table_version'],
@@ -426,16 +433,6 @@ class VendorAttempt:
             settled_at=raw.get('settled_at'),
             audio_seconds=raw.get('audio_seconds', 0.0),
         )
-        if (
-            not isinstance(attempt.attempt, int)
-            or isinstance(attempt.attempt, bool)
-            or not 1 <= attempt.attempt <= MAX_ATTEMPT_RECORDS
-        ):
-            raise ValueError('bounded attempt number required')
-        if attempt.service not in VENDOR_SERVICES:
-            raise ValueError('vendor service required')
-        if not isinstance(attempt.token, str) or not attempt.token:
-            raise ValueError('attempt token required')
         if (attempt.outcome is VendorAttemptOutcome.RUNNING) != (attempt.settled_at is None):
             raise ValueError('an attempt is running exactly when it is unsettled')
         if attempt.outcome is VendorAttemptOutcome.UNKNOWN:
@@ -511,19 +508,20 @@ class VendorHold:
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> 'VendorHold':
+        redrives = raw['redrives']
+        if not isinstance(redrives, int) or isinstance(redrives, bool) or redrives < 0:
+            raise ValueError('nonnegative redrive count required')
         hold = cls(
             reason=VendorHoldReason(raw['reason']),
             held_at=float(raw['held_at']),
             redrive_at=float(raw['redrive_at']),
-            redrives=raw['redrives'],
+            redrives=redrives,
             waiting_for=tuple(raw['waiting_for']),
         )
         if hold.reason is VendorHoldReason.UNKNOWN:
             raise ValueError('closed hold reason required')
         if not (math.isfinite(hold.held_at) and math.isfinite(hold.redrive_at)) or hold.redrive_at <= hold.held_at:
             raise ValueError('a hold always has a future redrive')
-        if not isinstance(hold.redrives, int) or isinstance(hold.redrives, bool) or hold.redrives < 0:
-            raise ValueError('nonnegative redrive count required')
         if not hold.waiting_for or not set(hold.waiting_for) <= VENDOR_SERVICES:
             raise ValueError('a hold waits for at least one vendor service')
         return hold

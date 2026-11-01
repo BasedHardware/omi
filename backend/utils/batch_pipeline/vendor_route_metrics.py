@@ -64,15 +64,15 @@ COLLECTORS = (
 
 
 def _route(value: object) -> str:
-    return value if value in contracts.ROUTES else 'unknown'
+    return value if isinstance(value, str) and value in contracts.ROUTES else 'unknown'
 
 
 def _vendor(value: object) -> str:
-    return value if value in contracts.VENDOR_SERVICES else 'unknown'
+    return value if isinstance(value, str) and value in contracts.VENDOR_SERVICES else 'unknown'
 
 
 def _late_outcome(value: object) -> str:
-    return value if value in contracts.LATE_RESULT_OUTCOMES else 'unknown'
+    return value if isinstance(value, str) and value in contracts.LATE_RESULT_OUTCOMES else 'unknown'
 
 
 def route_decision(route: str, reason: VendorRouteReason | str) -> None:
