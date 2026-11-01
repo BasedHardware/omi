@@ -64,6 +64,8 @@ from utils.memory.required_intake import retry_sweep
 from utils.memory.canonical_consolidation import complete_receipted_required_intake
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
+# Verifier allowance after an overshoot, in multiples of the staged items' two-call reserve.
+VERIFY_ALLOWANCE_FACTOR = 2
 logger = logging.getLogger(__name__)
 
 # Lever B3 (no-progress stop): this many consecutive tool batches without a new
@@ -954,7 +956,8 @@ async def run_session(
             # that ceiling and drop evidence. Keep the ceiling open; the reserve
             # is still what the two calls need, and it is not held in the main loop.
             verify_need = max(
-                verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
+                verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens)
+                * (VERIFY_ALLOWANCE_FACTOR if hold_arm == 'serve' else 1),
                 8 * 24000,
             )
             # Negative after an overshoot; invoke_once sizes calls from the same difference.
@@ -964,10 +967,13 @@ async def run_session(
             if hold_arm == 'serve' and staged:
                 # A main turn can cost more than its pre-call estimate (a cache miss on a
                 # long history) and eat the hold. Still pay for the staged items' two calls.
+                # A first call can also spend past its estimate and starve the second, so the
+                # allowance pays the reserve twice; only what the calls spend is charged.
                 try:
                     owed = verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens)
-                    verify_allowance = max(0, owed - pass_left)
+                    verify_allowance = max(0, VERIFY_ALLOWANCE_FACTOR * owed - pass_left)
                     hold_row['allowance'] = verify_allowance
+                    hold_row['owed'] = owed
                 except Exception as error:
                     logger.warning('event=dream_lever_error lever=verify_hold exc=%s', type(error).__name__)
             # Same effective budget invoke_once enforces, so batch sizing matches what calls can afford.
@@ -994,6 +1000,8 @@ async def run_session(
                     # The judge and the state pass share the verify lane; the allowance is this call's only.
                     verify_allowance = 0
                 timing['verify_ms'] += int(1000 * (asyncio.get_running_loop().time() - verify_started))
+            if hold_arm != 'off':
+                hold_row['verify_used'] = verification_telemetry.get('used_tokens', 0)
             report['verifier_calls'] = calls
             report['verifier_transport_responses'] = max(
                 report.get('verifier_transport_responses', 0), verification_telemetry.get('transport_responses', 0)
