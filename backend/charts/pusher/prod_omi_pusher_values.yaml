@@ -182,6 +182,8 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT
+    value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
