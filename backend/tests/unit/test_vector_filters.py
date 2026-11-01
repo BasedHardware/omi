@@ -75,6 +75,7 @@ def test_query_memory_vector_candidates_uses_ns2_strict_default_filter_and_parse
     vector_db = _load_vector_db_with_stubs()
     fake_index = _FakeIndex()
     monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "owner_index", lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
 
     parsed = vector_db.query_memory_vector_candidates("uid-1", "query text", mode=SearchMode.default, limit=20)
@@ -92,6 +93,7 @@ def test_query_memory_vector_candidates_requires_explicit_archive_mode_for_archi
     vector_db = _load_vector_db_with_stubs()
     fake_index = _FakeIndex()
     monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "owner_index", lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
 
     vector_db.query_memory_vector_candidates("uid-1", "query text", mode=SearchMode.archive_explicit)
@@ -103,6 +105,7 @@ def test_query_memory_vector_candidates_bounds_provider_top_k(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     fake_index = _FakeIndex()
     monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "owner_index", lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
 
     vector_db.query_memory_vector_candidates("uid-1", "query text", limit=10_000)

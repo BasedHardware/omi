@@ -26,6 +26,7 @@ from database import vector_db
 def index(monkeypatch) -> MagicMock:
     fake = MagicMock()
     monkeypatch.setattr(vector_db, 'index', fake)
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     return fake
 
 

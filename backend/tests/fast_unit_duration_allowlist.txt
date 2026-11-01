@@ -23,6 +23,9 @@ tests/unit/test_llm_gateway_deploy_contract.py::test_prod_gateway_wiring_promote
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
 # Builds 10,001 in-memory records to prove universal export has no historical-data cap.
 tests/unit/test_universal_memory_service.py::test_export_has_no_silent_record_cap
+# Copies 10,001 records and verifies every payload group across both namespaces to prove
+# migration cannot silently truncate at Pinecone's 10,000-match query limit (~2.3s CPU).
+tests/unit/test_pinecone_partition_migration.py::test_large_owner_qualifies_complete_inventory_and_every_payload_group
 # Intentionally crosses the legacy 6,000-row boundary to prove cursor paging has no hidden cap.
 tests/unit/test_universal_memory_list_cursor.py::test_cursor_pages_beyond_6000_historical_with_bounded_calls_no_cap
 # Boots the developer memory HTTP surface to verify pending canonical rows remain observable.
