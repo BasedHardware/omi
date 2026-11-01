@@ -73,6 +73,8 @@ class FirestoreTransaction:
         self.cache: dict[tuple[str, str], dict] = {}
         self.writes: dict[tuple[str, str], dict] = {}
         self.patches: dict[tuple[str, str], dict] = {}
+        # Documents outside the batch tables that join this transaction (the provider-STT outbox row).
+        self.external: dict[Any, tuple[Any, dict]] = {}
 
     def _ref(self, table: str, key: str):
         if table == 'conversations':
@@ -105,6 +107,15 @@ class FirestoreTransaction:
             raise ValueError('only the conversation route owner may be patched by admission')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
+    def defer_set(self, ref: Any, value: dict) -> None:
+        """Set a document outside the batch tables at flush, after every read of this transaction.
+
+        Firestore refuses any transactional read after the first write, and flush itself reads
+        privacy state. A joining writer that set its document on the raw transaction mid-body made
+        every later read fail (ReadAfterWriteError: staging 11-01, every provider-route upload 503).
+        """
+        self.external[ref.path] = (ref, deepcopy(value))
+
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
@@ -136,7 +147,7 @@ class FirestoreTransaction:
         )
 
     def flush(self):
-        if len(self.writes) + len(self.patches) > 450:
+        if len(self.writes) + len(self.patches) + len(self.external) > 450:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
@@ -158,6 +169,8 @@ class FirestoreTransaction:
             self.transaction.set(self._ref(table, key), value)
         for (table, key), fields in self.patches.items():
             self.transaction.update(self._ref(table, key), fields)
+        for ref, value in self.external.values():
+            self.transaction.set(ref, value)
 
 
 class FirestoreStore:
@@ -216,6 +229,9 @@ class FirestoreStore:
 
     def ready_for_capacity(self, priority: int, now: float) -> int:
         return ready_for_capacity(self.client, self.namespace, priority, now)
+
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        return oldest_admissible_ready(self.client, self.namespace, priority, now)
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return control_candidate(self.client, self.namespace, priority, pool, now, worker_id=worker_id, exclude=exclude)
@@ -511,6 +527,47 @@ def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -
     if type(count) is not int or count < 0:
         raise ValueError('nonnegative integer capacity count required')
     return count
+
+
+# Bounded ready prefix the vendor-overflow backlog read walks (route selection, one read per
+# refresh in the healthy case). Policy holds and deferred rows at the head are skipped.
+ADMISSIBLE_READY_SCAN_LIMIT = 20
+
+
+def is_admissible_ready(job: dict[str, Any], now: float) -> bool:
+    """The ``ready_for_capacity`` predicate on one ready row: work a GPU would run if it had a lane."""
+    decision = job.get('compute_decision')
+    available_at = job.get('available_at')
+    return (
+        job.get('merge_pending') is True
+        and isinstance(decision, dict)
+        and decision.get('outcome') in ('unattempted', 'allowed')
+        and isinstance(available_at, (int, float))
+        and available_at <= now
+        and not is_policy_hold(job, now)
+    )
+
+
+def oldest_admissible_ready(client: Any, namespace: str, priority: int, now: float) -> float | None:
+    """Enqueue time of the oldest admissible ready unit, or None when the bounded prefix has none.
+
+    Same index as ``oldest(ready_only=True)``. A due allowance hold back in ``ready`` carries an
+    hours-old enqueue time, so it is skipped rather than read as GPU backlog. A prefix made only of
+    skipped rows reads as no backlog: overflow then fails toward GPU, which is today's routing.
+    """
+    docs = (
+        client.collection(f'{namespace}_jobs')
+        .where('priority', '==', priority)
+        .where('state', '==', 'ready')
+        .order_by('enqueued_at')
+        .limit(ADMISSIBLE_READY_SCAN_LIMIT)
+        .stream()
+    )
+    for doc in docs:
+        job = doc.to_dict()
+        if is_admissible_ready(job, now):
+            return job['enqueued_at']
+    return None
 
 
 def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = False) -> float | None:

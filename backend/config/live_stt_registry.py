@@ -8,6 +8,7 @@ import os
 import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
+from config.parakeet_ja import ja_window_allocated, ja_window_configured
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, STTServingSurface, parakeet_supports_language
 from config.live_stt_replay import ReplayLimits, parse_replay_limits
 
@@ -31,6 +32,9 @@ class Target:
         if not features.issubset(self.features) or (self.languages and lang not in self.languages):
             return False
         if self.family == 'parakeet':
+            if lang == 'ja':
+                # Owner ramp is applied by `window_ja_admits` where the uid is known.
+                return ja_window_configured()
             return parakeet_supports_language(STTServingSurface.PRERECORDED, lang)
         if self.family == 'modulate':
             return lang in MODULATE_SUPPORTED_LANGUAGES
@@ -56,6 +60,12 @@ def assigned(uid: str | None, salt: str, share: float) -> bool:
     from config.policy.batch import cohort_bucket
 
     return bool(uid) and cohort_bucket(uid, salt, bits=64) < share
+
+
+def window_ja_admits(target: Target, uid: str | None, language: str | None) -> bool:
+    """A Parakeet target serves Japanese only to owners inside the ja window ramp."""
+    lang = (language or 'multi').lower().split('-', 1)[0]
+    return target.family != 'parakeet' or lang != 'ja' or ja_window_allocated(uid)
 
 
 def routing_on(uid: str | None) -> bool:

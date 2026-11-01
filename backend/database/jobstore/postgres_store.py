@@ -141,6 +141,11 @@ class PostgresTransaction:
         self.store.require_table(table)
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
+    def defer_set(self, ref: Any, value: dict) -> None:
+        # A joining Firestore document (the provider-STT outbox row) commits only inside a Firestore
+        # admission transaction; this backend has none to make it atomic with.
+        raise NotImplementedError('joining Firestore documents need the Firestore transaction')
+
     def first_pending(self, owner_key: str) -> dict | None:
         row = self.store.first_pending_in(self.conn, owner_key)
         return self._locked_query_row(*row) if row else None
@@ -284,6 +289,18 @@ class PostgresStore:
                 (self.namespace, priority, now),
             ).fetchone()
         return int(row[0])
+
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        """A bounded ready prefix walked past holds and deferred rows, as on Firestore."""
+        from database.batch_pipeline_store import ADMISSIBLE_READY_SCAN_LIMIT, is_admissible_ready
+
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND state = 'ready' "
+                'ORDER BY enqueued_at, key COLLATE "C" LIMIT %s',
+                (self.namespace, priority, ADMISSIBLE_READY_SCAN_LIMIT),
+            ).fetchall()
+        return next((enqueued_at for enqueued_at, doc in rows if is_admissible_ready(doc, now)), None)
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # A hint read outside any transaction; rows without ready_at never match (Firestore order_by semantics).

@@ -234,8 +234,8 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
-        # OD worker plus the stockout borrower (l4capacity); the OD one is unchanged.
-        assert sorted(d['metadata']['name'] for d in deployments) == ['synthetic-worker', 'synthetic-worker-borrow']
+        # OD worker only: prod ships borrowing off so Parakeet's freed L4s go back to GCE.
+        assert sorted(d['metadata']['name'] for d in deployments) == ['synthetic-worker']
         assert deployment['spec']['replicas'] == 4  # Preserve baseline/live count for HPA.
         hpa = next(
             doc['spec']
@@ -398,6 +398,8 @@ def render_prod(*extra):
         str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
         '--set-string',
         'image.digest=sha256:' + 'b' * 64,
+        '--set',
+        'borrowedNodePools.enabled=true',
         *extra,
     )
 

@@ -101,8 +101,12 @@ def reconcile_committed_prefix(
     require_spans: bool = False,
     bucket: Any,
     list_chunks: Callable[..., List[Dict[str, Any]]],
+    bucket_for: Optional[Callable[[Optional[str]], Any]] = None,
 ) -> Tuple[int, List[str]]:
     """Count how many leading bytes of ``data`` are provably committed already.
+
+    ``bucket_for`` resolves a listed entry's ``bucket`` key (absent = ``bucket``),
+    so a generation listed from the regional chunk bucket is read there.
 
     ``timestamp`` is the sender's original wire timestamp for ``data[0]``.
     Returns ``(verified_prefix_bytes, committed_paths)``. A verified prefix is
@@ -166,7 +170,8 @@ def reconcile_committed_prefix(
         if len(candidates) != 1:
             break
         chunk, offset_samples = candidates[0]
-        pcm, charged = _raw_chunk_object_pcm(bucket, chunk, uid, deadline, RECONCILE_MAX_BYTES - bytes_seen)
+        source = bucket_for(chunk.get('bucket')) if bucket_for is not None and chunk.get('bucket') else bucket
+        pcm, charged = _raw_chunk_object_pcm(source, chunk, uid, deadline, RECONCILE_MAX_BYTES - bytes_seen)
         downloads += 1
         bytes_seen += charged
         if pcm is None or bytes_seen > RECONCILE_MAX_BYTES:
