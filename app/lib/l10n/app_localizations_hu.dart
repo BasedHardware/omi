@@ -4935,7 +4935,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.';
 
   @override
-  String get tasksEmptyStateMessage => 'Feladat létrehozásához kezdj beszélgetést.';
+  String get tasksEmptyStateMessage => 'A beszélgetéseidből származó teendők itt jelennek meg.';
 
   @override
   String get clearChatAction => 'Chat törlése';
@@ -15017,4 +15017,30 @@ class AppLocalizationsHu extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Kérj új kódot, és küldd el az $app alkalmazásból.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'A hangprofilt bármikor beállíthatod a Beállításokban.';
+
+  @override
+  String get homeNewRecordingButton => 'Új felvétel';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Kérdezd meg Omit a napodról';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Rögzíts egy beszélgetést az Omival';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Pipáld ki ezt a feladatot';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Az Omi magától újracsatlakozik';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
 }

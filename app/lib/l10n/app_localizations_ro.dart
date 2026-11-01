@@ -4933,7 +4933,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.';
 
   @override
-  String get tasksEmptyStateMessage => 'Începe o conversație pentru a crea o sarcină.';
+  String get tasksEmptyStateMessage => 'Sarcinile din conversațiile tale vor apărea aici.';
 
   @override
   String get clearChatAction => 'Șterge conversația';
@@ -15021,4 +15021,30 @@ class AppLocalizationsRo extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Obține un cod nou și trimite-l din $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Poți configura profilul vocal oricând din Setări.';
+
+  @override
+  String get homeNewRecordingButton => 'Înregistrare nouă';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Salut, sunt Omi. Întreabă-mă orice despre ce ai vorbit: ce a spus cineva, ce ai promis sau un rezumat al zilei tale. Pot și să adaug sarcini și să țin minte lucruri pentru tine.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Întreabă-l pe Omi despre ziua ta';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Înregistrează o conversație cu Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Bifează această sarcină ca s-o finalizezi';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi se va reconecta singur';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
 }

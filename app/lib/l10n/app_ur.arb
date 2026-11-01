@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "ٹاسک بنانے کے لیے گفتگو شروع کریں۔",
+    "tasksEmptyStateMessage": "آپ کی گفتگو سے کام یہاں ظاہر ہوں گے۔",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11944,5 +11944,13 @@
     "yearlySwitchDoneBody": "آج {amount} وصول کیے گئے۔ تجدید {date} کو۔",
     "episodePartsCount": "{count, plural, zero{{count} حصے} one{{count} حصے} two{{count} حصے} few{{count} حصے} many{{count} حصے} other{{count} حصے}}",
     "chatAppsWaitingMessageIn": "پیغام کو {app} میں بھیجیں۔ Omi کو ملتے ہی یہ اسکرین اپ ڈیٹ ہو جائے گی۔",
-    "chatAppsCodeExpiredMessageIn": "نیا کوڈ حاصل کریں اور اسے {app} سے بھیجیں۔"
+    "chatAppsCodeExpiredMessageIn": "نیا کوڈ حاصل کریں اور اسے {app} سے بھیجیں۔",
+    "voiceProfileCardDismissed": "آپ کسی بھی وقت سیٹنگز میں وائس پروفائل سیٹ کر سکتے ہیں۔",
+    "homeNewRecordingButton": "نئی ریکارڈنگ",
+    "chatWelcomeMessage": "ہیلو، میں Omi ہوں۔ آپ نے جس بارے میں بات کی، اس کے بارے میں کچھ بھی پوچھیں: کسی نے کیا کہا، آپ نے کیا وعدہ کیا یا آپ کے دن کا خلاصہ۔ میں کام بھی شامل کر سکتا ہوں اور آپ کے لیے باتیں یاد بھی رکھ سکتا ہوں۔",
+    "onboardingStarterTaskAsk": "Omi سے اپنے دن کے بارے میں پوچھیں",
+    "onboardingStarterTaskRecord": "Omi کے ساتھ ایک گفتگو ریکارڈ کریں",
+    "onboardingStarterTaskCheck": "مکمل کرنے کے لیے اس کام پر نشان لگائیں",
+    "capturePendantDisconnectedShort": "Omi خود دوبارہ جڑ جائے گا",
+    "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔"
 }

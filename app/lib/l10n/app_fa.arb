@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "برای ایجاد یک کار، گفتگو را شروع کنید.",
+    "tasksEmptyStateMessage": "کارهای گفتگوهای شما اینجا نمایش داده می‌شوند.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11944,5 +11944,13 @@
     "yearlySwitchDoneBody": "امروز {amount} کسر شد. تمدید در {date}.",
     "episodePartsCount": "{count, plural, zero{{count} بخش} one{{count} بخش} two{{count} بخش} few{{count} بخش} many{{count} بخش} other{{count} بخش}}",
     "chatAppsWaitingMessageIn": "پیام را در {app} ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.",
-    "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید."
+    "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید.",
+    "voiceProfileCardDismissed": "هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.",
+    "homeNewRecordingButton": "ضبط جدید",
+    "chatWelcomeMessage": "سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم.",
+    "onboardingStarterTaskAsk": "از Omi درباره روزت بپرس",
+    "onboardingStarterTaskRecord": "یک گفتگو را با Omi ضبط کن",
+    "onboardingStarterTaskCheck": "این کار را تیک بزن تا تمام شود",
+    "capturePendantDisconnectedShort": "Omi خودش دوباره وصل می‌شود",
+    "capturePendantDisconnectedDetail": "آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است."
 }

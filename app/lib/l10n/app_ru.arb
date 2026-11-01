@@ -1506,7 +1506,7 @@
     "durationSeconds": "Длительность: {seconds} секунд",
     "additionalSpeechSampleRemoved": "Дополнительный образец голоса удален",
     "consentDataMessage": "Продолжая, ваши разговоры, записи и личная информация будут надежно храниться на наших серверах. Ваши аудиозаписи и транскрипции обрабатываются сторонними AI-сервисами (включая Deepgram для транскрипции и OpenAI для анализа), чтобы предоставить вам аналитику на основе ИИ и обеспечить работу всех функций приложения.",
-    "tasksEmptyStateMessage": "Начните разговор, чтобы создать задачу.",
+    "tasksEmptyStateMessage": "Задачи из ваших разговоров появятся здесь.",
     "clearChatAction": "Очистить чат",
     "enableApps": "Включить приложения",
     "omiAppName": "Omi",
@@ -4553,5 +4553,13 @@
     "yearlySwitchDoneBody": "Сегодня списано {amount}. Продление {date}.",
     "episodePartsCount": "{count, plural, zero{{count} части} one{{count} часть} two{{count} части} few{{count} части} many{{count} частей} other{{count} части}}",
     "chatAppsWaitingMessageIn": "Отправьте сообщение в приложении «{app}». Этот экран обновится, как только Omi его получит.",
-    "chatAppsCodeExpiredMessageIn": "Получите новый код и отправьте его из приложения «{app}»."
+    "chatAppsCodeExpiredMessageIn": "Получите новый код и отправьте его из приложения «{app}».",
+    "voiceProfileCardDismissed": "Голосовой профиль можно настроить в любое время в Настройках.",
+    "homeNewRecordingButton": "Новая запись",
+    "chatWelcomeMessage": "Привет, я Omi. Спрашивайте обо всём, о чём вы говорили: что сказал кто-то, что вы пообещали или как прошёл ваш день. Я также могу добавлять задачи и запоминать важное за вас.",
+    "onboardingStarterTaskAsk": "Спросите Omi о своём дне",
+    "onboardingStarterTaskRecord": "Запишите разговор с Omi",
+    "onboardingStarterTaskCheck": "Отметьте эту задачу, чтобы завершить её",
+    "capturePendantDisconnectedShort": "Omi переподключится сам",
+    "capturePendantDisconnectedDetail": "Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено."
 }

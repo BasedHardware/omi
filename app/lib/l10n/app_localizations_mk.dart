@@ -4931,7 +4931,7 @@ class AppLocalizationsMk extends AppLocalizations {
       'Со продолжување, вашите разговори, снимки и лични информации ќе бидат безбедно зачувани на нашите сервери. Вашите аудио снимки и транскрипти се обработуваат од AI услуги на трети страни (вклучувајќи Deepgram за транскрипција и OpenAI за анализа) за да ви обезбедат увиди базирани на AI и да ги овозможат сите функции на апликацијата.';
 
   @override
-  String get tasksEmptyStateMessage => 'Започнете разговор за да создадете задача.';
+  String get tasksEmptyStateMessage => 'Задачите од вашите разговори ќе се појават тука.';
 
   @override
   String get clearChatAction => 'Очисти разговор';
@@ -15022,4 +15022,30 @@ class AppLocalizationsMk extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Добијте нов код и испратете го од $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Гласовниот профил можете да го поставите во секое време во Поставки.';
+
+  @override
+  String get homeNewRecordingButton => 'Ново снимање';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Здраво, јас сум Omi. Прашај ме било што за она за што си зборувал: што рекол некој, што си ветил или резиме на твојот ден. Можам и да додавам задачи и да паметам работи за тебе.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Прашај го Omi за твојот ден';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Сними разговор со Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Штиклирај ја оваа задача за да ја завршиш';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi ќе се поврзе повторно сам';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Приврзокот ја изгуби врската со овој телефон. Omi ќе се поврзе повторно сам кога приврзокот е вклучен и во близина. Сè што е снимено досега е безбедно.';
 }

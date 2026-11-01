@@ -1506,7 +1506,7 @@
     "durationSeconds": "Duración: {seconds} segundos",
     "additionalSpeechSampleRemoved": "Muestra de voz adicional eliminada",
     "consentDataMessage": "Al continuar, tus conversaciones, grabaciones e información personal se almacenarán de forma segura en nuestros servidores. Tus grabaciones de audio y transcripciones son procesadas por servicios de IA de terceros (incluyendo Deepgram para transcripción y OpenAI para análisis) para proporcionarte información impulsada por IA y habilitar todas las funciones de la aplicación.",
-    "tasksEmptyStateMessage": "Inicia una conversación para crear una tarea.",
+    "tasksEmptyStateMessage": "Las tareas de tus conversaciones aparecerán aquí.",
     "clearChatAction": "Borrar chat",
     "enableApps": "Habilitar apps",
     "omiAppName": "Omi",
@@ -4518,5 +4518,13 @@
     "yearlySwitchDoneBody": "Hoy se cobraron {amount}. Se renueva el {date}.",
     "episodePartsCount": "{count, plural, zero{{count} partes} one{{count} parte} two{{count} partes} few{{count} partes} many{{count} partes} other{{count} partes}}",
     "chatAppsWaitingMessageIn": "Envía el mensaje desde {app}. Esta pantalla se actualiza en cuanto Omi lo recibe.",
-    "chatAppsCodeExpiredMessageIn": "Obtén un código nuevo y envíalo desde {app}."
+    "chatAppsCodeExpiredMessageIn": "Obtén un código nuevo y envíalo desde {app}.",
+    "voiceProfileCardDismissed": "Puedes configurar tu perfil de voz cuando quieras en Ajustes.",
+    "homeNewRecordingButton": "Nueva grabación",
+    "chatWelcomeMessage": "Hola, soy Omi. Pregúntame lo que quieras sobre lo que has hablado: lo que dijo alguien, lo que prometiste o un resumen de tu día. También puedo añadir tareas y recordar cosas por ti.",
+    "onboardingStarterTaskAsk": "Pregúntale a Omi por tu día",
+    "onboardingStarterTaskRecord": "Graba una conversación con Omi",
+    "onboardingStarterTaskCheck": "Marca esta tarea para completarla",
+    "capturePendantDisconnectedShort": "Omi se volverá a conectar solo",
+    "capturePendantDisconnectedDetail": "Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo."
 }

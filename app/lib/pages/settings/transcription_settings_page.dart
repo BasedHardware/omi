@@ -891,7 +891,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             PlatformManager.instance.analytics.paywallOpened('transcription_settings', currentPlan: plan);
             routeToPage(
               context,
-              const UsagePage(showUpgradeDialog: true, paywallSource: 'transcription_settings'),
+              const UsagePage(
+                showUpgradeDialog: true,
+                paywallSource: 'transcription_settings',
+              ),
             );
           },
           child: ConstrainedBox(

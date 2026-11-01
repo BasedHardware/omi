@@ -4920,7 +4920,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Door verder te gaan worden uw gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers. Uw audio-opnames en transcripties worden verwerkt door AI-diensten van derden (waaronder Deepgram voor transcriptie en OpenAI voor analyse) om u AI-gestuurde inzichten te bieden en alle app-functies mogelijk te maken.';
 
   @override
-  String get tasksEmptyStateMessage => 'Begin een gesprek om een taak aan te maken.';
+  String get tasksEmptyStateMessage => 'Taken uit je gesprekken verschijnen hier.';
 
   @override
   String get clearChatAction => 'Chat wissen';
@@ -14997,4 +14997,30 @@ class AppLocalizationsNl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Vraag een nieuwe code aan en stuur die vanuit $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Je kunt je stemprofiel altijd instellen via Instellingen.';
+
+  @override
+  String get homeNewRecordingButton => 'Nieuwe opname';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hoi, ik ben Omi. Vraag me alles over waar je het over hebt gehad: wat iemand zei, wat je beloofde of een samenvatting van je dag. Ik kan ook taken toevoegen en dingen voor je onthouden.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Vraag Omi naar je dag';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Neem een gesprek op met Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Vink deze taak af om hem af te ronden';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi maakt vanzelf opnieuw verbinding';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
 }

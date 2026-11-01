@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Započnite razgovor da biste stvorili zadatak.",
+    "tasksEmptyStateMessage": "Zadaci iz vaših razgovora pojavit će se ovdje.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11944,5 +11944,13 @@
     "yearlySwitchDoneBody": "Danas naplaćeno {amount}. Obnavlja se {date}.",
     "episodePartsCount": "{count, plural, zero{{count} dijelova} one{{count} dio} two{{count} dijelova} few{{count} dijela} many{{count} dijelova} other{{count} dijelova}}",
     "chatAppsWaitingMessageIn": "Pošalji poruku u aplikaciji {app}. Ovaj se zaslon ažurira čim je Omi primi.",
-    "chatAppsCodeExpiredMessageIn": "Dohvati novi kôd i pošalji ga iz aplikacije {app}."
+    "chatAppsCodeExpiredMessageIn": "Dohvati novi kôd i pošalji ga iz aplikacije {app}.",
+    "voiceProfileCardDismissed": "Glasovni profil možete postaviti bilo kada u Postavkama.",
+    "homeNewRecordingButton": "Novo snimanje",
+    "chatWelcomeMessage": "Bok, ja sam Omi. Pitaj me bilo što o čemu si razgovarao: što je netko rekao, što si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe.",
+    "onboardingStarterTaskAsk": "Pitaj Omi o svom danu",
+    "onboardingStarterTaskRecord": "Snimi razgovor uz Omi",
+    "onboardingStarterTaskCheck": "Označi ovaj zadatak da ga završiš",
+    "capturePendantDisconnectedShort": "Omi će se sam ponovno povezati",
+    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno."
 }

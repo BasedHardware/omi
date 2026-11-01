@@ -4,6 +4,8 @@ import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
@@ -35,6 +37,10 @@ import 'package:omi/services/services.dart';
 import '../../integration_test/journeys/support/hermetic_boot.dart';
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('Home shows the calendar button; one picked day opens the day page', (tester) async {

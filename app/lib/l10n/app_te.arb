@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "పనిని సృష్టించడానికి సంభాషణను ప్రారంభించండి.",
+    "tasksEmptyStateMessage": "మీ సంభాషణల నుండి పనులు ఇక్కడ కనిపిస్తాయి.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11944,5 +11944,13 @@
     "yearlySwitchDoneBody": "ఈరోజు {amount} వసూలు చేశాం. పునరుద్ధరణ {date}.",
     "episodePartsCount": "{count, plural, zero{{count} భాగాలు} one{{count} భాగాలు} two{{count} భాగాలు} few{{count} భాగాలు} many{{count} భాగాలు} other{{count} భాగాలు}}",
     "chatAppsWaitingMessageIn": "{app}లో మెసేజ్ పంపండి. Omiకి అందగానే ఈ స్క్రీన్ అప్‌డేట్ అవుతుంది.",
-    "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి."
+    "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి.",
+    "voiceProfileCardDismissed": "సెట్టింగ్‌లలో ఎప్పుడైనా వాయిస్ ప్రొఫైల్ సెటప్ చేయవచ్చు.",
+    "homeNewRecordingButton": "కొత్త రికార్డింగ్",
+    "chatWelcomeMessage": "హాయ్, నేను Omi. మీరు మాట్లాడిన దేని గురించైనా అడగండి: ఎవరు ఏమన్నారు, మీరు ఏమి మాట ఇచ్చారు లేదా మీ రోజు సారాంశం. నేను పనులను జోడించగలను, మీ కోసం విషయాలు గుర్తుంచుకోగలను.",
+    "onboardingStarterTaskAsk": "మీ రోజు గురించి Omi ని అడగండి",
+    "onboardingStarterTaskRecord": "Omi తో ఒక సంభాషణను రికార్డ్ చేయండి",
+    "onboardingStarterTaskCheck": "పూర్తి చేయడానికి ఈ పనిని టిక్ చేయండి",
+    "capturePendantDisconnectedShort": "Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది",
+    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి."
 }

@@ -4904,7 +4904,7 @@ class AppLocalizationsPt extends AppLocalizations {
       'Ao continuar, suas conversas, gravações e informações pessoais serão armazenadas com segurança em nossos servidores. Suas gravações de áudio e transcrições são processadas por serviços de IA de terceiros (incluindo Deepgram para transcrição e OpenAI para análise) para fornecer insights baseados em IA e habilitar todos os recursos do aplicativo.';
 
   @override
-  String get tasksEmptyStateMessage => 'Inicie uma conversa para criar uma tarefa.';
+  String get tasksEmptyStateMessage => 'As tarefas das suas conversas aparecerão aqui.';
 
   @override
   String get clearChatAction => 'Limpar conversa';
@@ -14986,4 +14986,30 @@ class AppLocalizationsPt extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Gere um novo código e envie pelo app $app.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'Você pode configurar o perfil de voz a qualquer momento em Ajustes.';
+
+  @override
+  String get homeNewRecordingButton => 'Nova gravação';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Oi, eu sou o Omi. Pergunte qualquer coisa sobre o que você conversou: o que alguém disse, o que você prometeu ou um resumo do seu dia. Também posso adicionar tarefas e lembrar coisas para você.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Pergunte ao Omi sobre o seu dia';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Grave uma conversa com o Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Marque esta tarefa para concluí-la';
+
+  @override
+  String get capturePendantDisconnectedShort => 'O Omi se reconecta sozinho';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Seu pendente perdeu a conexão com este telefone. O Omi se reconecta sozinho quando o pendente estiver ligado e por perto. Tudo o que foi gravado antes está seguro.';
 }

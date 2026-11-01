@@ -4949,7 +4949,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'தொடர்வதன் மூலம், உங்கள் உரையாடல்கள், பதிவுகள் மற்றும் தனிப்பட்ட தகவல்கள் எங்கள் சேவையகங்களில் பாதுகாப்பாக சேமிக்கப்படும். உங்கள் ஆடியோ பதிவுகள் மற்றும் படியெடுப்புகள் மூன்றாம் தரப்பு AI சேவைகளால் செயலாக்கப்படுகின்றன (படியெடுப்பிற்கு Deepgram மற்றும் பகுப்பாய்விற்கு OpenAI உட்பட) AI இயக்கும் நுண்ணறிவுகளை உங்களுக்கு வழங்கவும் அனைத்து பயன்பாட்டு அம்சங்களையும் இயக்கவும்.';
 
   @override
-  String get tasksEmptyStateMessage => 'ஒரு பணியை உருவாக்க உரையாடலைத் தொடங்குங்கள்.';
+  String get tasksEmptyStateMessage => 'உங்கள் உரையாடல்களில் உள்ள பணிகள் இங்கே தோன்றும்.';
 
   @override
   String get clearChatAction => 'உரையாடலைத் தெளிக்கவும்';
@@ -15061,4 +15061,30 @@ class AppLocalizationsTa extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'புதிய குறியீட்டைப் பெற்று $app-இலிருந்து அனுப்புங்கள்.';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.';
+
+  @override
+  String get homeNewRecordingButton => 'புதிய பதிவு';
+
+  @override
+  String get chatWelcomeMessage =>
+      'வணக்கம், நான் Omi. நீங்கள் பேசிய எதைப் பற்றியும் கேளுங்கள்: யார் என்ன சொன்னார்கள், நீங்கள் என்ன வாக்குறுதி அளித்தீர்கள் அல்லது உங்கள் நாளின் சுருக்கம். பணிகளைச் சேர்க்கவும் உங்களுக்காக விஷயங்களை நினைவில் வைக்கவும் என்னால் முடியும்.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'உங்கள் நாளைப் பற்றி Omi-யிடம் கேளுங்கள்';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi மூலம் ஒரு உரையாடலைப் பதிவுசெய்யுங்கள்';
+
+  @override
+  String get onboardingStarterTaskCheck => 'முடிக்க இந்தப் பணியைக் குறியிடுங்கள்';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi தானாகவே மீண்டும் இணையும்';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
 }

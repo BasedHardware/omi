@@ -4885,7 +4885,7 @@ class AppLocalizationsHi extends AppLocalizations {
       'जारी रखने पर, आपकी बातचीत, रिकॉर्डिंग और व्यक्तिगत जानकारी हमारे सर्वर पर सुरक्षित रूप से संग्रहीत की जाएगी। आपकी ऑडियो रिकॉर्डिंग और ट्रांसक्रिप्ट तीसरे पक्ष की AI सेवाओं (ट्रांसक्रिप्शन के लिए Deepgram और विश्लेषण के लिए OpenAI सहित) द्वारा संसाधित किए जाते हैं ताकि आपको AI-संचालित अंतर्दृष्टि प्रदान की जा सके और सभी ऐप सुविधाएँ सक्षम की जा सकें।';
 
   @override
-  String get tasksEmptyStateMessage => 'टास्क बनाने के लिए बातचीत शुरू करें।';
+  String get tasksEmptyStateMessage => 'आपकी बातचीत से निकले काम यहाँ दिखेंगे।';
 
   @override
   String get clearChatAction => 'चैट साफ़ करें';
@@ -14941,4 +14941,30 @@ class AppLocalizationsHi extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'नया कोड लें और उसे $app ऐप से भेजें।';
   }
+
+  @override
+  String get voiceProfileCardDismissed => 'आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।';
+
+  @override
+  String get homeNewRecordingButton => 'नई रिकॉर्डिंग';
+
+  @override
+  String get chatWelcomeMessage =>
+      'नमस्ते, मैं Omi हूँ। आपने जिस बारे में बात की है, उसके बारे में कुछ भी पूछें: किसी ने क्या कहा, आपने क्या वादा किया, या आपके दिन का सारांश। मैं काम जोड़ सकता हूँ और आपके लिए चीज़ें याद भी रख सकता हूँ।';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi से अपने दिन के बारे में पूछें';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi से एक बातचीत रिकॉर्ड करें';
+
+  @override
+  String get onboardingStarterTaskCheck => 'इस काम को पूरा करने के लिए टिक करें';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi अपने आप फिर से कनेक्ट हो जाएगा';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।';
 }

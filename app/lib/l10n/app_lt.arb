@@ -1938,7 +1938,7 @@
     "tasksAddedToList": "Užduotys bus pridėtos į šį sąrašą",
     "tasksCompleted": "Užduotys atliktos",
     "tasksCreatedInWorkspace": "Užduotys bus sukurtos šioje darbo srityje",
-    "tasksEmptyStateMessage": "Pradėkite pokalbį, kad sukurtumėte užduotį.",
+    "tasksEmptyStateMessage": "Užduotys iš jūsų pokalbių bus rodomos čia.",
     "tasksExportedOneApp": "Užduotys gali būti eksportuojamos į vieną programėlę vienu metu.",
     "tasksFromConversationsWillAppear": "Užduotys iš jūsų pokalbių bus rodomos čia.\nSpustelėkite Kurti, kad pridėtumėte vieną rankiniu būdu.",
     "tasksLater": "Vėliau",
@@ -4518,5 +4518,13 @@
     "yearlySwitchDoneBody": "Šiandien nuskaičiuota {amount}. Atnaujinama {date}.",
     "episodePartsCount": "{count, plural, zero{{count} dalių} one{{count} dalis} two{{count} dalių} few{{count} dalys} many{{count} dalies} other{{count} dalių}}",
     "chatAppsWaitingMessageIn": "Išsiųskite žinutę programoje {app}. Šis ekranas atsinaujins, kai tik Omi ją gaus.",
-    "chatAppsCodeExpiredMessageIn": "Gaukite naują kodą ir išsiųskite jį per {app}."
+    "chatAppsCodeExpiredMessageIn": "Gaukite naują kodą ir išsiųskite jį per {app}.",
+    "voiceProfileCardDismissed": "Balso profilį galite nustatyti bet kada nustatymuose.",
+    "homeNewRecordingButton": "Naujas įrašas",
+    "chatWelcomeMessage": "Labas, aš Omi. Klausk manęs apie bet ką, apie ką kalbėjai: ką kas nors pasakė, ką pažadėjai ar tavo dienos santrauką. Taip pat galiu pridėti užduočių ir prisiminti dalykus už tave.",
+    "onboardingStarterTaskAsk": "Paklausk Omi apie savo dieną",
+    "onboardingStarterTaskRecord": "Įrašyk pokalbį su Omi",
+    "onboardingStarterTaskCheck": "Pažymėk šią užduotį kaip atliktą",
+    "capturePendantDisconnectedShort": "Omi pats vėl prisijungs",
+    "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota."
 }
