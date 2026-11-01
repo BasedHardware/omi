@@ -14680,9 +14680,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get episodeOnThisPhone => 'На овом телефону';
 
   @override
-  String get liveCardTitle => 'Уживо';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Коначни транскрипт касни око $duration';
   }
@@ -14697,7 +14694,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Безбедно снима';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Уживо на овом телефону';
+  String get livePreviewOnPhoneDivider => 'Управо сада, на овом телефону';
 
   @override
   String get livePreviewTurnOnLiveText => 'Укључи текст уживо';
@@ -14942,21 +14939,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count делова',
-      many: '$count делова',
-      few: '$count дела',
-      two: '$count делова',
-      one: '$count део',
-      zero: '$count делова',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Пошаљите поруку у апликацији $app. Овај екран се ажурира чим је Omi прими.';
   }
@@ -14965,4 +14947,28 @@ class AppLocalizationsSr extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Затражите нови код и пошаљите га из апликације $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Пишемо белешке…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Прво завршавамо транскрипт. Можете напустити ову страницу.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Покрива до $time · потпуне белешке по завршетку';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Транскрибовано до $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Сачувано $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Говорници и коначни транскрипт појавиће се овде током отпремања.';
 }

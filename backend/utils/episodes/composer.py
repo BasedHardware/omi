@@ -38,6 +38,7 @@ from config.episodes import (
     COMPOSER_RETRY_MINUTES,
     COMPOSER_MAX_CHAPTERS,
     COMPOSER_MAX_TRANSCRIPT_CHARS,
+    COMPOSER_MIN_SECTION_SECONDS,
     COMPOSER_TIMEOUT_SECONDS,
     RECOVERY_NOTES_MIN_INTERVAL_SECONDS,
     COMPOSER_VERSION,
@@ -47,14 +48,15 @@ from database import conversations as conversations_db
 from database import episodes as episodes_db
 from utils.conversations.recorded_time import conversation_span
 from utils.episodes import policy
+from utils.episodes.state import is_placeholder_heading, trim_text
 from utils.episodes.visibility import hidden_member
+from utils.speakers.display import sanitize_speaker_text
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage
 
 logger = logging.getLogger(__name__)
 
 _DONE = {'completed'}
-_PLACEHOLDER = re.compile(r'^\s*(new|unknown)\b.*\bmoment\b', re.I)
 _TURN_SECONDS = 60
 _TURN_GAP_SECONDS = 15
 _WINDOW_SECONDS = 600
@@ -144,7 +146,7 @@ def _speaker(segment: Mapping[str, Any], owner: str) -> str:
     name = str(segment.get('person_name') or '').strip()
     if name:
         return name
-    label = str(segment.get('speaker') or 'Speaker').replace('SPEAKER_', 'Speaker ')
+    label = str(segment.get('speaker') or 'Someone').replace('SPEAKER_', 'Speaker ')
     return label
 
 
@@ -305,7 +307,7 @@ def _speech_end(row: Mapping[str, Any]) -> Optional[datetime]:
 
 
 def _line(value: Any, limit: int) -> str:
-    return re.sub(r'\s+', ' ', str(value or '')).strip().strip('•-* ').strip()[:limit].rstrip()
+    return trim_text(re.sub(r'\s+', ' ', sanitize_speaker_text(str(value or ''))).strip().strip('•-* ').strip(), limit)
 
 
 def _points(chapter: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -368,7 +370,7 @@ def to_updates(
                 continue
             heading = _line(chapter.get('title'), 60)
             start = _clock(chapter.get('start'), lo, hi, tz)
-            if not heading or _PLACEHOLDER.match(heading) or start is None:
+            if not heading or is_placeholder_heading(heading) or start is None:
                 continue
             owner = next(
                 (cid for cid, a, b in known if a - timedelta(minutes=1) <= start <= b + timedelta(minutes=1)), None
@@ -383,8 +385,9 @@ def to_updates(
     moments = []
     for index, (start, end, owner, heading, points) in enumerate(drafts):
         following = drafts[index + 1][0] if index + 1 < len(drafts) else None
-        if end is None or end <= start:
-            # The last line the chapter owns: before the next chapter, on its own recording.
+        if end is None or (end - start).total_seconds() < COMPOSER_MIN_SECTION_SECONDS:
+            # The model's clocks are turn starts, so a section can read as seconds long. Its length
+            # is then the last line it owns: before the next chapter, on its own recording.
             inside = [t for t in times.get(owner) or [] if t >= start and (following is None or t < following)]
             end = max(inside) if inside else start
         # The moment stays inside its own recording's speech, whose transcript it opens.

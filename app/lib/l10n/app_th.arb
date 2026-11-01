@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "โน้ตจะเริ่มเมื่อถอดความฉบับสุดท้ายมาถึง",
     "episodeOnDeviceNotesFootnote": "ถอดและร่างไว้บนมือถือของคุณขณะพูด โน้ตฉบับเต็มจะมาพร้อมกับถอดความฉบับสุดท้าย",
     "episodeOnThisPhone": "บนเครื่องนี้",
-    "liveCardTitle": "แสดงสด",
     "livePreviewBehind": "ถอดความฉบับสุดท้ายตามหลังอยู่ประมาณ {duration}",
     "livePreviewCatchingUp": "ถอดความฉบับสุดท้ายกำลังตามมา",
     "livePreviewNoEngineBody": "คำของคุณจะปรากฏที่นี่ในหนึ่งถึงสองนาทีหลังจากพูด",
     "livePreviewNoEngineTitle": "กำลังบันทึกอย่างปลอดภัย",
-    "livePreviewOnPhoneDivider": "แสดงสดบนเครื่องนี้",
+    "livePreviewOnPhoneDivider": "เมื่อสักครู่ บนโทรศัพท์เครื่องนี้",
     "livePreviewTurnOnLiveText": "เปิดข้อความสด",
     "deviceCatchUpOnItsWay": "กำลังจะมาถึง",
     "deviceCatchUpWhenOnline": "เมื่อกลับมาออนไลน์",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "ตอนนี้แพ็กเกจของคุณยังจ่ายรายปีไม่ได้",
     "yearlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายปีแล้ว",
     "yearlySwitchDoneBody": "เรียกเก็บ {amount} วันนี้ ต่ออายุ {date}",
-    "episodePartsCount": "{count, plural, zero{{count} ส่วน} one{{count} ส่วน} two{{count} ส่วน} few{{count} ส่วน} many{{count} ส่วน} other{{count} ส่วน}}",
     "chatAppsWaitingMessageIn": "ส่งข้อความในแอป {app} หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ",
-    "chatAppsCodeExpiredMessageIn": "ขอรหัสใหม่แล้วส่งจากแอป{app}"
+    "chatAppsCodeExpiredMessageIn": "ขอรหัสใหม่แล้วส่งจากแอป{app}",
+    "episodeWritingNotes": "กำลังเขียนบันทึก…",
+    "episodeWritingNotesDetail": "กำลังทำบทถอดความให้เสร็จก่อน คุณออกจากหน้านี้ได้",
+    "episodeCoversUpTo": "ครอบคลุมถึง {time} · บันทึกฉบับเต็มเมื่อจบ",
+    "liveTranscribedUpTo": "ถอดความถึง {time}",
+    "liveAudioSaved": "บันทึกแล้ว {duration}",
+    "liveAudioSavedDetail": "ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด"
 }

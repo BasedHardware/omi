@@ -14701,9 +14701,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get episodeOnThisPhone => 'V tem telefonu';
 
   @override
-  String get liveCardTitle => 'V živo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Končni prepis za približno $duration zadaj';
   }
@@ -14718,7 +14715,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Varno snema';
 
   @override
-  String get livePreviewOnPhoneDivider => 'V živo v tem telefonu';
+  String get livePreviewOnPhoneDivider => 'Pravkar, na tem telefonu';
 
   @override
   String get livePreviewTurnOnLiveText => 'Vklopi besedilo v živo';
@@ -14963,21 +14960,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count delov',
-      many: '$count delov',
-      few: '$count deli',
-      two: '$count dela',
-      one: '$count del',
-      zero: '$count delov',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Pošljite sporočilo v aplikaciji $app. Ta zaslon se posodobi, takoj ko ga Omi prejme.';
   }
@@ -14986,4 +14968,28 @@ class AppLocalizationsSl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Pridobite novo kodo in jo pošljite iz aplikacije $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Pišemo zapiske…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Najprej dokončujemo prepis. To stran lahko zapustite.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Do $time · popolni zapiski ob koncu';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Prepisano do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Shranjeno $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.';
 }

@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "Нататкі з’явяцца, калі прыбудзе канчатковая расшыфроўка.",
     "episodeOnDeviceNotesFootnote": "Ствараюцца на вашым тэлефоне, пакуль вы гаварыце. Поўныя нататкі з’явяцца разам з канчатковай расшыфроўкай.",
     "episodeOnThisPhone": "На гэтым тэлефоне",
-    "liveCardTitle": "Нажыва",
     "livePreviewBehind": "Канчатковая расшыфроўка адстае прыблізна на {duration}",
     "livePreviewCatchingUp": "Канчатковая расшыфроўка даганяе",
     "livePreviewNoEngineBody": "Вашы словы з’явяцца тут праз хвіліну-две пасля таго, як вы іх вымовіце.",
     "livePreviewNoEngineTitle": "Бяспечны запіс",
-    "livePreviewOnPhoneDivider": "Нажыва на гэтым тэлефоне",
+    "livePreviewOnPhoneDivider": "Толькі што, на гэтым тэлефоне",
     "livePreviewTurnOnLiveText": "Уключыць жывы тэкст",
     "deviceCatchUpOnItsWay": "у дарозе",
     "deviceCatchUpWhenOnline": "пры злучэнні з інтэрнэтам",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "Гадавая аплата зараз недаступная для вашага плана.",
     "yearlySwitchDoneTitle": "Цяпер у вас гадавая аплата",
     "yearlySwitchDoneBody": "Сёння спісана {amount}. Падаўжэнне {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} часткі} one{{count} частка} two{{count} часткі} few{{count} часткі} many{{count} частак} other{{count} часткі}}",
     "chatAppsWaitingMessageIn": "Адпраў паведамленне ў праграме {app}. Гэты экран абновіцца, як толькі Omi яго атрымае.",
-    "chatAppsCodeExpiredMessageIn": "Атрымай новы код і адпраў яго з праграмы {app}."
+    "chatAppsCodeExpiredMessageIn": "Атрымай новы код і адпраў яго з праграмы {app}.",
+    "episodeWritingNotes": "Пішам нататкі…",
+    "episodeWritingNotesDetail": "Спачатку завяршаем транскрыпцыю. Можаце пакінуць гэту старонку.",
+    "episodeCoversUpTo": "Ахоплівае да {time} · поўныя нататкі пасля завяршэння",
+    "liveTranscribedUpTo": "Транскрыбавана да {time}",
+    "liveAudioSaved": "Захавана {duration}",
+    "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі."
 }

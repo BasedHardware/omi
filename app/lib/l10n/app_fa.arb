@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "یادداشت‌ها با رسیدن پی‌نوشت نهایی شروع می‌شوند.",
     "episodeOnDeviceNotesFootnote": "همان‌طور که حرف می‌زنی روی گوشی‌ات نوشته می‌شود. یادداشت‌های کامل همراه با پی‌نوشت نهایی می‌رسند.",
     "episodeOnThisPhone": "روی این گوشی",
-    "liveCardTitle": "زنده",
     "livePreviewBehind": "پی‌نوشت نهایی حدود {duration} عقب است",
     "livePreviewCatchingUp": "پی‌نوشت نهایی در حال رسیدن است",
     "livePreviewNoEngineBody": "حرف‌هایت یک تا دو دقیقه بعد از گفتن اینجا ظاهر می‌شود.",
     "livePreviewNoEngineTitle": "با امنیت ضبط می‌کند",
-    "livePreviewOnPhoneDivider": "زنده روی این گوشی",
+    "livePreviewOnPhoneDivider": "همین الان، روی این تلفن",
     "livePreviewTurnOnLiveText": "روشن کردن متن زنده",
     "deviceCatchUpOnItsWay": "در راه است",
     "deviceCatchUpWhenOnline": "وقتی آنلاین باشد",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "پرداخت سالانه اکنون برای طرح شما در دسترس نیست.",
     "yearlySwitchDoneTitle": "اکنون سالانه پرداخت می‌کنید",
     "yearlySwitchDoneBody": "امروز {amount} کسر شد. تمدید در {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} بخش} one{{count} بخش} two{{count} بخش} few{{count} بخش} many{{count} بخش} other{{count} بخش}}",
     "chatAppsWaitingMessageIn": "پیام را در {app} ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.",
-    "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید."
+    "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید.",
+    "episodeWritingNotes": "در حال نوشتن یادداشت‌ها…",
+    "episodeWritingNotesDetail": "اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.",
+    "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",
+    "liveTranscribedUpTo": "رونویسی تا {time}",
+    "liveAudioSaved": "{duration} ذخیره شد",
+    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند."
 }

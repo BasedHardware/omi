@@ -4489,12 +4489,11 @@
     "episodeNotesStartWithTranscript": "As notas começam quando a transcrição final chega.",
     "episodeOnDeviceNotesFootnote": "Elaboradas no seu telefone enquanto você fala. As notas completas chegam com a transcrição final.",
     "episodeOnThisPhone": "Neste telefone",
-    "liveCardTitle": "Ao vivo",
     "livePreviewBehind": "Transcrição final com cerca de {duration} de atraso",
     "livePreviewCatchingUp": "A transcrição final está se atualizando",
     "livePreviewNoEngineBody": "Suas palavras aparecem aqui um ou dois minutos depois de você dizê-las.",
     "livePreviewNoEngineTitle": "Gravando com segurança",
-    "livePreviewOnPhoneDivider": "Ao vivo neste telefone",
+    "livePreviewOnPhoneDivider": "Agora mesmo, neste telefone",
     "livePreviewTurnOnLiveText": "Ativar texto ao vivo",
     "deviceCatchUpOnItsWay": "a caminho",
     "deviceCatchUpWhenOnline": "quando estiver online",
@@ -4551,7 +4550,12 @@
     "yearlySwitchUnavailable": "A cobrança anual não está disponível para seu plano no momento.",
     "yearlySwitchDoneTitle": "Agora você está no plano anual",
     "yearlySwitchDoneBody": "{amount} cobrados hoje. Renova em {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} partes} one{{count} parte} two{{count} partes} few{{count} partes} many{{count} partes} other{{count} partes}}",
     "chatAppsWaitingMessageIn": "Envie a mensagem no app {app}. Esta tela é atualizada assim que a Omi a receber.",
-    "chatAppsCodeExpiredMessageIn": "Gere um novo código e envie pelo app {app}."
+    "chatAppsCodeExpiredMessageIn": "Gere um novo código e envie pelo app {app}.",
+    "episodeWritingNotes": "Escrevendo notas…",
+    "episodeWritingNotesDetail": "Primeiro terminamos a transcrição. Você pode sair desta página.",
+    "episodeCoversUpTo": "Cobre até {time} · notas completas ao terminar",
+    "liveTranscribedUpTo": "Transcrito até {time}",
+    "liveAudioSaved": "{duration} salvos",
+    "liveAudioSavedDetail": "Os falantes e a transcrição final aparecerão aqui durante o envio."
 }
