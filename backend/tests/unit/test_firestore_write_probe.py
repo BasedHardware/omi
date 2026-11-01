@@ -1,5 +1,6 @@
 """The write probe must count every committed write once, by collection, op and caller, and never break one."""
 
+import datetime
 import sys
 from pathlib import Path
 
@@ -83,6 +84,13 @@ def test_write_op_classifies_every_write_shape():
     assert probe.write_op(Write(update=Document(name=name)))[0] == 'set'
     assert probe.write_op(Write(update=Document(name=name), update_mask=DocumentMask(field_paths=['a'])))[0] == 'merge'
     assert probe.write_op(Write(update=Document(name=name), current_document=Precondition(exists=True)))[0] == 'update'
+    # A last-update-time CAS requires the document to exist: not an upsert.
+    cas = Write(
+        update=Document(name=name),
+        update_mask=DocumentMask(field_paths=['a']),
+        current_document=Precondition(update_time=datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)),
+    )
+    assert probe.write_op(cas)[0] == 'update'
     assert probe.write_op(Write(delete=name))[0] == 'delete'
     assert probe.write_op({'delete': name})[0] == 'delete'
     named = probe.write_op(Write(delete='projects/p/databases/staging/documents/users/u1'))

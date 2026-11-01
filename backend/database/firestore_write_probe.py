@@ -33,7 +33,7 @@ Billing assumptions (Cloud Firestore Standard pricing, encoded, not measured):
   them under their own "(named databases)" SKU.
 
 ``op`` is ``create`` (precondition exists=false), ``update`` (precondition
-exists=true: ``update()``), ``merge`` (an update mask and no precondition, an
+exists=true or a last-update-time precondition: ``update()``), ``merge`` (an update mask and no precondition, an
 upsert: ``set(merge=True)``), ``set`` (whole-document replace), ``delete``, or
 ``transform`` (a transform-only write). ``update`` and ``merge`` are split
 because commit-boundary fences treat an upsert as able to create a document.
@@ -194,6 +194,8 @@ def write_op(write: Any) -> tuple[str, str, tuple[str, ...]]:
         if kind == 'update':
             if pb.HasField('current_document') and pb.current_document.HasField('exists'):
                 op = 'update' if pb.current_document.exists else 'create'
+            elif pb.HasField('current_document') and pb.current_document.HasField('update_time'):
+                op = 'update'  # A last-update-time precondition requires the document to exist.
             else:
                 op = 'merge' if pb.HasField('update_mask') else 'set'
             name = pb.update.name
