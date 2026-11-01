@@ -48,6 +48,8 @@ tolerations:
 worker:
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
+  # #24213 IO 5 did not run in qualification (NO-GO 2026-11-01); hold the prior 3.
+  ioConcurrency: 3
   # Batch quality shadow at 25% (lead 2026-10-29, retro ruling "shadow 25% first").
   # Matches the four Cloud Run roles; paid recovery keeps the 200/h base cap
   # (lead ruling 12:15Z reversing the #23964 zero pin). Rollback: 0.
