@@ -61,6 +61,10 @@ worker:
   shadowPercent: 25
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
+  # Strict-VAD shadow at 10% (batchdesign §9 PR-3, 2026-11-01): the shadow cost
+  # up to 0.6s of the 2.55s/unit flight. 100 restores full sampling for the
+  # silence qualification; 0 turns the shadow off entirely.
+  strictVadShadowPercent: 10
   apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
   audience: https://backend-sync-hhibjajaja-uc.a.run.app
   emptyAsrRecoveryEnabled: true

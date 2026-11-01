@@ -140,7 +140,9 @@ $0.730/h, `g2-standard-8` $0.854/h) that is about 1.8x the L4 cost per
 audio-hour, so the fallback carries work only while L4 workers are Pending:
 scale it with `kubectl scale deploy/<release>-t4 --replicas=N` (N at most the
 Pending L4 count) and back to 0 when they schedule. Helm upgrades keep the live
-count. The bench did not cover flight batching, pipeline depth 2 or lease and
+count. The L4 HPA's chain-busy metric is namespace-wide, so serving T4 replicas
+raise the L4 recommendation; scale the fallback to 0 as L4 workers schedule
+and the 1800s scale-down window sheds the excess. The bench did not cover flight batching, pipeline depth 2 or lease and
 storage IO; watch the T4 replicas' stage timings and peak memory on first use.
 
 An operator creates the pool out-of-band, not through IaC or this chart, with
