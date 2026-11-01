@@ -43,21 +43,48 @@ def test_no_delete_rule_can_reach_chunks_except_the_scoped_noncurrent_rule():
 
 def test_apply_files_declare_exactly_one_coldline_rule_scoped_to_chunks():
     for name in APPLY_FILES:
-        set_class = [r for r in _rules(_load(name)) if r["action"]["type"] == "SetStorageClass"]
+        set_class = [
+            r
+            for r in _rules(_load(name))
+            if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "COLDLINE"
+        ]
         assert len(set_class) == 1, name
         rule = set_class[0]
-        assert rule["action"]["storageClass"] == "COLDLINE"
         assert rule["condition"]["age"] == 30
         assert rule["condition"]["matchesPrefix"] == ["chunks/"]
 
 
 def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
-    set_class = [r for r in _rules(_load("prod.json")) if r["action"]["type"] == "SetStorageClass"]
+    set_class = [
+        r
+        for r in _rules(_load("prod.json"))
+        if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "COLDLINE"
+    ]
     assert len(set_class) == 1
     rule = set_class[0]
     assert rule["condition"]["matchesSuffix"] == [".batch.enc", ".batch.bin"], (
         "prod Coldline transitions must stay scoped to the large batch artifacts; "
         "small .opus.enc chunks never pay back Coldline Class A pricing (p76)"
+    )
+
+
+def test_prod_archive_rule_is_pinned_to_the_coldline_batch_stock():
+    archive = [
+        r
+        for r in _rules(_load("prod.json"))
+        if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "ARCHIVE"
+    ]
+    assert len(archive) == 1, "prod declares exactly one ARCHIVE transition (David 11-01)"
+    rule = archive[0]
+    assert rule["condition"]["matchesStorageClass"] == ["COLDLINE"], "only already-Coldline objects may move to Archive"
+    assert rule["condition"]["matchesPrefix"] == ["chunks/"]
+    assert rule["condition"]["matchesSuffix"] == [
+        ".batch.enc",
+        ".batch.bin",
+    ], "same batch-artifact scope as the Coldline rule; .opus.enc chunks stay out"
+    assert rule["condition"]["age"] == 60, (
+        "age 60 = at least 30 days in Coldline before Archive; the existing stock "
+        "(created >= 60d ago) transitions on first evaluation"
     )
 
 
@@ -91,7 +118,9 @@ def test_rollback_files_only_drop_rules_the_apply_variant_added():
         assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
         assert all(rule in apply_rules for rule in rollback_rules)
         dropped = [rule for rule in apply_rules if rule not in rollback_rules]
-        expected = ["Delete", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
+        expected = (
+            ["Delete", "SetStorageClass", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
+        )
         assert (
             sorted(rule["action"]["type"] for rule in dropped) == expected
         ), f"{apply_name}: rollback must drop exactly the rules the apply variant added beyond legacy"
