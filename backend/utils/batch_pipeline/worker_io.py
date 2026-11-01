@@ -78,7 +78,9 @@ class DecodeBudget:
             self._segments.add(item.segment_id)
             self.seconds += item.duration_seconds
         try:
-            return FirstDecode(self, item, executor.submit(decode, item))
+            # The caller explicitly owns the returned future and its budget
+            # reservation until FirstDecode.close drains and releases it.
+            return executor.submit(decode, item)
         except BaseException:
             self.release(item)
             raise

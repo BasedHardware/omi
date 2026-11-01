@@ -59,7 +59,7 @@ from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, r
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.stage_timings import StageTimings
-from utils.batch_pipeline.worker_io import DecodeBudget, PendingResults
+from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults
 from utils.batch_pipeline import worker_metrics
 from utils.observability.fallback import record_fallback
 
@@ -476,7 +476,8 @@ class PipelineWorker:
         # IO=1 is the existing serial rollback. No models or privacy shortcuts.
         if self._io is None or not items:
             return None
-        return self._decode_budget.submit(self._io, self._decode_context, items[0])
+        future = self._decode_budget.submit(self._io, self._decode_context, items[0])
+        return FirstDecode(self._decode_budget, items[0], future) if future is not None else None
 
     def _fatal(self, exc):
         self._unavailable = True

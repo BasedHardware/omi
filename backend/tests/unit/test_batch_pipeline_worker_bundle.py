@@ -28,7 +28,7 @@ from utils.batch_pipeline.compute_client import InvalidReceipt
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
-from utils.batch_pipeline.worker_io import DecodeBudget, PendingResults
+from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults
 
 
 @pytest.fixture(autouse=True)
@@ -197,8 +197,9 @@ def test_preparation_audio_bound_is_shared_and_released_only_after_io_drains():
     release = threading.Event()
     budget = DecodeBudget(1800)
     with ThreadPoolExecutor(2) as executor:
-        first = budget.submit(executor, lambda work: release.wait(2), item('a', 1000))
-        second = budget.submit(executor, lambda work: release.wait(2), item('b', 800))
+        first_work, second_work = item('a', 1000), item('b', 800)
+        first = FirstDecode(budget, first_work, budget.submit(executor, lambda work: release.wait(2), first_work))
+        second = FirstDecode(budget, second_work, budget.submit(executor, lambda work: release.wait(2), second_work))
         try:
             assert budget.seconds == 1800
             assert budget.submit(executor, lambda work: None, item('c', 1)) is None
@@ -223,7 +224,8 @@ def test_queued_preparation_cancels_without_waiting_for_executor_capacity():
 
         blocker_future = executor.submit(blocker)
         assert occupied.wait(1)
-        handle = budget.submit(executor, lambda work: None, item())
+        work = item()
+        handle = FirstDecode(budget, work, budget.submit(executor, lambda work: None, work))
         try:
             started = time.monotonic()
             handle.cancel()

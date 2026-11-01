@@ -467,7 +467,9 @@ class Pump:
                     except asyncio.CancelledError:
                         results = await _drain_task(compute)
                         if callable(getattr(results, 'close', None)):
-                            await _drain_task(asyncio.create_task(run_blocking(sync_executor, results.close)))
+                            await _drain_task(
+                                asyncio.shield(asyncio.create_task(run_blocking(sync_executor, results.close)))
+                            )
                         raise
                 # CUDA is quiescent and the next lane may compute. Leases stay
                 # renewed until every write and fenced publication has settled.
@@ -550,7 +552,7 @@ class Pump:
             finally:
                 self._normal_flights -= 1
                 done.set()
-                await _drain_task(renew)
+                await _drain_task(asyncio.shield(renew))
 
     async def _release(self, leases: list[LeasedWork]) -> None:
         for lease in leases:
