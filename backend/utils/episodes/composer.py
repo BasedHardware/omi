@@ -38,6 +38,7 @@ from config.episodes import (
     COMPOSER_RETRY_MINUTES,
     COMPOSER_MAX_CHAPTERS,
     COMPOSER_MAX_TRANSCRIPT_CHARS,
+    COMPOSER_MIN_SECTION_SECONDS,
     COMPOSER_TIMEOUT_SECONDS,
     RECOVERY_NOTES_MIN_INTERVAL_SECONDS,
     COMPOSER_VERSION,
@@ -56,7 +57,6 @@ from utils.llm.usage_tracker import track_usage
 logger = logging.getLogger(__name__)
 
 _DONE = {'completed'}
-COMPOSER_MIN_SECTION_SECONDS = 60
 _TURN_SECONDS = 60
 _TURN_GAP_SECONDS = 15
 _WINDOW_SECONDS = 600

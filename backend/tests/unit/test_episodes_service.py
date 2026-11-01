@@ -17,6 +17,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.episodes import incremental, service
 from utils.episodes.moment import MomentFragment
 from utils.episodes.service import Collaborators, MomentInput
+from utils.episodes.moment_order import newest_moments, timeline_moments
 
 UID = 'uid-episodes'
 T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
@@ -2218,14 +2219,14 @@ def test_the_moment_cap_compares_stored_text_and_fresh_datetimes_by_time():
     stored = [_timed(minute % 60, f'c{minute}', stored=True) for minute in range(config.MAX_MOMENTS)]
     fresh = _timed(59, 'fresh')
     stored[-1]['started_at'] = datetime(2026, 11, 1, 11, 0, tzinfo=timezone.utc).isoformat()
-    kept = service._newest_moments([*stored, fresh])
+    kept = newest_moments([*stored, fresh])
     assert fresh in kept
     assert stored[-1] not in kept
 
 
 def test_a_stored_section_seconds_long_runs_to_the_next_on_its_recording():
     first, second = _timed(0, stored=True), _timed(5, stored=True)
-    read = service._timeline_moments([second, first])
+    read = timeline_moments([second, first])
     assert read[0]['started_at'] == first['started_at']
     assert read[0]['ended_at'] == second['started_at']
     assert read[1]['ended_at'] == second['ended_at']
