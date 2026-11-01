@@ -2073,6 +2073,8 @@ class ListenReceiver(ReplayFilterMixin):
         if admission is not None and getattr(self, 'cap_paused', False) and admission.allowed(self.host.stt_service):
             if not await self.initialize_stt():
                 return
+            if not getattr(self, 'cap_paused', False):
+                self.note_deferred_stream_opened()  # No-op unless a deferred open was waiting on the cap.
         if admission is not None and not admission.packet_allowed(
             buffer, self.host.stt_service, self.host.request.sample_rate
         ):
@@ -2800,10 +2802,10 @@ class ListenReceiver(ReplayFilterMixin):
             except Exception as error:
                 logger.warning('shutdown transport abort failed: %s', type(error).__name__)
         self._release_drained_sockets()
+        note_deferred_stream_closed(self)
 
     async def _teardown_body(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
         request = self.host.request
-        note_deferred_stream_closed(self)
         if self.recovery is not None:
             self.recovery.mark_client_leaving()
         # Teardown owns subsequent tail-send/transport symptoms. Mark the
@@ -2888,6 +2890,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not self.host.use_custom_stt:
             await self._flush_stt_buffer(buffer, force=True)
         await self._drain_stt_sockets()
+        note_deferred_stream_closed(self)  # After the final flush, which can itself open the stream.
         if self.recovery is not None and self._replay_tail_bytes:
             REPLAY_SKIPPED.labels(source=provider_family(self._serving_provider()), successor='unknown').inc(
                 self._replay_tail_bytes / (2 * request.sample_rate)
