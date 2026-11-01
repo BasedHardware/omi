@@ -122,11 +122,11 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  # 2026-10-29 retire100 (review r1): floor 1, aligning the chart with the
-  # live HPA (live has run min 1 since ~10-27). The intended retirement to 0
-  # is blocked: GKE documents HPA scale-to-zero from 1.37 and the compat
-  # fixture pins 1.35, so a 0 floor cannot be trusted to scale back up here.
-  # Revisit the 0 floor on a 1.37+ cluster. Rollback: 2 (the #23672 floor).
+  # retire100: chart floor 2 -> 1 matches the 2026-11-01 live HPA floor 1
+  # (the 10-30 read was 2); no incremental live saving at this snapshot.
+  # Keep a positive floor: scale-to-zero remains blocked by the cluster's
+  # 1.35 compatibility contract. Requalify on 1.37+ before considering 0.
+  # Source rollback: 2. Operational rollback: the floor captured at apply.
   minReplicas: 1
   maxReplicas: 10
   behavior:

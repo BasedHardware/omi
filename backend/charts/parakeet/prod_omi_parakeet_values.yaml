@@ -196,16 +196,15 @@ autoscaling:
   # P77r retry proposal: install the relative-refusal guard before activating.
   # Rollback: restore minReplicas=12 and workloadOnly=false together.
   workloadOnly: true
-  # 2026-10-29 retire100, sized on lead ruling 907116 / planscost c9a37d:
-  # ~31% of 7d conversations stay live after batch-100% (20% unsupported
-  # language -> Soniox, 7% sync-off, 3% multilingual) plus ~5-6% desktop-
-  # eligible. Parakeet carries the English residual (sync-off English +
-  # desktop English, ~12-17% of conversations): peak concurrency ~29
-  # sessions > one replica's 16-session window, so the floor is 2 (32
-  # sessions absorb the peak without racing scale-up; scaleUp is still
-  # 0s-stabilization +4/15s on burst). Cap 12 unchanged: not a floor,
-  # absorbs a Soniox-failover surge, and the guard's build_rollback
-  # contract expects maxReplicas == 12 (review r1). Rollback: 8/12.
+  # retire100 candidate, based on ruling 907116's English residual model.
+  # Qualify residual live demand and Soniox health after batch-100 before
+  # applying; 2026-11-01 live min/current were 4/8, not the old pinned 12/12.
+  # A floor of 2 is not a measured capacity guarantee. If batch overflow
+  # relies on PARAKEET_BATCH_PRESSURE_MIN_REPLICAS=3, qualify floor 3 instead.
+  # Keep max 12, targets, workload-only mode and scale policies unchanged:
+  # the guard's build_rollback asserts cap 12 and the 2-request/35% targets.
+  # Operational rollback: captured live floor (4 on 11-01); guard trip: 12
+  # with latency restored. The pre-change chart floor is 8.
   minReplicas: 2
   maxReplicas: 12
   behavior:
