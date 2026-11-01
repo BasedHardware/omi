@@ -99,7 +99,8 @@ test('actual desktop view locations are gated, services stay out', () => {
 
 test('resolved SHA mismatch cannot evaluate another concurrency group', async () => {
   const f = fixture(); await run({...f,headSha:'e'.repeat(40)});
-  assert.equal(f.statuses.length,0);
+  assert.ok(f.statuses.every(s => s.sha === 'e'.repeat(40)));
+  assert.equal(f.statuses.at(-1).state,'failure');
 });
 test('arbitrarily named SwiftUI file is gated by immutable contents', async () => {
   const f = fixture();
@@ -118,4 +119,13 @@ test('arbitrarily named AppKit panel requires approval', async () => {
   f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/Chrome/CustomChrome.swift'}],commits:[],total_commits:0}});
   f.github.rest.repos.getContent = async () => ({data:{encoding:'base64',size:60,content:Buffer.from('import AppKit; class CustomChrome: NSPanel {}').toString('base64')}});
   await run(f); assert.equal(f.statuses.at(-1).state,'failure');
+});
+
+test('moved trigger still reconciles revoked approval on remaining locked-head PR', async () => {
+  const f = fixture(); const locked = f.p.head.sha;
+  f.prs.push({...f.p,number:2,head:{sha:'e'.repeat(40)},user:{id:2}});
+  f.context.payload.pull_request.number=2; f.comments[2]=[];
+  await run({...f,headSha:locked});
+  assert.equal(f.statuses.at(-1).state,'failure');
+  assert.ok(f.statuses.every(s => s.sha === locked));
 });

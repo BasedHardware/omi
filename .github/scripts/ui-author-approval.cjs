@@ -81,8 +81,8 @@ async function evaluateHead({github, context, headSha}) {
   const repo = context.repo;
   const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
   const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
-  if (trigger.state !== 'open' || trigger.base.ref !== 'main' || (headSha && trigger.head.sha !== headSha)) return;
-  const sha = trigger.head.sha;
+  if (!headSha && (trigger.state !== 'open' || trigger.base.ref !== 'main')) return;
+  const sha = headSha || trigger.head.sha;
   const status = (state, description) => github.rest.repos.createCommitStatus({
     ...repo,sha,state,context:STATUS,description,
   });
@@ -94,8 +94,7 @@ async function evaluateHead({github, context, headSha}) {
       ...repo,state:'open',base:'main',per_page:100,
     })).filter(p => p.head.sha === sha);
     const prs = await sameHead();
-    if (!prs.some(p => p.number === trigger.number)) throw new Error('PR snapshot changed');
-    let allowed = true;
+    let allowed = prs.length > 0;
     for (const summary of prs) {
       const pr = (await github.rest.pulls.get({...repo,pull_number:summary.number})).data;
       if (pr.head.sha !== sha || pr.base.ref !== 'main') throw new Error('PR snapshot changed');
