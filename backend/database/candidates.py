@@ -905,6 +905,8 @@ def resolve_task_candidate(
                 if not task_snapshot.exists:
                     raise CandidateNotFoundError('Linked task not found')
                 existing_task = _snapshot_dict(task_snapshot)
+                if existing_task.get('deleted') is True:
+                    raise CandidateNotFoundError('Linked task not found')
                 if existing_task.get('account_generation', 0) not in {0, account_generation}:
                     raise CandidateGenerationMismatchError('task account generation mismatch')
                 if not existing_task.get('conversation_id'):
@@ -975,6 +977,8 @@ def resolve_task_candidate(
             if not task_snapshot.exists:
                 raise CandidateNotFoundError(f'task:{task_id}')
             current_task = _snapshot_dict(task_snapshot)
+            if current_task.get('deleted') is True:
+                raise CandidateNotFoundError(f'task:{task_id}')
             current_task_generation = int(current_task.get('account_generation', 0))
             if current_task_generation not in {0, account_generation}:
                 raise CandidateGenerationMismatchError('task account generation mismatch')
