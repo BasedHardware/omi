@@ -2218,11 +2218,36 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
                                 if customer_id and isinstance(customer_id, str):
                                     users_db.set_stripe_customer_id(uid, customer_id)
                                 users_db.update_user_subscription(uid, subscription.model_dump())
+                                try:
+                                    from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
+                                    if funded_processing_enabled(uid):
+                                        from utils.processing_backlog_worker import upgrade
+
+                                        upgrade(
+                                            uid,
+                                            f'reconcile-upgrade:{subscription.stripe_subscription_id}:{price_id}',
+                                            intent_at=time.time(),
+                                        )
+                                except Exception:
+                                    pass
                                 return subscription
 
         active = find_active_paid_subscription_for_user(uid)
         if active:
             users_db.update_user_subscription(uid, active.model_dump())
+            if is_paid_plan(active.plan):
+                try:
+                    from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
+                    if funded_processing_enabled(uid):
+                        from utils.processing_backlog_worker import upgrade
+
+                        upgrade(
+                            uid,
+                            f'reconcile-upgrade:{active.stripe_subscription_id}:{active.current_price_id}',
+                            intent_at=time.time(),
+                        )
+                except Exception:
+                    pass
             return active
 
     except Exception as e:

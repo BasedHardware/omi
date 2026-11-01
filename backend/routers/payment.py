@@ -866,12 +866,21 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # Same price as the stored plan. A previous attempt may have stored
         # this paid price and then failed the unlock fence. Replay the
         # unbounded unlock only when locked rows remain, then clear free-tier
-        # fair use before the 400. The response body stays the installed-client
-        # contract. A fence or data-plane error stays a 500 so the client retries.
+        # fair use and unblock waiting backlog recordings before the 400.
+        # The response body stays the installed-client contract. A fence or
+        # data-plane error stays a 500 so the client retries.
         if current_price_id == request.price_id:
             if has_recoverable_locked_content(uid):
                 _unlock_paid_content(uid)
             clear_fair_use_on_upgrade(uid)
+            if funded_processing_enabled(uid):
+                from utils.processing_backlog_worker import upgrade
+
+                upgrade(
+                    uid,
+                    f'same-plan-replay:{current_price_id}:{int(time.time())}',
+                    intent_at=time.time(),
+                )
             raise HTTPException(
                 status_code=400,
                 detail="You are already subscribed to this plan. Please select a different plan to upgrade or downgrade.",
