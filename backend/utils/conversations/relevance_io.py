@@ -10,6 +10,7 @@ import logging
 from datetime import timedelta
 from typing import Any, Callable, Optional
 
+from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS
 from database import conversations as conversations_db
 from models.conversation_continuity import DEFAULT_GAP_SECONDS
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -20,6 +21,7 @@ from utils.conversations.relevance import (
     decide_relevance,
     find_neighbor,
 )
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.conversations.wake_word import find_wake_word_matches
 from utils.integration_telemetry import emit_posthog_event
 from utils.metrics import record_conversation_relevance
@@ -34,14 +36,19 @@ def adjacent_conversation(
     uid: str, conversation: Any, conversation_id: Optional[str], *, require_complete: bool = False
 ) -> Optional[Neighbor]:
     """A kept conversation this one would have joined had capture not split it (fail-open)."""
-    started_at, finished_at = conversation.started_at, conversation.finished_at
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(conversation)
+    started_at, finished_at = (span.recorded_start, span.recorded_end) if span else (None, None)
     if started_at is None or finished_at is None:
         return None
     try:
         rows = conversations_db.get_conversations_finished_after(
             uid,
             status='completed',
-            finished_after=started_at - timedelta(seconds=DEFAULT_GAP_SECONDS),
+            # Legacy finished_at can lag the recording clock. Widen discovery;
+            # find_neighbor still proves adjacency from recorded spans below.
+            finished_after=started_at - timedelta(seconds=DEFAULT_GAP_SECONDS + CLOCK_SKEW_SECONDS),
             limit=NEIGHBOR_CANDIDATE_LIMIT,
             **({'include_hidden': True} if require_complete else {}),
         )
@@ -73,11 +80,14 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
 
     if not enabled():
         return None
-    from database import episodes
+    from database import episodes, episode_timeline
     from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 
     cid = conversation_id or getattr(conversation, 'id', None)
-    start, end = getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(conversation)
+    start, end = (span.recorded_start, span.recorded_end) if span else (None, None)
     if start is None or end is None:
         return None
     try:
@@ -92,18 +102,66 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
                 other = conversations_db.get_conversation_raw_snapshot(
                     uid,
                     other_id,
-                    field_paths=['started_at', 'finished_at', 'discarded', 'deleted', 'sync_merged_into'],
+                    field_paths=[
+                        'started_at',
+                        'finished_at',
+                        'discarded',
+                        'deleted',
+                        'sync_merged_into',
+                        'recorded_start',
+                        'recorded_end',
+                        'last_speech_at',
+                        'status',
+                        'capture_evidence',
+                        'relevance_decision',
+                        'sync_relevance_user_kept',
+                        'has_photos',
+                        'photos',
+                        'user_title',
+                        'starred',
+                        'folder_user_set',
+                    ],
                 )
-                if not other or any(other.get(key) for key in ('discarded', 'deleted', 'sync_merged_into')):
+                if (
+                    not other
+                    or is_relevance_discarded(other)
+                    or any(other.get(key) for key in ('deleted', 'sync_merged_into'))
+                ):
                     continue
                 # Check the other member's span, not an envelope this clip may
                 # already have extended. Attachment order cannot widen proof.
-                evidence = dict(episode, started_at=other.get('started_at'), last_activity_at=other.get('finished_at'))
+                other_span = conversation_span(other)
+                if other_span is None:
+                    continue
+                evidence = dict(episode, started_at=other_span.recorded_start, last_activity_at=other_span.recorded_end)
                 if choose_recorded_episode([evidence], start, end):
+                    from config.recorded_time import recorded_episodes_enabled
+                    from utils.episodes.client_gate import episode_work_enabled
+
+                    # Context remains useful outside episode admission, but a
+                    # keep receipt must not claim membership we cannot write.
+                    if not recorded_episodes_enabled() or not episode_work_enabled(uid):
+                        return 'occasion_context'
+                    if not cid:
+                        return 'occasion_lookup_unavailable'
+                    source = (
+                        conversation.get('source')
+                        if isinstance(conversation, dict)
+                        else getattr(conversation, 'source', None)
+                    )
+                    episode_timeline.attach_existing_recorded(
+                        uid,
+                        cid,
+                        getattr(source, 'value', source),
+                        start,
+                        end,
+                        episode_id=episode['id'],
+                        choose=choose_recorded_episode,
+                    )
                     return 'occasion_member'
         if adjacent_conversation(uid, conversation, cid, require_complete=True):
             return 'occasion_neighbor'
-    except Exception:
+    except Exception as error:
         from utils.observability.fallback import record_fallback
 
         record_fallback(
@@ -113,7 +171,7 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
             reason='lookup_unavailable',
             outcome='degraded',
         )
-        logger.warning('event=occasion_retention outcome=lookup_unavailable')
+        logger.warning('event=occasion_retention outcome=lookup_unavailable exception_type=%s', type(error).__name__)
         return 'occasion_lookup_unavailable'
     return None
 

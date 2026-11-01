@@ -94,6 +94,17 @@ def _all_rule_exports() -> dict[str, dict[str, dict]]:
     }
 
 
+def test_pusher_db_saturation_sums_task_kinds_and_tracks_configured_capacity():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-pusher-db-executor-saturated']
+        assert rule['for'] == '10m', export_name
+        assert rule['data'][0]['model']['expr'] == (
+            'sum without (task) (omi_executor_task_active{job="pusher-metrics",executor="db"}) '
+            '/ omi_executor_max_workers{job="pusher-metrics",executor="db"}'
+        ), export_name
+        assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [0.99], 'type': 'gt'}
+
+
 COUNTER_FN_ON_GAUGE_DEBT = {
     # Pre-existing rules that apply rate() to a stackdriver_ GAUGE. The exporter
     # publishes Cloud Monitoring DELTA metrics as gauges whose value is the count
@@ -1337,6 +1348,9 @@ def _declared_backend_metric_names() -> set[str]:
         if "/tests/" in text or "/testing/" in text or "/.venv/" in text:
             continue
         names |= set(_METRIC_DECLARATION.findall(path.read_text(encoding="utf-8", errors="ignore")))
+        if path == REPO / 'backend/utils/executors.py':
+            # This helper constructs/reuses registered Gauge objects with fixed names.
+            names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
     return names
 
 

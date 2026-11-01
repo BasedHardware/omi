@@ -14460,6 +14460,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get episodeMoments => 'Anlar';
 
   @override
+  String get episodeFollowUps => 'Takip adımları';
+
+  @override
+  String get episodeOpenTranscript => 'Transkripti aç';
+
+  @override
   String get episodeSoFar => 'Şu ana kadar';
 
   @override
@@ -14680,12 +14686,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get episodeOnThisPhone => 'Bu telefonda';
 
   @override
-  String get episodeOpenTranscript => 'Transkripti aç';
-
-  @override
-  String get liveCardTitle => 'Canlı';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Nihai transkript yaklaşık $duration geride';
   }
@@ -14700,7 +14700,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Güvenle kaydediyor';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Bu telefonda canlı';
+  String get livePreviewOnPhoneDivider => 'Az önce, bu telefonda';
 
   @override
   String get livePreviewTurnOnLiveText => 'Canlı metni aç';
@@ -14943,4 +14943,38 @@ class AppLocalizationsTr extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Bugün $amount tahsil edildi. Yenilenme: $date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Mesajı $app\'dan gönder. Omi\'ye ulaşır ulaşmaz bu ekran güncellenir.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Yeni bir kod al ve $app\'dan gönder.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Notlar yazılıyor…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Önce döküm tamamlanıyor. Bu sayfadan çıkabilirsiniz.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time saatine kadar · bitince tam notlar';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time saatine kadar yazıya döküldü';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration kaydedildi';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Konuşmacılar ve son döküm, yükleme sırasında burada görünür.';
 }

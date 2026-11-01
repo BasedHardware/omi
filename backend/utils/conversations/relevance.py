@@ -219,7 +219,10 @@ def find_neighbor(
     best: Optional[Neighbor] = None
     for row in rows:
         other_id = row.get('id')
-        other_start, other_end = row.get('started_at'), row.get('finished_at')
+        from utils.conversations.recorded_time import conversation_span
+
+        span = conversation_span(row)
+        other_start, other_end = (span.recorded_start, span.recorded_end) if span else (None, None)
         if not other_id or other_id == conversation_id or row.get('discarded') or row.get('deleted'):
             continue
         if not isinstance(other_start, datetime) or not isinstance(other_end, datetime):

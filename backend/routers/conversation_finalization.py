@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from config.listen_finalization import durable_attempt_cap_enabled as _durable_attempt_cap_enabled
 from config.summary_guarantee import enabled as summary_deadline_enabled
 
 from database import conversation_finalization_jobs as jobs_db
@@ -44,15 +44,6 @@ from utils.workers.retry import retry_response
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _durable_attempt_cap_enabled() -> bool:
-    return os.getenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true').strip().lower() in {
-        '1',
-        'true',
-        'yes',
-        'on',
-    }
 
 
 def _parse_task_payload(payload: Any) -> tuple[str, int] | None:

@@ -55,7 +55,12 @@ def test_segment_models_use_transcript_even_with_integration_provenance(
 ):
     now = datetime(2026, 10, 1, tzinfo=timezone.utc)
     segment = stack.segments.TranscriptSegment(
-        id='segment-1', text='Synthetic transcript', speaker='SPEAKER_00', is_user=False, start=0, end=10
+        id='segment-1',
+        text='Synthetic transcript with enough workshop planning details to reach the real notes model',
+        speaker='SPEAKER_00',
+        is_user=False,
+        start=0,
+        end=10,
     )
     fields = dict(started_at=now, finished_at=now, source=source, transcript_segments=[segment])
     if model_name == 'Conversation':

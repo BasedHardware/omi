@@ -25545,6 +25545,18 @@ abstract class AppLocalizations {
   /// **'Moments'**
   String get episodeMoments;
 
+  /// Section title for the next steps written into a finished episode summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow-ups'**
+  String get episodeFollowUps;
+
+  /// Link from the Summary live card to the Transcript tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Open transcript'**
+  String get episodeOpenTranscript;
+
   /// Title of the running notes card on a live episode.
   ///
   /// In en, this message translates to:
@@ -25899,18 +25911,6 @@ abstract class AppLocalizations {
   /// **'On this phone'**
   String get episodeOnThisPhone;
 
-  /// Link from the Summary live card to the Transcript tab.
-  ///
-  /// In en, this message translates to:
-  /// **'Open transcript'**
-  String get episodeOpenTranscript;
-
-  /// Title of the live preview card on the Summary tab.
-  ///
-  /// In en, this message translates to:
-  /// **'Live'**
-  String get liveCardTitle;
-
   /// Quiet line: how far the final transcript lags the live preview.
   ///
   /// In en, this message translates to:
@@ -25938,7 +25938,7 @@ abstract class AppLocalizations {
   /// Divider between the final transcript and the on-device preview lines.
   ///
   /// In en, this message translates to:
-  /// **'Live on this phone'**
+  /// **'Just now, on this phone'**
   String get livePreviewOnPhoneDivider;
 
   /// Link to the speech settings where the platform can deep-link to them.
@@ -26276,6 +26276,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{amount} charged today. Renews {date}.'**
   String yearlySwitchDoneBody(String amount, String date);
+
+  /// Waiting step after opening a chat app with the link code. app is a brand name such as WhatsApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the message in {app}. This screen updates as soon as Omi gets it.'**
+  String chatAppsWaitingMessageIn(String app);
+
+  /// The link code expired. app is a brand name such as WhatsApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a new code and send it from {app}.'**
+  String chatAppsCodeExpiredMessageIn(String app);
+
+  /// The processing row and page while an episode's notes are written.
+  ///
+  /// In en, this message translates to:
+  /// **'Writing notes…'**
+  String get episodeWritingNotes;
+
+  /// Under Writing notes on the processing page.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing the transcript first. You can leave this page.'**
+  String get episodeWritingNotesDetail;
+
+  /// How far the running notes reach on a live episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers up to {time} · full notes when it wraps up'**
+  String episodeCoversUpTo(Object time);
+
+  /// Rule where the final transcript ends on a live episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribed up to {time}'**
+  String liveTranscribedUpTo(Object time);
+
+  /// Card past the final transcript: audio saved and not yet transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} saved'**
+  String liveAudioSaved(Object duration);
+
+  /// Under the saved-audio card's heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Speakers and the final transcript fill in here as it uploads.'**
+  String get liveAudioSavedDetail;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

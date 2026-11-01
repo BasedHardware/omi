@@ -14491,6 +14491,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get episodeMoments => 'Momenty';
 
   @override
+  String get episodeFollowUps => 'Dalsze kroki';
+
+  @override
+  String get episodeOpenTranscript => 'Otwórz transkrypcję';
+
+  @override
   String get episodeSoFar => 'Na razie';
 
   @override
@@ -14711,12 +14717,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get episodeOnThisPhone => 'Na tym telefonie';
 
   @override
-  String get episodeOpenTranscript => 'Otwórz transkrypcję';
-
-  @override
-  String get liveCardTitle => 'Na żywo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Ostateczna transkrypcja z opóźnieniem około $duration';
   }
@@ -14731,7 +14731,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Bezpiecznie nagrywa';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Na żywo na tym telefonie';
+  String get livePreviewOnPhoneDivider => 'Przed chwilą, na tym telefonie';
 
   @override
   String get livePreviewTurnOnLiveText => 'Włącz tekst na żywo';
@@ -14973,4 +14973,38 @@ class AppLocalizationsPl extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Dziś pobrano $amount. Odnowienie $date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Wyślij wiadomość w aplikacji $app. Ten ekran odświeży się, gdy tylko Omi ją odbierze.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Pobierz nowy kod i wyślij go z aplikacji $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Piszemy notatki…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Najpierw kończymy transkrypcję. Możesz opuścić tę stronę.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Obejmuje do $time · pełne notatki na końcu';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkrypcja do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Zapisano $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania.';
 }

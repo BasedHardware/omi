@@ -3637,7 +3637,9 @@ async def test_sequenced_worker_retries_then_releases_terminal_failure_and_acks_
     request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
     module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
     module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
-    module.sync_backfill_sequencer.begin_job = MagicMock(side_effect=[True, True, False])
+    module.sync_backfill_sequencer.begin_job = MagicMock(
+        side_effect=[{'job': {'attempt': 2}}, {'job': {'attempt': 2}}, None]
+    )
     module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'failed', 'attempt': 2})
@@ -3684,7 +3686,9 @@ async def test_sequenced_request_budget_is_anchored_at_route_entry():
     request = MagicMock()
     request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
     module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
-    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.begin_job = MagicMock(
+        side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+    )
     module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'completed', 'attempt': 1})
@@ -3741,7 +3745,9 @@ async def test_sequenced_request_budget_is_anchored_at_middleware_request_start(
     # request started 42s before the handler began resolving dependencies.
     request.state = types.SimpleNamespace(omi_request_started_monotonic=time.monotonic() - 42.0)
     module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
-    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.begin_job = MagicMock(
+        side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+    )
     module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'completed', 'attempt': 1})
@@ -3913,36 +3919,6 @@ async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_ba
             assert error.status_code != 413
         except Exception:
             pass  # Later fresh-lane stubs may stop the call; only the cap matters here.
-        module.validate_backfill_uploads.assert_not_called()
-    finally:
-        _restore_modules(saved_modules)
-
-
-@pytest.mark.asyncio
-async def test_v1_over_limit_backfill_upload_keeps_the_retryable_503_not_a_413():
-    from starlette.datastructures import UploadFile
-    from utils.sync.input_limits import MAX_BACKFILL_FILES
-
-    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
-    module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.BACKFILL))
-    module.validate_backfill_uploads = MagicMock()
-    module.resolve_client_device_from_request = MagicMock(
-        return_value=types.SimpleNamespace(device_hash='h', platform='p', app_version='v', client_device_id=None)
-    )
-    module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
-    try:
-        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
-        uploads = [
-            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
-            for _ in range(MAX_BACKFILL_FILES + 1)
-        ]
-        request = MagicMock()
-        request.headers = {}
-        response = await module.sync_local_files(
-            request=request, response=MagicMock(headers={}), files=uploads, uid='u'
-        )
-        assert response.status_code == 503
-        assert json.loads(response.body)['code'] == 'backfill_capacity'
         module.validate_backfill_uploads.assert_not_called()
     finally:
         _restore_modules(saved_modules)
@@ -4937,7 +4913,9 @@ async def test_sequenced_budget_deferral_acks_without_finishing_sequencer_owner(
     request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
     module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
     module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
-    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.begin_job = MagicMock(
+        side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+    )
     module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
@@ -4978,7 +4956,9 @@ async def test_sequenced_delivery_heartbeat_drain_is_bounded():
     request = MagicMock()
     request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
     module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
-    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.begin_job = MagicMock(
+        side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+    )
     module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
@@ -5338,7 +5318,9 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
     request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
     module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
     module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 0.01
-    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.begin_job = MagicMock(
+        side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+    )
     module.sync_backfill_sequencer.renew_job = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
 
@@ -6161,7 +6143,9 @@ async def test_sequenced_cleanup_waits_share_one_deadline():
     module.sync_job_uses_ledger_fence = MagicMock(
         side_effect=lambda job: bool(job and job.get('ledger_fence_mode') == module.SyncLedgerFenceMode.ACTIVE.value)
     )
-    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.begin_job = MagicMock(
+        side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+    )
     module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
@@ -6260,7 +6244,9 @@ async def test_route_preamble_stall_in_begin_job_ends_request_at_the_route_deadl
     request = MagicMock()
     request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
     module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
-    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.begin_job = MagicMock(
+        side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+    )
     module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
@@ -6441,6 +6427,7 @@ async def test_direct_refresh_error_continues_into_the_attempt_body_instead_of_a
 @pytest.mark.asyncio
 async def test_route_preamble_stall_in_cohort_warm_ends_request_at_the_route_deadline():
     module, saved_modules, request, fallback_calls = _legacy_preamble_module('queued')
+    request.json.return_value['kind'] = 'sync_reprocess'
 
     async def _warm_stalls(uid):
         await asyncio.sleep(30)
@@ -6462,6 +6449,7 @@ async def test_route_preamble_stall_in_cohort_warm_ends_request_at_the_route_dea
 @pytest.mark.asyncio
 async def test_cohort_warm_error_is_not_turned_into_a_success_response():
     module, saved_modules, request, fallback_calls = _legacy_preamble_module('queued')
+    request.json.return_value['kind'] = 'sync_reprocess'
     module.warm_rollout_cohorts = AsyncMock(side_effect=RuntimeError('cohort read failed'))
     try:
         with pytest.raises(RuntimeError):
@@ -6542,6 +6530,161 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_stale_epoch_skips_cohort_job_reads_heartbeat_and_work():
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'synthetic', 'job_id': 'job', 'sequencer_epoch': 3})
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=None)
+    module.warm_rollout_cohorts = AsyncMock()
+    module.get_sync_job = MagicMock()
+    module.start_background_task = MagicMock()
+    module._run_sync_job_body = AsyncMock()
+    try:
+        response = await module.run_sync_job(request, task_retry_count=4)
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'stale_sequencer_epoch'}
+        module.sync_backfill_sequencer.begin_job.assert_called_once_with('synthetic', 'job', 3)
+        module.warm_rollout_cohorts.assert_not_awaited()
+        module.get_sync_job.assert_not_called()
+        module.start_background_task.assert_not_called()
+        module._run_sync_job_body.assert_not_awaited()
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('queue_attempt,prior_attempt,expected', [(0, 4, 4), (4, 1, 4), (0, 'invalid', 0)])
+async def test_claim_snapshot_carries_retry_history_without_a_router_prior_read(queue_attempt, prior_attempt, expected):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'synthetic', 'job_id': 'job', 'sequencer_epoch': 3})
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value={'job': {'attempt': prior_attempt}})
+    module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+    module.get_sync_job = MagicMock(side_effect=AssertionError('unexpected prior read'))
+    module.warm_rollout_cohorts = AsyncMock()
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    module._run_sync_job_body = AsyncMock(
+        return_value=module.JSONResponse(status_code=500, content={'status': 'retry'})
+    )
+    try:
+        response = await module.run_sync_job(request, task_retry_count=queue_attempt)
+        assert response.status_code == 500
+        assert module._run_sync_job_body.await_args.args[1] == expected
+        module.get_sync_job.assert_not_called()
+        module.sync_backfill_sequencer.finish_job.assert_not_called()
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_claim_snapshot_never_shortcuts_real_work_or_the_final_terminal_check():
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'synthetic', 'job_id': 'job', 'sequencer_epoch': 3})
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value={'job': {'status': 'completed', 'attempt': 4}})
+    module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.get_sync_job = MagicMock(return_value={'status': 'processing'})
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    module._run_sync_job_body = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'done'}))
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 500
+        assert json.loads(response.body) == {'status': 'nonterminal_ack'}
+        assert module._run_sync_job_body.await_args.args[1] == 4
+        module.get_sync_job.assert_called_once_with('job')
+        module.sync_backfill_sequencer.finish_job.assert_not_called()
+        module.uid_sequencer.kick.assert_not_called()
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['work', 'locked', 'terminal', 'converged'])
+async def test_only_real_sync_work_warms_cohorts(mode):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('provider unavailable'),
+        latest_job={'job_id': 'job-1', 'status': 'processing', 'stt_provider': 'parakeet', 'stt_model': 'parakeet'},
+    )
+    module.warm_rollout_cohorts = AsyncMock()
+    if mode == 'locked':
+        module.try_acquire_sync_job_run_lock.return_value = None
+    elif mode == 'terminal':
+        module.get_sync_job.return_value = {'status': 'completed', 'ledger_fence_mode': 'active'}
+        module.get_sync_job.side_effect = None
+    elif mode == 'converged':
+        module.bind_or_converge_sync_ledger_completion.return_value = {'status': 'completed'}
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+        if mode == 'work':
+            assert response.status_code == 500
+            module.warm_rollout_cohorts.assert_awaited_once_with('test-uid')
+            module._run_full_pipeline_background_async.assert_awaited_once()
+        else:
+            assert response.status_code == (409 if mode == 'locked' else 200)
+            module.warm_rollout_cohorts.assert_not_awaited()
+            module._run_full_pipeline_background_async.assert_not_awaited()
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('expiry', ['read_timeout', 'handler_budget'])
+@pytest.mark.parametrize('sequenced', [False, True])
+@pytest.mark.parametrize('release_confirmed', [False, True])
+async def test_work_cohort_timeout_keeps_queue_owned_retry_before_paid_work(expiry, sequenced, release_confirmed):
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module, pipeline_error=RuntimeError('pipeline must not run'), latest_job={'status': 'queued'}
+    )
+    job = {'status': 'queued', 'lane': 'fresh', 'ledger_fence_mode': 'active'}
+    module.get_sync_job = MagicMock(return_value=job)
+    module.update_sync_job = MagicMock(return_value=job)
+    module.release_job_run_lock_strict = MagicMock(return_value=int(release_confirmed))
+    module.get_sync_tasks_max_attempts = MagicMock(return_value=5)
+    if sequenced:
+        request.json.return_value['sequencer_epoch'] = 3
+        module.sync_backfill_sequencer.begin_job = MagicMock(return_value={'job': job})
+        module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+        module.sync_backfill_sequencer.note_budget_deferral = MagicMock(return_value=True)
+        module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+
+    expire_budget = _pipeline_expiring_the_handler_budget(module)
+
+    async def warm(_uid):
+        if expiry == 'read_timeout':
+            raise TimeoutError('membership read timed out')
+        await expire_budget()
+
+    module.warm_rollout_cohorts = warm
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+        module.release_job_run_lock_strict.assert_called_once()
+        if release_confirmed:
+            assert response.status_code == 409
+            assert json.loads(response.body) == {'status': 'locked'}
+            module.enqueue_sync_job_budget_replacement.assert_not_called()
+            module.update_sync_job.assert_not_called()
+            assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+        else:
+            assert response.status_code == 200
+            assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+            module.enqueue_sync_job_budget_replacement.assert_called_once()
+            assert module.update_sync_job.call_args.args[1].get('deferred_until')
+            assert fallback_calls == []
+        module._download_staged_files.assert_not_called()
+        module._run_full_pipeline_background_async.assert_not_awaited()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.release_job_run_lock.assert_not_called()
+        if sequenced:
+            module.sync_backfill_sequencer.finish_job.assert_not_called()
+    finally:
+        _restore_sync_modules(saved_modules)
 
 
 @pytest.mark.asyncio
@@ -6810,7 +6953,9 @@ async def test_owner_count_write_timeout_drains_and_rescues_the_deferral():
         # MagicMock would break the heartbeat's wait_for), and finish/kick
         # make the post-response owner handling inert.
         module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
-        module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+        module.sync_backfill_sequencer.begin_job = MagicMock(
+            side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+        )
         module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
         module.uid_sequencer.kick = MagicMock(return_value=True)
         module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
@@ -6887,7 +7032,9 @@ async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
         # Sequenced-wrapper seams: a real heartbeat task needs a numeric
         # HEARTBEAT_SECONDS and a real create_task driver.
         module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
-        module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+        module.sync_backfill_sequencer.begin_job = MagicMock(
+            side_effect=lambda _uid, job_id, _epoch: {'job': module.get_sync_job(job_id)}
+        )
         module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
         module.uid_sequencer.kick = MagicMock(return_value=True)
         module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)

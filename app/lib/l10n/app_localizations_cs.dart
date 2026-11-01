@@ -14446,6 +14446,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get episodeMoments => 'Okamžiky';
 
   @override
+  String get episodeFollowUps => 'Další kroky';
+
+  @override
+  String get episodeOpenTranscript => 'Otevřít přepis';
+
+  @override
   String get episodeSoFar => 'Zatím';
 
   @override
@@ -14666,12 +14672,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get episodeOnThisPhone => 'V tomto telefonu';
 
   @override
-  String get episodeOpenTranscript => 'Otevřít přepis';
-
-  @override
-  String get liveCardTitle => 'Živě';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Konečný přepis má zpoždění přibližně $duration';
   }
@@ -14686,7 +14686,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Bezpečně nahrává';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Živě v tomto telefonu';
+  String get livePreviewOnPhoneDivider => 'Právě teď, na tomto telefonu';
 
   @override
   String get livePreviewTurnOnLiveText => 'Zapnout živý text';
@@ -14928,4 +14928,38 @@ class AppLocalizationsCs extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Dnes účtováno $amount. Obnovení $date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošli zprávu v aplikaci $app. Tato obrazovka se aktualizuje, jakmile ji Omi dostane.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Získej nový kód a pošli ho z aplikace $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Píšeme poznámky…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Nejprve dokončujeme přepis. Tuto stránku můžete opustit.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Pokrývá do $time · úplné poznámky po dokončení';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Přepsáno do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Uloženo $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Mluvčí a konečný přepis se zde objeví během nahrávání.';
 }

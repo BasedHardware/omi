@@ -15,6 +15,7 @@ fullnameOverride: "prod-omi-cloud-run-sync-metrics-exporter"
 #   omi_journey_*, omi_client_journey_* journey SLO alerts, Core Features
 #   omi_owner_recognition_conversations owner-recognition alerts (surface="sync")
 #   omi_conversation_duration_seconds,
+#   omi_conversation_relevance_decision_total Core Features hourly discard share by service/trigger
 #   omi_conversation_summary_vector_upserts  Core Features
 #   omi_firestore_documents_per_operation    Firestore read-amplification alert
 #   omi_capture_finalization_*          resilience alert, Core Features
@@ -45,6 +46,7 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_client_journey_'
       - 'prometheus.googleapis.com/omi_owner_recognition_conversations_total/'
       - 'prometheus.googleapis.com/omi_conversation_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_conversation_relevance_decision_total/'
       - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'
       - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
       - 'prometheus.googleapis.com/omi_capture_finalization_'

@@ -1,10 +1,11 @@
-"""Durable live/desktop admission, drained on the existing CPU reconciliation loop.
+"""Durable live/desktop admission, drained independently of reconciliation.
 
 Capture reserves its route in the existing conversation create. Finalization
 registers a privacy-fenced pending job before closing its own durable job. No
 Firestore reads are added to audio frames, provisional segments or pusher flush.
 """
 
+import asyncio
 from dataclasses import replace
 from collections.abc import Generator
 from typing import Any
@@ -15,6 +16,8 @@ import os
 import time
 
 from config.policy import resolve_batch_policy
+from config.record_audio import require_record_audio_barrier, record_identity
+from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -27,6 +30,9 @@ from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
+from utils.batch_pipeline.record_barrier import validate_record_tail
+from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
+from config.record_seal_rules import overlap_trim_enabled
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
@@ -36,11 +42,8 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
-
-
-def record_identity(uid: str, conversation_id: str) -> tuple[str, str]:
-    content = hashlib.sha256(f'record-v1:{uid}:{conversation_id}'.encode()).hexdigest()
-    return content, hashlib.sha256(f'{content}:0'.encode()).hexdigest()
+# Leave headroom in the shared sync (16), DB (32) and storage (128) pools.
+RECORD_DRAIN_CONCURRENCY = 4
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -62,7 +65,9 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
     return OWNER
 
 
-def register_recording(uid: str, conversation: dict, *, store=None, now=None) -> bool:
+def register_recording(
+    uid: str, conversation: dict, *, store=None, now=None, transaction=None, server_flags=None
+) -> bool:
     if conversation.get('record_lane_owner') != OWNER:
         return False
     if server_batch_owned(conversation) and not server_batch_has_audio(conversation):
@@ -71,13 +76,17 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
         return False
     if not conversation.get('private_cloud_sync_enabled'):
         return False
-    store = store or shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
+    if transaction is None:
+        store = store or shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
     now = time.time() if now is None else now
     content, segment = record_identity(uid, conversation['id'])
     # The immutable native owner is main's earlier admission receipt. A later
     # cohort rollback cannot cancel it before finalization registers the unit.
     policy = replace(
-        resolve_batch_policy(uid), batch_enabled=True, live_admission_enabled=True, live_record_enabled=True
+        resolve_batch_policy(uid, flags=server_flags) if server_flags is not None else resolve_batch_policy(uid),
+        batch_enabled=True,
+        live_admission_enabled=True,
+        live_record_enabled=True,
     )
     snapshot = {
         key: conversation.get(key)
@@ -122,44 +131,68 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
         )
         return True
 
+    # Operator seal backfill joins registration to the row's existing transaction.
+    # The caller owns flushing buffered writes after all privacy reads complete.
+    if transaction is not None:
+        return commit(transaction)
+    assert store is not None
     return store.run(commit)
 
 
-def _units(
-    uid, conversation_id, chunks, client, key
+def retained_record_units(
+    uid, conversation_id, chunks, client, key, *, diagnostics=None, partial=False
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
-    """Bounded one-hour units, preserving capture clocks and verified overlaps."""
+    """Bounded one-hour units; earlier retained objects own overlapping frames."""
+    trim_divergent = overlap_trim_enabled()
+    unit_frames = (UNIT_SECONDS if partial else 3600) * 16000
+    reference_limit = UNIT_REFERENCES if partial else MAX_REFERENCES
     allowed = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
     references, start, end, previous_pcm = [], None, None, b''
+    capture_origin = None
     for chunk in chunks:
         ref = {
             'path': chunk['path'],
             'bucket': chunk.get('bucket', private_cloud_sync_bucket),
             'generation': int(chunk['generation']),
-            'sample_rate': int((chunk.get('span') or {}).get('sample_rate', 16000)),
         }
-        # Metadata is tied to the same immutable object version used by readers.
-        blob = client.bucket(ref['bucket']).blob(ref['path'], generation=ref['generation'])
-        blob.reload(if_generation_match=ref['generation'], timeout=30, retry=None)
-        ref['metadata'] = blob.metadata or {}
-        if not chunk.get('span'):
-            ref['sample_rate'] = int(ref['metadata'].get('record_sample_rate', 16000))
-        pcm = read_reference(client, ref, uid, conversation_id, allowed, key)
+        if chunk.get('span'):
+            ref['sample_rate'] = int(chunk['span'].get('sample_rate', 16000))
+        pcm = read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
         if not pcm or len(pcm) % 2:
             raise ValueError('retained source has no aligned audio')
+        comparison_pcm = pcm
         source_digest = hashlib.sha256(pcm).hexdigest()
         source_skip = 0
         capture = float(chunk['timestamp'])
-        if end is not None and capture < end - 1 / 16000:
-            # Reject an ambiguous overlap rather than process it twice or drop it.
-            # Raw and PCM representations must prove the same overlapping bytes.
+        if capture_origin is None:
+            capture_origin = capture
+        # Quantize once to the capture's sample grid. Independent rounding of
+        # overlap lengths and manifest positions disagrees at half-frame ties.
+        capture = capture_origin + round((capture - capture_origin) * 16000) / 16000
+        # Resolve even a one-frame overlap: the manifest reader forbids
+        # overlapping slices, so the proof cannot let that frame through twice.
+        if end is not None and round((end - capture) * 16000) > 0:
             overlap = round((end - capture) * 16000) * 2
-            if overlap > len(previous_pcm) or pcm[:overlap] != previous_pcm[-overlap:]:
+            if overlap > len(previous_pcm):
                 raise ValueError('conflicting retained audio overlap')
+            # A contained object compares only the frames it actually carries.
+            prior_start = len(previous_pcm) - overlap
+            divergent = pcm[:overlap] != previous_pcm[prior_start : prior_start + min(overlap, len(pcm))]
+            if divergent and not trim_divergent:
+                raise ValueError('conflicting retained audio overlap')
+            # Preserve the old refusal for short contained objects when off.
+            if not trim_divergent and len(pcm) < overlap:
+                raise ValueError('conflicting retained audio overlap')
+            if divergent and diagnostics is not None:
+                diagnostics['trimmed_divergent_overlaps'] = diagnostics.get('trimmed_divergent_overlaps', 0) + 1
             source_skip = overlap // 2
             pcm, capture = pcm[overlap:], end
             if not pcm:
                 continue
+            # The next overlap may reach into this object's discarded prefix.
+            # Keep its full extent with earlier accepted bytes in that prefix,
+            # so both the size fence and divergence count use the accepted union.
+            comparison_pcm = previous_pcm[-overlap:] + pcm if trim_divergent else pcm
         if start is not None and end is not None and capture - end > 30:
             yield start, end - start, references
             references, start = [], None
@@ -168,13 +201,13 @@ def _units(
             if start is None:
                 start = capture + offset / 32000
             position = round((capture + offset / 32000 - start) * 16000)
-            if position >= 3600 * 16000:
+            if position >= unit_frames or partial and len(references) >= reference_limit:
                 if end is None:
                     raise ValueError('unit has no capture end')
                 yield start, end - start, references
                 references, start = [], None
                 continue
-            frames = min(len(pcm[offset:]) // 2, 3600 * 16000 - position)
+            frames = min((len(pcm) - offset) // 2, unit_frames - position)
             references.append(
                 {
                     **ref,
@@ -188,15 +221,18 @@ def _units(
                 raise ValueError('retained capture reference budget exceeded')
             offset += frames * 2
             end = capture + offset / 32000
-            if position + frames == 3600 * 16000:
+            if position + frames == unit_frames:
                 yield start, end - start, references
                 references, start = [], None
-        previous_pcm = pcm
+        previous_pcm = comparison_pcm
     if references and start is not None and end is not None:
         yield start, end - start, references
 
 
 async def admit_recording(store, pending, *, now=None):
+    from config.batch_pipeline import require_record_protocol_ready
+
+    require_record_protocol_ready()
     now = time.time() if now is None else now
     uid, conversation_id = pending['owner_id'], pending['conversation_id']
     row = pending['record_snapshot']
@@ -214,11 +250,12 @@ async def admit_recording(store, pending, *, now=None):
         )
 
     current = await run_blocking(db_executor, read_current)
-    if current.get('status') != 'completed' or not current.get('record_audio_closed'):
-        raise ValueError('capture upload/finalization barrier not closed')
+    record_barrier = require_record_audio_barrier(current)
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
+    if current.get('record_audio_partial'):
+        return await drain_partial(store, pending, current, client, artifacts, retained_record_units, now=now)
     # A failed raw-archive listing raises (drain retries in 60 s) rather than
     # admitting a recording whose later packs are silently missing.
     chunks = await run_blocking(
@@ -237,7 +274,7 @@ async def admit_recording(store, pending, *, now=None):
         privacy_generation=pending['privacy_generation'],
     )
     protection = await run_blocking(db_executor, artifacts.authorize, seed)
-    iterator = _units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
+    iterator = retained_record_units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
     units = []
     try:
         while unit := await run_blocking(sync_executor, next, iterator, None):
@@ -246,13 +283,10 @@ async def admit_recording(store, pending, *, now=None):
                 raise ValueError('retained capture unit budget exceeded')
     finally:
         iterator.close()
-    if not 1 <= len(units) <= 128:
-        raise ValueError('retained capture unit budget exceeded')
     # Never claim a successful record whose final recognized speech is missing
     # from the durable upload. The pending obligation has no TTL.
-    finish = row.get('finished_at')
-    if finish is not None and units[-1][0] + units[-1][1] + 0.1 < finish.timestamp():
-        raise ValueError('retained capture tail not durable yet')
+    validate_record_tail(units, row.get('finished_at'))
+    validate_record_tail(units, current.get('finished_at'))
     items = [
         WorkItem(
             hashlib.sha256(f'{content}:{i}'.encode()).hexdigest(),
@@ -324,6 +358,7 @@ async def admit_recording(store, pending, *, now=None):
         namespace=store.namespace,
         policy=policy,
         require_artifacts=True,
+        record_barrier=record_barrier,
         intake={
             'owner_id': uid,
             'owner_key': owner_key(uid),
@@ -340,23 +375,59 @@ async def admit_recording(store, pending, *, now=None):
 
 
 async def drain_recordings(store):
-    segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), 10)
-    for segment in segments:
+    started = time.monotonic()
+    segments, partial_count = [], 0
+
+    async def drain_one(segment):
+        nonlocal partial_count
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
-            continue
+            return
+        partial_count += bool(pending.get('partial_coordinator'))
         try:
             await admit_recording(store, pending)
-        except BatchPrivacyBlocked:
+            if not pending.get('partial_coordinator'):
+                return
+        except BatchPrivacyBlocked as error:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
-            continue
+            if pending.get('partial_coordinator'):
+                record_partial_failure(error, privacy=True, run=pending.get('partial_run'))
+            return
         except Exception as error:
+            if pending.get('partial_coordinator'):
+                record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
 
-            def defer(tx):
-                latest = tx.get('jobs', segment)
-                if latest.get('state') == 'record_pending':
-                    latest['available_at'] = time.time() + 60
-                    tx.put('jobs', segment, latest)
+        def defer(tx):
+            latest = tx.get('jobs', segment)
+            if latest.get('state') == 'record_pending':
+                delay = INVENTORY_POLL_SECONDS if (latest.get('partial_run') or {}).get('complete') else 60
+                latest['available_at'] = max(latest.get('available_at', 0), time.time() + delay)
+                tx.put('jobs', segment, latest)
 
-            await run_blocking(db_executor, store.run, defer)
+        await run_blocking(db_executor, store.run, defer)
+
+    async def worker():
+        # next() has no await: each selected row belongs to one local worker.
+        for segment in remaining:
+            await drain_one(segment)
+
+    try:
+        segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), 10)
+        remaining = iter(segments)
+        # Join every worker even on failure; a retry must not overlap unfinished
+        # work from this pass. Across replicas the existing intake/partial CAS
+        # still decides admission; selection itself never claims or expires rows.
+        results = await asyncio.gather(
+            *(worker() for _ in range(min(RECORD_DRAIN_CONCURRENCY, len(segments)))), return_exceptions=True
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+    finally:
+        logger.info(
+            'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',
+            len(segments),
+            partial_count,
+            time.monotonic() - started,
+        )

@@ -31,7 +31,7 @@ The first lane is:
 omi:auto:chat-structured
 ```
 
-For v1, this is the only supported OpenAI-compatible chat-completions interface. It is structured and non-streaming. The broader streaming product chat path remains `/v2/messages`, backed by the retrieval and agentic chat graph documented in [Chat System Architecture](/doc/developer/backend/chat_system).
+For v1, this is the only supported OpenAI-compatible chat-completions interface. It is structured and non-streaming. The broader streaming product chat path remains `/v2/messages`, backed by the retrieval and agentic chat graph documented in [Chat System Architecture](./chat-system.md).
 
 `chat-structured` is for non-streaming structured extraction and classification work, such as memory extraction, chat extraction helpers, conversation post-processing structure, and schema-bound feature decisions. It is the safest first lane because it has clear success checks: JSON/schema validity, parser repair rate, extraction precision/recall, latency, and cost.
 

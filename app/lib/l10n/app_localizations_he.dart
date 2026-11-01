@@ -14343,6 +14343,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get episodeMoments => 'רגעים';
 
   @override
+  String get episodeFollowUps => 'המשך טיפול';
+
+  @override
+  String get episodeOpenTranscript => 'פתח תמליל';
+
+  @override
   String get episodeSoFar => 'עד כה';
 
   @override
@@ -14562,12 +14568,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get episodeOnThisPhone => 'בטלפון הזה';
 
   @override
-  String get episodeOpenTranscript => 'פתח תמליל';
-
-  @override
-  String get liveCardTitle => 'בשידור חי';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'התמליל הסופי בפיגור של כ-$duration';
   }
@@ -14582,7 +14582,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'מקליט בבטחה';
 
   @override
-  String get livePreviewOnPhoneDivider => 'בשידור חי בטלפון הזה';
+  String get livePreviewOnPhoneDivider => 'ממש עכשיו, בטלפון הזה';
 
   @override
   String get livePreviewTurnOnLiveText => 'הפעל טקסט חי';
@@ -14820,4 +14820,38 @@ class AppLocalizationsHe extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'חויבו היום $amount. מתחדש ב-$date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'שלחו את ההודעה באפליקציית $app. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'קבלו קוד חדש ושלחו אותו מ$app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'כותבים הערות…';
+
+  @override
+  String get episodeWritingNotesDetail => 'קודם מסיימים את התמלול. אפשר לעזוב את הדף.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'מכסה עד $time · הערות מלאות בסיום';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'תומלל עד $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration נשמרו';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.';
 }

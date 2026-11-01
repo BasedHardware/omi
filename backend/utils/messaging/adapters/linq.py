@@ -41,7 +41,7 @@ def _message_clock(data, *, now=None):
     return now
 
 
-def _link_code(text: str) -> str | None:
+def link_code(text: str) -> str | None:
     """One 32-hex code anywhere in the text. Extra codes are not a link."""
     found = _LINK_CODE.findall(text or '')
     if len(found) != 1:
@@ -117,7 +117,7 @@ class LinqProvider:
             raise ValueError('Unsupported Linq webhook version')
         text = '\n'.join(str(p.get('value', '')) for p in parts if p.get('type') in ('text', 'link'))
         command = text.strip().lower()
-        proof = _link_code(text)
+        proof = link_code(text)
         attachments = []
         acknowledgement = False
         unsupported = False

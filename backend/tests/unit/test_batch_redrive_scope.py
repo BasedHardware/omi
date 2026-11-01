@@ -86,9 +86,14 @@ def cli(monkeypatch, tmp_path):
     monkeypatch.setattr(module, 'create_artifact_store', lambda *a: Mock())
     monkeypatch.setattr(module, 'configure_rollout_runtime', lambda: None)
     monkeypatch.setattr(scope, 'owner_jobs', lambda *a: (document(sid) for sid in rows))
-    monkeypatch.setattr(
-        module, 'checked_job', lambda store, sid, uid, key, independent=False, repair=False: deepcopy(rows[sid])
-    )
+
+    def checked_job(store, sid, uid, key, independent=False, repair=False, ordinary_empty=False):
+        # This fixture models the pre-existing modes; the ordinary-empty mode
+        # uses the real privacy/ownership census in its own regression suite.
+        assert ordinary_empty is False
+        return deepcopy(rows[sid])
+
+    monkeypatch.setattr(module, 'checked_job', checked_job)
     monkeypatch.setattr(module, 'inspect_unit', lambda *a: 'speech')
     calls = []
 

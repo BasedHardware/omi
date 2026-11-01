@@ -14469,6 +14469,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get episodeMoments => 'Akimirkos';
 
   @override
+  String get episodeFollowUps => 'Tolesni veiksmai';
+
+  @override
+  String get episodeOpenTranscript => 'Atidaryti transkripciją';
+
+  @override
   String get episodeSoFar => 'Kol kas';
 
   @override
@@ -14689,12 +14695,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get episodeOnThisPhone => 'Šiame telefone';
 
   @override
-  String get episodeOpenTranscript => 'Atidaryti transkripciją';
-
-  @override
-  String get liveCardTitle => 'Tiesiogiai';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Galutinė transkripcija atsilieka maždaug $duration';
   }
@@ -14709,7 +14709,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Saugiai įrašinėja';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Tiesiogiai šiame telefone';
+  String get livePreviewOnPhoneDivider => 'Ką tik, šiame telefone';
 
   @override
   String get livePreviewTurnOnLiveText => 'Įjungti tiesioginį tekstą';
@@ -14952,4 +14952,38 @@ class AppLocalizationsLt extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Šiandien nuskaičiuota $amount. Atnaujinama $date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Išsiųskite žinutę programoje $app. Šis ekranas atsinaujins, kai tik Omi ją gaus.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Gaukite naują kodą ir išsiųskite jį per $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Rašomos pastabos…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Pirmiausia baigiame transkripciją. Galite palikti šį puslapį.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Iki $time · pilnos pastabos pabaigoje';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkribuota iki $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Išsaugota $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
 }

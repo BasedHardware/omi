@@ -14431,6 +14431,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get episodeMoments => 'पल';
 
   @override
+  String get episodeFollowUps => 'आगे के कदम';
+
+  @override
+  String get episodeOpenTranscript => 'ट्रांस्क्रिप्ट खोलें';
+
+  @override
   String get episodeSoFar => 'अब तक';
 
   @override
@@ -14651,12 +14657,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get episodeOnThisPhone => 'इस फ़ोन पर';
 
   @override
-  String get episodeOpenTranscript => 'ट्रांस्क्रिप्ट खोलें';
-
-  @override
-  String get liveCardTitle => 'लाइव';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'अंतिम ट्रांस्क्रिप्ट लगभग $duration पीछे है';
   }
@@ -14671,7 +14671,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'सुरक्षित रिकॉर्ड हो रहा है';
 
   @override
-  String get livePreviewOnPhoneDivider => 'इस फ़ोन पर लाइव';
+  String get livePreviewOnPhoneDivider => 'अभी, इस फ़ोन पर';
 
   @override
   String get livePreviewTurnOnLiveText => 'लाइव टेक्स्ट चालू करें';
@@ -14913,4 +14913,38 @@ class AppLocalizationsHi extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'आज $amount चार्ज किए गए। नवीनीकरण $date को।';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app ऐप में मैसेज भेजें। Omi को मिलते ही यह स्क्रीन अपडेट हो जाएगी।';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'नया कोड लें और उसे $app ऐप से भेजें।';
+  }
+
+  @override
+  String get episodeWritingNotes => 'नोट्स लिखे जा रहे हैं…';
+
+  @override
+  String get episodeWritingNotesDetail => 'पहले ट्रांसक्रिप्ट पूरी हो रही है। आप यह पेज छोड़ सकते हैं।';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time तक · समाप्त होने पर पूरे नोट्स';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time तक ट्रांसक्राइब हुआ';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration सहेजा गया';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।';
 }

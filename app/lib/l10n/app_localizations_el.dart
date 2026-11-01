@@ -14542,6 +14542,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get episodeMoments => 'Στιγμές';
 
   @override
+  String get episodeFollowUps => 'Επόμενα βήματα';
+
+  @override
+  String get episodeOpenTranscript => 'Άνοιγμα απομαγνητοφώνησης';
+
+  @override
   String get episodeSoFar => 'Μέχρι τώρα';
 
   @override
@@ -14764,12 +14770,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get episodeOnThisPhone => 'Σε αυτό το τηλέφωνο';
 
   @override
-  String get episodeOpenTranscript => 'Άνοιγμα απομαγνητοφώνησης';
-
-  @override
-  String get liveCardTitle => 'Ζωντανά';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Η τελική απομαγνητοφώνηση υστερεί περίπου $duration';
   }
@@ -14784,7 +14784,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Ασφαλή εγγραφή';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Ζωντανά σε αυτό το τηλέφωνο';
+  String get livePreviewOnPhoneDivider => 'Μόλις τώρα, σε αυτό το τηλέφωνο';
 
   @override
   String get livePreviewTurnOnLiveText => 'Ενεργοποίηση ζωντανού κειμένου';
@@ -15029,4 +15029,39 @@ class AppLocalizationsEl extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Χρεώθηκαν σήμερα $amount. Ανανέωση στις $date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Στείλε το μήνυμα από τα $app. Αυτή η οθόνη ενημερώνεται μόλις το λάβει το Omi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Πάρε νέο κωδικό και στείλ\' τον από τα $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Γράφονται οι σημειώσεις…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Πρώτα ολοκληρώνεται η απομαγνητοφώνηση. Μπορείς να φύγεις από τη σελίδα.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Καλύπτει έως τις $time · πλήρεις σημειώσεις στο τέλος';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Απομαγνητοφώνηση έως τις $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Αποθηκεύτηκαν $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail =>
+      'Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.';
 }

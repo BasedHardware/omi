@@ -26,6 +26,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from routers.listen.policy import persist_conversation_policy
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
+from utils.executors import start_background_task
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.live_speaker_carry import carried_receipt
 from utils.observability.fallback import record_fallback
@@ -52,6 +53,7 @@ from utils.transcribe_decisions import (
 )
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
 from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
+from utils.conversations.recorded_time import conversation_span
 from utils.conversations.lifecycle_clocks import speech_clock
 from utils.episodes import boundaries, boundary_runtime
 from routers.listen.occasion import occasion_attach_target
@@ -174,7 +176,7 @@ class LiveConversationController:
             existing,
             source=normalize_listen_source(self.host.request.source),
             device_id=self.host.client_device_context.client_device_id,
-            now=self.clock(),
+            arrival_at=self.clock(),
             timeout=self.host.conversation_creation_timeout,
             language=getattr(self.host, 'language', None),
         ):
@@ -575,7 +577,7 @@ class LiveConversationController:
                     existing,
                     source=normalize_listen_source(request.source),
                     device_id=self.host.client_device_context.client_device_id,
-                    now=self.clock(),
+                    arrival_at=self.clock(),
                     timeout=self.host.conversation_creation_timeout,
                 ):
                     if (
@@ -774,6 +776,22 @@ class LiveConversationController:
             owner_carry_donor=automatic_donor,
         )
         self.send_conversation_session(binding, self.host.recording_session_id)
+
+    async def rollover_after_transcript_decode_failure(self) -> None:
+        """Move live speech first, then finalize the displaced generation normally.
+
+        This also covers multi-channel sessions, which have no lifecycle sweep.
+        Finalization outlives socket teardown and cannot block the persist loop.
+        """
+        previous_id = self.host.state.current_conversation_id
+        try:
+            await self.create_new_in_progress_conversation(rollover=True)
+        finally:
+            if previous_id and self.host.state.current_conversation_id != previous_id:
+                start_background_task(
+                    self._finalize_isolated(self.process_conversation, previous_id, stage='transcript_decode_rollover'),
+                    name='listen_transcript_decode_finalization',
+                )
 
     async def prepare(self) -> Optional[str]:
         if self.host.is_multi_channel:
@@ -992,8 +1010,10 @@ class LiveConversationController:
     def _occasion_span_exceeded(self, conversation: dict[str, Any]) -> bool:
         if not getattr(self.host, 'occasion_mode', False):
             return False
-        started = persisted_started_seconds(conversation.get('started_at'))
-        return started is not None and self.clock().timestamp() - started >= OCCASION_MAX_SPAN_SECONDS
+        span = conversation_span(conversation)
+        return (
+            span is not None and (span.recorded_end - span.recorded_start).total_seconds() >= OCCASION_MAX_SPAN_SECONDS
+        )
 
     async def _occasion_attach_target(self) -> Optional[str]:
         return await occasion_attach_target(self)
@@ -1037,7 +1057,7 @@ class LiveConversationController:
                 await self.host.persistence.call(
                     boundary_runtime.apply_signal_edges,
                     self.host.request.uid,
-                    now=self.clock(),
+                    arrival_at=self.clock(),
                     quiet=(self.clock() - finished_at).total_seconds() >= boundaries.QUIET_SECONDS,
                 )
                 action = ConversationLifecycleAction.process_and_create_new

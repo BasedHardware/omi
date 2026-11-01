@@ -246,9 +246,9 @@ def test_default_list_sends_limit_then_offset_and_refill_stays_capped(monkeypatc
     first_limit = next(i for i, c in enumerate(calls) if c[0] == 'limit')
     assert calls[first_limit] == ('limit', 2)
     assert calls[first_limit + 1] == ('offset', 0)
-    # the refill read is bounded: 70 skips at window 2 = 35 batches, capped
+    # Refill windows request only missing slots; total raw refill reads are capped.
     refill_streams = [c for c in calls if c[0] == 'stream' and c[3] is not None]
-    assert len(refill_streams) <= 36
+    assert sum(c[2] for c in refill_streams) <= 64
     # the cap stopped the scan: the page is short, never wrong
     assert ids == ['visible']
     # sanity: without the cap the deep row would exist in this listing

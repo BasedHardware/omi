@@ -603,7 +603,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
     def units(*args, **kwargs):
         yield audio_unit(100, b'\x01\x00' * 16000)
 
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
     monkeypatch.setattr(intake, 'resolve_route', spy_route)
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
@@ -717,3 +717,45 @@ def test_batch_enforced_gate_failure_falls_back_to_the_vendor_probe(monkeypatch)
     decision = lid.resolve_language('multi', wav(), surface='batch', cohort_key='synthetic-owner')
     assert decision.evidence == 'audio_lid' and decision.parakeet_safe
     client.post.assert_called_once()
+
+
+def test_shadow_authorization_denial_blocks_both_self_and_vendor_probes(monkeypatch):
+    client = detector(monkeypatch)
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    model = Mock(return_value=None)
+    monkeypatch.setattr(lid.language_gate, 'self_detect', model)
+    refused = Mock(return_value=False)
+    decision = lid.resolve_language(
+        'multi',
+        wav(),
+        surface='batch',
+        cohort_key='synthetic-owner',
+        before_self_probe=refused,
+        before_probe=refused,
+    )
+    assert not decision.parakeet_safe
+    assert refused.call_count == 2
+    model.assert_not_called()
+    client.post.assert_not_called()
+
+
+def test_shadow_rechecks_authorization_between_model_and_vendor(monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    client = detector(monkeypatch)
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    model = Mock(return_value=None)
+    monkeypatch.setattr(lid.language_gate, 'self_detect', model)
+    check = Mock(side_effect=[True, BatchPrivacyBlocked('synthetic revocation')])
+    decision = lid.resolve_language(
+        'multi',
+        wav(),
+        surface='batch',
+        cohort_key='synthetic-owner',
+        before_self_probe=check,
+        before_probe=check,
+    )
+    assert not decision.parakeet_safe
+    assert check.call_count == 2
+    model.assert_called_once()
+    client.post.assert_not_called()

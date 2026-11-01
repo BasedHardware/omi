@@ -554,42 +554,46 @@ an empty multilingual response from Modulate alone stays `failed_held` rather
 than terminal-empty. Timeouts, malformed responses, uncertain calls, missing
 evidence, and provider failures stay held. There are no paid-intent resets.
 
-**Second multilingual provider (long-speech units) — retired 2026-08-27.**
-This step used to spend exactly one more call, to cloud Deepgram nova-3 with
-language detection (`second_transcribe`), inside the same `running` intent.
-Deepgram is retired (no contract since 2026-08-27), so
-`config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` is `None` and
-`second_provider_eligible` answers False for every unit: no second call is
-spent, and an empty multilingual Modulate response settles `failed_held`
-(Modulate-only recovery, the same behavior as
-`BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false`). The wiring, flag and
-metering stay so a future second batch provider can be introduced by naming it
-in the policy again. Historical behavior, kept for reference:
+**Second multilingual provider — Soniox (ship on).**
+`config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` names `soniox`.
+An ordinary held unit whose Modulate response is validated empty gets at most
+one Soniox `stt-async-v5` call inside the same `running` recovery intent,
+using the existing sync/operator or async/serving batch adapter. This includes
+short validation holds and oversized units; it no longer requires a long-speech
+handoff. Already-settled padded-empty outcomes do not spend another call.
+`BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false` restores Modulate-only
+ordinary recovery (unset is on). The independent language-guard path keeps its
+separate switch, one-minute duration cap, and existing evidence rules.
 
-- Deepgram returns words: the unit recovers with those words (ordinary
-  `success` result).
-- Deepgram also returns valid-empty: with the terminal-empty flag on, the unit
-  settles `no_recoverable_speech` with `recognition_evidence`
-  `{gpu_padded_retry: skipped_long_speech, multilingual_recovery: empty,
-  second_multilingual_recovery: empty}`. This is the honest outcome. No one may
-  listen to the audio, so the pipeline has to settle it on evidence: VAD saw
-  speech-like energy, and two independent multilingual ASR systems, with
-  different models and language coverage, both found no words in it. It is the
-  same quality of evidence as GPU padded-empty plus Modulate-empty. Another
-  `failed_held` would only say "unknown", and nothing would ever retry it.
-- Deepgram errors, times out, returns a malformed answer, or the allowance
-  refuses: the unit stays `failed_held` with Modulate's
-  `response_validation/empty_asr` failure, as before.
+- Soniox words recover the unit with a `success` result and `words_provider=soniox`.
+- A second valid-empty answer can settle `no_recoverable_speech` only when the
+  terminal-empty policy and `terminal_empty_allowed` permit it. The ship-on
+  empty-ASR safety net still refuses positive strict-VAD disposal. Both provider
+  receipts record `empty` and zero words. Short/validation/oversize holds use
+  `{multilingual_recovery: empty, second_multilingual_recovery: empty}` plus
+  both receipts in the artifact; long-speech holds also retain their real
+  `gpu_padded_retry: skipped_long_speech` evidence. No GPU retry is fabricated.
+- Errors, timeouts, malformed answers, missing key or allowance refusal leave
+  the unit `failed_held`, without a result and with original audio in custody.
 
-A crash between the two calls leaves the intent `running`. The 900 s abandonment
-rule then settles it `failed_held` without another call. Each long-speech empty
-costs at most one extra Deepgram call of the unit's duration. Metering:
-`omi_batch_recovery_second_provider_total{provider=deepgram,outcome=words|empty|error|refused}`,
-the log `event=batch_recovery_second_provider provider=deepgram outcome=...`,
-and `omi_stt_cap_provider_audio_seconds{path=sync,outcome=accepted}` for both
-paid answers (`provider=modulate`, now also for valid-empty answers, and
-`provider=deepgram`). `BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false` (kill
-switch, unset is on) restores Modulate-only recovery.
+The allowance and consent are rechecked with `sync_allowed` for Soniox before
+spend, including managed recovery of BYOK admissions. A token/privacy-fenced
+`started` receipt claims the sole second call. A crash or cancellation leaves
+the intent `running`; the 900 s abandonment rule settles it `failed_held`
+without reissuing either provider call. The ordinary call uses the admitted
+unit's duration (at most 7,200 s) and the adapter's 120 s deadline, without retries.
+Cost is at most one extra Soniox call per Modulate-empty held unit. Metering:
+`omi_batch_recovery_second_provider_total{provider=soniox,outcome=words|empty|error|refused}`,
+`event=batch_recovery_second_provider provider=soniox outcome=...`, and
+`omi_stt_cap_provider_audio_seconds{path=sync,outcome=accepted}` for validated
+words and empty answers (`provider=modulate` and `provider=soniox`).
+
+Deploy the CPU recovery hosts with `SONIOX_API_KEY`; the GPU worker chart also
+references that key from `.Values.secretName` (prod: `prod-omi-backend-secrets`).
+The optional secret reference preserves worker startup if absent; readiness
+refuses the second call until configured. The lead verifies the key exists
+before deploying; never print its value. No admission/ramp or guarded-path
+flag change is part of this feature.
 
 This is an empty-words **terminal degradation**, distinct from silence. The
 encrypted result retains validated positive VAD and closed recognition evidence.
@@ -645,6 +649,82 @@ spent intents never become retryable. Inspect completion and terminal-empty
 captured-duration rates before any ramp: terminal completion does not prove ASR
 quality or make the unresolved duration disappear from correctness metrics.
 
+
+## Assignment hold recovery
+
+`BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED` ships on. A backfill priority
+does not establish that a target writer is old: missing-target and
+finalize-pending conflicts retry while the unit's **capture end** is less than
+six hours old. Unknown capture age also retries. First-attempt, enqueue and
+result-commit times do not supply age. The existing first-failure stamp and
+24-hour head retry bound still prevent indefinite owner-chain blocking.
+Discarded targets, ambiguous lineage ownership, structural conflicts,
+generation ambiguity, deletion and privacy fences keep their dispositions.
+
+The maintenance leader examines at most 128 held rows every 60 seconds,
+checking a five-second monotonic budget between units. One in-flight database
+transaction can outlast that soft bound. The document-name cursor advances
+only through examined rows, then wraps. This is eligibility scanning, not
+assignment: released rows return to the existing capture-ordered pending
+scanner and ordinary transactions, including all provenance, privacy,
+generation and content-ledger fences. The sanctioned redrive keeps the owner
+watermark from moving backwards. Follow-up discovery has its separate cursor.
+
+A completed, nondeleted, nondiscarded target is eligible, including targets on
+ordinary sync bindings without a record-route owner. Record replacements still
+require batch route ownership; custom-STT and unsupported protection levels
+are refused. Assignment rechecks target lifecycle inside its write transaction,
+so a discard racing release cannot receive text. Open operator intents and
+privacy-refusal receipts are not reset. Audio and committed results are never
+changed by release. Proven multipart receipts survive; only quarantined parts
+are reset, and the summary is rebuilt when all parts have receipts again.
+
+`projection_redriven_at` remains the historical watermark fence.
+`projection_release_attempts` caps an unsuccessful episode at three releases;
+successful complete assignment resets that budget in its existing receipt
+write. An old one-shot marker consumes one attempt on migration. Re-holding
+never clears the budget, so an incompatible target cannot cause endless writes.
+Already projected parts replay their receipts rather than appending again.
+
+At 128 rows/minute the eligibility ceiling is 7,680 rows/hour: 3,233 true holds
+take about 26 minutes of scan capacity, or about 84 minutes including the RCA's
+7,414 ready siblings. These are capacity estimates, not production completion
+promises: database latency, maintenance work, leader changes, waiting targets
+and ordinary projection capacity can extend them. Watch `release_held` summaries
+(`examined`, `released`, `waiting`, `error`, `elapsed_ms`) and fresh pending age;
+the release pass adds at most one page and its inter-row budget per minute.
+
+The eligibility pass costs one query-document read plus two transaction reads
+per examined row, with one further target read for eligible holds, and **two
+writes per release**. For the RCA cohort, one untruncated pass is approximately
+35,174 reads (10,647 x 3 + 3,233) and at most 6,466 release writes. Page fetches
+repeated after the time bound and transaction retries add reads; at full-page
+cadence the per-leader scan ceiling is 30,720 reads/hour before transaction
+retries. Normal assignment/follow-up writes are separate. No STT/LLM/vendor
+calls are added. At the illustrative nam5 rates of $0.06/100k reads and
+$0.18/100k writes, that pass is about **$0.033**, excluding ordinary projection,
+storage, egress, retries and shadow mirroring; see the
+[Firestore billing example](https://firebase.google.com/docs/firestore/billing-example).
+
+Rollback: set the kill switch to `false` to restore lane-only striking,
+record-origin-only one-shot eligibility and the old 32-row/900-second cadence.
+Already released pending units still drain with receipt/lifecycle fences;
+committed text is not undone. Remaining holds retain audio/results and their
+attempt counts. New releases carry protocol 2 with `projection_release_version=1`:
+a binary rollback refuses them rather than interpreting preserved multipart
+receipts or writing without the new lifecycle check. They remain pending with
+audio/results retained until the new binary returns; never clear the protocol
+or proven receipts to force an old writer through. Switch-off on the new binary
+continues to drain them normally.
+
+This does not fix the prepare-to-back-of-queue convoy: page preparation can
+still defer the target-creating visit behind older unvisited rows. The age gate
+lets those recent units wait for that writer rather than holding immediately;
+the release scan repairs units held before the fix once the target lands.
+
+Conflict holds emit only the closed `conflict_subtype` token and the
+`omi_batch_pipeline_projection_conflict_holds_total{subtype}` counter (under
+the existing correctness-metrics switch). They carry no identifiers or text.
 
 ## Dark projection tail controls
 
@@ -861,13 +941,47 @@ with phase timings before claiming the target or increasing admission.
 
 `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
 `false` restores oldest-100 discovery). Assignment and async follow-ups each
-advance their own bounded 100-row keyset scan across pending, persisted and
-ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+advance their own bounded 100-row keyset scan. Assignment scans pending
+results; async follow-ups scan persisted/ready results by default. The cursor
+uses `(committed_at, document ID)`, so equal timestamps
 and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
 restart begins at the head without dropping any durable obligations. Follow-ups
 launch the whole bounded page before fetching the next one. Discovery order is
 only a hint: existing transactional predecessor, privacy, all-sibling readiness,
 receipt replay and paid-intent fences remain authoritative.
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED` defaults to `true`.
+Follow-up discovery uses only the persisted/ready result page, plus one job
+read per receipt for its pinned policy. It no longer fetches each result twice
+after the query. Synchronous receipts are filtered before queueing so they
+cannot delay async recovery wakeups. Legacy unpinned policies still use the
+existing privacy-aware resolution; execution rechecks policy and receipt
+fences. Setting the switch to `false` restores the mixed page and
+per-candidate reads. Pagination's separate kill switch still controls rotation.
+Pending partial assignments and quarantine-held rows do not enter the finish
+page; recovery and repair still return them through pending assignment to
+persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
+or destination can unblock them without changing their own result version.
+Already-ready siblings in one discovered page share a content-completion
+probe for their exact immutable binding. Every row still rechecks its receipt
+and privacy fences; persisted rows still finish their own side effects and
+probe completion. Failed/cancelled probes clear their marker. Each new
+discovery page gets a fresh probe; an older page keeps its marker until its
+queued/running rows finish. Priority/owed recovery work bypasses sharing,
+including owed rows also found by discovery or woken before their probe. Thus an
+unchanged ready row gets a fresh probe each cycle even when its dependency
+changed elsewhere. No cooldown or version cache is used. When the existing
+quarantine-hold transaction finds a quarantined sibling, it uses its existing
+read set to settle all matching ready siblings' discovery hints together.
+It verifies their full binding, owner and segment identity before any write;
+persisted side effects and receipt payloads are untouched. This prevents ready
+siblings leaving discovery one per later pass. The same kill switch restores
+single-row hold hints as well as independent completion probes.
+
+The execution read origin `task:batch_projection_followup` covers these row
+fences and sibling completion scans; candidate discovery runs in its caller's
+origin. Measure them separately: reducing candidate reads alone does not
+establish a reduction in the execution-origin read counter.
 
 The query reuses the declared prod/dev results composite index:
 `projection_state ASC, committed_at ASC, __name__ ASC` in
@@ -979,8 +1093,9 @@ what the mixed page did for those rows:
 - async-policy rows are not touched there, but seeing any of them keeps
   follow-ups scheduled.
 
-Async follow-up discovery keeps its own mixed page and cursor unchanged. All
-three pages use the same `in` filter on the declared results composite index
+Async follow-up discovery keeps its own cursor and uses a persisted/ready
+page by default (its kill switch restores the mixed page). All three pages
+use the same `in` filter on the declared results composite index
 (`projection_state, committed_at, __name__`), so no index changes are needed.
 
 ### Per-owner projection drain (Phase 1)

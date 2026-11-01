@@ -14448,6 +14448,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeMoments => 'Khoảnh khắc';
 
   @override
+  String get episodeFollowUps => 'Việc cần làm tiếp';
+
+  @override
+  String get episodeOpenTranscript => 'Mở bản ghi chép';
+
+  @override
   String get episodeSoFar => 'Cho đến giờ';
 
   @override
@@ -14669,12 +14675,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeOnThisPhone => 'Trên điện thoại này';
 
   @override
-  String get episodeOpenTranscript => 'Mở bản ghi chép';
-
-  @override
-  String get liveCardTitle => 'Trực tiếp';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Bản ghi chép cuối cùng chậm khoảng $duration';
   }
@@ -14689,7 +14689,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Đang ghi âm an toàn';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Trực tiếp trên điện thoại này';
+  String get livePreviewOnPhoneDivider => 'Vừa xong, trên điện thoại này';
 
   @override
   String get livePreviewTurnOnLiveText => 'Bật văn bản trực tiếp';
@@ -14932,4 +14932,38 @@ class AppLocalizationsVi extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Đã thu $amount hôm nay. Gia hạn vào $date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Gửi tin nhắn trong $app. Màn hình này sẽ cập nhật ngay khi Omi nhận được.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Lấy mã mới và gửi từ $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Đang viết ghi chú…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Đang hoàn tất bản chép trước. Bạn có thể rời trang này.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Đến $time · ghi chú đầy đủ khi kết thúc';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Đã chép đến $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Đã lưu $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
 }

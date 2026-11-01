@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-get-or-create-lookup-outside-create-transaction",
+  "violated_contract": "A get-or-create keyed on a natural key, such as a person's display name, must decide whether the record exists in the same transaction that creates it. POST /v1/users/people ran a plain name query and then wrote a new random-id person in a separate write, so two concurrent or retried requests for a new name could both miss the lookup and each create a person, leaving duplicates under one name.",
+  "canonical_prevention": "Re-check the key with a query inside the Firestore transaction that creates the record, completing every read before the first write, and run it through the shared bounded contention retry. Firestore's serializable transactions then abort a racing create, and its retry returns the record the winner created instead of adding a second one. Guard the read-before-create shape with the strict transaction fixture and pin the race through the real route.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_people_get_or_create.py",
+    "backend/tests/unit/fixtures/strict_firestore_transaction.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/people.py"
+  ],
+  "status": "open"
+}

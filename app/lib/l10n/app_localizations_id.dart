@@ -14460,6 +14460,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get episodeMoments => 'Momen';
 
   @override
+  String get episodeFollowUps => 'Tindak lanjut';
+
+  @override
+  String get episodeOpenTranscript => 'Buka transkrip';
+
+  @override
   String get episodeSoFar => 'Sejauh ini';
 
   @override
@@ -14680,12 +14686,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get episodeOnThisPhone => 'Di ponsel ini';
 
   @override
-  String get episodeOpenTranscript => 'Buka transkrip';
-
-  @override
-  String get liveCardTitle => 'Langsung';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Transkrip final tertunda sekitar $duration';
   }
@@ -14700,7 +14700,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Merekam dengan aman';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Langsung di ponsel ini';
+  String get livePreviewOnPhoneDivider => 'Baru saja, di ponsel ini';
 
   @override
   String get livePreviewTurnOnLiveText => 'Aktifkan teks langsung';
@@ -14945,4 +14945,38 @@ class AppLocalizationsId extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return '$amount ditagih hari ini. Diperpanjang $date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Kirim pesan di $app. Layar ini akan diperbarui segera setelah Omi menerimanya.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dapatkan kode baru lalu kirim dari $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Menulis catatan…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Menyelesaikan transkrip dulu. Anda boleh meninggalkan halaman ini.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Mencakup hingga $time · catatan lengkap saat selesai';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Ditranskripsi hingga $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration tersimpan';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Pembicara dan transkrip akhir akan muncul di sini saat diunggah.';
 }

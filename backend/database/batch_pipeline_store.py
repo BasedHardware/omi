@@ -5,8 +5,6 @@ The transaction callback must be pure; it may be retried by Firestore.
 """
 
 from copy import deepcopy
-from contextlib import contextmanager
-from contextvars import ContextVar
 import hashlib
 import logging
 import os
@@ -22,6 +20,10 @@ from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.batch_pipeline_transaction_labels import (
+    current_operation,
+    pull_operation as pull_operation,
+)
 from utils.sync.stage import collection_name
 
 # Every state an obligation can drain from. Assignment needs only ``pending``;
@@ -32,19 +34,7 @@ PROJECTION_ASSIGNMENT_STATES = ('pending',)
 PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
 T = TypeVar('T')
-_pull_operation = ContextVar('batch_pull_operation', default='batch_pipeline_store')
 logger = logging.getLogger(__name__)
-
-
-@contextmanager
-def pull_operation(operation: str, shard: str):
-    if operation not in {'claim', 'pull'} or shard not in {f'scheduler_{n:02d}' for n in range(SCHEDULER_SHARDS)}:
-        raise ValueError('static pull operation and scheduler shard required')
-    token = _pull_operation.set(f'batch_{operation} shard={shard}')
-    try:
-        yield
-    finally:
-        _pull_operation.reset(token)
 
 
 class Transaction(Protocol):
@@ -214,7 +204,7 @@ class FirestoreStore:
         return run_with_transaction_contention_retry(
             lambda: client.transaction(max_attempts=1),
             commit,
-            operation_name=_pull_operation.get(),
+            operation_name=current_operation(),
         )
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:

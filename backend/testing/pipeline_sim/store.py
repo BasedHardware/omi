@@ -206,14 +206,38 @@ class SimStore:
         return [segment_id for _, segment_id in candidates[: max(1, min(limit, 100))]]
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
-        values = [
-            row['enqueued_at']
-            for (table, _), row in self.rows.items()
-            if table == 'jobs'
-            and row.get('priority') == priority
-            and (row.get('state') == 'ready' if ready_only else row.get('merge_pending'))
-        ]
-        return min(values) if values else None
+        if ready_only:
+            values = [
+                row['enqueued_at']
+                for (table, _), row in self.rows.items()
+                if table == 'jobs' and row.get('priority') == priority and row.get('state') == 'ready'
+            ]
+            return min(values) if values else None
+        # Mirrors database.batch_pipeline_store.oldest: a bounded FIFO prefix walked past allowance holds.
+        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold
+
+        rows = sorted(
+            (row['enqueued_at'], key, row)
+            for (table, key), row in self.rows.items()
+            if table == 'jobs' and row.get('priority') == priority and row.get('merge_pending')
+        )
+        oldest_hold = None
+        for enqueued_at, _, row in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
+            if not is_allowance_policy_hold(row):
+                return enqueued_at
+            oldest_hold = enqueued_at if oldest_hold is None else oldest_hold
+        return oldest_hold if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        """Mirrors database.batch_pipeline_store.ready_for_capacity."""
+        return sum(
+            1
+            for segment_id in self._by_state.get('ready', ())
+            if (row := self.rows[('jobs', segment_id)]).get('priority') == priority
+            and row.get('merge_pending') is True
+            and (row.get('compute_decision') or {}).get('outcome') in {'unattempted', 'allowed'}
+            and row.get('available_at', float('inf')) <= now
+        )
 
     def oldest_retry(self, priority: int) -> float | None:
         values = [
@@ -295,9 +319,28 @@ class SimStore:
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
 
-    def projection_page(self, limit: int = 100, *, after=None) -> tuple[list[str], Any]:
+    def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
+        """The owner's result committed directly after ``previous``; two matches fail closed (Firestore hint)."""
+        matches = sorted(
+            key
+            for (table, key), row in self.rows.items()
+            if table == 'results'
+            and row.get('owner_key') == owner_key
+            and 'previous_segment_id' in row  # Firestore equality never matches a missing field
+            and row['previous_segment_id'] == previous
+        )
+        return matches[0] if len(matches) == 1 else None
+
+    def projection_page(
+        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+    ) -> tuple[list[str], Any]:
         """Keyset page over results awaiting projection, ordered (committed_at, key); mirrors the Firestore scan."""
-        wanted = {'pending', 'persisted', 'ready'}
+        from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES, PROJECTION_OBLIGATION_STATES
+
+        states = PROJECTION_DISCOVERY_STATES if states is None else states
+        if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
+            raise ValueError('projection discovery states must be drain states')
+        wanted = set(states)
         ordered = sorted(
             (row['committed_at'], key)
             for (table, key), row in self.rows.items()

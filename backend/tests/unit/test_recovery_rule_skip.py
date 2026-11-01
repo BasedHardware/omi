@@ -43,6 +43,8 @@ def isolated_processing_module():
 def test_recovery_rule_discard_records_explicit_discard_without_paid_structuring(
     monkeypatch, isolated_processing_module
 ):
+    # Exercise the pre-existing recovery rule with the independent floor rolled back.
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
     pc = isolated_processing_module
     conversation = Conversation(
@@ -202,6 +204,8 @@ def test_recovery_skip_accepts_only_original_rule_reasons(reason):
 
 
 def test_silent_backfill_never_uses_rule_discard_or_quiet_minimum(monkeypatch, isolated_processing_module):
+    # Notes-v2 and the independent floor are off; the recovery-only policy stays unchanged.
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     """A plan-approved keep must request real notes even when recovery's minimum switch is on."""
     monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
     pc = isolated_processing_module

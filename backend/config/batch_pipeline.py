@@ -26,6 +26,15 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+
+def projection_hold_recovery_enabled() -> bool:
+    """Ship-on hold age gate and automatic redrive; false restores old behavior."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED',
+        os.getenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 T = TypeVar('T')
 
 
@@ -129,6 +138,12 @@ def live_record_admission_enabled() -> bool:
     from config.policy import resolve_batch_policy
 
     return resolve_batch_policy('').live_admission_enabled
+
+
+def require_record_protocol_ready() -> None:
+    """One-time producer protocol cutover; never expires a pending obligation."""
+    if os.getenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'false').strip().lower() != 'true':
+        raise ValueError('record protocol cutover barrier closed')
 
 
 def live_record_enabled_for(owner_id: str) -> bool:
@@ -293,8 +308,9 @@ def long_speech_handoff_enabled() -> bool:
 def second_multilingual_enabled() -> bool:
     """Kill switch (unset is on; only ``false`` disables it).
 
-    A long-speech handoff unit whose Modulate recovery came back valid-empty gets
-    one Deepgram multilingual call inside the same paid recovery intent.
+    A held unit whose Modulate recovery came back valid-empty gets one Soniox
+    multilingual call inside the same paid recovery intent. Language-guarded
+    recovery retains its separate switch and one-minute bound.
     """
     return rollout_default_on(
         'BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED',
@@ -406,6 +422,13 @@ def projection_pending_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
 
 
+def projection_followup_page_enabled() -> bool:
+    """Kill switch: discover only finishable receipts, without per-row fetches."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
+
+
 def owner_drain_enabled() -> bool:
     """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
     from config.policy import kill_switch
@@ -476,7 +499,7 @@ def worker_pipeline_depth() -> int:
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
 
 
-WORKER_IO_CONCURRENCY_DEFAULT = 3
+WORKER_IO_CONCURRENCY_DEFAULT = 5
 WORKER_IO_CONCURRENCY_MAX = 8
 
 
@@ -497,10 +520,10 @@ def stage_profiling_enabled() -> bool:
 
 
 def worker_io_concurrency() -> int:
-    """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
+    """Shared bounded artifact fetch/decode and persistence across pump lanes.
 
     1 restores the fully serial chain. Malformed or out-of-range values keep the
-    conservative default; GPU work and the chain lock are unaffected either way.
+    bounded default; GPU work and the chain lock are unaffected either way.
     """
     try:
         value = int(os.getenv('BATCH_PIPELINE_WORKER_IO_CONCURRENCY', str(WORKER_IO_CONCURRENCY_DEFAULT)))

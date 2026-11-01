@@ -14475,6 +14475,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get episodeMoments => 'Trenutki';
 
   @override
+  String get episodeFollowUps => 'Nadaljnji koraki';
+
+  @override
+  String get episodeOpenTranscript => 'Odpri prepis';
+
+  @override
   String get episodeSoFar => 'Do zdaj';
 
   @override
@@ -14695,12 +14701,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get episodeOnThisPhone => 'V tem telefonu';
 
   @override
-  String get episodeOpenTranscript => 'Odpri prepis';
-
-  @override
-  String get liveCardTitle => 'V živo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Končni prepis za približno $duration zadaj';
   }
@@ -14715,7 +14715,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Varno snema';
 
   @override
-  String get livePreviewOnPhoneDivider => 'V živo v tem telefonu';
+  String get livePreviewOnPhoneDivider => 'Pravkar, na tem telefonu';
 
   @override
   String get livePreviewTurnOnLiveText => 'Vklopi besedilo v živo';
@@ -14958,4 +14958,38 @@ class AppLocalizationsSl extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Danes zaračunano $amount. Podaljšanje $date.';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošljite sporočilo v aplikaciji $app. Ta zaslon se posodobi, takoj ko ga Omi prejme.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Pridobite novo kodo in jo pošljite iz aplikacije $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Pišemo zapiske…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Najprej dokončujemo prepis. To stran lahko zapustite.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Do $time · popolni zapiski ob koncu';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Prepisano do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Shranjeno $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.';
 }
