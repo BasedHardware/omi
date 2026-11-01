@@ -83,16 +83,13 @@ def test_manual_consent_only_starts_selected_owner(admission, consent):
     assert consent.allowance.called is admission.allowed
 
 
-@pytest.mark.parametrize('asynchronous', [False, True])
-async def test_upgrade_consent_only_starts_selected_owner(admission, consent, monkeypatch, asynchronous):
+async def test_trial_start_consent_only_starts_selected_owner(admission, consent, monkeypatch):
     async def immediate(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
     monkeypatch.setattr(worker, 'run_blocking', immediate)
-    if asynchronous:
-        await worker.upgrade_async(admission.uid, 'synthetic-upgrade', intent_at=consent.now)
-    else:
-        worker.upgrade(admission.uid, 'synthetic-upgrade', intent_at=consent.now)
+    trial = {'id': 'sub_synthetic', 'status': 'trialing', 'trial_start': consent.now.timestamp()}
+    await worker.trial_started_async(admission.uid, trial)
     assert consent.start.called is admission.allowed
     if admission.allowed:
         assert consent.start.call_args.kwargs['automatic'] is True

@@ -4,9 +4,8 @@ from typing import Any
 import math
 import time
 
-from config.rate_card import recording_units_per_hour, standard_chat_units, budget_units
-from config.plan_catalog import resolve_subscription_entitlements, allocation_limit
-from config.stt_cap_dispatch import recovery_cohort_admits
+from config.rate_card import recording_units_per_hour, standard_chat_units
+from config.stt_cap_dispatch import TRIAL_RECOVERY_GRANT_HOURS, recovery_cohort_admits
 from datetime import datetime, timezone
 from models.users import ProcessingBacklog
 from utils import funded_processing
@@ -84,7 +83,8 @@ def manual_choice_in_scope(uid: str) -> bool:
 
 
 def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: Any = None) -> dict | None:
-    source = 'upgrade' if automatic else 'manual'
+    """A tap, or (``automatic``) the one-time trial grant. No other path starts recovery."""
+    source = 'trial' if automatic else 'manual'
     try:
         chosen, outcome = _choose(uid, request_key=request_key, automatic=automatic, intent_at=intent_at)
     except Exception:
@@ -108,8 +108,8 @@ def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> t
     result = snapshot(uid, allowance=allowance, paid=True)
     if result is None:
         return None, BacklogChoiceOutcome.OUT_OF_SCOPE
-    # The first delivery of an old payment event is not fresh upgrade consent.
-    # Record declined intent too, so retries cannot reinterpret it after reset.
+    # The first delivery of an old trial event is not fresh consent. Record
+    # declined intent too, so retries cannot reinterpret it after reset.
     intent_period = None
     if automatic:
         try:
@@ -119,25 +119,26 @@ def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> t
             intent_period = moment.astimezone(timezone.utc).strftime('%Y-%m')
         except (TypeError, ValueError, OverflowError, OSError):
             pass
-    begin = result.state not in {'none', 'capped'} and (
-        not automatic or intent_period == period and not result.exceeds_remaining
-    )
+    begin = result.state not in {'none', 'capped'} and (not automatic or intent_period == period)
     if begin:
         outcome = BacklogChoiceOutcome.ACCEPTED
     elif result.state == 'capped':
         outcome = BacklogChoiceOutcome.CAPPED
     elif result.state == 'none':
         outcome = BacklogChoiceOutcome.NOTHING_WAITING
-    elif intent_period != period:
-        outcome = BacklogChoiceOutcome.STALE_INTENT
     else:
-        outcome = BacklogChoiceOutcome.EXCEEDS_REMAINING
+        outcome = BacklogChoiceOutcome.STALE_INTENT
     if not begin and not automatic:
         return None, outcome
+    remaining = result.remaining_units
+    if automatic:
+        # The worker spends this budget newest first and skips what no longer fits.
+        grant = TRIAL_RECOVERY_GRANT_HOURS * float(recording_units_per_hour('batch'))
+        remaining = grant if remaining is None else min(grant, remaining)
     chosen = store.start(
         uid,
         period=period,
-        remaining=result.remaining_units,
+        remaining=remaining,
         cutoff=time.time(),
         request_key=request_key,
         automatic=automatic,
@@ -148,36 +149,3 @@ def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> t
 
 def is_active(row: dict) -> bool:
     return row.get('state') == 'processing' and row.get('period') == funded_processing.period_id()
-
-
-def allowance_increased(previous: Any, current: Any) -> bool:
-    """Compare catalog allocations, never Stripe amounts or a calendar renewal.
-
-    Period validity is normalized for identity comparison only. This cannot
-    authorize work: choose() separately resolves the real funded allowance.
-    """
-
-    def fields(value):
-        if value is None:
-            return {'plan': 'basic'}
-        return dict(value) if isinstance(value, dict) else value.model_dump()
-
-    old, new = fields(previous), fields(current)
-    if old.get('plan') == new.get('plan') and old.get('current_price_id') == new.get('current_price_id'):
-        return False
-
-    def limit(value):
-        identity = {
-            **value,
-            'status': 'active',
-            'current_period_end': int(datetime.now(timezone.utc).timestamp()) + 86400,
-        }
-        entitlement = resolve_subscription_entitlements(identity)
-        units = budget_units(entitlement)
-        if units is not None:
-            return float(units)
-        seconds = allocation_limit(entitlement['plan_id'], 'transcription')
-        return None if seconds is None else seconds * float(recording_units_per_hour('batch')) / 3600
-
-    before, after = limit(old), limit(new)
-    return before is not None and (after is None or after > before)

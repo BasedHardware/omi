@@ -165,7 +165,7 @@ class HeldRecoverySkipOutcome(StrEnum):
 
 
 class BacklogChoiceOutcome(StrEnum):
-    """Result of a "Process waiting recordings" tap or an upgrade's backlog intent."""
+    """Result of a "Process waiting recordings" tap or a Stripe trial's one-time grant."""
 
     UNKNOWN = 'unknown'
     ACCEPTED = 'accepted'
@@ -174,7 +174,6 @@ class BacklogChoiceOutcome(StrEnum):
     CAPPED = 'capped'
     NOTHING_WAITING = 'nothing_waiting'
     STALE_INTENT = 'stale_intent'
-    EXCEEDS_REMAINING = 'exceeds_remaining'
     ERROR = 'error'
 
 

@@ -373,13 +373,25 @@ async def run(
     return continuation
 
 
-def upgrade(uid: str, request_key: str, *, intent_at):
-    """Only payment intent calls this; monthly renewal/reset never creates intent."""
-    choose(uid, request_key=request_key, automatic=True, intent_at=intent_at)
+async def trial_started_async(uid: str, stripe_subscription: dict) -> None:
+    """The only automatic recovery: once per Stripe trial, from its start (David, 2026-11-01).
 
-
-async def upgrade_async(uid: str, request_key: str, *, intent_at):
-    await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True, intent_at=intent_at)
+    Keyed to the subscription, so a redelivery, restart or later month finds the
+    receipt and starts nothing. The trial's own start dates the intent: a late
+    first delivery in a later month is stale, not consent. Purchases, renewals
+    and the first real charge never call this; they wait for a tap.
+    """
+    started = stripe_subscription.get('trial_start')
+    if stripe_subscription.get('status') != 'trialing' or not stripe_subscription.get('id') or not started:
+        return
+    await run_blocking(
+        db_executor,
+        choose,
+        uid,
+        request_key=f'trial-grant:{stripe_subscription["id"]}',
+        automatic=True,
+        intent_at=started,
+    )
 
 
 cap_hold_recovery.register_backlog_runner(run)

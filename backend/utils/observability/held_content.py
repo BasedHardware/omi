@@ -102,11 +102,12 @@ RECOVERY_SKIPPED = Counter(
     'or not_paid (a Free owner, by design)',
     ['outcome'],
 )
-BACKLOG_CHOICE_SOURCES = ('manual', 'upgrade')
+BACKLOG_CHOICE_SOURCES = ('manual', 'trial')
 BACKLOG_CHOICE = Counter(
     'omi_processing_backlog_choice',
-    'Processing-backlog choices by source: manual is POST /v1/users/processing-backlog/process, upgrade is '
-    'payment intent. A retried idempotency key counts again. Labels never identify a person',
+    'Processing-backlog choices by source: manual is POST /v1/users/processing-backlog/process, trial is a '
+    'Stripe trial start (the one automatic grant). A retried idempotency key counts again. '
+    'Labels never identify a person',
     ['source', 'outcome'],
 )
 PACING_OUTCOMES = ('granted', 'deferred', 'refused')

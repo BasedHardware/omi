@@ -11,6 +11,9 @@ from typing import Callable
 from config.rollout_cohorts import cohort_admits, parse_cohort
 
 LANES = frozenset({'live', 'sync', 'batch'})
+# The only automatic held-audio recovery: once per Stripe trial, newest first,
+# up to this much held audio (David, 2026-11-01). Anything more needs a tap.
+TRIAL_RECOVERY_GRANT_HOURS = 25
 # Legacy full batch rollout fence. Offline allowance refusal does not depend on
 # selecting this scope; admission-time BYOK policy remains authoritative.
 _BATCH_LANE_READY = False
