@@ -503,17 +503,23 @@ class MemoriesViewModel: ObservableObject {
   // MARK: - Initialization
 
   private let deleteMemoryRequest: (String) async throws -> Void
+  private let editMemoryRequest: (String, String, RuntimeOwnerAuthorizationSnapshot) async throws -> ServerMemory?
   private(set) var deferredDeleteRetry: MemoryDeleteRetryScheduler
   private(set) var reconcileRetry: MemoryReconcileRetryScheduler
 
   init(
     deleteMemoryRequest: ((String) async throws -> Void)? = nil,
+    editMemoryRequest: ((String, String, RuntimeOwnerAuthorizationSnapshot) async throws -> ServerMemory?)? = nil,
     deferredRetrySleeper: MemoryDeleteRetryScheduler.Sleeper? = nil,
     reconcileRetrySleeper: MemoryReconcileRetryScheduler.Sleeper? = nil
   ) {
     self.deleteMemoryRequest =
       deleteMemoryRequest ?? { id in
         try await APIClient.shared.deleteMemory(id: id)
+      }
+    self.editMemoryRequest =
+      editMemoryRequest ?? { id, content, authorization in
+        try await APIClient.shared.editMemory(id: id, content: content, authorizationSnapshot: authorization)
       }
     deferredDeleteRetry = MemoryDeleteRetryScheduler(sleeper: deferredRetrySleeper)
     reconcileRetry = MemoryReconcileRetryScheduler(sleeper: reconcileRetrySleeper)
@@ -670,6 +676,9 @@ class MemoriesViewModel: ObservableObject {
     editingMemory = nil
     editText = ""
     selectedMemory = nil
+    editError = nil
+    isSavingMemoryEdit = false
+    memoryEditGeneration &+= 1
     pendingDeleteMemory = nil
     undoTimeRemaining = 0
     hasLoadedInitially = false
@@ -1772,21 +1781,57 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
-  func saveEditedMemory(_ memory: ServerMemory) async {
-    guard !editText.isEmpty else { return }
+  @Published var editError: String? = nil
+  @Published private(set) var isSavingMemoryEdit = false
+  private var memoryEditGeneration: UInt64 = 0
+
+  @discardableResult
+  func saveEditedMemory(_ memory: ServerMemory) async -> Bool {
+    let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !isSavingMemoryEdit,
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else { return false }
+    memoryEditGeneration &+= 1
+    let generation = memoryEditGeneration
+    isSavingMemoryEdit = true
+    defer {
+      if generation == memoryEditGeneration { isSavingMemoryEdit = false }
+    }
+    func isCurrentEdit() -> Bool {
+      generation == memoryEditGeneration && RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+    }
+    editError = nil
 
     do {
-      try await APIClient.shared.editMemory(id: memory.id, content: editText)
-
-      // Update content in SQLite so auto-refresh doesn't revert the edit
-      try await MemoryStorage.shared.updateContentByBackendId(memory.id, content: editText)
+      let replacement: ServerMemory?
+      if MemoryIdentity(surfacedId: memory.id).isLocalOnly {
+        replacement = nil
+      } else {
+        replacement = try await editMemoryRequest(memory.id, trimmed, authorization)
+      }
+      guard isCurrentEdit() else { return false }
+      let resolvedId = replacement?.id ?? memory.id
+      try await MemoryStorage.shared.applyEditedMemory(
+        originalID: memory.id, content: trimmed, replacement: replacement,
+        authorization: LocalMutationAuthorization { RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) })
+      guard isCurrentEdit() else { return false }
+      // A save may finish after navigation selected another memory. Its durable
+      // receipt is still valid, but it must not close or overwrite that editor.
+      guard selectedMemory == nil || selectedMemory?.id == memory.id else { return false }
+      if let replacement, selectedMemory?.id == memory.id { selectedMemory = replacement }
 
       editingMemory = nil
       editText = ""
       await loadMemories()
-      await refreshSelectedMemory()
+      guard isCurrentEdit() else { return false }
+      await refreshSelectedMemory(preferredId: resolvedId)
+      return isCurrentEdit()
     } catch {
+      guard isCurrentEdit() else { return false }
+      guard selectedMemory == nil || selectedMemory?.id == memory.id else { return false }
+      editError = error.localizedDescription
       logError("Failed to edit memory", error: error)
+      return false
     }
   }
 
@@ -1796,15 +1841,18 @@ class MemoriesViewModel: ObservableObject {
   /// immutable, so a successful edit left the detail panel rendering the text
   /// the user had just replaced. As a modal that dismissed on save this was
   /// invisible; as a persistent side panel it reads as "Save did nothing".
-  func refreshSelectedMemory() async {
+  /// When a canonical correction mints a replacement memory ID, `preferredId`
+  /// switches the open panel to the replacement record.
+  func refreshSelectedMemory(preferredId: String? = nil) async {
     guard let current = selectedMemory else { return }
-    if let refreshed = memories.first(where: { $0.id == current.id }) {
+    let targetId = preferredId ?? current.id
+    if let refreshed = memories.first(where: { $0.id == targetId }) {
       selectedMemory = refreshed
       return
     }
     // The reloaded page is scope-filtered and may not contain it; the cache is
     // authoritative for a single known id.
-    if let cached = await self.memories(withIDs: [current.id]).first {
+    if let cached = await self.memories(withIDs: [targetId]).first {
       selectedMemory = cached
     }
   }
@@ -3188,6 +3236,7 @@ struct MemoryDetailPanel: View {
       // shareable persona; a switch beside a trash can made that a slip.
       OmiIconMenu(systemName: "ellipsis", help: "Memory Actions") {
         Button("Edit Text") {
+          viewModel.editError = nil
           editContentText = memory.content
           isEditingContent = true
         }
@@ -3236,6 +3285,7 @@ struct MemoryDetailPanel: View {
         // with room to spare. An 80pt box showed roughly three lines of a
         // twelve-line memory and made editing a scroll-and-hunt exercise.
         TextEditor(text: $editContentText)
+          .disabled(viewModel.isSavingMemoryEdit)
           .scaledFont(size: OmiType.subheading)
           .foregroundColor(Ink.primary)
           .scrollContentBackground(.hidden)
@@ -3244,19 +3294,33 @@ struct MemoryDetailPanel: View {
           .cornerRadius(OmiChrome.elementRadius)
           .frame(minHeight: 260)
 
+        if let editError = viewModel.editError, !editError.isEmpty {
+          Text(editError)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.errorRed)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
         HStack(spacing: OmiSpacing.sm) {
-          Button("Cancel") { isEditingContent = false }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          Button("Cancel") {
+            viewModel.editError = nil
+            isEditingContent = false
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .disabled(viewModel.isSavingMemoryEdit)
 
           Button("Save") {
             viewModel.editText = editContentText
             Task {
-              await viewModel.saveEditedMemory(memory)
-              isEditingContent = false
+              let saved = await viewModel.saveEditedMemory(memory)
+              if saved {
+                isEditingContent = false
+              }
             }
           }
           .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-          .disabled(editContentText.isEmpty)
+          .disabled(
+            viewModel.isSavingMemoryEdit || editContentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
     } else if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
@@ -3273,6 +3337,7 @@ struct MemoryDetailPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .onTapGesture {
+          viewModel.editError = nil
           editContentText = memory.content
           isEditingContent = true
         }

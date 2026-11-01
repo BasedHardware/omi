@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Preserve failed memory edits and canonical replacements while preventing stale sign-in responses from replacing current memories or settings"
+  ]
+}

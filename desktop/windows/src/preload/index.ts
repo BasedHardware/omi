@@ -284,8 +284,10 @@ const omi: OmiBridgeApi = {
   // --- Track 3 (proactive-assistant settings — Notifications tab) ---
   assistantsGetSettings: () =>
     ipcRenderer.invoke('assistants:getSettings') as Promise<AssistantSettingsView>,
-  assistantsSetSettings: (patch: Partial<AssistantSettingsView>) =>
-    ipcRenderer.invoke('assistants:setSettings', patch) as Promise<AssistantSettingsView>,
+  assistantsSetSettings: (patch: Partial<AssistantSettingsView>, expectedOwnerUid?: string) =>
+    (expectedOwnerUid !== undefined
+      ? ipcRenderer.invoke('assistants:setSettings', patch, expectedOwnerUid)
+      : ipcRenderer.invoke('assistants:setSettings', patch)) as Promise<AssistantSettingsView>,
   onAssistantSettingsChanged: (cb: (view: AssistantSettingsView) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, view: AssistantSettingsView): void => cb(view)
     ipcRenderer.on('assistants:settingsChanged', listener)

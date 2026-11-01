@@ -8,6 +8,10 @@ import { ScreenAnalysisRow } from './GeneralTab'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
 import type { AssistantSettingsView } from '../../../../../shared/types'
 
+vi.mock('../../../hooks/useAuth', () => ({
+  useAuth: () => ({ user: { uid: 'settings-owner-test' } })
+}))
+
 const VIEW: AssistantSettingsView = {
   notificationsEnabled: true,
   notificationFrequency: 0,
@@ -72,7 +76,10 @@ describe('GeneralTab ScreenAnalysisRow', () => {
     act(() => {
       fireEvent.click(sw())
     })
-    expect(setSettings).toHaveBeenCalledWith({ screenAnalysisEnabled: false })
+    expect(setSettings).toHaveBeenCalledWith(
+      { screenAnalysisEnabled: false },
+      'settings-owner-test'
+    )
     expect(sw().getAttribute('aria-checked')).toBe('false')
   })
 

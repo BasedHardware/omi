@@ -74,13 +74,26 @@ actor APIClient {
     return ""
   }
 
-  let session: URLSession
+  var session: URLSession
   var transport: OmiHTTPTransport
 
   /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
   var testAuthHeader: String? {
     get { transport.testAuthHeader }
     set { transport.testAuthHeader = newValue }
+  }
+
+  /// Test-only method to swap session/transport for request interception.
+  func setTestSession(_ session: URLSession) {
+    self.session = session
+    self.transport = OmiHTTPTransport(session: session)
+  }
+
+  /// Test-only method to restore the default session/transport.
+  func resetTestSession() {
+    let transport = OmiHTTPTransport()
+    self.transport = transport
+    self.session = transport.session
   }
 
   // Short-lived caches to deduplicate simultaneous calls from multiple services

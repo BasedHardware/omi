@@ -21,6 +21,9 @@ def test_child_env_for_offline_mode() -> None:
     assert child["PROVIDER_MODE"] == "offline"
     assert child["OMI_HARNESS_INSTANCE"] == "default"
     assert child["FIREBASE_API_KEY"] == config.LOCAL_FIREBASE_API_KEY
+    assert child["MEMORY_ENABLED"] == "on"
+    assert "MEMORY_MODE" not in child
+    assert config.desktop_backend_child_env_for(cfg)["MEMORY_ENABLED"] == "on"
     assert child["OMI_LLM_GATEWAY_FEATURE_MODE"] == "off"
     assert child["STT_SERVICE_MODELS"] == "parakeet"
     assert "soniox" not in child["STT_SERVICE_MODELS"]
