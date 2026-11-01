@@ -50,7 +50,7 @@
     },
     {
       "path": "backend/utils/batch_pipeline/vendor_health.py",
-      "reason": "All-vendor batch routing slice C ships the cross-pod vendor health service dormant (no behavior change by design). Slice B (route selection) calls allows() and slice D (provider-stage failover) calls reserve() and record_attempt(); remove this entry when the first of them merges. It replaces slice A's vendor_route_metrics.py entry, which this module now imports. Tests: backend/tests/unit/test_batch_vendor_health.py."
+      "reason": "All-vendor batch routing slice C ships the cross-pod vendor health service dormant (no behavior change by design). Slice B (route selection) calls allows() and slice D (provider-stage failover) calls reserve() and record_attempt(); remove this entry when the first of them merges. Tests: backend/tests/unit/test_batch_vendor_health.py."
     }
   ]
 }
