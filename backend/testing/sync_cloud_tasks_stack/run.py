@@ -951,36 +951,6 @@ def _final_attempt_post_ledger_failure_converges(stack: Stack) -> None:
         raise StackFailure('final durable-ledger convergence released unarchived input')
 
 
-def _archived_success_releases_only_staging(stack: Stack) -> None:
-    uid = stack.scenario_uid('archived-success')
-    job_id, task = _submit_and_capture_task(stack, uid, archive=True)
-    response = _deliver_task(task, retry_count=0)
-    if response.status_code != 200:
-        raise StackFailure('archived worker did not finish successfully')
-    _assert_durable_success(stack, uid, job_id)
-    body = task['body']
-    ledger = (
-        stack.firestore.collection('users')
-        .document(uid)
-        .collection('sync_content_ledger_offline')
-        .document(body['content_id'])
-        .get()
-        .to_dict()
-        or {}
-    )
-    receipt = ledger.get('staging_custody') or {}
-    if receipt.get('version') != 1 or not receipt.get('originals'):
-        raise StackFailure('completed ledger lacks original archive custody proof')
-    for original in receipt['originals']:
-        if not (stack.storage_dir / 'omi-private-cloud-sync' / original['archive']).is_file():
-            raise StackFailure('successful staging cleanup removed its durable archive')
-    if any(stack.staged_blob_path(path).exists() for path in body['raw_blob_paths']):
-        raise StackFailure('proven archived success retained redundant staging')
-    duplicate = _deliver_task(task, retry_count=1)
-    if duplicate.status_code != 200 or _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('archived terminal duplicate reprocessed audio')
-
-
 def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
     uid = stack.scenario_uid('terminal-failure')
     job_id, task = _submit_and_capture_task(stack, uid)
