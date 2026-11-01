@@ -237,8 +237,11 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
         assert len(deployments) == 1 and deployment['spec']['replicas'] == 1
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     expected_selector = {'service': 'batch-pipeline', 'env': stage}
-    if environment in ('dev', 'prod'):  # prod pins OD-first (f05065); dev keeps its pool pin
+    if environment == 'dev':  # dev keeps its pool pin
         expected_selector['cloud.google.com/gke-nodepool'] = 'batch-pipeline-pool'
+    if environment == 'prod':  # OD-first (f05065), now via affinity with borrowed OD pools
+        expected_selector = {'env': stage}
+        assert pod_pools(pod) == (['batch-pipeline-pool', *PROD_BORROWED], ['batch-pipeline-pool'])
     assert pod['nodeSelector'] == expected_selector
     assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
         ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
@@ -387,8 +390,94 @@ def test_production_cutover_is_single_od_hpa_min4_max16():
     assert hpas['synthetic-worker']['maxReplicas'] == 16
     pods = [d for d in docs if d['kind'] == 'Deployment']
     assert len(pods) == 1
-    selector = pods[0]['spec']['template']['spec']['nodeSelector']
-    assert selector['cloud.google.com/gke-nodepool'] == 'batch-pipeline-pool'
+    pod = pods[0]['spec']['template']['spec']
+    assert 'cloud.google.com/gke-nodepool' not in pod['nodeSelector']
+    # Own OD pool preferred; only on-demand pools are allowed at all.
+    required, preferred = pod_pools(pod)
+    assert required[0] == preferred[0] == 'batch-pipeline-pool'
+    assert not any('spot' in pool for pool in required)
+
+
+PROD_BORROWED = ['parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2']
+
+
+def pod_pools(pod):
+    affinity = pod['affinity']['nodeAffinity']
+    [term] = affinity['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
+    [required] = term['matchExpressions']
+    [preferred] = affinity['preferredDuringSchedulingIgnoredDuringExecution']
+    [preference] = preferred['preference']['matchExpressions']
+    assert required['key'] == preference['key'] == 'cloud.google.com/gke-nodepool'
+    assert required['operator'] == preference['operator'] == 'In' and preferred['weight'] == 100
+    return required['values'], preference['values']
+
+
+def test_prod_borrows_parakeet_l4_nodes_below_parakeet_priority():
+    # L4 stockout (l4capacity 2026-11-01): nodes Parakeet frees go to Pending
+    # workers instead of back to GCE, and Parakeet (no class, priority 0)
+    # preempts a borrower. Borrowers must still trigger autoscaler scale-up.
+    result = render(
+        '-f',
+        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
+        '--set-string',
+        'image.digest=sha256:' + 'b' * 64,
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    [priority_class] = [d for d in docs if d['kind'] == 'PriorityClass']
+    [deployment] = [d for d in docs if d['kind'] == 'Deployment']
+    pod = deployment['spec']['template']['spec']
+    assert pod['priorityClassName'] == priority_class['metadata']['name'] == 'synthetic-worker-borrower'
+    assert -10 <= priority_class['value'] < 0
+    assert priority_class['preemptionPolicy'] == 'Never' and priority_class['globalDefault'] is False
+    assert pod_pools(pod) == (['batch-pipeline-pool', *PROD_BORROWED], ['batch-pipeline-pool'])
+    assert pod['nodeSelector'] == {'env': 'prod'}
+    # Parakeet nodes carry only the nvidia.com/gpu taint, which the worker already tolerates.
+    assert ('nvidia.com/gpu', 'present') in {(t['key'], t['value']) for t in pod['tolerations']}
+    # Parakeet itself never gets a class, so it keeps priority 0 over borrowers.
+    parakeet = yaml.safe_load((CHART.parent / 'parakeet' / 'prod_omi_parakeet_values.yaml').read_text())
+    assert not parakeet.get('priorityClassName')
+
+
+def test_borrowing_off_restores_the_pool_pin_and_creates_no_priority_class():
+    result = render(
+        '-f',
+        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
+        '--set-string',
+        'image.digest=sha256:' + 'b' * 64,
+        '--set',
+        'borrowedNodePools.enabled=false',
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    assert not [d for d in docs if d['kind'] == 'PriorityClass']
+    [deployment] = [d for d in docs if d['kind'] == 'Deployment']
+    pod = deployment['spec']['template']['spec']
+    assert 'affinity' not in pod and 'priorityClassName' not in pod
+    assert pod['nodeSelector'] == {
+        'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
+        'service': 'batch-pipeline',
+        'env': 'prod',
+    }
+
+
+@pytest.mark.parametrize(
+    'overrides,message',
+    [
+        (['borrowedNodePools.pools={batch-pipeline-pool-spot}'], 'other on-demand pools'),
+        (['borrowedNodePools.pools={batch-pipeline-pool}'], 'other on-demand pools'),
+        (['borrowedNodePools.pools=null'], 'non-empty pools list'),
+        (['borrowedNodePools.priority=0'], 'must be in [-10, 0)'),
+        (['borrowedNodePools.priority=-11'], 'must be in [-10, 0)'),
+    ],
+)
+def test_borrowing_rejects_spot_self_empty_and_unsafe_priority(overrides, message):
+    arguments = ['-f', str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml')]
+    arguments += ['--set-string', 'image.digest=sha256:' + 'b' * 64]
+    for override in overrides:
+        arguments += ['--set', override]
+    result = render(*arguments)
+    assert result.returncode != 0 and message in result.stderr
 
 
 @pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '2400s'), ('diarizer', '600s')])

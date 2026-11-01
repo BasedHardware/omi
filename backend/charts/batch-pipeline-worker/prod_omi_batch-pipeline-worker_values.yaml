@@ -45,6 +45,14 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+# L4 stockout (l4capacity 2026-11-01): out-of-resources in us-central1-a/b/c
+# alike, so nodes Parakeet frees as its floor falls go to batch, not to GCE.
+# Parakeet keeps priority 0 and preempts a borrowed worker (lease retries; no
+# audio is lost). All three pools are on-demand g2-standard-8 + L4 with only the
+# nvidia.com/gpu taint. Kill switch: enabled false (worker roll).
+borrowedNodePools:
+  enabled: true
+  pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true

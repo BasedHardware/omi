@@ -29,6 +29,18 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+# Borrow idle on-demand L4 nodes from other pools (L4 stockout, l4capacity
+# 2026-11-01). When on, the pod requires the nodeSelector pool or one of
+# `pools`, prefers its own pool, and runs at a negative PriorityClass so the
+# owning workload (default priority 0) preempts it on demand. A freed node then
+# passes straight to a Pending worker instead of returning to GCE. Each pool
+# must be on-demand g2-standard-8 + L4 whose only taint the worker tolerates.
+borrowedNodePools:
+  enabled: false
+  pools: []
+  # In [-10, 0): below pods without a class (0), and not below the cluster
+  # autoscaler's expendable cutoff (-10), so Pending workers still add nodes.
+  priority: -1
 worker:
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true

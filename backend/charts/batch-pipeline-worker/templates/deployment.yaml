@@ -55,7 +55,38 @@ spec:
     spec:
       serviceAccountName: {{ required "dedicated Workload Identity serviceAccountName required" .Values.serviceAccountName }}
       terminationGracePeriodSeconds: 1500
-      {{- with .instance.nodeSelector }}
+      {{- $selector := .instance.nodeSelector }}
+      {{- if .Values.borrowedNodePools.enabled }}
+      {{- $own := index $selector "cloud.google.com/gke-nodepool" | default "" }}
+      {{- $borrowed := .Values.borrowedNodePools.pools | default list }}
+      {{- if or (not $own) (empty $borrowed) .Values.autoscaling.balancedPools.enabled }}
+      {{- fail "borrowedNodePools needs a nodeSelector pool, a non-empty pools list and no balancedPools" }}
+      {{- end }}
+      {{- range $borrowed }}
+      {{- if or (eq . $own) (contains "spot" .) }}
+      {{- fail "borrowedNodePools.pools must be other on-demand pools" }}
+      {{- end }}
+      {{- end }}
+      {{- /* The pool label moves to affinity; `service` differs per pool. */}}
+      {{- $selector = omit $selector "cloud.google.com/gke-nodepool" "service" }}
+      priorityClassName: {{ printf "%s-borrower" .Release.Name }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: cloud.google.com/gke-nodepool
+                    operator: In
+                    values: {{ prepend $borrowed $own | toJson }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: cloud.google.com/gke-nodepool
+                    operator: In
+                    values: [{{ $own | quote }}]
+      {{- end }}
+      {{- with $selector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
