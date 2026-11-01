@@ -27,6 +27,7 @@ from database.sync_ledger import LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.intake import durable_status, start_response
 from utils.batch_pipeline.artifact_policy import artifacts_for
+from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
@@ -159,6 +160,7 @@ async def registered_record_response(
     loaded_conversation=None,
     policy=None,
     legacy_mode=None,
+    evidence: IntakeRouteEvidence | None = None,
 ) -> JSONResponse | RecordUploadRoute | None:
     policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
@@ -231,6 +233,15 @@ async def registered_record_response(
                 return _pending()
             if reason:
                 record_admission_exclusion(language, reason, legacy_available=True)
+            # A fresh legacy claim caused by this conversation's language is a
+            # language exclusion like ``reason``; a narrowed policy is not (the
+            # ramp already recorded its own exclusion).
+            if (
+                evidence is not None
+                and legacy_owner
+                and (reason or (policy.batch_enabled and known_unsupported_batch_language(row.get('language'))))
+            ):
+                evidence.language_excluded = True
             return RecordUploadRoute.BATCH if owner == 'batch_sync_v1' else RecordUploadRoute.LEGACY
         return None
     if byok_enabled or row.get('uses_custom_stt'):
