@@ -162,7 +162,48 @@ def _transcribe_from_gpu_result(result: Dict[str, Any]) -> Dict[str, Any]:
         )
     if not segments and text:
         segments = [{"text": text, "start": 0.0, "end": 0.0}]
+    else:
+        segments = _split_cjk_sentences(segments, cast(List[Any], timestamp.get("char", []) or []))
     return {"text": text, "segments": segments}
+
+
+_CJK_SENTENCE_ENDS = ("。", "？", "！")
+
+
+def _split_cjk_sentences(segments: List[Dict[str, Any]], chars: List[Any]) -> List[Dict[str, Any]]:
+    """Rebuild Japanese/Chinese sentence segments from token timestamps.
+
+    NeMo closes a segment only at a word that ends in a delimiter, and words are
+    space-separated, so unspaced Japanese comes back as one segment per request.
+    The live window then can't emit or anchor at the sentences inside it. Only
+    segments holding a full-width sentence end before their last character are
+    rebuilt; any other text, and any token text that disagrees with the decoded
+    segments, keeps NeMo's segments unchanged.
+    """
+    if not chars or not any(mark in str(seg["text"])[:-1] for seg in segments for mark in _CJK_SENTENCE_ENDS):
+        return segments
+    out: List[Dict[str, Any]] = []
+    piece_text = ""
+    piece_start: Optional[float] = None
+    piece_end = 0.0
+    for raw in chars:
+        entry: Dict[str, Any] = cast(Dict[str, Any], raw)
+        token = str(entry.get("char", ""))
+        if not token:
+            continue
+        if piece_start is None:
+            piece_start = float(entry.get("start", 0.0))
+        piece_text += token
+        piece_end = float(entry.get("end", piece_start))
+        if piece_text.rstrip().endswith(_CJK_SENTENCE_ENDS):
+            out.append({"text": piece_text.strip(), "start": piece_start, "end": piece_end})
+            piece_text, piece_start = "", None
+    if piece_text.strip() and piece_start is not None:
+        out.append({"text": piece_text.strip(), "start": piece_start, "end": piece_end})
+    joined = "".join(str(seg["text"]) for seg in out).replace(" ", "")
+    if joined != "".join(str(seg["text"]) for seg in segments).replace(" ", ""):
+        return segments
+    return out
 
 
 def transcribe_file(file_path: str) -> Dict[str, Any]:
