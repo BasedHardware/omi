@@ -12,22 +12,6 @@ MAX_OPEN = 30
 MAX_AUDIO_SECONDS = 6 * 3600
 OPEN_WINDOW_SECONDS = 6 * 3600
 READ_LIMIT = 512
-
-
-def intake_outcome(candidate_enabled: bool, admitted_enabled: bool) -> str:
-    """Bounded sync-intake admission outcome for the upload log line.
-
-    Cloud Run serving has no Prometheus scrape, so the per-upload batch/legacy
-    split is only measurable as this log token: ``not_cohort`` (owner outside
-    the ramp cohort, or the served percent is 0), ``legacy_excluded`` (cohort
-    owner narrowed to legacy by the owner-load filter) or ``batch``.
-    """
-
-    if not candidate_enabled:
-        return 'not_cohort'
-    return 'batch' if admitted_enabled else 'legacy_excluded'
-
-
 SWITCH = 'BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS'
 
 
