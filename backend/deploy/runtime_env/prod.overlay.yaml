@@ -39,6 +39,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+        # artifacts on open/play/download only. Kill switch: set false.
+        PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         # Replay uses the existing singleton loop; live admission stays inline.
         LISTEN_FINALIZATION_REPLAY_ENABLED:
           value: 'true'
@@ -255,6 +258,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+        # artifacts on open/play/download only. Kill switch: set false.
+        PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
         OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -502,6 +508,11 @@ overlay:
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
+
+
+          # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+          # artifacts on open/play/download only. Kill switch: set false.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -854,6 +865,11 @@ overlay:
           PROVIDER_STT_TASKS_QUEUE: {value: provider-stt, category: reliability}
           PROVIDER_STT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app', category: reliability}
           PROVIDER_STT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app', category: service_auth}
+
+
+          # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+          # artifacts on open/play/download only. Kill switch: set false.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -1231,6 +1247,11 @@ overlay:
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
+
+
+          # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+          # artifacts on open/play/download only. Kill switch: set false.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
           # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
@@ -1584,6 +1605,11 @@ overlay:
           PROVIDER_STT_TASKS_QUEUE: {value: provider-stt, category: reliability}
           PROVIDER_STT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app', category: reliability}
           PROVIDER_STT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app', category: service_auth}
+
+
+          # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+          # artifacts on open/play/download only. Kill switch: set false.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
           # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also

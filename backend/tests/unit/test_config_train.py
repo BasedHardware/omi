@@ -20,6 +20,13 @@ import ops_train  # noqa: E402
 PROD_HEADER = 'schema: omi.ops/v1\nenvironment: prod\nproject: based-hardware\nregion: us-central1\n'
 
 
+def test_fresh_queue_smoothing_keeps_concurrency_and_retry_ownership():
+    queue = yaml.safe_load((BACKEND / 'deploy/ops/prod.yaml').read_text())['cloud_tasks']['sync-jobs-fresh']
+    assert queue['max_dispatches_per_second'] == 15
+    assert queue['max_concurrent_dispatches'] == 160
+    assert (queue['max_attempts'], queue['min_backoff'], queue['max_backoff']) == (5, '60s', '300s')
+
+
 def _container(image: str, env: dict[str, str], *, ports: bool = True, name: str = 'backend') -> dict[str, Any]:
     out: dict[str, Any] = {'name': name, 'image': image, 'env': [{'name': k, 'value': v} for k, v in env.items()]}
     if ports:

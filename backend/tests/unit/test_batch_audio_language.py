@@ -578,7 +578,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
     """Lead cfcaba: with legacy sync draining or dark, main's language guard does not
     send uploads to legacy; unsupported/unknown speech keeps #23038's bounded probe."""
     from types import SimpleNamespace
-    from utils.batch_pipeline import intake
+    from utils.batch_pipeline import intake, route_selection
     from utils.batch_pipeline.audio import audio_unit, read_context
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.sync.legacy_dark import LegacySyncMode
@@ -586,7 +586,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
 
     client = detector(monkeypatch, code, confidence)
     captured, routes = [], []
-    real_resolve_route = intake.resolve_route
+    real_resolve_route = route_selection.resolve_route
 
     def spy_route(language, **kwargs):
         routes.append(real_resolve_route(language, **kwargs))
@@ -603,8 +603,8 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
     def units(*args, **kwargs):
         yield audio_unit(100, b'\x01\x00' * 16000)
 
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
-    monkeypatch.setattr(intake, 'resolve_route', spy_route)
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
+    monkeypatch.setattr(route_selection, 'resolve_route', spy_route)
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)

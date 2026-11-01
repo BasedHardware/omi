@@ -45,6 +45,7 @@ from tests.unit.test_batch_pipeline_owner_chain_projection import (
     projector_for,
 )
 from utils.batch_pipeline import projection
+from utils.batch_pipeline.projection_hold_policy import PROJECTION_TERMINAL_CONFLICTS
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.assignment_errors import (
     SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER,
@@ -87,6 +88,8 @@ def expected_outcome(kind: str, lane: str) -> str:
     if kind.startswith('conflict:'):
         subtype = kind.split(':', 1)[1]
         if subtype in SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL:
+            return ADVANCE
+        if subtype in PROJECTION_TERMINAL_CONFLICTS:
             return ADVANCE
         if subtype in SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER:
             return ADVANCE if lane == 'backfill' else WAIT

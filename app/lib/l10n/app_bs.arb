@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "Bilješke počinju kad stigne konačni transkript.",
     "episodeOnDeviceNotesFootnote": "Nastaju na tvom telefonu dok pričaš. Potpune bilješke stižu s konačnim transkriptom.",
     "episodeOnThisPhone": "Na ovom telefonu",
-    "liveCardTitle": "Uživo",
     "livePreviewBehind": "Konačni transkript kasni oko {duration}",
     "livePreviewCatchingUp": "Konačni transkript sustiže",
     "livePreviewNoEngineBody": "Tvoje riječi se ovdje pojavljuju minutu ili dvije nakon što ih izgovoriš.",
     "livePreviewNoEngineTitle": "Sigurno snima",
-    "livePreviewOnPhoneDivider": "Uživo na ovom telefonu",
+    "livePreviewOnPhoneDivider": "Upravo sada, na ovom telefonu",
     "livePreviewTurnOnLiveText": "Uključi tekst uživo",
     "deviceCatchUpOnItsWay": "na putu",
     "deviceCatchUpWhenOnline": "kada bude online",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "Godišnje plaćanje trenutno nije dostupno za vaš plan.",
     "yearlySwitchDoneTitle": "Sada plaćate godišnje",
     "yearlySwitchDoneBody": "Danas naplaćeno {amount}. Obnavlja se {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} dijelova} one{{count} dio} two{{count} dijelova} few{{count} dijela} many{{count} dijelova} other{{count} dijelova}}",
     "chatAppsWaitingMessageIn": "Pošalji poruku u aplikaciji {app}. Ovaj ekran će se ažurirati čim je Omi primi.",
-    "chatAppsCodeExpiredMessageIn": "Uzmi novi kod i pošalji ga iz aplikacije {app}."
+    "chatAppsCodeExpiredMessageIn": "Uzmi novi kod i pošalji ga iz aplikacije {app}.",
+    "episodeWritingNotes": "Pišemo bilješke…",
+    "episodeWritingNotesDetail": "Prvo završavamo transkript. Možete napustiti ovu stranicu.",
+    "episodeCoversUpTo": "Pokriva do {time} · potpune bilješke po završetku",
+    "liveTranscribedUpTo": "Transkribovano do {time}",
+    "liveAudioSaved": "Sačuvano {duration}",
+    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tokom otpremanja."
 }

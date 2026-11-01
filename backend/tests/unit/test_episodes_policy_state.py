@@ -6,7 +6,7 @@ import pytest
 
 from config import episodes as config
 from utils.episodes import policy
-from utils.episodes.state import InvalidUpdate, apply_update, parse_update, render_state
+from utils.episodes.state import InvalidUpdate, apply_update, clean_text, parse_update, render_state
 
 T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
 
@@ -226,3 +226,19 @@ def test_match_saved_tasks_is_one_to_one_and_threshold_bound():
     ]
     assert policy.match_saved_tasks(items, saved) == {'p1': 't1', 'p2': 't2', 'p3': None}
     assert policy.match_saved_tasks(items[:1], []) == {'p1': None}
+
+
+def test_a_long_note_ends_on_a_whole_sentence_or_word():
+    sentence = 'The release moves to Thursday. ' + 'so the review has a little more slack than before ' * 5
+    assert clean_text(sentence, 40).endswith('Thursday.')
+    words = 'checklist ' * 30
+    trimmed = clean_text(words, 44)
+    assert trimmed.endswith('…') and len(trimmed) <= 44 and trimmed[:-1].split()[-1] == 'checklist'
+    assert clean_text('短' * 60, 20) == '短' * 19 + '…'
+    assert clean_text('fits', 40) == 'fits'
+
+
+def test_generated_prose_loses_lettered_and_numbered_speaker_labels():
+    assert clean_text('Speaker C asked Speaker 4 about the speaker series.', 80) == (
+        'a speaker asked a speaker about the speaker series.'
+    )

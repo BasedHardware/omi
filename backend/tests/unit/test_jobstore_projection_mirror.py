@@ -54,7 +54,10 @@ def test_record_silence_assignment_mirrors_even_when_the_transaction_fails(monke
 
     monkeypatch.setattr(projector_module.conversations_db, 'assign_sync_conversation', fail)
     session = SimpleNamespace(
-        prepare=None, validate_plan=None, policy=SimpleNamespace(projection_contention=False, projection_timing=None)
+        entry={},
+        prepare=None,
+        validate_plan=None,
+        policy=SimpleNamespace(projection_contention=False, projection_timing=None),
     )
     item = SimpleNamespace(capture_at=1.0, duration_seconds=2.0)
     bound = SimpleNamespace(target_conversation_id='c', data_protection_level='standard', owner_id='o')

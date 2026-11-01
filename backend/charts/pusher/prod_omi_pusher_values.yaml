@@ -153,7 +153,7 @@ env:
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
-    value: "false"
+    value: "true"
   - name: REPEAT_WORK_REVISION_ENABLED
     value: "false"
   - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
@@ -703,3 +703,21 @@ affinity:
               operator: In
               values:
                 - v3
+    # Soft preference only: n2rescue still carries the required labels above,
+    # so overflow capacity cannot regress. Without this term the scheduler
+    # spreads evenly across v3 and n2rescue, stranding half the fleet on
+    # n2rescue (9 of 16 nodes, 2026-10-29) even after load falls, because
+    # pusher pods never reschedule on their own.
+    # Deploy gate: pod-template change — per
+    # backend/docs/runbooks/audio-fleet.md, roll only in a verified
+    # traffic-free window or after a qualified admission drain; never onto
+    # active WS sessions (PDB 80% protects availability, not sessions).
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: cloud.google.com/gke-nodepool
+              operator: In
+              values:
+                - pusher-pool-v3
+                - pusher-pool-v3-bc

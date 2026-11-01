@@ -17925,10 +17925,6 @@
     "@episodeOnThisPhone": {
         "description": "Tag on notes drafted on-device from the live preview."
     },
-    "liveCardTitle": "Live",
-    "@liveCardTitle": {
-        "description": "Title of the live preview card on the Summary tab."
-    },
     "livePreviewBehind": "Final transcript about {duration} behind",
     "@livePreviewBehind": {
         "description": "Quiet line: how far the final transcript lags the live preview.",
@@ -17948,7 +17944,7 @@
     "@livePreviewNoEngineTitle": {
         "description": "No-engine preview card title."
     },
-    "livePreviewOnPhoneDivider": "Live on this phone",
+    "livePreviewOnPhoneDivider": "Just now, on this phone",
     "@livePreviewOnPhoneDivider": {
         "description": "Divider between the final transcript and the on-device preview lines."
     },
@@ -18250,15 +18246,6 @@
             }
         }
     },
-    "episodePartsCount": "{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}",
-    "@episodePartsCount": {
-        "description": "Number of retained conversations in a closed episode Home row; shown for two or more parts.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "chatAppsWaitingMessageIn": "Send the message in {app}. This screen updates as soon as Omi gets it.",
     "@chatAppsWaitingMessageIn": {
         "description": "Waiting step after opening a chat app with the link code. app is a brand name such as WhatsApp.",
@@ -18276,5 +18263,38 @@
                 "type": "String"
             }
         }
+    },
+    "episodeWritingNotes": "Writing notes…",
+    "@episodeWritingNotes": {
+        "description": "The processing row and page while an episode's notes are written."
+    },
+    "episodeWritingNotesDetail": "Finishing the transcript first. You can leave this page.",
+    "@episodeWritingNotesDetail": {
+        "description": "Under Writing notes on the processing page."
+    },
+    "episodeCoversUpTo": "Covers up to {time} · full notes when it wraps up",
+    "@episodeCoversUpTo": {
+        "description": "How far the running notes reach on a live episode.",
+        "placeholders": {
+            "time": {}
+        }
+    },
+    "liveTranscribedUpTo": "Transcribed up to {time}",
+    "@liveTranscribedUpTo": {
+        "description": "Rule where the final transcript ends on a live episode.",
+        "placeholders": {
+            "time": {}
+        }
+    },
+    "liveAudioSaved": "{duration} saved",
+    "@liveAudioSaved": {
+        "description": "Card past the final transcript: audio saved and not yet transcribed.",
+        "placeholders": {
+            "duration": {}
+        }
+    },
+    "liveAudioSavedDetail": "Speakers and the final transcript fill in here as it uploads.",
+    "@liveAudioSavedDetail": {
+        "description": "Under the saved-audio card's heading."
     }
 }

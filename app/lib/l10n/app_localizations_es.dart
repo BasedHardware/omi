@@ -14718,9 +14718,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get episodeOnThisPhone => 'En este teléfono';
 
   @override
-  String get liveCardTitle => 'En vivo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Transcripción final con unos $duration de retraso';
   }
@@ -14735,7 +14732,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Grabando de forma segura';
 
   @override
-  String get livePreviewOnPhoneDivider => 'En vivo en este teléfono';
+  String get livePreviewOnPhoneDivider => 'Ahora mismo, en este teléfono';
 
   @override
   String get livePreviewTurnOnLiveText => 'Activar texto en vivo';
@@ -14980,21 +14977,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count partes',
-      many: '$count partes',
-      few: '$count partes',
-      two: '$count partes',
-      one: '$count parte',
-      zero: '$count partes',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Envía el mensaje desde $app. Esta pantalla se actualiza en cuanto Omi lo recibe.';
   }
@@ -15003,4 +14985,28 @@ class AppLocalizationsEs extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Obtén un código nuevo y envíalo desde $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Escribiendo notas…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Primero terminamos la transcripción. Puedes salir de esta página.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Cubre hasta las $time · notas completas al terminar';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transcrito hasta las $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration guardados';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Los hablantes y la transcripción final aparecerán aquí a medida que se suba.';
 }

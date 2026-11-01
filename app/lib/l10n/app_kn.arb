@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "ಅಂತಿಮ ಪ್ರತಿಲಿಪಿ ಆಗಮಿಸಿದಾಗ ಟಿಪ್ಪಣಿಗಳು ಪ್ರಾರಂಭವಾಗುತ್ತವೆ.",
     "episodeOnDeviceNotesFootnote": "ನೀವು ಮಾತನಾಡುವಾಗ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ರಚಿಸಲಾಗುತ್ತದೆ. ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು ಅಂತಿಮ ಪ್ರತಿಲಿಪಿಯೊಂದಿಗೆ ಬರುತ್ತವೆ.",
     "episodeOnThisPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ",
-    "liveCardTitle": "ಲೈವ್",
     "livePreviewBehind": "ಅಂತಿಮ ಪ್ರತಿಲಿಪಿ ಸುಮಾರು {duration} ಹಿಂದಿದೆ",
     "livePreviewCatchingUp": "ಅಂತಿಮ ಪ್ರತಿಲಿಪಿ ತಲುಪುತ್ತಿದೆ",
     "livePreviewNoEngineBody": "ನೀವು ಹೇಳಿದ ಒಂದೆರಡು ನಿಮಿಷಗಳಲ್ಲಿ ನಿಮ್ಮ ಮಾತುಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.",
     "livePreviewNoEngineTitle": "ಸುರಕ್ಷಿತವಾಗಿ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ",
-    "livePreviewOnPhoneDivider": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಲೈವ್",
+    "livePreviewOnPhoneDivider": "ಈಗಷ್ಟೇ, ಈ ಫೋನ್‌ನಲ್ಲಿ",
     "livePreviewTurnOnLiveText": "ಲೈವ್ ಪಠ್ಯ ಆನ್ ಮಾಡಿ",
     "deviceCatchUpOnItsWay": "ದಾರಿಯಲ್ಲಿದೆ",
     "deviceCatchUpWhenOnline": "ಆನ್‌ಲೈನ್ ಆದಾಗ",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "ಈಗ ನಿಮ್ಮ ಯೋಜನೆಗೆ ವಾರ್ಷಿಕ ಪಾವತಿ ಲಭ್ಯವಿಲ್ಲ.",
     "yearlySwitchDoneTitle": "ನೀವು ಈಗ ವಾರ್ಷಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
     "yearlySwitchDoneBody": "ಇಂದು {amount} ಶುಲ್ಕ ವಿಧಿಸಲಾಗಿದೆ. ನವೀಕರಣ {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} ಭಾಗಗಳು} one{{count} ಭಾಗಗಳು} two{{count} ಭಾಗಗಳು} few{{count} ಭಾಗಗಳು} many{{count} ಭಾಗಗಳು} other{{count} ಭಾಗಗಳು}}",
     "chatAppsWaitingMessageIn": "{app} ನಲ್ಲಿ ಸಂದೇಶ ಕಳುಹಿಸಿ. Omi ಗೆ ಅದು ಸಿಕ್ಕ ತಕ್ಷಣ ಈ ಪರದೆ ನವೀಕರಣಗೊಳ್ಳುತ್ತದೆ.",
-    "chatAppsCodeExpiredMessageIn": "ಹೊಸ ಕೋಡ್ ಪಡೆದು {app} ನಿಂದ ಕಳುಹಿಸಿ."
+    "chatAppsCodeExpiredMessageIn": "ಹೊಸ ಕೋಡ್ ಪಡೆದು {app} ನಿಂದ ಕಳುಹಿಸಿ.",
+    "episodeWritingNotes": "ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
+    "episodeWritingNotesDetail": "ಮೊದಲು ಪ್ರತಿಲೇಖನ ಮುಗಿಸಲಾಗುತ್ತಿದೆ. ನೀವು ಈ ಪುಟದಿಂದ ಹೊರಡಬಹುದು.",
+    "episodeCoversUpTo": "{time} ವರೆಗೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",
+    "liveTranscribedUpTo": "{time} ವರೆಗೆ ಪ್ರತಿಲೇಖನವಾಗಿದೆ",
+    "liveAudioSaved": "{duration} ಉಳಿಸಲಾಗಿದೆ",
+    "liveAudioSavedDetail": "ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ."
 }

@@ -7,11 +7,22 @@ import threading
 import time
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2.id_token import fetch_id_token
 
 from utils.batch_pipeline.contracts import LeasedWork
+
+
+class InvalidReceipt(ValueError):
+    """The authority replied, but did not supply a usable fenced receipt."""
+
+
+def failure_outcome(error):
+    if isinstance(error, TimeoutError) or (isinstance(error, URLError) and isinstance(error.reason, TimeoutError)):
+        return 'timeout'
+    return 'invalid_receipt' if isinstance(error, InvalidReceipt) else 'transport'
 
 
 class ComputeClient:
@@ -52,13 +63,16 @@ class ComputeClient:
             with self._send(request, timeout=5) as response:
                 raw = response.read(65537)
             if len(raw) > 65536:
-                raise ValueError('oversized spend admission response')
-            result = json.loads(raw)
+                raise InvalidReceipt('oversized spend admission response')
+            try:
+                result = json.loads(raw)
+            except (ValueError, UnicodeError, RecursionError):
+                raise InvalidReceipt('invalid spend admission JSON') from None
             identities = {lease.item.segment_id for lease in leases}
             if not isinstance(result, dict) or not isinstance(result.get('allowed'), list):
-                raise ValueError('invalid spend admission receipt')
+                raise InvalidReceipt('invalid spend admission receipt')
             if any(not isinstance(value, str) or value not in identities for value in result['allowed']):
-                raise ValueError('foreign spend admission receipt')
+                raise InvalidReceipt('foreign spend admission receipt')
             retries = result.get('retry_after') or {}
             if not isinstance(retries, dict) or any(
                 key not in identities
@@ -67,13 +81,13 @@ class ComputeClient:
                 or not 1 <= value <= 86400
                 for key, value in retries.items()
             ):
-                raise ValueError('invalid spend admission retry receipt')
+                raise InvalidReceipt('invalid spend admission retry receipt')
             held_reason = result.get('held_reason') or {}
             if not isinstance(held_reason, dict) or any(
                 key not in identities or not isinstance(value, str) or not 1 <= len(value) <= 64
                 for key, value in held_reason.items()
             ):
-                raise ValueError('invalid spend admission hold receipt')
+                raise InvalidReceipt('invalid spend admission hold receipt')
             return result
         except Exception:
             self._refresh_at = 0.0

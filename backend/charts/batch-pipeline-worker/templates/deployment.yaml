@@ -97,6 +97,7 @@ spec:
             - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
             # Pump flights per GPU: claim and publication overlap the exclusive chain; "1" is the serial kill switch.
             - {name: BATCH_PIPELINE_WORKER_PIPELINE_DEPTH, value: {{ .Values.worker.pipelineDepth | default 2 | quote }}}
+            - {name: BATCH_PIPELINE_WORKER_IO_CONCURRENCY, value: {{ .Values.worker.ioConcurrency | default 5 | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}
