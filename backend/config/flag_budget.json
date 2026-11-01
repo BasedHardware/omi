@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 202,
+  "count": 203,
   "names": {
     "BATCH_VENDOR_ROUTING_ENABLED": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTING_PERCENT": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
@@ -28,6 +28,7 @@
     "BATCH_VENDOR_ROUTING_SHADOW_PERCENT": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTE_TABLE": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED": {"owner": "holdfix / batch rollout lead", "review_by": "2026-11-15"},
+    "BATCH_ALLOWANCE_HOLD_RETRY_SECONDS": {"owner": "holdpark / batch rollout lead", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_RECORD_PROTOCOL_READY": {"owner": "two-lane lead", "review_by": "2026-11-15"},
     "CONVERSATION_OCCASION_RELEVANCE_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "CONVERSATION_MERGE_BEFORE_PROCESSING": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
