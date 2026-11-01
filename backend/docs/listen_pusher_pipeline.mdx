@@ -6,6 +6,24 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Cohort-scoped legacy sync retirement
+
+Upload admission, record-owner selection, final-pass claims, cap-hold handoff
+and sequencer dispatch resolve legacy mode for the audio owner. The runtime
+`legacy-sync` percent uses the deployed batch-percent hash and is clamped to batch admission; owners outside
+the percent keep legacy `on`. In draining/dark, admission language exclusion
+cannot refuse the owner's batch path, even during env-update skew. Named
+unsupported languages use C8 provider STT; unknown multilingual inputs retain
+the GPU language barrier and fenced recovery path. Ledger custody and duplicate
+fences are unchanged. Live vendor retirement still requires its separate
+language-quality and durable capture eligibility checks.
+
+Prepare draining/dark env sets with `scripts.rollout.legacy_env`, which forces
+`BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` on each Cloud Run entry.
+Serve the cohort-aware implementation everywhere before setting a partial
+mode/percent; rollback remains a single `legacy_sync=on` write. Operational
+preconditions and the C9 holds are in [the legacy-dark runbook](runbooks/legacy-dark.md).
+
 ## Partial finishes for retained recordings
 
 Batch GPU compute admission returns partial receipts within a four-second server
@@ -3501,7 +3519,15 @@ and retained-audio limits are documented in the
 ### Sync backfill handler-budget deferral (Cloud Run request timeout)
 
 `backend-sync-backfill` runs each Cloud Tasks sync job inside one
-`POST /v2/sync-jobs/run` request. Starlette's `TimeoutMiddleware` answers its
+`POST /v2/sync-jobs/run` request. Stale sequencer epochs and no-op deliveries
+skip cohort warming; real work warms membership after the run-lock and
+terminal/convergence checks. A valid sequencer claim carries its prior Redis
+job snapshot back to the route, preserving retry history without a second
+executor dispatch. Locked retries and the final terminal re-read stay fenced.
+Cohort-only timeouts retain the queue-owned 409 after a confirmed lock release;
+an uncertain release keeps the existing preserved-lock continuation. Paid-work
+timeouts still preserve their lock and staged audio.
+Starlette's `TimeoutMiddleware` answers its
 route cap (`HTTP_SYNC_JOBS_RUN_TIMEOUT`, default 1500 s) with a 504 without
 cancelling the downstream pipeline, so an over-budget job would hold the ASGI
 request until Cloud Run kills it at the platform's maximum request timeout.
@@ -7470,13 +7496,47 @@ an accounting diagnostic, not a serving-failure abort.
 
 `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
 `false` restores oldest-100 discovery). Assignment and async follow-ups each
-advance their own bounded 100-row keyset scan across pending, persisted and
-ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+advance their own bounded 100-row keyset scan. Assignment scans pending
+results; async follow-ups scan persisted/ready results by default. The cursor
+uses `(committed_at, document ID)`, so equal timestamps
 and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
 restart begins at the head without dropping any durable obligations. Follow-ups
 launch the whole bounded page before fetching the next one. Discovery order is
 only a hint: existing transactional predecessor, privacy, all-sibling readiness,
 receipt replay and paid-intent fences remain authoritative.
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED` defaults to `true`.
+Follow-up discovery uses only the persisted/ready result page, plus one job
+read per receipt for its pinned policy. It no longer fetches each result twice
+after the query. Synchronous receipts are filtered before queueing so they
+cannot delay async recovery wakeups. Legacy unpinned policies still use the
+existing privacy-aware resolution; execution rechecks policy and receipt
+fences. Setting the switch to `false` restores the mixed page and
+per-candidate reads. Pagination's separate kill switch still controls rotation.
+Pending partial assignments and quarantine-held rows do not enter the finish
+page; recovery and repair still return them through pending assignment to
+persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
+or destination can unblock them without changing their own result version.
+Already-ready siblings in one discovered page share a content-completion
+probe for their exact immutable binding. Every row still rechecks its receipt
+and privacy fences; persisted rows still finish their own side effects and
+probe completion. Failed/cancelled probes clear their marker. Each new
+discovery page gets a fresh probe; an older page keeps its marker until its
+queued/running rows finish. Priority/owed recovery work bypasses sharing,
+including owed rows also found by discovery or woken before their probe. Thus an
+unchanged ready row gets a fresh probe each cycle even when its dependency
+changed elsewhere. No cooldown or version cache is used. When the existing
+quarantine-hold transaction finds a quarantined sibling, it uses its existing
+read set to settle all matching ready siblings' discovery hints together.
+It verifies their full binding, owner and segment identity before any write;
+persisted side effects and receipt payloads are untouched. This prevents ready
+siblings leaving discovery one per later pass. The same kill switch restores
+single-row hold hints as well as independent completion probes.
+
+The execution read origin `task:batch_projection_followup` covers these row
+fences and sibling completion scans; candidate discovery runs in its caller's
+origin. Measure them separately: reducing candidate reads alone does not
+establish a reduction in the execution-origin read counter.
 
 The query reuses the declared prod/dev results composite index:
 `projection_state ASC, committed_at ASC, __name__ ASC` in

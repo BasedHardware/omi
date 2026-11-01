@@ -19,7 +19,7 @@ from google.api_core.exceptions import NotFound
 from prometheus_client import Counter
 
 from database._client import get_firestore_client
-from database import sync_redrive
+from database import sync_redrive, sync_jobs
 from database.sync_ledger import is_valid_completed_sync_content_result
 from config.firestore_read_levers import lever_enabled
 from config.sync_owner_concurrency import backlog_threshold, preparation_width
@@ -510,8 +510,12 @@ def claim_next(
 
 def begin_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
-) -> bool:
-    """A stale Cloud Task epoch can never enter the transcription pipeline."""
+) -> Optional[dict[str, Any]]:
+    """Fence the delivery, then return its prior job state in the same DB leaf.
+
+    Stale epochs perform no job read. The snapshot only carries retry history;
+    the handler must still re-read under its run lock and before completion.
+    """
     _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
@@ -534,9 +538,12 @@ def begin_job(
         return True
 
     try:
-        return commit(client.transaction())
+        began = commit(client.transaction())
     except NotFound:
-        return False
+        return None
+    if not began:
+        return None
+    return {'job': sync_jobs.get_sync_job(job_id)}
 
 
 def renew_job(

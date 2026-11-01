@@ -422,6 +422,13 @@ def projection_pending_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
 
 
+def projection_followup_page_enabled() -> bool:
+    """Kill switch: discover only finishable receipts, without per-row fetches."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
+
+
 def owner_drain_enabled() -> bool:
     """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
     from config.policy import kill_switch
