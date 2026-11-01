@@ -155,6 +155,33 @@ def test_explicit_nulls_fall_back_to_defaults_instead_of_failing():
     assert extraction.action_items == []
 
 
+def test_a_submission_without_a_usable_emoji_never_persists_the_default():
+    # The schema default (🧠) means the model never chose: the stored row gets
+    # the category's emoji instead, exactly like the v2 NotesOutput path.
+    omitted = StructuredExtraction.model_validate({'title': 'Kickoff', 'category': 'business'}).to_structured()
+    assert omitted.emoji == '💼'
+    nulled = StructuredExtraction.model_validate(
+        {'title': 'Kickoff', 'category': 'business', 'emoji': None}
+    ).to_structured()
+    assert nulled.emoji == '💼'
+    other = StructuredExtraction.model_validate({'title': 'Misc', 'category': 'other'}).to_structured()
+    assert other.emoji == '💬'
+    chosen = StructuredExtraction.model_validate(
+        {'title': 'Kickoff', 'category': 'business', 'emoji': '🎯'}
+    ).to_structured()
+    assert chosen.emoji == '🎯'
+
+
+def test_agent_notes_submission_without_an_emoji_uses_the_category_fallback():
+    from models.structured_extraction import AgentNotesSubmission
+
+    submission = AgentNotesSubmission.model_validate(
+        {'title': 'Sync', 'category': 'work', 'participants': [], 'action_items': [], 'events': []}
+    )
+
+    assert submission.to_structured().emoji == '🧑‍💻'
+
+
 def test_action_items_extraction_shares_the_guard():
     """The retired action-item-only parser used this model before notes v2."""
     completion = json.dumps({'action_items': [{'due_at': None}, {'description': 'Send the deck'}]})

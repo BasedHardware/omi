@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, Optional
 
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database.speaker_profile_authority import owner_teaching_authorized, person_teaching_authorized
 from models.other import VoiceReadiness, voice_readiness
 from models.person_confidence import SOURCE_CARD
@@ -26,6 +27,7 @@ from utils.observability.speaker_learning_jobs import record_speaker_learning_jo
 from utils.owner_voice_evidence import authorized_owner_segments
 from utils.person_evidence import receipt_person_ids
 from utils.speaker_learning_policy import authorized_teaching_segments
+from utils.speakers import auto_enroll
 
 MAX_JOBS = 32
 MAX_SEGMENT_IDS = 200
@@ -204,7 +206,19 @@ def _finite_nonzero_vector(vector: Any) -> bool:
     )
 
 
-def _person_stored(person: Mapping[str, Any], job: Mapping[str, Any]) -> bool:
+def _person_stored(person: Mapping[str, Any], job: Mapping[str, Any], uid: str) -> bool:
+    entries = auto_enroll.active(
+        auto_enroll.open_pool(uid, job.get('person_id') or '', person.get(auto_enroll.POOL_FIELD)),
+        _now().timestamp(),
+    )
+    if auto_enroll.enabled() and any(
+        e.get('conversation_id') == job.get('conversation_id')
+        and set(e.get('segment_ids') or []).issubset(set(job.get('segment_ids') or []))
+        and isinstance(e.get('generation'), int)
+        and e['generation'] >= job.get('generation', 0)
+        for e in entries
+    ):
+        return True
     if voice_readiness(person) != VoiceReadiness.ready:
         return False
     source = person.get('speech_sample_source') or {}
@@ -292,7 +306,7 @@ def _authority_check(
                 job.get('generation'),
             ):
                 return 'superseded'
-            if _person_stored(person, job):
+            if _person_stored(person, job, user_ref.id):
                 return 'stored'
             return None
         if not owner_teaching_authorized(
@@ -562,6 +576,7 @@ def _ledger_transaction(
             dirty = True
         for doc_ref, update in writes:
             transaction.update(doc_ref, update)
+            bump_people_generation(transaction, doc_ref)
         if dirty or events:
             _trim_jobs(jobs, events)
             transaction.set(ref, {'jobs': jobs})
@@ -885,7 +900,7 @@ def prepare_assignment_jobs(
                 return 'disabled'
             if not set(job.get('segment_ids') or []) <= person_allowed(pid):
                 return 'superseded'
-            if _person_stored(person, job):
+            if _person_stored(person, job, user_ref.id):
                 return 'stored'
             return None
         allowed = set(

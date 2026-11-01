@@ -228,6 +228,15 @@ def test_firestore_diagnostics_are_bounded(message, expected):
     assert _firestore_error_class(ValueError(message)) == 'none'
 
 
+def test_contention_budget_exhaustion_tokens_are_bounded():
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+
+    assert _firestore_error_class(FirestoreContentionExhausted('budget spent')) == 'contention'
+    deadline = FirestoreContentionExhausted('deadline spent', reason='deadline_exhausted')
+    assert _firestore_error_class(deadline) == 'deadline_exhausted'
+    assert _firestore_error_class(ValueError('budget spent')) == 'none'
+
+
 def test_ledger_has_no_permanent_segment_guard():
     """The bounded batch cap is the only pause; nothing reads a per-segment guard."""
     assert not hasattr(sync_ledger, 'get_sync_segment_quarantine')

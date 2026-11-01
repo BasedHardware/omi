@@ -92,6 +92,20 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   SocketServiceState get state =>
       _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
 
+  /// False while a custom-STT composite that forwards raw audio to Omi runs
+  /// without its Omi connection (see
+  /// [CompositeTranscriptionSocket.keepPrimaryWhenSecondaryFails]). Audio sent
+  /// in that state never reached Omi, so it must not be marked as synced.
+  ///
+  /// When raw-audio forwarding is off the user has opted out of sending audio
+  /// to Omi, so frames keep being marked synced as before; leaving them
+  /// unsynced would queue them for a later upload the user did not consent to.
+  bool get deliversToOmi {
+    final socket = _socket;
+    if (socket is! CompositeTranscriptionSocket) return true;
+    return !socket.secondaryDegraded || !socket.forwardRawAudioToSecondary;
+  }
+
   int sampleRate;
   BleAudioCodec codec;
   String language;
@@ -104,6 +118,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool onboardingMode;
   bool speechProfileRedo;
   Geolocation? geolocation;
+
+  /// This socket declared `local_preview=enabled`: the phone renders an
+  /// on-device preview and the server may defer the cloud stream.
+  bool localPreview;
 
   /// Reports foreground / live-transcript visibility to the server while connected.
   VoidCallback? _clientStateListener;
@@ -121,6 +139,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.speechProfileRedo = false,
     this.geolocation,
     this.clientConversationId,
+    this.localPreview = false,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -144,6 +163,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (speechProfileRedo) {
       params += '&speech_profile_redo=enabled';
+    }
+
+    if (localPreview) {
+      params += '&local_preview=enabled';
     }
 
     // Enable server-side speaker auto-assignment (backward compatibility flag)
@@ -179,6 +202,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.speechProfileRedo = false,
     this.geolocation,
     this.clientConversationId,
+    this.localPreview = false,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -430,6 +454,7 @@ class TranscriptSocketServiceFactory {
     String? sttConfigId,
     Geolocation? geolocation,
     String? clientConversationId,
+    bool localPreview = false,
   }) {
     return TranscriptSegmentSocketService.create(
       sampleRate,
@@ -440,6 +465,7 @@ class TranscriptSocketServiceFactory {
       sttConfigId: sttConfigId ?? 'omi:default',
       geolocation: geolocation,
       clientConversationId: clientConversationId,
+      localPreview: localPreview,
     );
   }
 
@@ -699,6 +725,9 @@ class TranscriptSocketServiceFactory {
       secondarySocket: secondaryService.socket,
       sttProvider: sttProvider,
       forwardRawAudioToSecondary: forwardRawAudioToSecondary,
+      // Live custom STT keeps running through Omi socket outages; the capture
+      // controller keeps WAL frames unsynced while degraded (deliversToOmi).
+      keepPrimaryWhenSecondaryFails: true,
     );
     return TranscriptSegmentSocketService.withSocket(
       sampleRate,

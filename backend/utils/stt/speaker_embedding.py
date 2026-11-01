@@ -133,7 +133,12 @@ def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
 
 
 def extract_embedding_from_bytes(
-    audio_data: bytes, filename: str = "audio.wav", *, client: httpx.Client | None = None, timeout: float = 300.0
+    audio_data: bytes,
+    filename: str = "audio.wav",
+    *,
+    client: httpx.Client | None = None,
+    timeout: float = 300.0,
+    use_cache: bool = True,
 ) -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from audio bytes using hosted API.
@@ -156,7 +161,7 @@ def extract_embedding_from_bytes(
 
     api_url = _get_api_url()
 
-    cache_key, cached = _cached(audio_data, api_url)
+    cache_key, cached = _cached(audio_data, api_url) if use_cache else (None, None)
     if cached is not None:
         return cached
     files = {'file': (filename, audio_data, 'audio/wav')}

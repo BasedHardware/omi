@@ -1,3 +1,6 @@
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/backend/http/api/account_deletion.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'dart:async';
 
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -171,7 +174,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+        _knowledgeGraphPrebuildFuture = KnowledgeGraphApi.prebuildForOnboarding().catchError((_) {});
       }
       // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
       if (_controller!.index == kSpeechProfilePage) {
@@ -503,32 +506,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
   }
 
-  Future<void> _prebuildKnowledgeGraph() async {
-    try {
-      final current = await KnowledgeGraphApi.getKnowledgeGraph();
-      // Canonical graphs are derived on read, even when no relationships exist.
-      // Do not schedule the legacy mutation rejected by the canonical fence.
-      if (current['canonical'] == true) return;
-      final nodes = current['nodes'] as List<dynamic>? ?? const [];
-      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
-      if (hasGraph) return;
-    } catch (_) {
-      // Continue to rebuild below.
-    }
-
-    final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
-    final status = rebuildResult['status'];
-    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
-    if (status == 'canonical_up_to_date') {
-      return;
-    }
-    await KnowledgeGraphApi.waitForGraphStability(
-      timeout: const Duration(seconds: 25),
-      interval: const Duration(seconds: 2),
-      stabilityChecks: 1,
-    );
-  }
-
   void _updateBackgroundImage(int pageIndex) {
     final newImage = _getBackgroundImageForIndex(pageIndex) ?? Assets.images.onboardingBg1.path;
     if (_currentBackgroundImage != newImage) {
@@ -605,6 +582,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       AuthComponent(
         onSignIn: () async {
           if (!mounted) return;
+          final deletion = await context.read<AuthenticationProvider>().checkAccountDeletion();
+          if (!context.mounted) return;
+          if (deletion is! ApiSuccess<AccountDeletionStatus> || deletion.data.pendingDeletion) {
+            Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
+            return;
+          }
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           // Refresh subscription on sign-in: AppShell only fetches it on mount,

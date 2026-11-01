@@ -20,7 +20,8 @@ final class ScreenEmbeddingPolicyTests: XCTestCase {
               let policy = ScreenEmbeddingPolicy(
                 plan: plan, status: status, localRoute: selection, killSwitches: flags)
               let paid = plan?.hasPaidCapability == true && status == .active
-              let cloud = status == .active && (plan == .operator || plan == .pro || plan == .architect)
+              let cloud =
+                status == .active && (plan == .operator || plan == .pro || plan == .architect || plan == .unlimitedV2)
               let available: Bool
               if case .engine = selection { available = enabled && !hardKill } else { available = false }
               XCTAssertEqual(policy.shouldEmbedWithGemini, cloud)

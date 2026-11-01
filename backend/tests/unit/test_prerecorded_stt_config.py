@@ -45,3 +45,16 @@ def test_whitespace_only_provider_binding_is_missing():
             PrerecordedSTTService.MODULATE,
             {'MODULATE_API_KEY': '   '},
         )
+
+
+def test_soniox_held_recovery_contract_does_not_enable_general_prerecorded():
+    from config.prerecorded_stt import required_env_for_held_recovery, SONIOX_HELD_RECOVERY_MODEL
+    from config.stt_provider_policy import provider_is_enabled, STTServingSurface
+
+    assert required_env_for_held_recovery() == ('SONIOX_API_KEY',)
+    assert SONIOX_HELD_RECOVERY_MODEL == 'stt-async-v5'
+    assert not provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    assert 'SONIOX_API_KEY' not in required_env_for_model_config('soniox')
+    with pytest.raises(PrerecordedSTTConfigurationError):
+        require_provider_environment(PrerecordedSTTService.SONIOX, {'SONIOX_API_KEY': ' '})
+    require_provider_environment(PrerecordedSTTService.SONIOX, {'SONIOX_API_KEY': 'synthetic'})

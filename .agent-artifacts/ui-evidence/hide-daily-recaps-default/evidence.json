@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-recaps-hidden-default.png",
+      "platform": "mobile-ios",
+      "description": "Real prod-flavor debug build on the iPhone 16 Pro simulator, signed into a real account with existing recaps, pref unset: Home goes straight from the tabs to the conversation list with no Daily Recaps row. Conversation titles blurred for privacy.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-developer-recaps-toggle-on.png",
+      "platform": "mobile-ios",
+      "description": "Developer Settings > Experimental on the same simulator build: the new Daily Recaps on Home row after flipping it on.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-home-recaps-shown.png",
+      "platform": "mobile-ios",
+      "description": "Back on the same kept-alive Home after the toggle: the Daily Recaps row with View All is shown above Today. Recap and conversation titles blurred for privacy.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

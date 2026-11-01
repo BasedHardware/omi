@@ -644,14 +644,32 @@ def apply_reset(client: Any, uid: str, plan: ResetPlan) -> None:
     if not plan.doc_ids:
         return
     from database.fsr_read_cache import writing
+    from database.monthly_usage_totals import commit_fenced
 
     with writing('usage_month_cache', uid):
-        hourly = client.collection("users").document(uid).collection("hourly_usage")
-        for chunk_start in range(0, len(plan.doc_ids), _BATCH_LIMIT):
-            batch = client.batch()
-            for doc_id in plan.doc_ids[chunk_start : chunk_start + _BATCH_LIMIT]:
-                batch.set(hourly.document(doc_id), {"transcription_seconds": 0}, merge=True)
-            batch.commit()
+        user_ref = client.collection("users").document(uid)
+        hourly = user_ref.collection("hourly_usage")
+        # A reset also invalidates each affected monthly projection atomically.
+        # Half the write limit leaves room even for one distinct month per doc.
+        chunk_size = _BATCH_LIMIT // 2
+        for chunk_start in range(0, len(plan.doc_ids), chunk_size):
+
+            def write(transaction):
+                months = set()
+                for doc_id in plan.doc_ids[chunk_start : chunk_start + chunk_size]:
+                    transaction.set(hourly.document(doc_id), {"transcription_seconds": 0}, merge=True)
+                    try:
+                        stamp = datetime.strptime(doc_id, '%Y-%m-%d-%H')
+                    except ValueError:
+                        # Noncanonical rows cannot have a ready monthly projection.
+                        continue
+                    months.add(stamp.strftime('%Y-%m'))
+                for month in months:
+                    transaction.set(
+                        user_ref.collection('monthly_usage_totals').document(month), {'ready': False}, merge=True
+                    )
+
+            commit_fenced(user_ref, write, firestore_client=client)
 
 
 def apply_chat_reset(client: Any, uid: str, plan: ChatResetPlan) -> None:

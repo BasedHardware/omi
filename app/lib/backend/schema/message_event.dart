@@ -59,6 +59,11 @@ class MessageServiceStatusEvent extends MessageEvent {
   final String? reason;
   final bool mobileStandardBatch;
 
+  /// Mobile local-preview lane: the phone renders its own on-device preview and
+  /// journals all pendant audio for batch. Only meaningful together with
+  /// [mobileStandardBatch]; absent on old servers means today's live transcript.
+  final bool localPreview;
+
   MessageServiceStatusEvent({
     required this.status,
     this.statusText,
@@ -67,6 +72,7 @@ class MessageServiceStatusEvent extends MessageEvent {
     this.retryable,
     this.reason,
     this.mobileStandardBatch = false,
+    this.localPreview = false,
   }) : super(eventType: 'service_status');
 
   factory MessageServiceStatusEvent.fromJson(Map<String, dynamic> json) {
@@ -78,6 +84,7 @@ class MessageServiceStatusEvent extends MessageEvent {
       retryable: json['retryable'] as bool?,
       reason: json['reason'] as String?,
       mobileStandardBatch: json['mobile_standard_batch'] == true,
+      localPreview: json['mobile_standard_batch'] == true && json['local_preview'] == true,
     );
   }
 }

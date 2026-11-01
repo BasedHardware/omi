@@ -14,6 +14,7 @@ from config.action_item_extraction_policy import (
 )
 from database.auth import get_user_full_name
 from utils.metrics import OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL
+from utils.conversations.action_item_validity import select_valid_items
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def _field(item: Any, name: str) -> Any:
     return item.get(name) if isinstance(item, Mapping) else getattr(item, name, None)
 
 
-def filter_extracted_items(uid: str, items: Sequence[Any]) -> list[Any]:
+def filter_extracted_items(uid: str, items: Sequence[Any], *, conversation: Any = None) -> list[Any]:
     named = any(normalized_name(_field(item, 'owner_name')) not in UNKNOWN_OWNERS | OWNER_ALIASES for item in items)
     profile_name = get_user_full_name(uid) if named else None
     # refactor: superseded by utils.llm.action_item_v2 when ACTION_ITEMS_V2_MODE=serve
@@ -41,21 +42,20 @@ def filter_extracted_items(uid: str, items: Sequence[Any]) -> list[Any]:
             logger.info('event=action_item_extraction_dropped reason=%s count=%d', reason, count)
     from utils.llm.action_item_v2 import select_items
 
-    return select_items(uid, items, kept, profile_name)
+    segments = getattr(conversation, 'transcript_segments', ()) or ()
+    return select_valid_items(uid, select_items(uid, items, kept, profile_name), transcript_segments=segments)
 
 
 def action_items_for_write(
     uid: str, conversation: Any, now: datetime, canonical_fields: Callable[[Any, Any], dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """Project only admitted extraction items to the shared initial/refresh write payload."""
-    from config.refactor_modes import serving_for
-
     from utils.conversations.media_consumers import is_excluded
 
+    if not conversation.id:
+        raise ValueError('extracted action items require conversation provenance')
     if is_excluded(uid, conversation, consumer='action_items'):
         return []
-    if serving_for('ACTION_ITEMS_V2_MODE', uid) and not conversation.id:
-        raise ValueError('extracted action items require conversation provenance')
     return [
         {
             'description': action_item.description,
@@ -65,9 +65,8 @@ def action_items_for_write(
             'due_at': action_item.due_at,
             'completed_at': action_item.completed_at,
             'is_locked': conversation.is_locked,
-            'conversation_id': conversation.id,
             **canonical_fields(action_item, conversation),
-            **({'conversation_id': conversation.id} if serving_for('ACTION_ITEMS_V2_MODE', uid) else {}),
+            'conversation_id': conversation.id,
         }
-        for action_item in filter_extracted_items(uid, conversation.structured.action_items)
+        for action_item in filter_extracted_items(uid, conversation.structured.action_items, conversation=conversation)
     ]

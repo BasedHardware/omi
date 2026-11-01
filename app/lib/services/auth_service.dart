@@ -20,7 +20,6 @@ import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/siri_integration.dart';
-import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -339,7 +338,6 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    await ProactivityRuntime.outbox.bindOwner(null);
     await _prepareSiriBestEffort();
     _invalidateRefreshes();
     _clearCachedIdentityAndAuth();
@@ -349,7 +347,6 @@ class AuthService {
   /// Credential collision and provider switching preserve their existing
   /// non-Siri cache behavior, while fencing native Siri before Firebase exits.
   Future<void> signOutForAccountSwitch() async {
-    await ProactivityRuntime.outbox.bindOwner(null);
     await _prepareSiriBestEffort();
     handleAuthUserChanged(null);
     await _tokenGateway.signOut();

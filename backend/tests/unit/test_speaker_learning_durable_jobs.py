@@ -51,6 +51,7 @@ def _segments(count=2, person_id=None, is_user=False):
 
 @pytest.fixture
 def world(monkeypatch):
+    monkeypatch.setattr(jobs, 'enroll', lambda *args: None)
     store = StrictFirestore()
     store.rows[CONV_PATH] = dict(id=CONV, status='completed', transcript_segments=_segments())
     store.rows[PERSON_PATH] = dict(id='p', name='Sam')
@@ -132,7 +133,7 @@ def test_backoff_skips_then_audio_arrival_stores(world, target, monkeypatch):
         assign(is_user=True, segment_ids=['s0'], use_for_speech_training=True)
     if target == 'person':
 
-        async def decide(uid, person_id, cid, ids):
+        async def decide(uid, person_id, cid, ids, **kwargs):
             return 'stored' if (world.store.rows.get(CONV_PATH) or {}).get('audio_files') else 'no_audio'
 
         world.extract.side_effect = decide

@@ -1,6 +1,7 @@
 """Dark, batch-hash live vendor retirement; final transcript ownership is durable."""
 
 from config.batch_pipeline import record_capture_eligible
+from config.server_batch import MARKER
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 
@@ -50,7 +51,7 @@ def covered(host) -> bool:
 
 def capture_snapshot(capture: dict) -> dict:
     """Retain only scalar eligibility evidence, never decoded content/photos."""
-    return {
+    snapshot = {
         key: capture.get(key)
         for key in (
             'id',
@@ -63,3 +64,13 @@ def capture_snapshot(capture: dict) -> dict:
             'language',
         )
     }
+    if (capture.get('external_data') or {}).get(MARKER) is True:
+        snapshot[MARKER] = True
+    return snapshot
+
+
+def local_preview_batch_owned(uid: str) -> bool:
+    """The uid's recordings belong to the batch record lane (allowlist or batch percent)."""
+    from config.policy import resolve_batch_policy
+
+    return bool(uid) and resolve_batch_policy(uid).batch_enabled

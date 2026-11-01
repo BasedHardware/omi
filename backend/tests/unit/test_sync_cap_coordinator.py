@@ -68,7 +68,7 @@ async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinat
     )
     writer = _ledger(pipeline, monkeypatch)
     monkeypatch.setattr(
-        cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=False, reason='usage_budget_exhausted')
+        cap_hold, 'funded_allowance', lambda uid, **kw: SimpleNamespace(managed=False, reason='usage_budget_exhausted')
     )
     retained = []
 
@@ -96,7 +96,9 @@ async def test_late_hold_reports_custody_and_charges_only_dispatched_speech(coor
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[])
     writer = _ledger(pipeline, monkeypatch)
-    monkeypatch.setattr(cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=True, reason='available'))
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', lambda uid, **kw: SimpleNamespace(managed=True, reason='available')
+    )
     paths = [tmp_path / '1760000000.wav', tmp_path / '1760000002.5.wav']
     for path in paths:
         _write_labeled_wav(path, range(5))
@@ -145,3 +147,11 @@ async def test_actual_v2_coordinator_does_not_hold_outside_scope(
     assert state.vad_seen
     allowance.assert_not_called()
     sync_cap_holds.mark_content_held.assert_not_called()
+
+
+async def test_v2_default_offline_scope_holds_before_vad(coordinator, monkeypatch, tmp_path):
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    await test_full_hold_contains_only_wal_audio_not_already_committed(
+        coordinator, monkeypatch, tmp_path, dispatch=False
+    )

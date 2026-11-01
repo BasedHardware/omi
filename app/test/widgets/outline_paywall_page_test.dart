@@ -50,11 +50,11 @@ void main() {
   testWidgets('shows the catalog prices, the yearly saving and both exits', (tester) async {
     await _open(tester, checkout: (_, __, ___) async => PaywallCheckoutOutcome.cancelled, onClosed: (_) {});
     expect(find.text('Never miss a word again.'), findsOneWidget);
-    expect(find.text(r'$22.49'), findsOneWidget, reason: 'yearly shown per month');
-    expect(find.text(r'$269.91'), findsOneWidget, reason: 'yearly total');
-    expect(find.text(r'$29.99'), findsNWidgets(2), reason: 'monthly price and subtitle');
+    expect(find.textContaining(r'US$22.49'), findsOneWidget, reason: 'secondary monthly equivalent');
+    expect(find.text(r'US$269.91'), findsOneWidget, reason: 'yearly total');
+    expect(find.text(r'US$29.99'), findsNWidgets(2), reason: 'monthly price and subtitle');
     expect(find.text('SAVE ~25%'), findsOneWidget);
-    expect(find.text('Upgrade to Unlimited'), findsOneWidget);
+    expect(find.text('Upgrade to Omi Pro'), findsOneWidget);
     expect(find.text('Use Free Plan'), findsOneWidget);
     expect(find.text('Cancel anytime.'), findsOneWidget);
     expect(find.byKey(const Key('outline_paywall_close')), findsOneWidget);
@@ -94,7 +94,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(sent, ['price_month']);
     expect(closed, 'unset');
-    expect(find.text('Upgrade to Unlimited'), findsOneWidget);
+    expect(find.text('Upgrade to Omi Pro'), findsOneWidget);
   });
 
   testWidgets('Use Free Plan closes without charging', (tester) async {

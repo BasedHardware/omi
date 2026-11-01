@@ -1,5 +1,5 @@
 ---
-title: "API Reference"
+title: "API reference"
 icon: "square-terminal"
 description: "Complete reference for the Omi Developer API. Build integrations with memories, conversations, action items, and more."
 ---
@@ -18,7 +18,7 @@ All API requests require a Developer API key in the `Authorization` header:
 Authorization: Bearer omi_dev_your_api_key_here
 ```
 
-Get your key from **Settings → Developer → Create Key** in the Omi app.
+Create a key on the [Developers page](https://app.omi.me/developers).
 
 <Warning>
 MCP keys (`omi_mcp_...`) are only for the MCP server at `/v1/mcp`. They are not accepted by REST
@@ -26,26 +26,15 @@ Developer API endpoints. Use a Developer API key (`omi_dev_...`) for endpoints s
 `/v1/dev/user/memories` and `/v1/dev/user/conversations`.
 </Warning>
 
-## Rate Limits
+## Rate limits
 
-| Limit | Value |
-|-------|-------|
-| Per minute | 100 requests per API key |
-| Per day | 10,000 requests per user |
-
-Rate limit headers are included in every response:
-
-```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1642694400
-```
+Budgets are per operation and per credential. See [rate limits](/doc/developer/api/overview#rate-limits) for the current table and how to handle a `429`.
 
 ## Resources
 
 <CardGroup cols={2}>
   <Card title="Memories" icon="brain" href="/api-reference/endpoint/memories/list">
-    Timeless facts about the user — preferences, relationships, insights.
+    Timeless facts about the user, such as preferences, relationships, and insights.
   </Card>
   <Card title="Conversations" icon="message" href="/api-reference/endpoint/conversations/list">
     Conversation transcripts with AI-generated summaries and action items.

@@ -5,6 +5,13 @@ and background processing.
 
 ## Boundaries
 
+- Manual merge admission allocates a new target before dispatch and returns
+  `merged_conversation_id` to clients. All manual admissions use durable jobs
+  regardless of the wider lifecycle canary; consumed-source receipts fence new
+  admission and worker rereads. The target keeps one identity; the optional response remains decodable by released clients. Mobile
+  completion/restart/cache ownership is documented in
+  `app/docs/conversation-merge-recovery.md`.
+
 - `live_continuation.py` coordinates durable reconnect admission through
   `database/listen_continuations.py`. The original recording binding remains
   immutable; its continuation metadata is adopted transactionally. Resume
@@ -23,6 +30,7 @@ and background processing.
   structuring, summary, and memory work (#7690). That gate sits after the
   unpaid desktop on-device / `store_projection` path (#14513) so it cannot
   strip a local summary.
+- `minimum_derived.py` owns intelligence admission and audited short-clip summary-debt waivers; creation delivery stays independent. See [short-recording floor](../../docs/short-recording-floor.md).
 - `processing_trigger.py` owns *why* a conversation is processed. Every caller
   of `process_conversation` (and every finalization job) names a
   `ProcessingTrigger`; its `PROCESSING_MODES` row fixes run-now, reprocess,

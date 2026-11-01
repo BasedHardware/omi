@@ -26,7 +26,12 @@ from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
 from config.jev_decisions import JEV_MODEL, RelevanceArm
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
-from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance, deterministic_tiebreak
+from utils.conversations.relevance_rules import (
+    RULES_VERSION,
+    deterministic_relevance,
+    deterministic_tiebreak,
+    transcript_word_count,
+)
 
 from utils.observability.fallback import record_fallback
 from utils.metrics import record_relevance_scorer_outcome
@@ -214,7 +219,10 @@ def find_neighbor(
     best: Optional[Neighbor] = None
     for row in rows:
         other_id = row.get('id')
-        other_start, other_end = row.get('started_at'), row.get('finished_at')
+        from utils.conversations.recorded_time import conversation_span
+
+        span = conversation_span(row)
+        other_start, other_end = (span.recorded_start, span.recorded_end) if span else (None, None)
         if not other_id or other_id == conversation_id or row.get('discarded') or row.get('deleted'):
             continue
         if not isinstance(other_start, datetime) or not isinstance(other_end, datetime):
@@ -242,6 +250,7 @@ def decide_relevance(
     model_discards: Optional[Callable[[Callable[[Exception], None], Optional[Neighbor]], bool]],
     calendar_retains: Callable[[], bool],
     neighbor: Callable[[], Optional[Neighbor]] = lambda: None,
+    occasion_retains: Callable[[], Optional[str]] = lambda: None,
     jev_discard_probability: Optional[Callable[[], Optional[float]]] = None,
     arm: RelevanceArm = 'nano',
     record_arm: bool = False,
@@ -254,8 +263,24 @@ def decide_relevance(
     model exception advances the chain. The final arm uses only lexicon evidence,
     never duration or raw length to discard. Photos and trusted wake words
     keep when no model can assess their content. Calendar protection applies
-    to every discard.
+    to every discard. A capture below the short-clip floor is not sent to Jev
+    (its keep would stand the clip up with full notes); the quiet-minimum path
+    upstream normally intercepts such clips first, so a calendar rescue here
+    only ever keeps a short in-meeting fragment instead of discarding it.
     """
+
+    # Speech the floor can measure: an empty transcript is not a short clip but a
+    # capture scrap, whose calendar retention (SCA-381 evidence) stands unchanged.
+    # Lazy: notes_short_clip pulls the notes/recovery stack, which this leaf module must not import eagerly.
+    from utils.llm.notes_short_clip import below_short_clip_floor
+
+    floor_words = sum(transcript_word_count(text) for text in texts)
+    short_clip = (
+        floor_words > 0
+        and not has_photos
+        and not trusted_wake_word
+        and below_short_clip_floor(words=floor_words, speech_seconds=speech_seconds)
+    )
 
     def keep(decided_by: DecidedBy, reason: str) -> RelevanceDecision:
         return RelevanceDecision('keep', decided_by, reason, trigger)
@@ -293,6 +318,18 @@ def decide_relevance(
         return keep('policy', 'exempt')
     if user_kept:
         return keep('user', 'restored')
+
+    # A member is evidence of the whole occasion. A continuation can only be
+    # hidden after transactional absorption proves its content reached a survivor.
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if occasion_relevance_enabled():
+        occasion_reason = occasion_retains()
+        if occasion_reason:
+            return keep('policy', occasion_reason)
+        adjacent = neighbor()
+        if adjacent is not None:
+            return replace(keep('policy', 'occasion_neighbor'), neighbor_id=adjacent.conversation_id)
 
     # Photos carry content the transcript rules cannot see, and a trusted wake
     # word is judged by the model's wake-word rules (an invocation the
@@ -370,7 +407,10 @@ def decide_relevance(
 
     arms: list[DecisionArm] = []
     if jev_discard_probability is not None:
-        arms.append(DecisionArm('jev', lambda: jev_discard_probability is not None, jev_decision))
+        # A sub-floor capture never reaches Jev: its keep would stand the clip up
+        # as a standalone conversation. Unavailable (not a declined answer) so the
+        # scorer circuit does not read the floor as a Jev failure.
+        arms.append(DecisionArm('jev', lambda: jev_discard_probability is not None and not short_clip, jev_decision))
     arms.extend(
         (
             DecisionArm('model', lambda: model_discards is not None, nano_decision),

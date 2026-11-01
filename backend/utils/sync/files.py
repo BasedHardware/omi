@@ -1,4 +1,5 @@
 from utils.observability.sync_phases import sync_phase
+from datetime import datetime, timezone
 import logging
 import os
 import re
@@ -12,6 +13,7 @@ from fastapi import HTTPException, UploadFile
 from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
 from utils.request_validation import parse_sync_filename_timestamp
+from utils.sync.capture_clock import capture_time_rejection
 from utils.sync import playback as sync_playback
 from utils.sync.input_limits import BackfillStoragePressure, raise_sync_storage_pressure, sync_pcm_format
 
@@ -126,7 +128,10 @@ def decode_opus_file_to_wav(
 
 
 def get_timestamp_from_path(path: str) -> int | float:
-    return parse_sync_filename_timestamp(path)
+    # Internal WAL/VAD clock read, not an admission check: a segment name is
+    # the admitted source capture time plus a speech offset, so it can sit
+    # past the future-skew window. Staging boundaries own the window check.
+    return parse_sync_filename_timestamp(path, enforce_window=False)
 
 
 def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
@@ -146,8 +151,19 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         if '_' not in filename:
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, missing timestamp")
         try:
-            get_timestamp_from_path(filename)
+            timestamp = get_timestamp_from_path(filename)
         except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
+        # The internal clock read above is window-free (derived names); this
+        # staging boundary owns the capture-time admission window. V1 (and the
+        # chat/desktop transcribe seams sharing it) keep the pre-skew-admission
+        # contract — any future time is rejected — because their pipelines run
+        # at capture-time offset 0, so an admitted future stamp would store and
+        # compare ahead of the server clock. V2 staging owns skew admission.
+        if (
+            capture_time_rejection(datetime.fromtimestamp(timestamp, tz=timezone.utc), future_skew_seconds=0)
+            is not None
+        ):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
         path = os.path.join(directory, filename)

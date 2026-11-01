@@ -32,7 +32,7 @@ interface UseChatReturn {
     fileIds?: string[],
     context?: ChatContextInfo | null,
     optimisticFiles?: MessageFile[],
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
   appendRealtimeExchange: (humanText: string, aiText: string) => Promise<void>;
@@ -106,7 +106,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   }, [appId, chatSessionId, claimRequest]);
 
   /**
-   * Send a message and handle streaming response
+   * Send a message and handle streaming response. Resolves false when the
+   * stream reported an error or the transport failed, so callers can keep
+   * restorable state (e.g. the composer draft) for a retry.
    */
   const sendMessage = useCallback(
     async (
@@ -114,10 +116,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       fileIds?: string[],
       context?: ChatContextInfo | null,
       optimisticFiles?: MessageFile[],
-    ) => {
-      if ((!text.trim() && !fileIds?.length) || isStreaming) return;
+    ): Promise<boolean> => {
+      if ((!text.trim() && !fileIds?.length) || isStreaming) return false;
 
       const isCurrent = claimRequest();
+      let failed = false;
       setError(null);
       setIsStreaming(true);
       setStreamingText('');
@@ -187,6 +190,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 break;
 
               case 'error':
+                failed = true;
                 setError(chunk.text);
                 break;
             }
@@ -194,7 +198,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           { appId, chatSessionId, fileIds, context: context || null },
         );
       } catch (err) {
-        if (!isCurrent()) return;
+        if (!isCurrent()) return false;
+        failed = true;
         console.error('Failed to send message:', err);
         setError(err instanceof Error ? err.message : 'Failed to send message');
 
@@ -219,6 +224,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           setStreamingText('');
         }
       }
+      return !failed;
     },
     [appId, chatSessionId, isStreaming, claimRequest],
   );

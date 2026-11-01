@@ -1174,6 +1174,106 @@ class GeneratedReviewChangesResponse {
   }
 }
 
+class GeneratedOpenLoopCard {
+  final String cardId;
+  final String contextLine;
+  final String date;
+  final String question;
+
+  const GeneratedOpenLoopCard({
+    required this.cardId,
+    required this.contextLine,
+    required this.date,
+    required this.question,
+  });
+
+  factory GeneratedOpenLoopCard.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopCard(
+      cardId: _required(_readFieldValue<String>(_readField(json, const ["card_id"]), "card_id", _readString, requiredField: true, nullable: false), "card_id"),
+      contextLine: _required(_readFieldValue<String>(_readField(json, const ["context_line"]), "context_line", _readString, requiredField: true, nullable: false), "context_line"),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      question: _required(_readFieldValue<String>(_readField(json, const ["question"]), "question", _readString, requiredField: true, nullable: false), "question"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'card_id': cardId,
+      'context_line': contextLine,
+      'date': date,
+      'question': question,
+    };
+  }
+}
+
+class GeneratedOpenLoopCardsResponse {
+  final List<GeneratedOpenLoopCard>? cards;
+
+  const GeneratedOpenLoopCardsResponse({
+    this.cards,
+  });
+
+  factory GeneratedOpenLoopCardsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopCardsResponse(
+      cards: _readFieldValue<List<GeneratedOpenLoopCard>>(_readField(json, const ["cards"]), "cards", (value) => _readObjectList(value, GeneratedOpenLoopCard.fromJson), requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'cards': cards?.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedOpenLoopAnswerRequest {
+  final String action;
+
+  const GeneratedOpenLoopAnswerRequest({
+    required this.action,
+  });
+
+  factory GeneratedOpenLoopAnswerRequest.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopAnswerRequest(
+      action: _required(_readFieldValue<String>(_readField(json, const ["action"]), "action", _readString, requiredField: true, nullable: false), "action"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action': action,
+    };
+  }
+}
+
+class GeneratedOpenLoopAnswerResponse {
+  final String cardId;
+  final String date;
+  final String state;
+
+  const GeneratedOpenLoopAnswerResponse({
+    required this.cardId,
+    required this.date,
+    required this.state,
+  });
+
+  factory GeneratedOpenLoopAnswerResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopAnswerResponse(
+      cardId: _required(_readFieldValue<String>(_readField(json, const ["card_id"]), "card_id", _readString, requiredField: true, nullable: false), "card_id"),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'card_id': cardId,
+      'date': date,
+      'state': state,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;

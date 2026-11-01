@@ -550,7 +550,13 @@ _CHAIN_METHODS = _QUERY_METHODS | {
     'end_at',
     'collection',
 }
-_STREAM_HELPERS = {'budgeted_stream_iter', 'budgeted_stream_list', 'mcp_auth_stream'}
+_STREAM_HELPERS = {
+    'budgeted_stream_iter',
+    'budgeted_stream_list',
+    'mcp_auth_stream',
+    'projected_stream_list',
+    'projected_stream_iter',
+}
 _QUERY_GET_RECEIVER = re.compile(r'query|.*_query')
 
 

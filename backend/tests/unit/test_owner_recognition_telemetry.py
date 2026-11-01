@@ -670,6 +670,8 @@ def test_sync_intake_then_first_enrichment_counts_once(monkeypatch):
 
 
 def test_promoted_sync_fragment_counts_once(monkeypatch):
+    # The promotion metric covers the legacy fragment-discard rollback.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     store = StrictFirestore()
     lifecycle, pipeline = _wire_sync_store(monkeypatch, store)
     _stub_sync_enrichment(monkeypatch, store)

@@ -13,6 +13,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from config.refactor_modes import shadow_or_serve
+from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
 from database import speaker_evidence as storage
 from models.speaker_evidence import (
     OWNER,
@@ -95,7 +96,7 @@ def _receipt_scope(segment: Any, scope: str | None) -> str | None:
     provider = _get(segment, 'provider_speaker') or {}
     original = _get(provider, 'scope')
     if (
-        (scope or '').startswith(('conversation:', 'legacy-conversation:'))
+        (scope or '').startswith(('conversation:', 'legacy-conversation:', BATCH_CONVERSATION_SCOPE))
         and isinstance(original, str)
         and original
         and str(_get(provider, 'id', -1)).isdigit()
@@ -157,6 +158,7 @@ def build_evidence(
     rejected = manual_rejected_speakers(receipt)
     clusters, centroids = [], {}
     reasons = set(abstentions)
+    batch_authoritative = bool(resolution and getattr(resolution, 'stats', {}).get('batch_authoritative'))
     for key, members in groups.items():
         voice = key[1] if key[0] == 'resolved' else None
         speaker_id = voice if voice is not None else _get(members[0], 'speaker_id')
@@ -170,7 +172,7 @@ def build_evidence(
         ranked = sorted(((pid, d) for pid, d in distances.items() if isfinite(d)), key=lambda x: x[1])
         # Finalize historically rejected enrolled people in the 0.50-0.65 gap
         # after live accepted them. Reuse live's point and runner-up margin.
-        if ranked and not accepted:
+        if ranked and not accepted and not batch_authoritative:
             pid, distance = ranked[0]
             runner = ranked[1][1] if len(ranked) > 1 else float('inf')
             if pid != 'user' and policy.ENROLLED_PERSON.accepts(distance) and runner - distance >= policy.MATCH_MARGIN:
@@ -211,8 +213,13 @@ def build_evidence(
             decision = _manual_decision(metadata, references[metadata['id']], receipt, rejected)
             if decision and (decision.get('is_user') or decision.get('person_id')):
                 pid = OWNER if decision.get('is_user') else decision['person_id']
-                if not any(c.source == 'manual' and c.person_id == pid for c in candidates):
-                    candidates.append(SpeakerCandidate(person_id=pid, probability=1, band='confident', source='manual'))
+                candidate = next((c for c in candidates if c.source == 'manual' and c.person_id == pid), None)
+                if candidate is None:
+                    candidate = SpeakerCandidate(
+                        person_id=pid, probability=1, band='confident', source='manual', segment_ids=[]
+                    )
+                    candidates.append(candidate)
+                candidate.segment_ids = [*(candidate.segment_ids or ()), str(metadata['id'])]
         candidates.sort(key=lambda c: (-c.probability, c.source, c.person_id))
         cluster = VoiceCluster(
             id=f'v{len(clusters)}',
@@ -236,14 +243,20 @@ def build_evidence(
             )
         elif not accepted and not any(c.source == 'manual' for c in candidates):
             reasons.add(resolution.voice_identity_statuses.get(voice, 'insufficient_evidence'))
-    clusters, centroids, count_abstained = merge_surplus(clusters, centroids, hint, channel_ids=channel_ids)
+    if batch_authoritative:
+        # Names and roster hints cannot undo the batch must/cannot-link graph.
+        count_abstained = bool(hint and len(clusters) != hint)
+    else:
+        clusters, centroids, count_abstained = merge_surplus(clusters, centroids, hint, channel_ids=channel_ids)
     if count_abstained:
         reasons.add('participant_count_unresolved')
     owner_anchor = anchor_owner(
         clusters,
         channel_ids=channel_ids,
         energies=energies,
-        near_field_allowed=near_field_allowed and bool(resolution) and resolution.coverage >= 0.9,
+        near_field_allowed=(
+            near_field_allowed and bool(resolution) and resolution.coverage >= 0.9 and not batch_authoritative
+        ),
     )
     if owner_anchor == 'none':
         reasons.add('owner_unanchored')

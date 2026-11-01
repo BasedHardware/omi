@@ -82,6 +82,18 @@ def test_entirely_covered_upload_reports_repeat_only():
     assert kept == [] and report['repeat_only'] is True
 
 
+@pytest.mark.parametrize('start,end', [(0, 0), (2, 1), (0, float('nan')), (0, float('inf')), (0, 86401)])
+def test_append_duration_does_not_certify_invalid_or_clamped_timing(start, end):
+    segment = dict(start=start, end=end, timestamp=1000)
+    assert live_speech_dedupe.measured_speech_seconds([segment]) is None
+
+
+def test_append_duration_sums_sources_without_clamping_or_unioning():
+    segments = [dict(start=0, end=3, timestamp=1000), dict(start=1, end=5, timestamp=1001)]
+    assert live_speech_dedupe.measured_speech_seconds(segments) == 7
+    assert live_speech_dedupe.measured_speech_seconds([]) == 0
+
+
 def test_unproven_identical_and_reworded_second_utterance_is_kept():
     """Without independent capture proof the same words are legitimate repetition."""
     incoming_segments = [incoming(LIVE[0], 40.0), incoming(reworded(LIVE[1]), 50.0)]
@@ -410,3 +422,17 @@ def test_bounded_span_seconds_clamps_pathological_inputs():
     assert bounded_span_seconds([{'start': -10.0, 'end': 0.0}]) == 10.0
     assert bounded_span_seconds([{'start': 0.0, 'end': 10**9}]) == 86400.0
     assert bounded_span_seconds([{'start': 'x', 'end': float('inf')}]) == 0.0
+
+
+@pytest.mark.parametrize('require_capture_proof', [True, False])
+def test_donor_helper_signature_preserves_incoming_proof_default(require_capture_proof):
+    segments = [incoming(LIVE[0], 0)]
+    kept, report = drop_covered_repeats(
+        segments,
+        live_row_segments(),
+        live_origin=ORIGIN,
+        live_pinned=False,
+        require_capture_proof=require_capture_proof,
+    )
+    assert kept == (segments if require_capture_proof else [])
+    assert report['methods'] == ([] if require_capture_proof else ['lexical'])

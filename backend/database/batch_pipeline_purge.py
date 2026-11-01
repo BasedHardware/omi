@@ -99,6 +99,32 @@ def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: 
     mirror_refresh(namespace, touched)
 
 
+def _erase_artifact(
+    uid: str, namespace: str, snapshot: Any, data: dict[str, Any], delete_uri: Callable[[str, str], None]
+) -> None:
+    # The default deleter enforces the requested owner's configured storage
+    # prefix before any metadata repair. A foreign URI raises, so the purge
+    # cannot acknowledge erasure or transfer deletion authority to that row.
+    for uri in _references(data):
+        delete_uri(uid, uri)
+    pending_until = data.get('write_pending_until', datetime.min.replace(tzinfo=timezone.utc))
+    if pending_until > datetime.now(timezone.utc):
+        # Privacy intent is authoritative, even if routine cleanup parked this
+        # row. Keep late-upload erasure reachable and clear any racing TTL.
+        snapshot.reference.update(
+            {
+                'owner_id': uid,
+                'owner_key': privacy_owner_key(uid),
+                'erasure_requested': True,
+                'cleanup_after': pending_until,
+                'expires_at': firestore.DELETE_FIELD,
+            }
+        )
+    else:
+        snapshot.reference.delete()
+    mirror_refresh(namespace, [('artifacts', snapshot.id)])
+
+
 def purge_batch_owner(
     uid: str,
     *,
@@ -166,21 +192,16 @@ def purge_batch_owner(
                         continue
                     if table in {'jobs', 'results'}:
                         segments.add(snapshot.id)
+                    if table == 'artifacts':
+                        _erase_artifact(uid, namespace, snapshot, data, delete_uri)
+                        deleted += 1
+                        continue
                     for uri in _references(data):
                         delete_uri(uid, uri)
                     if table == 'jobs':
                         for uri in _references(result):
                             delete_uri(uid, uri)
                         _delete_job(client, namespace, snapshot, retain_ordering=conversation_id is not None)
-                    elif table == 'artifacts' and data.get(
-                        'write_pending_until', datetime.min.replace(tzinfo=timezone.utc)
-                    ) > datetime.now(timezone.utc):
-                        # An upload already in flight can finish after the first
-                        # erase (including after process death). Keep its unique
-                        # name in the cleanup outbox until the bounded IO ends.
-                        snapshot.reference.update(
-                            {'erasure_requested': True, 'cleanup_after': data['write_pending_until']}
-                        )
                     elif table == 'results' and conversation_id is not None:
                         _erase_result(client, namespace, snapshot)
                     else:
@@ -188,6 +209,23 @@ def purge_batch_owner(
                     if table != 'jobs':
                         mirror_refresh(namespace, [(table, snapshot.id)])
                     deleted += 1
+        # A routine owner-mismatch flag must never hide accepted audio from
+        # privacy erasure. This bounded, single-field fallback reaches parked
+        # rows without scanning other owners or trusting a foreign URI.
+        after = None
+        while True:
+            rows = queries.artifacts_by_owner_id(client, namespace, uid, after=after)
+            if not rows:
+                break
+            after = rows[-1]
+            for snapshot in rows:
+                data = snapshot.to_dict() or {}
+                if data.get('owner_key') == key:
+                    continue  # Already handled above, including pending writes.
+                if not _belongs(data, conversation_id) and data.get('segment_id') not in segments:
+                    continue
+                _erase_artifact(uid, namespace, snapshot, data, delete_uri)
+                deleted += 1
         if conversation_id is None:
             _purge_owner_fairness(client, namespace, key)
             if default_storage_cleanup:

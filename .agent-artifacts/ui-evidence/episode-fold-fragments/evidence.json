@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-shadow.png",
+      "platform": "mobile-ios",
+      "description": "Home with a live episode (clients_refactor shadow cohort): the live episode row (Live · 2h), the processing member row (Wrapping up) under it, and the non-member Phone call row. The episode's own member rows (in-progress split, finished conversation, highlight) are folded under the live row and absent. Hermetic provider fixtures, widget rendering, not installed-device acceptance.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-serve.png",
+      "platform": "mobile-ios",
+      "description": "Same Home state under the clients_refactor serve cohort: identical folding - live episode row plus processing member plus non-member row only; completed members and highlights stay inside the live episode page until the episode closes.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -88,8 +88,8 @@
       "path": "utils/batch_pipeline/shadow_intake.py",
       "function": "offer_upload",
       "kind": "start_background_task",
-      "count": 3,
-      "why": "reviewed safe (#23003): best-effort shadow reserve, late-reserve drop and staging of private copies; legacy keeps its own paths, ledger and processing, so a loss at SIGKILL drops one shadow sample. A stranded shadow job is settled as error by the worker reaper after 1h and its control rows carry TTLs; copies live in the dying container's temp directory"
+      "count": 4,
+      "why": "reviewed safe (#23003): best-effort shadow reserve, late-reserve drop and staging of private copies; legacy keeps its own paths, ledger and processing, so a loss at SIGKILL drops one shadow sample. A stranded shadow job is settled as error by the worker reaper after 1h and its control rows carry TTLs; copies live in the dying container's temp directory. #23748 adds one tracked pair-only qualification offer, which awaits its pair and cleanup internally: SIGKILL can lose a sample, never serving work, routing, projection or usage. Durable intents prevent repeat spend; occupied slots fail closed after a crash until verified operator drain/reset. Private copies remain only in that container's temp directory. No qualification completeness or automatic slot recovery is promised. Owner astrabatch2/batch lane; lead adfec6 accepts this one task, remove with the temporary qualification mode (review 2026-10-29)."
     },
     {
       "path": "utils/batch_pipeline/shadow_worker.py",
@@ -155,6 +155,20 @@
       "why": "reviewed safe (Episodes v1/v1.1): best-effort moment update and the structural attach on the episode overlay; neither holds conversation, task or memory authority. A moment lost at SIGKILL is re-applied by the conversation's finalization tail (record_moment over segments past the episode's applied offset), and a lost attach is redone by the next batch on any replica (the attach is idempotent) or by that moment/finalization, which opens or joins the episode itself"
     },
     {
+      "path": "utils/episodes/live.py",
+      "function": "on_session_end",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: the 45-second task only delays a derived episode note update; the original transcript remains in the conversation row and finalization replays segments that have no episode receipt if the pusher exits before the timer fires"
+    },
+    {
+      "path": "utils/episodes/live.py",
+      "function": "on_session_end",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: the 45-second task only delays a derived episode note update; the original transcript remains in the conversation row and finalization replays segments that have no episode receipt if the pusher exits before the timer fires"
+    },
+    {
       "path": "utils/episodes/finalize.py",
       "function": "schedule_after_finalization",
       "kind": "submit_with_context",
@@ -162,11 +176,25 @@
       "why": "reviewed safe (Episodes finalize): the synchronous POST /v1/conversations route's post-processing episode hook (tail notes and provisional-item reconciliation on the episode overlay), which holds no conversation, task or memory authority; the conversation, its tasks and the episode close are all committed before it is submitted. Lost at SIGKILL, the closed episode only misses its last tail bullets and that conversation's shadow items stay unreconciled; awaiting it would add a model call to the user's finalize request"
     },
     {
-      "path": "utils/episodes/live.py",
-      "function": "on_session_end",
-      "kind": "start_background_task",
+      "path": "utils/episodes/finalize.py",
+      "function": "_queue_retry",
+      "kind": "submit_with_context_retry",
       "count": 1,
-      "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
+      "why": "PR #23828: saturation admission retry for the already-inventoried best-effort episode finalize/intake overlay hooks in this module. Runs on the same pool with at most 64 deferred calls and synchronous producer backpressure. No source processing authority is delegated: transcript/audio/job/task/memory persistence precedes the hook. SIGKILL or shutdown cancellation can leave derived notes or episode attachment stale; a later finalize/close can repair from retained transcripts. This site and the executor admission implementation are both inventoried; future retry callers must declare their own lifetime."
+    },
+    {
+      "path": "utils/episodes/finalize.py",
+      "function": "schedule_synced_intake_attach",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe (Episodes sync intake): folds a just-persisted offline-sync clip into the live episode overlay so Home hides it under the live row; holds no conversation, task or memory authority and runs after intake committed the row. Lost at SIGKILL, the clip still joins at its sync_update finalize (on_conversation_finalized -> _attach_synced), so the only cost is the old minutes-late fold; awaiting it would put episode Firestore reads on every sync segment's hot path"
+    },
+    {
+      "path": "utils/executors.py",
+      "function": "MonitoredThreadPoolExecutor._drain_deferred",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "PR #23828: bounded admission retry for the existing best-effort episode finalize/intake hooks above, on their same executor. At most 64 deferred submissions; overflow backpressures synchronous producers, capacity callbacks retry admission, and shutdown explicitly cancels pending work. No conversation, audio, job, task or memory authority is delegated: source transcripts and ordinary processing remain persisted. SIGKILL can leave an ordinary WAL row unfolded or derived episode notes/shadow reconciliation stale, matching the existing hooks' documented lifetime; a later finalize/close can repair from retained transcripts. Saturation, context and shutdown behavior are tested in test_episodes_finalize_paths.py and test_executors.py."
     },
     {
       "path": "utils/llm/byok_errors.py",
@@ -272,6 +300,13 @@
       "kind": "start_background_task",
       "count": 1,
       "why": "reviewed safe: telemetry-only vendor sample; losing it only leaves the gauge stale and has no listen-request or admission effect"
+    },
+    {
+      "path": "utils/sync/cap_hold_redrive.py",
+      "function": "_schedule_fleet_snapshot",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: fleet snapshot is telemetry only and owns no hold, lease, reservation, or provider work; SIGKILL can lose one gauge refresh, and a later sweep or process restart schedules a fresh sample"
     },
     {
       "path": "utils/sync/pipeline.py",

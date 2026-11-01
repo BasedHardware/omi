@@ -70,6 +70,7 @@ Future<(DeviceOnboardingProvider, _Messages)> _answered(WidgetTester tester) asy
   chat
     ..add('q1', 'What is on my calendar today?', MessageSender.human)
     ..add('a1', 'A design review at 2 pm.', MessageSender.ai);
+  provider.onVoiceResponseReceived('A design review at 2 pm.');
   await tester.pump(const Duration(milliseconds: 300));
   expect(find.text('A design review at 2 pm.'), findsOneWidget);
   return (provider, chat);

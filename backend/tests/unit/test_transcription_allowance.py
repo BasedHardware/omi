@@ -236,6 +236,21 @@ def test_an_inactive_subscription_has_no_managed_minutes_for_either_question(mon
     assert sub.resolve_transcription_allowance('uid').reason == 'subscription_inactive'
 
 
+def test_the_release_probe_identity_is_never_admission_held_by_the_desktop_paywall(monkeypatch, sub) -> None:
+    """The fixed non-human release-probe uid exercises the full terminal desktop path
+    (utils/release_probe.py gate convention). Its Free-plan account never buys a plan
+    or BYOK keys, so once live STT cap-dispatch admission covers the whole fleet the
+    strict desktop trial paywall holds every probe packet and the pusher prod canary
+    finalization probe times out with zero transcripts (run 40190728003)."""
+    _situate(monkeypatch, sub, plan=PlanType.basic, paywalled=True)
+    allowance = sub.resolve_transcription_allowance('omi-release-probe', source='desktop')
+    assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('managed', None, 'release_probe')
+    # An ordinary uid in the same expired-trial situation stays blocked: the
+    # exemption is the exact non-human identity, not the account state.
+    blocked = sub.resolve_transcription_allowance('uid', source='desktop')
+    assert (blocked.mode, blocked.remaining_seconds, blocked.reason) == ('blocked', 0, 'trial_paywalled')
+
+
 def test_a_paywall_lookup_failure_inside_the_real_helper_does_not_open_a_billed_socket(monkeypatch, sub) -> None:
     """`is_trial_paywalled` fails open for every other caller (a Firebase blip never paywalls a paying
     user). The allowance path asks it strictly, so the same blip resolves to the free path."""

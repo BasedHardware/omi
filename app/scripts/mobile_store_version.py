@@ -15,7 +15,8 @@ from mobile_release_identity import MAX_BUILD_NUMBER
 
 VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 BUILD_RE = re.compile(r"^[1-9][0-9]*$")
-PROVIDERS = frozenset({"testflight", "app_store", "play"})
+PROVIDERS = frozenset({"testflight", "app_store", "play", "play_bundles"})
+PLAY_BUNDLE_FIELDS = frozenset({"versionCode", "sha1", "sha256"})
 
 
 class StoreLookupError(ValueError):
@@ -109,6 +110,36 @@ def parse_play_output(raw: str, *, returncode: int = 0) -> StoreSnapshot:
     if not value:
         return StoreSnapshot.empty(provider)
     return StoreSnapshot.available(provider, None, _require_build(value, "play.build_number"))
+
+
+def parse_play_bundles_output(raw: str, *, returncode: int = 0) -> StoreSnapshot:
+    """Parse google-play's ``bundles list --json`` output.
+
+    The bundle list covers every version code Google Play has already
+    accepted, including bundles orphaned by a rejected release that no track
+    references anymore; a track-only lookup cannot see those, yet their
+    version codes are burned forever.  A successful listing always carries a
+    JSON array, so blank output and ``null`` are errors and an empty list is
+    the only valid empty-history result.
+    """
+    provider = "play_bundles"
+    _require_success(returncode, provider)
+    if not raw.strip():
+        raise StoreLookupError(f"{provider} returned a blank response")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise StoreLookupError(f"{provider} returned invalid JSON") from error
+    if not isinstance(payload, list):
+        raise StoreLookupError(f"{provider} returned a non-list result")
+    builds: list[int] = []
+    for bundle in payload:
+        if not isinstance(bundle, dict) or "versionCode" not in bundle or set(bundle) - PLAY_BUNDLE_FIELDS:
+            raise StoreLookupError(f"{provider} returned an incomplete result")
+        builds.append(_require_build(bundle["versionCode"], f"{provider}.versionCode"))
+    if not builds:
+        return StoreSnapshot.empty(provider)
+    return StoreSnapshot.available(provider, None, max(builds))
 
 
 def _parse_pubspec_version(value: str) -> tuple[str, int]:
@@ -214,6 +245,10 @@ def main(argv: list[str] | None = None) -> int:
             snapshots["play"] = parse_play_output(
                 str(inputs["play"]["stdout"]),
                 returncode=int(inputs["play"].get("exit_code", 0)),
+            )
+            snapshots["play_bundles"] = parse_play_bundles_output(
+                str(inputs["play_bundles"]["stdout"]),
+                returncode=int(inputs["play_bundles"].get("exit_code", 0)),
             )
         plan = resolve_next_release(args.platform, args.pubspec_version, snapshots)
     except (KeyError, TypeError, ValueError) as error:

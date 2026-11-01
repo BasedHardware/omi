@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 // Phase 4.1 — Structured, ActionItem, AppResponse, and Event are kept as deliberate
@@ -16,6 +15,12 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 typedef Section = wire.GeneratedSection;
 
 class Structured {
+  /// The neutral emoji for a row where nothing chose one (server
+  /// `models.conversation_emoji.NEUTRAL_EMOJI`). 🧠 is the server's
+  /// "extraction omitted the field" sentinel and must not be the
+  /// missing/empty fallback here.
+  static const String neutralEmoji = '💬';
+
   int id = 0;
 
   String title;
@@ -39,18 +44,18 @@ class Structured {
   getEmoji() {
     try {
       if (emoji.isNotEmpty) return utf8.decode(emoji.toString().codeUnits);
-      return ['🧠', '😎', '🧑‍💻', '🚀'][Random().nextInt(4)];
+      return neutralEmoji;
     } catch (e) {
-      // return ['🧠', '😎', '🧑‍💻', '🚀'][Random().nextInt(4)];
       return emoji; // should return random?
     }
   }
 
   static Structured fromJson(Map<String, dynamic> json) {
+    final emojiSource = json['emoji'];
     var structured = Structured(
       json['title'] ?? '',
       json['overview'] ?? '',
-      emoji: json['emoji'] ?? '🧠',
+      emoji: emojiSource is String && emojiSource.trim().isNotEmpty ? emojiSource : neutralEmoji,
       category: json['category'] ?? 'other',
       salience: json['salience'] is String ? json['salience'] as String : null,
     );

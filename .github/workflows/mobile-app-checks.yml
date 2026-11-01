@@ -439,25 +439,16 @@ jobs:
       - name: Setup Gradle for Flutter compile smoke
         uses: gradle/actions/setup-gradle@v6
         with:
-          # This job is the Mobile App Checks wall. A main write here added
-          # ~1m of Gradle save+cleanup AFTER the APK was already uploaded
-          # (run 35256814704, Post Setup Gradle 1m08s). It also raced the
-          # parallel JVM job for the same content keys (ReserveCacheError on
-          # 35268313733 and 35250647514). Restore-only on every ref: PRs and
-          # main read the User Home that android-unit-tests writes on main.
-          # Cross-job restore is the default (strict-match false); run
-          # 35257388447 restored android-unit-tests[...] from this job.
-          # setup-gradle cannot overlap that POST save with earlier steps —
-          # moving the write to the non-wall job is the off-critical-path
-          # option that still seeds the cache.
-          cache-read-only: true
-          # `caches` is the build cache; `wrapper` avoids re-downloading
-          # Gradle 8.14 on every job. Restore-keys still fall back across
-          # jobs on this OS (gradle-home-cache-strict-match defaults false).
-          gradle-home-cache-includes: |
-            caches
-            notifications
-            wrapper
+          # Cold Gradle homes took 11-12m in runs 40022514904/40025498700;
+          # with 11m of runner/Flutter setup, run 40030083284 hit the 25m cap.
+          # Basic caching keys caches + wrapper by OS/arch and Gradle build
+          # files, not commit SHA, so backend-only edits reuse the same entry.
+          # Populate on PRs too: the main-only JVM writer left all three
+          # attempts cold. GitHub scopes PR writes to that PR's merge ref.
+          # This provider's keys are separate from the JVM job's enhanced
+          # cache, and an exact hit skips saving another copy on every commit.
+          cache-provider: basic
+          cache-read-only: false
 
       - name: Restore pinned Android NDK
         # Same corrupt-download flake as the emulator job hit (runs 39506049904,

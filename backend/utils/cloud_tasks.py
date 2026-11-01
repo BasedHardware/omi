@@ -19,9 +19,11 @@ import json
 import logging
 import hashlib
 import os
+import re
 import time
 import uuid
 from typing import Any, Dict, Iterable, NamedTuple, Optional
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 from google.api_core.exceptions import AlreadyExists, NotFound
@@ -74,7 +76,9 @@ SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_
 # of whole-budget attempts the job has already spent (routers/sync.py).
 # ``redrive_mode`` rides only on operator-built redrive payloads and must survive
 # budget replacements and sequencer re-dispatch (utils/sync/minimal_redrive.py).
-SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims', 'budget_deferrals', 'redrive_mode'})
+SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset(
+    {'capture_evidence_claims', 'budget_deferrals', 'redrive_mode', 'raw_capture_paths'}
+)
 
 
 def sync_job_payload_keys_valid(keys: Iterable[str], *, allow_sequenced: bool = True) -> bool:
@@ -237,17 +241,57 @@ def is_listen_finalization_dispatch_enabled() -> bool:
     return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
-def is_listen_finalization_dispatch_configured() -> bool:
-    """Whether the durable finalizer can be admitted without an inline fallback."""
-    return is_listen_finalization_dispatch_enabled() and all(
-        (
-            os.getenv('SYNC_TASKS_PROJECT', ''),
-            os.getenv('SYNC_TASKS_LOCATION', ''),
-            os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
-            _listen_finalization_handler_url(),
-            _listen_finalization_invoker_sa(),
-        )
+def _listen_finalization_tasks_binding() -> tuple[str, str, str, str, str]:
+    return (
+        os.getenv('SYNC_TASKS_PROJECT', ''),
+        os.getenv('SYNC_TASKS_LOCATION', ''),
+        os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+        _listen_finalization_handler_url(),
+        _listen_finalization_invoker_sa(),
     )
+
+
+def is_listen_finalization_dispatch_configured() -> bool:
+    """Retain the existing live-admission mode and nonempty-binding contract."""
+    return is_listen_finalization_dispatch_enabled() and all(_listen_finalization_tasks_binding())
+
+
+def is_listen_finalization_tasks_configured() -> bool:
+    """Validate the replay worker binding without changing live admission.
+
+    This is syntax validation, not a queue-existence or IAM probe. Validate the
+    raw values used by enqueue, rather than accepting whitespace after strip().
+    """
+    project, location, queue, url, invoker = _listen_finalization_tasks_binding()
+    if not (
+        re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:-]*', project)
+        and re.fullmatch(r'[a-z]+(?:-[a-z]+)+[0-9]+', location)
+        and re.fullmatch(r'[A-Za-z0-9-]{1,100}', queue)
+        and re.fullmatch(
+            r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.iam|developer)\.gserviceaccount\.com',
+            invoker,
+        )
+    ):
+        return False
+    if not url or len(url) > 2083 or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        return bool(
+            parsed.scheme in ('http', 'https')
+            and parsed.hostname
+            and len(parsed.hostname) <= 253
+            and all(
+                re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label)
+                for label in parsed.hostname.split('.')
+            )
+            and parsed.username is None
+            and parsed.password is None
+            and '#' not in url
+            and (parsed.port is None or 0 < parsed.port <= 65535)
+        )
+    except ValueError:
+        return False
 
 
 def get_account_deletion_tasks_max_attempts() -> int:
@@ -446,6 +490,10 @@ def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
     suffix = f"-d{int(payload['requested_at'] // 3600)}" if payload.get('on_demand') else ''
     if not payload.get('on_demand') and payload.get('playback_epoch'):
         suffix = f"-r{payload['playback_epoch']}"
+    if payload.get('recovery_epoch'):
+        # The failed marker generation is stable across polls and hour changes.
+        # One failed retry rewrites the marker and starts a fresh cooldown.
+        suffix = f"-r{payload['recovery_epoch']}"
     if payload.get('schema_version') == 2:
         return f"amc-{payload['conversation_id']}-{payload['fingerprint']}{suffix}"
     return f"am-{payload['conversation_id']}-{payload['audio_file_id']}{suffix}"

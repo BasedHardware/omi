@@ -222,8 +222,22 @@ def test_gemini_thinking_controls_map_to_luna_effort(thinking, expected):
     assert _gemini_thinking_effort_for_luna(thinking) == expected
 
 
+@pytest.mark.parametrize('anchor', ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.8-flash'])
+@pytest.mark.parametrize(
+    'thinking,expected_effort',
+    [
+        ({'thinking_budget': 0}, 'none'),
+        ({'thinking_budget': 1024}, 'low'),
+        ({'thinking_budget': 4096}, 'medium'),
+        ({'thinking_level': 'high'}, 'medium'),
+    ],
+)
+@pytest.mark.parametrize('with_tools', [False, True])
+@pytest.mark.parametrize('streaming', [False, True])
 @pytest.mark.asyncio
-async def test_macos_task_extraction_payload_maps_budget_and_counts_dropped_controls(monkeypatch):
+async def test_macos_payload_preserves_luna_tool_contract_and_drops_unsupported_controls(
+    monkeypatch, anchor, thinking, expected_effort, with_tools, streaming
+):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', '{"gemini-2.5-flash":"inactive"}')
     seen = []
@@ -235,10 +249,20 @@ async def test_macos_task_extraction_payload_maps_budget_and_counts_dropped_cont
         assert request.url.path == '/v1/chat/completions'
         body = json.loads(request.content)
         assert body['model'] == 'gpt-6-luna'
-        assert body['reasoning_effort'] == 'low'
-        assert body['tools'][0]['function']['name'] == 'extract_task'
+        assert body['reasoning_effort'] == ('none' if with_tools else expected_effort)
+        if with_tools:
+            assert body['tools'][0]['function']['name'] == 'extract_task'
+            assert body['tool_choice'] == 'required'
+        else:
+            assert 'tools' not in body and 'tool_choice' not in body
         assert not {'google', 'top_p', 'stop'} & body.keys()
         assert request.headers.get(ptr.REQUEST_TYPE_HEADER) is None
+        if streaming:
+            return httpx.Response(
+                200,
+                content=b'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+                headers={'content-type': 'text/event-stream'},
+            )
         return httpx.Response(200, json=success())
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
@@ -252,18 +276,19 @@ async def test_macos_task_extraction_payload_maps_budget_and_counts_dropped_cont
                     'role': 'user',
                     'parts': [
                         {'text': 'Extract tasks visible on this screen.'},
-                        {'inlineData': {'mimeType': 'image/jpeg', 'data': 'AA=='}},
+                        {'inline_data': {'mime_type': 'image/jpeg', 'data': 'AA=='}},
                     ],
                 },
             ],
-            'generationConfig': {
-                'thinkingConfig': {'thinkingBudget': 1024},
+            # Swift GeminiImageToolRequest uses snake_case on this wire.
+            'generation_config': {
+                'thinking_config': thinking,
                 'topP': 0.4,
                 'stopSequences': ['STOP'],
             },
             'tools': [
                 {
-                    'functionDeclarations': [
+                    'function_declarations': [
                         {
                             'name': 'extract_task',
                             'description': 'Stage a task suggestion from the screen.',
@@ -276,21 +301,32 @@ async def test_macos_task_extraction_payload_maps_budget_and_counts_dropped_cont
                     ]
                 }
             ],
-            'toolConfig': {'functionCallingConfig': {'mode': 'ANY'}},
+            'tool_config': {'function_calling_config': {'mode': 'ANY'}},
         }
+        if not with_tools:
+            payload.pop('tools')
+            payload.pop('tool_config')
         request = dgg.gemini_body_to_openai_chat(
             payload,
-            lane_id=ptr.desktop_text_lane_id(ptr.PT_MODEL_CURRENT),
-            stream=False,
+            lane_id=ptr.desktop_text_lane_id(anchor),
+            stream=streaming,
         )
         resolved = resolve_chat_completion_route(load_gateway_config(), request)
-        result = await execute_chat_completion(
-            resolved,
-            build_omi_managed_credential_context(ServiceCaller(name='backend')),
-            ProviderRegistry({'gemini': vertex, 'openai': OpenAICompatibleChatCompletionProvider(http_client=client)}),
+        credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
+        registry = ProviderRegistry(
+            {'gemini': vertex, 'openai': OpenAICompatibleChatCompletionProvider(http_client=client)}
         )
+        if streaming:
+            prepared = await _prepared_streaming_iterator(
+                resolved, credentials, registry, resolved.active_route, attempt_trace=AttemptTrace()
+            )
+            assert prepared.provider == 'openai' and prepared.model == 'gpt-6-luna'
+            output = (prepared.first_chunk or b'') + b''.join([chunk async for chunk in prepared.stream])
+            assert b'ok' in output and b'[DONE]' in output
+        else:
+            result = await execute_chat_completion(resolved, credentials, registry)
+            assert result.selected_provider == 'openai' and result.selected_model == 'gpt-6-luna'
 
-    assert result.selected_provider == 'openai' and result.selected_model == 'gpt-6-luna'
     assert len(seen) == 1
     assert LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL.labels(param='top_p')._value.get() == before_top_p + 1
     assert LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL.labels(param='stop')._value.get() == before_stop + 1

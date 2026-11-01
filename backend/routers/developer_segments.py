@@ -20,6 +20,7 @@ from prometheus_client import Counter
 from pydantic import BaseModel, Field, model_validator
 
 from config.refactor_modes import serving_for, shadow_or_serve
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.account_deletion_marker import account_deletion_firestore_client as get_firestore_client
 from database.from_segments_chunks import purge_chunks
 from models.capture_coverage import AdmitResult, CaptureKey, FrameRange
@@ -119,7 +120,13 @@ def stage_chunk(
             user.collection('deleted_conversations').document(request.client_session_id).get(transaction=transaction)
         )
         prior = ref.get(transaction=transaction)
-        if deleting.exists or deleted.exists or session_deleted.exists:
+        if (
+            account_deletion_marker_blocks_access(
+                marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+            )
+            or deleted.exists
+            or session_deleted.exists
+        ):
             raise HTTPException(status_code=409, detail='Capture owner or conversation is deleted')
         previous = prior.to_dict() or {}
         expiry = previous.get('expires_at')

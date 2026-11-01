@@ -92,6 +92,47 @@ artifact or stays held, never reissues the paid call. Stop launching further
 units on a notification or cost anomaly. Keep all receipts/artifacts; rollback
 cannot undo a vendor charge or published words. Never clear an intent to retry.
 
+## Explicit independent recovery for ordinary empty units
+
+`--ordinary-empty-independent --paid-epoch 3 --silent` is a separate operator
+plan, with Soniox as its only new recognizer. It is not an automatic retry or
+the language-guarded route. Initial selection requires exact private IDs,
+`quarantined / failed_held`, an ordinary `assemble_words / empty_asr` worker
+failure, valid input-bound worker speech of at least one VAD frame, and settled
+Modulate-empty intents at both epoch 1 and epoch 2. The spent epoch-2 intent
+must already be silent and match the original recovery and privacy generation.
+Nonempty/unknown replies, a missing/foreign/subframe worker receipt, active
+work, a result, or a prior Soniox attempt do not qualify.
+
+Each owner-scoped plan is capped at two speech units and 47.6 recorded audio
+seconds in total. The existing decoded per-unit independent bound is still
+60 seconds. The census binds the exact worker receipt, worker failure and
+spent intent, in addition to the usual immutable unit fields. The distinct
+operation/plan digest also binds the fixed unit/audio ceilings and silent mode.
+These limits do not authorize any call: the lead must approve each owner's
+new census and plan digests and the combined call budget.
+
+Use the same dry-run and canary approval boundaries as above, adding the new
+mode, an exact `--unit-ids-file`, `--paid-epoch 3` and `--silent`. Dry-run reports
+worker-VAD speech; it does not relabel that evidence as a fresh CPU-VAD test.
+Keep its new cohort file separate from the spent Modulate plan. Before apply,
+securely supply the approved Soniox runtime credential as well as the normal
+artifact material. Privacy, policy, funding, lease and source-binding checks
+remain mandatory. The independent-recovery kill switch still stops new calls.
+
+Apply preserves both spent intents verbatim and creates one new Soniox intent
+with an explicit ordinary-empty route marker. Valid words may project through
+the already deployed silent serving contract. Empty, invalid or uncertain
+answers remain held and retain their measured speech; this mode never turns an
+empty reply into a silence result. Replay reuses the same intent and reconciles
+only its create-only artifact, never buying another call. Changing the prior
+proof or approval digest refuses the plan.
+
+This operator code needs no batch-worker rollout. It still requires a reviewed
+merge, a fresh canonical dry-run from that source, and separate lead approval
+before production apply. Unit tests with synthetic providers do not establish
+production recognition quality or visible transcript delivery.
+
 ## Local verification
 
 Focused regressions cover scoped bootstrap/replay and silent projection. The

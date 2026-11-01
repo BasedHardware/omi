@@ -125,6 +125,7 @@ def test_canonical_l1_wrapper_keeps_broad_source_aware_candidates_out_of_archive
             text="I like coffee, plan to travel, and prefer concise updates.",
             speaker="SPEAKER_00",
             is_user=True,
+            speaker_match_source="conversation_voice",
             start=0.0,
             end=4.0,
         ),
@@ -158,7 +159,7 @@ def test_canonical_l1_wrapper_keeps_broad_source_aware_candidates_out_of_archive
     assert captured["source_type"] == "voice_transcript"
     assert captured["persist_route_outcomes"] is False
     assert "David:" in captured["text"]
-    assert "Speaker 1:" in captured["text"]
+    assert "Speaker A:" in captured["text"]
 
 
 def test_canonical_l1_wrapper_carries_confirmed_owner_voice_provenance(monkeypatch):
@@ -189,6 +190,7 @@ def test_canonical_l1_wrapper_carries_confirmed_owner_voice_provenance(monkeypat
             speaker_id=0,
             speaker_id_scope="conversation-owner:0",
             is_user=True,
+            speaker_match_source="conversation_voice",
             start=0.0,
             end=2.0,
         ),
@@ -218,7 +220,7 @@ def test_canonical_l1_wrapper_carries_confirmed_owner_voice_provenance(monkeypat
     assert candidates[0].lineage_id == "conversation_owner"
     assert candidates[0].independence_group == "conversation_owner"
     assert candidates[0].attribution == "user_spoken"
-    assert candidates[1].attribution is None
+    assert candidates[1].attribution == "unknown"
 
 
 def test_canonical_l1_wrapper_threads_rejection_examples_to_the_prompt_boundary(monkeypatch):
@@ -294,6 +296,7 @@ def test_canonical_l1_wrapper_sends_short_voice_transcript_to_broad_extractor(mo
             text="Call Mom",
             speaker="SPEAKER_00",
             is_user=True,
+            speaker_match_source="conversation_voice",
             start=0.0,
             end=1.0,
         )
@@ -745,5 +748,5 @@ def test_l1_extraction_receives_untrusted_cluster_render(monkeypatch):
     ]
     extract_canonical_l1_memory_candidates('u', 'c', segments, user_name='David', language='en')
     assert 'UNTRUSTED' in captured['text']
-    assert 'Speaker 0:' in captured['text'] and 'Speaker 1:' in captured['text']
+    assert 'Speaker A:' in captured['text'] and 'Speaker B:' in captured['text']
     assert 'David:' not in captured['text']

@@ -20,7 +20,12 @@ def test_severity_timing_and_actionable_annotations():
             severity = rule['labels']['severity']
             assert severity in {'critical', 'warning', 'ticket'}, rule['uid']
             wait, interval, repeat = ('30s', '5m', '4h') if severity == 'critical' else ('5m', '1h', '24h')
-            assert rule['notification_settings'] == {
+            settings = dict(rule['notification_settings'])
+            # Agent-tier rules keep the severity timing but are muted for humans
+            # (test_every_alert_rule_declares_tier_owner_and_audience).
+            if rule['labels'].get('tier') == 'agent':
+                assert settings.pop('mute_time_intervals') == ['omi-tier-silent'], rule['uid']
+            assert settings == {
                 'receiver': 'Omi - Services Alerting (Telegram)',
                 'group_by': ['alertname'],
                 'group_wait': wait,

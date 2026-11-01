@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 
@@ -53,7 +54,7 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,

@@ -11,6 +11,7 @@ from models.dream_edit import Edit, MemoryHygieneEdit
 from models.agent_edit import HarnessEdit
 from models.review_context import question_source
 from utils.agent_capabilities.guards import vocabulary_rejection, verbatim_quote
+from utils.agent_capabilities.registry import get_kind
 
 
 from utils.agent_capabilities.tools import (
@@ -25,6 +26,8 @@ from utils.agent_capabilities.tools import (
 
 
 def suggest_edit(uid, edit, records, *, run_id=None):
+    if get_kind(edit.kind).dream_only:
+        raise ValueError('Dream-private capability cannot be offered in Review')
     validate_edit(edit, records)
     key = edit_key(edit, records)
     if not review_changes.agent_change_allowed(uid, key):

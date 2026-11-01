@@ -40,7 +40,13 @@ class Doc:
     def collection(self, name):
         return Collection(self.store, self.path + '/' + name)
 
+    @property
+    def parent(self):
+        return Collection(self.store, self.path.rsplit('/', 1)[0])
+
     def get(self, field_paths=None, transaction=None):
+        if transaction is not None and getattr(transaction, 'pending', []):
+            raise RuntimeError('Firestore transactions must read before writing')
         self.store.reads += 1
         data = self.store.docs.get(self.path)
         if data is not None and field_paths:
@@ -74,6 +80,10 @@ class Collection:
 
     def document(self, id):
         return Doc(self.store, self.path + '/' + id)
+
+    @property
+    def parent(self):
+        return Doc(self.store, self.path.rsplit('/', 1)[0])
 
     def where(self, filter):
         return Collection(self.store, self.path, (*self.filters, filter), self.fields, self.cap)
@@ -121,4 +131,44 @@ class Store:
         return [ref.get(field_paths) for ref in references]
 
     def transaction(self):
-        return object()
+        return Transaction()
+
+    def batch(self):
+        return Batch()
+
+
+class Batch:
+    """Serialize all writes before applying; transaction races use the emulator."""
+
+    def __init__(self):
+        self.pending = []
+
+    def set(self, ref, data, merge=False):
+        # Validate each payload with the SDK before staging any mutation.
+        _helpers.pbs_for_set_with_merge('projects/test/databases/(default)/documents/' + ref.path, data, merge=merge)
+        self.pending.append((ref, data, merge))
+
+    def commit(self):
+        for ref, data, merge in self.pending:
+            ref.set(data, merge=merge)
+
+
+class Transaction(Batch):
+    """Single-attempt serialized writes; retry/erasure semantics use the emulator."""
+
+    _read_only = False
+    _max_attempts = 1
+    _id = None
+
+    def _clean_up(self):
+        self.pending.clear()
+        self._id = None
+
+    def _begin(self, retry_id=None):
+        self._id = b'shadow-usage-test'
+
+    def _commit(self):
+        self.commit()
+
+    def _rollback(self):
+        self.pending.clear()

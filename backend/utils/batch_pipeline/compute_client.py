@@ -68,6 +68,12 @@ class ComputeClient:
                 for key, value in retries.items()
             ):
                 raise ValueError('invalid spend admission retry receipt')
+            held_reason = result.get('held_reason') or {}
+            if not isinstance(held_reason, dict) or any(
+                key not in identities or not isinstance(value, str) or not 1 <= len(value) <= 64
+                for key, value in held_reason.items()
+            ):
+                raise ValueError('invalid spend admission hold receipt')
             return result
         except Exception:
             self._refresh_at = 0.0
@@ -91,6 +97,38 @@ class ComputeClient:
         if len(raw) > 4096:
             raise ValueError('oversized shadow recovery response')
         return json.loads(raw)
+
+    def shadow_project(self, segment_id: str, payload: dict) -> dict:
+        """Ephemeral body, one attempt; no queue, persisted transcript or retry."""
+        body = json.dumps({'stage': self.stage, 'segment_id': segment_id, 'payload': payload}, allow_nan=False).encode()
+        if len(body) > 8 * 1024 * 1024:
+            raise ValueError('bounded shadow projection payload required')
+        with self._lock:
+            if time.monotonic() >= self._refresh_at:
+                self._token = self._token_source()
+                self._refresh_at = time.monotonic() + 300
+            token = self._token
+        request = Request(
+            self.base_url + '/v2/batch-pipeline/shadow-project',
+            data=body,
+            method='POST',
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'},
+        )
+        with self._send(request, timeout=5) as response:
+            raw = response.read(4097)
+        if len(raw) > 4096:
+            raise ValueError('bounded shadow projection receipt required')
+        receipt = json.loads(raw)
+        if not isinstance(receipt, dict) or receipt.get('status') not in {
+            'planned',
+            'empty',
+            'not_eligible',
+            'budget_skipped',
+            'busy',
+            'error',
+        }:
+            raise ValueError('invalid shadow projection receipt')
+        return receipt
 
 
 def from_env() -> ComputeClient:

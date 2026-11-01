@@ -7,6 +7,7 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
@@ -686,8 +687,8 @@ class TestFinalizationDiagnostics:
             )
 
         records = [r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage()]
-        assert f'job_ref={uuid.UUID(job_id).hex}' in records[0]
-        assert f'attempt_ref={attempt_ref}' in records[0]
+        assert f'job_ref={sync_jobs.bounded_correlation_ref(job_id)}' in records[0]
+        assert f'attempt_ref={sync_jobs.bounded_correlation_ref(attempt_ref)}' in records[0]
         assert 'failure_phase=provider_call' in records[0]
         assert 'failure_class=TimeoutError' in records[0]
         assert 'failure_subtype=provenance_mismatch' in records[0]
@@ -1185,6 +1186,7 @@ def _load_sync_router_for_fast_path():
     from models.geolocation import geolocation_from_private_header as actual_geolocation_from_private_header
     from pydantic import BaseModel
     from database.sync_jobs import SyncLedgerFenceMode
+    from database.legal_holds import DestructiveOperationInProgress as actual_destructive_operation_in_progress
     from utils.stt import outcomes as actual_outcomes
     from utils.stt import prerecorded_health as actual_prerecorded_health
     from utils.stt import speaker_match as actual_speaker_match
@@ -1209,6 +1211,7 @@ def _load_sync_router_for_fast_path():
         'database.users',
         'database.user_usage',
         'database.sync_ledger',
+        'database.legal_holds',
         'database.sync_empty_recovery',
         'database.sync_backfill_sequencer',
         'database.firestore_read_metrics',
@@ -1278,6 +1281,8 @@ def _load_sync_router_for_fast_path():
     for mod_name in heavy_deps:
         saved_modules[mod_name] = sys.modules.get(mod_name)
         sys.modules[mod_name] = MagicMock()
+
+    sys.modules['database.legal_holds'].DestructiveOperationInProgress = actual_destructive_operation_in_progress
 
     # utils.conversations is a namespace package on disk (no __init__.py), so the
     # sync pipeline's submodule imports resolve only through a real __path__.
@@ -1448,6 +1453,14 @@ def _load_sync_router_for_fast_path():
             'utils.observability.journeys': journeys_mod,
         },
     )
+    # The pipeline schedules the episodes finalize hook at module scope; the
+    # fire-and-forget hook is no sync-coordinator concern, so the whole package
+    # stubs like observability above (MagicMock('utils') is not a package).
+    saved_modules.setdefault('utils.episodes', sys.modules.get('utils.episodes'))
+    episodes_pkg = types.ModuleType('utils.episodes')
+    episodes_pkg.__path__ = []  # type: ignore[attr-defined]
+    sys.modules['utils.episodes'] = episodes_pkg
+    install_package_submodule_stubs('utils.episodes', saved_modules)
     sys.modules['utils.conversation_shape'] = shape_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
     # Keep the empty-success guard's vendor-state reads real (stdlib+prometheus
@@ -2436,7 +2449,9 @@ async def test_sync_task_final_attempt_converges_a_ledger_completed_by_the_faili
         module._run_full_pipeline_background_async.assert_awaited_once()
         module._finalize_sync_job_failure.assert_not_awaited()
         module.fenced_mark_job_queued_for_retry.assert_not_called()
-        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+        module._delete_staged_blobs_async.assert_awaited_once_with(
+            ['staged/audio.opus'], uid='test-uid', content_id='content-1', job_id='job-1'
+        )
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
     finally:
         sys.modules.pop('routers.sync', None)
@@ -3040,7 +3055,11 @@ async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_t
         )
     )
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         with pytest.raises(module.HTTPException) as error:
             await module.sync_local_files_v2(files=uploads, uid='test-uid')
         assert error.value.status_code == 413
@@ -3099,7 +3118,11 @@ async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_ba
         module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.FRESH))
     module.validate_backfill_uploads = MagicMock()
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         try:
             await module.sync_local_files_v2(files=uploads, uid='test-uid')
         except module.HTTPException as error:
@@ -4219,9 +4242,12 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
     module.sync_backfill_sequencer.renew_job = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
 
+    renewal_started = asyncio.Event()
+
     async def _body_returns_after_renewal_started(_request, _task_retry_count, *_args, **_kwargs):
-        # Let the heartbeat reach its first renewal before the response exists.
-        await asyncio.sleep(0.05)
+        # Synchronize with the blocked renewal instead of assuming a sleep
+        # gives the heartbeat enough scheduler time on a loaded runner.
+        await asyncio.wait_for(renewal_started.wait(), timeout=2)
         return module.JSONResponse(status_code=200, content={'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS})
 
     passthrough_run_blocking = module.run_blocking
@@ -4231,6 +4257,7 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
         nonlocal renewal_reached
         if fn is module.sync_backfill_sequencer.renew_job:
             renewal_reached = True
+            renewal_started.set()
             await asyncio.sleep(10)
         return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
 

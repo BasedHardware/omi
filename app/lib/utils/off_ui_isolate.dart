@@ -10,6 +10,11 @@ import 'package:omi/backend/http/api_fallback.dart';
 @visibleForTesting
 int offUiIsolateFallbacks = 0;
 
+/// Completed worker runs, so default-path tests prove work was offloaded rather
+/// than merely exercising an injected test implementation.
+@visibleForTesting
+int offUiIsolateWorkerCompletions = 0;
+
 /// Runs CPU-bound, pure [work] (JSON encode/decode, hashing, parsing) on a
 /// background isolate when its input is large, and inline when it is small.
 ///
@@ -34,7 +39,9 @@ Future<R> offUiIsolate<R>(
 }) async {
   if (kIsWeb || size < threshold) return work();
   try {
-    return await Isolate.run(work, debugName: debugName);
+    final result = await Isolate.run(work, debugName: debugName);
+    offUiIsolateWorkerCompletions++;
+    return result;
   } on ArgumentError {
     // A captured value was not sendable. Correctness beats latency, but tests
     // assert this stays at zero so the work does not silently move back.

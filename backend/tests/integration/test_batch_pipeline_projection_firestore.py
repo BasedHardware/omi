@@ -3,9 +3,13 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from itertools import permutations
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
+import json
 import os
+import subprocess
+import sys
 import threading
 
 from google.auth.credentials import AnonymousCredentials
@@ -261,7 +265,7 @@ def test_crash_after_ledger_completion_repairs_client_without_reprocessing(lane)
 
 
 @pytest.mark.parametrize('kind', ['account', 'conversation'])
-def test_deletion_during_projection_cannot_resurrect_or_complete(lane, monkeypatch, kind):
+def test_deletion_during_projection_never_resurrects_and_only_conversation_deletion_settles(lane, monkeypatch, kind):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
     from utils.batch_pipeline import projection
 
@@ -287,10 +291,16 @@ def test_deletion_during_projection_cannot_resurrect_or_complete(lane, monkeypat
                 {'deleted': True}
             )
         deleted.set()
-        with pytest.raises(BatchPrivacyBlocked):
-            future.result()
-    assert not active_rows(lane) and not lane.tasks and not lane.published
-    assert batch.ledger.get().to_dict()['status'] == 'processing'
+        if kind == 'account':
+            assert future.result() is None
+            held = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+            assert held['projection_privacy_refusal']['reason'] == 'account_deleted'
+            assert held['projection']['privacy_control_only']
+        else:
+            assert future.result()['reason_code'] == 'conversation_deleted'
+    assert not active_rows(lane) and not lane.tasks
+    assert batch.ledger.get().to_dict()['status'] == ('processing' if kind == 'account' else 'completed')
+    assert len(lane.published) == (0 if kind == 'account' else 1)
 
 
 def test_silence_commits_without_loading_transcript_or_marking_enrichment(lane):
@@ -404,14 +414,16 @@ def test_delete_after_assignment_cannot_recreate_reprocess_obligation(lane, monk
     lane.finish(batch)
     original = bridge.finish_sync_bridges
 
-    def delete_before_mark(uid, cid):
-        result = original(uid, cid)
+    def delete_before_mark(uid, cid, **kwargs):
+        result = original(uid, cid, **kwargs)
         lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
         return result
 
     monkeypatch.setattr(bridge, 'finish_sync_bridges', delete_before_mark)
-    with pytest.raises(BatchPrivacyBlocked):
-        lane.projector.project(batch.ids[0])
+    assert lane.projector.project(batch.ids[0]) is None
+    held = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert held['projection_privacy_refusal']['reason'] == 'account_deleted'
+    assert held['projection']['state'] == 'quarantined'
     assert batch.ledger.get().to_dict()['status'] == 'processing'
     assert not lane.tasks and not lane.published
     assert not list(lane.client.collection(lane.reprocess.COLLECTION).stream())
@@ -546,6 +558,10 @@ def test_hourly_usage_and_fair_use_are_once_only_with_completion_replay(lane):
     assert row['transcription_seconds'] == 4 and row['speech_seconds'] == 4
     assert row['plan_usage']['pro']['speech_seconds'] == 4
     assert batch.ledger.get().to_dict()['usage_committed_at'] is not None
+    total = list(lane.user.collection('monthly_usage_totals').stream())
+    assert len(total) == 1
+    assert total[0].to_dict()['totals']['speech_seconds'] == 4
+    assert total[0].to_dict()['totals']['transcription_seconds'] == 4
 
 
 def test_leading_silence_preserves_absolute_capture_and_playback_clock(lane):
@@ -586,6 +602,203 @@ def frozen_manifest(lane, batch, **extra):
         handle.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
         handle.writeframes(b'\0' * (32000 * 30))
     return with_context(stream.getvalue(), context)
+
+
+def ambiguous_manifest(lane, batch, monkeypatch, *, ambiguous_index=None):
+    from utils.sync import recording_lineage
+
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'requires_compute_admission': True})
+    lane.payload.setdefault('speech_spans', [{'start': 0, 'end': 4}])
+    manifest = frozen_manifest(
+        lane,
+        batch,
+        recording_session_id='synthetic-recording',
+        audio_start_seconds=batch.items[0].capture_at,
+        audio_end_seconds=batch.items[0].capture_at + batch.items[0].duration_seconds,
+    )
+    lane.projector.fetch_audio = lambda _: manifest
+    monkeypatch.setattr(recording_lineage, 'lineage_resolution_requested', lambda *a, **kw: True)
+    monkeypatch.setattr(recording_lineage, 'ambiguous_binding_pending', lambda _, reason: reason == 'ambiguous_pending')
+
+    def plan(ids, timestamp_of, duration_of, uid, origin, stamped, source, device, locked, job, reasons):
+        index = round((timestamp_of(ids[0]) - batch.items[0].capture_at) / 150)
+        reasons[ids[0]] = 'ambiguous_pending' if ambiguous_index is None or index == ambiguous_index else None
+        return {ids[0]: None}
+
+    monkeypatch.setattr(recording_lineage, 'plan_segment_targets', plan)
+
+
+def test_ambiguous_head_retains_custody_and_successor_drains_idempotently(lane, monkeypatch):
+    from utils.batch_pipeline.scheduler import owner_key
+    from utils.batch_pipeline.retention import expire_completed_segment
+    from utils.batch_pipeline.projection_repair import plan_owner, apply_owner
+    from utils.batch_pipeline.projection import Projector
+
+    head = lane.seed()
+    lane.finish(head)
+    ambiguous_manifest(lane, head, monkeypatch)
+    tail = lane.seed(capture_at=2000)
+    lane.finish(tail)
+    from utils.batch_pipeline import context as context_module
+    from utils.sync import recording_lineage
+
+    manifests = {
+        head.ids[0]: lane.projector.fetch_audio(head.items[0]),
+        tail.ids[0]: frozen_manifest(
+            lane, tail, recording_session_id='synthetic-tail', audio_start_seconds=2000, audio_end_seconds=2030
+        ),
+    }
+    lane.projector.store.ref('jobs', tail.ids[0]).update({'requires_compute_admission': True})
+    lane.projector.fetch_audio = lambda item: manifests[item.segment_id]
+    lane.projector.require_lineage_fence = True
+    monkeypatch.setattr(context_module, 'sync_live_dedupe_active_for', lambda _: True)
+    from utils.batch_pipeline.projection import build_incoming
+
+    live = build_incoming(tail.items[0], tail.binding, lane.payload)
+    live['id'] = 'synthetic-tail-target'
+    lane.conversations.assign_sync_conversation(lane.uid, live, firestore_client=lane.client)
+
+    def strict_plan(ids, timestamp_of, duration_of, uid, origin, stamped, source, device, locked, job, reasons):
+        ambiguous = origin == 'synthetic-recording'
+        reasons[ids[0]] = 'ambiguous_pending' if ambiguous else 'bound'
+        return {ids[0]: None if ambiguous else 'synthetic-tail-target'}
+
+    monkeypatch.setattr(recording_lineage, 'plan_segment_targets', strict_plan)
+    # The serving role pins its own stage policy before an operator may reuse it.
+    for sid in (head.ids[0], tail.ids[0]):
+        lane.projector.store.read(sid)
+    plan = plan_owner(lane.store, lane.uid)
+    assert plan['units'] == [head.ids[0], tail.ids[0]]
+    assert apply_owner(lane.projector, plan) == {'quarantine_held': 1, 'completed': 1}
+    receipt = lane.projector.store.ref('results', head.ids[0]).get().to_dict()
+    assert receipt['projection_state'] == 'quarantine_held' and receipt['protocol_version'] == 2
+    part = receipt['projection_parts']['0']
+    assert part['state'] == 'quarantined' and part['disposition'] == 'ambiguous_generation'
+    assert part['held_speech_seconds'] == 4 and part['speech_seconds'] == 0
+    assert 'expires_at' not in receipt
+    assert head.ledger.get().to_dict()['status'] == 'processing'
+    assert not expire_completed_segment(lane.store, lane.uid, head.ids[0], 10000)
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == tail.ids[0]
+    assert len(active_rows(lane)) == 1 and len(lane.published) == 1
+    assert sum(len(segment['text'].split()) for segment in active_rows(lane)[0]['transcript_segments']) == 4
+    restarted = Projector(lane.store, lane.projector.load_result, publish=lane.projector.publish, clock=lane.clock)
+    assert restarted.project(head.ids[0]) is None  # must not reload the manifest or assign held text
+    assert apply_owner(restarted, plan_owner(lane.store, lane.uid)) == {}
+    assert len(active_rows(lane)) == 1 and len(lane.published) == 1
+
+
+@pytest.mark.parametrize('ambiguous_index', [0, 1, 2])
+def test_multipart_ambiguity_replays_proven_parts_without_completing_held_upload(lane, monkeypatch, ambiguous_index):
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=ambiguous_index)
+    assert lane.projector.project(batch.ids[0]) is None
+    assert lane.projector.project(batch.ids[0]) is None
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection_state'] == 'quarantine_held'
+    assert row['projection_parts'][str(ambiguous_index)]['state'] == 'quarantined'
+    assert len(active_rows(lane)) == 2 and len(lane.tasks) == 2
+    assert all(c['sync_content_revision'] == 1 for c in active_rows(lane))
+    assert batch.ledger.get().to_dict()['status'] == 'processing' and not lane.published
+    assert not list(lane.user.collection('hourly_usage').stream())
+
+
+def test_quarantine_transaction_holds_privacy_without_assigning_or_acknowledging_content(lane, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.batch_pipeline.scheduler import owner_key
+
+    batch = lane.seed()
+    lane.finish(batch)
+    ambiguous_manifest(lane, batch, monkeypatch)
+    original = ProjectionSession.persist_empty
+
+    def erase_before_commit(session, **kwargs):
+        if kwargs.get('quarantined'):
+            lane.user.update({'data_protection_level': 'e2ee'})
+        return original(session, **kwargs)
+
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', erase_before_commit)
+    assert lane.projector.project(batch.ids[0]) is None
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert not row.get('projection_parts') and row['protocol_version'] == 2
+    assert row['projection']['privacy_control_only']
+    assert row['projection_privacy_refusal']['reason'] == 'data_protection_changed'
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == batch.ids[0]
+    assert not active_rows(lane) and not lane.tasks and not lane.published
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+
+
+def test_mixed_quarantine_keeps_proven_followups_discoverable_after_restart(lane, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+    from utils.batch_pipeline.metrics import QueueMetrics
+    from prometheus_client import CollectorRegistry
+
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=0)
+    lane.projector.persist(batch.ids[0])  # async assignment, no follow-ups
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection']['state'] == 'quarantined' and row['projection_state'] == 'persisted'
+    assert batch.ids[0] in lane.store.projection_pending()
+    assert not lane.tasks
+    restarted = Projector(lane.store, lane.projector.load_result, publish=lane.projector.publish, clock=lane.clock)
+    assert restarted.project(batch.ids[0]) is None
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection_state'] == 'quarantine_held' and len(lane.tasks) == 2
+    assert batch.ids[0] not in lane.store.projection_pending()
+    metrics = QueueMetrics(CollectorRegistry())
+    metrics.refresh_projection(lane.store, 10000)
+    assert metrics.projection_age._value.get() == 9998
+    assert not lane.published and batch.ledger.get().to_dict()['status'] == 'processing'
+
+
+def test_partial_quarantine_crash_retains_watermark_fence_and_resumes(lane, monkeypatch):
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.batch_pipeline.scheduler import owner_key
+
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=0)
+    original = ProjectionSession.persist_empty
+
+    def lose_first_reply(session, **kwargs):
+        receipt = original(session, **kwargs)
+        if kwargs.get('quarantined'):
+            raise RuntimeError('synthetic partial quarantine crash')
+        return receipt
+
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', lose_first_reply)
+    with pytest.raises(RuntimeError, match='partial quarantine crash'):
+        lane.projector.project(batch.ids[0])
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['protocol_version'] == 2 and row['projection_state'] == 'pending'
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) is None
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', original)
+    assert lane.projector.project(batch.ids[0]) is None
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == batch.ids[0]
+    assert len(active_rows(lane)) == 2 and not lane.published
+
+
+def test_lost_quarantine_commit_reply_restarts_without_duplicate_or_custody_ttl(lane, monkeypatch):
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.batch_pipeline.scheduler import owner_key
+
+    batch = lane.seed()
+    lane.finish(batch)
+    ambiguous_manifest(lane, batch, monkeypatch)
+    original = ProjectionSession.persist_empty
+
+    def lost(session, **kwargs):
+        receipt = original(session, **kwargs)
+        if kwargs.get('quarantined'):
+            raise RuntimeError('synthetic lost quarantine reply')
+        return receipt
+
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', lost)
+    with pytest.raises(RuntimeError, match='lost quarantine reply'):
+        lane.projector.project(batch.ids[0])
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', original)
+    assert lane.projector.project(batch.ids[0]) is None
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == batch.ids[0]
+    assert not active_rows(lane) and not lane.published
 
 
 def test_authenticated_manifest_preserves_location_and_uses_legacy_lineage_policy(lane, monkeypatch):
@@ -1307,6 +1520,107 @@ def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, mo
     assert len(lane.tasks) == len(lane.published) == len(lane.loads) == 1
 
 
+def test_late_writer_after_claim_takeover_replays_committed_receipt(lane, monkeypatch):
+    """The advisory claim is never a mutation fence; the Firestore receipts are.
+
+    Writer A's claim lease expires while its assignment chain is in flight.
+    Writer B takes the same owner claim and fully projects and commits the
+    segment. A's late transaction body then reaches commit on a fresh
+    transaction: it must replay B's committed receipt — one conversation copy,
+    one ``sync_content_revision`` increment, one usage charge — and A's
+    token-fenced release must never evict B's live claim.
+    """
+    from google.api_core.exceptions import Aborted
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+    from database import firestore_transaction_retry
+    from utils.batch_pipeline.scheduler import owner_key
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed()
+    lane.finish(batch)
+
+    transport = lane.client._firestore_api._transport
+    original_read = transport._wrapped_methods[transport.batch_get_documents]
+    assign = lane.conversations.assign_sync_conversation
+    assignment_threads = set()
+    injected = False
+    late_transactions = []
+    claim_key = f'batch_projection:{lane.store.namespace}:{owner_key(lane.uid)}'
+
+    def assignment(*args, **kwargs):
+        assignment_threads.add(threading.get_ident())
+        try:
+            return assign(*args, **kwargs)
+        finally:
+            assignment_threads.discard(threading.get_ident())
+
+    def read(request, **kwargs):
+        nonlocal injected
+        if request.transaction and threading.get_ident() in assignment_threads:
+            late_transactions.append(bytes(request.transaction))
+            if not injected:
+                injected = True
+                raise Aborted('synthetic read-time contention')
+        return original_read(request, **kwargs)
+
+    in_flight, resume = threading.Event(), threading.Event()
+    takeover = {}
+    actual_retry = firestore_transaction_retry.run_with_transaction_contention_retry
+
+    def retry_with_takeover(transaction_factory, operation, *, operation_name, **kwargs):
+        if operation_name != 'sync_assignment' or 'done' in takeover:
+
+            return actual_retry(transaction_factory, operation, operation_name=operation_name, **kwargs)
+
+        def sleep(_delay):
+            takeover['done'] = True
+            in_flight.set()
+            assert resume.wait(20)
+
+        return actual_retry(transaction_factory, operation, operation_name=operation_name, sleep=sleep, **kwargs)
+
+    monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', assignment)
+    monkeypatch.setattr(firestore_transaction_retry, 'run_with_transaction_contention_retry', retry_with_takeover)
+    monkeypatch.setitem(transport._wrapped_methods, transport.batch_get_documents, read)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        late = pool.submit(lane.projector.project, batch.ids[0])
+        assert in_flight.wait(20)
+        # A's Redis lease expires mid-chain (the TTL); writer B takes the same
+        # owner claim and fully projects the same segment under it.
+        redis.delete(claim_key)
+        with claims.projection_claim(lane.store.namespace, owner_key(lane.uid)) as writer_b:
+            assert writer_b
+            replacement = redis.get(claim_key)
+            committed = lane.projector._project_read(
+                batch.ids[0], *lane.projector.store.read(batch.ids[0]), claimed=True
+            )
+            receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+            ledger = batch.ledger.get().to_dict()
+            resume.set()
+            assert late.result(30) == committed
+            # The late writer's release never evicts B's live claim token.
+            assert redis.get(claim_key) == replacement
+    assert len(set(late_transactions)) >= 2  # A's late body ran on a fresh transaction after B's commit.
+    rows = active_rows(lane)
+    assert len(rows) == 1 and rows[0]['sync_content_revision'] == 1
+    assert rows[0]['transcript_segments'][0]['text'] == 'We discussed the project.'
+    assert len(rows[0]['transcript_segments']) == 1
+    # Each writer fetched the provider transcript once; every durable effect
+    # of the segment stayed single-copy.
+    assert lane.loads == [batch.ids[0], batch.ids[0]] and len(lane.tasks) == 1
+    final_receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert final_receipt['projection'] == receipt['projection']
+    assert final_receipt['projection_state'] == 'completed'
+    assert batch.ledger.get().to_dict() == ledger
+    usage = list(lane.user.collection('hourly_usage').stream())
+    assert len(usage) == 1 and usage[0].to_dict()['speech_seconds'] == 4
+    assert not redis.exists(claim_key)  # only B's own release removed B's token
+
+
 def superseded_anchor(lane, item, *, merged=False):
     """Metadata-only fixture: assignment must reject without decoding content."""
     anchor = lane.user.collection('conversations').document(item.conversation_id)
@@ -1411,9 +1725,18 @@ def test_superseded_settlement_rechecks_fences_after_failed_assignment(lane, mon
 
     superseded_anchor(lane, batch.items[0])
     monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', fail)
-    with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
-        lane.projector.project(batch.ids[0])
-    assert not lane.projector.store.ref('results', batch.ids[0]).get().to_dict().get('projection')
+    if kind in {'account', 'generation'}:
+        assert lane.projector.project(batch.ids[0]) is None
+        held = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+        assert held['projection']['privacy_control_only']
+        assert held['projection'].get('disposition') != 'superseded'
+        assert held['projection_privacy_refusal']['reason'] == (
+            'account_deleted' if kind == 'account' else 'privacy_generation_changed'
+        )
+    else:
+        with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
+            lane.projector.project(batch.ids[0])
+        assert not lane.projector.store.ref('results', batch.ids[0]).get().to_dict().get('projection')
     assert batch.ledger.get().to_dict()['status'] == 'processing'
     assert not lane.tasks and not lane.published
 
@@ -1564,3 +1887,94 @@ def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch,
             assert row.get('sync_merged_into') == rows[0]['id']
     for unit in units:
         assert unit.ledger.get().to_dict()['status'] == 'completed'
+
+
+def _repair_cli_env(project, owner_env, owner, host):
+    env = dict(os.environ)
+    env.update(
+        GCLOUD_PROJECT=project,
+        FIREBASE_PROJECT_ID=project,
+        FIRESTORE_EMULATOR_HOST=host,
+        NO_PROXY='127.0.0.1,localhost,::1',
+        no_proxy='127.0.0.1,localhost,::1',
+    )
+    env[owner_env] = owner
+    return env
+
+
+def _run_repair_cli(arguments, env):
+    script = str(Path(__file__).resolve().parents[2] / 'scripts/batch_pipeline_projection_repair.py')
+    return subprocess.run([sys.executable, script, *arguments], env=env, capture_output=True, text=True, timeout=180)
+
+
+def test_local_repair_cli_dry_run_is_aggregate_only_and_never_writes():
+    from utils.batch_pipeline.scheduler import owner_key
+
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('loopback emulator required; no cloud fallback')
+    project = f'demo-pr1-c-{uuid4().hex[:12]}'
+    namespace_id = uuid4().hex[:12]
+    namespace = f'batch_pipeline_test_{namespace_id}'
+    owner = f'synthetic-repair-{uuid4().hex[:8]}'
+    key = owner_key(owner)
+    client = firestore.Client(project=project, credentials=AnonymousCredentials())
+    client.collection(f'{namespace}_owners').document(key).set({'projection_watermark': 'old'})
+    for sid, previous, state in [('old', None, 'persisted'), ('head', 'old', 'pending'), ('tail', 'head', 'pending')]:
+        client.collection(f'{namespace}_results').document(sid).set(
+            {
+                'segment_id': sid,
+                'owner_key': key,
+                'previous_segment_id': previous,
+                'projection_state': state,
+                'committed_at': 1,
+                'result': {'uri': f'gs://synthetic/{sid}'},
+            }
+        )
+        client.collection(f'{namespace}_jobs').document(sid).set(
+            {'owner_id': owner, 'policy_parts': {'projection': {'pinned': True}}}
+        )
+    collections_before = sorted(collection.id for collection in client.collections())
+    results_before = {doc.id: doc.to_dict() for doc in client.collection(f'{namespace}_results').stream()}
+    jobs_before = {doc.id: doc.to_dict() for doc in client.collection(f'{namespace}_jobs').stream()}
+    completed = _run_repair_cli(
+        ['--stage', 'local', '--local-namespace', namespace_id, '--owner-env', 'W1_OWNER_UID'],
+        _repair_cli_env(project, 'W1_OWNER_UID', owner, host),
+    )
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout.strip())
+    assert payload['planned_units'] == 3 and payload['apply'] is False
+    assert payload['states'] == {'persisted': 1, 'pending': 2}
+    assert payload['unpinned_units'] == 0
+    assert payload['lookback_missing'] is False and len(payload['plan_sha256']) == 64
+    # Aggregate output only: no owner identity or storage paths leak.
+    assert owner not in completed.stdout and 'gs://' not in completed.stdout
+    # Dry-run stays read-only: identical rows, owner watermark untouched.
+    assert {doc.id: doc.to_dict() for doc in client.collection(f'{namespace}_results').stream()} == results_before
+    assert {doc.id: doc.to_dict() for doc in client.collection(f'{namespace}_jobs').stream()} == jobs_before
+    assert client.collection(f'{namespace}_owners').document(key).get().to_dict() == {'projection_watermark': 'old'}
+    assert sorted(collection.id for collection in client.collections()) == collections_before
+
+
+def test_local_repair_cli_refuses_invalid_namespace_non_loopback_and_prod_overrides():
+    base = dict(os.environ)
+    base.pop('GCP_AGENT_TIER', None)
+    base.pop('FIRESTORE_EMULATOR_HOST', None)
+    base.update(NO_PROXY='127.0.0.1,localhost,::1', no_proxy='127.0.0.1,localhost,::1')
+    loopback = dict(base, FIRESTORE_EMULATOR_HOST='127.0.0.1:8085')
+
+    def refusals(arguments, env, message):
+        completed = _run_repair_cli(arguments, env)
+        assert completed.returncode == 2, completed.stdout + completed.stderr
+        assert message in completed.stderr
+
+    refusals(['--stage', 'local', '--local-namespace', 'Bad-ID'], loopback, 'must match')
+    refusals(['--stage', 'local', '--local-namespace', '../batch_pipeline_prod'], loopback, 'must match')
+    refusals(
+        ['--stage', 'prod', '--local-namespace', 'anything'],
+        loopback,
+        '--local-namespace applies to --stage local only',
+    )
+    refusals(['--stage', 'local'], dict(base, FIRESTORE_EMULATOR_HOST='10.9.8.7:8080'), 'loopback emulator')
+    refusals(['--stage', 'local'], base, 'loopback emulator')
+    refusals(['--stage', 'prod'], base, 'wrong identity')

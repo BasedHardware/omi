@@ -27,6 +27,9 @@ class ProcessingTrigger(str, Enum):
     USER_REPROCESS = 'user_reprocess'  # the user asked to reprocess it
     MERGE = 'merge'  # the user merged conversations into it
     SMART_MERGE = 'smart_merge'  # a finished conversation was folded into this survivor
+    CAPTURE_GROUP = (
+        'capture_group'  # a capture-group member joined; the primary's notes must carry the group's meeting context
+    )
     SERVER_RECOVERY = 'server_recovery'
     SILENT_BACKFILL = 'silent_backfill'  # operator-approved historical summary, no derived work
 
@@ -66,6 +69,10 @@ PROCESSING_MODES: Mapping[ProcessingTrigger, ProcessingMode] = MappingProxyType(
         # Regenerates an existing, already-kept survivor over its longer transcript:
         # no created-side effects, and relevance must not hide the whole occasion.
         ProcessingTrigger.SMART_MERGE: ProcessingMode(True, True, _KEEP),
+        # Same contract for the capture-group primary: the transcript is unchanged,
+        # only the confirmed same-event members' meeting context is new, so the
+        # row the user sees must not be re-judged for relevance.
+        ProcessingTrigger.CAPTURE_GROUP: ProcessingMode(True, True, _KEEP),
         ProcessingTrigger.SERVER_RECOVERY: ProcessingMode(True, True, _KEEP),
         ProcessingTrigger.SILENT_BACKFILL: ProcessingMode(True, True, _KEEP),
     }

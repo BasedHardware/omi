@@ -6,6 +6,7 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 /// which is how #10948 stayed invisible for a full day.
 String syncCooldownTitle(RateLimitReason? reason, AppLocalizations l) => switch (reason) {
       RateLimitReason.backendBusy => l.syncCardBackendBusy,
+      RateLimitReason.dispatchHold => l.syncCardUploadsPaused,
       RateLimitReason.edgeThrottle => l.syncCardThrottlePaused,
       _ => l.syncCardRateLimited,
     };

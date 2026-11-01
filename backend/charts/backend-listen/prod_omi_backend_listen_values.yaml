@@ -17,6 +17,9 @@ image:
 gcpProjectId: based-hardware
 runtimeGcpProjectId: based-hardware
 
+# Reject key credentials even when supplied through protected private values.
+workloadIdentityOnly: true
+
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
 # This is to override the chart name.
@@ -30,9 +33,9 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Keyless runtime identity (Workload Identity) that replaces the nik-164
-  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
-  # present the JSON still wins. Shared by the listen canary deployments.
+  # Keyless runtime identity (Workload Identity), shared by listen canaries.
+  # Do not inject SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS:
+  # they override ADC and can resurrect a revoked key on the next rollout.
   annotations:
     iam.gke.io/gcp-service-account: backend-listen-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
@@ -125,8 +128,10 @@ env:
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
     value: "0"
-  - name: BATCH_PIPELINE_PERCENT
+  - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
     value: "0"
+  - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED
@@ -149,6 +154,8 @@ env:
     value: "true"
   - name: REPEAT_WORK_REVISION_ENABLED
     value: "false"
+  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+    value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
@@ -203,6 +210,8 @@ env:
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
     value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
+    value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
@@ -214,10 +223,16 @@ env:
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: PROACTIVITY_V2_POSTHOG_HOST
     value: "https://us.posthog.com"
+  - name: OMI_FLAGS_FIRESTORE_PROJECT
+    value: "based-hardware"
+  - name: OMI_FLAGS_FIRESTORE_DATABASE
+    value: "omi-flags"
+  - name: OMI_FLAGS_SOURCE
+    value: "dual"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
+    value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -228,6 +243,8 @@ env:
     value: "300"
   - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
     value: "30"
+  - name: FSR_USAGE_MONTH_TOTAL_EPOCH
+    value: "v1"
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
@@ -354,6 +371,17 @@ env:
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
+  # Replay-only binding: keep live/stale-conversation admission in inline mode.
+  - name: LISTEN_FINALIZATION_REPLAY_ENABLED
+    value: "true"
+  - name: LISTEN_FINALIZATION_TASKS_QUEUE
+    value: "conversation-finalization"
+  - name: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+    value: "https://backend-sync-hhibjajaja-uc.a.run.app/v1/conversation-finalization-jobs/run"
+  - name: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+    value: "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+  - name: LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS
+    value: "5"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
@@ -390,8 +418,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MEMORY_V3_CURSOR_SECRET
-  - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
-    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -450,16 +476,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
@@ -572,7 +588,7 @@ env:
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
   - name: STT_ROUTING_ON_PERCENT
-    value: "90"
+    value: "100"
   - name: STT_ROUTING_TARGETS_JSON
     value: ""
   - name: STT_ROUTING_DISRUPTION_GATE
@@ -591,6 +607,9 @@ env:
     value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
     value: "16"
+  # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
+  - name: PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED
+    value: "false"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
@@ -623,6 +642,15 @@ env:
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
+  # Soniox bills every connected second; 5% uid cohort tests tighter idle close (registry ramp 5→25→50→100, speaker bars).
+  - name: SONIOX_IDLE_COHORT_PERCENT
+    value: "5"
+  - name: SONIOX_IDLE_COHORT_CLOSE_SECONDS
+    value: "20"
+  - name: SONIOX_IDLE_COHORT_REARM_SECONDS
+    value: "15"
+  - name: SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR
+    value: "20"
   - name: STT_SERVICE_MODELS
     value: "parakeet-window,modulate-velma-2,soniox"
   - name: HOSTED_TRANSLATION_API_URL
@@ -812,7 +840,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 40
+  minReplicas: 30
   maxReplicas: 60
   behavior:
     scaleDown:
