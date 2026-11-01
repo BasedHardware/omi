@@ -202,8 +202,10 @@ Each pump lane may submit its first fetch/decode before acquiring the GPU lock.
 These prepared attempts share a strict 1800-audio-second budget across all lanes;
 oversize units take ordinary locked decode. An attempt-local handle carries its
 audio, language and capture stream, never another lease's cached context. Stop
-and lost-lease paths cancel queued preparation and drain running bounded IO
-before renewal ends. The first prepared unit counts against this budget until
+and lost-lease paths cancel queued preparation while a lane waits. After GPU
+dispatch, the current bounded chain drains; the waiting-lane watcher is stopped
+and joined before dispatch. Running IO drains before renewal ends.
+The first prepared unit counts against this budget until
 its lane finishes; the existing active-flight prefetch/group bounds still apply.
 
 The final bounded persist tail settles after CUDA quiescence and release of the
@@ -213,7 +215,7 @@ per-unit failure/recovery path. Token, privacy and ordered-merge checks remain
 authoritative. Set Helm `worker.ioConcurrency=1` to remove preparation and
 restore serial artifact IO, including persistence under the model lock.
 
-`omi_batch_pipeline_completed_audio_seconds_total{outcome="success"|"silence"}`
+`omi_batch_pipeline_completed_audio_seconds_total{outcome="success"|"silence"|"no_recoverable_speech"}`
 counts admitted capture seconds only on a new fenced completion, including
 silence; duplicate completion receipts contribute zero. It is not a projection
 or vendor-spend denominator. `events{event="requeued"}` counts retry-to-ready

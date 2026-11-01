@@ -22,7 +22,7 @@ from tests.unit.test_batch_pipeline_artifacts import setup as artifacts_setup, i
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline import pump as pump_module, worker_metrics
 from utils.batch_pipeline.audio import audio_unit, with_context
-from utils.batch_pipeline.contracts import FailedWork, WorkResult
+from utils.batch_pipeline.contracts import FailedWork, WorkResult, WORK_OUTCOMES
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.compute_client import InvalidReceipt
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -369,9 +369,18 @@ def test_released_attempt_cannot_overwrite_another_attempts_staged_context():
 
 @pytest.mark.parametrize('shadow', ['silent', 'speech', 'unavailable'])
 def test_shadow_cannot_change_words_speakers_clocks_or_model_calls(monkeypatch, shadow):
-    baseline, _, saved, _, diarized, _ = setup_worker(io_concurrency=1)
+    baseline_vad, candidate_vad = [], []
+
+    def vad(calls):
+        def run(samples):
+            calls.append(len(samples))
+            return [(0, len(samples) / 16000)]
+
+        return run
+
+    baseline, baseline_words, saved, _, diarized, _ = setup_worker(io_concurrency=1, vad=vad(baseline_vad))
     expected = baseline.process_batch([item()])
-    worker, _, actual, _, actual_diarized, _ = setup_worker(io_concurrency=5)
+    worker, candidate_words, actual, _, actual_diarized, _ = setup_worker(io_concurrency=5, vad=vad(candidate_vad))
     if shadow == 'unavailable':
 
         def inspect(*args):
@@ -386,6 +395,60 @@ def test_shadow_cannot_change_words_speakers_clocks_or_model_calls(monkeypatch, 
     finally:
         prepared.close()
     assert actual == saved and actual_diarized == diarized
+    assert candidate_words.calls == baseline_words.calls and candidate_vad == baseline_vad
+
+
+@pytest.mark.asyncio
+async def test_stop_after_dispatch_cannot_cancel_a_queued_first_decode(monkeypatch):
+    loop = asyncio.get_running_loop()
+    dispatched = asyncio.Event()
+    release = threading.Event()
+    worker, _, _, _, _, _ = setup_worker(io_concurrency=2)
+    blockers = [worker._io.submit(release.wait, 3) for _ in range(2)]
+    prepared_handles = []
+    prepare, process = worker.prepare_first, worker._process
+
+    def observe_prepare(items):
+        handle = prepare(items)
+        prepared_handles.append(handle)
+        return handle
+
+    def observe_process(*args, **kwargs):
+        loop.call_soon_threadsafe(dispatched.set)
+        return process(*args, **kwargs)
+
+    monkeypatch.setattr(worker, 'prepare_first', observe_prepare)
+    monkeypatch.setattr(worker, '_process', observe_process)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item(), time.time())
+    stop = asyncio.Event()
+    running = asyncio.create_task(Pump(queue, worker, flights=2).run_once(stop_event=stop, maintain=False))
+    try:
+        await asyncio.wait_for(dispatched.wait(), 2)
+        stop.set()
+        # Cross the previous watcher's 100ms poll while the decode is queued.
+        await asyncio.sleep(0.15)
+        assert not prepared_handles[0].future.cancelled()
+    finally:
+        release.set()
+        await asyncio.wait_for(running, 2)
+        for blocker in blockers:
+            blocker.result(1)
+    assert store.rows['jobs', 'a']['state'] == 'committed'
+    assert store.rows['jobs', 'a']['attempt'] == 1
+    assert worker._decode_budget.seconds == 0
+
+
+@pytest.mark.parametrize('outcome', sorted(WORK_OUTCOMES))
+def test_every_fenced_work_outcome_counts_capture_seconds_once(outcome):
+    registry = CollectorRegistry()
+    queue = Scheduler(MemoryStore(), metrics=QueueMetrics(registry))
+    queue.enqueue(item(), 0)
+    lease = queue.pull(0)[0]
+    result = WorkResult('a', 'encrypted://result', outcome)
+    assert queue.complete(result, lease.token, 1) and queue.complete(result, lease.token, 2)
+    assert registry.get_sample_value('omi_batch_pipeline_completed_audio_seconds_total', {'outcome': outcome}) == 2
 
 
 def test_privacy_delete_during_persist_never_publishes(monkeypatch):

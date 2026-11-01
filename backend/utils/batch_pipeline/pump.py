@@ -405,6 +405,18 @@ class Pump:
             skipped: set[str] = set()
             try:
                 async with self._gpu:
+                    # Preparation belongs to the waiting lane. Once dispatch
+                    # starts, the current bounded chain drains on stop/loss;
+                    # cancelling a queued first fetch here would fake a failure.
+                    if watching is not None:
+                        watching.cancel()
+                        watched = asyncio.gather(watching, return_exceptions=True)
+                        try:
+                            await asyncio.shield(watched)
+                        except asyncio.CancelledError:
+                            await _drain_task(watched)
+                            raise
+                        watching = None
                     if stop_event is not None and stop_event.is_set() and self.flights > 1:
                         # Claimed behind a sibling's chain when SIGTERM or a
                         # fatal GPU error arrived: refund without an attempt

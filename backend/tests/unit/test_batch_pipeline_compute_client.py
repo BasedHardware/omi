@@ -100,6 +100,19 @@ def test_malformed_json_is_invalid_receipt_and_never_permission():
         client([lease()])
 
 
+def test_deeply_nested_json_is_an_invalid_receipt_not_a_transport_failure():
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'aud',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(b'[' * 2000 + b']' * 2000),
+    )
+    with pytest.raises(InvalidReceipt) as error:
+        client([lease()])
+    assert failure_outcome(error.value) == 'invalid_receipt'
+
+
 @pytest.mark.parametrize(
     'url,audience,stage',
     [

@@ -109,6 +109,7 @@ class SynchronizedWorker:
         except Exception as error:
             # Synchronization can fail after compute handed off writes. Fatal
             # CUDA must not leave those writes running beyond the receipt.
+            # Keep the poisoned GPU slot held until that fatal drain completes.
             close = getattr(pending, 'close', None)
             if callable(close):
                 close()

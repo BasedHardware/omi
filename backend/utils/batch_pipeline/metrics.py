@@ -5,7 +5,7 @@ import logging
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
-from utils.batch_pipeline.contracts import Priority
+from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
@@ -191,6 +191,6 @@ class QueueMetrics:
             self.owner_wait.observe(max(0.0, wait_seconds))
 
     def record_completed_audio(self, outcome: str, seconds: float) -> None:
-        if outcome not in {'success', 'silence'}:
+        if outcome not in WORK_OUTCOMES:
             raise ValueError('invalid completion outcome')
         self.completed_audio.labels(outcome).inc(seconds)

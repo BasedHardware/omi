@@ -66,7 +66,7 @@ class ComputeClient:
                 raise InvalidReceipt('oversized spend admission response')
             try:
                 result = json.loads(raw)
-            except (ValueError, UnicodeError):
+            except (ValueError, UnicodeError, RecursionError):
                 raise InvalidReceipt('invalid spend admission JSON') from None
             identities = {lease.item.segment_id for lease in leases}
             if not isinstance(result, dict) or not isinstance(result.get('allowed'), list):

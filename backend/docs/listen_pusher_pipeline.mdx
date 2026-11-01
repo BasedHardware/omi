@@ -7159,7 +7159,9 @@ GPU lock, within one shared 1800-admitted-audio-second budget across pump lanes.
 Oversize units retain ordinary locked decode. Prepared audio, language and
 capture-stream context belong to the exact lease attempt; a replacement attempt
 cannot consume an older context. Stop and lost renewal cancel queued preparation
-and drain bounded running IO before renewal ends. Cancelled waiting attempts are
+and drain bounded running IO before renewal ends. The waiting-lane watcher is
+joined before GPU dispatch; a dispatched bounded chain drains normally.
+Cancelled waiting attempts are
 refunded through the existing lease fence, including after renewal recovers.
 
 All model calls and CUDA quiescence remain exclusive on the calling thread.
