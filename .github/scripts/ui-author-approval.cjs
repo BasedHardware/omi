@@ -12,7 +12,7 @@ const isUI = path => /^(app\/lib\/(pages|widgets|ui|l10n)\/|desktop\/macos\/Desk
 function decision(pr, files, commits, comments) {
   const actor = isActor(pr.user) || commits.some(c => isActor(c.author) || isActor(c.committer)
     || (c.authors || []).some(isActor));
-  const ui = files.some(f => isUI(f.filename) || (f.previous_filename && isUI(f.previous_filename)));
+  const ui = files.some(f => f.ui || isUI(f.filename) || (f.previous_filename && isUI(f.previous_filename)));
   // REST caps PR commits at 250 and files at 3000. Never pass incomplete evidence.
   const incomplete = pr.commits >= 250 || pr.changed_files > 3000;
   const required = incomplete || (actor && ui);
@@ -55,10 +55,29 @@ async function evidence(github, repo, pr) {
     }
     commit.authors = object.authors.nodes.map(a => ({id:a.user?.databaseId}));
   }
+  // Inspect immutable Swift source as data, so UI declarations in arbitrarily
+  // named files (for example IntegrationNudgeCard.swift) cannot evade the gate.
+  for (const file of first.files) {
+    for (const path of new Set([file.filename,file.previous_filename].filter(Boolean))) {
+      if (!/^desktop\/macos\/.*\.swift$/.test(path)) continue;
+      for (const ref of [pr.base.sha,pr.head.sha]) {
+        try {
+          const {data} = await github.rest.repos.getContent({...repo,path,ref});
+          if (data.encoding !== 'base64' || !data.content || data.size > 1000000) {
+            throw new Error('Incomplete Swift source evidence');
+          }
+          const source = Buffer.from(data.content,'base64').toString('utf8');
+          file.ui ||= /\bimport\s+SwiftUI\b|:\s*(?:[\w.]+\s*,\s*)*(?:NSView|NSViewController|UIView|UIViewController)\b/.test(source);
+        } catch (error) {
+          if (error.status !== 404) throw error;
+        }
+      }
+    }
+  }
   return {files:first.files,commits};
 }
 
-async function run({github, context}) {
+async function evaluateHead({github, context}) {
   const repo = context.repo;
   const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
   const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
@@ -105,6 +124,20 @@ async function run({github, context}) {
     await status('failure','Unable to verify UI approval; see workflow logs');
     throw error;
   }
+}
+async function run({github,context}) {
+  // A global concurrency group can replace pending events. Reconcile every open
+  // head on every surviving event, including a dropped approval revocation.
+  const prs = await github.paginate(github.rest.pulls.list,{
+    ...context.repo,state:'open',base:'main',per_page:100,
+  });
+  const heads = new Map(prs.map(p => [p.head.sha,p.number]));
+  let failed = false;
+  for (const number of heads.values()) {
+    try { await evaluateHead({github,context:{...context,payload:{pull_request:{number}}}}); }
+    catch (error) { failed = true; console.error(error.message); }
+  }
+  if (failed) throw new Error('One or more heads could not be verified');
 }
 module.exports = run;
 module.exports.decision = decision;

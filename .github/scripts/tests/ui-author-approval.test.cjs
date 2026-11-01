@@ -64,7 +64,7 @@ test('workflow blocks repeatedly, notifies once per head, approves and revokes',
   assert.equal(f.statuses.at(-1).state,'failure');
   assert.equal(f.comments[1].filter(c => c.user.type === 'Bot').length,2);
   f.github.graphql = async () => {throw new Error('API failure');};
-  await assert.rejects(run(f),/API failure/);
+  await assert.rejects(run(f),/could not be verified/);
   assert.equal(f.statuses.at(-1).state,'failure');
 });
 test('another opener sharing SHA cannot clear the actor PR requirement', async () => {
@@ -82,7 +82,7 @@ test('all evidence is immutable across H -> B -> H movement', async () => {
   await run(f);
   assert.equal(f.calls[0].basehead,`${f.p.base.sha}...${f.p.head.sha}`);
   f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:Array(300).fill(ui[0]),commits:[],total_commits:0}});
-  await assert.rejects(run(f),/Incomplete immutable file/);
+  await assert.rejects(run(f),/could not be verified/);
   assert.equal(f.statuses.at(-1).state,'failure');
 });
 test('actual desktop view locations are gated, services stay out', () => {
@@ -95,4 +95,26 @@ test('actual desktop view locations are gated, services stay out', () => {
     'desktop/windows/src/main/transcription.ts']) {
     assert.equal(decision({...pr,user:actor},[{filename}],[],[]).allowed,true,filename);
   }
+});
+
+test('surviving unrelated event reconciles a dropped revocation', async () => {
+  const f = fixture();
+  const other = {...f.p,number:2,head:{sha:'e'.repeat(40)},user:{id:2}};
+  f.prs.push(other); f.comments[2]=[];
+  f.comments[1].push(approve); await run(f);
+  assert.equal(f.statuses.filter(s => s.sha === f.p.head.sha).at(-1).state,'success');
+  f.comments[1] = f.comments[1].filter(c => c !== approve); f.context.payload.pull_request.number=2;
+  await run(f);
+  assert.equal(f.statuses.filter(s => s.sha === f.p.head.sha).at(-1).state,'failure');
+});
+test('arbitrarily named SwiftUI file is gated by immutable contents', async () => {
+  const f = fixture();
+  f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCard.swift'}],commits:[],total_commits:0}});
+  const refs = [];
+  f.github.rest.repos.getContent = async ({ref}) => {refs.push(ref);return {data:{encoding:'base64',size:50,content:Buffer.from('import SwiftUI\nstruct IntegrationNudgeCard: View {}').toString('base64')}};};
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  assert.deepEqual(refs,[f.p.base.sha,f.p.head.sha]);
+  f.github.rest.repos.getContent = async () => ({data:{encoding:'base64',size:40,content:Buffer.from('import Foundation\nclass Service {}').toString('base64')}});
+  await run(f); assert.equal(f.statuses.at(-1).state,'success');
 });
