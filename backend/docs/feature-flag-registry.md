@@ -520,6 +520,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_EXTERNAL_LIST_CACHE_ENABLED` | Default on unless false; Encrypted authorized external list responses; ten seconds unless collection write coverage admits a versioned cache; expiry anchored before the origin query | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_EXTERNAL_LIST_METRICS_ENABLED` | Default on unless false; Count four external list GETs and staged promote POST including auth rate-limit validation and server errors | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED` | Default on; coalesce simultaneous identical external-list cache misses after each request passes authorization | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `OMI_FIRESTORE_WRITE_PROBE_ENABLED` | Default on; count committed Firestore writes by collection, op, caller and origin at the GAPIC Commit/BatchWrite boundary | backend | env | open | — | — | — | — | keep | keep | — | fswrites |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | Enable overflow routing to Gemini | backend, llm-gateway | env | open | — | — | — | — | keep | keep | — | unowned |
 | `OMI_LIST_PROJECTION_WRITER_ENABLED` | Default on; atomically maintain compact conversation/action metadata rows and opaque list versions | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | Permit direct-model gateway exception | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, pusher (chart)) | — | keep | keep | — | unowned |
@@ -1062,6 +1063,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_EXTERNAL_LIST_CACHE_ENABLED` — Default on unless false; Encrypted authorized external list responses; ten seconds unless collection write coverage admits a versioned cache; expiry anchored before the origin query (fail: open)
 - `OMI_EXTERNAL_LIST_METRICS_ENABLED` — Default on unless false; Count four external list GETs and staged promote POST including auth rate-limit validation and server errors (fail: open)
 - `OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED` — Default on; coalesce simultaneous identical external-list cache misses after each request passes authorization (fail: open)
+- `OMI_FIRESTORE_WRITE_PROBE_ENABLED` — Default on; count committed Firestore writes by collection, op, caller and origin at the GAPIC Commit/BatchWrite boundary (fail: open)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
 - `OMI_INDEXED_LIST_READS_ENABLED` — Default off; indexed canonical list candidates and slim main conversation lists preserve released row authority (fail: closed)

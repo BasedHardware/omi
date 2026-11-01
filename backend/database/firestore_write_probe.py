@@ -53,6 +53,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import os
 import re
 import threading
 from typing import Any, Callable, Iterable
@@ -323,10 +324,21 @@ def _patch(cls: Any, name: str, factory: Callable[[Any], Any]) -> None:
 _installed = False
 
 
+def probe_enabled() -> bool:
+    """Kill switch, on unless the literal ``false``.
+
+    Off means the transport is never wrapped, so the labelled write series are
+    never created in that process. Set per service: a Cloud Run service close
+    to its GMP sidecar ``samples`` limit (backend/deploy/cloud_run_gmp_sidecar.yaml)
+    would otherwise lose its whole scrape, not just these series.
+    """
+    return os.getenv('OMI_FIRESTORE_WRITE_PROBE_ENABLED', 'true').strip().lower() != 'false'
+
+
 def install_document_write_probe() -> None:
-    """Wrap the transport's Commit and BatchWrite. Idempotent. ImportError skips the install."""
+    """Wrap the transport's Commit and BatchWrite. Idempotent. ImportError or the kill switch skips the install."""
     global _installed
-    if _installed:
+    if _installed or not probe_enabled():
         return
     try:
         from google.cloud.firestore_v1.services.firestore import FirestoreAsyncClient, FirestoreClient
