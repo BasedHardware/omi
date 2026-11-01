@@ -43,10 +43,11 @@ def _stream(segment: Mapping[str, Any]) -> Optional[tuple[str, str]]:
 
 
 def drop_replayed_words(existing: list[dict], incoming: list[dict], *, clock: str = 'start') -> list[dict]:
-    """Drop retried pieces: a repeated ID, or a word the same provider stream already covers.
+    """Drop retried provider pieces: a repeated ID, or a word the same stream already covers.
 
     Text dedupe exempts one-word lines, and a joined word no longer has its own exact
-    range, so a redelivered batch would otherwise append the same words again.
+    range, so a redelivered batch would otherwise append the same words again. Lines with
+    no provider stream keep the recovery contract, where a receipt-only replay reappends.
     """
     ids = {segment.get('id') for segment in existing if segment.get('id')}
     spans: dict[tuple[str, str, Any], list[tuple[float, float]]] = {}
@@ -59,9 +60,9 @@ def drop_replayed_words(existing: list[dict], incoming: list[dict], *, clock: st
             )
     kept = []
     for segment in incoming:
-        if segment.get('id') and segment['id'] in ids:
-            continue
         stream = _stream(segment)
+        if stream is not None and segment.get('id') in ids:
+            continue
         if stream is not None and _is_word(segment):
             start = float(segment[clock])
             end = start + float(segment['end']) - float(segment['start'])

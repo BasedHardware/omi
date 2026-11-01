@@ -100,6 +100,11 @@ def test_same_time_word_from_another_provider_or_socket_is_not_a_replay():
     assert _texts(drop_replayed_words(stored, other)) == ['orange', 'orange']
 
 
+def test_replayed_line_without_a_provider_stream_keeps_the_recovery_contract():
+    stored = [{'id': 'wal-seg', 'text': 'a whole recovered line', 'start': 0.0, 'end': 2.0}]
+    assert _texts(drop_replayed_words(stored, [dict(stored[0])])) == ['a whole recovered line']
+
+
 def test_repeated_id_inside_one_batch_is_dropped():
     assert _texts(drop_replayed_words([], [_word('a', 'one', 0.0), _word('a', 'one', 0.0)])) == ['one']
 
