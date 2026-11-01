@@ -3,7 +3,7 @@
 ``SimStore`` is an in-memory model; this subclass keeps its public surface (``rows``, ``jobs()``, ``mutate``,
 ``purge``, ``observers`` ...) but sends every transaction through ``database.jobstore.PostgresStore.run``,
 so the characterization goldens are produced by the production doc-mode code: its SQL, its jsonb round
-trip, its serialization-failure retry and its privacy flush. The privacy authority is the same real
+trip, its document locks and conflict retry, and its privacy flush. The privacy authority is the same real
 fence over ``CustomerData``. Only the harness's out-of-band edits (``apply`` / ``delete`` / ``mutate`` /
 ``purge``, models of non-simulated writers) bypass transactions, as they do in ``SimStore``.
 """
@@ -109,7 +109,8 @@ class PgSimStore(SimStore):
     def jobs_in_state(self, state: str) -> list[str]:
         with self.pg.pool.connection() as conn:
             rows = conn.execute(
-                'SELECT key FROM jobs WHERE namespace = %s AND state = %s ORDER BY key', (self.pg.namespace, state)
+                'SELECT key FROM jobs WHERE namespace = %s AND state = %s ORDER BY key COLLATE "C"',
+                (self.pg.namespace, state),
             ).fetchall()
         return [row[0] for row in rows]
 
@@ -136,6 +137,26 @@ class PgSimStore(SimStore):
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self.pg.run(lambda tx: tx.ready_predecessor(owner_key, priority, segment_id))
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        return self.pg.ready_for_capacity(priority, now)
+
+    def longest_ready_pending(self, owner_key: str) -> dict | None:
+        return self.pg.longest_ready_pending(owner_key)
+
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
+        return self.pg.fresh_pending(owner_key, limit)
+
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
+        return self.pg.held_merge_owners(limit, after=after)
+
+    def projection_page(
+        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+    ) -> tuple[list[str], Any]:
+        return self.pg.projection_page(limit, after=after, states=states)
+
+    def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
+        return self.pg.projection_successor(owner_key, previous)
 
     # -- transactions -----------------------------------------------------------------------------------
     def run(self, body: Callable[[Any], T]) -> T:  # type: ignore[override]

@@ -4489,12 +4489,11 @@
     "episodeNotesStartWithTranscript": "Заметки появятся, когда прибудет финальная расшифровка.",
     "episodeOnDeviceNotesFootnote": "Создаются на вашем телефоне, пока вы говорите. Полные заметки появятся вместе с финальной расшифровкой.",
     "episodeOnThisPhone": "На этом телефоне",
-    "liveCardTitle": "Прямой эфир",
     "livePreviewBehind": "Финальная расшифровка отстает примерно на {duration}",
     "livePreviewCatchingUp": "Финальная расшифровка догоняет",
     "livePreviewNoEngineBody": "Ваши слова появятся здесь через минуту-две после того, как вы их произнесли.",
     "livePreviewNoEngineTitle": "Безопасная запись",
-    "livePreviewOnPhoneDivider": "Прямой эфир на этом телефоне",
+    "livePreviewOnPhoneDivider": "Только что, на этом телефоне",
     "livePreviewTurnOnLiveText": "Включить текст прямой трансляции",
     "deviceCatchUpOnItsWay": "в пути",
     "deviceCatchUpWhenOnline": "когда появится сеть",
@@ -4551,7 +4550,12 @@
     "yearlySwitchUnavailable": "Годовая оплата сейчас недоступна для вашего плана.",
     "yearlySwitchDoneTitle": "Теперь вы платите раз в год",
     "yearlySwitchDoneBody": "Сегодня списано {amount}. Продление {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} части} one{{count} часть} two{{count} части} few{{count} части} many{{count} частей} other{{count} части}}",
     "chatAppsWaitingMessageIn": "Отправьте сообщение в приложении «{app}». Этот экран обновится, как только Omi его получит.",
-    "chatAppsCodeExpiredMessageIn": "Получите новый код и отправьте его из приложения «{app}»."
+    "chatAppsCodeExpiredMessageIn": "Получите новый код и отправьте его из приложения «{app}».",
+    "episodeWritingNotes": "Пишем заметки…",
+    "episodeWritingNotesDetail": "Сначала завершаем расшифровку. Можно покинуть эту страницу.",
+    "episodeCoversUpTo": "Охватывает до {time} · полные заметки по завершении",
+    "liveTranscribedUpTo": "Расшифровано до {time}",
+    "liveAudioSaved": "Сохранено {duration}",
+    "liveAudioSavedDetail": "Участники и итоговая расшифровка появятся здесь по мере загрузки."
 }

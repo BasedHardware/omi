@@ -4489,12 +4489,11 @@
     "episodeNotesStartWithTranscript": "Notlar, nihai transkript geldiğinde başlar.",
     "episodeOnDeviceNotesFootnote": "Konuşurken telefonunda hazırlanıyor. Tam notlar nihai transkriptle birlikte gelecek.",
     "episodeOnThisPhone": "Bu telefonda",
-    "liveCardTitle": "Canlı",
     "livePreviewBehind": "Nihai transkript yaklaşık {duration} geride",
     "livePreviewCatchingUp": "Nihai transkript yaklaşıyor",
     "livePreviewNoEngineBody": "Sözlerin, söyledikten bir iki dakika sonra burada görünür.",
     "livePreviewNoEngineTitle": "Güvenle kaydediyor",
-    "livePreviewOnPhoneDivider": "Bu telefonda canlı",
+    "livePreviewOnPhoneDivider": "Az önce, bu telefonda",
     "livePreviewTurnOnLiveText": "Canlı metni aç",
     "deviceCatchUpOnItsWay": "yolda",
     "deviceCatchUpWhenOnline": "çevrimiçi olunca",
@@ -4551,7 +4550,12 @@
     "yearlySwitchUnavailable": "Yıllık ödeme şu anda planınız için kullanılamıyor.",
     "yearlySwitchDoneTitle": "Artık yıllık ödüyorsunuz",
     "yearlySwitchDoneBody": "Bugün {amount} tahsil edildi. Yenilenme: {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} bölüm} one{{count} bölüm} two{{count} bölüm} few{{count} bölüm} many{{count} bölüm} other{{count} bölüm}}",
     "chatAppsWaitingMessageIn": "Mesajı {app}'dan gönder. Omi'ye ulaşır ulaşmaz bu ekran güncellenir.",
-    "chatAppsCodeExpiredMessageIn": "Yeni bir kod al ve {app}'dan gönder."
+    "chatAppsCodeExpiredMessageIn": "Yeni bir kod al ve {app}'dan gönder.",
+    "episodeWritingNotes": "Notlar yazılıyor…",
+    "episodeWritingNotesDetail": "Önce döküm tamamlanıyor. Bu sayfadan çıkabilirsiniz.",
+    "episodeCoversUpTo": "{time} saatine kadar · bitince tam notlar",
+    "liveTranscribedUpTo": "{time} saatine kadar yazıya döküldü",
+    "liveAudioSaved": "{duration} kaydedildi",
+    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür."
 }

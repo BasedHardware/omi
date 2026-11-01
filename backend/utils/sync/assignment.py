@@ -255,6 +255,7 @@ def assign_in_transaction(
     lineage_eligible = incoming.pop('_sync_lineage_eligible', False) is True
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
+    redrive_target = incoming.pop('_batch_redrive_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
     collection = user_ref.collection('conversations')
     read: dict[str, dict | None] = {}
@@ -323,6 +324,22 @@ def assign_in_transaction(
         # timestamp anchor here becomes a twin when listen later persists. The
         # already-read target document fences concurrent create on replay.
         raise SyncAssignmentConflict('batch live target not persisted', subtype=Reason.LIVE_TARGET_NOT_PERSISTED)
+    if redrive_target:
+        # Release is a scheduling hint. Recheck lifecycle under the very
+        # transaction that appends, including a discard racing the release.
+        if not target:
+            raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
+        if target.get('deleted'):
+            raise SyncAssignmentSuperseded('sync target was deleted')
+        if target.get('discarded'):
+            raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
+        if target.get('status') != 'completed':
+            raise SyncAssignmentConflict('record finalize still pending', subtype=Reason.RECORD_FINALIZE_PENDING)
+        if target.get('uses_custom_stt') or target.get('data_protection_level', 'enhanced') not in {
+            'standard',
+            'enhanced',
+        }:
+            raise SyncAssignmentConflict('record privacy changed', subtype=Reason.RECORD_PRIVACY_CHANGED)
     replacement = None
     if record_span is not None:
         if not target or not target_id:
@@ -1294,6 +1311,10 @@ def assign_in_transaction(
         chosen.created,
         chosen.survivors,
     )
+    if redrive_target and any(
+        (accepted.matched.get(accepted.canonical) or {}).get('discarded') for accepted in [chosen, *extra_plans]
+    ):
+        raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
     remember_size_payload(canonical, result)
     for accepted in [chosen, *extra_plans]:
         remember_size_payload(accepted.canonical, accepted.result)

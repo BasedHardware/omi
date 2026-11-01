@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Pastabos prasidės, kai atvyks galutinė transkripcija.",
     "episodeOnDeviceNotesFootnote": "Kuriamos telefone, kol kalbate. Pilnos pastabos atvyks kartu su galutine transkripcija.",
     "episodeOnThisPhone": "Šiame telefone",
-    "liveCardTitle": "Tiesiogiai",
     "livePreviewBehind": "Galutinė transkripcija atsilieka maždaug {duration}",
     "livePreviewCatchingUp": "Galutinė transkripcija pasivijo",
     "livePreviewNoEngineBody": "Tavo žodžiai čia pasirodo po minutės ar dviejų.",
     "livePreviewNoEngineTitle": "Saugiai įrašinėja",
-    "livePreviewOnPhoneDivider": "Tiesiogiai šiame telefone",
+    "livePreviewOnPhoneDivider": "Ką tik, šiame telefone",
     "livePreviewTurnOnLiveText": "Įjungti tiesioginį tekstą",
     "deviceCatchUpOnItsWay": "pakeliui",
     "deviceCatchUpWhenOnline": "prisijungus",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Metinis mokėjimas jūsų planui šiuo metu negalimas.",
     "yearlySwitchDoneTitle": "Dabar mokate kas metus",
     "yearlySwitchDoneBody": "Šiandien nuskaičiuota {amount}. Atnaujinama {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} dalių} one{{count} dalis} two{{count} dalių} few{{count} dalys} many{{count} dalies} other{{count} dalių}}",
     "chatAppsWaitingMessageIn": "Išsiųskite žinutę programoje {app}. Šis ekranas atsinaujins, kai tik Omi ją gaus.",
-    "chatAppsCodeExpiredMessageIn": "Gaukite naują kodą ir išsiųskite jį per {app}."
+    "chatAppsCodeExpiredMessageIn": "Gaukite naują kodą ir išsiųskite jį per {app}.",
+    "episodeWritingNotes": "Rašomos pastabos…",
+    "episodeWritingNotesDetail": "Pirmiausia baigiame transkripciją. Galite palikti šį puslapį.",
+    "episodeCoversUpTo": "Iki {time} · pilnos pastabos pabaigoje",
+    "liveTranscribedUpTo": "Transkribuota iki {time}",
+    "liveAudioSaved": "Išsaugota {duration}",
+    "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant."
 }

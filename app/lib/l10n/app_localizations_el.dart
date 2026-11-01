@@ -14770,9 +14770,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get episodeOnThisPhone => 'Σε αυτό το τηλέφωνο';
 
   @override
-  String get liveCardTitle => 'Ζωντανά';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Η τελική απομαγνητοφώνηση υστερεί περίπου $duration';
   }
@@ -14787,7 +14784,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Ασφαλή εγγραφή';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Ζωντανά σε αυτό το τηλέφωνο';
+  String get livePreviewOnPhoneDivider => 'Μόλις τώρα, σε αυτό το τηλέφωνο';
 
   @override
   String get livePreviewTurnOnLiveText => 'Ενεργοποίηση ζωντανού κειμένου';
@@ -15034,21 +15031,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count μέρη',
-      many: '$count μέρη',
-      few: '$count μέρη',
-      two: '$count μέρη',
-      one: '$count μέρος',
-      zero: '$count μέρη',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Στείλε το μήνυμα από τα $app. Αυτή η οθόνη ενημερώνεται μόλις το λάβει το Omi.';
   }
@@ -15057,4 +15039,29 @@ class AppLocalizationsEl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Πάρε νέο κωδικό και στείλ\' τον από τα $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Γράφονται οι σημειώσεις…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Πρώτα ολοκληρώνεται η απομαγνητοφώνηση. Μπορείς να φύγεις από τη σελίδα.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Καλύπτει έως τις $time · πλήρεις σημειώσεις στο τέλος';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Απομαγνητοφώνηση έως τις $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Αποθηκεύτηκαν $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail =>
+      'Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.';
 }

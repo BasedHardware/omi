@@ -14686,9 +14686,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get episodeOnThisPhone => 'اس فون پر';
 
   @override
-  String get liveCardTitle => 'براہِ راست';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'حتمی نقل تقریباً $duration پیچھے ہے';
   }
@@ -14703,7 +14700,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'محفوظ طریقے سے ریکارڈ ہو رہا ہے';
 
   @override
-  String get livePreviewOnPhoneDivider => 'اس فون پر براہِ راست';
+  String get livePreviewOnPhoneDivider => 'ابھی، اس فون پر';
 
   @override
   String get livePreviewTurnOnLiveText => 'براہِ راست متن آن کریں';
@@ -14947,21 +14944,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count حصے',
-      many: '$count حصے',
-      few: '$count حصے',
-      two: '$count حصے',
-      one: '$count حصے',
-      zero: '$count حصے',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'پیغام کو $app میں بھیجیں۔ Omi کو ملتے ہی یہ اسکرین اپ ڈیٹ ہو جائے گی۔';
   }
@@ -14970,4 +14952,28 @@ class AppLocalizationsUr extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'نیا کوڈ حاصل کریں اور اسے $app سے بھیجیں۔';
   }
+
+  @override
+  String get episodeWritingNotes => 'نوٹس لکھے جا رہے ہیں…';
+
+  @override
+  String get episodeWritingNotesDetail => 'پہلے ٹرانسکرپٹ مکمل کر رہے ہیں۔ آپ یہ صفحہ چھوڑ سکتے ہیں۔';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time تک · ختم ہونے پر مکمل نوٹس';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time تک ٹرانسکرائب ہوا';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration محفوظ';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔';
 }

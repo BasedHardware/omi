@@ -51,6 +51,9 @@ def build_parser() -> argparse.ArgumentParser:
     op.add_argument('--show', action='store_true', help='Print the env entry and document revision (read-only)')
     op.add_argument('--percent', type=parse_percent, action='append', help='NAME=VALUE (repeatable)')
     op.add_argument('--legacy-sync', choices=store.LEGACY_SYNC_MODES)
+    parser.add_argument(
+        '--legacy-percent', type=float, help='Stable legacy retirement cohort (0..100); requires --legacy-sync'
+    )
     op.add_argument('--lock', metavar='WHO', help='Set locked_by (the controller refuses while set)')
     op.add_argument('--clear-lock', action='store_true', help='Set locked_by=null (acknowledges a controller stop)')
     parser.add_argument('--expected-revision', type=int)
@@ -74,7 +77,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def plan_change(args: argparse.Namespace, entry: dict[str, Any] | None) -> tuple[dict[str, Any], str] | str:
     """Return (change, reason) or a refusal code. Pure."""
+    if args.legacy_percent is not None and not args.legacy_sync:
+        return 'legacy_percent_requires_mode'
     if args.percent:
+        if any(name == 'legacy-sync' for name, _ in args.percent):
+            return 'legacy_percent_requires_mode'
         if entry is not None and entry['locked_by'] is None and entry['percents']:
             return 'percent_write_requires_operator_lock'
         percents = dict(args.percent)
@@ -85,10 +92,18 @@ def plan_change(args: argparse.Namespace, entry: dict[str, Any] | None) -> tuple
         return {'percents': percents}, args.reason or 'unknown'
     if args.legacy_sync:
         leaving_on = args.legacy_sync != 'on' and (entry is None or entry['legacy_sync'] == 'on')
+        widening = (
+            args.legacy_sync != 'on'
+            and args.legacy_percent is not None
+            and (entry is None or args.legacy_percent > entry['percents'].get('legacy-sync', 0))
+        )
         missing = sorted(set(DRAINING_PRECONDITIONS) - set(args.precondition_met or ()))
-        if leaving_on and missing:
+        if (leaving_on or widening) and missing:
             return 'draining_precondition_unmet:' + ','.join(missing)
-        return {'legacy_sync': args.legacy_sync}, args.reason or 'unknown'
+        change: dict[str, Any] = {'legacy_sync': args.legacy_sync}
+        if args.legacy_percent is not None:
+            change['percents'] = {'legacy-sync': args.legacy_percent}
+        return change, args.reason or 'unknown'
     if args.lock:
         return {'locked_by': args.lock}, args.reason or 'locked_by_operator'
     if args.clear_lock:

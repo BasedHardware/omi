@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "अंतिम ट्रांस्क्रिप्ट आने पर नोट्स शुरू होंगे।",
     "episodeOnDeviceNotesFootnote": "आप बोलते समय ये आपके फ़ोन पर तैयार होती हैं। पूरे नोट्स अंतिम ट्रांस्क्रिप्ट के साथ आएँगे।",
     "episodeOnThisPhone": "इस फ़ोन पर",
-    "liveCardTitle": "लाइव",
     "livePreviewBehind": "अंतिम ट्रांस्क्रिप्ट लगभग {duration} पीछे है",
     "livePreviewCatchingUp": "अंतिम ट्रांस्क्रिप्ट पहुँच रहा है",
     "livePreviewNoEngineBody": "आपके शब्द बोलने के एक या दो मिनट बाद यहाँ दिखते हैं।",
     "livePreviewNoEngineTitle": "सुरक्षित रिकॉर्ड हो रहा है",
-    "livePreviewOnPhoneDivider": "इस फ़ोन पर लाइव",
+    "livePreviewOnPhoneDivider": "अभी, इस फ़ोन पर",
     "livePreviewTurnOnLiveText": "लाइव टेक्स्ट चालू करें",
     "deviceCatchUpOnItsWay": "रास्ते में हैं",
     "deviceCatchUpWhenOnline": "ऑनलाइन होने पर",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "अभी आपके प्लान के लिए सालाना बिलिंग उपलब्ध नहीं है।",
     "yearlySwitchDoneTitle": "अब आप सालाना प्लान पर हैं",
     "yearlySwitchDoneBody": "आज {amount} चार्ज किए गए। नवीनीकरण {date} को।",
-    "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}",
     "chatAppsWaitingMessageIn": "{app} ऐप में मैसेज भेजें। Omi को मिलते ही यह स्क्रीन अपडेट हो जाएगी।",
-    "chatAppsCodeExpiredMessageIn": "नया कोड लें और उसे {app} ऐप से भेजें।"
+    "chatAppsCodeExpiredMessageIn": "नया कोड लें और उसे {app} ऐप से भेजें।",
+    "episodeWritingNotes": "नोट्स लिखे जा रहे हैं…",
+    "episodeWritingNotesDetail": "पहले ट्रांसक्रिप्ट पूरी हो रही है। आप यह पेज छोड़ सकते हैं।",
+    "episodeCoversUpTo": "{time} तक · समाप्त होने पर पूरे नोट्स",
+    "liveTranscribedUpTo": "{time} तक ट्रांसक्राइब हुआ",
+    "liveAudioSaved": "{duration} सहेजा गया",
+    "liveAudioSavedDetail": "अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।"
 }
