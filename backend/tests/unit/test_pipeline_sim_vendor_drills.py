@@ -17,6 +17,9 @@ from testing.pipeline_sim.trace import GOLDEN_CONFIGS
 from utils.batch_pipeline.vendor_route_contracts import VENDOR_HELD
 
 OUTAGE_END = 1500.0  # every upload arrives inside [0, 1200)
+# Terminal-outcome drills only need every upload (all arrive in [0, 1200)) to settle; a short
+# horizon keeps them under the fast-unit CPU guard on CI runners.
+TERMINAL_HORIZON = 2400.0
 TERMINAL_FAILURES = {'quarantined', 'privacy_blocked', 'provider_superseded', 'dead'}
 
 
@@ -106,7 +109,8 @@ def test_unarmed_modulate_outage_keeps_todays_terminal_failed_held():
     """No configured route table (dormant default): one Modulate call, then today's terminal
     failed_held for every unit, never a failover or a hold a pre-D worker could mishandle."""
     sim, _, jobs = drill(
-        vendor_outages=(('modulate', 0.0, 7200.0),),
+        vendor_outages=(('modulate', 0.0, TERMINAL_HORIZON),),
+        horizon_seconds=TERMINAL_HORIZON,
         vendor_failover_routes=('soniox',),
         vendor_health_aware=False,
         vendor_routing_armed=False,
@@ -129,7 +133,8 @@ def test_a_health_blind_total_outage_is_bounded_to_one_paid_call_per_vendor():
     """Without health (breakers never trip) both vendors fail every call: the paid-once bound ends
     each unit terminal after exactly one call per vendor, never a retry storm."""
     sim, _, jobs = drill(
-        vendor_outages=(('modulate', 0.0, 7200.0), ('soniox', 0.0, 7200.0)),
+        vendor_outages=(('modulate', 0.0, TERMINAL_HORIZON), ('soniox', 0.0, TERMINAL_HORIZON)),
+        horizon_seconds=TERMINAL_HORIZON,
         vendor_failover_routes=('soniox',),
         vendor_health_aware=False,
     )
