@@ -261,14 +261,20 @@ async def test_selected_persona_routes_through_agentic_stream_with_ordinary_argu
     [(("chat",), CHAT_APP_MARKER), (("persona",), PERSONA_MARKER)],
     ids=["chat-app", "persona-app"],
 )
-async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabilities, marker):
+@pytest.mark.parametrize(
+    "session_enabled,turn_enabled,expect_instructions",
+    [(True, None, True), (False, None, False), (False, True, True), (True, False, False)],
+)
+async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(
+    capabilities, marker, session_enabled, turn_enabled, expect_instructions
+):
     selected_app = _app(capabilities=capabilities, persona_prompt=PERSONA_MARKER, chat_prompt=CHAT_APP_MARKER)
     history = [
         _message("my favorite food is hot pot"),
         _message("noted", sender=MessageSender.ai),
         _message("who are you"),
     ]
-    session = SimpleNamespace(id="session-1", file_ids=[])
+    session = SimpleNamespace(id="session-1", file_ids=[], custom_instructions_enabled=session_enabled)
     context = PageContext(type="conversation", id="conv-1", title="Weekly review")
     callback_data = {}
     captured = {}
@@ -282,9 +288,15 @@ async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabi
         await callback.put_data("hi")
         await callback.end()
 
-    with patch.object(agentic, "get_user_timezone", lambda _uid: "UTC"), patch.object(
+    with patch.object(graph, "_current_prompt_metadata", AsyncMock(return_value=("<dt/>", "UTC"))), patch.object(
+        llm_chat.users_db,
+        "get_custom_instructions",
+        lambda _uid: {"enabled": True, "about_me": "CUSTOM_INSTRUCTION_MARKER", "response_style": "Concise"},
+    ), patch.object(agentic, "get_user_timezone", lambda _uid: "UTC"), patch.object(
         agentic, "get_mobile_city", AsyncMock(return_value=None)
-    ), patch.object(agentic, "load_app_tools", lambda _uid: []), patch.object(
+    ), patch.object(
+        agentic, "load_app_tools", lambda _uid: []
+    ), patch.object(
         agentic, "get_current_datetime_block", lambda _uid, tz=None, location=None: "<dt/>"
     ), patch.object(
         agentic, "_run_openai_agent_stream", runner
@@ -299,7 +311,7 @@ async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabi
     ):
         chunks = [
             chunk
-            async for chunk in agentic.execute_agentic_chat_stream(
+            async for chunk in graph.execute_chat_stream(
                 "uid-1",
                 history,
                 app=selected_app,
@@ -307,13 +319,14 @@ async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabi
                 chat_session=session,
                 context=context,
                 platform="ios",
-                current_datetime_block="<dt/>",
-                tz="UTC",
+                custom_instructions_enabled=turn_enabled,
             )
         ]
 
     assert "<selected_chat_app>" in captured["system_prompt"]
     assert marker in captured["system_prompt"]
+    assert ("CUSTOM_INSTRUCTION_MARKER" in captured["system_prompt"]) is expect_instructions
+    assert session.custom_instructions_enabled is session_enabled
     assert "get_memories_tool" in captured["tool_names"]
     assert "search_files_tool" in captured["tool_names"]
 

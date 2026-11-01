@@ -629,6 +629,9 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
             return f"done: {encoded_response}\n\n"
 
         try:
+            stream_kwargs: dict[str, Any] = {}
+            if data.custom_instructions_enabled is not None:
+                stream_kwargs['custom_instructions_enabled'] = data.custom_instructions_enabled
             async for chunk in execute_chat_stream(
                 uid,
                 messages,
@@ -642,6 +645,7 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                 client_tz=chat_tz,
                 device_tool_names=set(data.device_tools or ()),
                 shaped_invocation=True,
+                **stream_kwargs,
             ):
                 if chunk:
                     if chunk.startswith('error: '):

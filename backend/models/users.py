@@ -1,9 +1,9 @@
 from models.storefront import ChatAtCap
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Any
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, field_validator, model_validator, model_serializer
 
 from config.plan_catalog import PlanType
 
@@ -300,3 +300,63 @@ class AvailableLanguage(BaseModel):
 
 class AvailableLanguagesResponse(BaseModel):
     languages: List[AvailableLanguage]
+
+
+CUSTOM_INSTRUCTIONS_MAX_LENGTH = 1500
+
+
+def sanitize_custom_instruction_text(value: Optional[str]) -> str:
+    """Normalize user-authored custom instruction text.
+
+    Strips leading/trailing whitespace, normalizes CRLF to LF, and removes ASCII
+    control characters (except newlines and tabs) so stored instructions are
+    clean and bounded across clients.
+    """
+    if not value:
+        return ''
+    normalized = value.replace('\r\n', '\n').replace('\r', '\n')
+    cleaned = ''.join(ch for ch in normalized if ch in ('\n', '\t') or (ord(ch) >= 32 and ord(ch) != 127))
+    return cleaned.strip()
+
+
+class UpdateCustomInstructionsRequest(BaseModel):
+    enabled: Optional[bool] = None
+    about_me: Optional[str] = Field(default=None, max_length=CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+    response_style: Optional[str] = Field(default=None, max_length=CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if 'about_me' not in data and 'about_user' in data:
+                data = dict(data)
+                data['about_me'] = data['about_user']
+        return data
+
+    @field_validator('about_me', 'response_style', mode='before')
+    @classmethod
+    def sanitize_input(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return sanitize_custom_instruction_text(v)
+
+
+class CustomInstructionsResponse(BaseModel):
+    enabled: bool = True
+    about_me: str = Field(default='', max_length=CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+    response_style: str = Field(default='', max_length=CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+    updated_at: Optional[datetime] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if 'about_me' not in data and 'about_user' in data:
+                data = dict(data)
+                data['about_me'] = data['about_user']
+        return data
+
+    @field_validator('about_me', 'response_style', mode='before')
+    @classmethod
+    def sanitize_output(cls, v: Optional[str]) -> str:
+        return sanitize_custom_instruction_text(v) if v else ''
