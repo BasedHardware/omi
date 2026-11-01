@@ -840,9 +840,9 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  # 2026-10-29 retire100: batch at 100% takes consented mobile off the live leg;
-  # residual live (opt-outs + desktop, ~45-65% of sessions) fits ~19-27 pods.
-  # Rollback: restore 30 (pre-change live ran 42 replicas at 57%/55% CPU).
+  # retire100: planned live residual is ~31% excluded conversations plus
+  # ~5-6% desktop. Qualify the floor against fresh batch-100 demand before
+  # applying; max 60 and all scale-out signals stay intact. Rollback: 30.
   minReplicas: 20
   maxReplicas: 60
   behavior:
