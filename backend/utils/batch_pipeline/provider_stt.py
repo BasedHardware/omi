@@ -374,7 +374,7 @@ class ProviderSttStore:
         attempt_outcome: VendorAttemptOutcome | None = None,
         audio_seconds: float = 0.0,
         failover_to: tuple[str, ...] = (),
-        vad_speech_seconds: float | None = None,
+        measured_held_vad_speech_seconds: float | None = None,
     ) -> Literal['settled', 'failover', False]:
         """Settle the running attempt ``token``: a result, a failover back to pending, or terminal.
 
@@ -428,7 +428,7 @@ class ProviderSttStore:
                     quarantined_at=now,
                     recovery_state='failed_held',
                 )
-                _record_held_vad(job, vad_speech_seconds)
+                _record_held_vad(job, measured_held_vad_speech_seconds)
             else:
                 job.update(state='result_ready', result=asdict(WorkResult(segment_id, result_uri or '', outcome)))
             owner['revision'] = owner.get('revision', 0) + 1
@@ -438,7 +438,9 @@ class ProviderSttStore:
 
         return self.store.run(commit)
 
-    def terminal(self, segment_id: str, now: float, failure: dict, *, vad_speech_seconds: float | None = None) -> bool:
+    def terminal(
+        self, segment_id: str, now: float, failure: dict, *, measured_held_vad_speech_seconds: float | None = None
+    ) -> bool:
         """Terminal failed-held for a pending unit no vendor may serve any more (attempts spent)."""
 
         def commit(tx):
@@ -456,7 +458,7 @@ class ProviderSttStore:
                 recovery_state='failed_held',
             )
             job.setdefault('provider_intent', {})['failure'] = {'stage': failure['stage'], 'reason': failure['reason']}
-            _record_held_vad(job, vad_speech_seconds)
+            _record_held_vad(job, measured_held_vad_speech_seconds)
             owner['revision'] = owner.get('revision', 0) + 1
             tx.put('owners', key, owner)
             tx.put('jobs', segment_id, job)
@@ -849,7 +851,7 @@ class ProviderSttStage:
                 'reason': 'provider_failed',
             }
             speech = _speech_seconds(inspected) if failure is None else None
-            if self.protocol.terminal(segment_id, self.clock(), reason, vad_speech_seconds=speech):
+            if self.protocol.terminal(segment_id, self.clock(), reason, measured_held_vad_speech_seconds=speech):
                 self._log('failed_held', reason['reason'])
             return UnitOutcome('done', 'processed', provider_reason='provider_failed')
         if failure is not None or inspected is None or not inspected[2] or not self._armed():
@@ -901,7 +903,7 @@ class ProviderSttStage:
                 attempt_outcome=outcome,
                 audio_seconds=audio,
                 failover_to=failover_to,
-                vad_speech_seconds=_speech_seconds(plan.inspected) if plan.failure is None else None,
+                measured_held_vad_speech_seconds=_speech_seconds(plan.inspected) if plan.failure is None else None,
             )
             if not settled:
                 vendor_metrics.late_result(plan.service, 'ignored')
