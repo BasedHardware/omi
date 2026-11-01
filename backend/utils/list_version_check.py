@@ -21,6 +21,13 @@ CHECKS = Counter(
     'Conditional list version checks (source queries remain authoritative).',
     ['origin', 'outcome'],
 )
+# Sizes the epoch reader before it ramps: only requests that carry a validator
+# can ever be answered 304 without the source query (bounded: 3 origins x 2).
+VALIDATORS = Counter(
+    'omi_list_conditional_requests_total',
+    'List GETs on version-checkable routes by whether the client sent If-None-Match.',
+    ['origin', 'validator'],
+)
 ORIGINS = {
     '/v1/conversations': 'http:/v1/conversations',
     '/v1/action-items': 'http:/v1/action-items',
@@ -69,6 +76,9 @@ class ListVersionCheck:
         if not isinstance(request, Request):
             return cls(uid, family, '')
         check = cls(uid, family, ORIGINS.get(request.url.path, ''))
+        if check.origin:
+            present = 'present' if request.headers.get('if-none-match') else 'absent'
+            VALIDATORS.labels(check.origin, present).inc()
         # An epoch is an operator attestation that ALL writer runtimes are
         # upgraded. Rotate it after any writer rollback/gap; never auto-enable
         # a mixed fleet simply because the serving process has new code.
