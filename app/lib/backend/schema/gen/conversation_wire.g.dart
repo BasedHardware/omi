@@ -1003,6 +1003,7 @@ class GeneratedConversation {
   final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
+  final GeneratedRecordAudioPartial? recordAudioPartial;
   final DateTime? recordedEnd;
   final DateTime? recordedStart;
   final bool screenshotSharingEnabled;
@@ -1069,6 +1070,7 @@ class GeneratedConversation {
     this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
+    this.recordAudioPartial,
     this.recordedEnd,
     this.recordedStart,
     this.screenshotSharingEnabled = true,
@@ -1137,6 +1139,7 @@ class GeneratedConversation {
       processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
+      recordAudioPartial: _readFieldValue<GeneratedRecordAudioPartial>(_readField(json, const ["record_audio_partial"]), "record_audio_partial", (value) => _readObject(value, GeneratedRecordAudioPartial.fromJson), requiredField: false, nullable: true),
       recordedEnd: _readFieldValue<DateTime>(_readField(json, const ["recorded_end"]), "recorded_end", _readDateTime, requiredField: false, nullable: true),
       recordedStart: _readFieldValue<DateTime>(_readField(json, const ["recorded_start"]), "recorded_start", _readDateTime, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
@@ -1206,6 +1209,7 @@ class GeneratedConversation {
       'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
+      'record_audio_partial': recordAudioPartial?.toJson(),
       'recorded_end': recordedEnd?.toUtc().toIso8601String(),
       'recorded_start': recordedStart?.toUtc().toIso8601String(),
       'screenshot_sharing_enabled': screenshotSharingEnabled,
@@ -1226,6 +1230,38 @@ class GeneratedConversation {
       'user_overview': userOverview,
       'uses_custom_stt': usesCustomStt,
       'visibility': visibility,
+    };
+  }
+}
+
+class GeneratedRecordAudioPartial {
+  final int appliedGeneration;
+  final int generation;
+  final String reason;
+  final int version;
+
+  const GeneratedRecordAudioPartial({
+    this.appliedGeneration = 0,
+    this.generation = 0,
+    required this.reason,
+    this.version = 1,
+  });
+
+  factory GeneratedRecordAudioPartial.fromJson(Map<String, dynamic> json) {
+    return GeneratedRecordAudioPartial(
+      appliedGeneration: _required(_readFieldValue<int>(_readField(json, const ["applied_generation"]), "applied_generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "applied_generation"),
+      generation: _required(_readFieldValue<int>(_readField(json, const ["generation"]), "generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "generation"),
+      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
+      version: _required(_readFieldValue<int>(_readField(json, const ["version"]), "version", _readInt, requiredField: false, nullable: false, defaultValue: 1), "version"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'applied_generation': appliedGeneration,
+      'generation': generation,
+      'reason': reason,
+      'version': version,
     };
   }
 }
@@ -1464,6 +1500,7 @@ class GeneratedConversationSearchItem {
   final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
+  final GeneratedRecordAudioPartial? recordAudioPartial;
   final DateTime? recordedEnd;
   final DateTime? recordedStart;
   final bool screenshotSharingEnabled;
@@ -1531,6 +1568,7 @@ class GeneratedConversationSearchItem {
     this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
+    this.recordAudioPartial,
     this.recordedEnd,
     this.recordedStart,
     this.screenshotSharingEnabled = true,
@@ -1600,6 +1638,7 @@ class GeneratedConversationSearchItem {
       processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
+      recordAudioPartial: _readFieldValue<GeneratedRecordAudioPartial>(_readField(json, const ["record_audio_partial"]), "record_audio_partial", (value) => _readObject(value, GeneratedRecordAudioPartial.fromJson), requiredField: false, nullable: true),
       recordedEnd: _readFieldValue<DateTime>(_readField(json, const ["recorded_end"]), "recorded_end", _readDateTime, requiredField: false, nullable: true),
       recordedStart: _readFieldValue<DateTime>(_readField(json, const ["recorded_start"]), "recorded_start", _readDateTime, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
@@ -1670,6 +1709,7 @@ class GeneratedConversationSearchItem {
       'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
+      'record_audio_partial': recordAudioPartial?.toJson(),
       'recorded_end': recordedEnd?.toUtc().toIso8601String(),
       'recorded_start': recordedStart?.toUtc().toIso8601String(),
       'screenshot_sharing_enabled': screenshotSharingEnabled,

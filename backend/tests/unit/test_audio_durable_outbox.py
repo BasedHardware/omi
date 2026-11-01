@@ -1,6 +1,7 @@
 """Fault injection for the capture -> immutable receipt custody boundary."""
 
 import asyncio
+from concurrent.futures import Future
 from collections import deque
 from contextlib import nullcontext
 from datetime import datetime, timezone
@@ -47,6 +48,7 @@ from database.record_audio import seal_record_audio, set_record_upload_pending, 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.pusher_record_barrier import PusherRecordBarrier
 import utils.pusher_record_barrier as barrier_module
+import utils.pusher_record_finish as finish_module
 
 
 class Blob:
@@ -1219,17 +1221,17 @@ async def test_failed_tail_never_runs_inline_or_background_finish(inline_session
 
 
 @pytest.mark.asyncio
-async def test_shutdown_ack_failure_keeps_token_without_poisoning_retained_custody(inline_session, remote, monkeypatch):
+async def test_shutdown_ack_departure_still_delivers_projection_and_finishes(inline_session, remote, monkeypatch):
     client, path, barrier, projected = inline_session
     sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
     sock.send_bytes = AsyncMock(side_effect=WebSocketDisconnect(1006))
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
     assert remote.list_blobs('raw-live/') and remote.list_blobs('audio-outbox/')
-    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path]['record_upload_sessions']
     assert not client.rows[path].get('record_upload_failed')
-    assert 'conversation' in barrier.failed_recordings
-    assert client.rows[path]['record_audio_closed'] is False
-    assert not projected and sock.close_code == 1011
+    assert not barrier.failed_recordings
+    assert client.rows[path]['record_audio_closed'] is True
+    assert projected and sock.close_code == 1006
 
 
 @pytest.mark.asyncio
@@ -1245,9 +1247,15 @@ async def test_later_socket_reclears_only_receipt_proven_shutdown_tail(
     else:
         monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('synthetic tail failure')))
     await pusher._websocket_util_trigger(first, 'owner', 16000, audio_custody=1)
-    held = earlier.upload_sessions['conversation']
-    assert set(client.rows[path]['record_upload_sessions']) == {held}
-    assert not client.rows[path]['record_audio_closed']
+    held = earlier.upload_sessions.get('conversation')
+    if committed_before_failure:
+        # ACK departure no longer strands an owned projection at shutdown.
+        assert held is None and client.rows[path]['record_audio_closed']
+        assert client.rows[path]['record_upload_sessions'] == {}
+    else:
+        assert held is not None
+        assert set(client.rows[path]['record_upload_sessions']) == {held}
+        assert not client.rows[path]['record_audio_closed']
 
     monkeypatch.setattr(pusher, 'commit_pcm_window', real_commit)
     later = PusherRecordBarrier('owner')
@@ -1374,6 +1382,493 @@ async def test_inline_projection_timeout_keeps_background_close(inline_session, 
         await asyncio.wait_for(task, 5)
     assert finish_tasks == ['ws:owner:private_cloud']
     assert client.rows[path]['record_audio_closed'] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['success', 'failure', 'shutdown'])
+async def test_closed_socket_retains_real_drain_past_both_deadlines(inline_session, monkeypatch, outcome):
+    client, path, barrier, projected = inline_session
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    owners = []
+    start = finish_module.start_background_task
+
+    def track(coro, **kwargs):
+        owner = start(coro, **kwargs)
+        owners.append(owner)
+        return owner
+
+    def project(*args, **kwargs):
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(10)
+        if outcome == 'failure':
+            raise OSError('synthetic projection failure')
+        projected.append(args)
+
+    monkeypatch.setattr(finish_module, 'start_background_task', track)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.5)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        await asyncio.wait_for(handler, 5)
+        assert sock.client_state == WebSocketState.DISCONNECTED
+        assert len(owners) == 1 and finish_module._closed_record_drains
+        assert client.rows[path]['record_upload_sessions']
+        assert not client.rows[path]['record_audio_closed']
+        if outcome == 'shutdown':
+            # Pusher lifespan cancels tracked owners on SIGTERM. Cancellation
+            # cannot certify an executor operation that may still be running.
+            owners[0].cancel()
+        else:
+            release.set()
+        await asyncio.gather(*owners, return_exceptions=True)
+        assert not finish_module._closed_record_drains
+        if outcome == 'success':
+            assert projected and client.rows[path]['record_audio_closed']
+            assert client.rows[path]['record_upload_sessions'] == {}
+        else:
+            assert client.rows[path]['record_upload_sessions']
+            assert not client.rows[path]['record_audio_closed']
+    finally:
+        release.set()
+        await asyncio.wait_for(handler, 5)
+        for owner in owners:
+            if not owner.done():
+                owner.cancel()
+        await asyncio.gather(*owners, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_later_recording_does_not_starve_earlier_close(inline_session, monkeypatch):
+    client, path, barrier, projected = inline_session
+    later_path = (*path[:-1], 'later')
+    client.rows[later_path] = {'record_lane_owner': 'batch_live_v1'}
+    first_upload = asyncio.Event()
+    later_queued = threading.Event()
+    first_finished = asyncio.Event()
+    first_finished_thread = threading.Event()
+    loop = asyncio.get_running_loop()
+    real_finish = barrier.finish_recording
+
+    async def finish(cid):
+        result = await real_finish(cid)
+        if cid == 'conversation':
+            assert client.rows[path]['record_audio_closed']
+            first_finished.set()
+            first_finished_thread.set()
+        return result
+
+    def project(*args, **kwargs):
+        if args[2] == 'conversation':
+            loop.call_soon_threadsafe(first_upload.set)
+            assert later_queued.wait(5)
+        else:
+            assert first_finished_thread.wait(5), 'later projection must not gate the earlier close'
+        projected.append(args)
+
+    class OpenSocket(Socket):
+        async def receive_bytes(self):
+            if len(self.frames) == 2:
+                await asyncio.wait_for(first_upload.wait(), 5)
+            if not self.frames:
+                later_queued.set()
+                # Keep the socket open while the earlier recording closes.
+                await asyncio.wait_for(first_finished.wait(), 5)
+            return await super().receive_bytes()
+
+    monkeypatch.setattr(barrier, 'finish_recording', finish)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    frames = _audio_frames('conversation', [b'\x01\x00' * 160]) + _audio_frames('later', [b'\x02\x00' * 160])
+    sock = OpenSocket(frames)
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 10)
+    assert first_finished.is_set()
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert client.rows[later_path]['record_audio_closed']
+    assert not barrier.failed_recordings
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stage', ['clear', 'seal'])
+async def test_durable_metadata_close_retries_beyond_legacy_budget(inline_session, monkeypatch, stage):
+    client, path, barrier, _ = inline_session
+    monkeypatch.setattr(barrier_module, 'CLOSE_RETRY_MAX_SECONDS', 0.01)
+    original = record_audio_db.set_record_upload_pending
+    calls = []
+
+    def pending(uid, cid, token, active, **kwargs):
+        if not active and stage == 'clear':
+            calls.append(active)
+            if len(calls) <= barrier_module.CLOSE_RETRY_BUDGET + 1:
+                raise OSError('synthetic metadata outage')
+        return original(uid, cid, token, active, **kwargs)
+
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', pending)
+    if stage == 'seal':
+        original_seal = record_audio_db.seal_record_audio
+
+        def seal(*args, **kwargs):
+            calls.append(False)
+            if len(calls) <= barrier_module.CLOSE_RETRY_BUDGET + 1:
+                raise OSError('synthetic metadata outage')
+            return original_seal(*args, **kwargs)
+
+        monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert len(calls) == barrier_module.CLOSE_RETRY_BUDGET + 2
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('jitter_fraction', [0.0, 1.0])
+@pytest.mark.parametrize('stage', ['clear', 'seal'])
+async def test_durable_close_backoff_uses_real_barrier(inline_session, monkeypatch, jitter_fraction, stage):
+    client, path, barrier, _ = inline_session
+    await barrier.begin_recording('conversation')
+    barrier.keep_close_pending = True
+    clock = [100.0]
+    monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(barrier_module.random, 'uniform', lambda low, high: low + (high - low) * jitter_fraction)
+    target = 'set_record_upload_pending' if stage == 'clear' else 'seal_record_audio'
+    original = getattr(record_audio_db, target)
+    failing = MagicMock(side_effect=OSError('synthetic metadata outage'))
+    monkeypatch.setattr(record_audio_db, target, failing)
+    for attempt in range(1, 11):
+        assert not await barrier.finish_recording('conversation')
+        assert failing.call_count == attempt
+        if stage == 'clear':
+            assert client.rows[path]['record_upload_sessions'], 'failed clears must keep the producer fence'
+        assert not client.rows[path].get('record_audio_closed')
+        ceiling = min(2.0**attempt, 60.0)
+        delay = ceiling / 2 + ceiling / 2 * jitter_fraction
+        assert barrier.close_retry_at['conversation'] == clock[0] + delay
+        clock[0] += delay - 0.01
+        for _ in range(10):
+            assert not await barrier.finish_recording('conversation')
+        assert failing.call_count == attempt, 'worker ticks must not dispatch before the deadline'
+        clock[0] += 0.01
+    monkeypatch.setattr(record_audio_db, target, original)
+    assert await barrier.finish_recording('conversation')
+    assert client.rows[path]['record_audio_closed']
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert barrier.close_failures == barrier.close_retry_at == {}
+
+
+@pytest.mark.asyncio
+async def test_durable_close_retry_capacity_survives_caller_cancellation(inline_session, monkeypatch):
+    client, path, _, _ = inline_session
+    count = barrier_module.CLOSE_RETRY_MAX_IN_FLIGHT
+    slots = threading.BoundedSemaphore(count)
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', slots)
+    barriers = [PusherRecordBarrier('owner') for _ in range(count + 1)]
+    for barrier in barriers:
+        await barrier.begin_recording('conversation')
+        barrier.keep_close_pending = True
+    original = record_audio_db.set_record_upload_pending
+    monkeypatch.setattr(
+        record_audio_db, 'set_record_upload_pending', MagicMock(side_effect=OSError('synthetic metadata outage'))
+    )
+    for barrier in barriers:
+        assert not await barrier.finish_recording('conversation')
+    clock = [1000.0]
+    monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    for barrier in barriers:
+        barrier.close_retry_at['conversation'] = clock[0]
+    entered = asyncio.Event()
+    finished = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    calls = []
+    completions = []
+
+    def pending(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == count:
+            loop.call_soon_threadsafe(entered.set)
+        assert release.wait(10)
+        try:
+            return original(*args, **kwargs)
+        finally:
+            completions.append(True)
+            if len(completions) == count:
+                loop.call_soon_threadsafe(finished.set)
+
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', pending)
+    tasks = [asyncio.create_task(barrier.finish_recording('conversation')) for barrier in barriers[:-1]]
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        assert not await barriers[-1].finish_recording('conversation')
+        assert len(calls) == count
+        tasks[0].cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await tasks[0]
+        clock[0] += 60
+        assert not await barriers[-1].finish_recording('conversation')
+        assert len(calls) == count, 'cancelled caller must not free a running retry slot'
+        assert client.rows[path]['record_upload_sessions']
+    finally:
+        release.set()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.wait_for(finished.wait(), 5)
+    clock[0] += 60
+    assert await barriers[-1].finish_recording('conversation')
+    assert client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+async def test_failed_projection_retires_close_retry_entries_before_next_close(inline_session, monkeypatch):
+    client, path, barrier, _ = inline_session
+    barrier.keep_close_pending = True
+    monkeypatch.setattr(barrier_module, 'CLOSE_RETRY_MAX_SECONDS', 0.01)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(side_effect=OSError('metadata unavailable')))
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', MagicMock(side_effect=OSError('projection unavailable')))
+    monkeypatch.setattr(pusher, 'PROJECTION_RETRY_BUDGET', 0)
+    # Reproduce the real removal path that used to leave 128 stale failures:
+    # a metadata failure followed by a terminal projection failure for that close.
+    for index in range(128):
+        cid = f'synthetic-{index}'
+        row = (*path[:-1], cid)
+        client.rows[row] = {'record_lane_owner': 'batch_live_v1'}
+        assert not await barrier.finish_recording(cid)
+        assert cid in barrier.close_failures
+        sock = Socket(_audio_frames(cid, [b'\x01\x00' * 160]))
+        await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+        assert cid in barrier.failed_recordings
+        assert client.rows[row]['record_upload_sessions'], 'failed projection retains its durable fence'
+        assert not barrier.close_failures and not barrier.close_retry_at
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal_record_audio)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', lambda *a, **kw: None)
+    original = record_audio_db.set_record_upload_pending
+    clear_calls = []
+
+    def clear(*args, **kwargs):
+        if not args[3]:
+            clear_calls.append(True)
+            if len(clear_calls) == 1:
+                raise OSError('metadata unavailable')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', clear)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert len(clear_calls) == 2
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert client.rows[path]['record_audio_closed']
+    assert not barrier.close_failures and not barrier.close_retry_at
+
+
+def test_durable_failure_map_capacity_never_retires_a_close():
+    barrier = PusherRecordBarrier('owner')
+    barrier.keep_close_pending = True
+    for index in range(129):
+        assert not barrier._close_failed(f'synthetic-{index}', 'finish')
+    assert len(barrier.close_failures) == len(barrier.close_retry_at) == 129
+
+
+@pytest.mark.asyncio
+async def test_four_unknown_metadata_calls_allow_fifth_and_safe_late_success(inline_session, monkeypatch):
+    client, path, _, _ = inline_session
+    count = barrier_module.CLOSE_RETRY_MAX_IN_FLIGHT
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', threading.BoundedSemaphore(count))
+    monkeypatch.setattr(barrier_module, '_close_outstanding_slots', threading.BoundedSemaphore(12))
+    monkeypatch.setattr(barrier_module, 'CLOSE_METADATA_DEADLINE_SECONDS', 0.5)
+    barriers = [PusherRecordBarrier('owner') for _ in range(count + 1)]
+    for barrier in barriers:
+        await barrier.begin_recording('conversation')
+        barrier.keep_close_pending = True
+    original = record_audio_db.set_record_upload_pending
+    stalled = []
+
+    def submit(fn):
+        future = Future()
+        future.set_running_or_notify_cancel()
+        if len(stalled) < count:
+            stalled.append((future, fn))
+        else:
+            future.set_result(fn())
+        return future
+
+    monkeypatch.setattr(barrier_module, 'record_barrier_executor', SimpleNamespace(submit=submit))
+    before = barrier_module._CLOSE_DEADLINE_COUNTER._value.get()
+    results = await asyncio.gather(*(barrier.finish_recording('conversation') for barrier in barriers[:-1]))
+    assert results == [False] * count
+    assert all(not future.done() for future, _ in stalled)
+    assert barrier_module._CLOSE_DEADLINE_COUNTER._value.get() == before + count
+    assert len(client.rows[path]['record_upload_sessions']) == count + 1
+    assert await barriers[-1].finish_recording('conversation'), 'fifth close must run before any stalled call settles'
+    # The four earlier drains already supplied durable proof, so the later
+    # producer may also recover their exact ready tokens through the registry.
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert client.rows[path]['record_audio_closed']
+    # Retry clears the identical tokens. A late success repeats only that
+    # removal, never another producer's token or an audio commit.
+    for barrier in barriers[:-1]:
+        barrier.close_retry_at.clear()
+        assert await barrier.finish_recording('conversation')
+    original('owner', 'conversation', 'synthetic-new-producer', True)
+    for future, fn in stalled:
+        future.set_result(fn())
+    await asyncio.sleep(0)
+    assert not client.rows[path]['record_audio_closed']
+    assert set(client.rows[path]['record_upload_sessions']) == {'synthetic-new-producer'}
+    original('owner', 'conversation', 'synthetic-new-producer', False)
+    assert seal_record_audio('owner', 'conversation') is None
+
+
+@pytest.mark.asyncio
+async def test_abandoned_metadata_calls_are_bounded_and_capacity_recovers(inline_session, monkeypatch):
+    _, _, barrier, _ = inline_session
+    gauge_before = barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get()
+    refusals_before = barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get()
+    barrier.keep_close_pending = True
+    active = barrier_module.CLOSE_RETRY_MAX_IN_FLIGHT
+    outstanding = barrier_module.CLOSE_METADATA_MAX_OUTSTANDING
+    slots = threading.BoundedSemaphore(active)
+    outstanding_slots = threading.BoundedSemaphore(outstanding)
+    monkeypatch.setattr(barrier_module, '_close_retry_slots', slots)
+    monkeypatch.setattr(barrier_module, '_close_outstanding_slots', outstanding_slots)
+    monkeypatch.setattr(barrier_module, 'CLOSE_METADATA_DEADLINE_SECONDS', 0.5)
+    futures = []
+
+    def submit(fn):
+        future = Future()
+        future.set_running_or_notify_cancel()
+        futures.append(future)
+        return future
+
+    monkeypatch.setattr(barrier_module, 'record_barrier_executor', SimpleNamespace(submit=submit))
+    before = barrier_module._CLOSE_DEADLINE_COUNTER._value.get()
+    for _ in range(outstanding // active):
+        results = await asyncio.gather(
+            *(barrier._close_metadata('conversation', lambda: None) for _ in range(active)), return_exceptions=True
+        )
+        assert all(isinstance(result, TimeoutError) for result in results)
+    with pytest.raises(barrier_module.ExecutorSaturatedError):
+        await barrier._close_metadata('conversation', lambda: None)
+    assert len(futures) == outstanding
+    assert barrier_module._CLOSE_DEADLINE_COUNTER._value.get() == before + outstanding
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before + outstanding
+    assert barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get() == refusals_before + 1
+    # Completion of any abandoned call must permit new admission even if
+    # every other call remains stalled after its deadline.
+    futures[0].set_result(None)
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before + outstanding - 1
+    retry = asyncio.create_task(barrier._close_metadata('conversation', lambda: None))
+    await asyncio.sleep(0)
+    assert len(futures) == outstanding + 1
+    futures[-1].set_result(None)
+    assert await retry is None
+    for future in futures[1:-1]:
+        future.set_exception(OSError('late unknown write failure'))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before
+    assert all(slots.acquire(blocking=False) for _ in range(active))
+    assert not slots.acquire(blocking=False)
+    assert all(outstanding_slots.acquire(blocking=False) for _ in range(outstanding))
+    assert not outstanding_slots.acquire(blocking=False)
+
+
+@pytest.mark.asyncio
+async def test_non_record_socket_does_not_consume_closed_drain_capacity(inline_session, monkeypatch):
+    client, path, _, _ = inline_session
+    client.rows[path]['record_lane_owner'] = 'legacy_final_pass_v1'
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    retain = MagicMock(wraps=pusher.retain_closed_record_drain)
+
+    def project(*args, **kwargs):
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(5)
+
+    monkeypatch.setattr(pusher, 'retain_closed_record_drain', retain)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.5)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        await asyncio.wait_for(handler, 5)
+        retain.assert_not_called()
+        assert not finish_module._closed_record_drains
+        assert not client.rows[path].get('record_upload_sessions')
+    finally:
+        release.set()
+        await asyncio.wait_for(handler, 5)
+
+
+@pytest.mark.asyncio
+async def test_closed_drain_capacity_and_early_shutdown_keep_tokens(inline_session, monkeypatch, caplog):
+    client, path, barrier, _ = inline_session
+    await barrier.begin_recording('conversation')
+    release = asyncio.Event()
+    owners = []
+    start = finish_module.start_background_task
+
+    def track(coro, **kwargs):
+        owner = start(coro, **kwargs)
+        owners.append(owner)
+        return owner
+
+    async def drain():
+        await release.wait()
+        await barrier.finish_recording('conversation')
+
+    monkeypatch.setattr(finish_module, 'MAX_CLOSED_RECORD_DRAINS', 1)
+    monkeypatch.setattr(finish_module, 'start_background_task', track)
+    first = asyncio.create_task(drain())
+    second = asyncio.create_task(drain())
+    with caplog.at_level(logging.INFO, logger='utils.pusher_record_finish'):
+        try:
+            assert finish_module.retain_closed_record_drain(first)
+            assert not finish_module.retain_closed_record_drain(second)
+            assert len(finish_module._closed_record_drains) == 1
+            # Exercise cancellation before the process owner has started.
+            owners[0].cancel()
+            second.cancel()
+            await asyncio.gather(*owners, return_exceptions=True)
+            await asyncio.gather(first, second, return_exceptions=True)
+            assert first.cancelled()
+            assert not finish_module._closed_record_drains
+            assert client.rows[path]['record_upload_sessions']
+            assert not client.rows[path]['record_audio_closed']
+        finally:
+            for task in [first, second, *owners]:
+                task.cancel()
+            await asyncio.gather(first, second, *owners, return_exceptions=True)
+    messages = [r.getMessage() for r in caplog.records if r.name == 'utils.pusher_record_finish']
+    assert messages == [
+        'event=record_closed_finish outcome=retained',
+        'event=record_closed_finish outcome=capacity',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_projection_queue_counts_only_successful_enqueues(remote):
+    receipt = commit_pcm('owner', b'\x01\x00' * 160, 'conversation', 1000, 16000, 'root', 0)
+    ref = audio_outbox.AudioProjection(receipt, 1000, 0, 160)
+    queue = finish_module.RecordProjectionQueue(maxsize=1)
+    await queue.put(ref)
+    with pytest.raises(asyncio.QueueFull):
+        queue.put_nowait(ref)
+    blocked = asyncio.create_task(queue.put(ref))
+    await asyncio.sleep(0)
+    blocked.cancel()
+    await asyncio.gather(blocked, return_exceptions=True)
+    assert queue.conversations == {'conversation': 1}
+    assert queue.has_conversation('conversation')
+    assert not queue.has_conversation('later')
+    assert queue.get_nowait() is ref
+    queue.task_done()
+    assert not queue.conversations
 
 
 @pytest.mark.asyncio

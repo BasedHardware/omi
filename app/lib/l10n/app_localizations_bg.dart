@@ -14498,6 +14498,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get episodeMoments => 'Моменти';
 
   @override
+  String get episodeFollowUps => 'Следващи стъпки';
+
+  @override
+  String get episodeOpenTranscript => 'Отвори транскрипцията';
+
+  @override
   String get episodeSoFar => 'Досега';
 
   @override
@@ -14716,9 +14722,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'На този телефон';
-
-  @override
-  String get episodeOpenTranscript => 'Отвори транскрипцията';
 
   @override
   String get liveCardTitle => 'На живо';

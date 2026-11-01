@@ -1,6 +1,7 @@
 """Transactional replacement of a finalized provisional record, preserving annotations."""
 
 from copy import deepcopy
+import math
 
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.manual_speaker_assignments import (
@@ -33,18 +34,32 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
     origin = current['started_at'].timestamp()
     start, end = span['start'] - origin, span['end'] - origin
     old = current.get('transcript_segments') or []
-    covered = [s for s in old if start <= (s['start'] + s['end']) / 2 < end]
+    # Every partial pass fills empty spans, including the initial generation.
+    covered = [] if span.get('preserve_existing') else [s for s in old if start <= (s['start'] + s['end']) / 2 < end]
     retained = [s for s in old if s not in covered]
     new = deepcopy(incoming['transcript_segments'])
     shift = incoming['started_at'].timestamp() - origin
     allocator = ConversationSpeakerIdAllocator()
     allocator.hydrate(old)
+    placed = []
     for segment in new:
+        if span.get('preserve_existing') and not _placed(segment):
+            continue
         segment['start'] += shift
         segment['end'] += shift
+        if span.get('preserve_existing'):
+            # A partial result may only fill demonstrably empty time. Never
+            # split an ASR sentence across existing text or guess its alignment.
+            if not _placed(segment) or any(
+                not _placed(existing) or segment['start'] < existing['end'] and existing['start'] < segment['end']
+                for existing in old
+            ):
+                continue
         if segment['start'] < 0:
             segment['audio_alignment'], segment['audio_capture_run'] = 'unplaced', None
         allocator.assign(segment)
+        placed.append(segment)
+    new = placed
     receipt = current.get('manual_speaker_assignments') or {}
     # IDs can be referenced by summaries, corrections and translation caches.
     # Preserve those anchors and the user's text verbatim; fail closed when a
@@ -118,6 +133,18 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
     if finish is not None and (result.get('finished_at') is None or finish > result['finished_at']):
         result['finished_at'] = finish
     return result, new
+
+
+def _placed(segment):
+    start, end = segment.get('start'), segment.get('end')
+    return (
+        type(start) in {int, float}
+        and type(end) in {int, float}
+        and math.isfinite(start)
+        and math.isfinite(end)
+        and 0 <= start < end
+        and segment.get('audio_alignment') in {None, 'placed'}
+    )
 
 
 def _has_refs(value):

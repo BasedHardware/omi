@@ -14508,6 +14508,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get episodeMoments => 'క్షణాలు';
 
   @override
+  String get episodeFollowUps => 'తదుపరి చర్యలు';
+
+  @override
+  String get episodeOpenTranscript => 'ట్రాన్స్‌క్రిప్ట్ తెరవండి';
+
+  @override
   String get episodeSoFar => 'ఇప్పటివరకు';
 
   @override
@@ -14727,9 +14733,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'ఈ ఫోన్‌లో';
-
-  @override
-  String get episodeOpenTranscript => 'ట్రాన్స్‌క్రిప్ట్ తెరవండి';
 
   @override
   String get liveCardTitle => 'లైవ్';

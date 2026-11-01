@@ -14542,6 +14542,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get episodeMoments => 'Στιγμές';
 
   @override
+  String get episodeFollowUps => 'Επόμενα βήματα';
+
+  @override
+  String get episodeOpenTranscript => 'Άνοιγμα απομαγνητοφώνησης';
+
+  @override
   String get episodeSoFar => 'Μέχρι τώρα';
 
   @override
@@ -14762,9 +14768,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Σε αυτό το τηλέφωνο';
-
-  @override
-  String get episodeOpenTranscript => 'Άνοιγμα απομαγνητοφώνησης';
 
   @override
   String get liveCardTitle => 'Ζωντανά';

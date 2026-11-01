@@ -23,6 +23,7 @@ from utils.batch_pipeline.contracts import PoolCapacity
 from utils.batch_pipeline.serving import Serving
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline import admission
 
 
 @pytest.fixture
@@ -117,6 +118,39 @@ def test_storage_cleanup_failure_does_not_stop_projection_or_lease_recovery():
     cleanup = Mock(side_effect=TimeoutError('synthetic storage unavailable'))
     Serving(MemoryStore(), projector=projector, cleanup=cleanup).reconcile()
     projector.sweep.assert_called_once()
+
+
+def test_authorize_http_returns_before_worker_timeout_with_blocked_reservation(api, monkeypatch):
+    client, store = api
+    row = store.rows['jobs', 'synthetic']
+    row['requires_compute_admission'] = True
+    row['projection_binding'] = {'job_id': 'bp_job', 'content_id': 'content'}
+    store.rows['intakes', 'bp_job'] = {'total_audio_seconds': 30}
+    (lease,) = Scheduler(store).pull(time.time())
+    release, finished = threading.Event(), threading.Event()
+
+    def blocked(*args):
+        try:
+            release.wait(6)
+            return SimpleNamespace(allowed=True)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *args: False)
+    monkeypatch.setattr(admission, 'reserve_backfill_speech', blocked)
+    started = time.monotonic()
+    try:
+        response = client.post(
+            '/v2/batch-pipeline/authorize-compute',
+            json={'stage': 'dev', 'leases': [{'segment_id': 'synthetic', 'token': lease.token}]},
+        )
+        assert time.monotonic() - started < 4.8
+        assert response.status_code == 200
+        assert response.json() == {'allowed': [], 'retry_after': {'synthetic': 30}, 'held_reason': {}}
+    finally:
+        release.set()
+        assert finished.wait(2)
+    assert 'compute_admission_token' not in store.rows['jobs', 'synthetic']
 
 
 @pytest.mark.asyncio
@@ -705,3 +739,71 @@ def test_serving_maintenance_fails_open_when_lease_store_errors():
     service = Serving(store, cleanup=Mock(), leader=LeaderLease(broken, SERVING_MAINTENANCE, ttl_seconds=60))
     service.reconcile(periodic=True)
     service.cleanup.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('blocked', ['reconcile', 'drain', None])
+async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, blocked):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+    counts = {'reconcile': 0, 'drain': 0}
+    cancelled = asyncio.Event()
+    progressed = asyncio.Event()
+    stages = []
+    stage = 'dev'
+    original_wait_for = asyncio.wait_for
+
+    async def short_wait(awaitable, timeout):
+        return await original_wait_for(awaitable, timeout=0.01 if timeout == 5 else 0.001)
+
+    async def tick(kind):
+        nonlocal stage
+        counts[kind] += 1
+        if kind == blocked:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        elif counts[kind] >= 2 and (blocked is not None or min(counts.values()) >= 2):
+            progressed.set()
+        stage = 'prod'
+        if kind == 'drain':
+            raise RuntimeError('synthetic drain failure')
+
+    async def reconcile_async(**kwargs):
+        await tick('reconcile')
+
+    async def drain_recordings(store):
+        assert store is service.store
+        await tick('drain')
+
+    service = SimpleNamespace(store=object(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+
+    def resolve(selected):
+        stages.append(selected)
+        return service
+
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'current_stage', lambda: stage)
+    monkeypatch.setattr(serving, 'serving_for_stage', resolve)
+    monkeypatch.setattr(serving, 'drain_recordings', drain_recordings)
+    monkeypatch.setattr(serving.asyncio, 'wait_for', short_wait)
+    runtime = serving.start_serving_from_env()
+    try:
+        await original_wait_for(progressed.wait(), timeout=1)
+    finally:
+        await serving.stop_serving(runtime)
+    assert runtime[1].done()
+    assert counts['reconcile'] >= (1 if blocked == 'reconcile' else 2)
+    assert counts['drain'] >= (1 if blocked == 'drain' else 2)
+    assert 'dev' in stages and 'prod' in stages
+    assert cancelled.is_set() is (blocked is not None)
+    stopped_counts = counts.copy()
+    await asyncio.sleep(0)
+    assert counts == stopped_counts
+
+
+async def _inline_serving_call(executor, fn, *args, **kwargs):
+    return fn(*args, **kwargs)

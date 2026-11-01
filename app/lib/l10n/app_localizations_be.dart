@@ -14481,6 +14481,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get episodeMoments => 'Моманты';
 
   @override
+  String get episodeFollowUps => 'Наступныя крокі';
+
+  @override
+  String get episodeOpenTranscript => 'Адкрыць расшыфроўку';
+
+  @override
   String get episodeSoFar => 'Пакуль што';
 
   @override
@@ -14699,9 +14705,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'На гэтым тэлефоне';
-
-  @override
-  String get episodeOpenTranscript => 'Адкрыць расшыфроўку';
 
   @override
   String get liveCardTitle => 'Нажыва';

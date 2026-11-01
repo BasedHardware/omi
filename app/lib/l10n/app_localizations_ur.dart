@@ -14460,6 +14460,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get episodeMoments => 'لمحات';
 
   @override
+  String get episodeFollowUps => 'اگلے اقدامات';
+
+  @override
+  String get episodeOpenTranscript => 'نقل کھولیں';
+
+  @override
   String get episodeSoFar => 'اب تک';
 
   @override
@@ -14678,9 +14684,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'اس فون پر';
-
-  @override
-  String get episodeOpenTranscript => 'نقل کھولیں';
 
   @override
   String get liveCardTitle => 'براہِ راست';

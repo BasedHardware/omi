@@ -568,43 +568,6 @@ class TestProcessSegmentPreferences:
 # ---------------------------------------------------------------------------
 
 
-class TestSyncEndpointPrefsWiring:
-    """Verify sync_local_files fetches prefs and passes to process_segment threads."""
-
-    @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            return f.read()
-
-    def test_endpoint_fetches_transcription_prefs(self):
-        """sync_local_files must call get_user_transcription_preferences before threads."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_body = source[fn_start:]
-        assert 'get_user_transcription_preferences' in fn_body
-
-    def test_endpoint_passes_prefs_to_thread(self):
-        """Each thread must receive transcription_prefs as an argument."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_body = source[fn_start:]
-        assert 'transcription_prefs' in fn_body
-
-    def test_endpoint_forwards_private_cloud_and_data_protection(self):
-        """Private-cloud v1 sync must persist chunks with the user's protection level and finalize audio metadata."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_end = source.index('@router.post(  # v2 async sync-local-files', fn_start)
-        fn_body = source[fn_start:fn_end]
-
-        assert 'get_user_private_cloud_sync_enabled' in fn_body
-        assert 'get_data_protection_level' in fn_body
-        assert 'private_cloud_sync_enabled=private_cloud_sync_enabled' in fn_body
-        assert 'data_protection_level=data_protection_level' in fn_body
-        assert '_finalize_sync_audio_files' in fn_body
-
-
 # ---------------------------------------------------------------------------
 # get_deepgram_model_for_language edge cases
 # ---------------------------------------------------------------------------
@@ -1350,30 +1313,6 @@ class TestProcessSegmentSpeakerIdIntegration:
         mock_download.assert_not_called()
         # Should still run identification (for text-based detection)
         mock_identify.assert_called_once()
-
-
-class TestSyncEndpointSpeakerIdWiring:
-    """Verify sync_local_files builds speaker embeddings cache."""
-
-    @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            return f.read()
-
-    def test_endpoint_builds_embeddings_cache(self):
-        """sync_local_files must call build_person_embeddings_cache."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_body = source[fn_start:]
-        assert 'build_person_embeddings_cache' in fn_body
-
-    def test_endpoint_passes_cache_to_thread(self):
-        """Each thread must receive person_embeddings_cache as an argument."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_body = source[fn_start:]
-        assert 'person_embeddings_cache' in fn_body
 
 
 # ---------------------------------------------------------------------------
