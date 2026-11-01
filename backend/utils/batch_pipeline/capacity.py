@@ -7,6 +7,15 @@ reserving live traffic. This module does not infer slack from time of day or CPU
 from dataclasses import dataclass
 import math
 
+# One canonical 16 kHz frame. Admitted durations are differences of epoch
+# clocks, so a frame-exact one-hour unit can read 3600.0000005 seconds.
+FRAME_SECONDS = 1 / 16000
+
+
+def within_unit_ceiling(duration_seconds: float, ceiling_seconds: float) -> bool:
+    """Compare at frame resolution: float noise must never park an owner's FIFO."""
+    return duration_seconds <= ceiling_seconds + FRAME_SECONDS / 2
+
 
 @dataclass(frozen=True)
 class PoolCapacity:
