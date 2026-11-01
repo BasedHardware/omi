@@ -4303,6 +4303,9 @@ environments:
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
+            POSTPROCESS_EXECUTOR_WORKERS:
+              value: '64'
+              category: reliability
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
