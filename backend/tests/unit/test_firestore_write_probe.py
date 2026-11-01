@@ -44,11 +44,14 @@ class _Transport:
         self.requests = []
         self.fail = False
         self.batch_status = None
+        self.response = None
 
     def commit(self, client, request=None, **kwargs):
         if self.fail:
             raise self.fail if isinstance(self.fail, BaseException) else RuntimeError('commit refused')
         self.requests.append(request)
+        if self.response is not None:
+            return self.response
         writes = request['writes'] if isinstance(request, dict) else request.writes
         return CommitResponse(write_results=[WriteResult() for _ in writes])
 
@@ -154,6 +157,26 @@ def test_ambiguous_commit_is_counted_apart(client, transport):
         ref.set({'x': 1}, retry=None)
     assert probe.FIRESTORE_AMBIGUOUS_COMMIT_WRITES._value.get() == ambiguous + 1
     assert _billed('users/memories', 'set') == billed
+
+
+def test_noop_writes_are_counted_by_caller(client, transport):
+    caller = f'{__name__}:test_noop_writes_are_counted_by_caller'
+    noop_before = probe.FIRESTORE_NOOP_WRITES_BY_CALLER.labels(collection='users/memories', caller=caller)._value.get()
+    committed = datetime.datetime(2026, 11, 1, 12, tzinfo=datetime.timezone.utc)
+    earlier = committed - datetime.timedelta(hours=3)
+    transport.response = CommitResponse(
+        commit_time=committed,
+        write_results=[WriteResult(update_time=committed), WriteResult(update_time=earlier), WriteResult()],
+    )
+    memories = client.collection('users').document('u1').collection('memories')
+    batch = client.batch()
+    batch.set(memories.document('changed'), {'x': 1})
+    batch.set(memories.document('unchanged'), {'x': 1})
+    batch.delete(memories.document('gone'))
+    batch.commit()
+    # Only the write whose update_time predates commit_time is a no-op; a delete has none.
+    noop = probe.FIRESTORE_NOOP_WRITES_BY_CALLER.labels(collection='users/memories', caller=caller)._value.get()
+    assert noop == noop_before + 1
 
 
 def test_batch_write_counts_only_applied_writes(transport):

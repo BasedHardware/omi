@@ -69,6 +69,7 @@ __all__ = [
     'FIRESTORE_BILLED_WRITES',
     'FIRESTORE_BILLED_WRITES_BY_CALLER',
     'FIRESTORE_BILLED_WRITES_BY_ORIGIN',
+    'FIRESTORE_NOOP_WRITES_BY_CALLER',
     'FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW',
     'MAX_WRITE_CALLERS',
     'install_document_write_probe',
@@ -106,6 +107,17 @@ FIRESTORE_AMBIGUOUS_COMMIT_WRITES = Counter(
     'omi_firestore_ambiguous_commit_writes_total',
     'Writes in Firestore Commit/BatchWrite calls that failed with DeadlineExceeded or Unavailable '
     'and may have been applied and billed.',
+)
+
+
+# Cloud Monitoring reports ~15-20% of writes as UPDATE_NOOP (billed, changed
+# nothing) with no caller. A Commit's WriteResult.update_time is the document's
+# previous update time when the write changed nothing, so it is earlier than the
+# response's commit_time; a write that changed the document carries commit_time.
+FIRESTORE_NOOP_WRITES_BY_CALLER = Counter(
+    'omi_firestore_noop_writes_by_caller_total',
+    'Committed Firestore writes that left the document unchanged (billed as writes), by collection and call site.',
+    ['collection', 'caller'],
 )
 
 
@@ -262,6 +274,39 @@ def _applied(writes: list, response: Any) -> list:
     return [write for write, status in zip(writes, statuses) if not getattr(status, 'code', 0)]
 
 
+def _timestamp(value: Any) -> tuple[int, int]:
+    return value.seconds, value.nanos
+
+
+def _record_noops(writes: list, response: Any, caller: str) -> None:
+    """Count Commit writes whose result update_time predates commit_time. Never raises."""
+    try:
+        pb = type(response).pb(response)
+        results = list(pb.write_results)
+        if len(results) != len(writes) or not pb.HasField('commit_time'):
+            return
+        committed = _timestamp(pb.commit_time)
+        tally: dict[str, int] = {}
+        for write, result in zip(writes, results):
+            if not result.HasField('update_time') or _timestamp(result.update_time) >= committed:
+                continue  # Deletes carry no update_time; a changed document carries commit_time.
+            _, _, parts = write_op(write)
+            collection = collection_pattern(parts) if parts else _UNKNOWN
+            tally[collection] = tally.get(collection, 0) + 1
+        for collection, amount in tally.items():
+            FIRESTORE_NOOP_WRITES_BY_CALLER.labels(collection=collection, caller=caller).inc(amount)
+    except Exception:
+        pass  # Attribution must never affect a write.
+
+
+def _after(writes: list, response: Any, caller: str, partial: bool) -> None:
+    if partial:
+        _record(_applied(writes, response), caller)
+        return
+    _record(writes, caller)
+    _record_noops(writes, response, caller)
+
+
 def _record_ambiguous(writes: list, error: BaseException) -> None:
     """A Commit whose outcome is unknown may still have applied. Count it apart. Never raises."""
     try:
@@ -285,7 +330,7 @@ def _wrap(original: Any, *, partial: bool) -> Any:
             except BaseException as error:
                 _record_ambiguous(writes, error)
                 raise
-            _record(_applied(writes, response) if partial else writes, caller)
+            _after(writes, response, caller, partial)
             return response
 
         return async_call
@@ -299,7 +344,7 @@ def _wrap(original: Any, *, partial: bool) -> Any:
         except BaseException as error:
             _record_ambiguous(writes, error)
             raise
-        _record(_applied(writes, response) if partial else writes, caller)
+        _after(writes, response, caller, partial)
         return response
 
     return call
