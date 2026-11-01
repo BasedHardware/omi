@@ -98,3 +98,28 @@ def regional_bucket(uid: str, legacy: str | None) -> str | None:
             return legacy
         return configured
     return legacy
+
+
+def _regional_chunks_percent() -> float:
+    try:
+        percent = float(os.getenv('AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT', '0'))
+    except ValueError:
+        return 0.0
+    return percent if 0 <= percent <= 100 else 0.0
+
+
+def regional_chunk_bucket(uid: str, legacy: str) -> str:
+    """Bucket for new pusher PCM chunk batches.
+
+    A second ramp behind the REGIONAL_CACHE enable with its own percent: live
+    PCM chunks are a rendition of the canonical raw-live packs, which stay in
+    the multi-region bucket. Chunk readers list and resolve both buckets.
+    """
+    if not uid or not _phase_enabled('REGIONAL_CACHE'):
+        return legacy
+    configured = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+    if not configured:
+        return legacy
+    if in_rollout_cohort(uid, 'audio-archive'):
+        return configured
+    return configured if cohort_bucket(uid, 'audio-archive', bits=64) < _regional_chunks_percent() else legacy
