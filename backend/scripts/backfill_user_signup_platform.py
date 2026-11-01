@@ -33,6 +33,8 @@ Usage:
 
 import argparse
 from datetime import datetime, timezone
+from pathlib import Path
+import sys
 from typing import Any, cast
 
 import firebase_admin
@@ -99,6 +101,13 @@ def consider(
 
 
 def main() -> None:
+    # This standalone Admin SDK producer does not import database._client.
+    # Metadata merges can recreate a missing user: install the same atomic
+    # existence/authorization fence before constructing its client.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from database.batch_privacy_write_fence import install_write_fence
+
+    install_write_fence()
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true', help='Only print what would change')
     parser.add_argument('--limit', type=int, default=0, help='Max users to process (0 = all)')
