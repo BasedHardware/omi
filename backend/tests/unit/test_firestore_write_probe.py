@@ -2,6 +2,7 @@
 
 import datetime
 import sys
+import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -142,6 +143,19 @@ def test_transaction_retry_helper_is_not_the_caller(client, transport, monkeypat
         transaction.set(ref, {'x': 1})
 
     run_with_transaction_contention_retry(client.transaction, operation, operation_name='probe_test')
+    assert _by_caller('users/memories', 'set', caller) == before + 1
+
+
+def test_generic_write_helper_names_its_caller(client, transport):
+    # A helper registered as (module, function) plumbing is skipped like a plumbing module.
+    def _cas(ref):
+        ref.set({'x': 1})
+
+    # Same code, but its frame reports the helper's module as __name__.
+    helper = types.FunctionType(_cas.__code__, {'__name__': 'utils.enrichment.outbox'}, '_cas')
+    caller = f'{__name__}:test_generic_write_helper_names_its_caller'
+    before = _by_caller('users/memories', 'set', caller)
+    helper(client.collection('users').document('u1').collection('memories').document('m1'))
     assert _by_caller('users/memories', 'set', caller) == before + 1
 
 
