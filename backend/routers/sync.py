@@ -674,7 +674,7 @@ async def sync_local_files_v2(
     # Off the event loop, a cold process gives its first ramp read a bounded wait, so a
     # fresh instance cannot admit legacy work on the 'on' default after the ramp went
     # draining/dark (M3 review; batch intake reads the mode the same way).
-    legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+    legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
     legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
     legacy_mode_read_at = time.monotonic()
     lane_decision = classify_sync_lane(
@@ -942,7 +942,7 @@ async def sync_local_files_v2(
             # A legacy job is created only on a young mode read: a request that read 'on'
             # and then stalled (a long batch decode, a slow fallback) must not carry it past
             # a draining re-home of the same conversation (final_pass_rehome's flip grace).
-            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
             legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
 
         if not legacy_allowed:
@@ -1752,7 +1752,7 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
     uid = payload.get('uid') if isinstance(payload, dict) else None
     if not isinstance(uid, str) or not uid:
         return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
-    if not legacy_dark.sequencer_dispatch_allowed():
+    if not legacy_dark.sequencer_dispatch_allowed(uid=uid):
         return legacy_dark.sequencer_dark_response()
     try:
         dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
@@ -1828,7 +1828,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
-            and not legacy_dark.sequencer_registration_allowed()
+            and not legacy_dark.sequencer_registration_allowed(uid=payload.get('uid'))
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -1848,7 +1848,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             except TimeoutError:
                 logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=dark_owner_probe')
                 return _budget_deferral_fallback('preamble_timeout', 'degraded')
-            if registered and legacy_dark.sequencer_dispatch_allowed():
+            if registered and legacy_dark.sequencer_dispatch_allowed(uid=payload.get('uid')):
                 # The draining sweep dispatches this job; acking keeps it the only dispatcher.
                 legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNS_JOB)
                 return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
@@ -1863,7 +1863,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
-            and legacy_dark.sequencer_registration_allowed()
+            and legacy_dark.sequencer_registration_allowed(uid=payload.get('uid'))
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):

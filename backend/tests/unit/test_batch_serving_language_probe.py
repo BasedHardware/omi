@@ -59,7 +59,7 @@ def world(monkeypatch, tmp_path):
     store.namespace = 'batch_pipeline_dev'
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store)
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode.ON)
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.ON)
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
     monkeypatch.setattr(intake, 'decode_units', units)
     monkeypatch.setattr(intake, 'artifacts_for', lambda _: SimpleNamespace(stage_audio=stage))

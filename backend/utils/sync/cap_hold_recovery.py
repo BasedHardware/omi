@@ -454,7 +454,7 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
     try:
         from utils.batch_pipeline import cap_hold_admission
 
-        if await run_blocking(db_executor, cap_hold_admission.enabled_for, row):
+        if await run_blocking(db_executor, cap_hold_admission.enabled_for, row, uid=uid):
             if not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
                 return False
             admitted = await cap_hold_admission.admit_held(uid, snapshot, row)

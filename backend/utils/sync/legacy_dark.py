@@ -3,7 +3,7 @@
 One runtime switch, ``rollout_cohorts/_ramp.envs.<env>.legacy_sync``, moves the
 legacy sync lane through ``on`` -> ``draining`` -> ``dark`` without a deploy.
 The value is read through ``utils.rollout.runtime_percent.legacy_sync_mode``
-(contract (f): 30s TTL, last-known-good on read errors). This module owns what
+(contract (f): 30s TTL, legacy mode fails safe to on on read errors). This module owns what
 the legacy call sites do with it:
 
 * ``on``: today's behaviour, byte for byte.
@@ -154,7 +154,7 @@ def _fallback(source: str) -> LegacySyncMode:
     return LegacySyncMode.ON
 
 
-def current_mode() -> LegacySyncMode:
+def current_mode(uid: str | None = None) -> LegacySyncMode:
     """The served mode. Never raises; every failure serves ``on``."""
     try:
         # Imported per call (a cached module lookup): router test harnesses replace
@@ -163,7 +163,7 @@ def current_mode() -> LegacySyncMode:
     except Exception:  # ImportError, or a harness's stub package without __spec__
         return _fallback('absent')
     try:
-        raw: object = runtime_percent.legacy_sync_mode()
+        raw: object = runtime_percent.legacy_sync_mode(uid)
     except NotImplementedError:
         # The (f) stub before lane 6's implementation: the switch does not exist yet.
         return _fallback('absent')
@@ -179,9 +179,9 @@ def current_mode() -> LegacySyncMode:
     return mode
 
 
-def legacy_admission_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
+def legacy_admission_allowed(mode: Optional[LegacySyncMode] = None, *, uid: str | None = None) -> bool:
     """Whether a new legacy job may be created (admission, legacy-fresh, intake fallback)."""
-    return (mode or current_mode()) is LegacySyncMode.ON
+    return (mode or current_mode(uid)) is LegacySyncMode.ON
 
 
 def mode_age_seconds(now: Optional[datetime] = None) -> Optional[float]:
@@ -208,14 +208,14 @@ def mode_age_seconds(now: Optional[datetime] = None) -> Optional[float]:
     return ((now or datetime.now(timezone.utc)) - parsed).total_seconds()
 
 
-def sequencer_registration_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
+def sequencer_registration_allowed(mode: Optional[LegacySyncMode] = None, *, uid: str | None = None) -> bool:
     """New sequencer owners and the pre-sequencer migration branch exist only in ``on``."""
-    return (mode or current_mode()) is LegacySyncMode.ON
+    return (mode or current_mode(uid)) is LegacySyncMode.ON
 
 
-def sequencer_dispatch_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
+def sequencer_dispatch_allowed(mode: Optional[LegacySyncMode] = None, *, uid: str | None = None) -> bool:
     """``draining`` still dispatches accepted ``sync_backfill_pending`` entries; ``dark`` does not."""
-    return (mode or current_mode()) is not LegacySyncMode.DARK
+    return (mode or current_mode(uid)) is not LegacySyncMode.DARK
 
 
 def record_legacy_admission(reason: LegacyAdmissionReason | str, mode: Optional[LegacySyncMode] = None) -> None:
