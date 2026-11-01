@@ -154,7 +154,7 @@ class PostgresTransaction:
         # Two matches fail closed, exactly like the Firestore query.
         rows = self.conn.execute(
             "SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND priority = %s AND state = 'ready' "
-            'AND next_id = %s ORDER BY key LIMIT 2',
+            'AND next_id = %s ORDER BY key COLLATE "C" LIMIT 2',
             (self.store.namespace, owner_key, priority, segment_id),
         ).fetchall()
         return self._locked_query_row(*rows[0]) if len(rows) == 1 else None
@@ -244,7 +244,7 @@ class PostgresStore:
         with self._read_conn() as conn:
             rows = conn.execute(
                 f'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {field} <= %s '
-                f'ORDER BY {field}, key LIMIT %s',
+                f'ORDER BY {field}, key COLLATE "C" LIMIT %s',
                 (self.namespace, state, now, max(1, min(limit, 100))),
             ).fetchall()
         return [row[0] for row in rows]
@@ -263,7 +263,7 @@ class PostgresStore:
         with self._read_conn() as conn:
             rows = conn.execute(
                 'SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND merge_pending '
-                'ORDER BY enqueued_at, key LIMIT %s',
+                'ORDER BY enqueued_at, key COLLATE "C" LIMIT %s',
                 (self.namespace, priority, OLDEST_POLICY_HOLD_SCAN_LIMIT + 1),
             ).fetchall()
         oldest_hold = None
@@ -290,7 +290,7 @@ class PostgresStore:
         with self._read_conn() as conn:
             row = conn.execute(
                 "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-                "AND state = 'result_ready' AND doc ? 'ready_at' ORDER BY doc->'ready_at', key LIMIT 1",
+                "AND state = 'result_ready' AND doc ? 'ready_at' ORDER BY doc->'ready_at', key COLLATE \"C\" LIMIT 1",
                 (self.namespace, owner_key),
             ).fetchone()
         return row[0] if row else None
@@ -300,7 +300,7 @@ class PostgresStore:
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-                "AND doc->'fresh_capture' = 'true'::jsonb ORDER BY capture_at, key LIMIT %s",
+                "AND doc->'fresh_capture' = 'true'::jsonb ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
                 (self.namespace, owner_key, max(1, min(limit, 32))),
             ).fetchall()
         return [row[0] for row in rows]
@@ -331,7 +331,7 @@ class PostgresStore:
         with self._read_conn() as conn:
             rows = conn.execute(
                 f"SELECT key FROM results WHERE namespace = %(ns)s AND doc->>'owner_key' = %(owner)s "
-                f'AND {previous_match} ORDER BY key LIMIT 2',
+                f'AND {previous_match} ORDER BY key COLLATE "C" LIMIT 2',
                 {'ns': self.namespace, 'owner': owner_key, 'previous': previous},
             ).fetchall()
         return rows[0][0] if len(rows) == 1 else None
@@ -361,7 +361,7 @@ class PostgresStore:
         with self._read_conn() as conn:
             rows = conn.execute(
                 f'SELECT key, {p}_service FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
-                f'AND {at} <= %s ORDER BY {p}_service, {at}, key LIMIT %s',
+                f'AND {at} <= %s ORDER BY {p}_service, {at}, key COLLATE "C" LIMIT %s',
                 (self.namespace, now, 64 if worker_id else 1),
             ).fetchall()
         if worker_id:
@@ -413,13 +413,13 @@ class PostgresStore:
         size = max(1, min(limit, 100))
         clause, params = '', [self.namespace, list(states)]
         if after is not None:
-            clause = 'AND (committed_at, key) > (%s, %s)'
+            clause = 'AND (committed_at, key COLLATE "C") > (%s, %s)'
             params += [after[0], after[1]]
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT key, committed_at FROM results WHERE namespace = %s "
                 f"AND projection_state = ANY(%s) {clause} "
-                'ORDER BY committed_at, key LIMIT %s',
+                'ORDER BY committed_at, key COLLATE "C" LIMIT %s',
                 (*params, size),
             ).fetchall()
         cursor = (rows[-1][1], rows[-1][0]) if len(rows) == size else None
@@ -457,7 +457,7 @@ class PostgresStore:
         state = "AND state = 'result_ready' " if result_ready else ''
         return conn.execute(
             f'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending {state}'
-            'ORDER BY capture_at, key LIMIT 1',
+            'ORDER BY capture_at, key COLLATE "C" LIMIT 1',
             (self.namespace, owner_key),
         ).fetchone()
 

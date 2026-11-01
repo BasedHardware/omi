@@ -109,7 +109,8 @@ class PgSimStore(SimStore):
     def jobs_in_state(self, state: str) -> list[str]:
         with self.pg.pool.connection() as conn:
             rows = conn.execute(
-                'SELECT key FROM jobs WHERE namespace = %s AND state = %s ORDER BY key', (self.pg.namespace, state)
+                'SELECT key FROM jobs WHERE namespace = %s AND state = %s ORDER BY key COLLATE "C"',
+                (self.pg.namespace, state),
             ).fetchall()
         return [row[0] for row in rows]
 

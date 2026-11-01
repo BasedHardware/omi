@@ -534,6 +534,20 @@ def test_oldest_uncommitted_age_skips_allowance_holds(h):
     assert h.store.oldest(1, ready_only=True) == 1.0
 
 
+def test_key_tie_breaks_use_firestore_byte_order_not_the_database_collation(h):
+    """Firestore orders names bytewise; a locale collation would put 'a' before 'B' and 'ä' before 'z'."""
+    keys = ['ä', 'a', 'z', 'B']  # byte order: B < a < z < ä
+    rows = []
+    for key in keys:
+        rows.append(_pending(h, key, capture_at=1.0, state='retry', available_at=1.0))
+        rows.append(('results', key, {'segment_id': key, 'projection_state': 'pending', 'committed_at': 1.0}))
+    put_all(h, rows)
+    assert h.store.run(lambda tx: tx.first_pending(owner_key(h.uid('o'))))['segment_id'] == 'B'
+    assert h.store.due('retry', 5.0, 100) == ['B', 'a', 'z', 'ä']
+    first, cursor = h.store.projection_page(2)
+    assert first == ['B', 'a'] and h.store.projection_page(2, after=cursor)[0] == ['z', 'ä']
+
+
 def test_projection_page_narrows_to_requested_drain_states(h):
     rows = []
     for i, state in enumerate(('pending', 'quarantine_held', 'completed', 'ready')):
