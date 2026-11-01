@@ -52,6 +52,7 @@ EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
 EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
+HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
@@ -109,6 +110,11 @@ def episode_output_language_pinned() -> bool:
 def episode_hard_cap_across_conversations_enabled() -> bool:
     """Whether the strict episode-wide hard cap runs on attachment and moment boundaries."""
     return modes_default_on(EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV)
+
+
+def home_hide_below_floor_rows_enabled() -> bool:
+    """Whether Home leaves out short captures under the notes floor."""
+    return modes_default_on(HOME_HIDE_BELOW_FLOOR_ROWS_ENV)
 
 
 def episode_carry_on_session_end_enabled() -> bool:

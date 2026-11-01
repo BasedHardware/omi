@@ -107,6 +107,7 @@
     "EPISODE_RECORDED_TIME_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_LIVE_TIMER_START_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_CARRY_ON_SESSION_END": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
+    "HOME_HIDE_BELOW_FLOOR_ROWS": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_MOMENT_OUTPUT_VALIDATOR": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "FIRESTORE_EMULATOR_HOST": {"seeded": "2026-10-25"},

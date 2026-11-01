@@ -480,6 +480,7 @@ and an explicit empty literal renders as `''`.
 | `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FSR_MAINTENANCE_COORDINATION_ENABLED` | Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FSR_SMART_MERGE_PARTITION` | Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `HOME_HIDE_BELOW_FLOOR_ROWS` | Default on; Home leaves out finished captures under a minute with no notes because they are under the notes floor | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `JOBSTORE_SHADOW_WRITES` | Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `LATE_AUDIO_SYNC_INTAKE_ENABLED` | Default on; route delayed listen transcripts through recorded-time sync assignment and reject stale live stamps | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
@@ -999,6 +1000,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `FSR_SMART_MERGE_PARTITION` — Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan (fail: open)
 - `HELD_CONTENT_COHORT` — Fallback tokens uid:<uid>,pct:<0-100> or explicit all, used only after rollout_cohorts/held-content is confirmed absent; empty, unset, or malformed admits nobody (fail: closed)
 - `HELD_CONTENT_ENABLED` — Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. (fail: closed)
+- `HOME_HIDE_BELOW_FLOOR_ROWS` — Default on; Home leaves out finished captures under a minute with no notes because they are under the notes floor (fail: open)
 - `JOBSTORE_SHADOW_WRITES` — Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow (fail: open)
 - `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` — Default-off shared monthly budget admission for Free and ladder prices; hold on device at cap; legacy bypass (fail: closed)
 - `LADDER_V1_LANE_METERING_ENABLED` — Default-off live/batch/on-device shadow attribution; no new budget or charge (fail: closed)
