@@ -181,6 +181,10 @@ def shard_spread_enabled() -> bool:
     return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
 
 
+def pull_multi_lease_enabled() -> bool:
+    return os.getenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'true').strip().lower() != 'false'
+
+
 def scheduler_control_key(hashed_owner: str) -> str:
     """Pure shard identity shared by scheduling and privacy cleanup."""
     return f'scheduler_{int(hashed_owner[:8], 16) % SCHEDULER_SHARDS:02d}'
