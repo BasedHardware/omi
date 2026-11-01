@@ -472,7 +472,7 @@ void main() {
         final capture = captureFor(_State.hybrid, preview, inFlightSeconds: 22);
         capture.applyInProgressConversation(ServerConversation(
             id: 'c1',
-            createdAt: DateTime.utc(2026, 10, 27),
+            createdAt: DateTime.now().subtract(const Duration(minutes: 11)),
             structured: Structured('', ''),
             transcriptSegments: capture.segments.reversed.toList()));
         expect(capture.segments.map((s) => s.start), [0, 4]);
@@ -484,8 +484,8 @@ void main() {
             home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
             capture: capture,
             episodes: episodes);
-        // Finals with their speakers come first.
-        expect(find.textContaining('Thursday', findRichText: true), findsWidgets);
+        // Finals with their speakers come first; the list follows the latest, so the first may sit above the fold.
+        expect(find.textContaining('Thursday', findRichText: true, skipOffstage: false), findsWidgets);
         // The divider names where the preview continues.
         expect(find.byKey(const Key('live_preview_divider')), findsOneWidget);
         expect(find.text(en.livePreviewOnPhoneDivider), findsOneWidget);
