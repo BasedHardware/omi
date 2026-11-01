@@ -23,13 +23,14 @@ from fastapi.testclient import TestClient
 
 from routers import sync as router
 from utils.observability.reasons import SyncCaptureTimeReason
-from utils.request_validation import canonical_sync_upload_filenames, parse_sync_filename_timestamp
+from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import capture_clock, lanes
 from utils.sync.capture_clock import CaptureTimeWindowError, SyncCaptureTimeRejected, capture_time_rejection
 from utils.sync.clock_run import clock_run_from_path
 from utils.sync.empty_upload import nonempty_manifest_claims
 from utils.sync.files import get_timestamp_from_path
 from utils.sync.pipeline import _retrieve_file_paths_v2
+from utils.sync.upload_names import canonical_sync_upload_filenames
 
 
 def _capture_time_counter(outcome: str) -> float:

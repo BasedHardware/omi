@@ -6,7 +6,7 @@ from typing import BinaryIO, Iterable
 
 from fastapi import UploadFile
 
-from utils.request_validation import canonical_sync_upload_filenames
+from utils.sync.upload_names import canonical_sync_upload_filenames
 
 
 def empty_framed_clip(stream: BinaryIO) -> bool:
