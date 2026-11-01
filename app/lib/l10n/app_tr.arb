@@ -4428,6 +4428,8 @@
     "episodeLiveFor": "Canlı · {duration}",
     "episodeMomentsCount": "{count, plural, =1{1 an} other{{count} an}}",
     "episodeMoments": "Anlar",
+    "episodeFollowUps": "Takip adımları",
+    "episodeOpenTranscript": "Transkripti aç",
     "episodeSoFar": "Şu ana kadar",
     "episodeUpdatedJustNow": "Az önce güncellendi · bitince tam notlar",
     "episodeUpdatedMinutesAgo": "{minutes} dk önce güncellendi · bitince tam notlar",
@@ -4487,7 +4489,6 @@
     "episodeNotesStartWithTranscript": "Notlar, nihai transkript geldiğinde başlar.",
     "episodeOnDeviceNotesFootnote": "Konuşurken telefonunda hazırlanıyor. Tam notlar nihai transkriptle birlikte gelecek.",
     "episodeOnThisPhone": "Bu telefonda",
-    "episodeOpenTranscript": "Transkripti aç",
     "liveCardTitle": "Canlı",
     "livePreviewBehind": "Nihai transkript yaklaşık {duration} geride",
     "livePreviewCatchingUp": "Nihai transkript yaklaşıyor",
@@ -4549,5 +4550,8 @@
     "yearlySwitchPreviewFailed": "Fiyatınız yüklenemedi.",
     "yearlySwitchUnavailable": "Yıllık ödeme şu anda planınız için kullanılamıyor.",
     "yearlySwitchDoneTitle": "Artık yıllık ödüyorsunuz",
-    "yearlySwitchDoneBody": "Bugün {amount} tahsil edildi. Yenilenme: {date}."
+    "yearlySwitchDoneBody": "Bugün {amount} tahsil edildi. Yenilenme: {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} bölüm} one{{count} bölüm} two{{count} bölüm} few{{count} bölüm} many{{count} bölüm} other{{count} bölüm}}",
+    "chatAppsWaitingMessageIn": "Mesajı {app}'dan gönder. Omi'ye ulaşır ulaşmaz bu ekran güncellenir.",
+    "chatAppsCodeExpiredMessageIn": "Yeni bir kod al ve {app}'dan gönder."
 }

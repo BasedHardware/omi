@@ -14448,6 +14448,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeMoments => 'Khoảnh khắc';
 
   @override
+  String get episodeFollowUps => 'Việc cần làm tiếp';
+
+  @override
+  String get episodeOpenTranscript => 'Mở bản ghi chép';
+
+  @override
   String get episodeSoFar => 'Cho đến giờ';
 
   @override
@@ -14667,9 +14673,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Trên điện thoại này';
-
-  @override
-  String get episodeOpenTranscript => 'Mở bản ghi chép';
 
   @override
   String get liveCardTitle => 'Trực tiếp';
@@ -14931,5 +14934,30 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Đã thu $amount hôm nay. Gia hạn vào $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count phần',
+      many: '$count phần',
+      few: '$count phần',
+      two: '$count phần',
+      one: '$count phần',
+      zero: '$count phần',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Gửi tin nhắn trong $app. Màn hình này sẽ cập nhật ngay khi Omi nhận được.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Lấy mã mới và gửi từ $app.';
   }
 }

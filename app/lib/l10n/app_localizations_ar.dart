@@ -14364,6 +14364,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get episodeMoments => 'اللحظات';
 
   @override
+  String get episodeFollowUps => 'المتابعات';
+
+  @override
+  String get episodeOpenTranscript => 'فتح النسخ';
+
+  @override
   String get episodeSoFar => 'حتى الآن';
 
   @override
@@ -14581,9 +14587,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'على هذا الهاتف';
-
-  @override
-  String get episodeOpenTranscript => 'فتح النسخ';
 
   @override
   String get liveCardTitle => 'مباشر';
@@ -14841,5 +14844,30 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'تم خصم $amount اليوم. يتجدد في $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count جزء',
+      many: '$count جزءًا',
+      few: '$count أجزاء',
+      two: '$count جزءان',
+      one: '$count جزء',
+      zero: '$count أجزاء',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'أرسل الرسالة من تطبيق $app. تتحدث هذه الشاشة فور وصولها إلى Omi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'احصل على رمز جديد وأرسله من $app.';
   }
 }

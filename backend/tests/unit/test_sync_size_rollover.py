@@ -696,6 +696,8 @@ def test_donor_redirect_projection_is_capped_too(caplog):
 
 @pytest.mark.parametrize('level', ['enhanced', 'standard'])
 def test_assignment_cap_measures_the_actual_encoder(adapter, monkeypatch, level):
+    # Identical encoded plans need identical bookkeeping clocks at the byte boundary.
+    monkeypatch.setattr(assignment.time, 'time', lambda: 1234567890.0)
     # A compressible transcript is large in plaintext but small on disk.
     store = StrictFirestore()
 
@@ -721,13 +723,16 @@ def test_assignment_cap_measures_the_actual_encoder(adapter, monkeypatch, level)
     # Replay the identical plan with the cap one byte below its actual encoded size.
     # StrictFirestore retains DELETE_FIELD sentinels literally. Remove them
     # when measuring what the real update stores.
-    actual = original(
-        store.collection('users').document('u').collection('conversations').document('a'), _row(store, 'a')
+    # Retained donor content plus its absorbed receipt can exceed the compressed
+    # survivor. The cap protects every document written by the absorption.
+    actual = max(
+        original(store.collection('users').document('u').collection('conversations').document(cid), _row(store, cid))
+        for cid in ('a', 'c')
     )
     store.rows = deepcopy(before)
     monkeypatch.setattr(assignment, 'CONVERSATION_ABSORPTION_BYTE_CAP', actual)
     assign(chunk('b', 1120))
-    assert _row(store, 'c')['deleted']  # encoded equality fits; plaintext is much larger
+    assert _row(store, 'c')['deleted']  # encoded equality fits for every written document
     store.rows = deepcopy(before)
     monkeypatch.setattr(assignment, 'CONVERSATION_ABSORPTION_BYTE_CAP', actual - 1)
     assign(chunk('b', 1120))

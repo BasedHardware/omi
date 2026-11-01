@@ -15,6 +15,9 @@ def render(*arguments, namespace='synthetic'):
     helm = shutil.which('helm')
     if helm is None:
         pytest.skip('Helm unavailable; render check runs on the packaging host')
+    # Production sweeps require their real namespace even in offline templates.
+    if namespace == 'synthetic' and any('prod_omi_' in arg for arg in arguments):
+        namespace = 'prod-omi-backend'
     return subprocess.run(
         [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', namespace, *arguments],
         capture_output=True,
@@ -94,6 +97,7 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
         'service': 'batch-pipeline',
         'env': 'dev',
     }
+    assert manifests['Deployment']['spec']['replicas'] == 1
     assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
         ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
         ('nvidia.com/gpu', 'Equal', 'present', 'NoSchedule'),
@@ -105,6 +109,12 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert '@sha256:' in container['image']
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
     env = {v['name']: v.get('value') for v in container['env']}
+    soniox = next(v for v in container['env'] if v['name'] == 'SONIOX_API_KEY')
+    assert soniox['valueFrom']['secretKeyRef'] == {
+        'name': 'synthetic-secret',
+        'key': 'SONIOX_API_KEY',
+        'optional': True,
+    }
     assert env['BATCH_PIPELINE_MODEL_BATCH_SIZE'] == '8'
     assert env['BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_FLIGHT_BATCH_SECONDS'] == '1800'
@@ -146,6 +156,39 @@ def test_enabled_release_scrapes_but_waits_for_live_series_before_autoscaling():
     assert render(*enabled_arguments(), '--set', 'replicaCount=0').returncode != 0
 
 
+def test_worker_metrics_are_scraped_into_the_hpa_prometheus():
+    """The adapter reads the in-cluster Prometheus, not GMP; without this job
+    the omi_batch_pipeline_* external rules match zero series and the worker
+    HPA cannot scale (#23891). Mirrors the diarizer-batch-metrics contract."""
+    monitoring = CHART.parents[0] / 'monitoring'
+    values = yaml.safe_load((monitoring / 'kube-prometheus-stack/prod_omi_monitoring_values.yaml').read_text())
+    scrape = next(
+        s
+        for s in values['prometheus']['prometheusSpec']['additionalScrapeConfigs']
+        if s['job_name'] == 'batch-pipeline-worker-metrics'
+    )
+    keeps = {r['source_labels'][0]: r['regex'] for r in scrape['relabel_configs'] if r.get('action') == 'keep'}
+    assert keeps == {
+        '__meta_kubernetes_pod_label_app_kubernetes_io_name': 'batch-pipeline-worker',
+        '__meta_kubernetes_pod_container_port_name': 'http',
+        '__meta_kubernetes_pod_phase': 'Running',
+    }
+    # The adapter joins freshness on (namespace, worker_release, pod): relabels
+    # must add exactly namespace+pod, never touch priority/worker_release.
+    labels = {r['target_label']: r['source_labels'] for r in scrape['relabel_configs'] if 'target_label' in r}
+    assert labels == {'namespace': ['__meta_kubernetes_namespace'], 'pod': ['__meta_kubernetes_pod_name']}
+    assert 'metric_relabel_configs' not in scrape
+    # Freshness cutoff is 60s; 15s keeps two samples in window and matches the
+    # chart's GMP PodMonitoring cadence.
+    assert scrape['scrape_interval'] == '15s'
+    assert scrape['kubernetes_sd_configs'][0]['namespaces']['names'] == ['prod-omi-backend']
+    inventory = yaml.safe_load((monitoring / 'expected-targets.prod.yaml').read_text())['scrape_jobs']
+    entry = next(job for job in inventory if job['name'] == 'batch-pipeline-worker-metrics')
+    assert entry['mechanism'] == 'additionalScrapeConfigs'
+    assert entry['namespace'] == 'prod-omi-backend'
+    assert entry['auth'] is None and entry['coverage_status'] == 'declared'
+
+
 @pytest.mark.parametrize(
     'environment,stage,namespace,project,bucket,gsa,secret',
     [
@@ -185,7 +228,9 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
-        assert len(deployments) == 1 and deployment['spec']['replicas'] == 3  # ratified floor 3 (114a22)
+        assert len(deployments) == 1 and deployment['spec']['replicas'] == 3  # Preserve baseline/live count for HPA.
+        hpa = manifests['HorizontalPodAutoscaler']['spec']
+        assert hpa['minReplicas'] == 3 and hpa['maxReplicas'] == 16
         assert 'omi.ai/required-companion-deployment' not in deployment['metadata'].get('annotations', {})
     else:
         assert len(deployments) == 1 and deployment['spec']['replicas'] == 1
@@ -223,7 +268,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
         assert project_env[name]['valueFrom']['secretKeyRef']['name'] == secret
     project_id = 'based-hardware-dev' if environment == 'dev' else 'based-hardware'
     assert container['image'] == f"gcr.io/{project_id}/batch-pipeline-worker@sha256:{'b' * 64}"
-    assert 'HorizontalPodAutoscaler' not in manifests
+    assert ('HorizontalPodAutoscaler' in manifests) == (environment == 'prod')
 
 
 def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
@@ -329,8 +374,6 @@ def test_production_cutover_is_single_od_hpa_min3_max16():
         str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
         '--set-string',
         'image.digest=sha256:' + 'b' * 64,
-        '--set',
-        'autoscaling.enabled=true',
     )
     assert result.returncode == 0, result.stderr
     docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
@@ -435,8 +478,9 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
-    assert docs['Deployment']['spec']['replicas'] == 3  # ratified floor 3 (lead 114a22/724762, 10-28)
-    assert 'HorizontalPodAutoscaler' not in docs
+    assert docs['Deployment']['spec']['replicas'] == 3  # Keep the HPA floor through Helm upgrades.
+    hpa = docs['HorizontalPodAutoscaler']['spec']
+    assert hpa['minReplicas'] == 3 and hpa['maxReplicas'] == 16
 
 
 @pytest.mark.parametrize('enabled', [False, True])

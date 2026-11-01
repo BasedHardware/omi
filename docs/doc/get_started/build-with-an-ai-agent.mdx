@@ -1,0 +1,63 @@
+---
+title: "Build with an AI agent"
+icon: "wand-magic-sparkles"
+description: "Point Claude, Cursor, or Codex at Omi's llms.txt, MCP server, and Developer API to build on your own data."
+---
+
+Three things let a coding agent build on Omi:
+
+<CardGroup cols={3}>
+  <Card title="llms.txt" icon="file-lines" href="https://docs.omi.me/llms.txt">
+    This whole site, indexed for LLMs. Paste it into any agent.
+  </Card>
+  <Card title="Omi MCP server" icon="robot" href="/doc/developer/mcp/setup">
+    Give an agent live access to your memories and conversations
+  </Card>
+  <Card title="Developer API" icon="square-terminal" href="/doc/developer/api/overview">
+    REST endpoints the agent can call with your API key
+  </Card>
+</CardGroup>
+
+## Copy-paste prompts
+
+**Explore the platform**
+
+```text
+Read https://docs.omi.me/llms.txt. Summarize the ways I can extend Omi
+(apps, webhooks, chat tools), then list the first three endpoints I would
+need to list and create memories over the Developer API, with curl
+examples using a Developer API key (omi_dev_...).
+```
+
+**Build an app**
+
+```text
+Read https://docs.omi.me/llms.txt, especially the "Apps" pages. Design a
+small integration app that receives conversation-finished webhooks and
+posts a daily summary to my own server. Give me the app configuration,
+the webhook payload handling in Python, and the review checklist I must
+pass before submitting it in the Omi app.
+```
+
+**Query my data**
+
+```text
+You are connected to my Omi account over MCP. Search my memories and
+conversations from the last 7 days for anything about the renewal date
+of my domain, then draft a reminder with links back to the exact
+conversations you used.
+```
+
+## Giving an agent your data
+
+The MCP server exposes read and write tools scoped to your account: memories, conversations, action items, goals, and people. Set it up once in your MCP client (Claude Desktop, Cursor, and anything else that speaks MCP), and the agent can query your data directly:
+
+```bash
+claude mcp add --transport http omi https://api.omi.me/v1/mcp
+```
+
+See [MCP setup](/doc/developer/mcp/setup) for OAuth, scoped API keys, and client-specific snippets.
+
+<Warning>
+Treat an agent with Omi access like a person with your calendar and your call log. Prefer read-only scopes for anything you do not fully control, and rotate keys from the app when you are done.
+</Warning>

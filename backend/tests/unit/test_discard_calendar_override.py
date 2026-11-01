@@ -160,7 +160,7 @@ def _scrap_conversation():
         transcript_segments=[
             TranscriptSegment(
                 id='seg-1',
-                text='Two people are discussing the scaling plan.',
+                text='Two people are discussing the scaling plan and the firmware testing schedule together.',
                 speaker='SPEAKER_00',
                 speaker_id=0,
                 is_user=True,
@@ -318,3 +318,9 @@ class TestEverythingElseStillDiscards:
 
         assert discarded is False
         assert structure.call_count == 1
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

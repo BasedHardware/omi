@@ -8,7 +8,9 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
-from utils.sync import processing_hold
+from utils.sync import processing_hold, bridge_pending
+from config.recorded_time import late_audio_intake_enabled
+from models.conversation_continuity import DEFAULT_GAP_SECONDS
 import time
 
 import logging
@@ -40,7 +42,9 @@ from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry, merge_before_processing
 import config.speaker_match_scores as match_scores
-from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
+from utils.conversations.fragment_visibility import superseded_intake_discard, is_user_curated
+from config.occasion_relevance import enabled as occasion_relevance_enabled
+from utils.conversations.recorded_time import recorded_span, sync_recorded_end, write_span
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
@@ -60,12 +64,18 @@ from utils.sync.live_speech_dedupe import (
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
 from utils.sync.bridge_observation import bridge_observation
+from utils.sync.absorption_metrics import capture_assignment_metrics
 from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
 from utils.sync.assignment_telemetry import created_sync_row_observation
 from utils.capture.dedupe import choose_segments
 from utils.capture.identity import assignment_keys_compatible, persist_identity
 from utils.sync.assignment_index import AssignmentIndex
-from utils.sync.live_overlap import choose_live_overlap, compatible_capture, live_overlap_enabled
+from utils.sync.live_overlap import (
+    choose_live_overlap,
+    compatible_capture,
+    discoverable_live_overlap,
+    live_overlap_enabled,
+)
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 from models.conversation_continuity import intervals_connect
@@ -383,6 +393,43 @@ def assign_in_transaction(
     if target_id and tombstoned(target_id):
         raise SyncAssignmentSuperseded('sync target survivor was deleted')
     target_hint = target_id
+    if target_id and own_anchor and own_id != target_id and own_anchor.get('manual_speaker_assignments'):
+        raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
+    target_recorded_span = (
+        recorded_span(target['started_at'], decode(target).get('transcript_segments') or [])
+        if late_audio_intake_enabled() and target
+        else None
+    )
+    target_recorded_start = target_recorded_span[0] if target_recorded_span else (target or incoming)['started_at']
+    stale_empty_target = bool(
+        late_audio_intake_enabled()
+        and target
+        and target.get('status') == 'in_progress'
+        and not is_user_curated(target)
+        and target.get('created_at')
+        and (target['created_at'] - incoming['finished_at']).total_seconds() > DEFAULT_GAP_SECONDS
+        and target_recorded_span is None
+    )
+    if (
+        late_audio_intake_enabled()
+        and target
+        and (
+            stale_empty_target
+            or incoming['finished_at'] < target_recorded_start - timedelta(seconds=DEFAULT_GAP_SECONDS)
+        )
+    ):
+        # A phone's current socket/WAL stamp cannot own audio recorded before
+        # that generation existed. Let ordinary recorded-time assignment group
+        # the historical batch; never stretch the live row across upload delay.
+        target_id, target = None, None
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='explicit_target',
+            to_mode='temporal_assignment',
+            reason='policy',
+            outcome='recovered',
+            log=logger,
+        )
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced
         # words. Only timestamp hints must exclude live-owned rows.
@@ -468,10 +515,26 @@ def assign_in_transaction(
             selected = [incoming['transcript_segments'][i] for i in segment_indices]
             extent['started_at'] = incoming['started_at'] + timedelta(seconds=min(s['start'] for s in selected))
             extent['finished_at'] = incoming['started_at'] + timedelta(seconds=max(s['end'] for s in selected))
+        recorded_input_finish = extent['finished_at']
         if plan_target_id and plan_target:
             matched[plan_target_id] = plan_target
-            extent['started_at'] = min(extent['started_at'], plan_target['started_at'])
-            extent['finished_at'] = max(extent['finished_at'], plan_target['finished_at'])
+            target_span = (
+                recorded_span(plan_target['started_at'], decode(plan_target).get('transcript_segments') or [])
+                if late_audio_intake_enabled()
+                else None
+            )
+            if late_audio_intake_enabled():
+                # An empty live stub's wall-clock end proves no recorded speech.
+                # A populated target contributes its placed span, never its old
+                # processing-time end, to temporal candidate discovery.
+                if target_span:
+                    extent['started_at'] = min(extent['started_at'], target_span[0])
+                target_end = sync_recorded_end(plan_target, target_span)
+                if target_end:
+                    extent['finished_at'] = max(extent['finished_at'], target_end)
+            else:
+                extent['started_at'] = min(extent['started_at'], plan_target['started_at'])
+                extent['finished_at'] = max(extent['finished_at'], plan_target['finished_at'])
         while True:
             if isolated_id:
                 # Preserve only this input, with no inherited donor content or
@@ -771,6 +834,16 @@ def assign_in_transaction(
             finished_at=extent['finished_at'],
             transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
         )
+        if late_audio_intake_enabled():
+            merged_span = recorded_span(capture_start, segments)
+            proven_ends = [recorded_input_finish]
+            if merged_span:
+                proven_ends.append(merged_span[1])
+            for record in records:
+                end = sync_recorded_end(record, None)
+                if end is not None:
+                    proven_ends.append(end)
+            result['sync_recorded_end_at'] = result['finished_at'] = max(proven_ends)
         if incoming.get('capture_evidence') is not None:
             contributors = [row.get('capture_evidence') or {} for row in records] + [incoming['capture_evidence']]
             mapped = [receipt for item in contributors for receipt in item.get('receipts') or []]
@@ -801,12 +874,13 @@ def assign_in_transaction(
         # Meaningful later intake automatically promotes the complete recording.
         result['discarded'] = bool(
             verdict == 'discard'
+            and not occasion_relevance_enabled()
             and getattr(result.get('status'), 'value', result.get('status')) == 'completed'
             and not curated
         )
         if result['discarded']:
             result['relevance_decision'] = sync_intake_decision(rule)
-        elif is_rule_discard_decision(result.get('relevance_decision')):
+        elif superseded_intake_discard(result, bool(survivors or transfers)):
             result['relevance_decision'] = None
         result['is_locked'] = bool(incoming.get('is_locked'))
         result['private_cloud_sync_enabled'] = any(
@@ -842,11 +916,37 @@ def assign_in_transaction(
             ancestors = {cid for row in records for cid in row.get('sync_merged_from', [])}
             ancestors.update(cid for cid in matched if cid != canonical)
         result['sync_merged_from'] = sorted(ancestors)
+        if result['sync_live_target']:
+            result.pop(bridge_pending.FIELD, None)
+        elif (
+            not is_user_curated(result)
+            and not merge_before_processing.already_processed(result)
+            and result.get('status') == 'completed'
+            and live_overlap_enabled()
+        ):
+            # A coarse live hint is enough to hold visibility, never enough to
+            # transfer speech. The bridge revalidates recorded overlap later.
+            pending_targets = [
+                raw
+                for cid in live_candidate_ids
+                if (raw := load(cid))
+                and not tombstoned(cid)
+                and raw.get('status') in ('in_progress', 'processing')
+                and capture_mismatch(raw, incoming, user_ref.id) == 'none'
+                and discoverable_live_overlap(raw, incoming)
+            ]
+            if pending_targets and bridge_pending.FIELD not in result:
+                pending_target = min(pending_targets, key=lambda raw: raw['id'])
+                result[bridge_pending.FIELD] = {
+                    'target_id': pending_target['id'],
+                    'expires_at': time.time() + bridge_pending.MAX_WAIT_SECONDS,
+                }
         if incoming.get('geolocation') and not result.get('geolocation'):
             result['geolocation'] = incoming['geolocation']
 
         # Read all occupied day buckets before the first write.
         index.read(extent)
+        result.update(write_span(result, arrival_at=incoming.get('arrival_at')))
         payload = encode(result)
         payload.pop('photos', None)
         donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
@@ -1208,8 +1308,7 @@ def assign_in_transaction(
     if chosen.bridge is not None:
         result['_sync_lineage_bridge'] = chosen.bridge
     if created and lineage_eligible and sync_lineage_resolve_enabled():
-        # The adapter emits only the final successful transaction's observation,
-        # after commit. Neither this marker nor eligibility enters the write codec.
+        # Only the final successful transaction's observation is emitted after commit.
         candidates_read = all(cid in read for cid in live_candidate_ids)
         result['_sync_lineage_created'] = created_sync_row_observation(
             [row for row in read.values() if row is not None],
@@ -1220,7 +1319,6 @@ def assign_in_transaction(
             candidates_read=candidates_read,
         )
     if chosen.append_stats is not None:
-        # Transient telemetry only: the encoded plan already committed above.
         result['_sync_lineage_dedupe'] = chosen.append_stats
     if stamp_fallback_live and canonical == target_id and not created and result.get('sync_live_target'):
         result['_sync_lineage_stamp_append'] = _lineage_span_delta_bucket(
@@ -1231,6 +1329,7 @@ def assign_in_transaction(
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
     result['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
+    capture_assignment_metrics(result, [chosen, *extra_plans])
     return result, created, survivors
 
 
@@ -1241,6 +1340,19 @@ def _donor_redirect_patch(row: dict, canonical: str) -> dict:
         'deleted': True,
         'discarded': True,
         'sync_merged_into': canonical,
+        **(
+            {
+                'relevance_decision': {
+                    'verdict': 'absorbed',
+                    'decided_by': 'policy',
+                    'reason': 'sync_merge',
+                    'neighbor_id': canonical,
+                    'trigger': 'sync_intake',
+                }
+            }
+            if occasion_relevance_enabled()
+            else {}
+        ),
         'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
     }
 

@@ -20,8 +20,6 @@ A React Native SDK for connecting to and interacting with Omi devices via Blueto
   </Card>
 </CardGroup>
 
----
-
 ## Features
 
 - Scan for nearby Omi devices
@@ -31,8 +29,6 @@ A React Native SDK for connecting to and interacting with Omi devices via Blueto
 - Monitor battery levels
 - Handle connection state changes
 - Real-time audio transcription using Deepgram
-
----
 
 ## Installation
 
@@ -85,8 +81,6 @@ cd ios && pod install
   </Tab>
 </Tabs>
 
----
-
 ## Development Setup
 
 <Steps>
@@ -110,7 +104,7 @@ cd ios && pod install
     ```
 
     <Note>
-    This step is crucial. Without it, the app will fail to build with native module errors.
+    Do not skip this step. Without it, the build fails with native module errors.
     </Note>
   </Step>
   <Step title="Run the App">
@@ -125,7 +119,7 @@ cd ios && pod install
         Open the `.xcworkspace` file, NOT the `.xcodeproj` file.
         </Warning>
 
-        Select your target device and build. Bluetooth doesn't work in simulators - use a physical device.
+        Select your target device and build. Bluetooth doesn't work in simulators. Use a physical device.
       </Tab>
       <Tab title="Android">
         ```bash
@@ -139,9 +133,7 @@ cd ios && pod install
   </Step>
 </Steps>
 
----
-
-## Quick Start
+## Quick start
 
 ```javascript
 import { OmiConnection, DeviceConnectionState, BleAudioCodec } from '@omiai/omi-react-native';
@@ -184,8 +176,6 @@ async function connectToDevice(deviceId) {
   }
 }
 ```
-
----
 
 ## API Reference
 
@@ -234,8 +224,6 @@ async function connectToDevice(deviceId) {
   </Tab>
 </Tabs>
 
----
-
 ## Stopping Deepgram transcription
 
 `stop()` sends Deepgram's `CloseStream` once and stops accepting audio. By
@@ -261,7 +249,7 @@ or setting it to `0` closes immediately. Failed terminal sends also close immedi
     - Ensure Bluetooth is enabled on your device
     - Check that you have the necessary permissions
     - Make sure the Omi device is powered on and in range
-    - Bluetooth scanning doesn't work in iOS simulators - use a physical device
+    - Bluetooth scanning doesn't work in iOS simulators. Use a physical device
   </Accordion>
   <Accordion title="Connection fails" icon="plug">
     - Try restarting the Omi device
@@ -282,13 +270,9 @@ or setting it to `0` closes immediately. Failed terminal sends also close immedi
   </Accordion>
 </AccordionGroup>
 
----
-
 ## License
 
 MIT License
-
----
 
 ## Related
 

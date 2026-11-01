@@ -1906,6 +1906,36 @@ checks:
     triggers: [".github/scripts/check_speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixtures cover f-string, format, % and concatenation detection plus the legal log-message and static-label neighbors"
+  - id: docs-site-gate
+    command: ["python3", ".github/scripts/check_docs_site.py"]
+    triggers: ["docs/**", ".github/scripts/check_docs_site.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "docs.omi.me had no gate: three app pages linked /doc/developer/api and OmiConsumer linked /doc/hardware/consumer, none of which resolved, and the 2026-10 docs overhaul moved or deleted 20+ public pages that had zero redirect coverage, so nav-to-file, orphan, broken-link, image and redirect-shadow classes must fail deterministically"
+  - id: docs-site-gate-fixtures
+    command: ["python3", ".github/scripts/test_check_docs_site.py"]
+    triggers: [".github/scripts/check_docs_site.py", ".github/scripts/test_check_docs_site.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the docs gate is the guard for its failure classes, so each class (missing nav file, orphan, broken link, broken image, redirect-source link, redirect shadow, dead redirect target) stays covered by a hermetic fixture"
+  - id: docs-volatile-facts
+    command: ["python3", ".github/scripts/check_docs_volatile_facts.py"]
+    triggers: ["docs/**", ".github/scripts/check_docs_volatile_facts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hand-written docs pages shipped review-SLA promises ('reviewed within 24 hours' in two places), hardware prices, rotting counts ('22+ tools/integrations' in three places), retired bounty links and a model-name table that churns with every provider switch; the lint freezes those classes out of hand-written pages with an explicit allowlist for provider-topic, setup-pin, legacy and generated pages"
+  - id: docs-volatile-facts-fixtures
+    command: ["python3", ".github/scripts/test_check_docs_volatile_facts.py"]
+    triggers: [".github/scripts/check_docs_volatile_facts.py", ".github/scripts/test_check_docs_volatile_facts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every pattern class plus the allowlist and api-reference exemptions stay behaviorally covered"
+  - id: cli-commands-doc-drift
+    command: ["python3", "sdks/python-cli/tools/gen_commands_doc.py", "--check"]
+    triggers: ["sdks/python-cli/omi_cli/**", "sdks/python-cli/tools/gen_commands_doc.py", "docs/doc/developer/cli/commands.mdx", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the CLI commands page told readers to run 'omi --help for the live version' while itself missing the version/ask/chat commands, the entire omi local group, the --timeout flag and two env vars; the tree and inventory are now generated from the Typer registrations so the page cannot lag the code"
+  - id: mcp-tools-doc-drift
+    command: ["python3", "scripts/generate_mcp_tools_doc.py", "--check"]
+    triggers: ["backend/utils/mcp_server/registry.py", "scripts/generate_mcp_tools_doc.py", "docs/doc/developer/mcp/tools.mdx", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the MCP tools page hand-paraphrased all 26 advertised tools and had already lagged the registry (missing fields/summary_only/cursor/timezone parameters on conversation and screen-activity tools); the tool inventory (name, description, scope) is now generated from TOOL_SPECS so an undocumented new tool fails the drift check"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

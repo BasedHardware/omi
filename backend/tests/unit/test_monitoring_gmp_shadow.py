@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import re
 from email.message import Message
 from pathlib import Path
 
@@ -70,7 +71,7 @@ def test_identical_gaps_cannot_pass():
 
 def test_inventory_includes_nested_panels_and_explicit_regex_blocker():
     rows = s.inventory()['consumers']
-    assert any('/panels/18/panels/' in r['pointer'] for r in rows)
+    assert any(re.search(r'/panels/\d+/panels/', r['pointer']) for r in rows)
     assert any(r['owner_uid'] == 'omi-cloud-run-metric-names-unnormalized' and r['issues'] for r in rows)
     assert any(r['scope'] == 'normalized-omi-consumer-source-review' for r in rows)
 

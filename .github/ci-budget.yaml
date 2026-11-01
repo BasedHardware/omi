@@ -3173,6 +3173,42 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "ui-author-approval.yml/guard": {
+      "budget_p50_minutes": 5,
+      "display_name": "guard",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'pull_request_target' || github.event.issue.pull_request",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "resolve",
+      "owner": "CI maintainers",
+      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "ui-author-approval.yml/resolve": {
+      "budget_p50_minutes": 5,
+      "display_name": "resolve",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'pull_request_target' || github.event.issue.pull_request",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Resolve immutable SHA read-only before the per-SHA guard concurrency group; one API call and no checkout.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "web-checks.yml/build": {
       "budget_p50_minutes": 1,
       "display_name": "Build",
@@ -6071,6 +6107,31 @@
       "rationale": "Initial workflow inventory",
       "triggers": {
         "workflow_dispatch": ""
+      }
+    },
+    "ui-author-approval.yml": {
+      "name": "UI author approval",
+      "owner": "CI maintainers",
+      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
+      "triggers": {
+        "issue_comment": {
+          "types": [
+            "created",
+            "edited",
+            "deleted"
+          ]
+        },
+        "pull_request_target": {
+          "branches": [
+            "main"
+          ],
+          "types": [
+            "opened",
+            "synchronize",
+            "reopened",
+            "ready_for_review"
+          ]
+        }
       }
     },
     "web-checks.yml": {

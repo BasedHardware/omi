@@ -69,9 +69,9 @@ mixed identity cannot be established. No actual resource is configured here.
 ## Firestore read train (#23797, 2026-10-27)
 
 `FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
-surfaces explicitly declare all 19 current keys. The three train changes are
-`memory_list_index_window:0`, `batch_privacy_memoize:0`, and
-`people_scan_dedupe:100`; `finjob_candidate_queries` stays at 5.
+surfaces explicitly declare all 20 current keys. The guard flag-offs leave
+`memory_list_index_window:0`, `batch_privacy_memoize:0`,
+`people_scan_dedupe:0`, and `finjob_candidate_queries:0`.
 
 Monthly-total enablement and epoch deliberately remain split:
 

@@ -4393,6 +4393,8 @@
     "episodeLiveFor": "Trực tiếp · {duration}",
     "episodeMomentsCount": "{count, plural, =1{1 khoảnh khắc} other{{count} khoảnh khắc}}",
     "episodeMoments": "Khoảnh khắc",
+    "episodeFollowUps": "Việc cần làm tiếp",
+    "episodeOpenTranscript": "Mở bản ghi chép",
     "episodeSoFar": "Cho đến giờ",
     "episodeUpdatedJustNow": "Vừa cập nhật · ghi chú đầy đủ khi kết thúc",
     "episodeUpdatedMinutesAgo": "Cập nhật {minutes} phút trước · ghi chú đầy đủ khi kết thúc",
@@ -4452,7 +4454,6 @@
     "episodeNotesStartWithTranscript": "Ghi chú bắt đầu khi bản ghi chép cuối cùng đến.",
     "episodeOnDeviceNotesFootnote": "Được soạn trên điện thoại của bạn khi bạn nói. Ghi chú đầy đủ sẽ đến cùng bản ghi chép cuối cùng.",
     "episodeOnThisPhone": "Trên điện thoại này",
-    "episodeOpenTranscript": "Mở bản ghi chép",
     "liveCardTitle": "Trực tiếp",
     "livePreviewBehind": "Bản ghi chép cuối cùng chậm khoảng {duration}",
     "livePreviewCatchingUp": "Bản ghi chép cuối cùng đang cập nhật",
@@ -4514,5 +4515,8 @@
     "yearlySwitchPreviewFailed": "Không tải được giá của bạn.",
     "yearlySwitchUnavailable": "Hiện chưa thể trả theo năm cho gói của bạn.",
     "yearlySwitchDoneTitle": "Bạn đã chuyển sang trả theo năm",
-    "yearlySwitchDoneBody": "Đã thu {amount} hôm nay. Gia hạn vào {date}."
+    "yearlySwitchDoneBody": "Đã thu {amount} hôm nay. Gia hạn vào {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} phần} one{{count} phần} two{{count} phần} few{{count} phần} many{{count} phần} other{{count} phần}}",
+    "chatAppsWaitingMessageIn": "Gửi tin nhắn trong {app}. Màn hình này sẽ cập nhật ngay khi Omi nhận được.",
+    "chatAppsCodeExpiredMessageIn": "Lấy mã mới và gửi từ {app}."
 }

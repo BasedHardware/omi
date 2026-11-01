@@ -11819,6 +11819,8 @@
     "episodeLiveFor": "লাইভ · {duration}",
     "episodeMomentsCount": "{count, plural, =1{১টি মুহূর্ত} other{{count}টি মুহূর্ত}}",
     "episodeMoments": "মুহূর্তগুলো",
+    "episodeFollowUps": "পরবর্তী পদক্ষেপ",
+    "episodeOpenTranscript": "ট্রান্সক্রিপ্ট খুলুন",
     "episodeSoFar": "এখন পর্যন্ত",
     "episodeUpdatedJustNow": "এইমাত্র আপডেট হয়েছে · শেষে পূর্ণ নোট",
     "episodeUpdatedMinutesAgo": "{minutes} মিনিট আগে আপডেট · শেষে পূর্ণ নোট",
@@ -11878,7 +11880,6 @@
     "episodeNotesStartWithTranscript": "চূড়ান্ত ট্রান্সক্রিপ্ট এলে নোট শুরু হবে।",
     "episodeOnDeviceNotesFootnote": "আপনি বলার সময় এগুলো আপনার ফোনেই তৈরি হয়। সম্পূর্ণ নোটগুলো চূড়ান্ত ট্রান্সক্রিপ্টের সাথে আসবে।",
     "episodeOnThisPhone": "এই ফোনে",
-    "episodeOpenTranscript": "ট্রান্সক্রিপ্ট খুলুন",
     "liveCardTitle": "লাইভ",
     "livePreviewBehind": "চূড়ান্ত ট্রান্সক্রিপ্ট প্রায় {duration} পিছিয়ে",
     "livePreviewCatchingUp": "চূড়ান্ত ট্রান্সক্রিপ্ট ধরার চেষ্টা করছে",
@@ -11940,5 +11941,8 @@
     "yearlySwitchPreviewFailed": "আপনার মূল্য লোড করা যায়নি।",
     "yearlySwitchUnavailable": "এই মুহূর্তে আপনার প্ল্যানের জন্য বার্ষিক বিলিং উপলব্ধ নয়।",
     "yearlySwitchDoneTitle": "আপনি এখন বার্ষিক প্ল্যানে",
-    "yearlySwitchDoneBody": "আজ {amount} চার্জ করা হয়েছে। নবায়ন {date}।"
+    "yearlySwitchDoneBody": "আজ {amount} চার্জ করা হয়েছে। নবায়ন {date}।",
+    "episodePartsCount": "{count, plural, zero{{count}টি অংশ} one{{count}টি অংশ} two{{count}টি অংশ} few{{count}টি অংশ} many{{count}টি অংশ} other{{count}টি অংশ}}",
+    "chatAppsWaitingMessageIn": "{app} অ্যাপে মেসেজটি পাঠান। Omi পাওয়ামাত্র এই স্ক্রিন আপডেট হবে।",
+    "chatAppsCodeExpiredMessageIn": "নতুন কোড নিন এবং {app} অ্যাপ থেকে পাঠান।"
 }

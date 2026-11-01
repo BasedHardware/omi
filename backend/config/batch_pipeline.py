@@ -131,6 +131,12 @@ def live_record_admission_enabled() -> bool:
     return resolve_batch_policy('').live_admission_enabled
 
 
+def require_record_protocol_ready() -> None:
+    """One-time producer protocol cutover; never expires a pending obligation."""
+    if os.getenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'false').strip().lower() != 'true':
+        raise ValueError('record protocol cutover barrier closed')
+
+
 def live_record_enabled_for(owner_id: str) -> bool:
     from config.policy import resolve_batch_policy
 
@@ -293,8 +299,9 @@ def long_speech_handoff_enabled() -> bool:
 def second_multilingual_enabled() -> bool:
     """Kill switch (unset is on; only ``false`` disables it).
 
-    A long-speech handoff unit whose Modulate recovery came back valid-empty gets
-    one Deepgram multilingual call inside the same paid recovery intent.
+    A held unit whose Modulate recovery came back valid-empty gets one Soniox
+    multilingual call inside the same paid recovery intent. Language-guarded
+    recovery retains its separate switch and one-minute bound.
     """
     return rollout_default_on(
         'BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED',

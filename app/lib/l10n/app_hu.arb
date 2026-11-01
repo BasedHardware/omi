@@ -4489,6 +4489,8 @@
     "episodeLiveFor": "Élő · {duration}",
     "episodeMomentsCount": "{count, plural, =1{1 pillanat} other{{count} pillanat}}",
     "episodeMoments": "Pillanatok",
+    "episodeFollowUps": "Következő lépések",
+    "episodeOpenTranscript": "Átirat megnyitása",
     "episodeSoFar": "Eddig",
     "episodeUpdatedJustNow": "Épp most frissült · teljes jegyzet a végén",
     "episodeUpdatedMinutesAgo": "{minutes} perce frissült · teljes jegyzet a végén",
@@ -4548,7 +4550,6 @@
     "episodeNotesStartWithTranscript": "A jegyzetek a végleges átirat megérkezésekor indulnak.",
     "episodeOnDeviceNotesFootnote": "A telefonodon készülnek, miközben beszélsz. A teljes jegyzetek a végleges átirattal együtt érkeznek.",
     "episodeOnThisPhone": "Ezen a telefonon",
-    "episodeOpenTranscript": "Átirat megnyitása",
     "liveCardTitle": "Élő",
     "livePreviewBehind": "A végleges átirat kb. {duration} késésben van",
     "livePreviewCatchingUp": "A végleges átirat felzárkózik",
@@ -4610,5 +4611,8 @@
     "yearlySwitchPreviewFailed": "Nem sikerült betölteni az árat.",
     "yearlySwitchUnavailable": "Az éves fizetés jelenleg nem érhető el az Ön csomagjához.",
     "yearlySwitchDoneTitle": "Mostantól évente fizet",
-    "yearlySwitchDoneBody": "Ma terhelve: {amount}. Megújul: {date}."
+    "yearlySwitchDoneBody": "Ma terhelve: {amount}. Megújul: {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} rész} one{{count} rész} two{{count} rész} few{{count} rész} many{{count} rész} other{{count} rész}}",
+    "chatAppsWaitingMessageIn": "Küldd el az üzenetet az {app} alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.",
+    "chatAppsCodeExpiredMessageIn": "Kérj új kódot, és küldd el az {app} alkalmazásból."
 }

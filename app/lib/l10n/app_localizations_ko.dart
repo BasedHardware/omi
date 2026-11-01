@@ -14247,6 +14247,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeMoments => '순간';
 
   @override
+  String get episodeFollowUps => '후속 조치';
+
+  @override
+  String get episodeOpenTranscript => '스크립트 열기';
+
+  @override
   String get episodeSoFar => '지금까지';
 
   @override
@@ -14464,9 +14470,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => '이 휴대전화에서';
-
-  @override
-  String get episodeOpenTranscript => '스크립트 열기';
 
   @override
   String get liveCardTitle => '라이브';
@@ -14722,5 +14725,30 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return '오늘 $amount이 결제되었습니다. 갱신일은 $date입니다.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count개 부분',
+      many: '$count개 부분',
+      few: '$count개 부분',
+      two: '$count개 부분',
+      one: '$count개 부분',
+      zero: '$count개 부분',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app에서 메시지를 보내세요. Omi가 받는 즉시 이 화면이 업데이트됩니다.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return '새 코드를 받아 $app 앱에서 보내세요.';
   }
 }

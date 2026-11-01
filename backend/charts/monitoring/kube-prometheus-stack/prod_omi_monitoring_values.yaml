@@ -350,6 +350,33 @@ prometheus:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
+      # Same batch contract for the GPU batch-pipeline workers. The adapter's
+      # omi_batch_pipeline_* external rules join sample freshness per pod
+      # (on (namespace, worker_release, pod)): the relabels must add exactly
+      # namespace+pod, while priority and worker_release ride the samples.
+      # Select by the name label so every chart release is covered, not just
+      # today's single prod-omi-batch-pipeline-worker pool.
+      - job_name: batch-pipeline-worker-metrics
+        scrape_interval: 15s
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [prod-omi-backend]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: batch-pipeline-worker
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: http
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
       # Additional scrape configs for Deepgram Engine metrics
       - job_name: "dg_engine_metrics"
         scrape_interval: "2s"

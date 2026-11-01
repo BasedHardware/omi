@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Docs",
+  "name": "Omi Developers",
   "colors": {
     "primary": "#0D9373",
     "light": "#55D799",
@@ -11,187 +11,96 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Documentation",
-        "icon": "book",
+        "tab": "Get started",
+        "icon": "rocket",
         "groups": [
           {
-            "group": "Get Started",
+            "group": "Get started",
             "pages": [
-              "doc/get_started/introduction",
-              "getstartedwithomi",
-              "onboarding/omi",
-              "onboarding/omi-macos",
-              "onboarding/omi-devkit-2",
-              "onboarding/omi-glass",
-              "doc/get_started/chat_tips",
-              "doc/get_started/byok_and_custom_transcription"
-            ]
-          },
-          {
-            "group": "Core Development",
-            "pages": [
-              "doc/developer/AppSetup",
-              "doc/developer/Cursor",
-              {
-                "group": "Backend",
-                "pages": [
-                  "doc/developer/backend/Backend_Setup",
-                  "doc/developer/backend/backend_deepdive",
-                  "doc/developer/backend/chat_system",
-                  "doc/developer/backend/StoringConversations",
-                  "doc/developer/backend/transcription"
-                ],
-                "icon": "server"
-              },
-              {
-                "group": "Firmware",
-                "pages": [
-                  "doc/developer/firmware/Compile_firmware"
-                ],
-                "icon": "microchip"
-              },
-              {
-                "group": "SDK",
-                "pages": [
-                  "doc/developer/sdk/sdk",
-                  "doc/developer/sdk/python",
-                  "doc/developer/sdk/ReactNative",
-                  "doc/developer/sdk/swift"
-                ],
-                "icon": "cube"
-              },
-              "doc/developer/Protocol",
-              "doc/developer/Contribution",
-              "doc/integrations",
-              {
-                "group": "Audio & Testing",
-                "pages": [
-                  "doc/developer/savingaudio",
-                  "doc/developer/AudioStreaming",
-                  "doc/developer/DevKit2Testing"
-                ],
-                "icon": "headphones"
-              }
-            ]
-          },
-          {
-            "group": "DIY Guide",
-            "pages": [
-              "doc/assembly/introduction",
-              "doc/assembly/Buying_Guide",
-              "doc/assembly/Build_the_device",
-              "doc/get_started/Flash_device"
-            ]
-          },
-          {
-            "group": "Info",
-            "pages": [
-              "doc/info/Support",
-              "doc/info/License",
-              "doc/info/Disclaimer",
-              "doc/info/Privacy"
+              "doc/get_started/what-is-omi",
+              "doc/get_started/open-source-and-omi-cloud",
+              "doc/get_started/choose-your-path",
+              "doc/get_started/build-with-an-ai-agent",
+              "doc/get_started/byok_and_custom_transcription",
+              "onboarding/omi-macos"
             ]
           }
         ]
       },
       {
-        "tab": "API Reference",
-        "icon": "square-terminal",
-        "openapi": "api-reference/openapi.json",
+        "tab": "Build",
+        "icon": "puzzle-piece",
         "groups": [
           {
-            "group": "Overview",
+            "group": "Apps",
             "pages": [
-              "api-reference/introduction",
-              "doc/developer/api/overview"
+              "doc/developer/apps/Introduction",
+              "doc/developer/apps/PromptBased",
+              "doc/developer/apps/Integrations",
+              "doc/developer/apps/ChatTools",
+              "doc/developer/apps/Notifications",
+              "doc/developer/apps/Oauth",
+              "doc/developer/apps/AudioStreaming",
+              "doc/developer/custom-stt",
+              "doc/developer/apps/Import",
+              "doc/developer/apps/Submitting",
+              "doc/developer/apps/OpenSource",
+              {
+                "group": "Examples",
+                "pages": [
+                  "doc/developer/apps/examples/Github",
+                  "doc/developer/apps/examples/Slack",
+                  "doc/developer/apps/examples/OmiMentor"
+                ]
+              }
             ]
           },
           {
-            "group": "Memories",
+            "group": "Developer API",
             "pages": [
+              "doc/developer/api/overview",
+              "doc/developer/api/keys",
               "doc/developer/api/memories",
-              "api-reference/endpoint/memories/list",
-              "api-reference/endpoint/memories/create",
-              "api-reference/endpoint/memories/create-batch",
-              "api-reference/endpoint/memories/update",
-              "api-reference/endpoint/memories/delete"
-            ]
-          },
-          {
-            "group": "Conversations",
-            "pages": [
               "doc/developer/api/conversations",
-              "api-reference/endpoint/conversations/list",
-              "api-reference/endpoint/conversations/create",
-              "api-reference/endpoint/conversations/create-from-segments",
-              "api-reference/endpoint/conversations/get",
-              "api-reference/endpoint/conversations/update",
-              "api-reference/endpoint/conversations/delete"
-            ]
-          },
-          {
-            "group": "Folders",
-            "pages": [
               "doc/developer/api/folders",
-              "api-reference/endpoint/folders/list"
-            ]
-          },
-          {
-            "group": "Action Items",
-            "pages": [
               "doc/developer/api/action-items",
-              "api-reference/endpoint/action-items/list",
-              "api-reference/endpoint/action-items/create",
-              "api-reference/endpoint/action-items/create-batch",
-              "api-reference/endpoint/action-items/update",
-              "api-reference/endpoint/action-items/delete"
-            ]
-          },
-          {
-            "group": "Goals and Answers",
-            "pages": [
               "doc/developer/api/goals",
               "doc/developer/api/ask",
               "doc/developer/api/daily-summaries"
             ]
           },
           {
-            "group": "Authentication",
+            "group": "MCP",
             "pages": [
-              "doc/developer/api/keys",
-              "api-reference/endpoint/keys/current",
-              "api-reference/endpoint/keys/list",
-              "api-reference/endpoint/keys/create",
-              "api-reference/endpoint/keys/revoke"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Build Apps",
-        "icon": "puzzle-piece",
-        "groups": [
-          {
-            "group": "Getting Started",
-            "pages": [
-              "doc/developer/apps/Introduction",
-              "doc/developer/apps/PromptBased",
-              "doc/developer/apps/Integrations",
-              "doc/developer/apps/ChatTools",
-              "doc/developer/apps/AudioStreaming",
-              "doc/developer/apps/Import",
-              "doc/developer/apps/Oauth",
-              "doc/developer/apps/Notifications",
-              "doc/developer/apps/Submitting",
-              "doc/developer/apps/OpenSource"
+              "doc/developer/mcp/introduction",
+              "doc/developer/mcp/setup",
+              "doc/developer/mcp/examples",
+              "doc/developer/mcp/troubleshooting"
             ]
           },
           {
-            "group": "Examples",
+            "group": "CLI",
             "pages": [
-              "doc/developer/apps/examples/Github",
-              "doc/developer/apps/examples/Slack",
-              "doc/developer/apps/examples/OmiMentor"
+              "doc/developer/cli/introduction",
+              "doc/developer/cli/install",
+              "doc/developer/cli/quickstart",
+              "doc/developer/cli/agents",
+              "doc/developer/cli/troubleshooting"
+            ]
+          },
+          {
+            "group": "SDKs",
+            "pages": [
+              "doc/developer/sdk/sdk",
+              "doc/developer/sdk/python",
+              "doc/developer/sdk/swift",
+              "doc/developer/sdk/ReactNative"
+            ]
+          },
+          {
+            "group": "Third-party wearables",
+            "pages": [
+              "doc/integrations"
             ]
           }
         ]
@@ -201,17 +110,20 @@
         "icon": "microchip",
         "groups": [
           {
-            "group": "Devices",
+            "group": "Omi device",
             "pages": [
-              "doc/hardware/OmiConsumer",
-              "doc/hardware/DevKit2",
-              "doc/hardware/DevKit1",
-              "doc/hardware/SpeakerMod",
-              "doc/hardware/PaintingOMI"
+              "doc/hardware/OmiConsumer"
             ]
           },
           {
-            "group": "OmiGlass",
+            "group": "Flashing firmware",
+            "pages": [
+              "doc/get_started/Flash_device",
+              "doc/developer/firmware/Compile_firmware"
+            ]
+          },
+          {
+            "group": "omiGlass",
             "pages": [
               "doc/hardware/omiGlass",
               "doc/hardware/omiglass/flash-firmware",
@@ -219,7 +131,7 @@
             ]
           },
           {
-            "group": "Open Source",
+            "group": "Open hardware files",
             "pages": [
               "doc/hardware/consumer/index",
               "doc/hardware/consumer/electronics",
@@ -227,58 +139,132 @@
               "doc/hardware/consumer/assembly",
               "doc/hardware/consumer/license"
             ]
-          }
-        ]
-      },
-      {
-        "tab": "MCP",
-        "icon": "robot",
-        "groups": [
-          {
-            "group": "Getting Started",
-            "pages": [
-              "doc/developer/mcp/introduction",
-              "doc/developer/mcp/setup"
-            ]
           },
           {
-            "group": "Reference",
+            "group": "Legacy and community",
             "pages": [
-              "doc/developer/mcp/tools"
-            ]
-          },
-          {
-            "group": "Resources",
-            "pages": [
-              "doc/developer/mcp/examples",
-              "doc/developer/mcp/troubleshooting"
+              "doc/hardware/DevKit2",
+              "doc/hardware/DevKit1",
+              "doc/assembly/introduction",
+              "doc/assembly/Buying_Guide",
+              "doc/assembly/Build_the_device",
+              "doc/hardware/SpeakerMod",
+              "doc/hardware/PaintingOMI"
             ]
           }
         ]
       },
       {
-        "tab": "CLI",
-        "icon": "terminal",
+        "tab": "How Omi works",
+        "icon": "sitemap",
         "groups": [
           {
-            "group": "Getting Started",
+            "group": "How Omi works",
             "pages": [
-              "doc/developer/cli/introduction",
-              "doc/developer/cli/install",
-              "doc/developer/cli/quickstart"
+              "doc/how-omi-works/architecture",
+              "doc/how-omi-works/capture-and-transcription",
+              "doc/how-omi-works/conversations-and-memories",
+              "doc/how-omi-works/chat",
+              "doc/how-omi-works/privacy-and-data"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Contribute",
+        "icon": "code-pull-request",
+        "groups": [
+          {
+            "group": "Contribute",
+            "pages": [
+              "doc/developer/Contribution",
+              "doc/contribute/bounties",
+              "doc/contribute/community"
             ]
           },
           {
-            "group": "Reference",
+            "group": "Development setup",
             "pages": [
-              "doc/developer/cli/commands"
+              "doc/developer/AppSetup",
+              "doc/developer/backend/Backend_Setup",
+              "doc/contribute/desktop-setup"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "icon": "square-terminal",
+        "groups": [
+          {
+            "group": "API reference",
+            "openapi": "api-reference/openapi.json",
+            "pages": [
+              "api-reference/introduction",
+              {
+                "group": "Memories",
+                "pages": [
+                  "api-reference/endpoint/memories/list",
+                  "api-reference/endpoint/memories/create",
+                  "api-reference/endpoint/memories/create-batch",
+                  "api-reference/endpoint/memories/update",
+                  "api-reference/endpoint/memories/delete"
+                ]
+              },
+              {
+                "group": "Conversations",
+                "pages": [
+                  "api-reference/endpoint/conversations/list",
+                  "api-reference/endpoint/conversations/create",
+                  "api-reference/endpoint/conversations/create-from-segments",
+                  "api-reference/endpoint/conversations/get",
+                  "api-reference/endpoint/conversations/update",
+                  "api-reference/endpoint/conversations/delete"
+                ]
+              },
+              {
+                "group": "Folders",
+                "pages": [
+                  "api-reference/endpoint/folders/list"
+                ]
+              },
+              {
+                "group": "Action items",
+                "pages": [
+                  "api-reference/endpoint/action-items/list",
+                  "api-reference/endpoint/action-items/create",
+                  "api-reference/endpoint/action-items/create-batch",
+                  "api-reference/endpoint/action-items/update",
+                  "api-reference/endpoint/action-items/delete"
+                ]
+              },
+              {
+                "group": "API keys",
+                "pages": [
+                  "api-reference/endpoint/keys/current",
+                  "api-reference/endpoint/keys/list",
+                  "api-reference/endpoint/keys/create",
+                  "api-reference/endpoint/keys/revoke"
+                ]
+              }
             ]
           },
           {
-            "group": "Resources",
+            "group": "Platform reference",
             "pages": [
-              "doc/developer/cli/agents",
-              "doc/developer/cli/troubleshooting"
+              "doc/developer/cli/commands",
+              "doc/developer/mcp/tools",
+              "doc/developer/Protocol",
+              "doc/reference/changelog"
+            ]
+          },
+          {
+            "group": "Legal",
+            "pages": [
+              "doc/info/Support",
+              "doc/info/License",
+              "doc/info/Privacy",
+              "doc/info/Disclaimer"
             ]
           }
         ]
@@ -299,6 +285,14 @@
       {
         "label": "Support",
         "href": "https://help.omi.me"
+      },
+      {
+        "label": "Security",
+        "href": "https://github.com/BasedHardware/omi/blob/main/SECURITY.md"
+      },
+      {
+        "label": "License",
+        "href": "/doc/info/License"
       }
     ],
     "primary": {
@@ -307,6 +301,33 @@
       "href": "https://www.omi.me/cart/50230946562340:1"
     }
   },
+  "redirects": [
+    { "source": "/getstartedwithomi", "destination": "/doc/get_started/what-is-omi" },
+    { "source": "/quickstart", "destination": "/doc/get_started/what-is-omi" },
+    { "source": "/doc/get_started/introduction", "destination": "/doc/get_started/what-is-omi" },
+    { "source": "/onboarding/omi", "destination": "https://help.omi.me/en/articles/13149698-omi" },
+    { "source": "/onboarding/omi-glass", "destination": "https://help.omi.me/en/articles/13149740-omi-glass" },
+    { "source": "/onboarding/omi-devkit-2", "destination": "/doc/hardware/DevKit2" },
+    { "source": "/doc/get_started/chat_tips", "destination": "https://help.omi.me/en/articles/13153612-conversations-memories-and-chats" },
+    { "source": "/doc/developer/AudioStreaming", "destination": "/doc/developer/apps/AudioStreaming" },
+    { "source": "/doc/developer/savingaudio", "destination": "/doc/developer/apps/AudioStreaming" },
+    { "source": "/doc/developer/MCP", "destination": "/doc/developer/mcp/introduction" },
+    { "source": "/doc/developer/Cursor", "destination": "/doc/get_started/build-with-an-ai-agent" },
+    { "source": "/doc/developer/DevKit2Testing", "destination": "/doc/hardware/DevKit2" },
+    { "source": "/doc/developer/backend/backend_deepdive", "destination": "/doc/how-omi-works/architecture" },
+    { "source": "/doc/developer/desktop-model-credentials", "destination": "https://github.com/BasedHardware/omi/blob/main/desktop/macos/docs/agent-model-credentials.md" },
+    { "source": "/doc/developer/backend/cloud_run_jobs_checklist", "destination": "https://github.com/BasedHardware/omi/blob/main/backend/docs/cloud_run_jobs_checklist.md" },
+    { "source": "/doc/developer/backend/translation_benchmark", "destination": "https://github.com/BasedHardware/omi/tree/main/backend/docs" },
+    { "source": "/finops/telemetry-transport-contract", "destination": "https://github.com/BasedHardware/omi/blob/main/backend/docs/telemetry-transport-contract.md" },
+    { "source": "/product-telemetry/README", "destination": "https://github.com/BasedHardware/omi/blob/main/scripts/product-telemetry/README.md" },
+    { "source": "/archive/SPEC-meeting-receipt", "destination": "/doc/get_started/what-is-omi" },
+    { "source": "/doc/developer/backend/transcription", "destination": "/doc/how-omi-works/capture-and-transcription" },
+    { "source": "/doc/developer/api", "destination": "/doc/developer/api/overview" },
+    { "source": "/doc/developer/Compile_firmware", "destination": "/doc/developer/firmware/Compile_firmware" },
+    { "source": "/developer/backend/Backend_Setup", "destination": "/doc/developer/backend/Backend_Setup" },
+    { "source": "/doc/developer/backend/StoringConversations", "destination": "/doc/how-omi-works/conversations-and-memories" },
+    { "source": "/doc/developer/backend/chat_system", "destination": "/doc/how-omi-works/chat" }
+  ],
   "ai": {
     "llmsTxt": true
   }

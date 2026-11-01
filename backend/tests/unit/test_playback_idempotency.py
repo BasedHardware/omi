@@ -91,6 +91,57 @@ def route_app():
     return app, sync
 
 
+@pytest.mark.parametrize('demand', [False, True])
+@pytest.mark.asyncio
+async def test_locked_obsolete_job_is_consumed_but_current_job_keeps_retrying(monkeypatch, route_app, demand):
+    import httpx
+    from utils.sync.playback import conversation_merge_fingerprint
+
+    app, sync = route_app
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true' if demand else 'false')
+    monkeypatch.setattr(sync, 'account_deletion_blocks_user_work', lambda *_: False)
+    monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: None)
+    row = dict(started_at=1000.0, audio_files=[dict(id='current', chunk_timestamps=[1000.0])])
+    read = Mock(return_value=row)
+    monkeypatch.setattr(build.conversations_db, 'get_conversation_raw_snapshot', read)
+    release, encode, stamp = Mock(), Mock(), Mock()
+    monkeypatch.setattr(sync, 'release_job_run_lock', release)
+    monkeypatch.setattr(build, 'ensure_conversation_artifact', encode)
+    monkeypatch.setattr(sync.conversations_db, 'update_conversation', stamp)
+    payload = dict(schema_version=2, uid='synthetic', conversation_id='conversation', on_demand=demand)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        for _ in range(3):
+            result = await client.post('/v2/audio-merge-jobs/run', json={**payload, 'fingerprint': 'obsolete'})
+            assert result.status_code == 200 and result.json() == {'status': 'superseded'}
+        result = await client.post(
+            '/v2/audio-merge-jobs/run',
+            json={**payload, 'fingerprint': conversation_merge_fingerprint(row, demand=demand)},
+        )
+        assert result.status_code == 409 and result.json() == {'status': 'locked'}
+    assert read.call_args.kwargs['field_paths'] == ['audio_files', 'started_at', 'created_at', 'deleted']
+    assert read.call_args.kwargs['timeout'] == 1.0
+    for work in (release, encode, stamp):
+        work.assert_not_called()
+
+
+@pytest.mark.parametrize('row', [None, {}, {'deleted': True}, {'audio_files': []}, {'audio_files': [None]}])
+def test_locked_job_with_uncertain_source_retries(monkeypatch, row):
+    monkeypatch.setattr(build.conversations_db, 'get_conversation_raw_snapshot', Mock(return_value=row))
+    assert not build.superseded_while_locked(dict(uid='synthetic', conversation_id='conversation', fingerprint='old'))
+
+
+def test_locked_job_read_failure_and_missing_fingerprint_retry(monkeypatch):
+    read = Mock(side_effect=RuntimeError('synthetic read failure'))
+    monkeypatch.setattr(build.conversations_db, 'get_conversation_raw_snapshot', read)
+    assert not build.superseded_while_locked(dict(uid='synthetic', conversation_id='conversation', fingerprint='old'))
+    read.assert_called_once()
+    read.reset_mock()
+    for fingerprint in (None, '', 1):
+        assert not build.superseded_while_locked(dict(fingerprint=fingerprint))
+    read.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_http_retry_after_stamp_failure_reuses_published_audio(monkeypatch, route_app):
     import httpx
