@@ -255,3 +255,32 @@ def test_recovery_dispatch_requires_the_current_month_backlog_choice(prod_scope,
     monkeypatch.setattr(cap_hold_recovery, 'is_daily_audio_ceiling_exceeded', lambda uid: False)
     with funded_processing.backlog_consent(UID, grant):
         assert cap_hold_recovery._new_dispatch_allowed(UID, 'sync') is allowed
+
+
+@pytest.mark.parametrize('lanes', ['live', 'live,sync'])
+def test_recovery_cohort_pct_0_stops_all_recovery_and_keeps_the_cap(prod_scope, monkeypatch, lanes):
+    """The documented rollback: STT_CAP_RECOVERY_COHORT=pct:0, not the offline kill switch."""
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    monkeypatch.setattr(funded_processing, 'period_id', lambda: 'this-month')
+    intake = _intake_surface(UID)
+    monkeypatch.setenv('STT_CAP_RECOVERY_COHORT', 'pct:0')
+    assert not any(policy.recovery_admission_enabled(UID, lane) for lane in policy.LANES)
+    assert not policy.any_recovery_admission_enabled(UID)
+    # Intake keeps the offline allowance cap on new sync audio.
+    assert _intake_surface(UID) == intake and intake[0] is True
+    exhausted = TranscriptionAllowance('on_device', 0, 'plan_allowance_exhausted', limit_seconds=0)
+    monkeypatch.setattr(dispatch, 'funded_allowance', lambda uid, lane=None, **kwargs: exhausted)
+    monkeypatch.setattr(dispatch, 'record_decision', lambda *args: None)
+    monkeypatch.setattr(dispatch, 'record_audio', lambda *args: None)
+    assert dispatch.sync_admission(UID, 30, 'parakeet')[0] is False
+
+
+async def test_recovery_cohort_pct_0_parks_worker_and_recovery_before_any_work(held_sync, monkeypatch):
+    monkeypatch.setenv('STT_CAP_RECOVERY_COHORT', 'pct:0')
+    monkeypatch.setattr(cap_hold, 'claim', lambda *a: pytest.fail('claimed under pct:0'))
+    monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('admitted under pct:0'))
+    monkeypatch.setattr(worker.store, 'read', lambda uid: pytest.fail('worker ran under pct:0'))
+    assert await cap_hold_recovery.recover_selected(UID, held_sync.snapshot) is False
+    assert await cap_hold_recovery._recover_row(UID, held_sync.snapshot, {'state': 'held'}) is False
+    assert await worker.run(UID) is None
+    assert held_sync.events == [] and held_sync.lanes == []

@@ -38,7 +38,16 @@ admits lane `sync` for a cap-cohort owner even when `STT_CAP_DISPATCH_LANES` omi
 after the owner bought credits. Only recovery widens: intake, consent and
 `execution_admission_enabled` still read the lane list, and recovery still needs
 explicit owner consent, current allowance on the original lane and shared pacing.
-Rollback is the offline kill switch, which also stops creating new sync holds.
+A malformed lane list still denies this recovery, as it denies every lane; `sync`
+itself need not be listed.
+
+Rollback for this recovery is `STT_CAP_RECOVERY_COHORT=pct:0` on every API/sync
+recovery executor: it stops every recovery path (consent, worker, redrive,
+selected manifests, provider dispatch) and leaves holds and consent in custody,
+while the offline allowance cap keeps holding new sync audio. Do **not** use
+`STT_CAP_OFFLINE_ENFORCEMENT=false` to roll this back: it also removes the
+allowance cap on new sync audio from this boundary (sync admission selected by the
+legacy lane list stays governed by that list).
 PTT voice-message allowance enforcement is a separate follow-up.
 
 Release owner: subscription session merges; deployment lead deploys. Offline
