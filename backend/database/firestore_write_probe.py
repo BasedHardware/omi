@@ -157,6 +157,8 @@ _WRITE_PLUMBING_FUNCTIONS = frozenset(
         ('utils.enrichment.outbox', '_cas'),
         ('utils.enrichment.outbox', '_mutate'),
         ('utils.enrichment.outbox', 'mutate_row'),
+        # FirestoreEnrichmentOutbox's adapter in front of mutate_row.
+        ('database.outbox_firestore', '_mutate'),
     }
 )
 _CALLER_RE = re.compile(r'^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*){0,6}:[A-Za-z_][A-Za-z0-9_]{0,60}$')

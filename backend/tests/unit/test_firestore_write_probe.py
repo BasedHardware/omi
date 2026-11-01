@@ -153,10 +153,17 @@ def test_generic_write_helper_names_its_caller(client, transport):
 
     # Same code, but its frame reports the helper's module as __name__.
     helper = types.FunctionType(_cas.__code__, {'__name__': 'utils.enrichment.outbox'}, '_cas')
+
+    def _mutate(cas, ref):
+        cas(ref)
+
+    # The outbox adapter's _mutate sits in front of the CAS helper; both are skipped.
+    adapter = types.FunctionType(_mutate.__code__, {'__name__': 'database.outbox_firestore'}, '_mutate')
     caller = f'{__name__}:test_generic_write_helper_names_its_caller'
     before = _by_caller('users/memories', 'set', caller)
     helper(client.collection('users').document('u1').collection('memories').document('m1'))
-    assert _by_caller('users/memories', 'set', caller) == before + 1
+    adapter(helper, client.collection('users').document('u1').collection('memories').document('m2'))
+    assert _by_caller('users/memories', 'set', caller) == before + 2
 
 
 def test_batch_counts_each_write_and_failed_commit_counts_nothing(client, transport):
