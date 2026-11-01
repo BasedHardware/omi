@@ -38,6 +38,8 @@ def test_real_strict_vad_checks_the_20ms_partial_window():
 async def test_20ms_frame_beyond_eof_needs_independent_silence_evidence(monkeypatch, speech):
     monkeypatch.delenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', raising=False)
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false')
+    # The call count below includes the strict-VAD shadow, which samples by segment hash.
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
     # Exercise the actual Pyannote adapter with a synthetic frame whose start
     # lies beyond this 320-sample buffer. No model/GPU/private audio needed.
     monkeypatch.setattr(
