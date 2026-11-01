@@ -350,6 +350,22 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('a row with no episode yet opens a page that still finds the notes when they land', (tester) async {
+    OmiColors.active = OmiColors.forBrightness(Brightness.light);
+    final writing = _writing();
+    await _pump(tester, writing, Brightness.light,
+        home: Scaffold(body: ProcessingConversationRow(conversation: writing.members.first)));
+    await tester.tap(find.byKey(const Key('home_processing_row')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const Key('episode_writing_notes')), findsOneWidget);
+    Provider.of<EpisodeProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false)
+        .debugSetHomeEpisodes([_fictional()]);
+    await tester.pump();
+    expect(find.byKey(const Key('episode_lede')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('a section opens its moment in the transcript', (tester) async {
     OmiColors.active = OmiColors.forBrightness(Brightness.light);
     final opened = <String>[];

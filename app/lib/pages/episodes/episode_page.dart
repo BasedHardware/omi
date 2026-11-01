@@ -78,7 +78,13 @@ class EpisodePage extends StatelessWidget {
     final episodes = context.watch<EpisodeProvider?>();
     final hidden = episodes?.hiddenHomeMembers ?? const <String>{};
     // The page outlives the row that opened it: the finished notes land here, too.
-    final episode = episodes?.homeEpisodes.where((e) => e.id == this.episode.id).firstOrNull ?? this.episode;
+    // A row with no episode yet opens a stand-in with no id; its recording finds the real one.
+    final opened = this.episode;
+    final episode = episodes?.homeEpisodes
+            .where(
+                (e) => opened.id.isEmpty ? e.conversationIds.any(opened.conversationIds.contains) : e.id == opened.id)
+            .firstOrNull ??
+        opened;
     final known = {for (final c in history?.conversations ?? const <ServerConversation>[]) c.id: c};
     final members = [for (final member in episode.members) known[member.id] ?? member]
         .where((m) =>
