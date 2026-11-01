@@ -23,6 +23,7 @@ from utils.batch_pipeline.contracts import PoolCapacity
 from utils.batch_pipeline.serving import Serving
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline import admission
 
 
 @pytest.fixture
@@ -117,6 +118,39 @@ def test_storage_cleanup_failure_does_not_stop_projection_or_lease_recovery():
     cleanup = Mock(side_effect=TimeoutError('synthetic storage unavailable'))
     Serving(MemoryStore(), projector=projector, cleanup=cleanup).reconcile()
     projector.sweep.assert_called_once()
+
+
+def test_authorize_http_returns_before_worker_timeout_with_blocked_reservation(api, monkeypatch):
+    client, store = api
+    row = store.rows['jobs', 'synthetic']
+    row['requires_compute_admission'] = True
+    row['projection_binding'] = {'job_id': 'bp_job', 'content_id': 'content'}
+    store.rows['intakes', 'bp_job'] = {'total_audio_seconds': 30}
+    (lease,) = Scheduler(store).pull(time.time())
+    release, finished = threading.Event(), threading.Event()
+
+    def blocked(*args):
+        try:
+            release.wait(6)
+            return SimpleNamespace(allowed=True)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *args: False)
+    monkeypatch.setattr(admission, 'reserve_backfill_speech', blocked)
+    started = time.monotonic()
+    try:
+        response = client.post(
+            '/v2/batch-pipeline/authorize-compute',
+            json={'stage': 'dev', 'leases': [{'segment_id': 'synthetic', 'token': lease.token}]},
+        )
+        assert time.monotonic() - started < 4.8
+        assert response.status_code == 200
+        assert response.json() == {'allowed': [], 'retry_after': {'synthetic': 30}, 'held_reason': {}}
+    finally:
+        release.set()
+        assert finished.wait(2)
+    assert 'compute_admission_token' not in store.rows['jobs', 'synthetic']
 
 
 @pytest.mark.asyncio

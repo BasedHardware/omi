@@ -8,6 +8,17 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 ## Partial finishes for retained recordings
 
+Batch GPU compute admission returns partial receipts within a four-second server
+budget, below the existing worker client's five-second timeout. Completed
+decisions survive a slow dependency; unfinished and unreached leases receive
+`retry_after: 30` without an allow or a policy hold. Evaluation remains serial
+because fresh funding/fair-use checks do not reserve in-flight usage. Each
+blocking substage uses the DB executor and exports identifier-free stage timing;
+per-lease errors log only a bounded exception class. Cancellation cannot stop an
+already running database RPC or commit: it may finish a conservative backfill
+reservation or lease-fenced seal, but cannot grant unfinished work in the receipt
+or schedule another substage. No worker image or attempt-refund change is needed.
+
 Recording admission runs on its own serving loop, with a stop-aware 20-second
 wait after each pass, independently of reconciliation and recovery dispatch.
 Each pass selects the existing ten due `record_pending` rows and runs at most
