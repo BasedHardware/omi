@@ -1,3 +1,11 @@
+// Sync orchestration provider: wires the WAL service into the widget tree,
+// owns connectivity-aware retry/cooldown, and routes sync intents through the
+// shared RecordingTransferCoordinator recovery owner.
+//
+// It configures that coordinator instead of replacing it -- startup, retry,
+// cooldown and UI intents must all reach the same request owner or concurrent
+// passes double-upload (app/lib/services/capture/OWNERSHIP.md,
+// app/lib/services/wals/CUSTODY.md).
 import 'dart:async';
 import 'package:omi/services/wals/wal_derived_views.dart';
 
