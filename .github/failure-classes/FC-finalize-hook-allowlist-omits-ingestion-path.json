@@ -10,7 +10,7 @@
   "evidence_prs": [],
   "scope_hints": [
     "backend/utils/episodes/",
-    "backend/utils/sync/pipeline.py",
+    "backend/utils/sync/legacy_segment_core.py",
     "backend/utils/enrichment/callback.py",
     "app/lib/pages/conversations/"
   ],
