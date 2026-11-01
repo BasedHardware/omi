@@ -4,17 +4,43 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 
-def ensure_timezone_aware(value: datetime) -> datetime:
-    """Return an aware datetime, treating legacy naive values as UTC."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
+def ensure_timezone_aware(value: Any) -> datetime:
+    """Return an aware datetime, treating legacy naive values as UTC, or parsing ISO strings/timestamps."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str) and value.strip():
+        try:
+            dt = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            pass
+    to_datetime = getattr(value, 'ToDatetime', None)
+    if callable(to_datetime):
+        try:
+            converted = to_datetime(tzinfo=timezone.utc)
+            if isinstance(converted, datetime):
+                return converted if converted.tzinfo is not None else converted.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def firestore_revision_datetime(value: Any) -> Optional[datetime]:
     """Normalize Firestore snapshot metadata to an aware API datetime."""
     if isinstance(value, datetime):
         return ensure_timezone_aware(value)
+
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
 
     to_datetime = getattr(value, 'ToDatetime', None)
     if callable(to_datetime):
