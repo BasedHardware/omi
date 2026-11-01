@@ -230,7 +230,7 @@ def reconcile_listen_finalization_jobs(
     # retain their existing cloud_tasks admission and scheduling ownership.
     replay_candidates = candidates
     if not dispatch_enabled:
-        replay_candidates = [c for c in candidates if c.get('kind') not in {'listen_quiet_check', 'conversation_merge'}]
+        replay_candidates = [c for c in candidates if c.get('kind') not in ('listen_quiet_check', 'conversation_merge')]
         result['skipped'] += len(candidates) - len(replay_candidates)
     quiet_candidates = [
         candidate

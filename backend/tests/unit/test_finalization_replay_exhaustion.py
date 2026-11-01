@@ -346,3 +346,11 @@ def test_inline_replay_does_not_run_or_defer_other_job_kinds(store, monkeypatch,
     assert store.rows == before
     for effect in (quiet, merge, claim, defer, inline_replay):
         effect.assert_not_called()
+
+
+@pytest.mark.parametrize('kind', [{}, []])
+def test_inline_replay_unknown_kind_cannot_abort_the_page(store, inline_replay, kind):
+    store.rows[JOB_PATH]['kind'] = kind
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['retired'] == 1
+    assert store.rows[JOB_PATH]['last_failure_code'] == 'durable_attempts_exhausted'
+    inline_replay.assert_not_called()
