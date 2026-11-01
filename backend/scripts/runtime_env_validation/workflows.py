@@ -713,7 +713,10 @@ def _validate_firestore_readiness_workflow_contract(
         gate_with.get('source_sha') != admitted_readiness_ref
         or gate_with.get('project_id') != '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
         or gate_with.get('service_account') != 'omi-ci-index-check@based-hardware.iam.gserviceaccount.com'
-        or 'workloadIdentityPools/omi-gha-deploy-' not in str(gate_with.get('workload_identity_provider'))
+        or not any(
+            f'workloadIdentityPools/{pool}-' in str(gate_with.get('workload_identity_provider'))
+            for pool in ('omi-gha-deploy', 'omi-gha-notif')
+        )
         or gate_with.get('database', '(default)') != '(default)'
         or gate_step.get('if') is not None
         or gate_step.get('continue-on-error') not in (None, False)

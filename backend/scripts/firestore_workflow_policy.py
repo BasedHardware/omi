@@ -193,6 +193,9 @@ READINESS_SERVICE_ACCOUNT = 'omi-ci-index-check@based-hardware.iam.gserviceaccou
 READINESS_DEPLOY_PROVIDERS = (
     'workloadIdentityPools/omi-gha-deploy-prod/providers/github',
     'workloadIdentityPools/omi-gha-deploy-dev/providers/github',
+    # gcp_notifications_job.yml's own pools, each admitting only that workflow on main.
+    'workloadIdentityPools/omi-gha-notif-prod/providers/github',
+    'workloadIdentityPools/omi-gha-notif-dev/providers/github',
 )
 RUNTIME_PROJECT_INPUT = '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
 QA_PROJECT_INPUT = '${{ env.QA_PROJECT }}'
@@ -782,7 +785,9 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
         errors.append('readiness gate must sign in as the omi-ci-index-check@ read-only service account')
     provider = str(with_block.get('workload_identity_provider', ''))
     if not any(candidate in provider for candidate in READINESS_DEPLOY_PROVIDERS):
-        errors.append('readiness gate must authenticate through an omi-gha-deploy-prod/-dev workload identity provider')
+        errors.append(
+            'readiness gate must authenticate through an omi-gha-deploy or omi-gha-notif workload identity provider'
+        )
     project = str(with_block.get('project_id', ''))
     database = str(with_block.get('database', ''))
     if project == RUNTIME_PROJECT_INPUT:
