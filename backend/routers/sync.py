@@ -120,6 +120,7 @@ from config.rollout_cohorts import warm_rollout_cohorts
 from utils.sync.recording_lineage import parse_s1_upload_claims
 from utils.sync.files import (
     detect_source_from_filenames,
+    get_timestamp_from_path,
 )
 from utils.sync.ledger_completion import SyncJobRunLeaseLost, bind_or_converge_sync_ledger_completion
 from utils.sync.legacy_segment_core import (
