@@ -121,8 +121,10 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "omi-tv-rollup-daily",
         "sync-backfill-uid-sequencer",
     }
-    for jobs in (dev_jobs, prod_jobs):  # C4: planned until /v2/enrichment/sweep serves on backend-integration
-        assert jobs["enrichment-maintenance"]["lifecycle"] == "planned"
+    # C4: prod is active (Plan C prod activation; it also sweeps the provider-stt outbox); dev stays planned.
+    assert dev_jobs["enrichment-maintenance"]["lifecycle"] == "planned"
+    assert "lifecycle" not in prod_jobs["enrichment-maintenance"]
+    assert prod_jobs["enrichment-maintenance"]["state"] == "ENABLED"
     assert dev_jobs["enrichment-maintenance"]["state"] == "PAUSED"  # dev shares prod Firestore
     rollup = prod_jobs["omi-tv-rollup-daily"]
     assert rollup["lifecycle"] == "planned"

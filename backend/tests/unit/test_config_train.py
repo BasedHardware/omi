@@ -212,8 +212,13 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     queues = {q.name: q for q in spec.queues}
     recovery = queues['batch-quarantine-recovery'].fields
     assert (recovery['max_concurrent_dispatches'], recovery['max_dispatches_per_second']) == (16, 8.0)
-    # Lane 9's enrichment queue is declared but not created before M3.
-    assert queues['enrichment'].enabled is False
+    # Plan C prod activation: the config-train creates C3's enrichment and C8's provider-stt queues before the
+    # backend roll that points ENRICHMENT_ROUTE / PROVIDER_STT_TASKS_* at them (draining needs provider_stt_live).
+    assert queues['enrichment'].enabled is True
+    provider = queues['provider-stt']
+    assert provider.enabled is True
+    assert (provider.fields['max_concurrent_dispatches'], provider.fields['max_dispatches_per_second']) == (48, 10.0)
+    assert provider.fields['max_attempts'] == -1
 
 
 def test_staging_mirrors_prod_except_names():
