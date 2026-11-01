@@ -181,7 +181,12 @@ State lives at `~/.omi/config.toml` (overridable via `$OMI_CONFIG`). The file
 holds one or more named profiles, each with its own auth method and API base.
 Saving configuration preserves unknown settings at both the root and profile
 levels, so editing a known setting does not discard extensions from newer clients.
-Switch between them with `--profile`:
+
+Commands that update the config use a lock file beside it
+(`~/.omi/config.toml.lock` by default). It contains no credentials and stays after
+commands finish so concurrent commands share the same lock; leave it in place.
+
+Switch between profiles with `--profile`:
 
 ```bash
 omi config profile use work
