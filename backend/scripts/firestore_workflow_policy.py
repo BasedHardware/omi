@@ -189,7 +189,11 @@ def has_direct_firestore_mutation(run: str) -> bool:
 READINESS_ACTION = './.github/firestore-workflow/.github/actions/firestore-readiness'
 READINESS_CONTROL_PATH = '.github/firestore-workflow'
 READINESS_CONTROL_REF = '${{ github.workflow_sha }}'
-READINESS_CREDENTIALS = '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
+READINESS_SERVICE_ACCOUNT = 'omi-ci-index-check@based-hardware.iam.gserviceaccount.com'
+READINESS_DEPLOY_PROVIDERS = (
+    'workloadIdentityPools/omi-gha-deploy-prod/providers/github',
+    'workloadIdentityPools/omi-gha-deploy-dev/providers/github',
+)
 RUNTIME_PROJECT_INPUT = '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
 QA_PROJECT_INPUT = '${{ env.QA_PROJECT }}'
 QA_DATABASE_INPUT = '${{ env.QA_FIRESTORE_DATABASE }}'
@@ -774,8 +778,11 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
         errors.append('readiness gate source_sha must be the deployed source, not the workflow commit')
     elif not (re.fullmatch(r'[0-9a-f]{40}', source_sha) or 'sha' in source_sha.lower()):
         errors.append('readiness gate source_sha must resolve to a full source commit SHA')
-    if str(with_block.get('credentials_json', '')) != READINESS_CREDENTIALS:
-        errors.append('readiness gate must receive secrets.GCP_FIRESTORE_READONLY_CREDENTIALS')
+    if str(with_block.get('service_account', '')) != READINESS_SERVICE_ACCOUNT:
+        errors.append('readiness gate must sign in as the omi-ci-index-check@ read-only service account')
+    provider = str(with_block.get('workload_identity_provider', ''))
+    if not any(candidate in provider for candidate in READINESS_DEPLOY_PROVIDERS):
+        errors.append('readiness gate must authenticate through an omi-gha-deploy-prod/-dev workload identity provider')
     project = str(with_block.get('project_id', ''))
     database = str(with_block.get('database', ''))
     if project == RUNTIME_PROJECT_INPUT:
