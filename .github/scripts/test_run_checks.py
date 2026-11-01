@@ -1496,7 +1496,8 @@ class ParallelRunnerTests(unittest.TestCase):
                 pr_body_file=body,
                 keep_going=keep_going,
             )
-        return result, stdout.getvalue(), stderr.getvalue()
+        # Child output is relayed byte for byte; Windows children end lines with \r\n.
+        return result, stdout.getvalue().replace("\r\n", "\n"), stderr.getvalue()
 
     @staticmethod
     def script(root: Path, name: str, body: str) -> Check:
