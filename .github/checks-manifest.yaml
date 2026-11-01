@@ -1936,6 +1936,11 @@ checks:
     triggers: ["backend/utils/mcp_server/registry.py", "scripts/generate_mcp_tools_doc.py", "docs/doc/developer/mcp/tools.mdx", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the MCP tools page hand-paraphrased all 26 advertised tools and had already lagged the registry (missing fields/summary_only/cursor/timezone parameters on conversation and screen-activity tools); the tool inventory (name, description, scope) is now generated from TOOL_SPECS so an undocumented new tool fails the drift check"
+  - id: shipbob-app-security-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_shipbob_security.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET / setup page must safely JSON-serialize uid in inline scripts to prevent script-context breakouts, URL-encode uid in links, and escape callback errors"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
