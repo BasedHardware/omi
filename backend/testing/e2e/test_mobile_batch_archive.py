@@ -71,10 +71,11 @@ def test_local_http_batch_archive_acceptance(client, auth_headers, monkeypatch, 
             assert not scheduled
             assert not archived
         else:
-            assert response.status_code == 202, response.text
-            assert len(scheduled) == 1
-            assert len(archived) == 1, str(list(Path(fake_storage).rglob("*")))
-            assert archived[0].read_bytes() == raw
+            # Legacy-retire C9: an upload the batch lane does not take is refused by
+            # the legacy-dark fence (409, audio kept on the client); no legacy job runs.
+            assert response.status_code == 409, response.text
+            assert response.json()['code'] == 'sync_content_in_progress'
+            assert not scheduled
     finally:
         server.should_exit = True
         worker.join(timeout=10)

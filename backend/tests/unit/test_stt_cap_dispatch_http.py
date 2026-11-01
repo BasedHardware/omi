@@ -89,20 +89,36 @@ def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, u
         'resolve_transcription_allowance',
         lambda _: SimpleNamespace(reason='allowance_unavailable' if unavailable else 'usage_budget_exhausted'),
     )
-    # V2 acknowledges archived bytes/job custody; the real coordinator's
-    # full-WAV hold before VAD is tested in test_sync_cap_coordinator.
-    monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
+    # C9 (legacy-retire): v2 has no legacy admission arm. A held capture's ledger
+    # row is answered by the legacy-dark fence (202 completed), never 402.
+    from utils.sync import legacy_dark
+
+    held = {'held_audio': True, 'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'}
     monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
     from config.policy import BatchUnitPolicy
 
     monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
     monkeypatch.setattr(router, '_retrieve_file_paths_v2', lambda *a: ['synthetic.bin'])
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda *a: 'held-content')
-    monkeypatch.setattr(router, 'create_sync_job', Mock())
-    monkeypatch.setattr(router, 'claim_sync_content', lambda *a: {'outcome': 'held', 'result': {'held_audio': True}})
-    monkeypatch.setattr(router, 'mark_job_completed', Mock())
+    monkeypatch.setattr(
+        legacy_dark,
+        'read_ledger_row',
+        lambda uid, content_id: {'dispatch_protocol': 'stt_cap_hold_v1', 'status': 'held', 'result': held},
+    )
+    decisions = []
+    real_fence_response = legacy_dark.fence_response
+
+    def recording_fence_response(decision, **kwargs):
+        decisions.append(decision)
+        return real_fence_response(decision, **kwargs)
+
+    monkeypatch.setattr(legacy_dark, 'fence_response', recording_fence_response)
     response = client.post('/v2/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
     assert response.status_code == 202, response.text
     assert response.json()['status'] == 'completed'
-    assert router.mark_job_completed.call_args.args[1]['held_audio'] is True
+    # The held result the fence answers with (no legacy job is written in C9;
+    # before C9 this was mark_job_completed's result).
+    assert len(decisions) == 1
+    assert decisions[0].ownership is legacy_dark.LegacyOwnership.HELD
+    assert decisions[0].result['held_audio'] is True
     reject.assert_not_called()

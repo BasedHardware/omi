@@ -310,7 +310,6 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     )
     assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
-    assert '.github/scripts/ensure_monitoring_metric_alert_policy.py' in action
     assert 'reconcile_sync_backfill_alert_policy.py' in action
     assert 'verify_sync_backfill_alert_policy.py' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
@@ -318,26 +317,14 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     assert 'The request was aborted because there was no available instance' in action
 
 
-def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep():
+def test_retired_sequencer_scheduler_alerts_are_no_longer_provisioned():
+    # C10 deletes the sequencer and its Scheduler job; a train must not recreate the failure/heartbeat alerts,
+    # whose heartbeat condition would page once the sweep logs stop (the live policies are disabled at deploy).
     action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    assert 'sync_backfill_uid_sequencer_scheduler_failure' in action or 'scheduler_${KIND}' in action
-    assert 'resource.labels.job_id=\"sync-backfill-uid-sequencer\"' in action
-    assert 'AttemptFinished' in action
-    assert 'action=sweep_summary outcome=done' in action
-    assert "CONDITION='absent'" in action
-    assert "DURATION='600s'" in action
-
-
-def test_sequencer_scheduler_alerts_page_only_on_sustained_failure():
-    # Live prod policies (set by the alert owner on 2026-10-15/16) wait 10 minutes for
-    # both kinds; the deploy verifier must expect the same, or every prod deploy fails.
-    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    step = action.split('Provision backfill sequencer Scheduler execution alerts', 1)[1]
-    step = step.split('\n    - name:', 1)[0]
-    assert step.count("DURATION='600s'") == 2
-    assert "DURATION='0s'" not in step
-    assert step.count('DURATION_SECONDS=600') == 2
-    assert 'DURATION_SECONDS=0' not in step
+    assert 'Provision backfill sequencer Scheduler execution alerts' not in action
+    assert 'sync_backfill_uid_sequencer_scheduler' not in action
+    assert 'scheduler_${KIND}' not in action
+    assert 'action=sweep_summary outcome=done' not in action
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
@@ -389,22 +376,10 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in sync_step
-    assert 'gcloud tasks queues create "$BACKFILL_QUEUE"' in action
-    # The reconcile step manages the manifest-selected queue (prod: sync-backfill-fresh).
-    reconcile = next(
-        step
-        for step in yaml.safe_load(action)['runs']['steps']
-        if step.get('name') == 'Reconcile bounded sync backfill queue'
-    )
-    assert reconcile['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
-    assert 'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}' in stack
-    assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
-    assert '--max-dispatches-per-second=15' in action
-    assert '--max-backoff=60s' in action
-    # The queue's attempt cap must mirror get_sync_tasks_max_attempts()
-    # (default 5): omitted queue fields keep Google's default of 100, so a
-    # handler-budget deferral chain ended through the 409 would keep retrying
-    # past the preserved run lock and re-run whole-budget pipelines.
+    # C10 (legacy-retire): the backfill sequencer and its queue are retired; the
+    # lifecycle no longer creates or reconciles a backfill queue or the sweep job.
+    assert 'gcloud tasks queues create' not in action
+    assert '--jobs sync-backfill-uid-sequencer' not in action
     assert '--max-attempts=5' in action
     # The fresh lane and the fallback route in _enqueue_sync_job_routed deliver
     # through the main sync-jobs queue (SYNC_TASKS_QUEUE), so its attempt cap
@@ -443,7 +418,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     )
     lsteps = {step['name']: step for step in lifecycle['runs']['steps']}
     iam = lsteps['Bind backend-sync invoker to backfill worker']
-    queue = lsteps['Reconcile bounded sync backfill queue']
+    queue = lsteps['Reconcile sync-jobs attempt contract']
     ttl = lsteps['Provision and verify sync ledger TTL']
     budget = lsteps['Provision routed backfill budget alerts']
     abort = lsteps['Provision sync-backfill dispatch-abort alert']
@@ -457,18 +432,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
 
     resolver = next(step for step in lifecycle['runs']['steps'] if step.get('id') == 'live-max-scale')
     assert 'if' not in resolver  # Also resolve for platform/dispatch, not just the worker deploy.
-    assert lifecycle['runs']['steps'].index(resolver) < lifecycle['runs']['steps'].index(queue)
-    assert queue['env']['BACKFILL_MAX_CONCURRENT_DISPATCHES'] == (
-        '${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}'
-    )
-    run = queue['run']
-    for flag in (
-        '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"',
-        '--max-dispatches-per-second=15',
-        '--min-backoff=5s',
-        '--max-backoff=60s',
-    ):
-        assert run.count(flag) == 2
+    assert 'gcloud tasks queues update sync-jobs' in queue['run']
     assert 'sync_backfill_dispatch_abort' in abort['run']
     assert 'THRESHOLD=30' in abort['run'] and 'WINDOW=1800s' in abort['run']
     assert abort['run'].count('--threshold-value="$THRESHOLD" --alignment-period="$WINDOW"') == 2

@@ -92,21 +92,6 @@ class TestProcessSegmentErrorHandling:
         assert 'errors:' in signature, "Must accept errors parameter"
 
 
-class TestSyncEndpointErrorReporting:
-    """Verify the endpoint properly reports errors."""
-
-    @staticmethod
-    def _read_sync_source():
-        return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'))
-
-    def test_response_includes_failed_segments_count(self):
-        """Response must include failed_segments count for app to check."""
-        source = self._read_sync_source()
-        assert "'failed_segments'" in source, "Response must include failed_segments"
-        assert "'total_segments'" in source, "Response must include total_segments"
-        assert "'errors'" in source, "Response must include errors list"
-
-
 # ---------------------------------------------------------------------------
 # 2. Threading behavior — errors now properly collected
 # ---------------------------------------------------------------------------
