@@ -505,10 +505,11 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     integration_min = "--min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}"
     # 2026-11-01 packing: enrichment (/v2/enrichment/run) holds LLM-bound requests at ~27% CPU,
     # so concurrency 40 scaled integration 3 -> 8.3 instances. 80 per instance with 64 postprocess
-    # threads (prod overlay) and 4Gi packs them; 80 x 50 also widens MCP's slot ceiling.
+    # threads (prod overlay) and 4Gi packs them; 80 x 50 also widens MCP's slot ceiling. Dev keeps
+    # 40/2Gi with the default 24 threads.
     for flag in (
-        '--memory=4Gi',
-        '--concurrency=80',
+        "--memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}",
+        "--concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}",
         integration_min,
         '--max-instances=50',
         '--no-cpu-throttling',

@@ -938,8 +938,8 @@ runs:
           ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
           ${{ steps.runtime-env.outputs.backend_integration_flags }}
           --cpu=2
-          --memory=4Gi
-          --concurrency=80
+          --memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}
+          --concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}
           --min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}
           --max-instances=50
           --no-cpu-throttling

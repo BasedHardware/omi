@@ -562,8 +562,6 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          # Matches prod: concurrency 80 needs the enrichment pool to run what it admits (11-01 packing).
-          POSTPROCESS_EXECUTOR_WORKERS: {value: '64', category: reliability}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
