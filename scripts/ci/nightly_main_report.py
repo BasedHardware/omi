@@ -18,13 +18,15 @@ WORKFLOW = "main_nightly_full.yml"
 BAD = {"failure", "cancelled", "timed_out", "action_required", "startup_failure", "stale"}
 
 # The deterministic check manifest (run_checks.py) emits structured verdicts:
-# "<== FAIL <check-name> (<duration>s)" per failed check and, at exit, the
-# authoritative "Manifest checks failed: <name, name, ...>" summary. Many checks
-# run self-tests whose PASSING output deliberately prints ❌/FAIL:/error strings;
-# those must never be counted as failures. When the structured summary is present
-# it is the whole failure list for that job log.
+# "<== FAIL <check-name> (<duration>s)" per failed check and, at exit, either
+# "Manifest checks failed: <name, name, ...>" or "Manifest checks passed: N check(s).".
+# Many checks run self-tests whose PASSING output deliberately prints ❌/FAIL:/error
+# strings; those must never be counted as failures. A recognized manifest verdict is
+# authoritative for the whole job log: failures name the failed checks, a pass drops
+# the manifest's self-test noise so a different failed step is named instead.
 MANIFEST_FAIL_LINE = re.compile(r"^<== FAIL (\S+)")
 MANIFEST_SUMMARY_LINE = re.compile(r"^Manifest checks failed: (.+)$")
+MANIFEST_PASSED_LINE = re.compile(r"^Manifest checks passed: \d+ check\(s\)\.$")
 
 
 def gh(*args, json_result=False):
@@ -43,13 +45,15 @@ def _clean(line):
 
 
 def manifest_verdicts(lines):
-    """Return the manifest runner's own failed-check names, or None if absent."""
+    """Return the manifest runner's failed-check names, [] if it passed, or None if absent."""
     names = []
     for line in lines:
         line = _clean(line)
         match = MANIFEST_SUMMARY_LINE.match(line)
         if match:
             return [name.strip() for name in match.group(1).split(",") if name.strip()]
+        if MANIFEST_PASSED_LINE.match(line):
+            return []
         match = MANIFEST_FAIL_LINE.match(line)
         if match:
             names.append(match.group(1))
@@ -61,6 +65,8 @@ def failing_tests(log):
     lines = log.splitlines()
     manifest = manifest_verdicts(lines)
     if manifest is not None:
+        # A passed manifest still means the log's ❌/FAIL: strings are self-test
+        # fixtures; [] lets collect() name the actually-failed workflow step.
         return sorted(set(manifest))
     found = set()
     for line in lines:
