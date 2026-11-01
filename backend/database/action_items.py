@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast, overload
 from database import chat_edits
-from database.dream_dirty import after_write
+from database.dream_dirty import after_write, notify
 from google.api_core.exceptions import (
     DeadlineExceeded as FirestoreDeadlineExceeded,
     GoogleAPICallError,
@@ -1278,6 +1278,7 @@ def _purge_proactivity_source(uid: str, item_id: str) -> None:
     purge_source_items(uid=uid, source_kind='action_item', source_id=item_id, firestore_client=db)
 
 
+@after_write('action_items')
 def delete_action_item(uid: str, action_item_id: str) -> bool:
     """
     Delete an action item.
@@ -1305,6 +1306,7 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
     return True
 
 
+@after_write('action_items')
 def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]:
     """
     Delete multiple action items by id, chunking into 500-op Firestore batches.
@@ -1376,6 +1378,8 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
 
     for item_id in removed_ids:
         _purge_proactivity_source(uid, item_id)
+    if removed_ids:
+        notify(uid, [('action_items', item_id) for item_id in removed_ids])
     if total > 0:
         bump_action_items_list_version(uid)
 
@@ -1429,6 +1433,8 @@ def retire_action_items_for_conversation(
         batch.commit()
     for item_id in removed_ids:
         _purge_proactivity_source(uid, item_id)
+    if removed_ids:
+        notify(uid, [('action_items', item_id) for item_id in removed_ids])
     if total > 0:
         bump_action_items_list_version(uid)
     return total
