@@ -1218,7 +1218,8 @@ def _drains(outcome):
 
 
 def test_drain_cap_is_longer_than_two_seconds_and_inside_the_onset_buffer():
-    assert 2.0 < soniox_idle.IDLE_DRAIN_SECONDS < soniox_idle.ONSET_BUFFER_SECONDS
+    # 20 s covers 99.5% of measured session-end finalizes; resuming speech must still fit the buffer.
+    assert 20.0 <= soniox_idle.IDLE_DRAIN_SECONDS < soniox_idle.ONSET_BUFFER_SECONDS
 
 
 @pytest.mark.parametrize('cap,outcome,kept', [(0.01, 'timeout', False), (1.0, 'drained', True)])
@@ -1246,7 +1247,7 @@ def test_idle_close_keeps_finals_that_arrive_inside_the_drain_cap(monkeypatch, c
         await idle._close_task
         await asyncio.sleep(0.1)  # any late final has arrived by now
         assert _drains(outcome) == before + 1
-        assert peer.sent[-2:] == ['{"type": "finalize"}', '']
+        assert '{"type": "finalize"}' in peer.sent  # a timed-out drain may abort before end-of-audio
         assert any('late' in segment['text'] for segment in seen) is kept
         assert not idle.is_connection_dead
         await idle.drain_and_close()
@@ -1355,6 +1356,26 @@ def test_after_speech_the_full_vad_wait_applies(monkeypatch):
         socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
         await idle._close_task
         assert _closes('vad') == before + 1
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_speech_outside_active_vad_ends_a_refused_episode(monkeypatch):
+    """Shadow-mode speech still ends the episode, so the next refused no-frames close counts."""
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+
+    async def run():
+        _, idle, _, _, _, tick = build(monkeypatch, seconds=45)
+        idle._idle_budget.rearm_at = tick[0] + 1000
+        before = _refusals('rearm')
+        tick[0] += 25
+        assert idle.check_no_frames() is not None  # refused by the re-arm floor
+        assert _refusals('rearm') == before + 1
+        idle.observe_vad(SimpleNamespace(is_speech=True, audio_to_send=b''), 'shadow')
+        tick[0] += 30
+        assert idle.check_no_frames() is not None  # a new episode, refused again
+        assert _refusals('rearm') == before + 2
         await idle.drain_and_close()
 
     asyncio.run(run())

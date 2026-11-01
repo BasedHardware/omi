@@ -466,10 +466,10 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     ['reason'],
                 ),
             )
-            for _outcome in ('drained', 'timeout'):
-                _soniox_idle_metrics.drains.labels(outcome=_outcome)
-            for _reason in ('rearm', 'cap'):
-                _soniox_idle_metrics.close_refusals.labels(reason=_reason)
+            _soniox_idle_metrics.drains.labels(outcome='drained')
+            _soniox_idle_metrics.drains.labels(outcome='timeout')
+            _soniox_idle_metrics.close_refusals.labels(reason='rearm')
+            _soniox_idle_metrics.close_refusals.labels(reason='cap')
             for _trigger in ('vad', 'pre_speech', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
                 for _arm in SONIOX_IDLE_COHORT_ARMS:

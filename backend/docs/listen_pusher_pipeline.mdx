@@ -5048,10 +5048,10 @@ closes/reopens/latency/avoided series labelled `arm=control|treatment`.
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
 queue `finalize` behind admitted audio, queue the empty end-of-audio frame, drain
-final tokens for at most eight seconds, then close/abort the paid transport. The
+final tokens for at most twenty seconds, then close/abort the paid transport. The
 last utterance's final tokens arrive only after `finalize`, and the receive loop
 flushes the last committed word when the drain completes, so an abort before
-Soniox's `finished` loses them; the cap stays below the ten-second onset buffer
+Soniox's `finished` loses them; the cap stays below the thirty-second onset buffer
 that holds speech resuming during the drain. The
 logical leg stays alive and owns its pending text through that drain; this is
 neither a provider death nor a recovery episode or router health observation.
