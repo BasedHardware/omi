@@ -1,3 +1,12 @@
+"""Offline capture sync surface: manifest admission, /v2/sync-local-files intake,
+the OIDC sync/audio-merge job runners, and playback URL serving.
+
+Fresh and backfill traffic are deliberately split -- backfill never falls back
+into fresh/inline capacity and fresh keeps only a bounded inline fallback -- and
+job polling is window-admitted because an unbounded reconciler drain produced the
+2026-10 edge 429 storm (app/docs/sync-poll-storm.md documents the mechanism).
+"""
+
 from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from database.legal_holds import DestructiveOperationInProgress

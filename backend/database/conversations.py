@@ -1,3 +1,13 @@
+"""Conversation document persistence: read/write codecs, transcript decode,
+visibility, and revision-checked lifecycle writes.
+
+Transcript and detail fields are encrypted at rest, so every read and write must
+pass through the prepare/encode paths here; durable mutations are also the
+fail-open Typesense projection choke point. Hard delete purges Firestore only --
+external artifact cleanup belongs to orchestrators (backend/database/ARCHITECTURE.md,
+backend/docs/storing-conversations.md).
+"""
+
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks

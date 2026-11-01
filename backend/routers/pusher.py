@@ -1,3 +1,13 @@
+"""The /v1/trigger/listen WebSocket: binary device-audio ingestion, live STT and
+speaker dispatch, and record-barrier custody for realtime capture.
+
+Each long-lived connection supervises several concurrent tasks under a strict
+executor-pool discipline (workers are leaf operations; coordinators never share
+a pool with their children), and uncommitted audio is never dropped -- durable
+receipts and backpressure own the handoff. backend/docs/listen_pusher_pipeline.mdx
+owns the wire and finalization contract this file implements.
+"""
+
 import hashlib
 import os
 import struct
