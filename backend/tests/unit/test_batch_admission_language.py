@@ -1,22 +1,30 @@
 """New-custody language exclusion; existing receipts and the kill path stay intact."""
 
 from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
+from config.batch_pipeline_language import (
+    admission_language_exclusion_enabled,
+    admission_language_sample_enabled,
+    batch_admission_language,
+)
 from config.policy import BatchUnitPolicy
 from database.batch_pipeline_intake import admit
 from tests.unit.test_batch_language_eligibility import admitted, upload
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
+from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from utils.sync import final_pass_rehome
 
 
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
     monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
     monkeypatch.delenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', raising=False)
 
@@ -27,6 +35,8 @@ def defaults(monkeypatch):
 async def test_multilingual_unknown_or_unsupported_conversation_never_enters_custody(
     monkeypatch, language, user_language
 ):
+    # Sampling off is the full exclusion; sampled admission is covered below.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', 'false')
     writer = Mock(side_effect=AssertionError('excluded upload wrote batch custody'))
     monkeypatch.setattr(intake, 'admit', writer)
     response, staged, probe = await upload(
@@ -132,6 +142,89 @@ async def test_supported_conversation_overrides_unsupported_user_preference(monk
     )
     assert admitted(response, staged)
     assert probe.call_args.args[0] == 'en'
+
+
+def decision(language, safe, confidence=0.99):
+    return SimpleNamespace(
+        language=language, parakeet_safe=safe, evidence='audio_lid', confidence=confidence, probe_seconds=6.0
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('inherit', ['true', 'false'])
+@pytest.mark.parametrize('user_language,conversation', [('en', None), ('multi', None), ('es', 'und'), ('en', '')])
+async def test_unknown_multilingual_upload_admits_after_a_parakeet_safe_sample(
+    monkeypatch, inherit, user_language, conversation
+):
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', inherit)
+    excluded = Mock()
+    monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch, user_language=user_language, conversation_language=conversation, mode='on', evidence=evidence
+    )
+    assert admitted(response, staged) and not evidence.language_excluded
+    # The declared user language is never pinned: the audio itself is classified.
+    assert probe.call_args.args[0] == 'multi'
+    assert probe.staged_context['stt_language'] == 'en'
+    excluded.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'sample', [decision('ja', False), decision('en', False, 0.4), decision('und', False, 0.0), decision('zh', False)]
+)
+async def test_unsafe_or_unavailable_sample_keeps_the_upload_on_legacy(monkeypatch, sample):
+    writer = Mock(side_effect=AssertionError('unsafe sample wrote batch custody'))
+    excluded = Mock()
+    monkeypatch.setattr(intake, 'admit', writer)
+    monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', mode='on', decision=sample, evidence=evidence
+    )
+    assert response is None and staged == [] and probe.call_count == 1
+    writer.assert_not_called()
+    assert excluded.call_args.args[1] == 'unknown_multilingual_conversation'
+    # The intake outcome counter (#24283) attributes the legacy landing to the language gate.
+    assert evidence.language_excluded and not evidence.heavy_owner_excluded
+
+
+@pytest.mark.asyncio
+async def test_refused_sample_probe_keeps_the_refusal_instead_of_legacy(monkeypatch):
+    # Consent revoked during the first unit's LID: the guard's refusal wins over the
+    # unsafe-sample legacy route, so the client keeps its audio and retries.
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: False)
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    unsafe = decision('und', False, 0.0)
+
+    def refused(*args, **kwargs):
+        assert kwargs['before_probe']() is False
+        return unsafe
+
+    excluded = Mock()
+    monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', decision=unsafe)
+    assert response is None and excluded.call_count == 1  # control: unrefused unsafe sample → legacy
+    excluded.reset_mock()
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', decision=refused)
+    assert probe.call_count == 1
+    assert response is not None and response.status_code == 503 and staged == []
+    excluded.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('user,conversation', [('ja', None), ('en', 'vi'), ('multi', 'ko-KR')])
+async def test_known_unsupported_language_is_never_sampled(monkeypatch, user, conversation):
+    response, staged, probe = await upload(monkeypatch, user_language=user, conversation_language=conversation)
+    assert response is None and not staged and not probe.called
+
+
+@pytest.mark.parametrize('raw,expected', [(None, True), ('true', True), ('garbage', True), ('false', False)])
+def test_sample_switch_is_default_on(monkeypatch, raw, expected):
+    if raw is not None:
+        monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', raw)
+    assert admission_language_sample_enabled() is expected
 
 
 @pytest.mark.parametrize('raw', [None, '', 'true', 'TRUE', 'garbage'])

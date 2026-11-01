@@ -21,6 +21,7 @@ import numpy as np
 from utils.async_tasks import wait_for_event
 from utils.stt.batch_pressure import BatchPressure
 from config.live_stt_resilience import window_replica_recovery_enabled
+from config.parakeet_ja import window_endpoint
 from utils.stt.window_replicas import QueueTimeout, can_route_replicas, post_window, window_replicas
 from utils.stt import window_replicas as replica_http
 from utils.http_client import get_stt_client, get_stt_semaphore
@@ -378,6 +379,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._beyond_window_repost: int | None = None
         self._agc_peak = 0.0
         self._agc_last_gain = 1.0
+        self._family_endpoint = api_url == os.getenv('HOSTED_PARAKEET_API_URL')
         # Only the internal HTTP family uses direct GPU identities.
         self.replica_scoped = window_replica_recovery_enabled() and can_route_replicas(
             api_url, os.getenv('HOSTED_PARAKEET_API_URL'), batch_pressure.ready_replicas()
@@ -725,10 +727,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     def _shed_capacity(self) -> None:
         if not self.replica_scoped:
-            st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
-                error_class='capacity_full'
-            )
+            self._record_family_failure('capacity_full')
         self.fail('capacity_full', capacity_subtype='buffer_cap')
+
+    def _record_family_failure(self, error_class: str) -> None:
+        # The shared Parakeet circuit describes the default (v3) pool. A failure
+        # on another endpoint, such as the Japanese model, must not open it.
+        if self._family_endpoint:
+            st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                error_class=error_class
+            )
 
     def finish(self) -> None:
         self._closed = True
@@ -1373,9 +1381,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self.fail('capacity_full', capacity_subtype='queue_timeout')
                 response.raise_for_status()
             if response.status_code >= 500:
-                st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
-                    error_class='provider_5xx'
-                )
+                self._record_family_failure('provider_5xx')
                 self.fail('provider_5xx')
                 response.raise_for_status()
             if response.status_code == 413:
@@ -1397,9 +1403,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             raise
         except (TimeoutError, httpx.TimeoutException):
             if not self.replica_scoped:
-                st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
-                    error_class='timeout'
-                )
+                self._record_family_failure('timeout')
             self.fail('timeout')
             raise
         except Exception:
@@ -1486,12 +1490,18 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         return emitted
 
 
-def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate: int) -> WindowedParakeetSocket:
+def connect_window(
+    callback: Callable[[list[dict[str, Any]]], None], sample_rate: int, *, language: str = ''
+) -> WindowedParakeetSocket:
+    api_url = window_endpoint(language)
+    if not api_url:
+        raise ParakeetConnectionError('config_incomplete')
     try:
         min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
     except ValueError:
         min_replicas = 0
-    if not batch_pressure.allows(
+    # Batch pressure describes the default pool; the Japanese deployment has its own.
+    if api_url == os.getenv('HOSTED_PARAKEET_API_URL') and not batch_pressure.allows(
         os.getenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', ''),
         min_replicas,
     ):
@@ -1499,7 +1509,7 @@ def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate
         raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
     release = admission.acquire()
     try:
-        socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)
+        socket = WindowedParakeetSocket(callback, api_url, sample_rate, release)
         socket.start()
         # Count only a socket whose pump started successfully. Keeping this at the
         # connection boundary makes the accepted outcome describe an actual

@@ -168,10 +168,14 @@ def test_default_off_flags_are_independent(monkeypatch):
         'SYNC_POLL_BACKOFF_ENABLED',
         'SYNC_REPROCESS_COALESCE_ENABLED',
         'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED',
+        'OMI_ENV_STAGE',
+        'FIRESTORE_EMULATOR_HOST',
     ):
         monkeypatch.delenv(name, raising=False)
     assert not repeat_work.playback_on_demand() and not repeat_work.revision_reuse() and not repeat_work.poll_backoff()
-    assert not sync_reprocess.coalesce_enabled() and not sync_reprocess.dedupe_enabled()
+    # 2026-11-01 (repeatflags): dedupe is the serving default everywhere; the
+    # outbox coalesce default needs an outbox-owning runtime (prod/emulator).
+    assert not sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
     assert sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
     assert not repeat_work.playback_on_demand() and not repeat_work.poll_backoff()

@@ -5002,8 +5002,10 @@ one warning per process. No environment overrides it.
 Two triggers start a planned close:
 
 - **VAD silence.** Continuous active-VAD silence for the threshold, after the
-  gate's hangover has released the word boundary.
-- **No client frames.** `SONIOX_IDLE_NO_FRAMES_SECONDS` (default `60`, floor
+  gate's hangover has released the word boundary. Until the leg has heard any
+  speech the threshold is the 20 s floor (`trigger="pre_speech"`): there are no
+  words to finalize and no speaker scope yet, and the first onset reopens it.
+- **No client frames.** `SONIOX_IDLE_NO_FRAMES_SECONDS` (default `20`, floor
   `10`, `0` disables only this trigger) of wall time in which the client sent no
   frames at all, in any VAD mode. VAD only runs on arriving frames, so a
   backgrounded app or a dropped pendant otherwise holds a billed socket open on
@@ -5035,7 +5037,11 @@ the cohort kill switch) selects sessions by
 `cohort_bucket(uid, 'soniox-idle-close', bits=64)`, and in-cohort sessions read
 `SONIOX_IDLE_COHORT_CLOSE_SECONDS`, `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR`
 and `SONIOX_IDLE_COHORT_REARM_SECONDS` when set, each falling back to the
-global knob when unset. Out-of-cohort sessions always keep the global values,
+global knob when unset. The cohort is also the speech gate: its overrides may
+go below the global floors (close down to 5 s, one second past the VAD
+hangover; re-arm down to 1 s; cap up to 240 closes per hour), so the treatment
+arm connects Soniox only around speech while the arm metrics price it against
+today's policy. The global knobs keep their floors. Out-of-cohort sessions always keep the global values,
 and `SONIOX_IDLE_CLOSE_SECONDS=0` disables the idle wrapper for everyone
 either way. The receiver-owned budget resolves the arm once per logical session,
 consulting the listen request's uid only while the cohort is armed (percent > 0
@@ -5046,7 +5052,11 @@ closes/reopens/latency/avoided series labelled `arm=control|treatment`.
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
 queue `finalize` behind admitted audio, queue the empty end-of-audio frame, drain
-final tokens for at most two seconds, then close/abort the paid transport. The
+final tokens for at most twenty seconds, then close/abort the paid transport. The
+last utterance's final tokens arrive only after `finalize`, and the receive loop
+flushes the last committed word when the drain completes, so an abort before
+Soniox's `finished` loses them; the cap stays below the thirty-second onset buffer
+that holds speech resuming during the drain. The
 logical leg stays alive and owns its pending text through that drain; this is
 neither a provider death nor a recovery episode or router health observation.
 
@@ -5088,7 +5098,14 @@ real failures even if they arrive during the planned drain.
 Shutdown while closed never opens a socket just to finalize the session.
 
 The `omi_soniox_idle_*` close/reopen/failure counters (including
-`omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"no_frames"}`), reopen latency
+`omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"pre_speech"|"no_frames"}`,
+`omi_soniox_idle_drains_total{outcome="drained"|"timeout"}` and
+`omi_soniox_idle_close_refusals_total{reason="rearm"|"cap"}`, counted once per
+idle episode the re-arm floor or hourly cap kept on keepalives), the
+`omi_soniox_idle_silence_gap_seconds` histogram (active-VAD silence from the
+first silent frame to the next speech, the clock the close threshold reads,
+whether the gap stayed open or was idle-closed; it prices any threshold before a
+cohort runs), reopen latency
 histogram and estimated connected-seconds avoided counter register only for
 flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort,origin}`
 counts the wall time every Soniox websocket is actually open, flag on or off,
@@ -6010,8 +6027,11 @@ received with no stream would be deleted as an empty conversation. No provider
 socket opens at session start (no vendor, no Parakeet window leg); the first
 audio that reaches the socket (the journal refused it, e.g. low disk or a journal
 failure) opens today's stream and counts in
-`omi_listen_deferred_stream_opened_total{deferred_by}`. `CLOUD_LIVE_STT_MODE=off`
-uses the same deferral. Setting the kill switch off revokes at the next
+`omi_listen_deferred_stream_opened_total{deferred_by}`. At teardown,
+`omi_listen_deferred_stream_open_seconds{deferred_by,provider}` observes how long
+that stream stayed open: an upper bound on its provider connection time, which
+separates a stop-time flush (seconds) from a session that streamed throughout.
+`CLOUD_LIVE_STT_MODE=off` uses the same deferral. Setting the kill switch off revokes at the next
 renewal; the client streams again and the stream opens on its first audio.
 
 ### Forward canonical audio archive (default off)
@@ -6639,6 +6659,12 @@ audio, with no legacy bypass (lead ruling 6a783e). Before legacy drain, the lead
 must qualify multilingual/unsupported batch provider routing through Soniox.
 Explicit false restores the former admission and LID input selection. This needs
 a lead-owned backend-sync Cloud Run release; existing units are never rewritten.
+
+With legacy ON, the `unknown_multilingual_conversation` branch is decided on audio
+(`BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED`, default on). Input is forced to `multi`;
+the first unit's LID runs before any staging, and only a Parakeet-safe answer admits
+the upload. An unsafe, low-confidence, skipped or refused sample keeps it on legacy.
+Known-unsupported languages are never sampled. False restores the full exclusion.
 
 Batch self-LID evidence is bound to the authenticated item's owner, segment and
 versioned intake context. The worker requires nonempty job, content and source
@@ -8363,6 +8389,17 @@ retention, admission, profile enrollment or cross-conversation evidence lifetime
 The [retention contract](batch-voice-evidence-retention.md) defines the 24h
 capture deadline, completion +1h shortening, privacy fences and physical erasure.
 Expired evidence stays anonymous; manual speaker receipts keep their authority.
+
+Vendor-route units (provider STT, `recovery_version: 1`) carry the vendor's own
+unit-local speaker turns in `diarization.turns`; the vendor's labelled utterances
+already name the words. With turns present, projection gives the unit the same
+`final:batch:<unit>` scope as a GPU unit (`speaker_match_source: batch_vendor`),
+so sync-off centroids and conversation-wide linking cover overflow traffic too.
+Default-on `BATCH_VENDOR_SPEAKER_TURNS_ENABLED` off makes new and replayed
+projections words-only (unit-local `sync:` labels), and no resolver reads vendor
+centroids or must-links. Like centroid expiry, it does not regroup or rename
+conversations already resolved; manual speaker receipts keep their authority.
+Quarantine-recovered units still have no turns and keep their `sync:` labels.
 
 ## Live speaker epochs: bounded safe repair
 

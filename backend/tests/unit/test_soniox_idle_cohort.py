@@ -76,11 +76,69 @@ def test_treatment_overrides_apply_inside_cohort(monkeypatch):
 
 def test_treatment_close_floor_and_fallbacks(monkeypatch):
     monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
-    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '5')  # below the 20 s floor
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '2')  # inside the VAD hangover
     settings = idle_settings_for('user-1')
-    assert settings.close_seconds == idle_config.MIN_IDLE_CLOSE_SECONDS
+    assert settings.close_seconds == idle_config.MIN_COHORT_CLOSE_SECONDS
     monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', 'off')  # off = no override
     assert idle_settings_for('user-1').close_seconds == idle_config.DEFAULT_IDLE_CLOSE_SECONDS
+
+
+def test_speech_gate_cohort_goes_below_the_global_floors(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '10')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_REARM_SECONDS', '2')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR', '120')
+    settings = idle_settings_for('user-1')
+    assert settings.arm == 'treatment'
+    assert settings.close_seconds == 10.0 < idle_config.MIN_IDLE_CLOSE_SECONDS
+    assert settings.rearm_seconds == 2.0 < idle_config.MIN_REARM_SECONDS
+    assert settings.max_closes_per_hour == 120
+
+
+def test_speech_gate_floors_stay_past_the_hangover_and_bound_flapping(monkeypatch):
+    assert idle_config.MIN_COHORT_CLOSE_SECONDS > idle_config.VAD_HANGOVER_SECONDS
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_REARM_SECONDS', '0.1')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR', '100000')
+    settings = idle_settings_for('user-1')
+    assert settings.rearm_seconds == idle_config.MIN_COHORT_REARM_SECONDS
+    assert settings.max_closes_per_hour == idle_config.MAX_COHORT_CLOSES_PER_HOUR
+
+
+def test_global_knobs_keep_their_floors(monkeypatch):
+    # The global values reach every session without an arm comparison.
+    monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', '10')
+    monkeypatch.setenv('SONIOX_IDLE_REARM_SECONDS', '2')
+    settings = idle_settings_for('user-1')
+    assert settings.arm == 'control'
+    assert settings.close_seconds == idle_config.MIN_IDLE_CLOSE_SECONDS
+    assert settings.rearm_seconds == idle_config.MIN_REARM_SECONDS
+
+
+def test_prod_overlay_runs_the_speech_gate_dark():
+    import pathlib
+
+    import yaml
+
+    chart = pathlib.Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    env = {}
+
+    def walk(node):
+        if isinstance(node, dict):
+            if isinstance(node.get('name'), str) and node['name'].startswith('SONIOX_IDLE_COHORT_') and 'value' in node:
+                env[node['name']] = node['value']
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(yaml.safe_load(chart.read_text()))
+    assert env['SONIOX_IDLE_COHORT_PERCENT'] == '0'  # the lead ramps it; 0 is the kill switch
+    assert float(env['SONIOX_IDLE_COHORT_CLOSE_SECONDS']) >= idle_config.MIN_COHORT_CLOSE_SECONDS
+    assert float(env['SONIOX_IDLE_COHORT_CLOSE_SECONDS']) < idle_config.MIN_IDLE_CLOSE_SECONDS
+    assert float(env['SONIOX_IDLE_COHORT_REARM_SECONDS']) >= idle_config.MIN_COHORT_REARM_SECONDS
+    assert 0 < int(env['SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR']) <= idle_config.MAX_COHORT_CLOSES_PER_HOUR
 
 
 def test_out_of_cohort_uid_stays_control(monkeypatch):
