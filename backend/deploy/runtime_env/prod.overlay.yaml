@@ -1708,6 +1708,11 @@ overlay:
           DREAM_AGENT_CONCURRENCY:
             value: '8'
             category: reliability
+          # Enrichment (/v2/enrichment/run) runs on the postprocess pool and mostly waits on LLM calls:
+          # 64 threads let one instance run its 80 admitted requests instead of queueing 16 of 40 (11-01 packing).
+          POSTPROCESS_EXECUTOR_WORKERS:
+            value: '64'
+            category: reliability
           DREAM_ON_DEMAND_ENABLED:
             value: 'false'
             category: rollout
