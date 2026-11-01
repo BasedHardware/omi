@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,6 +37,32 @@ void main() {
     expect(AuthService.instance.currentUser, isNull);
   });
 
+  group('authStateChanges', () {
+    test("comes from the gateway's own stream when it has one", () async {
+      final streaming = _StreamingGateway();
+      AuthService.installLocalHarnessTokenGateway(streaming);
+      addTearDown(streaming.events.close);
+
+      final seen = <String?>[];
+      final sub = AuthService.instance.authStateChanges.listen((user) => seen.add(user?.uid));
+      addTearDown(sub.cancel);
+      streaming.events
+        ..add(const AuthUserSnapshot(uid: 'u1'))
+        ..add(null);
+      await pumpEventQueue();
+
+      expect(seen, ['u1', null]);
+    });
+
+    test('a gateway without a stream reports its current user once', () async {
+      gateway.user = const AuthUserSnapshot(uid: 'u1');
+
+      final seen = await AuthService.instance.authStateChanges.map((user) => user?.uid).toList();
+
+      expect(seen, ['u1']);
+    });
+  });
+
   group("the sign-in gate (AuthenticationProvider.isSignedIn)", () {
     late AuthenticationProvider provider;
 
@@ -59,7 +87,7 @@ void main() {
   });
 }
 
-final class _Gateway implements AuthTokenGateway {
+base class _Gateway implements AuthTokenGateway {
   AuthUserSnapshot? user;
 
   @override
@@ -70,4 +98,11 @@ final class _Gateway implements AuthTokenGateway {
 
   @override
   Future<void> signOut() async => user = null;
+}
+
+final class _StreamingGateway extends _Gateway implements AuthStateSource {
+  final events = StreamController<AuthUserSnapshot?>.broadcast();
+
+  @override
+  Stream<AuthUserSnapshot?> get authStateChanges => events.stream;
 }

@@ -23,9 +23,14 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
+final class _FirebaseAuthTokenGateway implements AuthTokenGateway, AuthStateSource {
   @override
   AuthUserSnapshot? get currentUser => snapshotOf(FirebaseAuth.instance.currentUser);
+
+  /// FirebaseAuth's `authStateChanges`, not its `userChanges`, which also fires on profile and
+  /// token updates.
+  @override
+  Stream<AuthUserSnapshot?> get authStateChanges => FirebaseAuth.instance.authStateChanges().map(snapshotOf);
 
   static AuthUserSnapshot? snapshotOf(User? user) => user == null
       ? null
@@ -229,11 +234,12 @@ class AuthService {
   /// FirebaseAuth, so every identity read goes through the one seam.
   AuthUserSnapshot? get currentUser => _tokenGateway.currentUser;
 
-  /// Sign-in and sign-out, as identity snapshots: FirebaseAuth's `authStateChanges` (not its
-  /// `userChanges`, which also fires on profile and token updates). Like [currentUser], callers
-  /// should listen here rather than to FirebaseAuth, so identity has one seam.
-  Stream<AuthUserSnapshot?> get authStateChanges =>
-      FirebaseAuth.instance.authStateChanges().map(_FirebaseAuthTokenGateway.snapshotOf);
+  /// Sign-in and sign-out, as identity snapshots from the token gateway. Like [currentUser],
+  /// callers should listen here rather than to FirebaseAuth, so identity has one seam.
+  Stream<AuthUserSnapshot?> get authStateChanges => switch (_tokenGateway) {
+        AuthStateSource source => source.authStateChanges,
+        final gateway => Stream.value(gateway.currentUser),
+      };
 
   static const _pkceCodeVerifierLength = 64;
   static const _pkceCharset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
