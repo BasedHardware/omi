@@ -724,7 +724,16 @@ def test_backlog_choice_counter_is_armed_and_never_carries_free_text():
     from utils.observability import held_content
 
     for source in ('manual', 'upgrade'):
-        for outcome in ('accepted', 'out_of_scope', 'capped', 'nothing_waiting', 'stale_intent', 'error', 'unknown'):
+        for outcome in (
+            'accepted',
+            'out_of_scope',
+            'not_paid',
+            'capped',
+            'nothing_waiting',
+            'stale_intent',
+            'error',
+            'unknown',
+        ):
             assert _choices(source, outcome) is not None
     held_content.record_backlog_choice('synthetic-owner', 'accepted')
     held_content.record_backlog_choice('manual', 'synthetic-owner')

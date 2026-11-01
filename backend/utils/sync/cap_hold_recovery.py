@@ -423,9 +423,12 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
 async def _scope(uid: str, row: dict) -> tuple[str | None, HeldRecoverySkipOutcome | None]:
     """(original dispatch lane, None) when in recovery scope, else (None, why it is not).
 
-    Recovery scope = execution admission plus main's optional recovery cohort (#22991)."""
+    Recovery scope = execution admission plus main's optional recovery cohort (#22991),
+    for an owner on an active paid plan. Free holds stay held on every lane."""
     if not any_recovery_admission_enabled(uid):
         return None, HeldRecoverySkipOutcome.OUT_OF_SCOPE
+    if not await run_blocking(db_executor, funded_processing.paid_owner, uid):
+        return None, HeldRecoverySkipOutcome.NOT_PAID
     meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
     lane = hold_lane(meta)
     if lane is None:

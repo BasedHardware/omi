@@ -121,6 +121,25 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
     return result
 
 
+def paid_owner(uid: str) -> bool:
+    """Held-content recovery spends only for an owner on an active paid plan (David, 2026-11-01).
+
+    Read on every call, never cached, so a downgrade or lapse stops recovery at
+    the next decision. An unreadable entitlement fails closed: the audio stays held.
+    """
+    from database import users as users_db
+    from utils.subscription import is_paid_plan
+
+    try:
+        subscription = users_db.get_user_valid_subscription(uid, provision=False)
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            'event=funded_processing outcome=entitlement_unavailable exception_type=%s', type(exc).__name__
+        )
+        return False
+    return subscription is not None and is_paid_plan(subscription.plan)
+
+
 def monthly_usage(uid: str) -> dict:
     """Subscription reporting shares closed-hour totals instead of rescanning every poll."""
     if not enabled(uid):

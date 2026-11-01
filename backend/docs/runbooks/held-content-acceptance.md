@@ -121,8 +121,10 @@ Do not `sum()` these gauges, and do not `max()` the gauge itself.
 `omi_processing_backlog_choice_total{source,outcome}` counts owner choices:
 `source="manual"` is each `POST /v1/users/processing-backlog/process` (including
 out-of-scope 404s), `source="upgrade"` is each payment upgrade intent; `outcome`
-is `accepted`, `out_of_scope`, `capped`, `nothing_waiting`, `stale_intent`,
-`exceeds_remaining` or `error`. A retried idempotency key counts again.
+is `accepted`, `out_of_scope`, `not_paid` (a Free owner, by design), `capped`,
+`nothing_waiting`, `stale_intent`, `exceeds_remaining` or `error`. A retried
+idempotency key counts again. `omi_held_content_recovery_skipped_total{outcome="not_paid"}`
+counts Free holds a choice skipped; it is intended and outside the recovery gate.
 
 Existing signals include `omi_stt_cap_provider_audio_seconds_total`,
 `omi_stt_cap_recovery_reconciliation_total`,

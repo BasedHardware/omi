@@ -33,7 +33,8 @@ def defer_estimate(conversation: Any) -> dict:
     return {'seconds': seconds, 'units': units, 'version': 'standard_bundle_v1'}
 
 
-def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> ProcessingBacklog | None:
+def snapshot(uid: str, *, allowance=None, audio=None, summary=None, paid=None) -> ProcessingBacklog | None:
+    """A Free owner with waiting work reads ``capped``: no process action, and the route's 402."""
     if not funded_processing.enabled(uid):
         return None
     from database import processing_backlog as store
@@ -49,10 +50,13 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> Processin
     estimate = seconds * rate / 3600 + max(0, summary.get('units', 0))
     remaining, budget = funded_processing.capacity(allowance)
     active = summary.get('state') == 'processing' and summary.get('period') == funded_processing.period_id()
+    waiting = count + deferred > 0
+    if waiting and paid is None:
+        paid = funded_processing.paid_owner(uid)
     state = (
         'capped'
-        if not allowance.managed
-        else 'none' if count + deferred == 0 else 'processing' if active else 'waiting_choice'
+        if not allowance.managed or waiting and not paid
+        else 'none' if not waiting else 'processing' if active else 'waiting_choice'
     )
     return ProcessingBacklog(
         state=state,
@@ -93,13 +97,15 @@ def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: An
 def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> tuple[dict | None, BacklogChoiceOutcome]:
     if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
         return None, BacklogChoiceOutcome.OUT_OF_SCOPE
+    if not funded_processing.paid_owner(uid):
+        return None, BacklogChoiceOutcome.NOT_PAID
     from database import processing_backlog as store
 
     # Pin the grant's month before reads: rollover between validation and the
     # write must expire this grant, never stamp old intent with a new budget.
     period = funded_processing.period_id()
     allowance = funded_processing.allowance(uid)
-    result = snapshot(uid, allowance=allowance)
+    result = snapshot(uid, allowance=allowance, paid=True)
     if result is None:
         return None, BacklogChoiceOutcome.OUT_OF_SCOPE
     # The first delivery of an old payment event is not fresh upgrade consent.

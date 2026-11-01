@@ -190,6 +190,9 @@ async def run(
         return
     if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         return
+    # A lapsed or downgraded owner parks here with the choice and holds intact.
+    if not await run_blocking(db_executor, funded_processing.paid_owner, uid):
+        return
     max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
         return

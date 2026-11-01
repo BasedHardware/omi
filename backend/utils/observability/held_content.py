@@ -98,7 +98,8 @@ RECOVERY = Counter('omi_held_content_recovery', 'Held recovery attempts and comp
 RECOVERY_SKIPPED = Counter(
     'omi_held_content_recovery_skipped',
     'Backlog items a processing choice skipped with no recovery attempt, so recovery_total never sees them: '
-    'out_of_scope owner or lane, unknown_origin hold metadata, or text_out_of_scope',
+    'out_of_scope owner or lane, unknown_origin hold metadata, text_out_of_scope, '
+    'or not_paid (a Free owner, by design)',
     ['outcome'],
 )
 BACKLOG_CHOICE_SOURCES = ('manual', 'upgrade')

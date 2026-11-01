@@ -41,6 +41,22 @@ explicit owner consent, current allowance on the original lane and shared pacing
 A malformed lane list still denies this recovery, as it denies every lane; `sync`
 itself need not be listed.
 
+Held audio recovers only for an owner on an active paid plan (David, 2026-11-01).
+`funded_processing.paid_owner` reads `get_user_valid_subscription(provision=False)`
+on every decision and applies `is_paid_plan`; an unreadable entitlement fails
+closed. It gates the recovery predicate (`cap_hold_recovery._scope`, so
+`_selected_lane`, `recover_selected` and the worker's per-item scope check on every
+lane), `processing_backlog.choose`, the worker `run` and the redrive sweep (which
+visits only paid owners). A Free owner's holds stay held, untouched, on every lane;
+a lapsed or downgraded owner parks at the next decision with choice and holds
+intact. `snapshot` reports `capped` for a Free owner with waiting work, so
+`POST /v1/users/processing-backlog/process` returns its existing 402 and clients
+show Upgrade, while `budget_exhausted` still says whether the monthly limit was
+actually reached. A Free skip counts as
+`omi_held_content_recovery_skipped_total{outcome="not_paid"}` and a Free tap as
+`omi_processing_backlog_choice_total{outcome="not_paid"}`; the recovery gate
+excludes `not_paid`, which is intended.
+
 Rollback for this recovery is `STT_CAP_RECOVERY_COHORT=pct:0` on every API/sync
 recovery executor: it stops every recovery path (consent, worker, redrive,
 selected manifests, provider dispatch) and leaves holds and consent in custody,

@@ -46,6 +46,8 @@ def admission(request, monkeypatch):
     monkeypatch.delenv('STT_CAP_RECOVERY_COHORT', raising=False)
     if raw is not None:
         monkeypatch.setenv('STT_CAP_RECOVERY_COHORT', raw)
+    # Paid owners: the Free gate is test_held_recovery_paid_only.py's subject.
+    monkeypatch.setattr(funded_processing, 'paid_owner', lambda uid: True)
     return SimpleNamespace(uid=uid, allowed=expected)
 
 
@@ -125,7 +127,6 @@ async def test_redrive_skips_excluded_owners_but_keeps_custody_maintenance(admis
     held = SimpleNamespace(id='hold', reference=SimpleNamespace(path=f'users/{admission.uid}/stt_cap_holds/hold'))
     monkeypatch.setattr(redrive.store, 'fleet_snapshot', lambda: {})
     monkeypatch.setattr(redrive, 'publish_fleet', Mock())
-    monkeypatch.setattr(redrive.users_db, 'get_user_valid_subscription', lambda uid, **_: None)
     monkeypatch.setattr(redrive.store, 'discover', lambda kind, **_: [choice] if kind == 'choices' else [held])
     seal, cleanup = Mock(return_value=True), Mock()
     monkeypatch.setattr(redrive.live_cap_staging, 'seal', seal)

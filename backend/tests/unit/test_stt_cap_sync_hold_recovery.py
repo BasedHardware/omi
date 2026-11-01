@@ -30,6 +30,8 @@ def prod_scope(monkeypatch):
     monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
     monkeypatch.delenv('STT_CAP_RECOVERY_COHORT', raising=False)
     monkeypatch.setattr(policy, '_cohort_resolver', lambda: f'uid:{UID}')
+    # A paid owner: Free owners never recover (test_held_recovery_paid_only.py).
+    monkeypatch.setattr(funded_processing, 'paid_owner', lambda uid: True)
 
 
 def test_sync_holds_enter_recovery_scope_with_live_only_lanes(prod_scope):
