@@ -48,10 +48,15 @@ class Provider(migration.PartitionTransport):
                 if all(
                     tuple(sorted(item)) == fields and all(set(v) == {'$eq'} for v in item.values()) for item in expected
                 ):
-                    identities = {tuple(item[name]['$eq'] for name in fields) for item in expected}
-                    clauses.append(
-                        lambda metadata, fs=fields, ids=identities: tuple(metadata.get(f) for f in fs) in ids
-                    )
+                    if len(fields) == 1:
+                        field = fields[0]
+                        identities = {item[field]['$eq'] for item in expected}
+                        clauses.append(lambda metadata, f=field, ids=identities: metadata.get(f) in ids)
+                    else:
+                        identities = {tuple(item[name]['$eq'] for name in fields) for item in expected}
+                        clauses.append(
+                            lambda metadata, fs=fields, ids=identities: tuple(metadata.get(f) for f in fs) in ids
+                        )
                 else:
                     predicates = [Provider._predicate(item) for item in expected]
                     clauses.append(lambda metadata, ps=predicates: any(p(metadata) for p in ps))
@@ -64,6 +69,8 @@ class Provider(migration.PartitionTransport):
                 clauses.append(lambda metadata, f=field, values=values: f in metadata and metadata[f] not in values)
             else:
                 raise AssertionError(f'Unmodeled filter operation: {expected}')
+        if len(clauses) == 1:
+            return clauses[0]
         return lambda metadata: all(check(metadata) for check in clauses)
 
     def call(self, path, payload):

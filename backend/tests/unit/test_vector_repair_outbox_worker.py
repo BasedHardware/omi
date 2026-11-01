@@ -1,14 +1,8 @@
 from datetime import datetime, timezone
 import json
-import sys
-import types
+import pytest
 
-google_stub = sys.modules.setdefault("google", types.ModuleType("google"))
-cloud_stub = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-firestore_stub = sys.modules.setdefault("google.cloud.firestore", types.ModuleType("google.cloud.firestore"))
-firestore_stub.transactional = lambda func: func
-google_stub.cloud = cloud_stub
-cloud_stub.firestore = firestore_stub
+from database import memory_vector_repair_outbox_worker as worker
 
 from database.memory_vector_repair_pinecone_adapter import (
     VECTOR_REPAIR_PINECONE_NAMESPACE,
@@ -27,6 +21,12 @@ from database.memory_vector_repair_outbox_worker import (
     process_vector_repair_purge_outbox_records,
     run_vector_repair_outbox_worker_tick,
 )
+
+
+@pytest.fixture(autouse=True)
+def fake_transaction_runner(monkeypatch):
+    name = '_claim_vector_repair_purge_outbox_snapshot_in_firestore_transaction'
+    monkeypatch.setattr(worker, name, getattr(worker, name).to_wrap)
 
 
 def _record(**overrides):
