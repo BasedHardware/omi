@@ -524,12 +524,21 @@ def test_served_ramp_reads_the_env_entry_and_its_age(monkeypatch):
     now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     document = {
         'envs': {
-            'prod': {'legacy_sync': 'draining', 'percents': {'legacy-sync': 100}, 'updated_at': '2026-01-01T11:55:00Z'}
+            'prod': {
+                'legacy_sync': 'draining',
+                'percents': {'legacy-sync': 100, 'batch-pipeline': 100},
+                'updated_at': '2026-01-01T11:55:00Z',
+            }
         }
     }
     monkeypatch.setattr(store, 'read_ramp', lambda **kwargs: document)
     assert sweep_module.served_ramp(object(), 'prod', now=now) == ('draining', 300.0)
-    document['envs']['prod']['percents']['legacy-sync'] = 25
+    # A batch-only rollback narrows retirement at read time; the bulk sweep must not move the uncovered owners.
+    document['envs']['prod']['percents']['batch-pipeline'] = 50
+    assert sweep_module.served_ramp(object(), 'prod', now=now) == ('on', None)
+    document['envs']['prod']['percents'].pop('batch-pipeline')
+    assert sweep_module.served_ramp(object(), 'prod', now=now) == ('on', None)
+    document['envs']['prod']['percents'].update({'legacy-sync': 25, 'batch-pipeline': 100})
     assert sweep_module.served_ramp(object(), 'prod', now=now) == ('on', None)
     assert sweep_module.served_ramp(object(), 'staging', now=now) == (None, None)
     monkeypatch.setattr(store, 'read_ramp', lambda **kwargs: None)

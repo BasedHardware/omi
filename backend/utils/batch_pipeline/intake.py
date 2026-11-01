@@ -402,18 +402,17 @@ async def accept_upload(
                 policy=policy,
             )
         admission_language = None
-        if (
-            mode is LegacySyncMode.ON
-            and admission_language_exclusion_enabled()
-            and target.get('record_lane_owner') != 'batch_sync_v1'
-        ):
+        if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
             admission_language, exclusion_reason = batch_admission_language(user, target)
-            if exclusion_reason:
-                # Exclusion is safe only while this owner still has legacy.
+            # Exclusion is safe only while this owner still has legacy. Once its
+            # legacy is draining/dark the upload is admitted (C8's provider route
+            # serves it) instead of being refused by both lanes; a supported
+            # conversation keeps its pinned input language in every mode.
+            if exclusion_reason and mode is LegacySyncMode.ON:
                 record_admission_exclusion(
                     target.get('language') or user.get('language'),
                     exclusion_reason,
-                    legacy_available=mode is LegacySyncMode.ON,
+                    legacy_available=True,
                 )
                 return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':

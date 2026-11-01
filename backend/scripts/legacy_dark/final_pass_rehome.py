@@ -158,7 +158,11 @@ def served_ramp(client: Any, env: str, *, now: Optional[datetime] = None) -> tup
         return None, None
     # This operator sweeps every owner. Partial retirement is re-homed by the
     # owner-scoped upload path; never move unrelated owners in a bulk sweep.
-    if entry.get('percents', {}).get('legacy-sync', 0) != 100:
+    # Retirement is nested in batch at read time (runtime_percent.clamp_nesting),
+    # so a batch-only rollback narrows it even while legacy-sync still reads 100.
+    from utils.rollout.runtime_percent import clamp_nesting
+
+    if clamp_nesting(entry.get('percents', {})).get('legacy-sync', 0) != 100:
         return 'on', None
     written = entry.get('updated_at')
     if not isinstance(written, str) or not written:
