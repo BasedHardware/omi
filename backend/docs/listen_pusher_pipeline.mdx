@@ -6643,6 +6643,12 @@ must qualify multilingual/unsupported batch provider routing through Soniox.
 Explicit false restores the former admission and LID input selection. This needs
 a lead-owned backend-sync Cloud Run release; existing units are never rewritten.
 
+With legacy ON, the `unknown_multilingual_conversation` branch is decided on audio
+(`BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED`, default on). Input is forced to `multi`;
+the first unit's LID runs before any staging, and only a Parakeet-safe answer admits
+the upload. An unsafe, low-confidence, skipped or refused sample keeps it on legacy.
+Known-unsupported languages are never sampled. False restores the full exclusion.
+
 Batch self-LID evidence is bound to the authenticated item's owner, segment and
 versioned intake context. The worker requires nonempty job, content and source
 provenance, a finite probability, and a probe duration matching the first 30

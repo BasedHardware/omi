@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 209,
+  "count": 210,
   "names": {
     "BATCH_VENDOR_ROUTING_ENABLED": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTING_PERCENT": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
@@ -40,6 +40,7 @@
     "BATCH_PULL_MULTI_LEASE_ENABLED": {"owner": "pulleff / batch rollout lead", "review_by": "2026-11-29"},
     "SYNC_PROCESSING_HOLD_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28"},
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {"owner": "langexcl / batch rollout lead", "review_by": "2026-11-15"},
+    "BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED": {"owner": "intakefallback / batch rollout lead", "review_by": "2026-11-29"},
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS": {"seeded": "2026-10-25"},
