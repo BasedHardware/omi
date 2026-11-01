@@ -198,6 +198,28 @@ def test_install_is_idempotent(transport):
     assert FirestoreClient.commit is wrapped
 
 
+@pytest.mark.parametrize('value', ['false', ' FALSE '])
+def test_kill_switch_leaves_the_transport_unwrapped(monkeypatch, value):
+    def commit(self, request=None, **kwargs):
+        return CommitResponse()
+
+    monkeypatch.setattr(FirestoreClient, 'commit', commit)
+    monkeypatch.setattr(probe, '_installed', False)
+    monkeypatch.setenv('OMI_FIRESTORE_WRITE_PROBE_ENABLED', value)
+    probe.install_document_write_probe()
+    assert FirestoreClient.commit is commit
+    assert probe._installed is False
+
+
+@pytest.mark.parametrize('value', [None, '', 'true', '0', 'off'])
+def test_kill_switch_is_on_unless_literal_false(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv('OMI_FIRESTORE_WRITE_PROBE_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('OMI_FIRESTORE_WRITE_PROBE_ENABLED', value)
+    assert probe.probe_enabled() is True
+
+
 def test_caller_cap_folds_new_labels_to_other(monkeypatch):
     monkeypatch.setattr(probe, '_known_callers', {f'm{i}:f' for i in range(probe.MAX_WRITE_CALLERS)})
     overflow = probe.FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW._value.get()
