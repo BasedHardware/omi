@@ -18,6 +18,7 @@ from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_en
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
+from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
@@ -71,9 +72,18 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
 
 
 def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
-    return job['duration_seconds'] <= max_seconds and not (
+    return within_unit_ceiling(job['duration_seconds'], max_seconds) and not (
         shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span'
     )
+
+
+def _park_reason(job: dict, max_seconds: float, shared_gpu: bool) -> str:
+    """Bounded label for a head this pull cannot lease; privacy is labeled by the caller."""
+    if not within_unit_ceiling(job['duration_seconds'], max_seconds):
+        return 'pool_duration'
+    if shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span':
+        return 'pool_unit_kind'
+    return 'shared_live_policy'
 
 
 def _prefer_merge_head(
@@ -401,6 +411,7 @@ class Scheduler:
                         )
                     except BatchPrivacyBlocked:
                         blocked.add(queue_key)
+                        observations.append(('parked_privacy', None))
                     else:
                         privacy_checked_segment = job['segment_id']
                         policy = stage_in_transaction(
@@ -419,6 +430,7 @@ class Scheduler:
                                 candidates=candidates,
                             )
                         job.setdefault('unit_kind', 'conversation')
+                        park = None
                         try:
                             if job['segment_id'] != privacy_checked_segment:
                                 tx.check_privacy(
@@ -431,11 +443,14 @@ class Scheduler:
                                 not gpu_key or policy.shared_live
                             )
                         except BatchPrivacyBlocked:
-                            allowed = False
+                            allowed, park = False, 'privacy'
                         if allowed:
                             eligible_queues[queue_key] = job['duration_seconds']
                         else:
                             blocked.add(queue_key)
+                            # Parking is otherwise silent: the owner's whole FIFO waits behind this head.
+                            park = park or _park_reason(job, max_seconds, bool(gpu_key))
+                            observations.append((f'parked_{park}', None))
                 if queue_key in blocked:
                     ring.append(ring.pop(0))
                     if len(blocked) == len(ring):

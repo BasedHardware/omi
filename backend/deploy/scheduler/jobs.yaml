@@ -185,8 +185,9 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/actions/sync-backfill-lifecycle/action.yml
+      # Plan C prod activation: active once the backend train carries ENRICHMENT_TASKS_* on backend-integration
+      # (the sweep verifies that audience); it also sweeps the provider-stt outbox (provider_stt_live).
       - name: enrichment-maintenance
-        lifecycle: planned
         region: us-central1
         schedule: "*/2 * * * *"
         time_zone: UTC

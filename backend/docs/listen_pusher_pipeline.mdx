@@ -7385,6 +7385,12 @@ transaction work; it does not limit positions searched within an owner. The
 `head_not_found_total` and `head_budget_exhausted_total` counters plus
 `predecessor_ready_age_seconds` histogram use only priority/release/namespace
 labels. New ready-predecessor indexes must be READY before deploying this code.
+`head_parked_total{reason}` counts each pull's visit to an owner queue whose
+head it cannot lease (`privacy`, `pool_duration`, `pool_unit_kind`,
+`shared_live_policy`); the whole FIFO waits behind that head, so a steady rate
+names a parked owner. Unit ceilings compare at frame resolution: admitted record
+durations are epoch-clock differences, and a frame-exact hour can read
+3600.0000005 seconds.
 Strict ordered merge remains authoritative; compute remains concurrent per owner.
 `BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` (default `false`) restricts the batch
 owner claim to ordered multipart assignment. Persisted receipts then drive
