@@ -320,6 +320,9 @@ class VendorAttemptOutcome(StrEnum):
     INVALID_RESPONSE = 'invalid_response'
     ABANDONED = 'abandoned'
     SUPERSEDED = 'superseded'
+    # Slice D (bus ask fe314f): our own failure on the attempt (invalid audio before the POST, an
+    # invalid payload or unexpected local error after it). Billable, never fails over.
+    LOCAL_FAILURE = 'local_failure'
 
 
 class VendorHoldReason(StrEnum):

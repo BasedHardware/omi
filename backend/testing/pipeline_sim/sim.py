@@ -54,11 +54,17 @@ from utils.batch_pipeline import pump as pump_module
 from utils.batch_pipeline import quarantine_recovery as recovery_module
 from utils.batch_pipeline import serving as serving_module
 from utils.batch_pipeline.contracts import PoolCapacity, ProjectionBinding, WorkItem
-from utils.batch_pipeline.provider_stt import ProviderSttStage, provider_enqueue, resolve_route
+from utils.batch_pipeline.provider_stt import (
+    ProviderSttStage,
+    VendorCallFailure,
+    provider_enqueue,
+    resolve_route,
+)
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.recovery_disposition import MultilingualEmpty, RecoveryFailure
 from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
 from utils.batch_pipeline.scheduler import Scheduler, owns_lease
+from utils.observability.reasons import VendorAttemptOutcome, VendorHealthReason
 from utils.batch_pipeline.serving import Serving
 from utils.sync.capture import chunk_identity
 
@@ -131,6 +137,18 @@ DEFAULT_FLAGS = {
 BACKFILL_SPEECH_SECONDS_PER_UID_DAY = 4 * 3600  # backend/AGENTS.md: four processed speech hours per UID/day
 
 
+class _SimVendorHealth:
+    """VendorHealth for drills: a vendor inside an outage window is refused (breaker open)."""
+
+    def __init__(self, sim: 'Simulation'):
+        self.sim = sim
+
+    def allows(self, service: str) -> tuple[bool, VendorHealthReason]:
+        if self.sim.config.vendor_health_aware and self.sim.vendor_down(service):
+            return False, VendorHealthReason.BREAKER_OPEN
+        return True, VendorHealthReason.HEALTHY
+
+
 @dataclass
 class SimConfig:
     name: str = 'custom'
@@ -185,6 +203,12 @@ class SimConfig:
     worker_language: str | None = None  # frozen intake metadata, when different from the declared language
     byok: bool = False
     legacy_sync: str = 'on'  # on | draining | dark
+    # Slice D vendor drills. Each (service, start, end) window fails every call to that vendor;
+    # with vendor_health_aware the vendor's health also refuses it (breaker open) so no call is
+    # spent. vendor_failover_routes is the route table's vendor list after the admitted one.
+    vendor_outages: tuple[tuple[str, float, float], ...] = ()
+    vendor_failover_routes: tuple[str, ...] = ()
+    vendor_health_aware: bool = True
 
     def __post_init__(self):
         if isinstance(self.policy, dict):
@@ -349,6 +373,7 @@ class Simulation:
         self.serving: Serving | None = None
         self.recovery: QuarantineRecovery | None = None
         self.polls: list[tuple[float, str, int]] = []
+        self.vendor_calls: collections.Counter = collections.Counter()  # (segment, service) -> calls
         self.provider_stage = (
             None
             if self.store is None
@@ -359,6 +384,8 @@ class Simulation:
                 allowed=lambda *_: True,
                 inspect=self._provider_inspect,
                 clock=self.clock.time,
+                health=_SimVendorHealth(self),
+                failover_routes=lambda language: ('modulate', *self.config.vendor_failover_routes),
             )
         )
         self._seed_customers()
@@ -535,8 +562,15 @@ class Simulation:
         spans = [{'start': start, 'end': end} for start, end in vad_spans(samples)]
         return b'', item.duration_seconds, spans
 
+    def vendor_down(self, service: str) -> bool:
+        now = self.clock.elapsed()  # windows are seconds after the simulation start
+        return any(name == service and start <= now < end for name, start, end in self.config.vendor_outages)
+
     def _provider_call(self, item, language, inspected, *, service):
         """The stage's vendor seam on the paid-provider model; errors map as ``transcribe`` maps them."""
+        self.vendor_calls[(item.segment_id, service)] += 1
+        if self.vendor_down(service):
+            raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.ERROR_5XX)
         try:
             payload = self.modulate(item, None, b'')
         except ProviderUnavailable:

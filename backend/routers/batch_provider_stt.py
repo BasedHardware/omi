@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from database.outbox import Outbox, OutboxKind, outbox_for
 from utils.batch_pipeline.provider_stt import ProviderSttConsumer
 from utils.executors import run_blocking, sync_executor
-from utils.workers.consumer import Result, http_response, run_push
+from utils.workers.consumer import Result, http_response, run_push, run_push_async
 
 ROUTE = '/v2/batch-pipeline/provider-stt/run'
 _BOUNDED_ID = 128
@@ -57,6 +57,25 @@ def run_delivery(
     )
 
 
+async def _run_sync(fn, *args, **kwargs):
+    return await run_blocking(sync_executor, fn, *args, **kwargs)
+
+
+async def run_delivery_async(
+    row_id: str, wake_token: str, *, consumer: ProviderSttConsumer | None = None, outbox: Outbox | None = None
+) -> Result:
+    """The serving delivery: store/GCS/VAD work on the sync executor, the vendor call awaited on the
+    event loop (Velma batch is synchronous-only, so its open request must not hold a thread)."""
+    return await run_push_async(
+        consumer or ProviderSttConsumer(),
+        outbox or outbox_for(OutboxKind.PROVIDER_STT),
+        row_id,
+        wake_token,
+        now=time.time(),
+        run_sync=_run_sync,
+    )
+
+
 @router.post(ROUTE, include_in_schema=False)
 async def run_provider_stt(request: Request, _retry_count: int = Depends(verify_provider_stt_task)):
     try:
@@ -71,5 +90,4 @@ async def run_provider_stt(request: Request, _retry_count: int = Depends(verify_
         or not _bounded(body['wake_token'])
     ):
         return _malformed()
-    result = await run_blocking(sync_executor, run_delivery, body['row_id'], body['wake_token'])
-    return http_response(result)
+    return http_response(await run_delivery_async(body['row_id'], body['wake_token']))

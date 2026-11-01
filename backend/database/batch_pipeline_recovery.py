@@ -7,7 +7,7 @@ from database.batch_pipeline_shadow_hook import mirror_refresh
 
 # A provider-STT unit (C8) has no lease to revoke; its fenced release also clears merge_pending so
 # OrderedMerge stops holding the owner's later captures behind it (no purge follows every fence).
-PROVIDER_STATES = frozenset({'provider_pending', 'provider_running'})
+PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 
 def quarantine_fenced(client: Any, namespace: str, segment_id: str, now: float) -> bool:

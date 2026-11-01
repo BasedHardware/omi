@@ -9,6 +9,7 @@ import hashlib
 import logging
 import os
 import re
+import time
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
@@ -464,6 +465,21 @@ def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
     return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
 
 
+def is_policy_hold(job: dict[str, Any], now: float | None = None) -> bool:
+    """A parked obligation the uncommitted-age proxy must not measure: an allowance hold, or a live
+    ``vendor_held`` provider unit (vendor_route_contracts.is_vendor_policy_hold). A vendor hold
+    whose redrive is overdue past the stale grace is measured again, so a dead redrive surfaces.
+    """
+    if is_allowance_policy_hold(job):
+        return True
+    if job.get('state') != 'vendor_held':
+        return False
+    from config.batch_pipeline_vendor_failover import held_stale_grace_seconds
+    from utils.batch_pipeline.vendor_route_contracts import is_vendor_policy_hold
+
+    return is_vendor_policy_hold(job, time.time() if now is None else now, held_stale_grace_seconds())
+
+
 def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -> int:
     """Count work awaiting a first/re-authorized attempt, never held legacy debt.
 
@@ -498,7 +514,7 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
         docs = list(query.where('state', '==', 'ready').order_by('enqueued_at').limit(1).stream())
         return docs[0].to_dict()['enqueued_at'] if docs else None
     # The uncommitted-age proxy must measure the oldest real commitment: walk a
-    # bounded prefix of the FIFO and skip allowance policy holds. Early return
+    # bounded prefix of the FIFO and skip allowance and vendor policy holds. Early return
     # keeps the healthy case a one-document read; a sentinel row beyond the
     # bound (limit + 1) distinguishes truncation from a FIFO that happens to be
     # exactly as long as the bound.
@@ -515,7 +531,7 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
         if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
             break  # the sentinel row exists: the scan was truncated
         job = doc.to_dict()
-        if is_allowance_policy_hold(job):
+        if is_policy_hold(job):
             oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
             continue
         return job['enqueued_at']
