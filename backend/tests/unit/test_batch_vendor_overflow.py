@@ -75,7 +75,7 @@ class Probe:
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
-    for name in c.FLAGS:
+    for name in (*c.FLAGS, 'BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED'):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(rs, '_tables', rs._TableCache())
     monkeypatch.setattr(rs, '_health', c.AlwaysHealthy())
@@ -201,6 +201,8 @@ def test_thresholds(monkeypatch, enter, exit_, expected):
 
 # --- the backlog signal ----------------------------------------------------------------------------
 
+BUSY = 1000  # admissible fresh units waiting: above the default 300 gate
+
 
 class Clock:
     def __init__(self):
@@ -210,18 +212,27 @@ class Clock:
         return self.now
 
 
-def _overflow(ages, clock):
-    """GpuOverflow whose sample returns the next backlog age (None: empty ring) synchronously."""
+def _overflow(readings, clock):
+    """GpuOverflow whose sample returns the next (age, waiting) reading synchronously; age None: empty."""
     samples = []
 
     def sample(now):
         samples.append(now)
-        age = ages.pop(0)
-        if isinstance(age, Exception):
-            raise age
-        return None if age is None else now - age
+        reading = readings.pop(0)
+        if isinstance(reading, Exception):
+            raise reading
+        age, waiting = reading
+        return (None if age is None else now - age), waiting
 
     return GpuOverflow(sample, clock=clock, monotonic=clock, submit=lambda fn: fn()), samples
+
+
+def _answers(overflow, clock, n):
+    answers = []
+    for _ in range(n):
+        answers.append(overflow.saturated())
+        clock.now += gpu_overflow.REFRESH_SECONDS
+    return answers
 
 
 GpuOverflow = gpu_overflow.GpuOverflow
@@ -229,18 +240,35 @@ GpuOverflow = gpu_overflow.GpuOverflow
 
 def test_hysteresis_enters_at_enter_and_leaves_below_exit():
     clock = Clock()
-    overflow, _ = _overflow([1199.0, 1200.0, 700.0, 600.0, 599.0, None], clock)
-    answers = []
-    for _ in range(6):
-        answers.append(overflow.saturated())
-        clock.now += gpu_overflow.REFRESH_SECONDS
-    assert answers == [False, True, True, True, False, False]
+    ages = [1199.0, 1200.0, 700.0, 600.0, 599.0, None]
+    overflow, _ = _overflow([(age, BUSY) for age in ages], clock)
+    assert _answers(overflow, clock, 6) == [False, True, True, True, False, False]
     assert m.GPU_OVERFLOW_ACTIVE._value.get() == 0
+
+
+def test_stuck_heads_are_not_a_backlog():
+    # 11-01 18:01Z shape: 111 admissible fresh units, the oldest 42 h old, an idle ring.
+    clock = Clock()
+    overflow, _ = _overflow([(153_175.0, 111)] * 3, clock)
+    assert _answers(overflow, clock, 3) == [False, False, False]
+
+
+def test_saturation_ends_when_the_backlog_drains_below_half_the_gate():
+    clock = Clock()
+    overflow, _ = _overflow([(1500.0, 300), (1500.0, 150), (1500.0, 149)], clock)
+    assert _answers(overflow, clock, 3) == [True, True, False]
+
+
+def test_min_ready_units_is_tunable(monkeypatch):
+    monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS', '50')
+    clock = Clock()
+    overflow, _ = _overflow([(1500.0, 111)], clock)
+    assert overflow.saturated() is True
 
 
 def test_one_read_per_refresh_window():
     clock = Clock()
-    overflow, samples = _overflow([1500.0, 0.0], clock)
+    overflow, samples = _overflow([(1500.0, BUSY), (0.0, 0)], clock)
     assert [overflow.saturated() for _ in range(50)] == [True] * 50
     assert len(samples) == 1
     assert m.GPU_BACKLOG_AGE._value.get() == 1500.0
@@ -248,7 +276,7 @@ def test_one_read_per_refresh_window():
 
 def test_a_failed_read_answers_not_saturated():
     clock = Clock()
-    overflow, _ = _overflow([1500.0, RuntimeError('firestore unavailable')], clock)
+    overflow, _ = _overflow([(1500.0, BUSY), RuntimeError('firestore unavailable')], clock)
     assert overflow.saturated() is True
     clock.now += gpu_overflow.REFRESH_SECONDS
     assert overflow.saturated() is False
@@ -258,24 +286,17 @@ def test_an_unschedulable_read_answers_not_saturated():
     def refuse(fn):
         raise RuntimeError('executor shut down')
 
-    overflow = GpuOverflow(lambda now: 0.0, submit=refuse)
+    overflow = GpuOverflow(lambda now: (0.0, BUSY), submit=refuse)
     assert overflow.saturated() is False
 
 
 def test_cold_process_answers_not_saturated_until_the_read_lands():
     pending = []
-    overflow = GpuOverflow(lambda now: now - 5000.0, submit=pending.append)
+    overflow = GpuOverflow(lambda now: (now - 5000.0, BUSY), submit=pending.append)
     assert overflow.saturated() is False
     assert overflow.saturated() is False and len(pending) == 1  # one read in flight, not two
     pending.pop()()
     assert overflow.saturated() is True
-
-
-def test_kill_switch_answers_not_saturated_without_reading(monkeypatch):
-    monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_ENABLED', 'false')
-    samples = []
-    overflow = GpuOverflow(lambda now: samples.append(now) or 0.0, submit=lambda fn: fn())
-    assert overflow.saturated() is False and samples == []
 
 
 def test_store_binding_reads_the_fresh_priority_once_per_process(monkeypatch):
@@ -283,18 +304,23 @@ def test_store_binding_reads_the_fresh_priority_once_per_process(monkeypatch):
 
     class Store:
         def oldest_admissible_ready(self, priority, now):
-            asked.append(priority)
+            asked.append(('oldest', priority))
             return now - 5000.0
+
+        def ready_for_capacity(self, priority, now):
+            asked.append(('count', priority))
+            return BUSY
 
     monkeypatch.setattr(gpu_overflow, '_submit', lambda fn: fn())
     assert gpu_overflow.saturated(Store()) is True
     bound = gpu_overflow._overflow
     assert gpu_overflow.saturated(Store()) is True and gpu_overflow._overflow is bound
-    assert asked == [int(Priority.FRESH)]
+    fresh = int(Priority.FRESH)
+    assert asked == [('oldest', fresh), ('count', fresh)]
 
 
-def test_store_without_the_read_never_overflows():
-    assert gpu_overflow.saturated(SimpleNamespace()) is False
+def test_store_without_the_reads_never_saturates():
+    assert gpu_overflow.saturated(SimpleNamespace(ready_for_capacity=lambda p, n: BUSY)) is False
     assert gpu_overflow._overflow is None
 
 
@@ -402,10 +428,63 @@ async def test_intake_offers_overflow_to_fresh_units_only(monkeypatch, priority,
     reads = []
     monkeypatch.setattr(intake, 'select_route', spy)
     monkeypatch.setattr(intake, 'priority_for', lambda lane, age: priority)
-    monkeypatch.setattr(intake.gpu_overflow, 'saturated', lambda store: reads.append(store) or False)
+    monkeypatch.setattr(intake.gpu_overflow, 'saturated', lambda store: reads.append(store) or True)
     response, staged, _ = await upload(monkeypatch, user_language='en', single=True, mode='draining')
-    assert admitted(response, staged)
+    assert admitted(response, staged)  # draining: no legacy to fall back to
     if offered:
-        assert seen['gpu_saturated']() is False and len(reads) == 1
+        assert seen['gpu_saturated']() is True and len(reads) == 1
+        monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_ENABLED', 'false')
+        assert seen['gpu_saturated']() is False and len(reads) == 1  # the switch is checked first
     else:
         assert seen['gpu_saturated'] is None
+
+
+def _fallbacks(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(intake, 'record_fallback', lambda **labels: recorded.append(labels))
+    return recorded
+
+
+@pytest.mark.asyncio
+async def test_saturated_ring_keeps_a_fresh_legacy_on_upload_on_legacy(monkeypatch):
+    recorded = _fallbacks(monkeypatch)
+    monkeypatch.setattr(intake.gpu_overflow, 'saturated', lambda store: True)
+    response, staged, probe = await upload(monkeypatch, user_language='en', single=True, mode='on')
+    assert response is None and staged == [] and not probe.called  # legacy dispatch, no custody
+    assert recorded == [
+        {
+            'component': 'sync_dispatch',
+            'from_mode': 'batch',
+            'to_mode': 'legacy',
+            'reason': 'capacity_full',
+            'outcome': 'recovered',
+        }
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'case',
+    ['not_saturated', 'backfill', 'draining', 'dark', 'kill_switch', 'batch_owned_conversation'],
+)
+async def test_capacity_fallback_never_applies_outside_its_case(monkeypatch, case):
+    recorded = _fallbacks(monkeypatch)
+    asked = []
+    saturated = case != 'not_saturated'
+    monkeypatch.setattr(intake.gpu_overflow, 'saturated', lambda store: asked.append(store) or saturated)
+    if case == 'backfill':
+        monkeypatch.setattr(intake, 'priority_for', lambda lane, age: Priority.DEEP)
+    if case == 'kill_switch':
+        monkeypatch.setenv('BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED', 'false')
+    response, staged, _ = await upload(
+        monkeypatch,
+        user_language='en',
+        single=True,
+        mode=case if case in ('draining', 'dark') else 'on',
+        conversation_language='en' if case == 'batch_owned_conversation' else None,
+        owner='batch_sync_v1' if case == 'batch_owned_conversation' else None,
+    )
+    assert admitted(response, staged)
+    assert all(labels['reason'] != 'capacity_full' for labels in recorded)
+    if case in ('backfill', 'kill_switch', 'batch_owned_conversation'):
+        assert asked == []  # the backlog is never read when the fallback cannot apply

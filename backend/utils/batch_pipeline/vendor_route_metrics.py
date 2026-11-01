@@ -24,7 +24,7 @@ from utils.observability.reasons import (
 ROUTE_DECISIONS = Counter(contracts.METRIC_ROUTE_DECISIONS, 'Batch vendor route selections', ['route', 'reason'])
 TABLE_LOADS = Counter(contracts.METRIC_TABLE_LOADS, 'Route table resolutions by ladder rung', ['outcome'])
 GPU_OVERFLOW_ACTIVE = Gauge(
-    contracts.METRIC_GPU_OVERFLOW_ACTIVE, '1 while selection sends new fresh GPU units to a vendor (this process)'
+    contracts.METRIC_GPU_OVERFLOW_ACTIVE, '1 while this process reads the GPU ring as past its fresh-backlog SLO'
 )
 GPU_BACKLOG_AGE = Gauge(
     contracts.METRIC_GPU_BACKLOG_AGE, 'Oldest admissible fresh GPU-ring unit age at the last overflow sample'
