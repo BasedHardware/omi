@@ -55,7 +55,10 @@ def _pages(client: Any, collection: str, page_size: int) -> Iterator[list[Any]]:
 
 def postgres_keys(conn: Any, namespace: str, table: str) -> set[str]:
     if table in _TYPED:
-        rows = conn.execute(f'SELECT key FROM {table} WHERE namespace = %s', (namespace,)).fetchall()
+        from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+        query = SQL('SELECT key FROM {} WHERE namespace = %s').format(Identifier(table))
+        rows = conn.execute(query, (namespace,)).fetchall()
     else:
         rows = conn.execute('SELECT key FROM docs WHERE namespace = %s AND tbl = %s', (namespace, table)).fetchall()
     return {row[0] for row in rows}

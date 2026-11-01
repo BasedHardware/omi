@@ -1,0 +1,7 @@
+🔒 [security fix] Fix SQL injection vulnerability in jobstore components
+
+🎯 **What:** The SQL injection vulnerability using f-strings and untrusted inputs for `table` and `field` and other components in multiple files (`backend/database/jobstore/backfill.py`, `backend/database/jobstore/outbox_pg.py`, `backend/database/jobstore/postgres_store.py`) is fixed.
+⚠️ **Risk:** Arbitrary code execution or data exposure/modification due to SQL injections if left unfixed.
+🛡️ **Solution:** Used `psycopg.sql.SQL` and `psycopg.sql.Identifier` to properly quote table names, fields, and other dynamic parameters instead of building raw queries with f-strings.
+
+Failure-Class: none
