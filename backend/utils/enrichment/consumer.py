@@ -197,7 +197,7 @@ class EnrichmentConsumer:
             return Result(
                 Outcome.DEFERRED,
                 ConsumerReason.NOT_DUE,
-                available_at=rows.custody_defer_until(context, row.get('first_pending_at'), now),
+                available_at=context.get('defer_until', now + rows.LIVE_DEFER_SECONDS),
             )
         if superseded:
             if retry_revision is not None:

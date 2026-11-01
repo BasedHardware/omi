@@ -55,8 +55,9 @@ LIVE_DEFER_SECONDS = 120
 # Custody deferrals whose cause can outlive the obligation: a merge redirect that
 # never resolves, a missing row, or a live target/bridge that never settles. On
 # 2026-11-01 about 1.7k such rows, most of them days old, were re-polled every
-# 30-120s: ~80% of backend-sync's /v2/sync-jobs/run deliveries. Past the grace
-# they poll hourly; custody, sweep repair and the eventual resume are unchanged.
+# 30-120s: ~80% of backend-sync's /v2/sync-jobs/run deliveries. Once one reason
+# has deferred a row past the grace (``deferred_since``), it polls hourly;
+# custody, sweep repair and the eventual resume are unchanged.
 STUCK_DEFER_REASONS = frozenset(
     {'redirect_unresolved', 'conversation_missing', 'open_live_target', 'pending_live_bridge'}
 )
@@ -70,14 +71,24 @@ UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a c
 HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
 
 
-def custody_defer_until(context: Row, first_pending_at: Any, now: float) -> float:
+def custody_deferred_since(row: Row, reason: str, now: float) -> float:
+    """Start of the row's current, uninterrupted deferral for ``reason``.
+
+    A different reason, or a completed callback, starts a new episode. It can
+    never predate the obligation's own acceptance, so a reopened dormant row
+    does not inherit an old episode.
+    """
+    since = row.get('deferred_since') if row.get('deferred_reason') == reason else None
+    if not isinstance(since, (int, float)):
+        return now
+    first = row.get('first_pending_at')
+    return max(since, first) if isinstance(first, (int, float)) else since
+
+
+def custody_defer_until(context: Row, deferred_since: float, now: float) -> float:
     """Next wake for a callback custody deferral; long-stuck causes poll hourly."""
     due = context.get('defer_until', now + LIVE_DEFER_SECONDS)
-    if (
-        context.get('defer_reason') in STUCK_DEFER_REASONS
-        and isinstance(first_pending_at, (int, float))
-        and now - first_pending_at >= STUCK_DEFER_GRACE_SECONDS
-    ):
+    if context.get('defer_reason') in STUCK_DEFER_REASONS and now - deferred_since >= STUCK_DEFER_GRACE_SECONDS:
         return max(due, now + STUCK_DEFER_POLL_SECONDS)
     return due
 
@@ -709,9 +720,11 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             if old is None or old.get('owner') != owner or old.get('task_token') != task_token:
                 return old, None
             pending = dict(old)
-            due = custody_defer_until(process_context, old.get('first_pending_at'), current)
+            since = custody_deferred_since(old, process_context['defer_reason'], current)
+            due = custody_defer_until(process_context, since, current)
             pending.update(
                 deferred_reason=process_context['defer_reason'],
+                deferred_since=since,
                 due_at=due,
                 task_due_at=due,
                 task_token=uuid.uuid4().hex,
@@ -730,6 +743,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     def finish(old: Row | None) -> tuple[Row | None, Row | None]:
         if old is None or old.get('owner') != owner:
             return old, None
+        old = {key: value for key, value in old.items() if key != 'deferred_since'}  # A completed callback ends it.
 
         if superseded and retry_revision is not None:
             # An append may precede the repair claim without another outbox
