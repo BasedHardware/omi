@@ -837,7 +837,9 @@ def assign_in_transaction(
         # Capture receipts name segment IDs, so a batch that carries them keeps its pieces.
         segments = join_word_pieces(
             segments,
-            joinable_ids=set() if incoming.get('capture_evidence') else {segment.get('id') for segment in survivors},
+            joinable_ids=(
+                set() if incoming.get('capture_evidence') else {str(segment.get('id')) for segment in survivors}
+            ),
             protected_ids=set(receipt.get('segments') or ()),
         )
         result.update(

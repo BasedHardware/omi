@@ -76,9 +76,9 @@ def drop_replayed_words(existing: list[dict], incoming: list[dict], *, clock: st
     return kept
 
 
-def other_provider_phrases(existing: Iterable[dict], *, clock: str = 'start') -> dict[tuple[str, str, str], list]:
+def other_provider_phrases(existing: Iterable[dict], *, clock: str = 'start') -> dict[tuple[str, ...], list]:
     """Three-word phrases per stored line, as (provider, start) for ``repeats_another_provider``."""
-    phrases: dict[tuple[str, str, str], list] = {}
+    phrases: dict[tuple[str, ...], list] = {}
     for segment in existing:
         provider = segment.get('stt_provider')
         if provider and not _is_word(segment):
@@ -148,12 +148,18 @@ def _absorb_word(into: dict, word: dict) -> None:
     ]
     if into.get('audio_source') or word.get('audio_source'):
         into['audio_source'] = None
-    left = into.get('audio_capture_start'), into.get('audio_capture_end')
-    right = word.get('audio_capture_start'), word.get('audio_capture_end')
-    if None in left or None in right or max(left[0], right[0]) > min(left[1], right[1]):
+    left_start, left_end = into.get('audio_capture_start'), into.get('audio_capture_end')
+    right_start, right_end = word.get('audio_capture_start'), word.get('audio_capture_end')
+    if (
+        left_start is None
+        or left_end is None
+        or right_start is None
+        or right_end is None
+        or max(left_start, right_start) > min(left_end, right_end)
+    ):
         into['audio_capture_start'] = into['audio_capture_end'] = None
     else:
-        into['audio_capture_start'], into['audio_capture_end'] = min(left[0], right[0]), max(left[1], right[1])
+        into['audio_capture_start'], into['audio_capture_end'] = min(left_start, right_start), max(left_end, right_end)
     if into.get('provider_speaker') != word.get('provider_speaker'):
         into['provider_speaker'] = {'id': -1, 'scope': 'ambiguous'}
     into['speaker_grouping_shadow'] = into['speaker_grouping_shadow_expires_at'] = None

@@ -479,8 +479,9 @@ def _kept_capture_proofs(
         for s in segments
         if s.capture_merge_proof is not None and (behind_tail or s.id == tail_id)
     }
-    if behind_tail and tail_id and (capture_proofs or {}).get(str(tail_id)) is not None:
-        kept[str(tail_id)] = capture_proofs[str(tail_id)]
+    tail_proof = (capture_proofs or {}).get(str(tail_id))
+    if behind_tail and tail_proof is not None:
+        kept[str(tail_id)] = tail_proof
     return kept
 
 
