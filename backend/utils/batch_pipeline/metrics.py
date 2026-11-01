@@ -6,6 +6,7 @@ from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGI
 
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
+from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
@@ -80,6 +81,12 @@ class QueueMetrics:
             'omi_batch_pipeline_events_total',
             'Worker transition receipts; jobs/s is rate of completed events',
             ['event'],
+            registry=registry,
+        )
+        self.admission_hold_reasons = Counter(
+            'omi_batch_pipeline_admission_hold_reasons_total',
+            'Evaluated compute-admission hold reasons on policy defers; bounded enum, unknown folds to unknown',
+            ['reason'],
             registry=registry,
         )
         self.completed_audio = Counter(
@@ -181,7 +188,14 @@ class QueueMetrics:
         self.projection_age.set(age)
         self.projection_observed_at.set(now)
 
-    def record(self, event: str, *, wait_seconds: float | None = None, relet: bool = False) -> None:
+    def record(
+        self,
+        event: str,
+        *,
+        wait_seconds: float | None = None,
+        relet: bool = False,
+        reason: str | None = None,
+    ) -> None:
         if event not in {
             'leased',
             'completed',
@@ -199,6 +213,10 @@ class QueueMetrics:
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:
             self.owner_wait.labels('true' if relet else 'false').observe(max(0.0, wait_seconds))
+        if event == 'admission_policy_deferred' and reason:
+            self.admission_hold_reasons.labels(
+                reason=reason_label(ReasonFamily.ADMISSION_HOLD, reason, AdmissionHoldReason)
+            ).inc()
 
     def record_completed_audio(self, outcome: str, seconds: float) -> None:
         if outcome not in WORK_OUTCOMES:

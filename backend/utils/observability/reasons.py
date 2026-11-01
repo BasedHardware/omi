@@ -49,6 +49,7 @@ class ReasonFamily(StrEnum):
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    ADMISSION_HOLD = 'admission_hold'
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
     VENDOR_ROUTE = 'vendor_route'
@@ -188,6 +189,27 @@ class SyncCaptureTimeReason(StrEnum):
     REJECTED_FUTURE = 'rejected_future'
     REJECTED_EARLY = 'rejected_early'
     REJECTED_MALFORMED = 'rejected_malformed'
+
+
+class AdmissionHoldReason(StrEnum):
+    """Closed reasons a compute-admission lease was held at defer time.
+
+    Owner: `utils/batch_pipeline/admission.py`. The literals are that module's
+    fair-use/ceiling/reservation/privacy holds; the spend-gate members mirror
+    the refusal subset of `utils.observability.stt_cap_dispatch.DispatchReason`.
+    Anything else folds to `unknown` by `reason_label`, never free text.
+    """
+
+    UNKNOWN = 'unknown'
+    FAIR_USE_RESTRICTED = 'fair_use_restricted'
+    DAILY_AUDIO_CEILING = 'daily_audio_ceiling'
+    BACKFILL_RESERVATION = 'backfill_reservation'
+    PRIVACY_BLOCKED = 'privacy_blocked'
+    CONSENT_DENIED = 'consent_denied'
+    ALLOWANCE_EXHAUSTED = 'allowance_exhausted'
+    BUDGET_EXHAUSTED = 'budget_exhausted'
+    ALLOWANCE_UNAVAILABLE = 'allowance_unavailable'
+    ACCESS_DENIED = 'access_denied'
 
 
 class WorkOutcome(StrEnum):

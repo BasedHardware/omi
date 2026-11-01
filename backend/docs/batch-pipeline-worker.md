@@ -273,7 +273,11 @@ Export oldest pending/ready/retry age per class, freshness, admission-to-lease o
 wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
 labels. Queue age is an SLO diagnostic, not a replica demand multiplier: a parked
 allowance hold can re-enter `ready` after its backoff while keeping a days-old
-enqueue time. One such row must not buy the entire GPU ceiling.
+enqueue time. One such row must not buy the entire GPU ceiling. Evaluated policy
+defers also export their bounded hold reason
+(`omi_batch_pipeline_admission_hold_reasons_total{reason}`, the closed
+`AdmissionHoldReason` enum; anything unrecognized folds to `unknown`), so the
+cycling-hold population can be split by spend class without reading job rows.
 
 Capacity uses `omi_batch_pipeline_admissible_ready_units`, an indexed aggregate
 over ready, merge-pending, currently available work whose compute status is
