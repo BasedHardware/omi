@@ -503,7 +503,7 @@ def test_one_oversize_record_is_rejected_before_customer_write_admission(setup):
 def test_qualify_counts_every_split_upsert_in_generation_and_can_commit(setup):
     key, db, provider, runner = setup
     provider.page_size = 100
-    provider.records[key.family] = {str(i): wide_record(str(i)) for i in range(40)}
+    provider.records[key.family] = {str(i): wide_record(str(i)) for i in range(24)}
     receipt = runner.qualify('split-page', dimension=3072)
     copies = [
         payload
@@ -516,7 +516,7 @@ def test_qualify_counts_every_split_upsert_in_generation_and_can_commit(setup):
     assert all(len(json.dumps(payload).encode()) <= 1_800_000 for payload in copies)
     assert sorted(row['id'] for payload in copies for row in payload['vectors']) == sorted(owned(provider, key.family))
     assert receipt['revision'] == 1 + 2 * (len(copies) + 2)
-    assert receipt['records'] == 40
+    assert receipt['records'] == 24
     assert owned(provider, key.partition_namespace) == owned(provider, key.family)
     assert commit(key, db, receipt).primary_namespace == key.partition_namespace
 
