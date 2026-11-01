@@ -603,7 +603,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
     def units(*args, **kwargs):
         yield audio_unit(100, b'\x01\x00' * 16000)
 
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
     monkeypatch.setattr(intake, 'resolve_route', spy_route)
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')

@@ -1,12 +1,12 @@
 ---
 title: "Omi"
 icon: "circle-dot"
-description: "The Omi Consumer Version 1 (CV1) is the latest hardware, built for everyday use. Powered by a dual-core nRF5340 SoC with a Wi-Fi 6 chip (not enabled in current firmware) and dual microphones for high-quality audio capture."
+description: "Omi Consumer Version 1 (CV1), the current everyday wearable: specifications, firmware updates, and open-source design files."
 ---
 
 ## Overview
 
-The Omi Consumer Version 1 (CV1) is the production-ready Omi hardware designed for everyday use. It features significant upgrades over the DevKit series.
+The Omi Consumer Version 1 (CV1) is the production-ready Omi hardware, designed for everyday use. It has significant upgrades over the DevKit series.
 
 <CardGroup cols={2}>
   <Card title="nRF5340 SoC" icon="microchip">
@@ -15,17 +15,15 @@ The Omi Consumer Version 1 (CV1) is the production-ready Omi hardware designed f
   <Card title="Wi-Fi 6" icon="wifi">
     nRF7002 chip; Wi-Fi is not enabled in current CV1 firmware
   </Card>
-  <Card title="Dual Microphones" icon="microphone">
+  <Card title="Dual microphones" icon="microphone">
     T5838 top-port PDM mics for superior audio
   </Card>
-  <Card title="Production Quality" icon="gem">
+  <Card title="Production quality" icon="gem">
     Built for everyday consumer use
   </Card>
 </CardGroup>
 
----
-
-## Technical Specifications
+## Technical specifications
 
 | Component | Specification |
 |-----------|---------------|
@@ -35,73 +33,65 @@ The Omi Consumer Version 1 (CV1) is the production-ready Omi hardware designed f
 | Audio | Dual T5838 top-port PDM microphones |
 | Form Factor | Consumer-grade wearable |
 
----
-
-## How to Get It
+## How to get it
 
 <Card title="Order Omi" icon="cart-shopping" href="https://omi.me">
   Purchase the Omi consumer device from the official Based Hardware store
 </Card>
 
----
-
 ## Firmware
 
-The recommended way to update your device is through the Omi app's built-in OTA (Over-The-Air) update feature.
+The recommended way to update your device is through the Omi app's built-in OTA (over-the-air) update feature.
 
 <Steps>
-  <Step title="Install the Omi App">
+  <Step title="Install the Omi app">
     Download from the [Apple App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163) or [Google Play Store](https://play.google.com/store/apps/details?id=com.friend.ios)
   </Step>
-  <Step title="Connect Your Device">
+  <Step title="Connect your device">
     Pair your Omi via Bluetooth
   </Step>
-  <Step title="Check for Updates">
+  <Step title="Check for updates">
     The app will notify you when firmware updates are available
   </Step>
 </Steps>
 
-### Manual Firmware Update
+### Manual firmware update
 
 <AccordionGroup>
-  <Accordion title="Download Pre-built Firmware" icon="download">
+  <Accordion title="Download pre-built firmware" icon="download">
     Download a pre-built firmware version from the [Omi GitHub Releases](https://github.com/BasedHardware/omi/releases?q=Omi_CV1_v).
 
     Look for releases tagged with `Omi_CV1_v<version>` for consumer device compatibility.
   </Accordion>
-  <Accordion title="Compile Firmware Yourself" icon="code">
+  <Accordion title="Compile firmware yourself" icon="code">
     For advanced users who want to customize the firmware:
 
-    <Card title="Firmware Compilation Guide" icon="terminal" href="/doc/developer/firmware/Compile_firmware">
+    <Card title="Firmware compilation guide" icon="terminal" href="/doc/developer/firmware/Compile_firmware">
       Learn how to build firmware from source
     </Card>
   </Accordion>
 </AccordionGroup>
 
----
+## Open source hardware
 
-## Open Source Hardware
-
-<Card title="Open Source Design Files" icon="code-branch" href="/doc/hardware/consumer">
-  Complete PCB schematics, Gerbers, KiCad 9 source (the `altium/` folder name is historical), mechanical STEP files, BOM, and assembly guides — all MIT licensed
+<Card title="Open source design files" icon="code-branch" href="/doc/hardware/consumer/index">
+  Complete PCB schematics, Gerbers, KiCad 9 source (the `altium/` folder name is historical), mechanical STEP files, BOM, and assembly guides, all MIT licensed
 </Card>
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
   <Card title="DevKit 2" icon="microchip" href="/doc/hardware/DevKit2">
-    Developer version with offline storage
+    Legacy developer kit with offline storage
   </Card>
   <Card title="Omi Glass" icon="glasses" href="/doc/hardware/omiGlass">
     Glasses form factor variant
   </Card>
-  <Card title="Firmware Guide" icon="code" href="/doc/developer/firmware/Compile_firmware">
+  <Card title="Firmware guide" icon="code" href="/doc/developer/firmware/Compile_firmware">
     Compile custom firmware
   </Card>
-  <Card title="App Setup" icon="mobile" href="/doc/get_started/introduction">
-    Get started with the Omi app
+  <Card title="What is Omi" icon="mobile" href="/doc/get_started/what-is-omi">
+    Start here
   </Card>
   <Card title="Painting Omi" icon="paint-roller" href="/doc/hardware/PaintingOMI">
     Guide on painting your device

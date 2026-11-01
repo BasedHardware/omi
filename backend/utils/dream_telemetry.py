@@ -94,6 +94,66 @@ def _int(value: Any) -> int:
         return 0
 
 
+def _kind(value: Any) -> str:
+    return str(value) if value in KNOWN_KINDS else 'other'
+
+
+OUTCOME_DECISIONS = frozenset({'undo', 'redo', 'accept', 'dismiss'})
+
+
+def _age(applied_at: Any, now: datetime) -> str:
+    if not isinstance(applied_at, datetime):
+        return 'none'
+    days = (now - applied_at).total_seconds() / 86400
+    return 'lt1d' if days < 1 else 'lt7d' if days < 7 else 'lt30d' if days < 30 else 'gte30d'
+
+
+def outcome_payload(kind: Any, decision: Any, *, applied_at: Any = None, now: datetime | None = None) -> dict[str, Any]:
+    return {
+        'event': 'dream_outcome',
+        'kind': _kind(kind),
+        'decision': decision if decision in OUTCOME_DECISIONS else 'other',
+        'age': _age(applied_at, now or datetime.now(timezone.utc)),
+    }
+
+
+def record_outcome(kind: Any, decision: Any, *, applied_at: Any = None) -> None:
+    """One owner decision on a Dream edit: Undo, Redo, or a Review accept/dismiss. Never raises."""
+    try:
+        payload = outcome_payload(kind, decision, applied_at=applied_at)
+    except Exception as error:
+        try:
+            ERRORS.labels('outcome').inc()
+            logger.warning('event=dream_telemetry_error record=outcome exc=%s', type(error).__name__)
+        except Exception:
+            pass
+        return
+    _emit('outcome', payload)
+
+
+def change_kind(data: Any) -> str | None:
+    """Policy kind of a journaled Dream change: its edit_kind, else its key segment.
+
+    Accepted proposals are re-keyed ``agent:user:<uuid>`` and memory-target
+    spelling keys use ``memory``; both keep the real kind in ``edit_kind``.
+    """
+    try:
+        if not isinstance(data, dict) or dream_kind(data.get('edit_key')) is None:
+            return None
+        edit_kind = (data.get('change') or {}).get('edit_kind')
+        return edit_kind if isinstance(edit_kind, str) and edit_kind else dream_kind(data.get('edit_key'))
+    except Exception:
+        return None
+
+
+def dream_kind(edit_key: Any) -> str | None:
+    """The kind of a Dream-authored edit key (``dream:<kind>:…``), else None."""
+    if not isinstance(edit_key, str) or not edit_key.startswith(('dream:', 'agent:')):
+        return None
+    parts = edit_key.split(':')
+    return parts[1] if len(parts) > 1 else None
+
+
 def _counts(values: Iterable[Any]) -> dict[str, int]:
     return dict(sorted(Counter(_label(value) for value in values).items()))
 
@@ -141,6 +201,12 @@ def pass_payload(report: dict[str, Any]) -> dict[str, Any]:
         'turns': _int(report.get('turns')),
         'tool_calls': sum(_int(count) for count in (report.get('tool_counts') or {}).values()),
         'verifier_calls': _int(report.get('verifier_calls')),
+        'verify_reasons': {_label(key): _int(count) for key, count in (report.get('verify_reasons') or {}).items()},
+        'verifier_by_kind': {
+            _kind(kind): {_label(decision): _int(count) for decision, count in row.items()}
+            for kind, row in (report.get('verifier_by_kind') or {}).items()
+            if isinstance(row, dict)
+        },
         'staged': sum(len(rows) for rows in (report.get('proposed') or {}).values() if isinstance(rows, list)),
         'outcomes': _counts(row.get('status') for row in outcomes if isinstance(row, dict)),
         'applied': _counts(
@@ -168,6 +234,22 @@ def pass_payload(report: dict[str, Any]) -> dict[str, Any]:
         'defect_reports': {_label(key): _int(value) for key, value in feedback.items()},
         'cost_usd': round(float(report['cost_usd']), 4) if isinstance(report.get('cost_usd'), (int, float)) else None,
     }
+
+
+_JUDGE_KEYS = ('kind', 'stratum', 'verdict', 'grounded', 'owner_appropriate', 'useful')
+
+
+def record_judgment(row: dict[str, Any]) -> None:
+    """One content-free value-judge record (scores are -1 when unjudged)."""
+    try:
+        payload: dict[str, Any] = {'event': 'dream_judge'}
+        for key in _JUDGE_KEYS:
+            value = row.get(key)
+            payload[key] = value if isinstance(value, int) and -1 <= value <= 2 else _label(value)
+    except Exception:
+        ERRORS.labels('judge').inc()
+        return
+    _emit('judge', payload)
 
 
 def record_pass(report: dict[str, Any]) -> None:

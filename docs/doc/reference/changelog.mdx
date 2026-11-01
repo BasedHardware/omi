@@ -1,0 +1,35 @@
+---
+title: "Developer changelog"
+icon: "clock-rotate-left"
+description: "Changes to the Omi developer platform: API, MCP, SDKs, CLI, and firmware/BLE protocol."
+---
+
+Newest first. This page covers the developer platform only: the Developer API, MCP server, SDKs, CLI, and firmware/BLE protocol. App release notes live in the app stores and the [help center](https://help.omi.me).
+
+## October 2026
+
+- **API** — Sync uploads with a skewed capture time now get a typed `400 invalid_capture_time` instead of a generic rejection ([#23746](https://github.com/BasedHardware/omi/pull/23746)).
+- **API** — List endpoints accept metadata projections and conditional version checks ([#23394](https://github.com/BasedHardware/omi/pull/23394)).
+- **SDK** — Whisper streaming fixes in the Go device SDK ([#22771](https://github.com/BasedHardware/omi/pull/22771)), Rust SDK ([#22481](https://github.com/BasedHardware/omi/pull/22481)), and Python SDK ([#22266](https://github.com/BasedHardware/omi/pull/22266)).
+- **CLI** — Export recipes for conversations (TSV), action items (CSV/TSV), and goals (Markdown checklist), plus batch import of memories from JSONL or CSV ([#19339](https://github.com/BasedHardware/omi/pull/19339), [#19357](https://github.com/BasedHardware/omi/pull/19357), [#20439](https://github.com/BasedHardware/omi/pull/20439), [#19349](https://github.com/BasedHardware/omi/pull/19349)).
+- **CLI** — `--timeout` sets a per-operation timeout for Developer API and local Desktop API calls ([#19525](https://github.com/BasedHardware/omi/pull/19525)).
+- **API** — Deleting a conversation also purges its photos, screen frames, and search vectors ([#23010](https://github.com/BasedHardware/omi/pull/23010)).
+- **API** — Creating a conversation from segments accepts `folder_id` and calendar meeting context ([#21265](https://github.com/BasedHardware/omi/pull/21265)).
+- **MCP** — Narrowed API key scopes are preserved, and agents can mint read-only keys ([#22114](https://github.com/BasedHardware/omi/pull/22114)).
+- **MCP** — MCP and the Developer API share one search and read contract, so the same query returns the same results on both ([#21436](https://github.com/BasedHardware/omi/pull/21436)).
+- **CLI** — `omi app` runs a local test harness for app webhooks ([#20970](https://github.com/BasedHardware/omi/pull/20970)).
+- **MCP** — OAuth refresh-token rotation retries safely and tolerates a short replay window ([#20885](https://github.com/BasedHardware/omi/pull/20885)).
+- **CLI** — `omi chat` streams answers with shared history, and new task commands ([#20685](https://github.com/BasedHardware/omi/pull/20685)).
+- **MCP** — Tools to rename and clean up People ([#15669](https://github.com/BasedHardware/omi/pull/15669)).
+
+## September 2026
+
+- **MCP** — The hosted server follows MCP spec 2026-07-28 at the canonical `https://api.omi.me/v1/mcp` URL; `/v1/mcp/sse` remains a compatibility alias ([#18745](https://github.com/BasedHardware/omi/pull/18745)).
+- **MCP** — Unknown category filters and unparseable date filters return errors instead of silently wrong results ([#17305](https://github.com/BasedHardware/omi/pull/17305), [#14105](https://github.com/BasedHardware/omi/pull/14105)).
+- **MCP** — Upstream HTTP failures surface as tool errors rather than successful results with an error body ([#13381](https://github.com/BasedHardware/omi/pull/13381)).
+- **Firmware** — A BLE simulator for testing device discovery without hardware ([#13052](https://github.com/BasedHardware/omi/pull/13052)).
+- **API** — Daily recaps are available through the Developer API ([#12923](https://github.com/BasedHardware/omi/pull/12923)).
+
+## Adding an entry
+
+When a merged PR changes a developer-platform surface (API, MCP, SDK, CLI, firmware/BLE protocol), add one line at the top of its month in [`docs/doc/reference/changelog.mdx`](https://github.com/BasedHardware/omi/blob/main/docs/doc/reference/changelog.mdx). Say what a developer can now do or must change, in plain words, and link the PR. Internal fixes and app changes do not get an entry. The full rule is in [`docs/AGENTS.md`](https://github.com/BasedHardware/omi/blob/main/docs/AGENTS.md).

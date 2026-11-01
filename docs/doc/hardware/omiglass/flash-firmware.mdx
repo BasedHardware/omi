@@ -1,14 +1,14 @@
 ---
-title: "Flash Firmware"
+title: "Flash firmware"
 icon: "bolt"
-description: "Flash the latest OmiGlass firmware using PlatformIO"
+description: "Flash the latest omiGlass firmware using PlatformIO"
 ---
 
-This guide walks you through flashing the OmiGlass firmware to your ESP32 S3 XIAO board using PlatformIO.
+This guide shows how to flash omiGlass firmware to your ESP32 S3 XIAO board with PlatformIO.
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed:
+Install the following before you begin:
 
 <Steps>
   <Step title="Install PlatformIO">
@@ -19,7 +19,7 @@ Before you begin, ensure you have the following installed:
     brew install platformio
     ```
 
-    **Using pip (All platforms):**
+    **Using pip (all platforms):**
     ```bash
     pip install platformio
     ```
@@ -30,17 +30,17 @@ Before you begin, ensure you have the following installed:
     ```
   </Step>
 
-  <Step title="Install Required Libraries">
-    PlatformIO will automatically install the required libraries when you build the firmware. The dependencies include:
+  <Step title="Install required libraries">
+    PlatformIO installs the required libraries when you build the firmware. The dependencies include:
 
     - **NimBLE-Arduino** (v1.4.1+) - Bluetooth Low Energy stack
     - **esp32-camera** (v2.0.0+) - Camera driver for ESP32
     - **arduino-libopus** - Audio codec for voice encoding
 
-    These are automatically downloaded from the `platformio.ini` configuration.
+    PlatformIO downloads them based on the `platformio.ini` configuration.
   </Step>
 
-  <Step title="Connect Your Device">
+  <Step title="Connect your device">
     Connect your ESP32 S3 XIAO board to your computer via USB-C cable.
 
     <Note>
@@ -49,20 +49,18 @@ Before you begin, ensure you have the following installed:
   </Step>
 </Steps>
 
----
-
-## Flash the Firmware
+## Flash the firmware
 
 Navigate to the firmware directory and flash using PlatformIO:
 
 <Steps>
-  <Step title="Navigate to Firmware Directory">
+  <Step title="Navigate to the firmware directory">
     ```bash
     cd omiGlass/firmware
     ```
   </Step>
 
-  <Step title="Build and Upload Firmware">
+  <Step title="Build and upload firmware">
     Try the standard build environment first:
 
     ```bash
@@ -80,7 +78,7 @@ Navigate to the firmware directory and flash using PlatformIO:
     </Info>
   </Step>
 
-  <Step title="Wait for Upload">
+  <Step title="Wait for the upload">
     PlatformIO will:
     1. Install dependencies (first time only)
     2. Compile the firmware
@@ -91,18 +89,16 @@ Navigate to the firmware directory and flash using PlatformIO:
   </Step>
 </Steps>
 
----
-
-## Build Environments
+## Build environments
 
 The firmware supports two build environments:
 
 | Environment | Upload Speed | Debug Level | Use Case |
 |------------|--------------|-------------|----------|
-| `seeed_xiao_esp32s3` | 115200 baud | Low (Level 1) | **Recommended** - Standard build for most users |
+| `seeed_xiao_esp32s3` | 115200 baud | Low (Level 1) | **Recommended**: standard build for most users |
 | `seeed_xiao_esp32s3_slow` | 57600 baud | High (Level 5) | Connection issues or detailed debugging |
 
-<Accordion title="Advanced: Build Without Uploading">
+<Accordion title="Advanced: build without uploading">
   If you only want to compile the firmware without uploading:
 
   ```bash
@@ -112,12 +108,10 @@ The firmware supports two build environments:
   The compiled binary will be in `.pio/build/seeed_xiao_esp32s3/firmware.bin`
 </Accordion>
 
----
-
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title="Upload Failed - Device Not Found">
+  <Accordion title="Upload failed: device not found">
     **Problem:** PlatformIO cannot find your ESP32 device.
 
     **Solutions:**
@@ -127,7 +121,7 @@ The firmware supports two build environments:
     - Verify device appears with `ls /dev/tty.*` or `ls /dev/cu.*`
   </Accordion>
 
-  <Accordion title="Permission Denied Error">
+  <Accordion title="Permission denied error">
     **Problem:** Cannot access the serial port.
 
     **Solutions (macOS/Linux):**
@@ -142,7 +136,7 @@ The firmware supports two build environments:
     Then log out and back in.
   </Accordion>
 
-  <Accordion title="Compilation Errors">
+  <Accordion title="Compilation errors">
     **Problem:** Build fails with compilation errors.
 
     **Solutions:**
@@ -162,7 +156,7 @@ The firmware supports two build environments:
       ```
   </Accordion>
 
-  <Accordion title="Upload Hangs or Times Out">
+  <Accordion title="Upload hangs or times out">
     **Problem:** Upload process starts but never completes.
 
     **Solutions:**
@@ -175,17 +169,15 @@ The firmware supports two build environments:
   </Accordion>
 </AccordionGroup>
 
----
+## Next steps
 
-## Next Steps
-
-After successfully flashing the firmware:
+After you flash the firmware:
 
 <CardGroup cols={2}>
-  <Card title="Monitor Device" icon="terminal" href="/doc/hardware/omiglass/monitoring">
+  <Card title="Monitor device" icon="terminal" href="/doc/hardware/omiglass/monitoring">
     Learn how to monitor logs and test your device
   </Card>
-  <Card title="Hardware Assembly" icon="screwdriver-wrench" href="/doc/hardware/omiGlass">
+  <Card title="Hardware assembly" icon="screwdriver-wrench" href="/doc/hardware/omiGlass">
     Complete hardware setup and assembly guide
   </Card>
 </CardGroup>

@@ -11,6 +11,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from config.batch_pipeline import projection_followup_page_enabled
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
@@ -351,6 +352,7 @@ class ProjectionStore:
         """Stop re-sweeping a persisted sibling; keep ledger/assignment fences intact."""
 
         policy = policy or self.policy(segment_id)
+        group_ready = projection_followup_page_enabled()
 
         @firestore.transactional
         def commit(transaction):
@@ -359,6 +361,7 @@ class ProjectionStore:
             if session.receipt().get('state') != 'ready':
                 return False
             held = False
+            ready = []
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 result = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -374,8 +377,26 @@ class ProjectionStore:
                     ):
                         raise ProjectionBlocked('quarantined sibling binding mismatch')
                     held = True
+                if (
+                    group_ready
+                    and (result.get('projection') or {}).get('state') == 'ready'
+                    and result.get('projection_state') in {'persisted', 'ready'}
+                ):
+                    if (
+                        not job.get('projection_binding')
+                        or normalized_binding(job['projection_binding']) != binding
+                        or job.get('owner_id') != binding.owner_id
+                        or result.get('owner_key') != owner_key(binding.owner_id)
+                        or result.get('segment_id') != sibling
+                    ):
+                        raise ProjectionBlocked('ready sibling binding mismatch')
+                    ready.append(self.ref('results', sibling))
             if held:
-                transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
+                # One page's ready siblings share a completion probe. Settle
+                # their discovery hints together using the read set above;
+                # otherwise they would trickle out one row per later pass.
+                for ref in ready if group_ready else [session.result_ref]:
+                    transaction.update(ref, {'projection_state': 'quarantine_held'})
             return held
 
         held = self.run(commit, policy=policy)

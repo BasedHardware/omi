@@ -10,6 +10,9 @@ import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/session_replay.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
+/// One flag answered by Omi's own flag store (`GET /v1/flags`).
+typedef OmiFlag = ({bool enabled, String? variant, String? payloadJson});
+
 class PostHogAnalyticsAdapter
     implements
         AnalyticsResolvedFlagAdapter,
@@ -27,6 +30,7 @@ class PostHogAnalyticsAdapter
     http.Client? client,
     Future<String?> Function()? distinctIdReader,
     this.personPropertiesForFlags,
+    this.omiFlags,
     DateTime Function()? clock,
   })  : _client = client,
         _distinctIdReader = distinctIdReader,
@@ -38,6 +42,13 @@ class PostHogAnalyticsAdapter
   /// Person properties sent with a verified fetch so property-targeted flags match a just-created
   /// identity before PostHog has ingested its `\$set` (a fresh account's email, for one).
   final Map<String, Object?> Function()? personPropertiesForFlags;
+
+  /// Fetches the keys Omi's flag store owns for the signed-in account (null on failure). Those keys answer
+  /// ahead of PostHog; every other key keeps PostHog's answer, so flags move off PostHog one at a time.
+  final Future<Map<String, OmiFlag>?> Function()? omiFlags;
+
+  /// The last Omi answer for the identity in force; cleared on identity change and replaced on reload.
+  Map<String, OmiFlag> _omi = const {};
   final DateTime Function() _clock;
 
   /// How long a verified fetch outranks the SDK cache. Long enough for the read that asked for it
@@ -71,6 +82,7 @@ class PostHogAnalyticsAdapter
   void _identityChanged() {
     _identityGeneration++;
     _verified = null;
+    _omi = const {};
   }
 
   final String apiKey;
@@ -186,10 +198,16 @@ class PostHogAnalyticsAdapter
   Map<String, Object> _captureProperties(Map<String, Object>? properties) => {...?properties};
 
   @override
-  bool isBooleanFeatureEnabledCached(String key) => _fresh?.flags[key] == true;
+  bool isBooleanFeatureEnabledCached(String key) {
+    final omi = _omi[key];
+    if (omi != null) return omi.enabled && omi.variant == null;
+    return _fresh?.flags[key] == true;
+  }
 
   @override
   Future<bool> isBooleanFeatureEnabled(String key) async {
+    final omi = _omi[key];
+    if (omi != null) return omi.enabled && omi.variant == null;
     final verified = _fresh;
     if (verified != null) return verified.flags[key] == true;
     final result = await Posthog().getFeatureFlagResult(key);
@@ -198,6 +216,8 @@ class PostHogAnalyticsAdapter
 
   @override
   Future<bool?> resolvedFeatureEnabled(String key) async {
+    final omi = _omi[key];
+    if (omi != null) return omi.enabled;
     final verified = _fresh;
     if (verified != null) {
       final value = verified.flags[key];
@@ -209,6 +229,8 @@ class PostHogAnalyticsAdapter
 
   @override
   Future<bool> isFeatureEnabled(String key) {
+    final omi = _omi[key];
+    if (omi != null) return Future.value(omi.enabled);
     final verified = _fresh;
     if (verified != null) {
       final value = verified.flags[key];
@@ -219,6 +241,8 @@ class PostHogAnalyticsAdapter
 
   @override
   Future<String?> getFeatureFlagVariant(String key) async {
+    final omi = _omi[key];
+    if (omi != null) return omi.enabled ? omi.variant : null;
     final verified = _fresh;
     if (verified != null) {
       final value = verified.flags[key];
@@ -234,6 +258,26 @@ class PostHogAnalyticsAdapter
   /// either way), so its cache is never taken as fresh here.
   @override
   Future<bool> reloadFeatureFlags() async {
+    final results = await Future.wait([_reloadPostHogFlags(), _reloadOmiFlags()]);
+    return results.first;
+  }
+
+  /// A failed or superseded fetch keeps the previous Omi answer for this identity.
+  Future<bool> _reloadOmiFlags() async {
+    final fetch = omiFlags;
+    if (fetch == null) return false;
+    final generation = _identityGeneration;
+    try {
+      final flags = await fetch();
+      if (flags == null || generation != _identityGeneration) return false;
+      _omi = Map.unmodifiable(flags);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _reloadPostHogFlags() async {
     final generation = _identityGeneration;
     final owned = _client == null ? http.Client() : null; // injected clients stay caller-owned
     final client = _client ?? owned!;
@@ -276,6 +320,16 @@ class PostHogAnalyticsAdapter
 
   @override
   Future<Object?> getFeatureFlagPayload(String key) async {
+    final omi = _omi[key];
+    if (omi != null) {
+      final raw = omi.payloadJson;
+      if (!omi.enabled || raw == null) return null;
+      try {
+        return jsonDecode(raw);
+      } on FormatException {
+        return raw;
+      }
+    }
     final verified = _fresh;
     if (verified != null) {
       if (!await isFeatureEnabled(key)) return null;

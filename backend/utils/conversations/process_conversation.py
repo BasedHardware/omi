@@ -74,7 +74,9 @@ from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
-from utils.llm.notes_short_clip import quiet_minimum
+from utils.llm.notes_short_clip import quiet_minimum, has_explicit_reminder
+from utils.llm.notes_short_clip_policy import english_word_floor, selected_summary_app
+from utils.conversations.minimum_derived import is_server_minimum
 from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
@@ -366,6 +368,7 @@ def _get_structured(
     *,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
+    summary_app_selected: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
     recovery_transcript_decoded: bool = True,
     recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
@@ -376,14 +379,12 @@ def _get_structured(
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
-            # An unreadable stored blob is never evidence of an empty capture.
             return Structured(), False
 
         @cache
         def occasion_reason():
             return occasion_retention(uid, conversation, conversation_id)
 
-        # refactor: superseded by utils.conversations.relevance_media when MEDIA_NOISE_MODE=serve
         media_minimum = None if is_release_probe_uid(uid) else content_minimum(uid, conversation, user_kept=user_kept)
         if media_minimum is not None:
             hidden = noise_hidden_from_home(
@@ -402,16 +403,22 @@ def _get_structured(
         user_language = (
             resolve_output_language(uid, language_code)
             if serving_for('NOTES_PACKET_V2_MODE', uid)
-            # Normalized so a 'multi'/'auto' capture tag can never reach a notes prompt.
             else normalize_language(users_db.get_user_language_preference(uid))
             or normalize_language(language_code)
             or 'en'
         )
-        minimum = quiet_minimum(uid, conversation, tz=tz)
+        summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
+        minimum = quiet_minimum(
+            uid,
+            conversation,
+            tz=tz,
+            user_kept=user_kept,
+            summary_app_selected=summary_app_selected,
+        )
         if minimum is not None:
             if relevance_observer is not None:
                 relevance_observer(RelevanceDecision('keep', 'rule', 'content_below_floor', trigger))
-            if recovery_minimum_fallback_observer is not None:
+            if is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
             return minimum, False
         prompt_conversation_id = (
@@ -576,6 +583,9 @@ def _get_structured(
                 and not is_release_probe_uid(uid)
                 and not user_kept
                 and not getattr(main_conv, 'photos', None)
+                and not has_explicit_reminder(main_conv.transcript_segments)
+                and not summary_app_selected
+                and english_word_floor(main_conv, discard_transcript)
                 and recovery_transcript_below_content_floor(main_conv)
             ):
                 if relevance_observer is not None:
@@ -779,10 +789,10 @@ def trigger_conversation_apps(
 ) -> bool:
     """Run the selected summary app for ``conversation``.
 
-    ``first_party_only`` is the user asking for Omi's own notes ("Summarize with
-    Omi"): no preferred app and no suggestion runs, so no template result is
-    produced or paid for.
+    ``first_party_only`` ("Summarize with Omi") skips preferred apps and suggestions.
     """
+    if is_server_minimum(conversation) and not (app_id or first_party_only):
+        return True
     if serving_for('NOTES_PACKET_V2_MODE', uid):
         language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
     else:
@@ -961,10 +971,10 @@ def update_goal_progress(
     idempotency_key_prefix: Optional[str] = None,
 ) -> bool:
     """Extract and update goal progress from conversation text."""
+    if is_server_minimum(conversation):
+        return True
     try:
-        # Legacy eager processing uses the bounded Redis lock. First-open work
-        # instead uses durable per-goal events below, so TTL expiry cannot
-        # duplicate a committed goal mutation.
+        # Eager uses a Redis lock; first-open uses durable per-goal events.
         if idempotency_key_prefix is None and not redis_db.try_acquire_conversation_goal_lock(uid, conversation.id):
             logger.info(f"[GOAL] Skipping already-processed conversation {conversation.id}")
             return True
@@ -1053,10 +1063,9 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
-    Finalization workers use this public boundary while holding their durable
-    lease. Keep the private helper below for existing in-module async callers.
+    Finalization workers and legacy async callers share this admission boundary.
     """
-    if exclude_from_derived(uid, conversation, consumer='memories'):
+    if is_server_minimum(conversation) or exclude_from_derived(uid, conversation, consumer='memories'):
         return
     # The deployment-wide capability fence is mandatory even when this
     # account's non-compatibility writer delegates formation to the sweep.
@@ -2144,6 +2153,9 @@ def _save_action_items(
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
+    if is_server_minimum(conversation):
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_server_minimum').inc()
+        return True
     # Backlog consent outlives a reset: even a fresh available balance must not
     # embed the raw placeholder or change its vector metadata while waiting.
     if getattr(conversation, 'processing_deferred', False) is True:
@@ -2594,16 +2606,10 @@ def process_conversation(
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
 ) -> Conversation:
-    """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
-    fixes run-now, reprocess, bypass, and relevance policy together.
+    """Process using trigger policy and stored user-kept authority.
 
-    ``user_kept`` is the stored ``sync_relevance_user_kept`` restore marker,
-    which the wire model does not carry; it outranks every relevance tier.
-
-    ``first_party_only`` runs no summary app at all (the user asked for Omi's
-    own notes). ``derived_effects_transcript_sha256`` is the stored
-    ``DERIVED_EFFECTS_TRANSCRIPT_FIELD`` digest: the transcript the stored
-    memories, tasks and goal progress were last derived from.
+    ``first_party_only`` requests Omi notes; the derived-effects digest identifies
+    the transcript last used for memories, tasks and goal progress.
     """
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
@@ -2806,9 +2812,7 @@ def process_conversation(
 
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
-    # Filled only by a fresh notes parse that ran with open loops enabled; a
-    # dedupe reuse or quiet-minimum path leaves it empty so the stored
-    # extractions survive this persist untouched.
+    # Empty on dedupe/minimum paths: preserve stored open-loop extractions.
     open_loop_sink: dict[str, Any] = {}
     recovery_minimum_fallback = False
 
@@ -2824,6 +2828,7 @@ def process_conversation(
         conversation_id=generated_conversation_id,
         trigger=trigger,
         user_kept=user_kept,
+        summary_app_selected=bool(app_id or first_party_only),
         relevance_observer=decisions.append,
         recovery_transcript_decoded=recovery_transcript_decoded,
         recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
@@ -2982,7 +2987,7 @@ def process_conversation(
 
     from utils.conversations.demand_processing import lazy_enrichment_enabled
 
-    lazy_effects = lazy_enrichment_enabled(uid) and not discarded
+    lazy_effects = lazy_enrichment_enabled(uid) and not discarded and not is_server_minimum(conversation)
     if lazy_effects and not defer_derived_effects:
         from utils.sync.reprocess import mark_effects
 
@@ -2996,25 +3001,17 @@ def process_conversation(
     if relevance is not None:
         emit_recorded_decision(uid, conversation.id, relevance)
 
-    # Wrap every post-persistence derived effect so the durable finalizer can
-    # defer the bundle until it transactionally claims ownership (#10468 r5).
-    # Captured by _emit_derived_effects so an explicit-selection failure can fail the
-    # reprocess AFTER the derived-effect bundle (persist-as-today, action items, goals)
-    # instead of stranding it mid-way. Only reachable when `app_id` was set; automatic
-    # app selection stays fail-open (SCA-359).
+    # The finalizer defers effects until its ownership claim (#10468 r5). Explicit
+    # app failures propagate after the bundle; automatic selection is fail-open.
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
     user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
-    # Keep-until-replaced is unconditional for user reprocess: a failed or empty
-    # app run must never wipe the template results already stored. The flag
-    # now only selects the 502 error code below.
+    # User reprocess preserves template results on failure; the flag selects 502.
     result_contract = user_reprocess and reprocess_result_contract_enabled()
 
     def _emit_derived_effects() -> None:
-        # AI-based folder assignment
         assigned_folder_id = None
-        if not discarded and not is_reprocess and not conversation.folder_id:
+        if not discarded and not is_reprocess and not conversation.folder_id and not is_server_minimum(conversation):
             try:
-                # Get user's folders
                 user_folders = folders_db.get_folders(uid)
                 if not user_folders:
                     user_folders = folders_db.initialize_system_folders(uid)
@@ -3087,17 +3084,19 @@ def process_conversation(
                 # failure instead of success-with-notes (SCA-359).
                 logger.error('Explicit app selection failed: %s', error)
                 explicit_selection_failures.append(error)
-            # trigger_conversation_apps only mutates the in-memory conversation and the durable write above already
-            # happened, so persist its output the same way the calendar_event/folder_id/audio_files
-            # write-backs do. Otherwise the app summary the LLM just produced is discarded.
+            # Persist app output after the canonical conversation write.
             app_updates = {
                 'apps_results': [result.dict() for result in conversation.apps_results],
                 'suggested_summarization_apps': conversation.suggested_summarization_apps,
             }
             conversations_db.update_conversation(uid, conversation.id, app_updates)
-            # Durable finalization writes its vector directly behind the fanout claim,
-            # including completed replays and terminal intelligence suppression.
-            if not lazy_effects and not defer_derived_effects and not is_reprocess:
+            # Durable finalization owns indexing for deferred work and replays.
+            if (
+                not lazy_effects
+                and not defer_derived_effects
+                and not is_reprocess
+                and not is_server_minimum(conversation)
+            ):
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
             effects_transcript = (
                 derived_effects_transcript_digest(conversation.transcript_segments) if is_reprocess else None

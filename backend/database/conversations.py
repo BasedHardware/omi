@@ -1,7 +1,7 @@
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
-from utils.sync import processing_hold
+from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
 import hashlib
@@ -412,9 +412,13 @@ def encode_conversation_for_write(
     return _prepare_conversation_for_write(conversation_data, uid, level)
 
 
+class TranscriptSegmentsDecodeError(ValueError):
+    """The stored transcript field cannot safely authorize a segment merge."""
+
+
 def _require_segment_list(parsed: Any) -> List[Any]:
     if not isinstance(parsed, list):
-        raise ValueError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
+        raise TranscriptSegmentsDecodeError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
     return parsed
 
 
@@ -448,20 +452,26 @@ def _decode_transcript_segments_blob(
     """
     if isinstance(raw_segments, list):
         return raw_segments
-    if isinstance(raw_segments, str):
-        payload = encryption.decrypt(raw_segments, uid)
-        if require_decryption and payload == raw_segments:
-            # decrypt's display fallback returns the input on authentication
-            # failure. Even parseable plaintext is not a successful decode.
-            raise ValueError('undecodable transcript_segments: decryption failed')
-        if compressed:
-            parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
-        else:
-            parsed = json.loads(payload)
-        return _require_segment_list(parsed)
-    if isinstance(raw_segments, bytes) and compressed:
-        return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
-    raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
+    try:
+        if isinstance(raw_segments, str):
+            payload = encryption.decrypt(raw_segments, uid)
+            if require_decryption and payload == raw_segments:
+                # A display fallback is not proof of successful decryption.
+                raise TranscriptSegmentsDecodeError('undecodable transcript_segments: decryption failed')
+            if compressed:
+                parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+            else:
+                parsed = json.loads(payload)
+            return _require_segment_list(parsed)
+        if isinstance(raw_segments, bytes) and compressed:
+            return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
+    except TranscriptSegmentsDecodeError:
+        raise
+    except (ValueError, TypeError, RecursionError, zlib.error) as error:
+        raise TranscriptSegmentsDecodeError('undecodable transcript_segments: invalid encoding') from error
+    raise TranscriptSegmentsDecodeError(
+        f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}'
+    )
 
 
 def decode_transcript_segments_verified(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
@@ -864,15 +874,14 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
 
 def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
-    if not conversation:
-        return False
-    if is_soft_deleted(conversation):
+    if not conversation or is_soft_deleted(conversation):
         return False
     if not include_discarded:
         # Dream duplicate captures are folded out of product reads, but the
         # preserved recordings stay visible to export/compliance readers.
         if (
             conversation.get('dream_duplicate_of')
+            or bridge_pending.hidden(conversation)
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):
@@ -1052,28 +1061,26 @@ def _collect_visible_conversation_page(
     except ListReadBudgetExhausted:
         return finish(conversations)
 
-    skipped = fetched - len(conversations)
+    refill_reads = 0
     while (
         len(conversations) < limit
+        and refill_reads < _RULE_DISCARD_PAGE_SKIP_CAP
         and fetched == batch_limit
         and last_doc is not None
-        and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP
         and hasattr(conversations_ref, 'start_after')
     ):
-        # A shortfall-sized follow-up lets one stale row end the scan while
-        # visible rows remain. Ask for another full window; the skip cap still
-        # bounds the walk.
+        # Refill only missing slots and bound all follow-up reads, including
+        # visible rows. Pending holds cannot multiply a large requested page.
+        batch_limit = min(limit - len(conversations), _RULE_DISCARD_PAGE_SKIP_CAP - refill_reads)
         follow = conversations_ref.start_after(last_doc).limit(batch_limit)
         fetched = 0
         try:
             for doc in budgeted_stream_iter(follow, budget):
                 fetched += 1
+                refill_reads += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
-                    skipped += 1
-                    if skipped > _RULE_DISCARD_PAGE_SKIP_CAP:
-                        return finish(conversations)
                     continue
                 conversations.append(conversation)
                 if len(conversations) >= limit:
@@ -1119,6 +1126,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         summary_receipt = None
         summary_changed = False
         write_data = copy.deepcopy(conversation_data)
+        write_data.pop('record_audio_partial', None)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         conversation_recorded_time.adopt_membership(transaction, user_ref, write_data)
@@ -1132,6 +1140,12 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 write_data['record_lane_owner'] = existing['record_lane_owner']
             else:
                 write_data.pop('record_lane_owner', None)
+            # The partial coordinator alone owns this receipt, including its
+            # internal barrier fields omitted by the public response model.
+            if existing.get('record_audio_partial'):
+                write_data['record_audio_partial'] = existing['record_audio_partial']
+            else:
+                write_data.pop('record_audio_partial', None)
 
             # Processing owns generated content, while these fields are explicitly
             # user-owned. The transaction retries if a concurrent mutation lands,
@@ -1281,6 +1295,10 @@ def persist_processing_result_with_lifecycle(
         preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
+        if existing.get('record_audio_partial'):
+            write_data['record_audio_partial'] = existing['record_audio_partial']
+        else:
+            write_data.pop('record_audio_partial', None)
         if (
             existing.get('deleted')
             or summary_delivery.repair_fenced(existing)
@@ -1500,7 +1518,12 @@ def get_conversation(
 
 
 def get_conversation_raw_snapshot(
-    uid: str, conversation_id: str, *, firestore_client: Any = None, field_paths: Optional[List[str]] = None
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+    field_paths: Optional[List[str]] = None,
+    timeout: float | None = None,
 ) -> Optional[Dict[str, Any]]:
     """Return the stored conversation document with no read-path decoding.
 
@@ -1512,7 +1535,10 @@ def get_conversation_raw_snapshot(
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
-    snapshot = ref.get() if field_paths is None else ref.get(field_paths=field_paths)
+    kwargs = {} if field_paths is None else {'field_paths': field_paths}
+    if timeout is not None:
+        kwargs.update(timeout=timeout, retry=None)
+    snapshot = ref.get(**kwargs)
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict()
@@ -1923,6 +1949,7 @@ def get_conversations_without_photos(
                 'user_corrections_compressed',
                 'deleted',
                 'dream_duplicate_of',
+                'sync_bridge_pending',
                 'relevance_decision',
                 'sync_relevance_user_kept',
                 'has_photos',
@@ -3605,8 +3632,9 @@ def update_conversation_segments(
         planned = None
         prior_commits: list[list[str]] = []
         if live_segments is not None:
+            raw_segments = current.get('transcript_segments')
             persisted = _decode_transcript_segments_strict(
-                uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+                uid, [] if raw_segments is None else raw_segments, bool(current.get('transcript_segments_compressed'))
             )
             if 'live_transcript_replay_receipt' in current:
                 prior_commits = replay_receipt_commits(

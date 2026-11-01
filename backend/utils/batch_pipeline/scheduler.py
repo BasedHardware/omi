@@ -539,20 +539,24 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', result.segment_id)
             if job.get('state') in {'result_ready', 'committed'}:
-                return job.get('result') == asdict(result) and job.get('token') == token, False
+                return job.get('result') == asdict(result) and job.get('token') == token, False, 0
             if not owns_lease(job, token, now):
-                return False, False
+                return False, False, 0
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
-                return False, False
+                return False, False, 0
             job.update(state='result_ready', result=asdict(result), ready_at=now)
             job.pop('retry_started_at', None)
             job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)
-            return True, True
+            return True, True, job['duration_seconds']
 
-        accepted, changed = self.store.run(commit)
+        accepted, changed, seconds = self.store.run(commit)
         if changed and self.metrics:
             self.metrics.record('completed')
+            try:
+                self.metrics.record_completed_audio(result.outcome, seconds)
+            except Exception:
+                pass  # Duration telemetry cannot undo a fenced completion.
         return accepted
 
     def fail(
@@ -606,6 +610,11 @@ class Scheduler:
             state, attempt, seconds = outcome
             if state == 'quarantined':
                 record_correctness('failed', seconds=seconds)
+            else:
+                try:
+                    logger.info('event=batch_retry reason=worker_failed outcome=deferred attempt=%d', attempt)
+                except Exception:
+                    pass
             # Best effort AFTER the transaction/exception scope: telemetry may
             # neither fail a sibling nor reveal a worker exception via handleError.
             if self.metrics:
@@ -729,7 +738,7 @@ class Scheduler:
                         control = read_control(tx, scheduler_control_key(job['owner_key']))
                         job['state'] = 'ready'
                         _append(tx, control, job)
-                        outcome = ('retry', 0, None)
+                        outcome = ('requeued', 0, None)
                     else:
                         return None
                     tx.put('jobs', segment_id, job)

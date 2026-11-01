@@ -601,6 +601,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               };
         final projectedEpisodes = <String, HomeRow>{};
         final projectedMemberIds = <String>{};
+        final projectedProcessingIds = <String>{};
         if (episodesOn && showRecordings && !convoProvider.isSelectionModeActive) {
           final today = DateTime.now();
           final days = conversationsByDate.keys;
@@ -618,11 +619,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             liveConversationIds: hiddenByLive,
             deletedIds: {...convoProvider.memoriesToDelete.keys, ...episodes.hiddenHomeMembers},
             knownConversations: snapshot.conversations,
+            processingConversations: snapshot.processingConversations,
           );
           conversationsByDate = {};
           for (final row in projected) {
             (conversationsByDate[row.day] ??= []).add(row.conversation);
             projectedMemberIds.addAll(row.episodeConversationIds);
+            if (row.isProcessing) projectedProcessingIds.add(row.conversation.id);
             if (row.episode != null) projectedEpisodes[row.conversation.id] = row;
           }
         }
@@ -832,6 +835,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           ],
                         );
                       case _ConversationListRowKind.conversation:
+                        if (projectedProcessingIds.contains(row.conversation!.id)) {
+                          return ProcessingConversationRow(
+                            key: ValueKey('processing_${row.conversation!.id}'),
+                            conversation: row.conversation!,
+                            episode: projectedEpisodes[row.conversation!.id]?.episode,
+                          );
+                        }
                         // Consecutive locked rows share one frosted card and one upgrade action;
                         // the run's first row draws it and the rest of the run draws nothing.
                         final lockedRun = _lockedRunAt(conversationRows, index);
@@ -848,7 +858,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
                           date: row.date,
-                          fillingSeconds: filling[row.conversation!.id],
+                          fillingSeconds: homeRowFilling(filling, row.conversation!.id,
+                              projectedEpisodes[row.conversation!.id]?.episodeConversationIds),
                           homeEpisode: projectedEpisodes[row.conversation!.id]?.episode,
                         );
                       case _ConversationListRowKind.recording:

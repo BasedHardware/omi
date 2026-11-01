@@ -104,7 +104,7 @@ def get_episode_for_conversation(
         return {'enabled': False, 'episode': None}
     return {
         'enabled': True,
-        'episode': home_read.project_episode(uid, service.episode_for_conversation(uid, conversation_id)),
+        'episode': home_read.project_lookup(uid, service.episode_for_conversation(uid, conversation_id)),
     }
 
 

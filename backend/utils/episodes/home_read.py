@@ -1,19 +1,31 @@
 """Client read projection with only retained, extant episode members."""
 
-from datetime import datetime, timedelta
+import logging
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.episodes import MAX_EPISODE_SECONDS
+from config.episodes import (
+    home_hide_below_floor_rows_enabled,
+    COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
+    COMPOSER_MAX_SCHEDULED_PER_READ,
+    COMPOSER_READ_THROTTLE_SECONDS,
+    MAX_EPISODE_SECONDS,
+)
 from database import conversations, episodes
 from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
 from utils.episodes.policy import utc
 from models.episode import EpisodeCloseReason
+from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
-from utils.conversations.fragment_visibility import is_relevance_discarded
+from utils.conversations.fragment_visibility import is_relevance_discarded, is_user_curated
+
+logger = logging.getLogger(__name__)
 
 
 def list_episode_window(
@@ -75,6 +87,7 @@ def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
     return {**wire, 'emoji': episode.get('emoji') or '', 'members': []}
 
 
+BELOW_FLOOR_ROW_MAX_SECONDS = 60
 MEMBER_FIELDS = [
     'structured',
     'user_title',
@@ -93,6 +106,7 @@ MEMBER_FIELDS = [
     'photos',
     'starred',
     'folder_user_set',
+    'summary_blocked_reason',
 ]
 
 
@@ -117,16 +131,132 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
 
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
     members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
-    return [wire for row in rows if (wire := project_episode(uid, row, members=members)) is not None]
+    wires = [wire for row in rows if (wire := project_episode(uid, row, members=members, list_row=True)) is not None]
+    contained = _contained_ids(rows, wires)
+    wires = [wire for wire in wires if wire['id'] not in contained]
+    schedule_missed_composes(uid, [row for row in rows if row.get('id') not in contained], wires)
+    return wires
+
+
+def _contained_ids(rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> set[str]:
+    """Closed episodes whose visible members another closed episode on the page already shows. Episodes
+    from before membership became singular (2026-10-30) can share members, and each would otherwise
+    get its own row and its own paid compose over the same speech."""
+    closed = {str(row.get('id')): row for row in rows if row.get('status') != 'live'}
+    visible = {wire['id']: {m['id'] for m in wire.get('members') or []} for wire in wires if wire['id'] in closed}
+
+    def preference(episode_id: str) -> tuple[bool, int, str]:
+        return (not closed[episode_id].get('composed_fingerprint'), -len(visible[episode_id]), episode_id)
+
+    kept: list[set[str]] = []
+    contained = set()
+    for episode_id in sorted(visible, key=preference):
+        if any(visible[episode_id] <= members for members in kept):
+            contained.add(episode_id)
+        else:
+            kept.append(visible[episode_id])
+    return contained
+
+
+def project_lookup(uid: str, episode: dict[str, Any] | None) -> dict[str, Any] | None:
+    """One episode for the per-conversation lookup; it carries the same safety net as the list read.
+
+    A fully hidden episode projects to nothing but is still checked, so the composer clears its notes.
+    Lookups arrive one per conversation row, so a per-user budget caps distinct episodes queued across them.
+    """
+    wire = project_episode(uid, episode)
+    if episode is not None and (claim := _lookup_reserve(uid)) is not None:
+        if not schedule_missed_composes(uid, [episode], [wire] if wire is not None else []):
+            _lookup_refund(uid, claim)
+    return wire
+
+
+_lookup_lock = threading.Lock()
+_lookup_spend: dict[str, list[float]] = {}
+
+
+def _lookup_reserve(uid: str) -> float | None:
+    """Claim one of the user's lookup schedules for this window atomically; refunded if nothing queues."""
+    now = time.monotonic()
+    with _lookup_lock:
+        if len(_lookup_spend) > 10_000:
+            # Drop only users with no spend left in the window, so active budgets survive the bound.
+            for key in [k for k, ats in _lookup_spend.items() if not _live(ats, now)]:
+                del _lookup_spend[key]
+        recent = _live(_lookup_spend.get(uid, []), now)
+        if len(recent) >= COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW:
+            _lookup_spend[uid] = recent
+            return None
+        _lookup_spend[uid] = [*recent, now]
+        return now
+
+
+def _lookup_refund(uid: str, claim: float) -> None:
+    """Return this lookup's own reservation, never a concurrent lookup's."""
+    with _lookup_lock:
+        spent = _lookup_spend.get(uid)
+        if spent and claim in spent:
+            spent.remove(claim)
+
+
+def _live(spent: list[float], now: float) -> list[float]:
+    return [at for at in spent if now - at < COMPOSER_READ_THROTTLE_SECONDS]
+
+
+def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> int:
+    """Safety net for the composer: a closed episode that is uncomposed, drifted, or whose visible
+    members changed since its compose (a direct discard or delete) gets one, at most a few per read.
+    Returns how many were queued."""
+    from utils.episodes import composer
+
+    queued = 0
+    try:
+        visible = {wire['id']: [m['id'] for m in wire.get('members') or []] for wire in wires}
+        now = datetime.now(timezone.utc)
+        for row in rows:
+            if queued >= COMPOSER_MAX_SCHEDULED_PER_READ:
+                break
+            closed_at = utc(row.get('closed_at'))
+            if closed_at is None or (now - closed_at).total_seconds() < 60:
+                continue
+            if not composer.needs_compose(row, visible_member_ids=visible.get(str(row.get('id')), [])):
+                continue
+            if composer.schedule(uid, str(row.get('id')), throttle=True):
+                queued += 1
+    except Exception as error:
+        logger.warning(
+            'event=episode_compose_schedule outcome=error source=read exception_type=%s', type(error).__name__
+        )
+    return queued
+
+
+def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:
+    """A closed capture under the notes floor, too brief and too empty to be worth a row.
+
+    List only: search, a direct link and Show discarded still reach it, and nothing is stored.
+    """
+    if not home_hide_below_floor_rows_enabled() or row.get('summary_blocked_reason') != 'content_below_floor':
+        return False
+    if is_user_curated(row) or (row.get('status') or 'completed') != 'completed':
+        return False
+    if ((row.get('structured') or {}).get('overview') or '').strip():
+        return False
+    started, finished = row.get('started_at'), row.get('finished_at')
+    return bool(started and finished and (finished - started).total_seconds() < BELOW_FLOOR_ROW_MAX_SECONDS)
 
 
 def project_episode(
-    uid: str, episode: dict[str, Any] | None, *, members: dict[str, dict[str, Any]] | None = None
+    uid: str,
+    episode: dict[str, Any] | None,
+    *,
+    members: dict[str, dict[str, Any]] | None = None,
+    list_row: bool = False,
 ) -> dict[str, Any] | None:
     if episode is None:
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
     retained: list[dict[str, Any]] = []
+    hidden = 0
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
         if (
@@ -135,6 +265,9 @@ def project_episode(
             or is_relevance_discarded(row)
             or row.get('sync_merged_into')
         ):
+            continue
+        if list_row and _too_short_for_a_home_row(row):
+            hidden += 1
             continue
         structured: dict[str, Any] = row.get('structured') or {}
         retained.append(
@@ -147,8 +280,11 @@ def project_episode(
                 'status': row.get('status') or 'completed',
             }
         )
+    if list_row:
+        episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None
+    retained.sort(key=lambda member: str(member['started_at']))
     ids = {member['id'] for member in retained}
     wire = wire_episode(episode)
     assert wire is not None  # Non-null input always has a wire projection.

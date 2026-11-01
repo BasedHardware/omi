@@ -14486,6 +14486,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get episodeMoments => 'Momenten';
 
   @override
+  String get episodeFollowUps => 'Vervolgstappen';
+
+  @override
+  String get episodeOpenTranscript => 'Transcriptie openen';
+
+  @override
   String get episodeSoFar => 'Tot nu toe';
 
   @override
@@ -14706,12 +14712,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get episodeOnThisPhone => 'Op deze telefoon';
 
   @override
-  String get episodeOpenTranscript => 'Transcriptie openen';
-
-  @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Definitieve transcriptie ongeveer $duration achter';
   }
@@ -14726,7 +14726,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Neemt veilig op';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live op deze telefoon';
+  String get livePreviewOnPhoneDivider => 'Zojuist, op deze telefoon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Live-tekst inschakelen';
@@ -14971,17 +14971,36 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count delen',
-      many: '$count delen',
-      few: '$count delen',
-      two: '$count delen',
-      one: '$count deel',
-      zero: '$count delen',
-    );
-    return '$_temp0';
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Stuur het bericht in $app. Dit scherm wordt bijgewerkt zodra Omi het ontvangt.';
   }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Vraag een nieuwe code aan en stuur die vanuit $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Notities schrijven…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Eerst maken we het transcript af. Je kunt deze pagina verlaten.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Tot $time · volledige notities aan het eind';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Getranscribeerd tot $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration opgeslagen';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.';
 }

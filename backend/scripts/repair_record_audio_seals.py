@@ -2,8 +2,9 @@
 """Repair exact record_pending jobs after retained-tail proof; dry-run by default.
 
 Input: private JSON array of exact pending job IDs (1..128, no discovery scan).
-Dry-run with ro-prod; a separately authorized operator may use prod-operator
-with --apply --approve-plan-sha256 DIGEST from the dry-run. This script prints
+Dry-run with ro-prod or prod-operator; a separately authorized operator must use
+prod-operator with --apply --approve-plan-sha256 DIGEST from the dry-run.
+Firestore emulator use is refused. This script prints
 only aggregate counts, closed dispositions and the opaque plan digest.
 """
 
@@ -54,9 +55,8 @@ def main():
     )
     args = parser.parse_args()
     logging.disable(logging.CRITICAL)
-    if os.getenv('FIRESTORE_EMULATOR_HOST') or os.getenv('GCP_AGENT_TIER') != (
-        'prod-operator' if args.apply else 'ro-prod'
-    ):
+    allowed_tiers = ('prod-operator',) if args.apply else ('ro-prod', 'prod-operator')
+    if os.getenv('FIRESTORE_EMULATOR_HOST') or os.getenv('GCP_AGENT_TIER') not in allowed_tiers:
         parser.error('wrong identity for requested operation')
     if args.apply and not args.approve_plan_sha256:
         parser.error('apply requires a dry-run plan digest')

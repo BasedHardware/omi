@@ -41,7 +41,7 @@ class ChatChannelEndpoint {
 /// The link-proof response carries `deep_link` and `address` when the server is configured.
 /// The PostHog flag payload is only the fallback, and it still names the provider used to mint:
 /// `{"telegram": {"provider": "telegram", "address": "<bot username>"},
-/// "imessage": {"provider": "<provider>", "address": "+1..."}}`. A channel without an address
+/// "imessage": {"provider": "<provider>", "address": "+1..."}, "whatsapp": {...}}`. A channel without an address
 /// is not offered. Fail-closed: no analytics identity, a slow read or a malformed payload all mean
 /// off.
 @immutable
@@ -68,7 +68,7 @@ class ChatAppsConfig {
     }
     final endpoints = <ChatChannel, ChatChannelEndpoint>{};
     if (value is Map) {
-      for (final channel in [ChatChannel.telegram, ChatChannel.imessage]) {
+      for (final channel in ChatChannel.values) {
         final row = value[channel.wireId];
         if (row is! Map) continue;
         final provider = row['provider'];
