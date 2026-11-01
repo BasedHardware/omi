@@ -10,10 +10,20 @@ from models.message_event import MessageServiceStatusEvent
 from routers.listen import local_preview as local_preview_module
 from routers.listen import receiver as receiver_module
 from routers.listen import runtime as runtime_module
-from routers.listen.local_preview import REASONS, admit_local_preview, local_preview_reason, renew_local_preview
+from routers.listen.local_preview import (
+    OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS,
+    REASONS,
+    admit_local_preview,
+    local_preview_reason,
+    note_deferred_stream_closed,
+    renew_local_preview,
+)
 from routers.listen.receiver import ListenReceiver
 from routers.listen.runtime import ListenSessionRuntime
-from utils.metrics import OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL
+from utils.metrics import (
+    OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL,
+    OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
+)
 
 KILL = 'LOCAL_PREVIEW_BATCH_ENABLED'
 
@@ -182,6 +192,104 @@ async def test_cap_paused_deferred_open_waits_for_cap_recovery(monkeypatch):
         fake.ensure_live_demand_routing()
     assert counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview') == before + 1
     fake.host.task_supervisor.create_lifetime_task.assert_called_once_with('run', name='live_demand_routing')
+
+
+def open_seconds(**labels):
+    """(count, sum) of the deferred-stream open-duration histogram for these labels."""
+    samples = [
+        sample
+        for family in OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS.collect()
+        for sample in family.samples
+        if all(sample.labels.get(k) == v for k, v in labels.items())
+    ]
+    count = sum(s.value for s in samples if s.name.endswith('_count'))
+    total = sum(s.value for s in samples if s.name.endswith('_sum'))
+    return count, total
+
+
+def test_deferred_stream_open_duration_observed_once_at_teardown(monkeypatch):
+    clock = [100.0, 103.5]
+    monkeypatch.setattr(receiver_module.time, 'monotonic', lambda: clock.pop(0) if len(clock) > 1 else clock[0])
+    fake = make_receiver(make_host(stt_service=SimpleNamespace(value='soniox')))
+    fake._cloud_live_opening = True
+    fake._cloud_live_deferred_by = 'local_preview'
+    fake._serving_provider = lambda: ListenReceiver._serving_provider(fake)
+    labels = {'deferred_by': 'local_preview', 'provider': 'soniox'}
+    count, total = open_seconds(**labels)
+
+    ListenReceiver.note_deferred_stream_opened(fake)
+    note_deferred_stream_closed(fake)
+    # A second teardown call (or a session that never opened) observes nothing.
+    note_deferred_stream_closed(fake)
+    assert open_seconds(**labels) == (count + 1, pytest.approx(total + 3.5))
+
+    never_opened = make_receiver(make_host())
+    note_deferred_stream_closed(never_opened)
+    assert open_seconds(**labels) == (count + 1, pytest.approx(total + 3.5))
+
+
+def deferred_soniox_receiver():
+    fake = make_receiver(make_host(stt_service=SimpleNamespace(value='soniox'), server_batch_only=False))
+    fake._cloud_live_deferred_by = 'local_preview'
+    fake._serving_provider = lambda: ListenReceiver._serving_provider(fake)
+    fake.note_deferred_stream_opened = lambda: ListenReceiver.note_deferred_stream_opened(fake)
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_cap_resume_on_flush_stamps_the_deferred_open():
+    # The first open hit the funded cap; credit recovered and the flush path opened the stream.
+    fake = deferred_soniox_receiver()
+    fake.host.state.last_audio_received_time = 1.0
+    fake._cloud_live_opening = True
+    fake.cap_paused = True
+
+    async def initialize_stt():
+        fake.cap_paused = False
+        return True
+
+    fake.initialize_stt = initialize_stt
+    fake.cap_admission = SimpleNamespace(
+        allowed=lambda service: True, packet_allowed=lambda *a: False, note_held=Mock(), record_suppressed=Mock()
+    )
+    fake.live_hold = None
+    fake._stt_buffer_start_sample = None
+    fake._emit_stt_cap_live_held = AsyncMock()
+    before = counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview')
+
+    await ListenReceiver._flush_stt_buffer(fake, bytearray(320))
+    assert fake._deferred_open_at is not None
+    assert counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview') == before + 1
+
+
+@pytest.mark.asyncio
+async def test_teardown_observes_a_stream_its_final_flush_opened(monkeypatch):
+    # The stop-time flush is the suspected leak: it opens the stream inside teardown.
+    clock = [50.0, 51.25]
+    monkeypatch.setattr(receiver_module.time, 'monotonic', lambda: clock.pop(0) if len(clock) > 1 else clock[0])
+    fake = deferred_soniox_receiver()
+    fake.host.use_custom_stt = False
+    fake.host.state.active = True
+    fake.recovery = None
+    fake.stt_socket = None
+    fake.stt_sockets_multi = []
+    fake._replay_recovery_task = None
+    fake._replay_delivery = None
+    fake.vad_gate = None
+    fake._replay_tail_bytes = 0
+
+    async def final_flush(buffer, force=False):
+        fake._cloud_live_opening = True
+        ListenReceiver.note_deferred_stream_opened(fake)
+
+    fake._flush_stt_buffer = final_flush
+    fake._drain_stt_sockets = AsyncMock()
+    labels = {'deferred_by': 'local_preview', 'provider': 'soniox'}
+    count, total = open_seconds(**labels)
+
+    await ListenReceiver._teardown_body(fake, bytearray(320), 0)
+    assert open_seconds(**labels) == (count + 1, pytest.approx(total + 1.25))
+    fake._drain_stt_sockets.assert_awaited_once()
 
 
 @pytest.mark.asyncio

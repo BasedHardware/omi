@@ -416,3 +416,14 @@ def test_small_verify_budget_still_batches_ordinary_evidence():
 
     assert _reasons(agree, [item], tokens=2 * (6000 // 3 + 4096 + 200), deadline_seconds=5) == {}
     assert len(seen) == 2
+
+
+def test_a_finished_pass_marks_its_notes_as_written_after_voice_narrowing(runtime, monkeypatch):
+    monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
+    _limited(runtime, monkeypatch)
+    model, _verified = _spender()
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+
+    assert report['status'] == 'complete' and report['notes_voice_free'] is True

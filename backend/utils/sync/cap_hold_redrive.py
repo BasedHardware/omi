@@ -13,7 +13,7 @@ from utils import funded_processing, processing_backlog_worker
 from config.stt_cap_dispatch import execution_admission_configured, recovery_cohort_admits
 from config.plan_catalog import PAID_PLAN_TYPES
 from utils.observability.held_content import publish_fleet
-from utils.sync import live_cap_staging
+from utils.sync import cap_hold_recovery, live_cap_staging
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +200,18 @@ async def sweep() -> dict:
             await run_blocking(storage_executor, live_cap_staging.cleanup, uid, snap.reference)
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=cleanup_deferred exception_type=%s', type(error).__name__)
+    handoffs = await run_blocking(db_executor, store.discover, 'handoff', limit=store.HANDOFF_PAGE)
+    for snap in handoffs:
+        uid = owner(snap, 'stt_cap_holds')
+        if uid is None:
+            continue
+        try:
+            if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+                continue
+            if await cap_hold_recovery.finish_handoff(uid, snap):
+                counts['handoffs_erased'] = counts.get('handoffs_erased', 0) + 1
+        except Exception as error:
+            logger.warning('event=cap_hold_redrive outcome=handoff_deferred exception_type=%s', type(error).__name__)
     if not execution_admission_configured():
         await _settle_fleet_snapshot(snapshot_task)
         logger.info(

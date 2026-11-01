@@ -31,8 +31,8 @@ def rendered(batch):
 def test_batch_scheduling_and_resources_are_disjoint_from_embedding():
     batch, live = rendered(True), rendered(False)
     pod = batch['Deployment']['spec']['template']['spec']
-    # No gke-nodepool pin: the on-demand pool and its Spot sibling share the
-    # service/env labels and omi.ai taints; the autoscaler prefers Spot first.
+    # No gke-nodepool pin: pools are replaced by service/env label and omi.ai
+    # taint, so the old and new pool both serve during a move.
     assert 'cloud.google.com/gke-nodepool' not in pod['nodeSelector']
     assert pod['nodeSelector'] == {'service': 'diarizer-batch', 'env': 'prod'}
     assert 'affinity' not in pod
@@ -48,6 +48,32 @@ def test_batch_scheduling_and_resources_are_disjoint_from_embedding():
     assert route['spec']['rules'][0]['matches'][0]['path']['value'] == '/diarizer-batch'
     assert route['spec']['rules'][0]['backendRefs'][0]['name'] == 'prod-omi-diarizer-batch-gw'
     assert batch['GCPBackendPolicy']['spec']['default']['timeoutSec'] == 900
+
+
+# n1-standard-4 + T4 (diarizer-batch-pool-v2), measured 2026-11-01 on ro-prod:
+# node allocatable minus the DaemonSet requests that tolerate the batch taints.
+SMALLEST_POOL_FREE_CPU = 3.92 - 0.513
+SMALLEST_POOL_FREE_MEM_GI = 12545160 / 2**20 - 1.04
+
+
+def _gi(quantity):
+    assert quantity.endswith('Gi'), quantity
+    return float(quantity[:-2])
+
+
+def test_batch_pod_fits_the_n1_standard_4_pool_and_surges_on_rollout():
+    deployment = rendered(True)['Deployment']
+    [container] = deployment['spec']['template']['spec']['containers']
+    requests, limits = container['resources']['requests'], container['resources']['limits']
+    assert float(requests['cpu']) <= float(limits['cpu']) <= SMALLEST_POOL_FREE_CPU
+    assert _gi(requests['memory']) <= _gi(limits['memory']) <= SMALLEST_POOL_FREE_MEM_GI
+    assert requests['nvidia.com/gpu'] == limits['nvidia.com/gpu'] == 1
+    # One-pod floor: never take the route to zero pods during a rollout or pool move.
+    assert deployment['spec']['strategy']['rollingUpdate'] == {'maxUnavailable': 0, 'maxSurge': 1}
+    # The live diarizer keeps its own strategy and 12Gi limit.
+    live = rendered(False)['Deployment']
+    assert live['spec']['strategy']['rollingUpdate'] == {'maxUnavailable': 1, 'maxSurge': 0}
+    assert live['spec']['template']['spec']['containers'][0]['resources']['limits']['memory'] == '12Gi'
 
 
 def test_hpa_metric_has_scrape_resource_labels_and_per_pod_adapter_mapping():
