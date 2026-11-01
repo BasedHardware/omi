@@ -503,7 +503,7 @@ void main() {
           // The rule and the saved card sit between the final lines and the preview.
           final catchUp = find.byKey(const Key('live_transcript_catch_up'));
           expect(find.byKey(const Key('live_transcribed_up_to')), findsOneWidget);
-          expect(find.text(en.liveAudioSaved(en.timeCompactSecs(20))), findsOneWidget);
+          expect(find.textContaining(en.liveAudioSaved(en.timeCompactSecs(20))), findsOneWidget);
           expect(find.byKey(const Key('live_preview_behind_line')), findsNothing);
           expect(tester.getBottomLeft(catchUp).dy,
               lessThanOrEqualTo(tester.getTopLeft(find.byKey(const Key('live_preview_divider'))).dy));

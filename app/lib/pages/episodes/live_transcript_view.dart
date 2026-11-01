@@ -681,8 +681,8 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     return context.l10n.waitingForTranscriptOrPhotos;
   }
 
-  /// Where the final transcript ends on the episode page: "Transcribed up to 9:28 AM", then the
-  /// card for the audio saved past it. Failures and retries keep the pill, as [_quietBehindLine].
+  /// Where the final transcript ends on the episode page: "Transcribed up to 9:28 AM", then one
+  /// tiny line for the audio saved past it. Failures and retries keep the pill, as [_quietBehindLine].
   Widget? _catchUp(CaptureProvider provider, TranscriptSegment last) {
     if (_quietBehindLine(provider) == null) return null;
     final l10n = context.l10n;
@@ -701,18 +701,11 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
           ))),
         if (saved > 0)
           Padding(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xs),
-            child: Container(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l10n.liveAudioSaved(OmiDuration.compact(saved, l10n)), style: OmiType.headline),
-                  const SizedBox(height: 2),
-                  Text(l10n.liveAudioSavedDetail, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
-                ],
-              ),
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
+            child: Text(
+              '${l10n.liveAudioSaved(OmiDuration.compact(saved, l10n))} · ${l10n.liveAudioSavedDetail}',
+              textAlign: TextAlign.center,
+              style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
             ),
           ),
       ],
