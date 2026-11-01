@@ -70,11 +70,11 @@ cloud_run:
     # 2026-10-24 costcut (live 22:48Z): cap 80 -> 50; warm floor 1 -> 5 so the sync
     # pump keeps conversation-finalization headroom (min 5 x concurrency 20, the
     # shape deploy-backend-stack sizes its queue against).
-    # 2026-10-29 retire100: batch at 100% takes consented mobile off per-segment
-    # sync; live measured 140-165k req/h on ~19 instances (7.4k req/h each).
-    # Residual sizing formula in retire100-changeset-2026-10-29.md; cap 20 =
-    # 35% headroom over the high residual case, floor 5 -> 3 (60 concurrent
-    # finalization handlers still exceed the 10-24 sizing rationale).
+    # retire100 candidate: apply only after batch-100 demand is qualified.
+    # 2026-11-01 ro-prod: 72h active-instance mean ~46, latest ~50;
+    # the old ~19-instance model does not establish headroom for cap 20.
+    # Floor 3 provides 60 concurrent handlers, down from 100 at floor 5;
+    # qualify queue latency/backlog as well as instance demand before apply.
     # Rollback: 50/5.
     max_instances: 20
     min_instances: 3
@@ -101,10 +101,11 @@ cloud_run:
     # redis_guard.sh moves this between its bounds from Redis memory. It is
     # deleted with the sequencer (C10); until then the config-train only
     # enforces the bounds.
-    # 2026-10-29 retire100: ceiling 40 -> 10. Live ran mean 6.0 / peak 7.5
-    # instances at 12-16k req/h (24h, ro-prod); the backfill fleet is paused
-    # at 22/54 cohorts so the cap only needs the fresh-reconciliation load,
-    # which collapses further at batch-100%. Rollback: ceiling 40 (live 16).
+    # retire100 candidate: ceiling 40 -> 10, pending fresh demand qualification.
+    # 2026-11-01 ro-prod: 72h active-instance mean 12.6, latest 14,
+    # single-revision peak 17. Cap 10 is not safe at that observed demand.
+    # Coordinate the redis_guard runtime ceiling before applying this bound.
+    # Rollback: ceiling 40 (live cap 16).
     max_instances: {owner: redis_guard, floor: 8, ceiling: 10}
   backend-integration:
     env:
