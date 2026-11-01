@@ -82,10 +82,30 @@ def test_prod_archive_rule_is_pinned_to_the_coldline_batch_stock():
         ".batch.enc",
         ".batch.bin",
     ], "same batch-artifact scope as the Coldline rule; .opus.enc chunks stay out"
-    assert rule["condition"]["age"] == 60, (
-        "age 60 = at least 30 days in Coldline before Archive; the existing stock "
-        "(created >= 60d ago) transitions on first evaluation"
+    assert rule["condition"]["age"] == 90, (
+        "lifecycle age is creation-based and transitions are asynchronous, so no age can "
+        "*guarantee* a Coldline interval; 90 (3x the Coldline transition age) keeps a real "
+        "Coldline residency even for lagged transitions, and the pre-existing stock "
+        "(created >= 90d ago) still moves on first evaluation"
     )
+
+
+def test_archive_rule_is_rejected_outside_prod():
+    dev = _load("development.json")
+    dev_with_archive = json.loads(json.dumps(dev))
+    dev_with_archive["lifecycle"]["rule"].append(
+        {
+            "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"},
+            "condition": {
+                "age": 90,
+                "matchesPrefix": ["chunks/"],
+                "matchesStorageClass": ["COLDLINE"],
+                "matchesSuffix": [".batch.enc", ".batch.bin"],
+            },
+        }
+    )
+    errors = validate_desired_document(dev_with_archive)
+    assert any("ARCHIVE" in e and "omi-private-cloud-sync" in e for e in errors), errors
 
 
 def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():

@@ -146,7 +146,14 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                 coldline_rules += 1
             elif target_class == "ARCHIVE":
                 # Later-class transition for the already-Coldline batch stock
-                # (David, 11-01); only Coldline objects may move to Archive.
+                # (David, 11-01); only Coldline objects may move to Archive,
+                # and only on the prod bucket — the approval names the prod
+                # Coldline stock, not the dev bucket.
+                if bucket != PROD_BUCKET:
+                    errors.append(
+                        f"desired rule {index} targets ARCHIVE; ARCHIVE transitions are approved for "
+                        f"{PROD_BUCKET} only, not {bucket!r}"
+                    )
                 allowed_sources = ARCHIVE_SOURCE_CLASSES
                 archive_rules += 1
             else:

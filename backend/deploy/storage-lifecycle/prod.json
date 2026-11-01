@@ -17,7 +17,7 @@
       {
         "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"},
         "condition": {
-          "age": 60,
+          "age": 90,
           "matchesPrefix": ["chunks/"],
           "matchesStorageClass": ["COLDLINE"],
           "matchesSuffix": [".batch.enc", ".batch.bin"]
