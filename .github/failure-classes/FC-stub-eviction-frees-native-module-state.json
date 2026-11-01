@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-stub-eviction-frees-native-module-state",
+  "violated_contract": "Test import isolation must not evict a native module whose state outlives its module object. CPython 3.11's _zoneinfo frees its globals in m_free while the static ZoneInfo type stays live, so an evicted copy collected after a re-import breaks ZoneInfo with 'SystemError: null argument to internal routine', at a time set by GC rather than by the test.",
+  "canonical_prevention": "stub_modules keeps the real stdlib zoneinfo family (matched by object identity, never by name) once a block first imports it, as it already keeps the google and jiter native families. Add any further native family explicitly to the same preservation step.",
+  "canonical_prevention_artifact": [
+    "backend/testing/import_isolation.py",
+    "backend/tests/unit/test_import_isolation.py"
+  ],
+  "evidence_prs": [24261],
+  "scope_hints": [
+    "backend/testing/import_isolation.py",
+    "backend/tests/unit/**"
+  ],
+  "status": "open"
+}

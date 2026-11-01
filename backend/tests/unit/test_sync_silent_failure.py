@@ -868,6 +868,9 @@ class TestProcessSegmentReal:
         sys.modules['database.sync_dead_letters'].dead_letter_failure_code = MagicMock(return_value='unknown')
         sys.modules['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
         sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
+        sys.modules['database.sync_ledger'].checkpoint_and_mark_sync_segment = MagicMock(return_value='marked')
+        sys.modules['database.sync_ledger'].SEGMENT_ALREADY_PROCESSED = 'already_processed'
+        sys.modules['database.sync_ledger'].SEGMENT_FOREIGN_OWNER = 'foreign_owner'
         sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
         sys.modules['database.sync_ledger'].get_sync_content_partial_result = MagicMock(return_value=None)
         sys.modules['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=True)
