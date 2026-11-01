@@ -323,6 +323,25 @@ def test_an_unbilled_refusal_parks_instead_of_re_calling_and_the_vendor_stays_un
     assert attempts(store) == [('modulate', 'rate_limited', 0.0), ('modulate', 'ok', 5.0)]
 
 
+def test_refusals_longer_than_the_record_bound_never_end_the_unit_terminal(store):
+    """Six 429s across redrives (MAX_ATTEMPT_RECORDS is 4): once the records are full, each new
+    attempt takes the trailing refusal's record, so the unit commits when the vendor answers."""
+    artifacts = Artifacts()
+    vendors = Vendors(modulate=[failure(VendorAttemptOutcome.RATE_LIMITED)] * 6)
+    routes = provider_stt._default_failover_routes
+    now = 200.0
+    for _ in range(40):
+        outcome = stage(store, artifacts, vendors, now=now, routes=routes).run('p1')
+        if outcome.outcome == 'done':
+            break
+        now = max(now + 1.0, outcome.available_at or now)
+    assert outcome.reason == 'processed' and job(store)['state'] == 'result_ready'
+    assert vendors.calls == ['modulate'] * 7
+    recorded = attempts(store)
+    assert len(recorded) == 4 and recorded[-1] == ('modulate', 'ok', 5.0)
+    assert all(entry == ('modulate', 'rate_limited', 0.0) for entry in recorded[:-1])
+
+
 def test_a_credit_refusal_moves_to_the_other_vendor_without_charging_the_first(store):
     artifacts = Artifacts()
     vendors = Vendors(modulate=[failure(VendorAttemptOutcome.CREDIT_REFUSAL)])

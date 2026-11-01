@@ -274,6 +274,40 @@ def test_unspent_probe_token_lapses_with_its_interval():
     assert not svc._take_probe('modulate')
 
 
+def test_peek_never_takes_the_probe_so_the_caller_that_calls_gets_it():
+    """Selection and a held unit's early-redrive check peek; only the mint's allows() probes. If a
+    peek spent the token, no call would follow and the breaker could never close (outagedrill)."""
+    clock = Clock()
+    svc = _service(clock, shared=vh.MemoryStore())
+    for _ in range(3):
+        svc.record_attempt('modulate', O.CREDIT_REFUSAL)
+    clock.now += config.Thresholds().open_seconds + 1
+    svc.refresh()
+    assert [svc.peek('modulate') for _ in range(5)] == [(False, R.FUNDS_REFUSAL)] * 5
+    assert svc.allows('modulate') == (True, R.HALF_OPEN_PROBE)
+    assert svc.allows('modulate') == (False, R.FUNDS_REFUSAL)  # one probe per interval
+    for _ in range(config.Thresholds().close_successes):
+        svc.record_attempt('modulate', O.OK)
+    clock.now += config.Thresholds().close_window_s
+    svc.record_attempt('modulate', O.OK)
+    assert svc.peek('modulate') == (True, R.HEALTHY)
+
+
+@pytest.mark.parametrize('failure, reason', [(O.ERROR_5XX, R.BREAKER_OPEN), (O.RATE_LIMITED, R.RATE_LIMITED)])
+def test_a_quiet_outage_opens_below_the_volume_floor(failure, reason):
+    """One call a minute never reaches error_open_min_n (20 in 5 min): five failures and no
+    success in the window open the breaker anyway, so held units and probes take over."""
+    clock = Clock()
+    svc = _service(clock)
+    trace = replay(svc, clock, [(30, lambda: O.OK), (30, lambda: failure)], per_minute=1)
+    onset = START + 3600 + 30 * 60
+    opened = next(row[0] for row in trace if row[0] > onset and row[2] is not R.HEALTHY)
+    assert opened - onset <= (config.Thresholds().all_failed_open_count + 1) * 60
+    # From then on every send is a half-open probe (one per interval, more than this demand).
+    assert {row[2] for row in trace if row[0] >= opened and row[1]} == {R.HALF_OPEN_PROBE}
+    assert svc.peek('modulate') == (False, reason)
+
+
 def test_background_refresh_runs_off_the_caller_thread():
     import threading
 
@@ -498,6 +532,7 @@ def test_defaults_are_the_ops_14_table():
     t = config.Thresholds()
     assert (t.error_degraded_rate, t.error_degraded_window_s, t.error_degraded_min_n) == (0.20, 600, 30)
     assert (t.error_open_rate, t.error_open_window_s, t.error_open_min_n) == (0.50, 300, 20)
+    assert t.all_failed_open_count == 5
     assert (t.funds_open_count, t.funds_window_s) == (3, 300)
     assert (t.empty_degraded_rate, t.empty_window_s, t.empty_min_n) == (0.055, 1800, 50)
     assert (t.latency_degraded_s, t.latency_open_s) == (30.0, 120.0)

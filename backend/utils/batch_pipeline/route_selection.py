@@ -111,7 +111,10 @@ def route_allowed(service: str) -> bool:
     if service == contracts.GPU:
         return True
     try:
-        allowed, _reason = serving_health().allows(service)
+        # Selection only chooses where a unit starts, so it never takes slice C's half-open probe
+        # (``peek``): the stage's mint does, or the breaker could never close.
+        health = serving_health()
+        allowed, _reason = getattr(health, 'peek', health.allows)(service)
     except Exception:
         # The contract says allows() never raises; if it does, fail toward GPU or the hold.
         allowed, _reason = False, VendorHealthReason.STATE_UNAVAILABLE

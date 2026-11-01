@@ -242,9 +242,23 @@ def attempts_of(job: dict) -> list[VendorAttempt]:
     ]
 
 
+def bounding_attempts(attempts: list[VendorAttempt]) -> list[VendorAttempt]:
+    """The records a new attempt is bounded by. Once the records are full, a trailing settled
+    unbilled refusal (429, credits, client breaker) processed nothing, so the next attempt takes
+    its record: a rate-limit or credit outage longer than a few redrives never exhausts
+    ``MAX_ATTEMPT_RECORDS`` and ends the unit terminal. The refusal stays in the attempt metrics."""
+    if (
+        len(attempts) >= contracts.MAX_ATTEMPT_RECORDS
+        and attempts[-1].settled_at is not None
+        and attempts[-1].outcome in contracts.UNBILLED_OUTCOMES
+    ):
+        return attempts[:-1]
+    return attempts
+
+
 def _can_attempt(attempts: list[VendorAttempt], service: str) -> bool:
     try:
-        check_new_attempt(attempts, service)
+        check_new_attempt(bounding_attempts(attempts), service)
     except AttemptRefused:
         return False
     return True
@@ -337,7 +351,7 @@ class ProviderSttStore:
                 return job
             if job.get('state') != PENDING:
                 return None
-            attempts = attempts_of(job)
+            attempts = bounding_attempts(attempts_of(job))
             number = check_new_attempt(attempts, service)
             attempt = VendorAttempt(number, service, token, binding.privacy_generation, now, table_version)
             job['state'] = RUNNING
@@ -1026,8 +1040,10 @@ class ProviderSttStage:
             return False
 
     def _allows_quietly(self, service: str) -> bool:
+        # Never the half-open probe (slice C ``peek``): it belongs to the mint in ``_healthy``; one
+        # spent here makes no call, so an open breaker would never close and holds never drain.
         try:
-            return bool(self.health.allows(service)[0])
+            return bool(getattr(self.health, 'peek', self.health.allows)(service)[0])
         except Exception:
             return False
 
