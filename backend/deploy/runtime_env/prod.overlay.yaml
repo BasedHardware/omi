@@ -469,6 +469,18 @@ overlay:
           env_var: CLOUD_RUN_VPC_SUBNET
     services:
       backend:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+        # Repeat-work switches resolve from code defaults since 2026-11-01; deploy
+        # removes live leftovers so the env never restates the default.
+        - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+        - REPEAT_WORK_REVISION_ENABLED
         secrets:
           TELEGRAM_BOT_TOKEN:
             secret: TELEGRAM_BOT_TOKEN
@@ -842,6 +854,9 @@ overlay:
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+        - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+        - SYNC_REPROCESS_COALESCE_ENABLED
+        - REPEAT_WORK_REVISION_ENABLED
         secrets:
           DREAM_AGENT_FEEDBACK_SALT:
             secret: DREAM_AGENT_FEEDBACK_SALT
@@ -1225,6 +1240,9 @@ overlay:
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+        - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+        - SYNC_REPROCESS_COALESCE_ENABLED
+        - REPEAT_WORK_REVISION_ENABLED
         env:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
@@ -1570,6 +1588,8 @@ overlay:
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+        - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+        - REPEAT_WORK_REVISION_ENABLED
         env:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch

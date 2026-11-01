@@ -31,10 +31,12 @@ def _enabled(name: str, *, default: bool) -> bool:
     if serving_for('CAPTURE_COVERAGE_MODE', None):
         # Explicit child configuration wins; only an absent child inherits revision reuse.
         return revision_reuse() if raw is None else default_off(name)
-    if raw is None:
+    if raw is None or not raw.strip():
+        # A blank value is an unset value, never a blank kill switch: a dev host
+        # must not fall onto the outbox path through an empty token.
         return revision_reuse() or default
     # Kill-switch grammar outside serve mode: an explicit false word turns the
-    # switch off; anything else but an unset var keeps the serving default.
+    # switch off; anything else keeps the serving default (warn-once on typos).
     # refactor: superseded by explicit child precedence when CAPTURE_COVERAGE_MODE=serve
     return revision_reuse() or default_on(name)
 

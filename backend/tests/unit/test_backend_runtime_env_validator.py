@@ -100,7 +100,6 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_UNIT_SECONDS", "value": "3600"},
         {"name": "BATCH_PIPELINE_SHARED_LIVE_ENABLED", "value": "false"},
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
-        {"name": "REPEAT_WORK_REVISION_ENABLED", "value": "false"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},
@@ -397,14 +396,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         '"FIRESTORE_READ_LEDGER", "value": "1"},\n        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},',
     )
     # Keep dev snapshots complete while individual tests remove unrelated
-    # gateway/secret fields. Train 1 switches remain explicitly off in dev.
+    # gateway/secret fields. The repeat-work coalesce/dedupe switches resolve
+    # from code defaults since 2026-11-01 and are forbidden_env on the sync
+    # hosts, so dev snapshots must not carry them.
     for service in ('backend-sync', 'backend-sync-backfill'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
             r'\1\n        {"name": "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM", "value": "false"},'
-            r'\n        {"name": "SYNC_REPROCESS_COALESCE_ENABLED", "value": "false"},'
-            r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},'
-            r'\n        {"name": "CONVERSATION_LLM_INPUT_DEDUPE_ENABLED", "value": "false"},',
+            r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},',
             payload,
             count=1,
             flags=re.DOTALL,

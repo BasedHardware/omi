@@ -713,6 +713,7 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - REPEAT_WORK_REVISION_ENABLED
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -1289,6 +1290,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
         backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
@@ -1565,6 +1569,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
         backend-integration:
           flags:
             --timeout: 3600s
@@ -1798,6 +1805,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
       jobs:
         notifications-job:
           flags:
@@ -2847,6 +2857,8 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -3678,6 +3690,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync-backfill:
           secrets:
@@ -4046,6 +4061,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-integration:
           flags:
@@ -4332,6 +4350,8 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       jobs:
         notifications-job:
