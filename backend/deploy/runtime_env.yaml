@@ -3599,6 +3599,7 @@ environments:
               category: reliability
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+            DREAM_STATE_PASS_MODE: {value: shadow, category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
@@ -3973,6 +3974,7 @@ environments:
               value: '8'
               category: reliability
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+            DREAM_STATE_PASS_MODE: {value: shadow, category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
