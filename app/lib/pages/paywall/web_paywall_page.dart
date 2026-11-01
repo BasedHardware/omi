@@ -12,8 +12,8 @@ import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
-import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -25,7 +25,11 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// `{"type":"ready"}`, `{"type":"checkout","interval":"year"|"month"}`, `{"type":"free"}`,
 /// `{"type":"restore"}`, `{"type":"fallback"}` — and may define `window.OmiPaywallHost.onCheckout(outcome)`.
 /// The URL carries `source`, `platform`, `locale`, `name`, `free_minutes`, `tier`, and per interval
-/// `<interval>_amount` (minor units) and `<interval>_currency`.
+/// `<interval>_amount` (minor units) and `<interval>_currency`. The reader's PostHog `distinct_id`
+/// rides in the fragment (`#distinct_id=…`), which the webview never sends to the server, so the
+/// page's events and experiment exposure join the reader's own events (such as `Upgrade Succeeded`)
+/// without the id reaching request logs; a reader who turned product analytics off gets
+/// `analytics=off` instead.
 ///
 /// Fail-open: a page that errors, 4xx/5xxs, or never reports ready within [loadTimeout] is replaced
 /// by the native plans sheet, so a dead URL never costs a purchase.
@@ -47,6 +51,8 @@ class WebPaywallPage extends StatefulWidget {
     required String name,
     required int freeMinutes,
     PaywallOffer? offer,
+    String? distinctId,
+    bool analyticsEnabled = true,
   }) {
     final params = Map<String, String>.from(base.queryParameters)
       ..['source'] = source
@@ -55,6 +61,7 @@ class WebPaywallPage extends StatefulWidget {
       ..['locale'] = locale
       ..['free_minutes'] = '$freeMinutes';
     if (name.isNotEmpty) params['name'] = name;
+    if (!analyticsEnabled) params['analytics'] = 'off';
     if (offer != null) {
       params['tier'] = offer.tierId;
       for (final price in [offer.monthly, offer.yearly]) {
@@ -65,7 +72,11 @@ class WebPaywallPage extends StatefulWidget {
         params['${price.interval}_per_month_price'] = price.formattedPerMonth;
       }
     }
-    return base.replace(queryParameters: params);
+    final identified = analyticsEnabled && distinctId != null && distinctId.isNotEmpty;
+    return base.replace(
+      queryParameters: params,
+      fragment: identified ? Uri(queryParameters: {'distinct_id': distinctId}).query : null,
+    );
   }
 
   @override
@@ -112,6 +123,8 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
       name: SharedPreferencesUtil().givenName,
       freeMinutes: (usage.subscription?.transcriptionSecondsLimit ?? 0) ~/ 60,
       offer: _offer,
+      distinctId: AnalyticsManager().settledDistinctId,
+      analyticsEnabled: AnalyticsManager.trackingEnabled,
     );
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -255,11 +268,14 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
             Positioned(
               top: MediaQuery.paddingOf(context).top + 4,
               left: 4,
+              // A dark X on a light disc reads on both dark and white pages; the steps page has no
+              // close of its own on its first two pages, so this is the only exit there.
               child: IconButton(
                 key: const Key('web_paywall_close'),
                 tooltip: context.l10n.useFreePlan,
                 onPressed: _dismiss,
-                icon: const Icon(Icons.close, color: Colors.white),
+                style: IconButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.85)),
+                icon: const Icon(Icons.close, color: Colors.black87, size: 20),
               ),
             ),
           ],

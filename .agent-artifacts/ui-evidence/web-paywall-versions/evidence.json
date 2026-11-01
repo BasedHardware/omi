@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-paywall-benefits-one-page.png",
+      "platform": "web",
+      "description": "Version benefits (one page, ported from the Superwall design): real catalog prices from the URL ($269.91/yr, $29.99/mo), Unlock Omi Unlimited with shine, Terms/Privacy links (headless Chrome, 390x844 @2x)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-web-paywall-steps-page-1-pendant.png",
+      "platform": "web",
+      "description": "Version steps, page 1: pendant hangs from the top edge, floating cards, Continue at the shared height, no visible close (headless Chrome, 390x844 @2x)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-web-paywall-steps-page-2-phones.png",
+      "platform": "web",
+      "description": "Version steps, page 2: three drawn phones (Home, a conversation summary, Ask Omi) with made-up content (headless Chrome, 390x844 @2x)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-web-paywall-steps-page-3-plans.png",
+      "platform": "web",
+      "description": "Version steps, page 3: 300K+ users and 4.7 App Store stars, scrollable perks panel, YEARLY/MONTHLY plans, Unlock Omi Unlimited, Terms/Privacy (headless Chrome, 390x844 @2x)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-in-app-benefits-from-usage-page.png",
+      "platform": "mobile-ios",
+      "description": "iOS simulator, debug build of this branch against the local test backend: Plan & Usage \u2192 Upgrade opens the web paywall; PostHog answered flag off, so benefits shows. 'Unable to load plans' because the local backend has no plan catalog",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-in-app-steps-page-1.png",
+      "platform": "mobile-ios",
+      "description": "iOS simulator: steps page 1 inside the app (safe-area aware cards after the fix in this commit). Served from a local copy with demo prices, since the local backend has no catalog",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-in-app-steps-page-2.png",
+      "platform": "mobile-ios",
+      "description": "iOS simulator: steps page 2 inside the app",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-in-app-steps-page-3.png",
+      "platform": "mobile-ios",
+      "description": "iOS simulator: steps page 3 inside the app; Unlock sent checkout to the app, which answered unavailable (no local Stripe catalog)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
