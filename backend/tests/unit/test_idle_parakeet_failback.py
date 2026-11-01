@@ -54,7 +54,16 @@ async def test_english_session_returns_to_parakeet_once_at_idle_onset(monkeypatc
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'case',
-    ['spent', 'kill_switch', 'non_english', 'benched', 'trial_stage', 'circuit_open', 'admission_full'],
+    [
+        'spent',
+        'kill_switch',
+        'non_english',
+        'benched',
+        'trial_stage',
+        'circuit_open',
+        'admission_full',
+        'no_window_route',
+    ],
 )
 async def test_failback_keeps_inplace_reopen_when_not_due(monkeypatch, case):
     language = 'vi' if case == 'non_english' else 'en'
@@ -71,6 +80,8 @@ async def test_failback_keeps_inplace_reopen_when_not_due(monkeypatch, case):
         monkeypatch.setattr(st, 'parakeet_family_circuit_state', lambda: 'open')
     elif case == 'admission_full':
         monkeypatch.setattr(window.admission, 'available', lambda: False)
+    elif case == 'no_window_route':
+        monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'parakeet'])
     try:
         await close_idle(idle)
         await onset(actual, DATA)

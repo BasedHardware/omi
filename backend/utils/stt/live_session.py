@@ -108,6 +108,8 @@ class LiveChainSession:
             return False
         if st.normalized_stt_language(self.receiver.host.language) != 'en' or not self.window_eligible():
             return False
+        if 'parakeet-window' not in {model.strip() for model in service_models(st.stt_service_models)}:
+            return False  # The chain could not select the window: a handoff would only spend the attempt.
         from utils.stt import parakeet_window
 
         if not parakeet_window.admission.available() or st.parakeet_family_circuit_state() != 'closed':
