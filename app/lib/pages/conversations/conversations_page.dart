@@ -842,6 +842,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           return ProcessingConversationRow(
                             key: ValueKey('processing_${row.conversation!.id}'),
                             conversation: row.conversation!,
+                            episode: projectedEpisodes[row.conversation!.id]?.episode,
                           );
                         }
                         // Consecutive locked rows share one frosted card and one upgrade action;
@@ -860,7 +861,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
                           date: row.date,
-                          fillingSeconds: filling[row.conversation!.id],
+                          fillingSeconds: homeRowFilling(filling, row.conversation!.id,
+                              projectedEpisodes[row.conversation!.id]?.episodeConversationIds),
                           homeEpisode: projectedEpisodes[row.conversation!.id]?.episode,
                         );
                       case _ConversationListRowKind.recording:

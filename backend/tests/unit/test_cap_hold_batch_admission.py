@@ -50,6 +50,15 @@ def test_only_unspent_sealed_holds_are_eligible(row, expected):
     assert adapter.enabled_for(row, LegacySyncMode.ON) is False
 
 
+def test_cap_hold_retirement_reads_the_hold_owner(monkeypatch):
+    from utils.sync import legacy_dark
+
+    seen = []
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: seen.append(uid) or LegacySyncMode.DRAINING)
+    assert adapter.enabled_for({'state': 'held'}, uid=UID)
+    assert seen == [UID]
+
+
 def test_held_wav_becomes_bounded_units_on_the_capture_clock(tmp_path):
     path = tmp_path / 'held.wav'
     _wav(path, 5.0, rate=8000)  # resampled to 16 kHz canonical PCM
@@ -171,7 +180,7 @@ def hook(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_draining_hands_the_hold_to_batch_and_never_runs_legacy(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
 
     async def admit(uid, snapshot, row):
         return adapter.HeldAdmission('admitted', 'bp_job')
@@ -194,7 +203,7 @@ async def test_draining_hands_the_hold_to_batch_and_never_runs_legacy(hook, monk
 
 @pytest.mark.asyncio
 async def test_unadmitted_hold_stays_held_for_the_next_sweep(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
 
     async def admit(uid, snapshot, row):
         return adapter.HeldAdmission('retry')
@@ -206,14 +215,14 @@ async def test_unadmitted_hold_stays_held_for_the_next_sweep(hook, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_on_keeps_the_legacy_recovery_path(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: False)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: False)
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
     assert ('legacy',) in hook.events and ('erase',) not in hook.events
 
 
 @pytest.mark.asyncio
 async def test_restricted_or_capped_owner_keeps_the_audio_held(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
     monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: False)
     monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('gated owner admitted'))
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False

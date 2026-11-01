@@ -143,7 +143,7 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
-    'database.batch_pipeline_projection_release.release_page': '9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
+    'database.batch_pipeline_projection_release.release_page': '51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
     'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
@@ -193,6 +193,8 @@ BODY_DIGEST = {
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
     'database.smart_merge.absorb_conversation': '531806c3dc28aa6d728effd0a0ff8037b7621128037ed7350cf06beb3bd5674b',
+    'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
+    'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.
@@ -3247,6 +3249,25 @@ _add(
         '(no query filters); the ingest path is the registered driver via '
         'database.client_telemetry.accept_batch.',
         body_digest='65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
+    )
+)
+
+_add(
+    SkipEntry(
+        'database.omi_flags.read_all',
+        reason='Omi flag store lives in its own Firestore project (OMI_FLAGS_FIRESTORE_PROJECT), not the '
+        'customer database this index contract covers; streams the ~30-doc omi_flags collection with no '
+        'filters, once per process per version change.',
+        body_digest='58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
+    )
+)
+
+_add(
+    SkipEntry(
+        'database.omi_flags.read_audit',
+        reason='Operator CLI history read in the separate flag project: one equality filter on key over the '
+        'small omi_flags_audit collection (single-field index, sorted in Python); never a serving path.',
+        body_digest='12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     )
 )
 

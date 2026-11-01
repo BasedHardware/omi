@@ -1,16 +1,22 @@
 """Hermetic conversation create/process/finalize lifecycle coverage."""
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 from fakes.firestore import read_action_items, read_conversation, seed_conversation
+from database import conversations
+from models.conversation import Conversation, CreateConversation
+from utils.conversations.factory import deserialize_conversation
+import utils.conversations.notes_task_context as notes_task_context_module
+import utils.conversations.process_conversation as process_module
 from models.structured import ActionItem, Structured
 from models.transcript_segment import TranscriptSegment
 from utils.llm.memories import CanonicalL1MemoryCandidate
 
 
 def _patch_process_conversation_boundaries(monkeypatch):
-    import utils.conversations.notes_task_context as notes_task_context_module
-    import utils.conversations.process_conversation as process_module
 
     # Universal canonical intake is deployment-fenced; this hermetic lifecycle
     # test explicitly opts its local process into the enabled read/write mode.
@@ -96,9 +102,6 @@ async def _async_none(*args, **kwargs):
 def test_conversation_create_process_finalize_lifecycle(client, auth_headers, monkeypatch):
     kg_calls = _patch_process_conversation_boundaries(monkeypatch)
 
-    import utils.conversations.process_conversation as process_module
-    from models.conversation import CreateConversation
-
     started_at = datetime(2025, 1, 15, 12, 0, tzinfo=timezone.utc)
     create_conversation = CreateConversation(
         started_at=started_at,
@@ -108,11 +111,11 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
         transcript_segments=[
             TranscriptSegment(
                 id="seg-life-1",
-                text="We should ship deterministic conversation lifecycle coverage.",
+                text="We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow.",
                 speaker="SPEAKER_00",
                 is_user=True,
                 start=0.0,
-                end=2.0,
+                end=8.0,
             )
         ],
     )
@@ -129,7 +132,10 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["id"] == processed.id
     assert body["status"] == "completed"
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
-    assert body["transcript_segments"][0]["text"] == "We should ship deterministic conversation lifecycle coverage."
+    assert (
+        body["transcript_segments"][0]["text"]
+        == "We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow."
+    )
 
     # INV-TASK-2: an omi conversation has no Suggested surface to review a
     # proposal on, so what the extractor admits lands in the task list.
@@ -146,12 +152,131 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert kg_calls == []
 
 
+@pytest.mark.parametrize('existing_debt', [False, True])
+def test_short_recording_minimum_survives_api_readback_without_paid_intelligence(
+    client, auth_headers, monkeypatch, existing_debt
+):
+
+    app_boundary = process_module.trigger_conversation_apps
+    _patch_process_conversation_boundaries(monkeypatch)
+    monkeypatch.setattr(process_module, 'trigger_conversation_apps', app_boundary)
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    paid = Mock(side_effect=AssertionError('minimum attempted paid intelligence'))
+    monkeypatch.setattr(process_module, 'get_conversation_notes', paid)
+    monkeypatch.setattr(process_module, 'extract_canonical_l1_memory_candidates', paid)
+    monkeypatch.setattr(process_module, 'get_available_apps', paid)
+    webhook = AsyncMock()
+    monkeypatch.setattr(process_module, 'conversation_created_webhook', webhook)
+    submit = process_module.submit_with_context
+
+    def run_creation_webhook(executor, fn, *args, **kwargs):
+        if fn.__name__ == '_run_webhook':
+            fn(*args, **kwargs)
+        return submit(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(process_module, 'submit_with_context', run_creation_webhook)
+    started = datetime(2026, 10, 31, 12, tzinfo=timezone.utc)
+    capture = CreateConversation(
+        started_at=started,
+        finished_at=started.replace(second=2),
+        source='omi',
+        language='en',
+        transcript_segments=[
+            TranscriptSegment(
+                id='short-source',
+                text='Small recording fragment.',
+                speaker='SPEAKER_00',
+                is_user=True,
+                start=0,
+                end=2,
+            )
+        ],
+    )
+    if existing_debt:
+        row = Conversation(
+            id='short-debt',
+            created_at=started,
+            structured=Structured(title='Pending recording', title_provenance='server_minimum'),
+            **capture.model_dump(),
+        ).model_dump()
+        row.update(
+            status='processing',
+            summary_first_pending_at=started.timestamp(),
+            summary_due_at=started.timestamp() + 120,
+            summary_title_provenance='server_minimum',
+            summary_output_present=False,
+        )
+        seed_conversation('123', row)
+        capture = deserialize_conversation(row)
+    minimum = process_module.process_conversation(
+        '123', 'en', capture, trigger=process_module.ProcessingTrigger.CLIENT_FINALIZE
+    )
+    response = client.get(f'/v1/conversations/{minimum.id}', headers=auth_headers)
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert saved['status'] == 'completed' and not saved['discarded']
+    assert saved['structured']['title']
+    assert saved['structured']['title_provenance'] == 'server_minimum'
+    assert saved['structured']['overview'] == '' and saved['structured']['action_items'] == []
+    assert saved['transcript_segments'][0]['text'] == 'Small recording fragment.'
+    assert read_action_items('123') == []
+    memories = client.get('/v3/memories', headers=auth_headers)
+    assert memories.status_code == 200 and memories.json() == []
+    stored = read_conversation('123', minimum.id)
+    assert stored['summary_due_at'] is None
+    assert stored['summary_blocked_reason'] == 'content_below_floor'
+    assert not stored.get('terminal_no_derived_effects')
+    paid.assert_not_called()
+    webhook.assert_awaited_once()
+
+
+@pytest.mark.parametrize('authority', ['user_title', 'enriched', 'title_only'])
+def test_existing_short_row_notes_survive_user_reprocess(client, auth_headers, monkeypatch, authority):
+
+    _patch_process_conversation_boundaries(monkeypatch)
+    notes = Mock(wraps=process_module.get_conversation_notes)
+    monkeypatch.setattr(process_module, 'get_conversation_notes', notes)
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    seed_conversation(
+        '123',
+        {
+            'id': 'renamed-short',
+            'created_at': '2026-10-31T12:00:00Z',
+            'started_at': '2026-10-31T12:00:00Z',
+            'finished_at': '2026-10-31T12:00:02Z',
+            'source': 'omi',
+            'language': 'en',
+            'status': 'completed',
+            'discarded': False,
+            **({'user_title': 'My chosen title'} if authority == 'user_title' else {}),
+            'structured': Structured(
+                title='Old notes', overview='Existing rich notes' if authority == 'enriched' else ''
+            ).model_dump(),
+            'transcript_segments': [
+                dict(id='curated-source', text='A tiny recording', speaker='SPEAKER_00', is_user=True, start=0, end=2)
+            ],
+            'data_protection_level': 'standard',
+        },
+    )
+    response = client.post('/v1/conversations/renamed-short/reprocess', headers=auth_headers)
+    assert response.status_code == 200, response.text
+    notes.assert_called_once()
+    stored = read_conversation('123', 'renamed-short')
+    assert stored['structured'].get('title_provenance') != 'server_minimum'
+    assert stored['structured']['overview'] == 'A deterministic processing result created by the E2E harness.'
+    if authority == 'user_title':
+        assert stored['user_title'] == 'My chosen title'
+    else:
+        assert not stored.get('user_title')
+
+
 def test_transactional_create_exposes_recorded_span_and_preexisting_episode_membership(
     client, auth_headers, fake_firestore
 ):
-    from database import conversations
-    from models.conversation import Conversation
-    from models.structured import Structured
 
     started = datetime(2026, 10, 29, 12, tzinfo=timezone.utc)
     cid = 'recorded-membership-create'

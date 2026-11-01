@@ -31,6 +31,7 @@ SCHEMA_GROUPS = {
             'EpisodeMember',
             'EpisodeListResponse',
             'EpisodeMoment',
+            'EpisodePoint',
             'EpisodeProvisionalItem',
             'Episode',
             'EpisodeLiveResponse',
@@ -185,6 +186,7 @@ SCHEMA_GROUPS = {
             'ConversationSpeakers',
             'AudioTimelineProvenance',
             'Conversation',
+            'RecordAudioPartial',
             'ProjectedActionItem',
             'ProjectedSection',
             'ProjectedEvent',
@@ -599,6 +601,10 @@ SCHEMA_GROUPS = {
             'MemoryEditResponse',
             'MemoryRevertRequest',
         ),
+    },
+    'flags': {
+        'output': DEFAULT_OUTPUT_DIR / 'flags_wire.g.dart',
+        'schemas': ('ClientFlag', 'ClientFlagsResponse'),
     },
     'goals': {
         'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',

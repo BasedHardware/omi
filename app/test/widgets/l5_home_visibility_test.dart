@@ -303,6 +303,14 @@ void main() {
           lastActivityAt: now,
           title: 'Planning the garden',
           conversationIds: ['active', 'finished'],
+          moments: [
+            EpisodeMoment(
+                id: 'm',
+                conversationId: 'finished',
+                startedAt: now,
+                endedAt: now,
+                points: const [EpisodePoint('Point')])
+          ],
           members: items);
       if (searching) conversations.previousQuery = 'meeting';
       // The closed snapshot owns both members even with no streaming capture.
@@ -332,11 +340,11 @@ void main() {
         expect(find.text('Finished meeting'), findsNothing);
         expect(find.text('Was in progress'), findsNothing);
         expect(find.text('Planning the garden'), findsOneWidget);
-        expect(find.textContaining('2 parts'), findsOneWidget);
+        expect(find.textContaining('parts'), findsNothing);
         expect(find.byType(ConversationListItem), findsOneWidget);
         final row = find.byType(ConversationListItem);
         expect(find.descendant(of: row, matching: find.text('10m')), findsOneWidget);
-        expect(find.descendant(of: row, matching: find.text(' • ')), findsNWidgets(2));
+        expect(find.descendant(of: row, matching: find.text(' • ')), findsOneWidget);
         await tester.tap(find.text('Planning the garden'));
       }
       await tester.pumpAndSettle();

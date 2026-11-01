@@ -14455,6 +14455,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get episodeMoments => 'Ögonblick';
 
   @override
+  String get episodeFollowUps => 'Uppföljning';
+
+  @override
+  String get episodeOpenTranscript => 'Öppna transkription';
+
+  @override
   String get episodeSoFar => 'Hittills';
 
   @override
@@ -14675,12 +14681,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get episodeOnThisPhone => 'På den här telefonen';
 
   @override
-  String get episodeOpenTranscript => 'Öppna transkription';
-
-  @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Slutgiltig transkription cirka $duration efter';
   }
@@ -14695,7 +14695,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Spelar in säkert';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live på den här telefonen';
+  String get livePreviewOnPhoneDivider => 'Just nu, på den här telefonen';
 
   @override
   String get livePreviewTurnOnLiveText => 'Aktivera live-text';
@@ -14941,19 +14941,38 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count delar',
-      many: '$count delar',
-      few: '$count delar',
-      two: '$count delar',
-      one: '$count del',
-      zero: '$count delar',
-    );
-    return '$_temp0';
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Skicka meddelandet i $app. Den här skärmen uppdateras så fort Omi får det.';
   }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Hämta en ny kod och skicka den från $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Skriver anteckningar…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Vi gör först klart transkriptionen. Du kan lämna den här sidan.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Täcker fram till $time · fullständiga anteckningar när det är klart';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkriberat fram till $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration sparat';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Talare och den slutliga transkriptionen visas här under uppladdningen.';
 
   @override
   String get paymentDeclinedTitle => 'Ditt kort nekades';

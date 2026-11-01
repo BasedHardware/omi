@@ -21,7 +21,8 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     Set<String> liveConversationIds = const {},
     Set<String> deletedIds = const {},
     List<ServerConversation> knownConversations = const [],
-    List<ServerConversation> processingConversations = const []}) {
+    List<ServerConversation> processingConversations = const [],
+    DateTime? now}) {
   if (!enabled) return [for (final c in conversations) HomeRow(c)];
   final byId = {for (final c in conversations) c.id: c, for (final c in knownConversations) c.id: c};
   final hidden = {...liveConversationIds};
@@ -46,9 +47,11 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
           id: 'episode:${episode.id}',
           createdAt: episode.startedAt,
           startedAt: episode.startedAt,
+          finishedAt: episode.lastActivityAt,
           structured: pending.first.structured,
         ),
         episodeConversationIds: episode.conversationIds.toSet(),
+        episode: episode,
         isProcessing: true,
       ));
       continue;
@@ -67,6 +70,22 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
       continue;
     }
     final primary = members.first;
+    if (!episode.composed && episode.awaitingSummary(now ?? DateTime.now())) {
+      rows.add(HomeRow(
+        ServerConversation(
+          id: 'episode:${episode.id}',
+          createdAt: episode.startedAt,
+          startedAt: episode.startedAt,
+          finishedAt: episode.lastActivityAt,
+          structured: primary.structured,
+        ),
+        episodeConversationIds: episode.conversationIds.toSet(),
+        episode: episode.copyWith(members: members),
+        isProcessing: true,
+      ));
+      continue;
+    }
+    // A summary that never landed keeps its one row, and the page reads the running notes.
     final end = episode.lastActivityAt;
     // The adapter gives the existing row widget its exact typography, emoji tile and spacing.
     // It is never passed to a conversation mutation or detail API.

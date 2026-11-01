@@ -1,12 +1,12 @@
 ---
-title: "Open Source Your App"
+title: "Open source your app"
 icon: "code-branch"
 description: "Contribute your Omi app to the open-source repo. Share your code with the community, get visibility, and help other developers learn from your work."
 ---
 
 ## Overview
 
-Beyond publishing to the Omi app store, you can open-source your app by contributing it to the [BasedHardware/omi](https://github.com/BasedHardware/omi) repository. This gives your app maximum visibility, lets other developers learn from and build on your work, and contributes to the Omi ecosystem.
+Beyond publishing to the Omi app store, you can open-source your app by contributing it to the [BasedHardware/omi](https://github.com/BasedHardware/omi) repository. This gives your app more visibility, lets other developers learn from and build on your work, and contributes to the Omi ecosystem.
 
 ```mermaid
 flowchart LR
@@ -19,17 +19,15 @@ flowchart LR
 ```
 
 <CardGroup cols={2}>
-  <Card title="Community Visibility" icon="users">
-    Your app is discoverable by thousands of Omi developers
+  <Card title="Community visibility" icon="users">
+    Your app is discoverable by Omi developers and users
   </Card>
-  <Card title="Contribution Rewards" icon="gift">
-    Significant contributions earn free DevKit hardware
+  <Card title="Learn from each other" icon="book">
+    Other developers can read, fork, and build on your work
   </Card>
 </CardGroup>
 
----
-
-## Repository Structure
+## Repository structure
 
 Open-source apps live in the `plugins/` directory:
 
@@ -48,12 +46,10 @@ omi/
 Each app should be a self-contained directory with everything needed to run it independently.
 </Info>
 
----
-
-## Step-by-Step Guide
+## Step-by-step guide
 
 <Steps>
-  <Step title="Fork the Repository">
+  <Step title="Fork the repository">
     Go to [github.com/BasedHardware/omi](https://github.com/BasedHardware/omi) and click **Fork** to create your own copy.
 
     ```bash
@@ -62,7 +58,7 @@ Each app should be a self-contained directory with everything needed to run it i
     ```
   </Step>
 
-  <Step title="Create Your App Directory">
+  <Step title="Create your app directory">
     Create a new folder under `plugins/` with a descriptive name:
 
     ```bash
@@ -70,18 +66,18 @@ Each app should be a self-contained directory with everything needed to run it i
     cd plugins/your-app-name
     ```
 
-    Use lowercase, hyphens for spaces (e.g., `meeting-summarizer`, `crm-sync`, `daily-journal`).
+    Use lowercase names with hyphens in place of spaces, such as `meeting-summarizer`, `crm-sync`, or `daily-journal`.
   </Step>
 
-  <Step title="Add Your App Code">
+  <Step title="Add your app code">
     Structure your app with these files at minimum:
 
     | File | Required | Description |
     |------|----------|-------------|
-    | `README.md` | ✅ | Documentation (see template below) |
-    | `main.py` | ✅ | App entry point |
-    | `requirements.txt` | ✅ | Python dependencies |
-    | `.env.example` | ✅ | Environment variable template (no secrets!) |
+    | `README.md` | Yes | Documentation (see template below) |
+    | `main.py` | Yes | App entry point |
+    | `requirements.txt` | Yes | Python dependencies |
+    | `.env.example` | Yes | Environment variable template (no secrets!) |
     | `.gitignore` | Recommended | Ignore `.env`, `__pycache__/`, etc. |
 
     <Warning>
@@ -89,7 +85,7 @@ Each app should be a self-contained directory with everything needed to run it i
     </Warning>
   </Step>
 
-  <Step title="Write a Great README">
+  <Step title="Write a great README">
     Your README is the first thing developers see. Include:
 
     ```markdown
@@ -107,7 +103,7 @@ Each app should be a self-contained directory with everything needed to run it i
     ## Setup
 
     ### Prerequisites
-    - Python 3.8+
+    - Python 3 (match the version the plugin runtime uses; see the repo's `backend` toolchain)
     - Any external service accounts needed
 
     ### Installation
@@ -132,7 +128,7 @@ Each app should be a self-contained directory with everything needed to run it i
     ```
   </Step>
 
-  <Step title="Test Thoroughly">
+  <Step title="Test thoroughly">
     Before submitting, make sure:
 
     - [ ] App runs from a clean install following your README
@@ -142,7 +138,7 @@ Each app should be a self-contained directory with everything needed to run it i
     - [ ] Code is clean and reasonably commented
   </Step>
 
-  <Step title="Create a Branch and Commit">
+  <Step title="Create a branch and commit">
     ```bash
     git checkout -b add-your-app-name
     git add plugins/your-app-name/
@@ -150,7 +146,7 @@ Each app should be a self-contained directory with everything needed to run it i
     ```
   </Step>
 
-  <Step title="Open a Pull Request">
+  <Step title="Open a pull request">
     Push your branch and open a PR against `main`:
 
     ```bash
@@ -164,14 +160,12 @@ Each app should be a self-contained directory with everything needed to run it i
   </Step>
 </Steps>
 
----
-
-## PR Review Checklist
+## PR review checklist
 
 Our team will review your PR against these criteria:
 
 <AccordionGroup>
-  <Accordion title="Code Quality" icon="code">
+  <Accordion title="Code quality" icon="code">
     - Clean, readable code
     - No unnecessary dependencies
     - Proper error handling
@@ -182,67 +176,48 @@ Our team will review your PR against these criteria:
     - `.env.example` with all required variables
     - Clear explanation of what the app does
   </Accordion>
-  <Accordion title="Self-Contained" icon="box">
+  <Accordion title="Self-contained" icon="box">
     - App runs independently from its directory
     - All dependencies listed in `requirements.txt`
     - No modifications to core Omi code
   </Accordion>
-  <Accordion title="Community Guidelines" icon="heart">
+  <Accordion title="Community guidelines" icon="heart">
     - Respects user privacy
     - No harmful or inappropriate content
     - Provides genuine value to users
   </Accordion>
 </AccordionGroup>
 
----
-
-## Tips for a Successful Contribution
+## Tips for a successful contribution
 
 <CardGroup cols={2}>
-  <Card title="Start Simple" icon="seedling">
+  <Card title="Start simple" icon="seedling">
     A well-documented simple app is better than a complex, undocumented one
   </Card>
-  <Card title="Show, Don't Tell" icon="photo-film">
+  <Card title="Show, don't tell" icon="photo-film">
     Include screenshots, GIFs, or a demo video in your README
   </Card>
-  <Card title="Be Responsive" icon="comments">
+  <Card title="Be responsive" icon="comments">
     Respond to review feedback quickly to get your PR merged faster
   </Card>
-  <Card title="Follow Existing Patterns" icon="copy">
+  <Card title="Follow existing patterns" icon="copy">
     Look at existing apps in `plugins/` for style and structure inspiration
   </Card>
 </CardGroup>
 
----
-
-## Contribution Rewards
-
-Significant open-source contributions earn rewards:
-
-| Contributions | Reward |
-|---------------|--------|
-| 1 merged PR | Free DevKit device (necklace or glasses) |
-| 2+ merged PRs | Additional DevKit + community recognition |
-
-<Tip>
-See the full [Contribution Guide](/doc/developer/Contribution) for details on rewards and bounties.
-</Tip>
-
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Publish to App Store" icon="store" href="/doc/developer/apps/Submitting">
+  <Card title="Publish to the app store" icon="store" href="/doc/developer/apps/Submitting">
     Submit your app to the Omi app store (no code required)
   </Card>
-  <Card title="Building Apps" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+  <Card title="Building apps" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
     Learn how to build Omi apps from scratch
   </Card>
-  <Card title="Contribution Guide" icon="code-pull-request" href="/doc/developer/Contribution">
-    General contribution guidelines and rewards
+  <Card title="Contribution guide" icon="code-pull-request" href="/doc/developer/Contribution">
+    General contribution guidelines
   </Card>
-  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+  <Card title="Integration apps" icon="plug" href="/doc/developer/apps/Integrations">
     Build webhook-based integrations
   </Card>
 </CardGroup>

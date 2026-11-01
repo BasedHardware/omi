@@ -14495,6 +14495,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get episodeMoments => 'Моменты';
 
   @override
+  String get episodeFollowUps => 'Следующие шаги';
+
+  @override
+  String get episodeOpenTranscript => 'Открыть расшифровку';
+
+  @override
   String get episodeSoFar => 'Пока что';
 
   @override
@@ -14715,12 +14721,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get episodeOnThisPhone => 'На этом телефоне';
 
   @override
-  String get episodeOpenTranscript => 'Открыть расшифровку';
-
-  @override
-  String get liveCardTitle => 'Прямой эфир';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Финальная расшифровка отстает примерно на $duration';
   }
@@ -14735,7 +14735,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Безопасная запись';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Прямой эфир на этом телефоне';
+  String get livePreviewOnPhoneDivider => 'Только что, на этом телефоне';
 
   @override
   String get livePreviewTurnOnLiveText => 'Включить текст прямой трансляции';
@@ -14980,19 +14980,38 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count части',
-      many: '$count частей',
-      few: '$count части',
-      two: '$count части',
-      one: '$count часть',
-      zero: '$count части',
-    );
-    return '$_temp0';
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Отправьте сообщение в приложении «$app». Этот экран обновится, как только Omi его получит.';
   }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Получите новый код и отправьте его из приложения «$app».';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Пишем заметки…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Сначала завершаем расшифровку. Можно покинуть эту страницу.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Охватывает до $time · полные заметки по завершении';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Расшифровано до $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Сохранено $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Участники и итоговая расшифровка появятся здесь по мере загрузки.';
 
   @override
   String get paymentDeclinedTitle => 'Ваша карта отклонена';

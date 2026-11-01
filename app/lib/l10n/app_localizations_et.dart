@@ -14440,6 +14440,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get episodeMoments => 'Hetked';
 
   @override
+  String get episodeFollowUps => 'Järgmised sammud';
+
+  @override
+  String get episodeOpenTranscript => 'Ava transkriptsioon';
+
+  @override
   String get episodeSoFar => 'Seni';
 
   @override
@@ -14660,12 +14666,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get episodeOnThisPhone => 'Selles telefonis';
 
   @override
-  String get episodeOpenTranscript => 'Ava transkriptsioon';
-
-  @override
-  String get liveCardTitle => 'Otse';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Lõplik transkriptsioon jääb umbes $duration maha';
   }
@@ -14680,7 +14680,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Salvestab turvaliselt';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Otse selles telefonis';
+  String get livePreviewOnPhoneDivider => 'Just praegu, selles telefonis';
 
   @override
   String get livePreviewTurnOnLiveText => 'Lülita reaalajas tekst sisse';
@@ -14925,19 +14925,38 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count osa',
-      many: '$count osa',
-      few: '$count osa',
-      two: '$count osa',
-      one: '$count osa',
-      zero: '$count osa',
-    );
-    return '$_temp0';
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Saada sõnum rakenduses $app. See ekraan uueneb, kui Omi selle kätte saab.';
   }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Hangi uus kood ja saada see rakendusest $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Kirjutame märkmeid…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Kõigepealt lõpetame transkriptsiooni. Võid sellelt lehelt lahkuda.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Katab kuni $time · täielikud märkmed lõpus';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkribeeritud kuni $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration salvestatud';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
 
   @override
   String get paymentDeclinedTitle => 'Sinu kaart lükati tagasi';

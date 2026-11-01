@@ -96,7 +96,12 @@ def test_lookup_wrap_up_and_dismiss(client, monkeypatch):
         'dismiss_item',
         lambda uid, eid, item_id: calls.append(('dismiss', eid, item_id)) or dict(EPISODE),
     )
+    checked = []
+    monkeypatch.setattr(
+        router_module.home_read, 'schedule_missed_composes', lambda uid, rows, wires: checked.append(rows[0]['id']) or 0
+    )
     assert http.get('/v1/episodes/by-conversation/c1').json()['episode']['id'] == 'e1'
+    assert checked == ['e1']  # The lookup Home calls carries the composer safety net.
     assert http.post('/v1/episodes/e1/wrap-up', json={'conversation_id': 'c1'}).status_code == 200
     assert http.post('/v1/episodes/e1/wrap-up').status_code == 200
     assert http.post('/v1/episodes/e1/items/p1/dismiss').status_code == 200

@@ -78,14 +78,14 @@ async def route(world, mode):
     )
 
 
-@pytest.mark.parametrize('mode', list(LegacySyncMode))
+@pytest.mark.parametrize('mode', [LegacySyncMode.ON])
 @pytest.mark.parametrize('language', ['auto', 'ja'])
 async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeypatch, mode, language):
     world = setup(monkeypatch, language)
     module, saved, jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
     before = deepcopy(world.client.rows)
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda *a: None)
         module.resolve_batch_policy = lambda uid: world.policy
         module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
@@ -141,14 +141,20 @@ async def test_prior_batch_receipt_precedes_a_new_owner_exclusion_without_writes
 
 @pytest.mark.parametrize('mode', [LegacySyncMode.DRAINING, LegacySyncMode.DARK])
 @pytest.mark.parametrize('language', ['auto', 'ja'])
-async def test_excluded_legacy_owner_is_not_rehomed_to_batch(monkeypatch, mode, language):
+async def test_unsupported_legacy_owner_rehomes_when_legacy_is_unavailable(monkeypatch, mode, language):
     world = setup(monkeypatch, language, owner='legacy_final_pass_v1')
-    rehome = Mock(side_effect=AssertionError('unsafe upload re-homed to batch'))
+    rehome = Mock(return_value=RehomeOutcome.REHOMED)
     monkeypatch.setattr(final_pass_rehome, 'upload_rehome', rehome)
-    before = deepcopy(world.client.rows)
-    assert await route(world, mode) is RecordUploadRoute.LEGACY
-    assert not world.claims and world.client.rows == before
-    rehome.assert_not_called()
+    assert await route(world, mode) is RecordUploadRoute.BATCH
+    rehome.assert_called_once()
+
+
+@pytest.mark.parametrize('mode', [LegacySyncMode.DRAINING, LegacySyncMode.DARK])
+@pytest.mark.parametrize('language', ['auto', 'ja', 'multi', 'und'])
+async def test_new_unsupported_owner_has_batch_path_in_retirement(monkeypatch, mode, language):
+    world = setup(monkeypatch, language)
+    assert await route(world, mode) is RecordUploadRoute.BATCH
+    assert world.claims == ['batch_sync_v1']
 
 
 async def test_supported_legacy_owner_still_rehomes_in_dark(monkeypatch):
@@ -181,4 +187,4 @@ async def test_negative_control_router_without_preclaim_gate_exposes_the_reviewe
     # router reserves batch_sync_v1 first, and the regression catches staging.
     monkeypatch.setattr(live_upload, 'admission_language_exclusion_enabled', lambda: False)
     with pytest.raises(AssertionError, match='not have been called'):
-        await test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeypatch, LegacySyncMode.DARK, 'auto')
+        await test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeypatch, LegacySyncMode.ON, 'auto')

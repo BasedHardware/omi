@@ -14510,6 +14510,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeMoments => 'Momente';
 
   @override
+  String get episodeFollowUps => 'Pași următori';
+
+  @override
+  String get episodeOpenTranscript => 'Deschide transcrierea';
+
+  @override
   String get episodeSoFar => 'Până acum';
 
   @override
@@ -14730,12 +14736,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeOnThisPhone => 'Pe acest telefon';
 
   @override
-  String get episodeOpenTranscript => 'Deschide transcrierea';
-
-  @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Transcrierea finală întârzie cu aproximativ $duration';
   }
@@ -14750,7 +14750,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Se înregistrează în siguranță';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live pe acest telefon';
+  String get livePreviewOnPhoneDivider => 'Chiar acum, pe acest telefon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Activează textul live';
@@ -14995,19 +14995,38 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count de părți',
-      many: '$count de părți',
-      few: '$count părți',
-      two: '$count de părți',
-      one: '$count parte',
-      zero: '$count de părți',
-    );
-    return '$_temp0';
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Trimite mesajul din $app. Acest ecran se actualizează de îndată ce Omi îl primește.';
   }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Obține un cod nou și trimite-l din $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Scriem notițele…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Mai întâi terminăm transcrierea. Poți părăsi această pagină.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Până la $time · notițe complete la final';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transcris până la $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration salvate';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
 
   @override
   String get paymentDeclinedTitle => 'Cardul dvs. a fost refuzat';

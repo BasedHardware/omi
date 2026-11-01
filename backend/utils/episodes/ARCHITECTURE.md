@@ -227,6 +227,57 @@ The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
   (`idle`), dated when the quiet reached the gap rather than when the read
   happened. No scheduler is involved.
 
+## Composed summary (David, 2026-10-31)
+
+The live notes above are a preview. Once an episode is closed and every retained
+member conversation has finished processing, `composer.compose` writes the
+episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
+- Input: each member's own summary (title, overview, action items) plus the
+  episode's full transcript with clock times. Above `COMPOSER_MAX_TRANSCRIPT_CHARS`
+  (about 60k tokens; the 4h cap makes this rare) the densest 10-minute windows
+  are kept in time order and the gaps are marked.
+- Output (v2) replaces `title`, `emoji`, `lede` (one or two sentences; also
+  `bullets` = [lede] for released clients), `follow_ups`, `people` and `moments`:
+  1-8 chapters, each with 2-5 `points` (text plus up to a few `details`). The
+  episode page renders each chapter as a section, like a conversation summary,
+  and opens it in its conversation's transcript via `start_offset`/`end_offset`.
+  Transcript labels and chapter times are HH:MM:SS; a chapter without an end runs
+  to its recording's last line before the next chapter. Placeholder or
+  out-of-span chapters are dropped. Member ends move `member_activity`, so a late
+  member extends the episode's end. `lede` and `follow_ups` live in the encrypted
+  `content` blob with the other notes.
+- `composer_version` changes recompose an episode once on read.
+- `composed_fingerprint` covers retained members, every member's transcript text
+  and timing, and its own summary and action items. Unchanged evidence never
+  spends a second call; a late member, a sync upgrade, a transcript edit or a
+  discard recomposes. `summary_needs_regeneration` forces it. An episode with no
+  speech is stamped once instead of retried.
+- `composed_notes` hashes the composed title, notes and moment headings. A later
+  per-moment write over them (a closing conversation's tail, a sync replay) still
+  records membership as before, and the next compose sees the drift and rewrites
+  the notes. `composed_member_ids` lets a read notice a member discarded or
+  deleted directly on its conversation after the compose.
+- One paid call per evidence across replicas: a `compose_lease` (fingerprint,
+  150 s) is claimed by CAS before the model call. After the call the members are
+  re-read; changed evidence returns `superseded` without writing (its own trigger
+  composes again). Failures count `compose_failures`; the read-side net backs off
+  10/20/40 minutes and stops after four until the evidence changes.
+- Chapter clock times are mapped on the same clock as the transcript labels and
+  must fall inside the episode's transcript span (two-minute slack).
+- Triggers: close, every member finalize (including `sync_update`), and a
+  read-side safety net in `home_read.project_episodes` for a closed episode that
+  is uncomposed, drifted or whose visible members changed, closed over a minute
+  ago (at most two per read, each episode at most every ten minutes per process).
+  Runs on a small background pool, one run per episode at a time; never raises.
+- `project_episodes` leaves out a member that closed in under a minute with no notes
+  because it fell under the notes floor, unless the user curated it. Lookups and
+  search still reach it. Kill switch `HOME_HIDE_BELOW_FLOOR_ROWS` (on unless set off, read
+  per request; changing it takes a new backend revision). Telemetry:
+  `omi_episode_home_members_total{outcome}`.
+- Kill switch `EPISODE_COMPOSER` (on unless set off): off restores the live
+  notes as the final notes. Telemetry: `omi_episode_compose_total{outcome}` and
+  `omi_episode_compose_seconds`; usage adds `composer_*` counters.
+
 ## Kill switch, cohort and client capability
 
 `config/episodes.py`:

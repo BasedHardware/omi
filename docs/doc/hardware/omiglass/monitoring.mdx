@@ -1,14 +1,14 @@
 ---
-title: "Monitoring & Testing"
+title: "Monitoring and testing"
 icon: "chart-line"
-description: "Monitor serial logs and test your OmiGlass device"
+description: "Monitor serial logs and test your omiGlass device"
 ---
 
 After flashing the firmware, you can monitor your device's activity, check battery status, and test functionality using the serial monitor.
 
-## Connect to Serial Monitor
+## Connect to the serial monitor
 
-Use PlatformIO's device monitor to view real-time logs from your OmiGlass:
+Use PlatformIO's device monitor to view real-time logs from your omiGlass:
 
 ```bash
 platformio device monitor --baud 115200
@@ -18,7 +18,7 @@ platformio device monitor --baud 115200
 The serial monitor connects to your device and displays debug logs, status messages, and allows you to send commands.
 </Info>
 
-**Alternative: Specify Port Explicitly**
+**Alternative: specify the port**
 
 If you have multiple devices connected:
 
@@ -34,13 +34,11 @@ pio device monitor --baud 115200
 To exit the serial monitor, press `Ctrl+C`
 </Tip>
 
----
-
-## Available Serial Commands
+## Available serial commands
 
 Once connected to the serial monitor, you can type these commands to interact with your device:
 
-### Quick Status Check
+### Quick status check
 
 ```
 status
@@ -48,7 +46,7 @@ status
 
 Shows current battery level, connection status, and device state.
 
-**Example Output:**
+**Example output:**
 ```
 Battery: 85% (4.1V)
 Status: Connected
@@ -56,20 +54,18 @@ Camera: Ready
 BLE: Active
 ```
 
----
-
-### Battery Monitoring Commands
+### Battery monitoring commands
 
 <CardGroup cols={2}>
-  <Card title="Charging Status" icon="battery-bolt">
-    Monitor charging progress in real-time
+  <Card title="Charging status" icon="battery-bolt">
+    Monitor charging progress in real time
   </Card>
-  <Card title="Runtime Calculator" icon="clock">
+  <Card title="Runtime calculator" icon="clock">
     See how long your glasses will last
   </Card>
 </CardGroup>
 
-#### Charging Status Monitor
+#### Charging status monitor
 
 ```
 charging
@@ -77,12 +73,12 @@ charging
 
 Takes 10 readings over 20 seconds and displays charging status:
 
-- **🔋 CHARGING** (>4.1V) - Actively charging
-- **⚡ CHARGED** (3.9-4.1V) - Good charge level
-- **🔴 LOW** (3.7-3.9V) - Needs charging
-- **❌ CRITICAL** (&lt;3.7V) - Check connections
+- **CHARGING** (>4.1V): Actively charging
+- **CHARGED** (3.9-4.1V): Good charge level
+- **LOW** (3.7-3.9V): Needs charging
+- **CRITICAL** (&lt;3.7V): Check connections
 
-**Example Output:**
+**Example output:**
 ```
 Reading 1/10: 4.15V - CHARGING
 Reading 2/10: 4.18V - CHARGING
@@ -91,9 +87,7 @@ Reading 3/10: 4.20V - CHARGING
 Average: 4.18V - Battery is charging normally
 ```
 
----
-
-#### Battery Runtime Calculator
+#### Battery runtime calculator
 
 ```
 runtime
@@ -101,7 +95,7 @@ runtime
 
 Shows estimated runtime for different usage scenarios based on current charge level.
 
-**Example Output:**
+**Example output:**
 ```
 Current Battery: 85% (4.1V)
 
@@ -111,9 +105,7 @@ Estimated Runtime:
 - Light Use (mostly idle): 10-12 hours
 ```
 
----
-
-#### Charge Time Calculator
+#### Charge time calculator
 
 ```
 chargetime
@@ -121,7 +113,7 @@ chargetime
 
 Calculates estimated time to reach full charge from current level.
 
-**Example Output:**
+**Example output:**
 ```
 Current Battery: 45% (3.85V)
 
@@ -131,9 +123,7 @@ Estimated Charging Time:
 - To 100%: 60 minutes
 ```
 
----
-
-#### Continuous Monitor
+#### Continuous monitor
 
 ```
 monitor
@@ -141,7 +131,7 @@ monitor
 
 Enables continuous monitoring with readings every 5 seconds. Type any command to stop.
 
-**Example Output:**
+**Example output:**
 ```
 [12:30:45] Battery: 82% (4.08V) | Status: Connected
 [12:30:50] Battery: 82% (4.08V) | Status: Connected
@@ -153,11 +143,9 @@ Enables continuous monitoring with readings every 5 seconds. Type any command to
 Press any key and hit Enter to stop continuous monitoring.
 </Note>
 
----
+## Battery status reference
 
-## Battery Status Reference
-
-### Voltage Levels & Charging Times
+### Voltage levels and charging times
 
 | Voltage Range | Battery % | Status | Time to Full (USB) |
 |---------------|-----------|--------|-------------------|
@@ -166,54 +154,50 @@ Press any key and hit Enter to stop continuous monitoring.
 | 3.8V - 4.0V | 20-80% | Moderate | 30-60 minutes |
 | 3.7V - 3.8V | 0-20% | Low battery | 60-90 minutes |
 | 3.5V - 3.7V | Critical | Very low | 90+ minutes |
-| <3.5V | Critical | Unsafe | Check hardware |
+| Under 3.5V | Critical | Unsafe | Check hardware |
 
 <Warning>
 Do not let the battery drop below 3.5V as it may damage the Li-ion cells.
 </Warning>
 
----
-
-### Battery Life Estimates
+### Battery life estimates
 
 Based on dual 250mAh batteries (500mAh total):
 
 | Usage Pattern | Runtime | Description |
 |---------------|---------|-------------|
-| 🔥 **Heavy Use** | **6-7 hours** | Continuous photo capture, always active |
-| ⚡ **Normal Use** | **8-10 hours** | Mixed usage: 60% active, 30% standby, 10% sleep |
-| 💤 **Light Use** | **12-15 hours** | Mostly connected but idle, occasional photos |
+| **Heavy use** | **6-7 hours** | Continuous photo capture, always active |
+| **Normal use** | **8-10 hours** | Mixed usage: 60% active, 30% standby, 10% sleep |
+| **Light use** | **12-15 hours** | Mostly connected but idle, occasional photos |
 
-**Current Consumption:**
-- Active Mode: ~80mA (Camera + BLE + processing)
-- Standby Mode: ~40mA (BLE connected, camera off)
-- Sleep Mode: ~2mA (Deep sleep, button wake-up)
+**Current consumption:**
+- Active mode: ~80mA (camera + BLE + processing)
+- Standby mode: ~40mA (BLE connected, camera off)
+- Sleep mode: ~2mA (deep sleep, button wake-up)
 
----
+## Testing your device
 
-## Testing Your Device
-
-### Basic Functionality Test
+### Basic functionality test
 
 <Steps>
-  <Step title="Connect to Serial Monitor">
+  <Step title="Connect to the serial monitor">
     ```bash
     platformio device monitor --baud 115200
     ```
   </Step>
 
-  <Step title="Check Status">
+  <Step title="Check status">
     Type `status` in the serial monitor and verify:
     - Battery percentage is displayed
     - Device reports as ready
     - BLE status shows as active
   </Step>
 
-  <Step title="Test Battery Monitoring">
+  <Step title="Test battery monitoring">
     Type `charging` to verify battery readings are accurate and stable.
   </Step>
 
-  <Step title="Connect to App">
+  <Step title="Connect to the app">
     Open the Omi app and verify:
     - Device appears in Bluetooth scan
     - Connection is successful
@@ -221,48 +205,44 @@ Based on dual 250mAh batteries (500mAh total):
   </Step>
 </Steps>
 
----
+## Charging your omiGlass
 
-## Charging Your OmiGlass
-
-### Hardware Setup
+### Hardware setup
 
 - **Batteries:** Dual 250mAh Li-ion batteries (500mAh total, 3.7V-4.3V range)
-- **Charging Method:** Connect USB-C cable to ESP32-S3 board
+- **Charging method:** Connect USB-C cable to ESP32-S3 board
 - **Charging LED:** On-board LED indicates status
 
-### Charging Process
+### Charging process
 
 <Steps>
-  <Step title="Connect USB-C Cable">
+  <Step title="Connect the USB-C cable">
     Plug the USB-C cable into the ESP32-S3 board and your computer or charger.
   </Step>
 
-  <Step title="Check LED Status">
+  <Step title="Check the LED status">
     - **Red LED** = Charging in progress
     - **Green LED** = Fully charged
   </Step>
 
-  <Step title="Monitor Progress">
+  <Step title="Monitor progress">
     Use the `charging` command to verify charging is progressing normally:
     ```
     charging
     ```
   </Step>
 
-  <Step title="Charging Time">
+  <Step title="Charging time">
     - USB 2.0 port: ~1-1.5 hours full charge
     - USB 3.0 port: ~45-60 minutes
     - USB-C port: ~30-45 minutes
   </Step>
 </Steps>
 
----
-
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title="No Serial Output">
+  <Accordion title="No serial output">
     **Problem:** Serial monitor connects but shows no output.
 
     **Solutions:**
@@ -272,7 +252,7 @@ Based on dual 250mAh batteries (500mAh total):
     - Check the firmware flashed successfully
   </Accordion>
 
-  <Accordion title="Battery Shows 0% or 100% Always">
+  <Accordion title="Battery shows 0% or 100% always">
     **Problem:** Battery percentage doesn't change or shows incorrect values.
 
     **Solutions:**
@@ -282,7 +262,7 @@ Based on dual 250mAh batteries (500mAh total):
     - Ensure resistor values are correct (169kΩ and 110kΩ)
   </Accordion>
 
-  <Accordion title="Device Won't Charge">
+  <Accordion title="Device won't charge">
     **Problem:** Battery voltage doesn't increase when connected to charger.
 
     **Solutions:**
@@ -293,7 +273,7 @@ Based on dual 250mAh batteries (500mAh total):
     - Use `charging` command to monitor voltage over time
   </Accordion>
 
-  <Accordion title="Inconsistent Readings">
+  <Accordion title="Inconsistent readings">
     **Problem:** Battery readings fluctuate significantly.
 
     **Solutions:**
@@ -304,18 +284,16 @@ Based on dual 250mAh batteries (500mAh total):
   </Accordion>
 </AccordionGroup>
 
----
+## Best practices
 
-## Best Practices
-
-### Charging Best Practices
+### Charging best practices
 
 - **Charge when battery drops below 20%** (3.8V)
 - **Don't let battery go below 3.5V** (damages Li-ion cells)
 - **Charge in moderate temperatures** (10°C-40°C)
 - **Use quality USB-C charger** (5V, 1A minimum)
 
-### Battery Life Optimization
+### Battery life optimization
 
 - **Avoid complete discharge** (stop using at 3.7V)
 - **Charge regularly** (don't leave dead for days)
@@ -325,22 +303,20 @@ Based on dual 250mAh batteries (500mAh total):
   - Reduce photo frequency for all-day use
   - Disconnect when not needed to save power
 
-### Monitoring Schedule
+### Monitoring schedule
 
 - **Before use:** Quick `status` check
 - **During long sessions:** Periodic `status` checks
 - **While charging:** Use `charging` command to verify progress
 - **For troubleshooting:** Use `monitor` for continuous tracking
 
----
-
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Flash Firmware" icon="microchip" href="/doc/hardware/omiglass/flash-firmware">
+  <Card title="Flash firmware" icon="microchip" href="/doc/hardware/omiglass/flash-firmware">
     Update to the latest firmware version
   </Card>
-  <Card title="Hardware Assembly" icon="screwdriver-wrench" href="/doc/hardware/omiGlass">
+  <Card title="Hardware assembly" icon="screwdriver-wrench" href="/doc/hardware/omiGlass">
     Complete hardware setup guide
   </Card>
 </CardGroup>

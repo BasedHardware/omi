@@ -17,7 +17,8 @@ traffic it scrapes, with no cross-environment comparison or labels.
 | `omi_live_stt_terminal_failures_total` | `provider`, `outcome`, `client_platform`, `deployment_environment`, `phase` | Provider failure detail correlated with a live-STT terminal. |
 | `omi_capture_finalization_reconciliations_total` | `outcome` | A stale durable capture job was requeued, or its requeue handoff failed. |
 | `omi_capture_finalization_failures_total` | `reason` | A persisted finalizer failed with one privacy-safe reason: `memory_fence`, `memory_config`, `provider`, `stale`, or `processing`. |
-| `listen_finalization_oldest_nonterminal_age_seconds` | none | Age of the oldest queued, leased, or BYOK-blocked capture finalization job. |
+| `listen_finalization_oldest_nonterminal_age_seconds` | none | Age of the oldest queued or leased system-owned capture finalization job; excludes BYOK-blocked waits. |
+| `listen_finalization_oldest_blocked_byok_age_seconds` | none | Age of the oldest job waiting for user BYOK credentials; informational, separate from system-owned age. |
 | `listen_finalization_durable_jobs` | `state` | Authoritative Firestore job projection: `accepted`, `success`, `failure`, `stale`, `nonterminal`, `blocked_byok`, or `terminal_unknown`. |
 
 `journey` is exactly `chat_response`, `pusher_session`, or
@@ -41,7 +42,7 @@ rewrite that contract:
 | Metric | Labels | Meaning |
 | --- | --- | --- |
 | `omi_client_journey_accepted_total` | `journey`, `client_kind`, `app_build` | A semantic journey was accepted. |
-| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `app_build`, `outcome` | Its one-shot coarse terminal result. |
+| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `app_build`, `outcome`, `reason` | Its one-shot terminal result with a closed issue reason. |
 | `omi_client_journey_issues_total` | `journey`, `client_kind`, `app_build`, `issue_class` | One bounded detail for a failed, degraded, or unknown terminal. |
 | `omi_client_journey_duration_seconds` | `journey`, `outcome` | Acceptance-to-terminal duration. |
 
@@ -49,8 +50,12 @@ rewrite that contract:
 sentinel `unknown`. `degraded` means the request completed but did not deliver
 the requested primary product result. `canned_fallback` and `quota_capped` stay
 separate `issue_class` values; they must not be inferred from the coarse
-outcome. Failure/degradation detail is a separate counter, and `client_kind` is
-omitted from the histogram, to avoid multiplying every histogram bucket.
+outcome. Terminal `reason` reuses the closed `CLIENT_JOURNEY_ISSUE_CLASSES`
+vocabulary for failure, degraded and unknown outcomes; unrecognized inputs
+become `unknown`, and success/cancelled always use `none`. The issue counter
+retains the same detail separately. Historical terminal series without `reason`
+are shown as `legacy_unlabeled` in Core Features. Neither `client_kind` nor
+`reason` is added to the histogram, to avoid multiplying every histogram bucket.
 
 `client_kind` prefers the bounded `X-App-Platform` value, then recognizes only
 known User-Agent families. Headerless CFNetwork and Electron clients resolve to

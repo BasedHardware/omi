@@ -33,6 +33,30 @@ import utils.conversations.finalizer as persisted_finalizer
 import services.conversation_finalization as finalization_service
 
 
+def test_prod_listen_has_replay_binding_without_enabling_live_admission(monkeypatch):
+    backend_root = Path(__file__).resolve().parents[2]
+    renderer = runpy.run_path(str(backend_root / 'scripts/render_backend_runtime_env.py'))
+    manifest = renderer['_load_yaml'](renderer['DEFAULT_MANIFEST'])
+    entries = manifest['environments']['prod']['gke']['backend-listen']['env']
+    monkeypatch.delenv('LISTEN_FINALIZATION_DISPATCH_MODE', raising=False)
+    for name in (
+        'SYNC_TASKS_PROJECT',
+        'SYNC_TASKS_LOCATION',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+        'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS',
+        'LISTEN_FINALIZATION_REPLAY_ENABLED',
+    ):
+        monkeypatch.setenv(name, entries[name]['value'])
+    assert 'LISTEN_FINALIZATION_DISPATCH_MODE' not in entries
+    assert cloud_tasks.is_listen_finalization_tasks_configured()
+    assert not cloud_tasks.is_listen_finalization_dispatch_enabled()
+    assert not cloud_tasks.is_listen_finalization_dispatch_configured()
+    assert finalization_service.replay_enabled()
+    assert cloud_tasks.get_listen_finalization_tasks_max_attempts() == 5
+
+
 def _prod_backend_sync_runtime_env(monkeypatch):
     """Render the production backend-sync contract instead of duplicating it here."""
     backend_root = Path(__file__).resolve().parents[2]
@@ -355,12 +379,83 @@ def test_listen_finalization_dispatch_configuration_requires_every_static_bindin
     assert cloud_tasks.is_listen_finalization_dispatch_configured() is False
 
     monkeypatch.setenv('SYNC_TASKS_PROJECT', 'project')
-    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'location')
+    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'us-central1')
     monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_QUEUE', 'conversation-finalization')
     monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://example.invalid/finalize')
-    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@example.invalid')
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@project.iam.gserviceaccount.com')
 
     assert cloud_tasks.is_listen_finalization_dispatch_configured() is True
+
+
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('SYNC_TASKS_PROJECT', '  project'),
+        ('SYNC_TASKS_PROJECT', 'project/other'),
+        ('SYNC_TASKS_LOCATION', 'not-a-region'),
+        ('SYNC_TASKS_LOCATION', 'us-central1/other'),
+        ('LISTEN_FINALIZATION_TASKS_QUEUE', 'queue/other'),
+        ('LISTEN_FINALIZATION_TASKS_QUEUE', ' '),
+        ('LISTEN_FINALIZATION_TASKS_QUEUE', 'q' * 101),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'relative/path'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://-invalid/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker..invalid/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://@worker.invalid/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid:bad/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid:0/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://user:password@worker.invalid/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid/run#fragment'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid/\nrun'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid/' + 'x' * 2083),
+        ('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@example.invalid'),
+        ('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@project..iam.gserviceaccount.com'),
+        ('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker.@project.iam.gserviceaccount.com'),
+        ('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@project.iam.gserviceaccount.com '),
+    ],
+)
+def test_finalization_binding_rejects_malformed_nonempty_values(monkeypatch, key, value):
+    for name, valid in {
+        'SYNC_TASKS_PROJECT': 'synthetic-project',
+        'SYNC_TASKS_LOCATION': 'us-central1',
+        'LISTEN_FINALIZATION_TASKS_QUEUE': 'conversation-finalization',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL': 'https://worker.invalid/run',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA': 'worker@synthetic-project.iam.gserviceaccount.com',
+    }.items():
+        monkeypatch.setenv(name, valid)
+    assert cloud_tasks.is_listen_finalization_tasks_configured()
+    monkeypatch.setenv(key, value)
+    assert not cloud_tasks.is_listen_finalization_tasks_configured()
+
+
+@pytest.mark.parametrize(
+    'invoker', ['worker@project.iam.gserviceaccount.com', '123-compute@developer.gserviceaccount.com']
+)
+def test_finalization_binding_accepts_invoker_fallback_and_loopback_harness(monkeypatch, invoker):
+    monkeypatch.setenv('SYNC_TASKS_PROJECT', 'synthetic-project')
+    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'us-central1')
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_QUEUE', 'conversation-finalization')
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'http://127.0.0.1:8080/run')
+    monkeypatch.delenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', raising=False)
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', invoker)
+    assert cloud_tasks.is_listen_finalization_tasks_configured()
+
+
+@pytest.mark.parametrize('mode', ['inline', 'cloud_tasks'])
+def test_replay_syntax_guard_keeps_existing_live_admission_contract(monkeypatch, mode):
+    monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', mode)
+    for key in (
+        'SYNC_TASKS_PROJECT',
+        'SYNC_TASKS_LOCATION',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+    ):
+        monkeypatch.setenv(key, 'synthetic-nonempty')
+    # Live admission has always used mode + presence, with actual enqueue
+    # validation owned by Cloud Tasks. This change validates replay only.
+    assert cloud_tasks.is_listen_finalization_dispatch_configured() is (mode == 'cloud_tasks')
+    assert not cloud_tasks.is_listen_finalization_tasks_configured()
 
 
 def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
@@ -2073,7 +2168,8 @@ async def test_finalizer_fences_before_memory_extraction_on_fanout_loss(monkeypa
 
 
 @pytest.mark.anyio
-async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(monkeypatch):
+@pytest.mark.parametrize('revision_advanced', [False, True])
+async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(monkeypatch, revision_advanced):
     """#10468 r4: when process_conversation reports that lifecycle persistence
     lost (discard/terminal), the finalizer must skip extract_memories entirely
     without even attempting the fanout claim."""
@@ -2101,6 +2197,8 @@ async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(mon
             'id': 'conversation-1',
             'status': ConversationStatus.processing.value,
             'discarded': False,
+            'finalization_job_id': 'job-1',
+            'sync_content_revision': 18,
         },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
@@ -2108,6 +2206,9 @@ async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(mon
     monkeypatch.setattr(persisted_finalizer, 'process_conversation', losing_process)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', extract)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim_fanout)
+
+    replay = MagicMock(return_value=revision_advanced)
+    monkeypatch.setattr(persisted_finalizer.finalization_jobs_db, 'defer_sync_revision_fence', replay)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -2117,7 +2218,12 @@ async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(mon
         lease_epoch=3,
     )
 
-    assert disposition == ConversationFinalizationDisposition.fenced
+    assert disposition == (
+        ConversationFinalizationDisposition.deferred
+        if revision_advanced
+        else ConversationFinalizationDisposition.fenced
+    )
+    replay.assert_called_once_with('job-1', 2, 3, 18)
     extract.assert_not_called()
     claim_fanout.assert_not_called()
 
@@ -2355,7 +2461,7 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     ],
 )
 @pytest.mark.parametrize('terminal', [False, True])
-@pytest.mark.parametrize('vector_case', ['success', 'embedding_error', 'stale', 'index_unavailable'])
+@pytest.mark.parametrize('vector_case', ['success', 'embedding_error', 'stale', 'index_unavailable', 'minimum'])
 async def test_finalizer_summary_vector_requires_visible_structure_and_winning_claim(
     monkeypatch, claim_status, deleted, discarded, structured, emits, vector_case, caplog, terminal
 ):
@@ -2363,8 +2469,13 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
         id='conversation-1',
         status=ConversationStatus.completed,
         discarded=discarded,
-        structured=SimpleNamespace(title='Meeting') if structured else None,
+        structured=(
+            SimpleNamespace(title='Meeting', title_provenance='server_minimum' if vector_case == 'minimum' else None)
+            if structured
+            else None
+        ),
     )
+    emits = emits and vector_case != 'minimum'
     events = []
 
     async def inline_run_blocking(_executor, func, *args, **kwargs):
