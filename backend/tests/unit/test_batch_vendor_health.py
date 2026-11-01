@@ -420,9 +420,9 @@ def test_gpu_always_healthy_unknown_and_unadmitted_vendors_refused():
     svc = _service(Clock())
     assert svc.allows('gpu') == (True, R.HEALTHY)
     assert svc.allows('deepgram') == (False, R.NOT_ADMITTED)
-    # Today's policy keeps Soniox off the prerecorded surface; slice D admits it.
-    assert svc.allows('soniox') == (False, R.NOT_ADMITTED)
-    assert svc.reserve('soniox', 10) == (False, R.NOT_ADMITTED)
+    # Slice D admits Soniox on the prerecorded surface (failover capacity only; tables mark it failover_only).
+    assert svc.allows('soniox') == (True, R.HEALTHY)
+    assert svc.reserve('soniox', 10) == (True, R.HEALTHY)
 
 
 def test_kill_switch_answers_from_process_local_vendor_guard(monkeypatch):

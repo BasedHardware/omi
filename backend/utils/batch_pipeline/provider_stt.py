@@ -650,8 +650,8 @@ def _default_allowed(owner_id: str, seconds: float, service: str) -> bool:
 
 
 def _default_health() -> VendorHealth:
-    # Slice C's cross-pod VendorHealth replaces this stand-in when it lands; until then no
-    # vendor is refused before its call (today's behavior).
+    # Offline callers and tests: no vendor is refused before its call. Serving passes slice C's
+    # get_vendor_health() (_service_stage).
     return contracts.AlwaysHealthy()
 
 
@@ -1003,7 +1003,7 @@ class ProviderSttStage:
 
     def _record_attempt(self, service: str, outcome: VendorAttemptOutcome, latency: float | None) -> None:
         """Feed a settled vendor attempt to slice C's breaker windows, when the health has them."""
-        record = getattr(self.health, 'record_attempt', None)
+        record = getattr(self.health, 'record_attempt', None) if self._armed() else None
         if record is None:
             return
         try:
@@ -1069,10 +1069,12 @@ def _service_stage() -> ProviderSttStage:
     from database.batch_pipeline_shadow_hook import shadow_from_env
     from database.batch_pipeline_store import FirestoreStore
     from utils.batch_pipeline.artifact_policy import artifacts_for
+    from utils.batch_pipeline.vendor_health import get_vendor_health
     from utils.sync.stage import current_stage
 
     store = shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))  # A2 seam: provider-STT writes
-    return ProviderSttStage(store, artifacts_for(store))
+    # Slice C's process-wide cross-pod health (slice B binds its routes to the served table).
+    return ProviderSttStage(store, artifacts_for(store), health=get_vendor_health())
 
 
 class ProviderSttConsumer:
