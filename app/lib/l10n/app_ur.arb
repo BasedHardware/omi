@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "{time} تک · ختم ہونے پر مکمل نوٹس",
     "liveTranscribedUpTo": "{time} تک ٹرانسکرائب ہوا",
     "liveAudioSaved": "{duration} محفوظ",
-    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔"
+    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔",
+    "paymentDeclinedTitle": "آپ کا کارڈ مسترد ہو گیا",
+    "paymentDeclinedMessage": "{plan} واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں"
 }

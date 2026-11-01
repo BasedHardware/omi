@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Охоплює до {time} · повні нотатки після завершення",
     "liveTranscribedUpTo": "Транскрибовано до {time}",
     "liveAudioSaved": "Збережено {duration}",
-    "liveAudioSavedDetail": "Учасники й остаточна транскрипція з'являться тут під час завантаження."
+    "liveAudioSavedDetail": "Учасники й остаточна транскрипція з'являться тут під час завантаження.",
+    "paymentDeclinedTitle": "Вашу картку відхилено",
+    "paymentDeclinedMessage": "Оновіть картку, щоб повернути {plan}"
 }

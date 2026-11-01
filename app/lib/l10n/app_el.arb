@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Καλύπτει έως τις {time} · πλήρεις σημειώσεις στο τέλος",
     "liveTranscribedUpTo": "Απομαγνητοφώνηση έως τις {time}",
     "liveAudioSaved": "Αποθηκεύτηκαν {duration}",
-    "liveAudioSavedDetail": "Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση."
+    "liveAudioSavedDetail": "Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.",
+    "paymentDeclinedTitle": "Η κάρτα σας απορρίφθηκε",
+    "paymentDeclinedMessage": "Ενημερώστε την κάρτα για να αποκτήσετε ξανά το {plan}"
 }

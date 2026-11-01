@@ -14986,4 +14986,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
+
+  @override
+  String get paymentDeclinedTitle => 'Jūsų kortelė atmesta';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Atnaujinkite kortelę, kad vėl naudotumėte $plan';
+  }
 }

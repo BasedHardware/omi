@@ -14956,4 +14956,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Talere og den endelige transskription dukker op her under upload.';
+
+  @override
+  String get paymentDeclinedTitle => 'Dit kort blev afvist';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Opdater kortet for at få $plan tilbage';
+  }
 }

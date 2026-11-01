@@ -14968,4 +14968,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
+
+  @override
+  String get paymentDeclinedTitle => 'Korttisi hylättiin';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Päivitä kortti saadaksesi $plan takaisin';
+  }
 }

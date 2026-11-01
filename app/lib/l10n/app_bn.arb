@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "{time} পর্যন্ত · শেষ হলে সম্পূর্ণ নোট",
     "liveTranscribedUpTo": "{time} পর্যন্ত ট্রান্সক্রাইব হয়েছে",
     "liveAudioSaved": "{duration} সংরক্ষিত",
-    "liveAudioSavedDetail": "আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।"
+    "liveAudioSavedDetail": "আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।",
+    "paymentDeclinedTitle": "আপনার কার্ড প্রত্যাখ্যাত হয়েছে",
+    "paymentDeclinedMessage": "আবার {plan} পেতে কার্ডটি আপডেট করুন"
 }

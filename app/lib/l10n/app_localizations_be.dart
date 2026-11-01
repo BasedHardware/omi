@@ -14998,4 +14998,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Удзельнікі і канчатковая транскрыпцыя з\'явяцца тут падчас загрузкі.';
+
+  @override
+  String get paymentDeclinedTitle => 'Вашу картку адхілілі';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Абнавіце картку, каб вярнуць $plan';
+  }
 }

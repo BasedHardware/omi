@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Meliputi sehingga {time} · nota penuh apabila selesai",
     "liveTranscribedUpTo": "Ditranskripsi sehingga {time}",
     "liveAudioSaved": "{duration} disimpan",
-    "liveAudioSavedDetail": "Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik."
+    "liveAudioSavedDetail": "Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.",
+    "paymentDeclinedTitle": "Kad anda ditolak",
+    "paymentDeclinedMessage": "Kemas kini kad untuk mendapatkan semula {plan}"
 }

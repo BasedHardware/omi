@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Pokrývá do {time} · úplné poznámky po dokončení",
     "liveTranscribedUpTo": "Přepsáno do {time}",
     "liveAudioSaved": "Uloženo {duration}",
-    "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání."
+    "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání.",
+    "paymentDeclinedTitle": "Vaše karta byla zamítnuta",
+    "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}"
 }

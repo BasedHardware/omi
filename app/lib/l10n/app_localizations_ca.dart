@@ -15039,4 +15039,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.';
+
+  @override
+  String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Actualitza-la per recuperar $plan';
+  }
 }

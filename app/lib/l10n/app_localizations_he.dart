@@ -14854,4 +14854,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.';
+
+  @override
+  String get paymentDeclinedTitle => 'הכרטיס שלך נדחה';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'עדכנו את הכרטיס כדי לקבל שוב את $plan';
+  }
 }

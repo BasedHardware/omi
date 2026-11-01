@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Fino alle {time} · note complete alla fine",
     "liveTranscribedUpTo": "Trascritto fino alle {time}",
     "liveAudioSaved": "{duration} salvati",
-    "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento."
+    "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento.",
+    "paymentDeclinedTitle": "La tua carta è stata rifiutata",
+    "paymentDeclinedMessage": "Aggiornala per riavere {plan}"
 }

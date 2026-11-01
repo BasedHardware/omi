@@ -3333,3 +3333,27 @@ final class WalUploadRefused extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"reason": reason.wireName, "status_code": statusCode};
 }
+
+final class SubscriptionPaymentIssueShown extends RegisteredEvent {
+  const SubscriptionPaymentIssueShown();
+  @override
+  String get wireName => "Subscription Payment Issue Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueUpdateTapped extends RegisteredEvent {
+  const SubscriptionPaymentIssueUpdateTapped();
+  @override
+  String get wireName => "Subscription Payment Issue Update Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssuePortalOpened extends RegisteredEvent {
+  const SubscriptionPaymentIssuePortalOpened();
+  @override
+  String get wireName => "Subscription Payment Issue Portal Opened";
+  @override
+  Map<String, Object> get properties => {};
+}

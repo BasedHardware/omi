@@ -14757,4 +14757,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.';
+
+  @override
+  String get paymentDeclinedTitle => '카드가 거절되었습니다';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan을 다시 이용하려면 카드를 업데이트하세요';
+  }
 }

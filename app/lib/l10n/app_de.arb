@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Bis {time} · vollständige Notizen zum Schluss",
     "liveTranscribedUpTo": "Transkribiert bis {time}",
     "liveAudioSaved": "{duration} gespeichert",
-    "liveAudioSavedDetail": "Sprecher und endgültiges Transkript erscheinen hier beim Hochladen."
+    "liveAudioSavedDetail": "Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.",
+    "paymentDeclinedTitle": "Ihre Karte wurde abgelehnt",
+    "paymentDeclinedMessage": "Karte aktualisieren, um {plan} zurückzubekommen"
 }

@@ -15023,4 +15023,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
+
+  @override
+  String get paymentDeclinedTitle => 'A kártyáját elutasították';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Frissítse a kártyát a(z) $plan visszaállításához';
+  }
 }

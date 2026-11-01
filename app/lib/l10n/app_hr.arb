@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "Pokriva do {time} · potpune bilješke po završetku",
     "liveTranscribedUpTo": "Transkribirano do {time}",
     "liveAudioSaved": "Spremljeno {duration}",
-    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa."
+    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa.",
+    "paymentDeclinedTitle": "Vaša kartica je odbijena",
+    "paymentDeclinedMessage": "Ažurirajte karticu kako biste vratili {plan}"
 }

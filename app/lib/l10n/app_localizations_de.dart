@@ -15077,4 +15077,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.';
+
+  @override
+  String get paymentDeclinedTitle => 'Ihre Karte wurde abgelehnt';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Karte aktualisieren, um $plan zurückzubekommen';
+  }
 }

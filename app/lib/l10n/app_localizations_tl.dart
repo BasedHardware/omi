@@ -15083,4 +15083,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.';
+
+  @override
+  String get paymentDeclinedTitle => 'Tinanggihan ang iyong card';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'I-update ang card para maibalik ang $plan';
+  }
 }

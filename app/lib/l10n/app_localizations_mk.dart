@@ -15028,4 +15028,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Говорниците и конечната транскрипција ќе се појават тука при прикачувањето.';
+
+  @override
+  String get paymentDeclinedTitle => 'Вашата картичка е одбиена';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Ажурирајте ја картичката за да го вратите $plan';
+  }
 }

@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Dekker frem til {time} · fullstendige notater til slutt",
     "liveTranscribedUpTo": "Transkribert frem til {time}",
     "liveAudioSaved": "{duration} lagret",
-    "liveAudioSavedDetail": "Talere og den endelige transkripsjonen dukker opp her under opplasting."
+    "liveAudioSavedDetail": "Talere og den endelige transkripsjonen dukker opp her under opplasting.",
+    "paymentDeclinedTitle": "Kortet ditt ble avvist",
+    "paymentDeclinedMessage": "Oppdater kortet for å få {plan} tilbake"
 }

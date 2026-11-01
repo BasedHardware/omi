@@ -14979,4 +14979,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Pembicara dan transkrip akhir akan muncul di sini saat diunggah.';
+
+  @override
+  String get paymentDeclinedTitle => 'Kartu Anda ditolak';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Perbarui kartu untuk mendapatkan kembali $plan';
+  }
 }

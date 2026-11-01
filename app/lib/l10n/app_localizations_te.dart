@@ -15027,4 +15027,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get paymentDeclinedTitle => 'మీ కార్డ్ తిరస్కరించబడింది';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
+  }
 }

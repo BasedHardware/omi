@@ -4557,5 +4557,7 @@
     "episodeCoversUpTo": "Mencakup hingga {time} · catatan lengkap saat selesai",
     "liveTranscribedUpTo": "Ditranskripsi hingga {time}",
     "liveAudioSaved": "{duration} tersimpan",
-    "liveAudioSavedDetail": "Pembicara dan transkrip akhir akan muncul di sini saat diunggah."
+    "liveAudioSavedDetail": "Pembicara dan transkrip akhir akan muncul di sini saat diunggah.",
+    "paymentDeclinedTitle": "Kartu Anda ditolak",
+    "paymentDeclinedMessage": "Perbarui kartu untuk mendapatkan kembali {plan}"
 }

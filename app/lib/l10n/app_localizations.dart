@@ -26324,6 +26324,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speakers and the final transcript fill in here as it uploads.'**
   String get liveAudioSavedDetail;
+
+  /// Home row title when the renewal charge for the user's plan failed
+  ///
+  /// In en, this message translates to:
+  /// **'Your card was declined'**
+  String get paymentDeclinedTitle;
+
+  /// Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro
+  ///
+  /// In en, this message translates to:
+  /// **'Update it to get {plan} back'**
+  String paymentDeclinedMessage(Object plan);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

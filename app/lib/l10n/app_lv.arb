@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Līdz {time} · pilnas piezīmes beigās",
     "liveTranscribedUpTo": "Transkribēts līdz {time}",
     "liveAudioSaved": "Saglabāts {duration}",
-    "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā."
+    "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.",
+    "paymentDeclinedTitle": "Jūsu karte tika noraidīta",
+    "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}"
 }

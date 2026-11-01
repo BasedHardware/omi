@@ -14891,4 +14891,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด';
+
+  @override
+  String get paymentDeclinedTitle => 'บัตรของคุณถูกปฏิเสธ';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'อัปเดตบัตรเพื่อกลับมาใช้ $plan';
+  }
 }

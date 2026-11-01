@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "Опфаќа до {time} · целосни белешки на крајот",
     "liveTranscribedUpTo": "Транскрибирано до {time}",
     "liveAudioSaved": "Зачувани {duration}",
-    "liveAudioSavedDetail": "Говорниците и конечната транскрипција ќе се појават тука при прикачувањето."
+    "liveAudioSavedDetail": "Говорниците и конечната транскрипција ќе се појават тука при прикачувањето.",
+    "paymentDeclinedTitle": "Вашата картичка е одбиена",
+    "paymentDeclinedMessage": "Ажурирајте ја картичката за да го вратите {plan}"
 }

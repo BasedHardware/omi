@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Până la {time} · notițe complete la final",
     "liveTranscribedUpTo": "Transcris până la {time}",
     "liveAudioSaved": "{duration} salvate",
-    "liveAudioSavedDetail": "Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă."
+    "liveAudioSavedDetail": "Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.",
+    "paymentDeclinedTitle": "Cardul dvs. a fost refuzat",
+    "paymentDeclinedMessage": "Actualizați cardul pentru a recupera {plan}"
 }

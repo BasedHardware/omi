@@ -4618,5 +4618,7 @@
     "episodeCoversUpTo": "{time}-ig · teljes jegyzetek a végén",
     "liveTranscribedUpTo": "Átírva eddig: {time}",
     "liveAudioSaved": "{duration} mentve",
-    "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg."
+    "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg.",
+    "paymentDeclinedTitle": "A kártyáját elutasították",
+    "paymentDeclinedMessage": "Frissítse a kártyát a(z) {plan} visszaállításához"
 }

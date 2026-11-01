@@ -14959,4 +14959,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get paymentDeclinedTitle => 'کارت شما رد شد';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'برای بازگرداندن $plan کارت را به‌روزرسانی کنید';
+  }
 }

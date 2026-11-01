@@ -15012,4 +15012,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Участники и итоговая расшифровка появятся здесь по мере загрузки.';
+
+  @override
+  String get paymentDeclinedTitle => 'Ваша карта отклонена';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Обновите карту, чтобы вернуть $plan';
+  }
 }

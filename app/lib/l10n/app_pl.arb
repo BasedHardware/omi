@@ -4557,5 +4557,7 @@
     "episodeCoversUpTo": "Obejmuje do {time} · pełne notatki na końcu",
     "liveTranscribedUpTo": "Transkrypcja do {time}",
     "liveAudioSaved": "Zapisano {duration}",
-    "liveAudioSavedDetail": "Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania."
+    "liveAudioSavedDetail": "Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania.",
+    "paymentDeclinedTitle": "Twoja karta została odrzucona",
+    "paymentDeclinedMessage": "Zaktualizuj kartę, aby odzyskać {plan}"
 }

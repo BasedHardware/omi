@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Täcker fram till {time} · fullständiga anteckningar när det är klart",
     "liveTranscribedUpTo": "Transkriberat fram till {time}",
     "liveAudioSaved": "{duration} sparat",
-    "liveAudioSavedDetail": "Talare och den slutliga transkriptionen visas här under uppladdningen."
+    "liveAudioSavedDetail": "Talare och den slutliga transkriptionen visas här under uppladdningen.",
+    "paymentDeclinedTitle": "Ditt kort nekades",
+    "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}"
 }

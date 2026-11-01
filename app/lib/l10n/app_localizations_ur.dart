@@ -14976,4 +14976,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔';
+
+  @override
+  String get paymentDeclinedTitle => 'آپ کا کارڈ مسترد ہو گیا';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں';
+  }
 }

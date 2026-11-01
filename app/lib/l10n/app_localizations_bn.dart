@@ -14959,4 +14959,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।';
+
+  @override
+  String get paymentDeclinedTitle => 'আপনার কার্ড প্রত্যাখ্যাত হয়েছে';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'আবার $plan পেতে কার্ডটি আপডেট করুন';
+  }
 }

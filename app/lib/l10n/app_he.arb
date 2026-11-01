@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "מכסה עד {time} · הערות מלאות בסיום",
     "liveTranscribedUpTo": "תומלל עד {time}",
     "liveAudioSaved": "{duration} נשמרו",
-    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה."
+    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.",
+    "paymentDeclinedTitle": "הכרטיס שלך נדחה",
+    "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}"
 }

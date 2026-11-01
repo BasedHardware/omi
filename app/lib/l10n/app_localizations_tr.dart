@@ -14977,4 +14977,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Konuşmacılar ve son döküm, yükleme sırasında burada görünür.';
+
+  @override
+  String get paymentDeclinedTitle => 'Kartınız reddedildi';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan planınızı geri almak için kartınızı güncelleyin';
+  }
 }

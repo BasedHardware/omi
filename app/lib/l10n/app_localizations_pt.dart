@@ -14992,4 +14992,12 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Os falantes e a transcrição final aparecerão aqui durante o envio.';
+
+  @override
+  String get paymentDeclinedTitle => 'Seu cartão foi recusado';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Atualize o cartão para recuperar $plan';
+  }
 }

@@ -2164,10 +2164,13 @@ def _stored_paid_period_lapsed(subscription: Subscription) -> bool:
     return not end or datetime.fromtimestamp(end, tz=timezone.utc) < datetime.now(timezone.utc)
 
 
-def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
+def reconcile_basic_plan_with_stripe(
+    uid: str, subscription: Subscription | None, *, stripe_snapshot: Optional[Dict[str, Any]] = None
+) -> Subscription | None:
     """
     If Firestore says `basic`, or a paid plan whose period has passed, but Stripe holds an
     active paid subscription, fix it once by reconciling with Stripe.
+    When requested, share the retrieved Stripe snapshot with the caller's recovery check.
     """
     if not subscription:
         return subscription
@@ -2189,6 +2192,8 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
             stripe_sub_dict: Optional[Dict[str, Any]] = (
                 stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
             )
+            if stripe_snapshot is not None and stripe_sub_dict:
+                stripe_snapshot.update(stripe_sub_dict)
             if stripe_sub_dict:
                 items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
                 price_id: Optional[str] = None

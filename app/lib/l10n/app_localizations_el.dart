@@ -15064,4 +15064,12 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get liveAudioSavedDetail =>
       'Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.';
+
+  @override
+  String get paymentDeclinedTitle => 'Η κάρτα σας απορρίφθηκε';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Ενημερώστε την κάρτα για να αποκτήσετε ξανά το $plan';
+  }
 }

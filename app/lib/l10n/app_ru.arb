@@ -4557,5 +4557,7 @@
     "episodeCoversUpTo": "Охватывает до {time} · полные заметки по завершении",
     "liveTranscribedUpTo": "Расшифровано до {time}",
     "liveAudioSaved": "Сохранено {duration}",
-    "liveAudioSavedDetail": "Участники и итоговая расшифровка появятся здесь по мере загрузки."
+    "liveAudioSavedDetail": "Участники и итоговая расшифровка появятся здесь по мере загрузки.",
+    "paymentDeclinedTitle": "Ваша карта отклонена",
+    "paymentDeclinedMessage": "Обновите карту, чтобы вернуть {plan}"
 }

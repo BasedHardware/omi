@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Tot {time} · volledige notities aan het eind",
     "liveTranscribedUpTo": "Getranscribeerd tot {time}",
     "liveAudioSaved": "{duration} opgeslagen",
-    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden."
+    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.",
+    "paymentDeclinedTitle": "Uw kaart is geweigerd",
+    "paymentDeclinedMessage": "Werk je kaart bij om {plan} terug te krijgen"
 }

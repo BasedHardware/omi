@@ -18296,5 +18296,13 @@
     "liveAudioSavedDetail": "Speakers and the final transcript fill in here as it uploads.",
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
+    },
+    "paymentDeclinedTitle": "Your card was declined",
+    "@paymentDeclinedTitle": {
+        "description": "Home row title when the renewal charge for the user's plan failed"
+    },
+    "paymentDeclinedMessage": "Update it to get {plan} back",
+    "@paymentDeclinedMessage": {
+        "description": "Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro"
     }
 }

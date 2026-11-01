@@ -4557,5 +4557,7 @@
     "episodeCoversUpTo": "Cobre até {time} · notas completas ao terminar",
     "liveTranscribedUpTo": "Transcrito até {time}",
     "liveAudioSaved": "{duration} salvos",
-    "liveAudioSavedDetail": "Os falantes e a transcrição final aparecerão aqui durante o envio."
+    "liveAudioSavedDetail": "Os falantes e a transcrição final aparecerão aqui durante o envio.",
+    "paymentDeclinedTitle": "Seu cartão foi recusado",
+    "paymentDeclinedMessage": "Atualize o cartão para recuperar {plan}"
 }

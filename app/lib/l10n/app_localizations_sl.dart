@@ -14992,4 +14992,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.';
+
+  @override
+  String get paymentDeclinedTitle => 'Vaša kartica je bila zavrnjena';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Posodobite kartico, da znova dobite $plan';
+  }
 }

@@ -14732,4 +14732,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
+
+  @override
+  String get paymentDeclinedTitle => '您的银行卡被拒绝';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '更新银行卡以恢复使用 $plan';
+  }
 }

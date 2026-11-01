@@ -14876,4 +14876,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.';
+
+  @override
+  String get paymentDeclinedTitle => 'تم رفض بطاقتك';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'حدّث بطاقتك لاستعادة $plan';
+  }
 }

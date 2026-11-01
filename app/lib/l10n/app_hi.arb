@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "{time} तक · समाप्त होने पर पूरे नोट्स",
     "liveTranscribedUpTo": "{time} तक ट्रांसक्राइब हुआ",
     "liveAudioSaved": "{duration} सहेजा गया",
-    "liveAudioSavedDetail": "अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।"
+    "liveAudioSavedDetail": "अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।",
+    "paymentDeclinedTitle": "आपका कार्ड अस्वीकार हो गया",
+    "paymentDeclinedMessage": "{plan} वापस पाने के लिए कार्ड अपडेट करें"
 }

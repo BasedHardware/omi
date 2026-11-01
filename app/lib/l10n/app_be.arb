@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "Ахоплівае да {time} · поўныя нататкі пасля завяршэння",
     "liveTranscribedUpTo": "Транскрыбавана да {time}",
     "liveAudioSaved": "Захавана {duration}",
-    "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі."
+    "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі.",
+    "paymentDeclinedTitle": "Вашу картку адхілілі",
+    "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}"
 }

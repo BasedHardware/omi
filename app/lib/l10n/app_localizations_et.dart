@@ -14957,4 +14957,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
+
+  @override
+  String get paymentDeclinedTitle => 'Sinu kaart lükati tagasi';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Uuenda kaarti, et $plan tagasi saada';
+  }
 }

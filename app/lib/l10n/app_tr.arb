@@ -4557,5 +4557,7 @@
     "episodeCoversUpTo": "{time} saatine kadar · bitince tam notlar",
     "liveTranscribedUpTo": "{time} saatine kadar yazıya döküldü",
     "liveAudioSaved": "{duration} kaydedildi",
-    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür."
+    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür.",
+    "paymentDeclinedTitle": "Kartınız reddedildi",
+    "paymentDeclinedMessage": "{plan} planınızı geri almak için kartınızı güncelleyin"
 }

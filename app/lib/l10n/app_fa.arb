@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",
     "liveTranscribedUpTo": "رونویسی تا {time}",
     "liveAudioSaved": "{duration} ذخیره شد",
-    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند."
+    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.",
+    "paymentDeclinedTitle": "کارت شما رد شد",
+    "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید"
 }

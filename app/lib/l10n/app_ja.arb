@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",
     "liveTranscribedUpTo": "{time}まで文字起こし済み",
     "liveAudioSaved": "{duration}を保存済み",
-    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。"
+    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。",
+    "paymentDeclinedTitle": "カードが拒否されました",
+    "paymentDeclinedMessage": "{plan}を再開するにはカードを更新してください"
 }

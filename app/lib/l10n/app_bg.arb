@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Обхваща до {time} · пълните бележки при приключване",
     "liveTranscribedUpTo": "Транскрибирано до {time}",
     "liveAudioSaved": "Запазени {duration}",
-    "liveAudioSavedDetail": "Говорителите и окончателната транскрипция ще се появят тук при качването."
+    "liveAudioSavedDetail": "Говорителите и окончателната транскрипция ще се появят тук при качването.",
+    "paymentDeclinedTitle": "Картата ви беше отхвърлена",
+    "paymentDeclinedMessage": "Обновете картата, за да възстановите {plan}"
 }

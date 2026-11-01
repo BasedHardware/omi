@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Cobreix fins a les {time} · notes completes en acabar",
     "liveTranscribedUpTo": "Transcrit fins a les {time}",
     "liveAudioSaved": "{duration} desats",
-    "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi."
+    "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.",
+    "paymentDeclinedTitle": "La teva targeta ha estat rebutjada",
+    "paymentDeclinedMessage": "Actualitza-la per recuperar {plan}"
 }
