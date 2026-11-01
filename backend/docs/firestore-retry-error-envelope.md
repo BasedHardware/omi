@@ -140,3 +140,46 @@ provider-failure classifier that recognizes only call errors cannot see the
 SDK's own budget-exhaustion envelope, so the exact fault class its retry
 budget existed to absorb skips every downstream retry and resurfaces as a
 failed write (traceback + degradation event) or an unclassified 500.
+
+## The finalization custody family (2026-11-01)
+
+Every transactional custody writer in
+`database/conversation_finalization_jobs.py` — the durable worker's
+claim/complete/fence/fanout/dead-letter/retryable path, the reconciler's
+replay claim, the BYOK resume/abandon terminal, the meeting-receipt writers,
+the three sweep-cursor advances, and the orphan sweep's
+stamp/terminal/deferred family — ran `run_transactional` bare: the
+expired-id commit rejection was replayed on a fresh transaction, but a
+read-time `Aborted` under a hot row escaped the wrapper and surfaced to the
+caller as a real failure (prod backend-listen 2026-11-01: the reconciler's
+replay claim `listen finalization reconciliation claim failed` ×11/30m —
+the durable worker, the reconciler, and `recover_stranded_byok_jobs`
+re-read the same rows every tick, and the orphan sweep touches every pod's
+conversation row, so bursts were structural, not incidental).
+
+The fix is the composition the file's own `create_or_get_finalization_intent`
+already carried: the shared bounded fresh-transaction contention budget
+(`database/firestore_transaction_retry.run_with_transaction_contention_retry`)
+owns read-time aborts; `run_transactional` inside it still restarts the
+expired-id rejection. Envelope-raising writers now surface the typed
+`FirestoreContentionExhausted` after the budget drains instead of a first-
+attempt `Aborted`; boolean writers answer `False`; `renew_processing_lease`
+stays deliberately bare because its caller treats every failure identically
+(pinned by `test_read_time_contention_on_the_lease_renewal_stays_bounded_for_its_caller`).
+The reconciler's claim loop distinguishes the drained budget (a bounded
+`skipped`, the next sweep is the retry, INFO) from a real claim failure
+(the loud `logger.exception` traceback stays).
+
+Guards: `tests/unit/test_conversation_finalization_custody_contention.py`
+(per-writer read-abort replay on fresh transactions, typed exhaustion with
+zero commits, expired-id twins composing both layers, interleaving fences —
+a replay re-decides on fresh reads and never writes a stale decision —,
+reconciler skip-vs-loud classification, budget pacing parity).
+
+Failure-Class: FC-hot-row-read-abort-escapes-reconciliation-custody — a
+transactional custody writer whose only replay layer is the expired-id
+commit rejection surfaces a read-time contention abort as a real failure:
+the row was left untouched (atomic), yet every caller downstream of the
+boundary — reconciler sweep, Cloud Tasks worker, orphan recovery —
+classifies the burst as its own fault and burns its retry budget on a
+boundary the system already owns the retry primitive for.

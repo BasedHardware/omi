@@ -133,7 +133,13 @@ contracts need their own durable-admission migration.
 
 `reconcile_listen_finalization_jobs()` runs at backend startup and every five
 minutes. It only enqueues work when Cloud Tasks dispatch is enabled. The
-reconciler reads a server-side bounded page of due jobs using
+replay claim (and every custody writer in
+`database/conversation_finalization_jobs.py`) rides the shared bounded
+contention budget: a read-time Firestore abort under a hot job row replays
+on a fresh transaction, and a drained budget counts as a bounded `skipped`
+(INFO, the next sweep is the retry) while a real claim failure keeps the
+loud `listen finalization reconciliation claim failed` traceback.
+The reconciler reads a server-side bounded page of due jobs using
 `reconcile_after_at`; terminal jobs do not retain that field. It transactionally
 increments `dispatch_generation` for platform-key jobs, then enqueues a new named task.
 For BYOK jobs it instead revokes expired live-session ownership to `blocked_byok`,

@@ -725,15 +725,27 @@ def _resume_blocked_byok_job_txn(
 
 def resume_blocked_byok_job_for_live_session(job_id: str, *, firestore_client: Any = None) -> FinalizationIntent:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction; the live pusher session's caller has no way to
     # distinguish that replay from a real write failure.
-    return run_transactional(
-        client,
-        firestore.transactional(_resume_blocked_byok_job_txn),
-        _job_ref(client, job_id),
-        _now(),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_resume_blocked_byok_job_txn),
+            _job_ref(client, job_id),
+            _now(),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='byok_resume_for_live_session',
     )
 
 
@@ -823,21 +835,33 @@ def claim_finalization_job(
     firestore_client: Any = None,
 ) -> FinalizationClaim:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction: the Cloud Tasks worker would otherwise answer the
     # replay with a 500 and burn a retry on an attempt that wrote nothing.
-    return run_transactional(
-        client,
-        firestore.transactional(_claim_finalization_job_txn),
-        _job_ref(client, job_id),
-        dispatch_generation,
-        allow_byok,
-        lease_seconds,
-        _now(),
-        expected_uid,
-        expected_conversation_id,
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
-        count_worker_claim,
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_claim_finalization_job_txn),
+            _job_ref(client, job_id),
+            dispatch_generation,
+            allow_byok,
+            lease_seconds,
+            _now(),
+            expected_uid,
+            expected_conversation_id,
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            count_worker_claim,
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_worker_claim',
     )
 
 
@@ -879,17 +903,29 @@ def mark_finalization_completed(
     job_id: str, dispatch_generation: int, lease_epoch: int, *, firestore_client: Any = None
 ) -> bool:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction: a completed fanout must not be re-leased and
     # re-processed because its acknowledgement died on a retired id.
-    return run_transactional(
-        client,
-        firestore.transactional(_mark_finalization_completed_txn),
-        _job_ref(client, job_id),
-        dispatch_generation,
-        lease_epoch,
-        _now(),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_mark_finalization_completed_txn),
+            _job_ref(client, job_id),
+            dispatch_generation,
+            lease_epoch,
+            _now(),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_complete',
     )
 
 
@@ -927,16 +963,28 @@ def mark_finalization_fenced(
     job_id: str, dispatch_generation: int, lease_epoch: int, *, firestore_client: Any = None
 ) -> bool:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_mark_finalization_fenced_txn),
-        _job_ref(client, job_id),
-        dispatch_generation,
-        lease_epoch,
-        _now(),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_mark_finalization_fenced_txn),
+            _job_ref(client, job_id),
+            dispatch_generation,
+            lease_epoch,
+            _now(),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_fence',
     )
 
 
@@ -1043,17 +1091,29 @@ def claim_finalization_fanout(
     firestore_client: Any = None,
 ) -> FinalizationFanoutClaim:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_claim_finalization_fanout_txn),
-        _job_ref(client, job_id),
-        dispatch_generation,
-        lease_epoch,
-        _now(),
-        lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_claim_finalization_fanout_txn),
+            _job_ref(client, job_id),
+            dispatch_generation,
+            lease_epoch,
+            _now(),
+            lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_fanout_claim',
     )
 
 
@@ -1091,16 +1151,28 @@ def mark_finalization_fanout_completed(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction: the committed fanout must not strand leased because
     # its completion write died on a retired id.
-    return run_transactional(
-        client,
-        firestore.transactional(_mark_finalization_fanout_completed_txn),
-        _job_ref(client, job_id),
-        dispatch_generation,
-        lease_epoch,
-        _now(),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_mark_finalization_fanout_completed_txn),
+            _job_ref(client, job_id),
+            dispatch_generation,
+            lease_epoch,
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_fanout_complete',
     )
 
 
@@ -1144,18 +1216,30 @@ def mark_finalization_retryable(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction: a retryable failure must keep its Cloud Tasks retry
     # budget for real failures, not spend it replaying a retired id.
-    return run_transactional(
-        client,
-        firestore.transactional(_mark_finalization_retryable_txn),
-        _job_ref(client, job_id),
-        dispatch_generation,
-        lease_epoch,
-        failure_code,
-        _now(),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_mark_finalization_retryable_txn),
+            _job_ref(client, job_id),
+            dispatch_generation,
+            lease_epoch,
+            failure_code,
+            _now(),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_retryable',
     )
 
 
@@ -1246,21 +1330,33 @@ def mark_finalization_dead_letter(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction: the terminal transition must land on the attempt
     # that earned it, not dead-letter through a retired-id replay.
-    return run_transactional(
-        client,
-        firestore.transactional(_mark_finalization_dead_letter_txn),
-        _job_ref(client, job_id),
-        dispatch_generation,
-        lease_epoch,
-        retry_count,
-        _now(),
-        lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
-        failure_code,
-        lambda uid: user_time_zone(client, uid),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_mark_finalization_dead_letter_txn),
+            _job_ref(client, job_id),
+            dispatch_generation,
+            lease_epoch,
+            retry_count,
+            _now(),
+            lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            failure_code,
+            lambda uid: user_time_zone(client, uid),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_dead_letter',
     )
 
 
@@ -1392,50 +1488,70 @@ def record_meeting_receipt(
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_record_meeting_receipt_txn),
-        _conversation_ref(client, uid, conversation_id),
-        client.collection(FINALIZATION_JOBS_COLLECTION),
-        uid,
-        conversation_id,
-        finalization_job_id,
-        eligible,
-        reason,
-        duration_s,
-        dedup_speech_s,
-        _now(),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_record_meeting_receipt_txn),
+            _conversation_ref(client, uid, conversation_id),
+            client.collection(FINALIZATION_JOBS_COLLECTION),
+            uid,
+            conversation_id,
+            finalization_job_id,
+            eligible,
+            reason,
+            duration_s,
+            dedup_speech_s,
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='meeting_receipt_record',
     )
 
 
 def mark_meeting_receipt_intent_persisted(job_id: str, intent_id: str, *, firestore_client: Any = None) -> bool:
     client = _client(firestore_client)
     job_ref = _job_ref(client, job_id)
-    transaction = client.transaction()
 
-    @firestore.transactional
-    def apply(write_transaction: Any) -> bool:
-        snapshot = job_ref.get(transaction=write_transaction)
-        if not getattr(snapshot, 'exists', False):
-            return False
-        job = snapshot.to_dict() or {}
-        existing = job.get('meeting_receipt_intent_id')
-        if isinstance(existing, str):
-            return existing == intent_id
-        now = _now()
-        write_transaction.update(
-            job_ref,
-            {
-                'meeting_receipt_intent_id': intent_id,
-                'meeting_receipt_intent_persisted_at': now,
-                'meeting_receipt_updated_at': now,
-            },
-        )
-        return True
+    # The outer contention budget replays a read-time ``Aborted`` on a fresh
+    # transaction; the idempotent intent write re-decides on the fresh read.
+    def apply_once(transaction: Any) -> bool:
+        @firestore.transactional
+        def apply(write_transaction: Any) -> bool:
+            snapshot = job_ref.get(transaction=write_transaction)
+            if not getattr(snapshot, 'exists', False):
+                return False
+            job = snapshot.to_dict() or {}
+            existing = job.get('meeting_receipt_intent_id')
+            if isinstance(existing, str):
+                return existing == intent_id
+            now = _now()
+            write_transaction.update(
+                job_ref,
+                {
+                    'meeting_receipt_intent_id': intent_id,
+                    'meeting_receipt_intent_persisted_at': now,
+                    'meeting_receipt_updated_at': now,
+                },
+            )
+            return True
 
-    return apply(transaction)
+        return apply(transaction)
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        apply_once,
+        operation_name='meeting_receipt_intent_persisted',
+    )
 
 
 def mark_meeting_receipt_materialized(
@@ -1448,34 +1564,42 @@ def mark_meeting_receipt_materialized(
 ) -> bool:
     client = _client(firestore_client)
     conversation_ref = _conversation_ref(client, uid, conversation_id)
-    transaction = client.transaction()
 
-    @firestore.transactional
-    def apply(write_transaction: Any) -> bool:
-        conversation_snapshot = conversation_ref.get(transaction=write_transaction)
-        if not getattr(conversation_snapshot, 'exists', False):
-            return False
-        job_id = (conversation_snapshot.to_dict() or {}).get('finalization_job_id')
-        if not isinstance(job_id, str) or not job_id:
-            return False
-        job_ref = _job_ref(client, job_id)
-        job_snapshot = job_ref.get(transaction=write_transaction)
-        if not getattr(job_snapshot, 'exists', False):
-            return False
-        job = job_snapshot.to_dict() or {}
-        if job.get('meeting_receipt_intent_id') != intent_id:
-            return False
-        if job.get('meeting_receipt_materialized_at') is None:
-            write_transaction.update(
-                job_ref,
-                {
-                    'meeting_receipt_materialized_at': materialized_at,
-                    'meeting_receipt_updated_at': materialized_at,
-                },
-            )
-        return True
+    # The outer contention budget replays a read-time ``Aborted`` on a fresh
+    # transaction; the fenced materialization re-reads inside the fresh one.
+    def apply_once(transaction: Any) -> bool:
+        @firestore.transactional
+        def apply(write_transaction: Any) -> bool:
+            conversation_snapshot = conversation_ref.get(transaction=write_transaction)
+            if not getattr(conversation_snapshot, 'exists', False):
+                return False
+            job_id = (conversation_snapshot.to_dict() or {}).get('finalization_job_id')
+            if not isinstance(job_id, str) or not job_id:
+                return False
+            job_ref = _job_ref(client, job_id)
+            job_snapshot = job_ref.get(transaction=write_transaction)
+            if not getattr(job_snapshot, 'exists', False):
+                return False
+            job = job_snapshot.to_dict() or {}
+            if job.get('meeting_receipt_intent_id') != intent_id:
+                return False
+            if job.get('meeting_receipt_materialized_at') is None:
+                write_transaction.update(
+                    job_ref,
+                    {
+                        'meeting_receipt_materialized_at': materialized_at,
+                        'meeting_receipt_updated_at': materialized_at,
+                    },
+                )
+            return True
 
-    return apply(transaction)
+        return apply(transaction)
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        apply_once,
+        operation_name='meeting_receipt_materialized',
+    )
 
 
 def get_meeting_receipt_reconcile_candidates(
@@ -1655,17 +1779,29 @@ def claim_finalization_replay(
     job_id: str, *, stale_after: timedelta, firestore_client: Any = None, byok_only: bool = False
 ) -> FinalizationIntent:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction: the reconciler must not error-skip a reclaim whose
     # commit died on a retired id.
-    return run_transactional(
-        client,
-        firestore.transactional(_claim_finalization_replay_txn),
-        _job_ref(client, job_id),
-        stale_after,
-        _now(),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
-        byok_only,
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_claim_finalization_replay_txn),
+            _job_ref(client, job_id),
+            stale_after,
+            _now(),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            byok_only,
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_replay_claim',
     )
 
 
@@ -1708,16 +1844,23 @@ def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None)
             except Exception:
                 result['errors'] += 1
         next_path = snapshots[-1].reference.path if len(snapshots) == page_size else None
-        # ``run_transactional`` restarts a retired-transaction-id commit on a
-        # fresh transaction; the sweep keeps its cursor instead of rescanning
-        # the window after a retired-id replay.
-        run_transactional(
-            client,
-            firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
-            state_ref,
-            int(state.get('generation', 0)),
-            next_path,
-            _now(),
+        # The cursor advance rides the same shared contention budget as the
+        # custody writers: ``run_with_transaction_contention_retry`` replays a
+        # read-time ``Aborted`` on a fresh transaction, and
+        # ``run_transactional`` inside it still restarts a retired-id commit;
+        # the sweep keeps its cursor instead of rescanning the window.
+        run_with_transaction_contention_retry(
+            client.transaction,
+            lambda transaction: run_transactional(
+                client,
+                firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
+                state_ref,
+                int(state.get('generation', 0)),
+                next_path,
+                _now(),
+                initial_transaction=transaction,
+            ),
+            operation_name='byok_reclaim_sweep_cursor',
         )
     return result
 
@@ -1996,16 +2139,28 @@ def advance_in_progress_content_sweep_cursor(
 ) -> bool:
     """Atomically advance the self-heal sweep cursor; ``False`` on a CAS loss."""
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_advance_in_progress_content_sweep_cursor_txn),
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC),
-        expected_generation,
-        new_resume_after_path,
-        pending_verifications or [],
-        _now(),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_advance_in_progress_content_sweep_cursor_txn),
+            client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC),
+            expected_generation,
+            new_resume_after_path,
+            pending_verifications or [],
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='in_progress_content_sweep_cursor',
     )
 
 
@@ -2068,15 +2223,27 @@ def advance_stale_processing_sweep_cursor(
     safely re-scans the same window.
     """
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC),
-        expected_generation,
-        new_resume_after_path,
-        _now(),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
+            client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC),
+            expected_generation,
+            new_resume_after_path,
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='stale_processing_sweep_cursor',
     )
 
 
@@ -2099,15 +2266,27 @@ def advance_meeting_receipt_backfill_cursor(
     expected_generation: int, new_resume_after_path: str | None, *, firestore_client: Any = None
 ) -> bool:
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(MEETING_RECEIPT_SWEEP_STATE_DOC),
-        expected_generation,
-        new_resume_after_path,
-        _now(),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
+            client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(MEETING_RECEIPT_SWEEP_STATE_DOC),
+            expected_generation,
+            new_resume_after_path,
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='meeting_receipt_backfill_cursor',
     )
 
 
@@ -2134,13 +2313,25 @@ def _stamp_processing_admission_if_absent_txn(transaction: Any, conversation_ref
 def stamp_processing_admission_if_absent(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Stamp the authoritative admission fence on a legacy processing conversation."""
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_stamp_processing_admission_if_absent_txn),
-        _conversation_ref(client, uid, conversation_id),
-        _now(),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_stamp_processing_admission_if_absent_txn),
+            _conversation_ref(client, uid, conversation_id),
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='processing_admission_stamp',
     )
 
 
@@ -2180,14 +2371,26 @@ def complete_unstampable_orphan_conversation(
 ) -> bool:
     """Terminalize a legacy orphan that is too large to accept the admission fence."""
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction; the terminalization must land on the attempt that
     # verified the orphan, not strand the row processing on a retired id.
-    return run_transactional(
-        client,
-        firestore.transactional(_complete_unstampable_orphan_conversation_txn),
-        _conversation_ref(client, uid, conversation_id),
-        _now() - stale_after,
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_complete_unstampable_orphan_conversation_txn),
+            _conversation_ref(client, uid, conversation_id),
+            _now() - stale_after,
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='unstampable_orphan_terminal',
     )
 
 
@@ -2239,17 +2442,29 @@ def complete_orphan_conversation(
 ) -> bool:
     """Close one crash orphan through the generation/ownership fence."""
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction: the crash orphan must be closed by the sweep that
     # verified it, not retried after another full stale window.
-    return run_transactional(
-        client,
-        firestore.transactional(_complete_orphan_conversation_txn),
-        _conversation_ref(client, uid, conversation_id),
-        expected_admitted_at,
-        _now(),
-        uid,
-        lambda zone_uid: user_time_zone(client, zone_uid),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_complete_orphan_conversation_txn),
+            _conversation_ref(client, uid, conversation_id),
+            expected_admitted_at,
+            _now(),
+            uid,
+            lambda zone_uid: user_time_zone(client, zone_uid),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='orphan_conversation_terminal',
     )
 
 
@@ -2307,14 +2522,26 @@ def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, 
 def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Atomically claim deferred ownership and renew the lease in one transaction."""
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction; the deferred row stays claimable instead of
     # surfacing the retirement as a failed claim.
-    return run_transactional(
-        client,
-        firestore.transactional(_reacquire_deferred_processing_txn),
-        _conversation_ref(client, uid, conversation_id),
-        _now(),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_reacquire_deferred_processing_txn),
+            _conversation_ref(client, uid, conversation_id),
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='deferred_processing_reacquire',
     )
 
 
@@ -2337,13 +2564,25 @@ def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref:
 def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction; the retry stays re-armed instead of surfacing the
     # retirement as a failed recovery.
-    return run_transactional(
-        client,
-        firestore.transactional(_recover_deferred_processing_failure_txn),
-        _conversation_ref(client, uid, conversation_id),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_recover_deferred_processing_failure_txn),
+            _conversation_ref(client, uid, conversation_id),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='deferred_processing_failure_recovery',
     )
 
 
@@ -2591,20 +2830,32 @@ def abandon_byok_finalization_job(
     """Close one unownable BYOK job through its generation/ownership fence."""
     client = _client(firestore_client)
     now = _now()
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_abandon_byok_finalization_job_txn),
-        _job_ref(client, job_id),
-        expected_status,
-        expected_dispatch_generation,
-        expected_lease_epoch,
-        now - abandoned_after,
-        now,
-        lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
-        lambda uid: user_time_zone(client, uid),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_abandon_byok_finalization_job_txn),
+            _job_ref(client, job_id),
+            expected_status,
+            expected_dispatch_generation,
+            expected_lease_epoch,
+            now - abandoned_after,
+            now,
+            lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+            lambda uid: user_time_zone(client, uid),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='byok_abandonment_terminal',
     )
 
 
@@ -2628,15 +2879,27 @@ def advance_byok_abandonment_sweep_cursor(
 ) -> bool:
     """Atomically advance the BYOK sweep cursor; ``None`` rotates the next sweep to the top."""
     client = _client(firestore_client)
+
     # ``run_transactional`` restarts a retired-transaction-id commit on a
     # fresh transaction.
-    return run_transactional(
-        client,
-        firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC),
-        expected_generation,
-        new_resume_after_path,
-        _now(),
+    # The outer contention budget replays a read-time ``Aborted`` on a
+    # fresh transaction; ``run_transactional`` inside it still restarts
+    # the retired-transaction-id commit rejection on a fresh transaction.
+    def run_once(transaction: Any) -> Any:
+        return run_transactional(
+            client,
+            firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
+            client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC),
+            expected_generation,
+            new_resume_after_path,
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='byok_abandonment_sweep_cursor',
     )
 
 

@@ -17,6 +17,7 @@ from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
 from database._client import is_document_size_limit_error
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from services.conversation_selfheal import run_selfheal_tick
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -104,6 +105,14 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
                 stale_after=stale_after,
                 firestore_client=firestore_client,
             )
+        except FirestoreContentionExhausted:
+            # The claim's own bounded contention budget drained: the row stays
+            # exactly as it was, and this tick's bounded skip is not a real
+            # claim failure — the next sweep revisits it. Keep the loud
+            # exception classification for everything else.
+            logger.info('listen finalization reconciliation claim contended out job=%s', job_id)
+            result['skipped'] += 1
+            continue
         except Exception:
             logger.exception('listen finalization reconciliation claim failed job=%s', job_id)
             result['skipped'] += 1
