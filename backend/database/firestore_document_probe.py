@@ -509,6 +509,10 @@ def _is_plumbing_module(module: str) -> bool:
     return module.startswith(_PLUMBING_PREFIXES)
 
 
+# Shared with the write probe, which skips the same SDK and runtime frames.
+is_plumbing_module = _is_plumbing_module
+
+
 def bound_caller(label: str) -> str:
     """Accept a ``module:function`` label, or ``other`` once the cap is full.
 

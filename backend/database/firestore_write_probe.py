@@ -54,7 +54,7 @@ from typing import Any, Callable, Iterable
 
 from prometheus_client import Counter
 
-from database.firestore_document_probe import _is_plumbing_module, collection_pattern
+from database.firestore_document_probe import collection_pattern, is_plumbing_module
 from database.firestore_read_origin import current_read_origin
 
 logger = logging.getLogger(__name__)
@@ -148,7 +148,7 @@ def _call_site() -> str:
         while frame is not None:
             module = frame.f_globals.get('__name__') or ''
             name = frame.f_code.co_name
-            if module in _WRITE_PLUMBING_MODULES or _is_plumbing_module(module) or not name or name.startswith('<'):
+            if module in _WRITE_PLUMBING_MODULES or is_plumbing_module(module) or not name or name.startswith('<'):
                 frame = frame.f_back
                 continue
             return _bound_caller(f'{module}:{name}')
