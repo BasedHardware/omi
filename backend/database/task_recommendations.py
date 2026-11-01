@@ -980,21 +980,25 @@ def load_canonical_product_state(
                 records.append(payload)
         return records
 
+    # Note: Filtering occurs in-memory after Firestore server-side limits (500/200/100).
+    # Soft-deleted or inactive items can consume slots in the initial page.
     def is_active_task(task: dict[str, Any]) -> bool:
-        return not bool(task.get('deleted') or task.get('is_deleted'))
+        if bool(task.get('deleted') or task.get('is_deleted') or task.get('completed')):
+            return False
+        status = str(task.get('status') or '').lower()
+        return status not in {'completed', 'cancelled', 'superseded'}
 
     def is_active_candidate(candidate: dict[str, Any]) -> bool:
-        return not bool(
-            candidate.get('deleted') or candidate.get('is_deleted') or candidate.get('status') == 'dismissed'
-        )
+        if bool(candidate.get('deleted') or candidate.get('is_deleted')):
+            return False
+        status = str(candidate.get('status') or '').lower()
+        return status not in {'rejected', 'expired'}
 
     def is_active_goal(goal: dict[str, Any]) -> bool:
         if goal.get('is_active') is False:
             return False
         status = str(goal.get('status') or '').lower()
-        if status in {'achieved', 'abandoned', 'completed'}:
-            return False
-        return True
+        return status not in {'achieved', 'abandoned'}
 
     def is_active_workstream(workstream: dict[str, Any]) -> bool:
         return not bool(

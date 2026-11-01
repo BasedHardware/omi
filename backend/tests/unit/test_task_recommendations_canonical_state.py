@@ -1,11 +1,11 @@
 """Regression test for canonical product state soft-delete and lifecycle filtering.
 
 Verifies:
-1. load_canonical_product_state excludes soft-deleted action items (deleted=True, is_deleted=True).
+1. load_canonical_product_state excludes soft-deleted and non-active action items (deleted=True, is_deleted=True, completed=True, completed/cancelled/superseded statuses).
 2. load_canonical_product_state excludes inactive and terminal (achieved/abandoned) goals.
-3. load_canonical_product_state excludes dismissed and deleted candidates.
+3. load_canonical_product_state excludes rejected, expired, and soft-deleted candidates.
 4. load_canonical_product_state excludes archived and deleted workstreams.
-5. delete_goal idempotency on already-abandoned goals and action-items cache invalidation.
+5. delete_goal idempotency on already-abandoned goals (no cache bump, timestamps preserved).
 """
 
 from copy import deepcopy
@@ -106,9 +106,25 @@ def test_load_canonical_product_state_filters_soft_deleted_and_terminal():
     uid = "test-user-1"
     base = ("users", uid)
 
-    # 1. Action items: active vs soft-deleted
+    # 1. Action items: active vs terminal/soft-deleted
     fake_db.rows[(*base, "action_items", "task-active")] = {
         "description": "Active task",
+        "status": "active",
+        "account_generation": 0,
+    }
+    fake_db.rows[(*base, "action_items", "task-completed-status")] = {
+        "description": "Completed task",
+        "status": "completed",
+        "account_generation": 0,
+    }
+    fake_db.rows[(*base, "action_items", "task-cancelled-status")] = {
+        "description": "Cancelled task",
+        "status": "cancelled",
+        "account_generation": 0,
+    }
+    fake_db.rows[(*base, "action_items", "task-superseded-status")] = {
+        "description": "Superseded task",
+        "status": "superseded",
         "account_generation": 0,
     }
     fake_db.rows[(*base, "action_items", "task-soft-deleted")] = {
@@ -141,20 +157,42 @@ def test_load_canonical_product_state_filters_soft_deleted_and_terminal():
         "is_active": False,
         "account_generation": 0,
     }
+    fake_db.rows[(*base, "goals", "goal-inactive")] = {
+        "title": "Inactive goal",
+        "status": "focused",
+        "is_active": False,
+        "account_generation": 0,
+    }
 
-    # 3. Candidates: active vs dismissed/deleted
-    fake_db.rows[(*base, "candidates", "cand-active")] = {
-        "title": "Active candidate",
+    # 3. Candidates: active vs rejected/expired/deleted
+    fake_db.rows[(*base, "candidates", "cand-pending")] = {
+        "title": "Pending candidate",
         "status": "pending",
         "account_generation": 0,
     }
-    fake_db.rows[(*base, "candidates", "cand-dismissed")] = {
-        "title": "Dismissed candidate",
-        "status": "dismissed",
+    fake_db.rows[(*base, "candidates", "cand-accepted")] = {
+        "title": "Accepted candidate",
+        "status": "accepted",
+        "account_generation": 0,
+    }
+    fake_db.rows[(*base, "candidates", "cand-rejected")] = {
+        "title": "Rejected candidate",
+        "status": "rejected",
+        "account_generation": 0,
+    }
+    fake_db.rows[(*base, "candidates", "cand-expired")] = {
+        "title": "Expired candidate",
+        "status": "expired",
+        "account_generation": 0,
+    }
+    fake_db.rows[(*base, "candidates", "cand-deleted")] = {
+        "title": "Deleted candidate",
+        "status": "pending",
+        "deleted": True,
         "account_generation": 0,
     }
 
-    # 4. Workstreams: active vs archived
+    # 4. Workstreams: active vs archived/deleted
     fake_db.rows[(*base, "workstreams", "ws-active")] = {
         "title": "Active workstream",
         "status": "active",
@@ -165,12 +203,20 @@ def test_load_canonical_product_state_filters_soft_deleted_and_terminal():
         "status": "archived",
         "account_generation": 0,
     }
+    fake_db.rows[(*base, "workstreams", "ws-deleted")] = {
+        "title": "Deleted workstream",
+        "deleted": True,
+        "account_generation": 0,
+    }
 
     state = tr_db.load_canonical_product_state(uid, account_generation=0, firestore_client=fake_db)
 
     # Validate action items
     task_ids = {t["id"] for t in state["tasks"]}
     assert "task-active" in task_ids
+    assert "task-completed-status" not in task_ids
+    assert "task-cancelled-status" not in task_ids
+    assert "task-superseded-status" not in task_ids
     assert "task-soft-deleted" not in task_ids
     assert "task-legacy-deleted" not in task_ids
 
@@ -179,16 +225,21 @@ def test_load_canonical_product_state_filters_soft_deleted_and_terminal():
     assert "goal-active" in goal_ids
     assert "goal-abandoned" not in goal_ids
     assert "goal-achieved" not in goal_ids
+    assert "goal-inactive" not in goal_ids
 
     # Validate candidates
     cand_ids = {c["id"] for c in state["candidates"]}
-    assert "cand-active" in cand_ids
-    assert "cand-dismissed" not in cand_ids
+    assert "cand-pending" in cand_ids
+    assert "cand-accepted" in cand_ids
+    assert "cand-rejected" not in cand_ids
+    assert "cand-expired" not in cand_ids
+    assert "cand-deleted" not in cand_ids
 
     # Validate workstreams
     ws_ids = {w["id"] for w in state["workstreams"]}
     assert "ws-active" in ws_ids
     assert "ws-archived" not in ws_ids
+    assert "ws-deleted" not in ws_ids
 
 
 def test_delete_goal_idempotency_and_cache_bump(monkeypatch):
@@ -211,14 +262,20 @@ def test_delete_goal_idempotency_and_cache_bump(monkeypatch):
         "is_active": True,
     }
 
-    # First delete: transitions to abandoned, bumps cache
+    # First delete: transitions to abandoned, bumps cache, sets ended_at and updated_at
     assert goals_db.delete_goal(uid, goal_id, firestore_client=fake_db)
     assert bumped == [uid]
     assert fake_db.rows[path]["status"] == "abandoned"
     assert fake_db.rows[path]["is_active"] is False
     assert fake_db.rows[path]["focus_rank"] is None
+    ended_at_first = fake_db.rows[path].get("ended_at")
+    updated_at_first = fake_db.rows[path].get("updated_at")
+    assert ended_at_first is not None
+    assert updated_at_first is not None
 
-    # Second delete: idempotent, returns True without repeating write
+    # Second delete: idempotent, returns True without repeating write or churning timestamps
     bumped.clear()
     assert goals_db.delete_goal(uid, goal_id, firestore_client=fake_db)
     assert bumped == []
+    assert fake_db.rows[path].get("ended_at") == ended_at_first
+    assert fake_db.rows[path].get("updated_at") == updated_at_first
