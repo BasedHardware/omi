@@ -12,7 +12,7 @@ import pytest
 from utils.observability import held_content as held_metrics
 from utils.sync import cap_hold, cap_hold_lifecycle, cap_hold_redrive, live_cap_hold as live, live_cap_staging
 from utils.sync.live_cap_publication import Publication
-from utils.sync import live_cap_codec
+from utils.sync import cap_work_budget, live_cap_codec
 from utils.stt import pre_recorded
 
 _EMPTY_FLEET = {
@@ -151,6 +151,111 @@ async def test_sweep_awaits_worker_and_does_not_create_consent(monkeypatch):
     release.set()
     assert (await sweep)['visited'] == 1
     choose.assert_not_called()
+
+
+async def test_sweep_request_budget_preserves_active_work_and_next_tick_joins_it(monkeypatch):
+    clock = [100.0]
+    snap = SimpleNamespace(reference=SimpleNamespace(path='users/synthetic/processing_backlog/current'))
+    monkeypatch.setattr(cap_hold_redrive, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(cap_hold_redrive, 'SWEEP_REQUEST_WAIT_SECONDS', 0.02)
+    monkeypatch.setattr(cap_hold_redrive, '_sweep_task', None)
+    monkeypatch.setattr(cap_hold_redrive, '_schedule_fleet_snapshot', lambda: None)
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind, **_: [snap] if kind == 'choices' else [])
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls, checkpoints = [], []
+
+    async def run(uid, **kwargs):
+        calls.append(kwargs)
+        assert 0 < kwargs['time_budget'] <= 240
+        entered.set()
+        await release.wait()
+        checkpoints.append('saved')
+        return len(calls) == 1
+
+    monkeypatch.setattr(cap_hold_redrive.processing_backlog_worker, 'run', run)
+    try:
+        first = await cap_hold_redrive.sweep()
+        await entered.wait()
+        retained = cap_hold_redrive._sweep_task
+        assert first['deferred'] and not retained.done()
+        clock[0] += 241  # No second candidate/rotation after the absolute work budget.
+        assert (await cap_hold_redrive.sweep())['deferred']
+        assert cap_hold_redrive._sweep_task is retained and len(calls) == 1
+        release.set()
+        assert (await retained)['visited'] == 1
+        assert checkpoints == ['saved']
+        # A later pass resumes the durable processing choice after checkpoint.
+        assert (await cap_hold_redrive.sweep())['visited'] == 1
+        assert len(calls) == 2 and checkpoints == ['saved', 'saved']
+    finally:
+        release.set()
+        if cap_hold_redrive._sweep_task is not None:
+            await cap_hold_redrive._sweep_task
+
+
+async def test_slow_discovery_uses_the_same_budget_and_does_not_start_late_work(monkeypatch):
+    clock = [100.0]
+    snap = SimpleNamespace(id='source', reference=SimpleNamespace(path='users/synthetic/stt_cap_holds/source'))
+    monkeypatch.setattr(cap_hold_redrive, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(cap_hold_redrive, 'SWEEP_REQUEST_WAIT_SECONDS', 0.02)
+    monkeypatch.setattr(cap_hold_redrive, '_sweep_task', None)
+    monkeypatch.setattr(cap_hold_redrive, '_schedule_fleet_snapshot', lambda: None)
+    entered, release = asyncio.Event(), asyncio.Event()
+    discoveries = []
+
+    async def blocked(_executor, function, *args, **kwargs):
+        if function is cap_hold_redrive.store.discover:
+            discoveries.append(args[0])
+            entered.set()
+            await release.wait()
+            return [snap]
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(cap_hold_redrive, 'run_blocking', blocked)
+    seal = Mock()
+    monkeypatch.setattr(cap_hold_redrive.live_cap_staging, 'seal', seal)
+    try:
+        assert (await cap_hold_redrive.sweep())['deferred']
+        await entered.wait()
+        clock[0] += 241
+        release.set()
+        assert await cap_hold_redrive._sweep_task == {'sealed': 0, 'visited': 0}
+        assert discoveries == ['staging']
+        seal.assert_not_called()
+    finally:
+        release.set()
+        if cap_hold_redrive._sweep_task is not None:
+            await cap_hold_redrive._sweep_task
+
+
+def test_sweep_request_ceiling_leaves_headroom_below_five_minutes():
+    assert 0 < cap_hold_redrive.SWEEP_WORK_BUDGET_SECONDS < cap_hold_redrive.SWEEP_REQUEST_WAIT_SECONDS < 300
+
+
+@pytest.mark.parametrize('child_budget', [900, None])
+def test_worker_visit_cannot_extend_its_sweep_deadline_after_slow_admission(monkeypatch, child_budget):
+    clock = [100.0]
+    monkeypatch.setattr(cap_work_budget, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    with cap_work_budget.visit(240):
+        clock[0] += 241
+        with cap_work_budget.visit(child_budget):
+            assert cap_work_budget.exhausted()
+        assert cap_work_budget.exhausted()
+    assert not cap_work_budget.exhausted()
+
+
+async def test_snapshot_wait_cannot_extend_an_exhausted_sweep_budget(monkeypatch):
+    release = asyncio.Event()
+    snapshot = asyncio.create_task(release.wait())
+    monkeypatch.setattr(cap_hold_redrive, 'time', SimpleNamespace(monotonic=lambda: 100.0))
+    try:
+        await asyncio.wait_for(cap_hold_redrive._settle_fleet_snapshot(snapshot, deadline=99.0), timeout=1)
+        assert not snapshot.done()
+    finally:
+        release.set()
+        await snapshot
 
 
 async def test_sweep_kill_switch_does_not_read_or_dispatch(monkeypatch):

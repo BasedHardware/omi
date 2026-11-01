@@ -2253,14 +2253,14 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
     except Exception:
         return await _run_sync_job_body(request, task_retry_count, entry_state)
-    if isinstance(payload, dict) and isinstance(payload.get('uid'), str):
-        try:
-            async with asyncio.timeout_at(route_deadline):
-                await warm_rollout_cohorts(payload['uid'])
-        except TimeoutError:
-            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
-            return _budget_deferral_fallback('preamble_timeout', 'degraded')
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
+        if isinstance(payload.get('uid'), str):
+            try:
+                async with asyncio.timeout_at(route_deadline):
+                    await warm_rollout_cohorts(payload['uid'])
+            except TimeoutError:
+                logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
+                return _budget_deferral_fallback('preamble_timeout', 'degraded')
         return await enrichment_response(payload)
     if minimal_redrive.parse_mode(payload) and not minimal_redrive.enabled():
         # Kill switch, before the sequencer lease and any lock, download or paid
@@ -2408,18 +2408,18 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
     # One absolute budget deadline for the whole sequenced request (entry_state,
     # captured and enforced at route entry): the fence read, payload parsing,
-    # begin_job, and the prior-job read below each run inside a timeout_at
+    # begin_job (including its prior-job snapshot) each run inside a timeout_at
     # against that deadline, so a stall in any of them ends the request through
     # the queue-owned 409 instead of carrying it past the Cloud Tasks dispatch
     # deadline or the middleware cap this change exists to stay under.
     sequenced_attempt_state: dict = entry_state
     try:
         async with asyncio.timeout_at(route_deadline):
-            began = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
+            claim = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
     except TimeoutError:
         logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=begin_job')
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
-    if not began:
+    if claim is None:
         logger.info('event=sync_uid_sequencer action=delivery outcome=stale_epoch')
         return JSONResponse(status_code=200, content={'status': 'stale_sequencer_epoch'})
     stop = asyncio.Event()
@@ -2428,12 +2428,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         name=f'sync:uid-lease:{job_id}',
     )
     try:
-        try:
-            async with asyncio.timeout_at(route_deadline):
-                prior_job = await run_blocking(db_executor, get_sync_job, job_id)
-        except TimeoutError:
-            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=prior_read')
-            return _budget_deferral_fallback('preamble_timeout', 'degraded')
+        prior_job = claim['job']
         prior_attempt = prior_job.get('attempt', 0) if isinstance(prior_job, dict) else 0
         effective_retry_count = max(task_retry_count, prior_attempt if isinstance(prior_attempt, int) else 0)
         # One state dict carries the post-budget deadline from the deferral
@@ -3390,6 +3385,11 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
+
+        # Membership is only needed for actual work. Epoch, migration, lock,
+        # expired-job, terminal and reconciled deliveries keep their existing
+        # acknowledgement/cleanup paths without a cohort-store round trip.
+        await warm_rollout_cohorts(uid)
 
         if await run_blocking(db_executor, should_skip_background_account_mutation, uid):
             await _finalize_sync_job_failure(

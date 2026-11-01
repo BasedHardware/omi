@@ -3501,7 +3501,12 @@ and retained-audio limits are documented in the
 ### Sync backfill handler-budget deferral (Cloud Run request timeout)
 
 `backend-sync-backfill` runs each Cloud Tasks sync job inside one
-`POST /v2/sync-jobs/run` request. Starlette's `TimeoutMiddleware` answers its
+`POST /v2/sync-jobs/run` request. Stale sequencer epochs and no-op deliveries
+skip cohort warming; real work warms membership after the run-lock and
+terminal/convergence checks. A valid sequencer claim carries its prior Redis
+job snapshot back to the route, preserving retry history without a second
+executor dispatch. Locked retries and the final terminal re-read stay fenced.
+Starlette's `TimeoutMiddleware` answers its
 route cap (`HTTP_SYNC_JOBS_RUN_TIMEOUT`, default 1500 s) with a 504 without
 cancelling the downstream pipeline, so an over-budget job would hold the ASGI
 request until Cloud Run kills it at the platform's maximum request timeout.
