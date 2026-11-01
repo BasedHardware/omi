@@ -297,6 +297,42 @@ def test_configure_health_binds(monkeypatch):
     assert _select(SUPPORTED).selected == 'gpu'
 
 
+def _unbound_with_fake_slice_c(monkeypatch, health):
+    from utils.batch_pipeline import vendor_health
+
+    calls = []
+
+    def get_vendor_health(routes=None):
+        calls.append(routes)
+        return health
+
+    monkeypatch.setattr(rs, '_health', rs._UNBOUND)
+    monkeypatch.setattr(vendor_health, 'get_vendor_health', get_vendor_health)
+    return calls
+
+
+def test_serving_binds_slice_c_once_with_the_served_tables_caps(monkeypatch):
+    table = copy.deepcopy(TABLE)
+    table['routes']['modulate']['daily_audio_hours_cap'] = 3300.0
+    table['routes']['soniox']['monthly_budget_usd'] = 500.0
+    _cohort(monkeypatch, table)
+    health = Health()
+    calls = _unbound_with_fake_slice_c(monkeypatch, health)
+    assert rs.serving_health() is health and rs.serving_health() is health
+    assert len(calls) == 1  # one process-wide binding
+    routes = calls[0]()  # read per call: a later table edit is enforced without a rebind
+    assert routes['modulate'].daily_audio_hours_cap == 3300.0
+    assert routes['soniox'].monthly_budget_usd == 500.0
+
+
+def test_an_outage_steers_admission_to_gpu_through_the_bound_slice_c_health(monkeypatch):
+    # Modulate and Soniox down: a table that prefers Modulate over a capable GPU admits to GPU,
+    # instead of parking the unit in vendor_held while GPU is healthy.
+    _cohort(monkeypatch)
+    _unbound_with_fake_slice_c(monkeypatch, Health(down={'modulate', 'soniox'}))
+    assert _select(SUPPORTED).selected == 'gpu'
+
+
 def test_failover_hint_lists_other_healthy_vendors(monkeypatch):
     _soniox_admitted(monkeypatch)
     _cohort(monkeypatch)

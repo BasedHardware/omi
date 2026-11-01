@@ -674,8 +674,8 @@ def _default_allowed(owner_id: str, seconds: float, service: str) -> bool:
 
 
 def _default_health() -> VendorHealth:
-    # Offline callers and tests: no vendor is refused before its call. Serving passes slice C's
-    # get_vendor_health() (_service_stage).
+    # Offline callers and tests: no vendor is refused before its call. Serving passes
+    # route_selection.serving_health() (_service_stage): slice C with the served table's caps.
     return contracts.AlwaysHealthy()
 
 
@@ -1099,12 +1099,12 @@ def _service_stage() -> ProviderSttStage:
     from database.batch_pipeline_shadow_hook import shadow_from_env
     from database.batch_pipeline_store import FirestoreStore
     from utils.batch_pipeline.artifact_policy import artifacts_for
-    from utils.batch_pipeline.vendor_health import get_vendor_health
+    from utils.batch_pipeline.route_selection import serving_health
     from utils.sync.stage import current_stage
 
     store = shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))  # A2 seam: provider-STT writes
-    # Slice C's process-wide cross-pod health (slice B binds its routes to the served table).
-    return ProviderSttStage(store, artifacts_for(store), health=get_vendor_health())
+    # The vendor health admission selection also uses: slice C reading the served table's caps.
+    return ProviderSttStage(store, artifacts_for(store), health=serving_health())
 
 
 class ProviderSttConsumer:
