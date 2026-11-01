@@ -6,22 +6,24 @@ aiofiles==24.1.0
 annotated-types==0.7.0
 annotated-doc==0.0.4
 anthropic==0.111.0
-anyio==4.4.0
+anyio==4.14.2
 attrs==24.1.0
 av==12.0.0
 babel==2.18.0
 CacheControl==0.14.0
 cachetools==5.5.0
-certifi==2024.7.4
+certifi==2026.10.18
 cffi==2.0.0
 charset-normalizer==3.3.2
 click==8.1.7
-cryptography==48.0.1
+# cryptography 49+ ships no x86_64 macOS wheels; Intel-Mac dev envs stay on 48.0.1.
+cryptography==50.0.2; sys_platform != "darwin" or platform_machine != "x86_64"
+cryptography==48.0.1; sys_platform == "darwin" and platform_machine == "x86_64"
 dataclasses-json==0.6.7
 deepgram-sdk==4.8.1
 deprecation==2.1.0
 distro==1.9.0
-dnspython==2.6.1
+dnspython==2.9.0
 docstring-parser==0.18.0
 email_validator==2.2.0
 fastapi==0.121.0
@@ -67,21 +69,21 @@ langdetect==1.0.9
 langsmith==0.8.5
 MarkupSafe==2.1.5
 marshmallow==3.26.2
-msgpack==1.2.1
+msgpack==1.2.3
 mypy-extensions==1.0.0
 numpy==1.26.4
 onnxruntime==1.19.0
 openai==2.38.0
 orjson==3.11.6
 packaging==24.2
-pillow==12.3.0
+pillow==13.0.0
 pinecone==7.3.0
 pinecone-plugin-interface==0.0.7
 posthog==3.5.2
 prometheus-client==0.21.1
 proto-plus==1.24.0
 protobuf==5.29.6
-pyasn1==0.6.4
+pyasn1==0.6.5
 pyasn1_modules==0.4.0
 pycparser==2.22
 pyparsing==3.1.2
@@ -90,7 +92,7 @@ pydantic-settings==2.10.1
 pydantic_core==2.33.2
 pydub==0.25.1
 pycountry==24.6.1
-PyJWT==2.13.0
+PyJWT==2.15.1
 PyYAML==6.0.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2

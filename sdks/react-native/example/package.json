@@ -32,7 +32,7 @@
     "uuid": "^11.1.1",
     "brace-expansion": "~5.0.8",
     "js-yaml": "~4.3.0",
-    "shell-quote": "~1.9.0",
+    "shell-quote": "~1.11.0",
     "@expo/image-utils": {
       "semver": "^7.5.2"
     }
