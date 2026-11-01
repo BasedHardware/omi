@@ -338,6 +338,8 @@ async def verify_chain(
                 support[item.id] = verifiers.votes_for('disagree')
             else:
                 support[item.id] = verifiers.votes_for('unverified')
+    if telemetry is not None:
+        telemetry['used_tokens'] = used
     return support, calls
 
 

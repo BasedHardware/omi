@@ -185,6 +185,26 @@ def test_allowance_survives_a_first_verifier_call_that_spends_past_its_estimate(
     assert hold['owed'] > 0 and hold['verify_used'] > hold['owed'] // 2, hold
 
 
+def test_a_large_reserve_is_still_paid_twice_after_an_overshoot(runtime, monkeypatch):
+    monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
+    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
+    _limited(runtime, monkeypatch)
+    monkeypatch.setattr(dream_agent, 'verification_reserve_tokens', lambda staged, **_: 150000)
+    offered = []
+
+    async def capture(staged, model_turn, *, tokens, telemetry=None, **_):
+        offered.append(tokens)
+        telemetry['used_tokens'] = 0
+        return {}, 0
+
+    monkeypatch.setattr(dream_agent.dream_verify, 'verify', capture)
+    model, _verified = _spender(overshoot=200000)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    # Above the 192k evidence floor, the doubled reserve still sets the cap.
+    assert offered == [300000]
+    assert report['levers']['verify_hold']['verify_used'] == 0
+
+
 def test_verify_allowance_never_funds_the_judge_after_an_overshoot(runtime, monkeypatch):
     monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
     monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')

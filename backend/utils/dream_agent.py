@@ -956,7 +956,8 @@ async def run_session(
             # that ceiling and drop evidence. Keep the ceiling open; the reserve
             # is still what the two calls need, and it is not held in the main loop.
             verify_need = max(
-                verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
+                verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens)
+                * (VERIFY_ALLOWANCE_FACTOR if hold_arm == 'serve' else 1),
                 8 * 24000,
             )
             # Negative after an overshoot; invoke_once sizes calls from the same difference.
@@ -998,9 +999,9 @@ async def run_session(
                 finally:
                     # The judge and the state pass share the verify lane; the allowance is this call's only.
                     verify_allowance = 0
-                if hold_arm != 'off':
-                    hold_row['verify_used'] = verification_telemetry.get('used_tokens', 0)
                 timing['verify_ms'] += int(1000 * (asyncio.get_running_loop().time() - verify_started))
+            if hold_arm != 'off':
+                hold_row['verify_used'] = verification_telemetry.get('used_tokens', 0)
             report['verifier_calls'] = calls
             report['verifier_transport_responses'] = max(
                 report.get('verifier_transport_responses', 0), verification_telemetry.get('transport_responses', 0)
