@@ -188,7 +188,7 @@ describe('known over-exclusions from substring matching', () => {
 
 describe('sensitive window-title markers', () => {
   it('has not silently shrunk', () => {
-    expect(SENSITIVE_WINDOW_MARKERS).toHaveLength(12)
+    expect(SENSITIVE_WINDOW_MARKERS).toHaveLength(21)
   })
 
   it.each(SENSITIVE_WINDOW_MARKERS)('never captures a window titled around %s', (marker) => {
@@ -217,6 +217,55 @@ describe('sensitive window-title markers', () => {
     for (const marker of ['password', 'login', 'sign in', '2fa', 'incognito', 'one-time code']) {
       expect(SENSITIVE_WINDOW_MARKERS).toContain(marker)
     }
+  })
+
+  it('keeps the French markers', () => {
+    // A French Windows or browser never says "sign in" or "incognito", so
+    // without these the title rule does nothing for French-speaking users.
+    for (const marker of [
+      'navigation privée',
+      'connexion',
+      'se connecter',
+      'mot de passe',
+      'code de vérification'
+    ]) {
+      expect(SENSITIVE_WINDOW_MARKERS).toContain(marker)
+    }
+  })
+
+  it.each([
+    'Nouvel onglet - Google Chrome (Navigation privée)',
+    'Connexion à AccèsD | Desjardins - Google Chrome',
+    'Se connecter à votre compte Microsoft - Microsoft Edge',
+    'Ouvrir une session - Mozilla Firefox',
+    'Réinitialiser votre MOT DE PASSE - Google Chrome',
+    'Entrez le CODE DE VÉRIFICATION - Google Chrome'
+  ])('never captures the French title %s', (windowTitle) => {
+    expect(
+      shouldCaptureFrame({
+        ...capturable,
+        appName: 'Chrome',
+        processName: 'chrome.exe',
+        windowTitle
+      })
+    ).toEqual({ capture: false, reason: 'sensitive' })
+  })
+
+  it('stores every marker lowercase and NFC, since only the title is lowercased', () => {
+    // An accented marker written with a capital, or with "é" decomposed into
+    // "e" + U+0301, would read correctly and never match a title.
+    for (const marker of SENSITIVE_WINDOW_MARKERS) {
+      expect(marker).toBe(marker.toLowerCase().normalize('NFC'))
+    }
+  })
+
+  it('also skips a French network-connection page, a known over-exclusion', () => {
+    // "connexion" is both the French login word and the ordinary word for a
+    // network connection. Skipping such a page is the cheap direction of the
+    // trade-off; this case documents it so a narrowing is a deliberate choice.
+    expect(
+      shouldCaptureFrame({ ...capturable, windowTitle: 'Paramètres de connexion réseau' })
+    ).toEqual({ capture: false, reason: 'sensitive' })
   })
 
   it('captures an ordinary browser tab', () => {

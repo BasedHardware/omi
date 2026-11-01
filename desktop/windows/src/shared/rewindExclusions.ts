@@ -52,5 +52,15 @@ export const SENSITIVE_WINDOW_MARKERS: string[] = [
   'password',
   'two-factor',
   '2fa',
-  'one-time code'
+  'one-time code',
+  // French equivalents (Windows/Chrome/Edge in French, Québec banking sites)
+  'navigation privée',
+  'connexion',
+  'se connecter',
+  'ouvrir une session',
+  'mot de passe',
+  'authentification',
+  'code de vérification',
+  'code de sécurité',
+  'code à usage unique'
 ]
