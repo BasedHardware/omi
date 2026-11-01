@@ -1,6 +1,7 @@
 """Executable query coverage for the dormant batch pipeline's stage namespaces."""
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry, ref_collection
 
@@ -8,6 +9,33 @@ from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry, r
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry(
+            'utils.batch_pipeline.record_seal_cluster_repair.discover',
+            domains={
+                'after': [
+                    None,
+                    {
+                        'path': 'users/synthetic/conversations/old',
+                        'finished_at': datetime(2026, 10, 1, tzinfo=timezone.utc),
+                    },
+                ]
+            },
+            neutrals={
+                'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
+                'max_rows': (1024, 'in-memory candidate cap only'),
+                'max_scan': (10000, 'aggregate scan bound only'),
+                'advance_rows': (1024, 'resume checkpoint only; no filter or ordering change'),
+                'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
+            },
+        ),
+        DriverEntry(
+            'utils.batch_pipeline.record_seal_sweeper.discover_pending',
+            domains={'namespace': namespaces},
+            neutrals={
+                'budget': (None, 'RPC timeout and retry only; no filter or ordering change'),
+                'limit': (32, 'bounded discovery page size only'),
+            },
+        ),
         DriverEntry(
             'database.batch_pipeline_store.ready_for_capacity',
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
@@ -50,7 +78,7 @@ def entries():
             covered_by=('database.batch_pipeline_shadow.stale_jobs',),
             reason='bounded orchestration delegates its only query to stale_jobs; finish uses document transactions',
             expect_observed=False,
-            body_digest='e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
+            body_digest='014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
         ),
         CoveredByEntry(
             'database.batch_ramp.ramp_admission_policy',

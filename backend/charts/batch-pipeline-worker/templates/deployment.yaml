@@ -28,9 +28,18 @@ spec:
   # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
   # before new ones start, so the deadline covers drain plus startup.
   progressDeadlineSeconds: 2400
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
+  {{- $replicas := .Values.replicaCount }}
+  {{- if .Values.autoscaling.enabled }}
+  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
+  {{- if $current }}
+  {{- $replicas = dig "spec" "replicas" $replicas $current }}
   {{- end }}
+  {{- end }}
+  # Keep the live count in Helm's manifest while HPA controls the scale subresource.
+  # Omitting replicas defaults the Deployment to one before HPA reconciliation;
+  # looking up the live value also prevents later Helm upgrades resetting HPA scale.
+  # New installs and offline renders use replicaCount as their baseline.
+  replicas: {{ $replicas | int }}
   # Never allocate surge GPUs or co-locate a second chain on one device.
   strategy:
     type: Recreate
@@ -119,6 +128,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secretName }}
                   key: HUGGINGFACE_TOKEN
+            - name: SONIOX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: SONIOX_API_KEY
+                  optional: true
           startupProbe:
             httpGet: {path: /ready, port: http}
             periodSeconds: 10

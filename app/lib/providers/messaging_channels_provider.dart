@@ -22,6 +22,7 @@ class ChannelLink {
     this.keepPrivateMemoriesInApp = true,
     this.insights = false,
     this.displayHandle,
+    this.address,
   });
 
   factory ChannelLink.fromGenerated(wire.GeneratedChannelLink link) => ChannelLink(
@@ -47,6 +48,23 @@ class ChannelLink {
   final bool keepPrivateMemoriesInApp;
   final bool insights;
   final String? displayHandle;
+
+  /// The line this link texted, when the connect sheet knows it. Not sent by the links API.
+  final String? address;
+
+  ChannelLink withAddress(String? value) => ChannelLink(
+        id: id,
+        channelId: channelId,
+        provider: provider,
+        externalId: externalId,
+        linkedAt: linkedAt,
+        visibleInApp: visibleInApp,
+        voiceNotes: voiceNotes,
+        keepPrivateMemoriesInApp: keepPrivateMemoriesInApp,
+        insights: insights,
+        displayHandle: displayHandle,
+        address: value,
+      );
 
   ChatChannel? get channel => ChatChannel.fromWire(channelId);
 

@@ -14241,6 +14241,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get episodeMoments => 'モーメント';
 
   @override
+  String get episodeFollowUps => 'フォローアップ';
+
+  @override
+  String get episodeOpenTranscript => '文字起こしを開く';
+
+  @override
   String get episodeSoFar => 'ここまで';
 
   @override
@@ -14458,9 +14464,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'この端末上で';
-
-  @override
-  String get episodeOpenTranscript => '文字起こしを開く';
 
   @override
   String get liveCardTitle => 'ライブ';
@@ -14716,5 +14719,30 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return '本日$amountを請求しました。次回更新は$dateです。';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count パート',
+      many: '$count パート',
+      few: '$count パート',
+      two: '$count パート',
+      one: '$count パート',
+      zero: '$count パート',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$appでメッセージを送信してください。Omiが受信するとすぐにこの画面が更新されます。';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return '新しいコードを取得して、$appアプリから送信してください。';
   }
 }

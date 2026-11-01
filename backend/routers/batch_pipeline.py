@@ -263,9 +263,7 @@ async def metrics():
 
 @router.post('/authorize-compute', include_in_schema=False)
 async def authorize_compute(body: HeartbeatRequest):
-    return await run_blocking(
-        db_executor, authorize, body.service().store, [lease.model_dump() for lease in body.leases]
-    )
+    return await authorize(body.service().store, [lease.model_dump() for lease in body.leases])
 
 
 async def enrichment_response(payload: dict):

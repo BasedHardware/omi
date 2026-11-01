@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -534,6 +535,14 @@ void main() {
   test('classifies HTTP upload failures without reducing them to unknown', () {
     expect(RecordingUploadTelemetry.failureClass(const SyncUploadHttpException(401, 'auth')), 'authentication');
     expect(RecordingUploadTelemetry.failureClass(const SyncUploadHttpException(503, 'server')), 'server');
+  });
+
+  test('a connection dropped by a network switch is a network failure, not unknown', () {
+    final uri = Uri.parse('https://api.omi.me/v2/sync-local-files');
+    expect(
+        RecordingUploadTelemetry.failureClass(http.ClientException("Can't assign requested address", uri)), 'network');
+    expect(RecordingUploadTelemetry.failureClass(http.ClientException('Broken pipe', uri)), 'network');
+    expect(RecordingUploadTelemetry.failureClass(const SyncUploadHttpException(400, 'refused')), 'unknown');
   });
 
   test('telemetry failure never changes an accepted upload', () async {

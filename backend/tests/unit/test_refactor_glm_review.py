@@ -64,8 +64,8 @@ async def test_serving_trim_tracks_generated_and_retired_paths(monkeypatch):
     assert paths == ['derived'] and cleanup == {'retired', 'derived'}
 
 
-@pytest.mark.parametrize('mode,accepted', [('off', False), ('shadow', False), ('invalid', False), ('serve', True)])
-def test_duplicate_capture_timestamp_widening_is_serve_only(monkeypatch, mode, accepted):
+@pytest.mark.parametrize('mode,accepted', [('off', True), ('shadow', True), ('invalid', True), ('serve', True)])
+def test_recorded_timestamp_parsing_is_global(monkeypatch, mode, accepted):
     monkeypatch.setenv('LIFECYCLE_V2_MODE', mode)
     monkeypatch.delenv('LIFECYCLE_V2_MODE_SERVE_PERCENT', raising=False)
     row = {

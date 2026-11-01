@@ -121,17 +121,14 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
             STTServingSurface.PTT,
         }
     ),
-    # Async is admitted only for bounded, language-guarded held recovery; general
+    # Async is admitted only for fenced held recovery; general
     # prerecorded/PTT selection continues to use its existing providers.
     SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY}),
 }
 
-# Held batch recovery used to spend one more multilingual call after Modulate
-# returned a validated empty response for long unknown-language speech
-# (utils/batch_pipeline/quarantine_recovery.py). Deepgram retired 2026-08-27
-# (no contract); there is no second provider with a batch client, so recovery
-# is Modulate-only and eligible units settle without the second call.
-HELD_RECOVERY_SECOND_PROVIDER: Final[str | None] = None
+# One independent call after a validated Modulate-empty held recovery, inside
+# the same paid intent. BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED is its kill switch.
+HELD_RECOVERY_SECOND_PROVIDER: Final[str | None] = SONIOX_PROVIDER
 
 # Defaults are also policy-owned so a deployment fallback cannot drift from the
 # providers approved above. A deployment's literal ordering is checked against

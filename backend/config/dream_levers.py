@@ -30,12 +30,44 @@ HISTORY_COMPACT_MODE_ENV = 'DREAM_HISTORY_COMPACT_MODE'
 HISTORY_COMPACT_SERVE_PERCENT_ENV = 'DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT'
 # Order each sweep's due owners by expected payoff, with an aging bound. Global: off/shadow/serve only.
 PAYOFF_ORDER_MODE_ENV = 'DREAM_PAYOFF_ORDER_MODE'
+# Back off an owner's hunt cadence after dry hunts (David 2026-10-30: replaces the idle-skip hunt floor).
+HUNT_BACKOFF_MODE_ENV = 'DREAM_HUNT_BACKOFF_MODE'
+HUNT_BACKOFF_SERVE_PERCENT_ENV = 'DREAM_HUNT_BACKOFF_MODE_SERVE_PERCENT'
+# Deterministic no-LLM pre-scan handing hunts concrete people/task cleanup targets.
+PRESCAN_MODE_ENV = 'DREAM_PRESCAN_MODE'
+PRESCAN_SERVE_PERCENT_ENV = 'DREAM_PRESCAN_MODE_SERVE_PERCENT'
+
+# Hold the two verifier calls' token reserve out of the main loop so staged work is
+# verified (10-30/31: 171 of 252 daily verifier_unverified items had zero verifier calls).
+VERIFY_HOLD_MODE_ENV = 'DREAM_VERIFY_HOLD_MODE'
+VERIFY_HOLD_SERVE_PERCENT_ENV = 'DREAM_VERIFY_HOLD_MODE_SERVE_PERCENT'
+# Apply trivially reversible auto kinds left unverified by budget or transport, never
+# when a verifier disagreed or the evidence was oversized or answered with invalid ids.
+LIBERAL_VERIFIER_MODE_ENV = 'DREAM_LIBERAL_VERIFIER_MODE'
+LIBERAL_VERIFIER_SERVE_PERCENT_ENV = 'DREAM_LIBERAL_VERIFIER_MODE_SERVE_PERCENT'
+LIBERAL_VERIFIER_KINDS = frozenset({'dismiss_person', 'spelling', 'title', 'overview', 'set_language', 'vocabulary'})
+LIBERAL_VERIFIER_REASONS = frozenset({'call_failed', 'single_vote', 'budget_tokens', 'budget_deadline'})
+
+# Defaults when the mode env is unset. 10-29 shadow day: idle-skip would have cut 79% of
+# applied edits and the no-progress stop 31%, so both are retired (off); payoff ordering
+# serves (David 2026-10-30: payoff first). The verify hold serves: it only moves budget
+# from searching to verifying what was found. Every other lever measures in shadow.
+DEFAULT_MODES: dict[str, Arm] = {
+    IDLE_SKIP_MODE_ENV: 'off',
+    NO_PROGRESS_STOP_MODE_ENV: 'off',
+    PAYOFF_ORDER_MODE_ENV: 'serve',
+    VERIFY_HOLD_MODE_ENV: 'serve',
+}
 
 PER_OWNER = (
     IDLE_SKIP_MODE_ENV,
     MATERIAL_BUDGET_MODE_ENV,
     NO_PROGRESS_STOP_MODE_ENV,
     HISTORY_COMPACT_MODE_ENV,
+    HUNT_BACKOFF_MODE_ENV,
+    PRESCAN_MODE_ENV,
+    VERIFY_HOLD_MODE_ENV,
+    LIBERAL_VERIFIER_MODE_ENV,
 )
 SHORT_NAMES = {
     IDLE_SKIP_MODE_ENV: 'idle_skip',
@@ -43,18 +75,23 @@ SHORT_NAMES = {
     NO_PROGRESS_STOP_MODE_ENV: 'no_progress_stop',
     HISTORY_COMPACT_MODE_ENV: 'history_compact',
     PAYOFF_ORDER_MODE_ENV: 'payoff_order',
+    HUNT_BACKOFF_MODE_ENV: 'hunt_backoff',
+    PRESCAN_MODE_ENV: 'prescan',
+    VERIFY_HOLD_MODE_ENV: 'verify_hold',
+    LIBERAL_VERIFIER_MODE_ENV: 'liberal_verifier',
 }
 
 
 def arm(name: str, uid: str | None) -> Arm:
     """This owner's arm for one lever; any configuration error fails open to ``off``."""
     try:
-        current = refactor_modes.mode(name, 'shadow')
+        default: Arm = DEFAULT_MODES.get(name, 'shadow')
+        current = refactor_modes.mode(name, default)
         if current == 'off':
             return 'off'
         if name == PAYOFF_ORDER_MODE_ENV:
             return current
-        return 'serve' if refactor_modes.serving_for(name, uid, 'shadow') else 'shadow'
+        return 'serve' if refactor_modes.serving_for(name, uid, default) else 'shadow'
     except Exception as error:
         logger.warning(
             'event=dream_lever_error lever=%s exc=%s', SHORT_NAMES.get(name, 'unknown'), type(error).__name__

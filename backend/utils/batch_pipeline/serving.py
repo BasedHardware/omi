@@ -286,10 +286,24 @@ def start_serving_from_env():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
                 await service.reconcile_async(recover_quarantine=True, periodic=True)
-                await drain_recordings(service.store)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=20)
+            except asyncio.TimeoutError:
+                pass
+
+    async def drain():
+        # Record admission must not wait for a full reconciliation pass.
+        while not stop.is_set():
+            try:
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                await drain_recordings(service.store)
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_serving action=record_drain outcome=retry exception_type=%s', type(error).__name__
                 )
             try:
                 await asyncio.wait_for(stop.wait(), timeout=20)
@@ -316,7 +330,7 @@ def start_serving_from_env():
                 pass
 
     async def run():
-        await asyncio.gather(supervise(), dispatch_recovery())
+        await asyncio.gather(supervise(), drain(), dispatch_recovery())
 
     return stop, start_background_task(run(), name='batch_pipeline_serving')
 

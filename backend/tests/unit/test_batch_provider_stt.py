@@ -906,7 +906,7 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
     monkeypatch.setattr(admission, 'get_hard_restriction_status', Mock(return_value=(False, None)))
     monkeypatch.setattr(admission, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=type('R', (), {'allowed': True})()))
-    receipt = admission.authorize(store, [{'segment_id': lease.item.segment_id, 'token': lease.token}], now=201.0)
+    receipt = await admission.authorize(store, [{'segment_id': lease.item.segment_id, 'token': lease.token}], now=201.0)
     if byok:
         assert receipt['allowed'] == [lease.item.segment_id]
         gate.assert_not_called()

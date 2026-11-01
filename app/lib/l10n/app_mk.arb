@@ -11819,6 +11819,8 @@
     "episodeLiveFor": "Во живо · {duration}",
     "episodeMomentsCount": "{count, plural, =1{1 момент} other{{count} моменти}}",
     "episodeMoments": "Моменти",
+    "episodeFollowUps": "Следни чекори",
+    "episodeOpenTranscript": "Отвори транскрипција",
     "episodeSoFar": "Досега",
     "episodeUpdatedJustNow": "Ажурирано сега · целосни белешки на крајот",
     "episodeUpdatedMinutesAgo": "Ажурирано пред {minutes} мин · целосни белешки на крајот",
@@ -11878,7 +11880,6 @@
     "episodeNotesStartWithTranscript": "Белешките започнуваат кога ќе пристигне конечната транскрипција.",
     "episodeOnDeviceNotesFootnote": "Се создаваат на твојот телефон додека зборуваш. Целосните белешки доаѓаат со конечната транскрипција.",
     "episodeOnThisPhone": "На овој телефон",
-    "episodeOpenTranscript": "Отвори транскрипција",
     "liveCardTitle": "Во живо",
     "livePreviewBehind": "Конечната транскрипција доцни околу {duration}",
     "livePreviewCatchingUp": "Конечната транскрипција стигнува",
@@ -11940,5 +11941,8 @@
     "yearlySwitchPreviewFailed": "Цената не можеше да се вчита.",
     "yearlySwitchUnavailable": "Годишното плаќање моментално не е достапно за вашиот план.",
     "yearlySwitchDoneTitle": "Сега плаќате годишно",
-    "yearlySwitchDoneBody": "Денес се наплатени {amount}. Обновување на {date}."
+    "yearlySwitchDoneBody": "Денес се наплатени {amount}. Обновување на {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} дела} one{{count} дел} two{{count} дела} few{{count} дела} many{{count} дела} other{{count} дела}}",
+    "chatAppsWaitingMessageIn": "Испратете ја пораката во {app}. Овој екран се ажурира штом Omi ќе ја добие.",
+    "chatAppsCodeExpiredMessageIn": "Добијте нов код и испратете го од {app}."
 }

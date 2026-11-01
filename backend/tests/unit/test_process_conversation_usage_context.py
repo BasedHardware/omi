@@ -2116,3 +2116,9 @@ def test_held_raw_budget_denial_preserves_backlog_choice_authority(monkeypatch, 
     assert result.processing_deferred
     store.assert_called_once()
     observer.assert_called_once_with(True)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

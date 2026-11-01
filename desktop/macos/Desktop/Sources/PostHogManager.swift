@@ -100,6 +100,7 @@ class PostHogManager {
 
     PostHogSDK.shared.identify(uid, userProperties: properties)
     log("PostHog: Identified user \(uid)")
+    OmiFlagStore.shared.refresh()
   }
 
   /// Set person properties in one identify call.
@@ -195,26 +196,31 @@ class PostHogManager {
   func reset() {
     guard isInitialized else { return }
     PostHogSDK.shared.reset()
+    OmiFlagStore.shared.reset()
     log("PostHog: Reset user")
   }
 
   // MARK: - Feature Flags
+  // Keys owned by Omi's flag store (`OmiFlagStore`) answer first; every other key reads PostHog.
 
   /// Check if a feature flag is enabled
   func isFeatureEnabled(_ flag: String) -> Bool {
     guard isInitialized else { return false }
+    if let omi = OmiFlagStore.shared.flag(flag) { return omi.enabled }
     return PostHogSDK.shared.isFeatureEnabled(flag)
   }
 
   /// Get feature flag value
   func getFeatureFlag(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
+    if let omi = OmiFlagStore.shared.value(flag) { return omi }
     return PostHogSDK.shared.getFeatureFlag(flag)
   }
 
   /// Get the JSON payload configured on a feature flag
   func getFeatureFlagPayload(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
+    if OmiFlagStore.shared.flag(flag) != nil { return OmiFlagStore.shared.payload(flag) }
     return PostHogSDK.shared.getFeatureFlagResult(flag)?.payload
   }
 
@@ -243,6 +249,7 @@ class PostHogManager {
   func reloadFeatureFlags() {
     guard isInitialized else { return }
     PostHogSDK.shared.reloadFeatureFlags()
+    OmiFlagStore.shared.refresh()
   }
 }
 

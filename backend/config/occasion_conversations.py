@@ -22,8 +22,10 @@ from __future__ import annotations
 import os
 
 OCCASION_CONVERSATIONS_ENABLED_ENV = 'OCCASION_CONVERSATIONS_ENABLED'
-OCCASION_GAP_SECONDS = 15 * 60
-OCCASION_MAX_SPAN_SECONDS = 3 * 60 * 60
+from config import recorded_time_tolerances as tolerances
+
+OCCASION_GAP_SECONDS = tolerances.CLOSE_GAP_SECONDS
+OCCASION_MAX_SPAN_SECONDS = tolerances.MAX_EPISODE_SECONDS
 
 _OFF = frozenset({'0', 'false', 'off', 'no'})
 # Sources whose clients do not show episodes; their conversations keep today's boundaries.

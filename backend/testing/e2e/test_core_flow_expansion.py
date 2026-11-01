@@ -116,7 +116,7 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
     monkeypatch.setenv("SYNC_TASKS_LOCATION", "us-central1")
     monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_QUEUE", "conversation-finalization")
     monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_HANDLER_URL", "https://example.invalid/finalize")
-    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_INVOKER_SA", "worker@example.invalid")
+    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_INVOKER_SA", "worker@test-e2e-project.iam.gserviceaccount.com")
 
     cloud_tasks_module = sys.modules["utils.cloud_tasks"]
     monkeypatch.setattr(cloud_tasks_module, "enqueue_listen_finalization_job", lambda *a, **k: None)

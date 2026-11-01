@@ -405,7 +405,7 @@ def _stamp_incoming(texts, skew=40, *, binding='stamp_fallback'):
     return incoming
 
 
-@pytest.mark.parametrize(('extra_seconds', 'bucket'), [(0, '0'), (30, '0_60'), (100, '60_300'), (300, '60_300')])
+@pytest.mark.parametrize(('extra_seconds', 'bucket'), [(0, '0_60'), (30, '0_60'), (100, '60_300'), (300, '60_300')])
 def test_stamp_fallback_live_append_reports_extent_growth(extra_seconds, bucket):
     store = seeded_store([live_row()])
     incoming = _stamp_incoming(NEW)
@@ -684,8 +684,9 @@ async def test_coordinator_lineage_off_passes_no_binding_kwarg(coordinator, monk
 def test_stamp_gap_threshold_preserves_proven_targets_and_routes_unproven_speech(growth, binding, status):
     row = live_row(status=status)
     store = seeded_store([row])
-    # Real gap: incoming speech ends growth seconds after the live row.
-    incoming = _stamp_incoming(NEW[:1], skew=60 + growth, binding=binding)
+    # The placed provider span ends 0.7s beyond the chunk metadata. Pin the
+    # boundary to recorded speech so growth=300 is exactly the admitted limit.
+    incoming = _stamp_incoming(NEW[:1], skew=60 + growth - 0.7, binding=binding)
     before = deepcopy(store.rows[('users', 'u', 'conversations', LIVE_ID)])
     assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
     if binding == 'stamp_fallback' and growth > 300:

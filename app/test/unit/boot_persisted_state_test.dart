@@ -6,6 +6,7 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/startup/boot_journal.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 class _Documents extends PathProviderPlatform {
@@ -25,6 +26,9 @@ void main() {
     PathProviderPlatform.instance = _Documents(directory.path);
   });
   tearDown(() async {
+    // Getter-triggered quarantine writes are asynchronous. Join the journal
+    // before removing its directory rather than racing a temporary-file rename.
+    await BootJournal.instance.read();
     PathProviderPlatform.instance = previousProvider;
     await directory.delete(recursive: true);
   });
@@ -62,8 +66,9 @@ void main() {
           ].any((key) => candidate.startsWith('$key.corrupt-')));
       final allOriginalsArchived = recordedKeys.length == 5;
       if (allOriginalsArchived && await journal.exists()) {
-        final entries = jsonDecode(await journal.readAsString()) as List<dynamic>;
-        quarantineRecorded = entries.any((entry) => entry is Map && entry['stage'] == 'quarantine:btDevice');
+        final entries = await BootJournal.instance.read();
+        quarantineRecorded =
+            ['btDevice', 'btDevices'].every((key) => entries.any((entry) => entry['stage'] == 'quarantine:$key'));
       }
       if (!quarantineRecorded) await Future<void>.delayed(const Duration(milliseconds: 1));
     }
@@ -72,7 +77,7 @@ void main() {
     }
     final archivedPairing = stored.getKeys().singleWhere((key) => key.startsWith('btDevice.corrupt-'));
     expect(stored.getString(archivedPairing), '{"id":42}');
-    expect(quarantineRecorded, isTrue, reason: 'quarantine journal should record btDevice within two seconds');
+    expect(quarantineRecorded, isTrue, reason: 'both getter-triggered quarantines must finish before cleanup');
     expect(await journal.readAsString(), contains('quarantine:btDevice'));
   });
 

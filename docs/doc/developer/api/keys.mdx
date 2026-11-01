@@ -1,5 +1,5 @@
 ---
-title: "API Keys"
+title: "API keys"
 icon: "key"
 description: "Manage your Developer API keys"
 ---
@@ -24,7 +24,6 @@ Developer API keys are self-service: while signed in to Omi, open the
 `omi_dev_...` key cannot create, list, or revoke keys itself.
 </Note>
 
-
 ## Hand a key to an agent without pasting it
 
 After you create a key there, choose **Send to My Agent Securely**. Omi encrypts the key in your
@@ -39,8 +38,6 @@ Your agent installs the `zkr` receiver if needed (see
 `zkr receive --link-stdin --output <relative-path>`, moves the value into its own secret store or
 environment variable, and deletes the file. If the link was already opened or has expired, create a
 new one. **Show the key instead** remains available when you would rather store the key yourself.
-
----
 
 ## Inspect the Calling Key
 
@@ -138,8 +135,6 @@ This endpoint requires your signed-in Omi/Firebase session. The secret key value
   </Accordion>
 </AccordionGroup>
 
----
-
 ## Create API Key
 
 <Card title="POST /v1/dev/keys" icon="upload" color="#3b82f6" horizontal>
@@ -219,7 +214,7 @@ Firebase ID token, not an existing `omi_dev_...` key. The new secret is returned
 </Accordion>
 
 <Warning>
-The full API key (`key` field) is only returned once during creation. Store it securely immediately - you won't be able to see it again!
+The full API key (`key` field) is only returned once during creation. Store it securely right away. You can't view it again.
 </Warning>
 
 ### Scopes
@@ -231,8 +226,6 @@ Choose the least-privileged scopes needed by your integration:
 
 Memory scopes authorize the key, but they do not bypass the account-level Developer Memory API readiness
 gate. See [Memories](/doc/developer/api/memories) for that availability contract.
-
----
 
 ## Revoke API Key
 
@@ -293,8 +286,6 @@ gate. See [Memories](/doc/developer/api/memories) for that availability contract
 If a key is compromised, revoke it immediately and create a new one.
 </Tip>
 
----
-
 ## Best Practices
 
 <CardGroup cols={2}>
@@ -311,8 +302,6 @@ If a key is compromised, revoke it immediately and create a new one.
     Periodically create new keys and revoke old ones
   </Card>
 </CardGroup>
-
----
 
 ## Use Case: Key Management Script
 
@@ -421,8 +410,6 @@ If a key is compromised, revoke it immediately and create a new one.
   </Tab>
 </Tabs>
 
----
-
 ## Managing Keys in the App
 
 You can also manage API keys in the Omi mobile app (the web
@@ -444,7 +431,7 @@ You can also manage API keys in the Omi mobile app (the web
 </Steps>
 
 <Info>
-Keys created in the app and via the API are the same - you can manage them from either place.
+Keys created in the app and through the API are the same. You can manage them from either place.
 </Info>
 
 Additional opt-in read scopes are `people:read`, `profile:read`, and

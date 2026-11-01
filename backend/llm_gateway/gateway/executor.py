@@ -818,9 +818,11 @@ def _provider_request(
             )
             for message in provider_request['messages']
         ]
-    _sanitize_openai_chat_completions_request(provider_request, provider_ref)
     if mapped_gemini_effort is not None:
         provider_request['reasoning_effort'] = mapped_gemini_effort
+    # Apply the provider contract last: desktop tool loops request Gemini
+    # thinking, but Luna Chat Completions function tools require effort=none.
+    _sanitize_openai_chat_completions_request(provider_request, provider_ref)
     return provider_request
 
 
@@ -832,8 +834,9 @@ def _sanitize_openai_chat_completions_request(
 
     Live OpenAI 400 (2026-08): function tools with reasoning_effort other than
     ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
-    Desktop Gemini fallbacks reapply their mapped effort after this sanitizer;
-    other gpt-6-luna routes retain their route-specific effort and tool policy.
+    GPT-6 Luna has the same Chat Completions tool restriction. Apply this after
+    mapping desktop Gemini thinking controls so they cannot restore a rejected
+    nonzero effort. Requests without tools retain their mapped effort.
     Temperature must stay at the model default (1).
     """
     if provider_ref.provider != 'openai':

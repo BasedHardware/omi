@@ -8805,6 +8805,78 @@
         "title": "ClickUpTeamsResponse",
         "type": "object"
       },
+      "ClientFlag": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "payload_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "JSON-encoded payload when enabled",
+            "title": "Payload Json"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Multivariate value when enabled; null for boolean flags",
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "key",
+          "enabled"
+        ],
+        "title": "ClientFlag",
+        "type": "object"
+      },
+      "ClientFlagsResponse": {
+        "properties": {
+          "flags": {
+            "description": "Only keys the Omi store owns. A key not listed keeps the client's previous source.",
+            "items": {
+              "$ref": "#/components/schemas/ClientFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Store version; null when the store is unconfigured or unreadable",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "version",
+          "flags"
+        ],
+        "title": "ClientFlagsResponse",
+        "type": "object"
+      },
       "ClientProcessing": {
         "additionalProperties": false,
         "properties": {
@@ -9125,6 +9197,18 @@
             "title": "Apps Results",
             "type": "array"
           },
+          "arrival_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival At"
+          },
           "audio_files": {
             "default": [],
             "items": {
@@ -9245,6 +9329,16 @@
               }
             ]
           },
+          "clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedClock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content_kind": {
             "anyOf": [
               {
@@ -9296,6 +9390,17 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
           },
           "external_data": {
             "anyOf": [
@@ -9498,6 +9603,40 @@
                 "type": "null"
               }
             ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded End"
+          },
+          "recorded_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Start"
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -10456,6 +10595,18 @@
             "title": "Apps Results",
             "type": "array"
           },
+          "arrival_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival At"
+          },
           "audio_files": {
             "default": [],
             "items": {
@@ -10576,6 +10727,16 @@
               }
             ]
           },
+          "clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedClock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content_kind": {
             "anyOf": [
               {
@@ -10627,6 +10788,17 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
           },
           "external_data": {
             "anyOf": [
@@ -10837,6 +11009,40 @@
                 "type": "null"
               }
             ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded End"
+          },
+          "recorded_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Start"
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -15751,6 +15957,18 @@
             "title": "Conversation Ids",
             "type": "array"
           },
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "follow_ups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Follow Ups",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -15759,6 +15977,18 @@
             "format": "date-time",
             "title": "Last Activity At",
             "type": "string"
+          },
+          "lede": {
+            "default": "",
+            "title": "Lede",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeMember"
+            },
+            "title": "Members",
+            "type": "array"
           },
           "moments": {
             "items": {
@@ -15813,6 +16043,18 @@
             "title": "Status",
             "type": "string"
           },
+          "timer_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timer Started At"
+          },
           "title": {
             "default": "",
             "title": "Title",
@@ -15826,6 +16068,37 @@
           "last_activity_at"
         ],
         "title": "Episode",
+        "type": "object"
+      },
+      "EpisodeListResponse": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/Episode"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "EpisodeListResponse",
         "type": "object"
       },
       "EpisodeLiveResponse": {
@@ -15885,6 +16158,53 @@
         "title": "EpisodeLookupResponse",
         "type": "object"
       },
+      "EpisodeMember": {
+        "description": "Retained member metadata; transcript is hydrated by the existing detail API.",
+        "properties": {
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "default": "completed",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "started_at"
+        ],
+        "title": "EpisodeMember",
+        "type": "object"
+      },
       "EpisodeMoment": {
         "properties": {
           "conversation_id": {
@@ -15910,6 +16230,13 @@
             "title": "Id",
             "type": "string"
           },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodePoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
           "start_offset": {
             "default": 0.0,
             "title": "Start Offset",
@@ -15928,6 +16255,27 @@
           "ended_at"
         ],
         "title": "EpisodeMoment",
+        "type": "object"
+      },
+      "EpisodePoint": {
+        "description": "One point of a composed moment, with optional supporting specifics under it.",
+        "properties": {
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "EpisodePoint",
         "type": "object"
       },
       "EpisodeProvisionalItem": {
@@ -27364,6 +27712,41 @@
         "title": "RecommendationSubjectKind",
         "type": "string"
       },
+      "RecordAudioPartial": {
+        "description": "Available transcript is incomplete; this never certifies a complete seal.",
+        "properties": {
+          "applied_generation": {
+            "default": 0,
+            "title": "Applied Generation",
+            "type": "integer"
+          },
+          "generation": {
+            "default": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "tail_lagging",
+              "budget_limit",
+              "tail_lost_or_unproven"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RecordAudioPartial",
+        "type": "object"
+      },
       "RecordLlmUsageBucketRequest": {
         "properties": {
           "account": {
@@ -27417,6 +27800,18 @@
         },
         "title": "RecordLlmUsageBucketRequest",
         "type": "object"
+      },
+      "RecordedClock": {
+        "enum": [
+          "device",
+          "estimated_device",
+          "frame",
+          "live_capture",
+          "imported",
+          "legacy"
+        ],
+        "title": "RecordedClock",
+        "type": "string"
       },
       "RedeemCodeRequest": {
         "properties": {
@@ -56423,6 +56818,149 @@
         ]
       }
     },
+    "/v1/episodes": {
+      "get": {
+        "operationId": "list_episodes_v1_episodes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Episodes",
+        "tags": [
+          "episodes"
+        ]
+      }
+    },
     "/v1/episodes/by-conversation/{conversation_id}": {
       "get": {
         "operationId": "get_episode_for_conversation_v1_episodes_by_conversation__conversation_id__get",
@@ -57086,6 +57624,95 @@
         "tags": [
           "fair_use"
         ]
+      }
+    },
+    "/v1/flags": {
+      "get": {
+        "operationId": "client_flags_v1_flags_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "surface",
+            "required": true,
+            "schema": {
+              "enum": [
+                "macos",
+                "mobile",
+                "web-app",
+                "windows"
+              ],
+              "title": "Surface",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientFlagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Client Flags"
       }
     },
     "/v1/folders": {

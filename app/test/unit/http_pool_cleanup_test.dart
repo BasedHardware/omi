@@ -139,6 +139,8 @@ class _ScriptedClient extends Fake implements HttpClient {
   int? maxConnectionsPerHost;
   @override
   Duration idleTimeout = Duration.zero;
+  @override
+  Duration? connectionTimeout;
 
   @override
   Future<HttpClientRequest> openUrl(String method, Uri url) {

@@ -26,7 +26,7 @@ from utils.observability.reasons import SyncCaptureTimeReason
 # max — uncalibrated phone clocks drift minutes, so one outlier phone must keep
 # syncing — while bogus device stamps (2030+) stay ~years outside and accepted
 # times are clamped to now anyway, so the wider bound costs nothing downstream.
-DEFAULT_MAX_FUTURE_SKEW_SECONDS = 600
+from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS as DEFAULT_MAX_FUTURE_SKEW_SECONDS
 
 EARLIEST_CAPTURE_TIME = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
