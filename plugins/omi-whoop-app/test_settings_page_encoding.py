@@ -177,7 +177,7 @@ class TestWhoopSettingsPageEncoding(unittest.TestCase):
             self.assertIn('href="/?uid=user%22123%3Cscript%3E"', body)
             self.assertNotIn('href="/?uid=user"123<script>"', body)
 
-    def test_callback_exception_escapes_error_message(self):
+    def test_callback_exception_returns_fixed_error_message(self):
         with patch.object(
             main, "get_uid_from_oauth_state", return_value="user123"
         ), patch.object(main, "delete_oauth_state"), patch.object(
@@ -186,7 +186,7 @@ class TestWhoopSettingsPageEncoding(unittest.TestCase):
             response = asyncio.run(main.whoop_callback(code="code_123", state="state_123"))
             self.assertEqual(response.status_code, 500)
             body = response.body.decode()
-            self.assertIn("&lt;script&gt;broken&lt;/script&gt;", body)
+            self.assertEqual(body, "Authentication error")
             self.assertNotIn("<script>broken</script>", body)
 
     def test_disconnect_redirect_quotes_uid(self):

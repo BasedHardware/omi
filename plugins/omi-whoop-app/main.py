@@ -1278,11 +1278,8 @@ async def whoop_callback(
         """)
 
     except Exception as e:
-        log(f"OAuth error: {e}")
-        import traceback
-        traceback.print_exc()
-        safe_error = html.escape(str(e))
-        return HTMLResponse(content=f"Authentication error: {safe_error}", status_code=500)
+        log(f"OAuth error: {type(e).__name__}")
+        return HTMLResponse(content="Authentication error", status_code=500)
 
 
 @app.get("/setup/whoop")
