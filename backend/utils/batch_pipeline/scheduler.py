@@ -34,6 +34,8 @@ LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
+# A later lease starts only below this many buffered writes (flush refuses 450).
+PULL_WRITE_HEADROOM = 300
 HEAD_OWNER_BUDGET = 64
 CONTENTION_BACKOFF_CAP_SECONDS = 30.0
 PULL_CLAIM_SECONDS = 30.0
@@ -100,7 +102,7 @@ class _OwnWrites:
     """
 
     def __init__(self, tx: Transaction):
-        self._tx, self._jobs = tx, set()
+        self._tx, self._jobs, self._written = tx, set(), set()
 
     def __getattr__(self, name):
         return getattr(self._tx, name)  # Store-specific helpers pass through unchanged.
@@ -111,7 +113,11 @@ class _OwnWrites:
     def put(self, table: str, key: str, value: dict) -> None:
         if table == 'jobs':
             self._jobs.add(key)
+        self._written.add((table, key))
         self._tx.put(table, key, value)
+
+    def buffered_writes(self) -> int:
+        return len(self._written)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
         self._tx.patch(table, key, fields)
@@ -458,9 +464,13 @@ class Scheduler:
             owner_count = max(1, len(ring))
             head_budget = [HEAD_OWNER_BUDGET]
             visits = 0
-            # MAX_VISITS bounds the walk to each lease, exactly as one lease per
-            # transaction did; the ring's reads are already cached for the next.
-            while visits < MAX_VISITS and len(receipts) < max_leases:
+            # MAX_VISITS still bounds the whole walk, and with it the queue
+            # writes; later leases spend what the first left, from cached reads.
+            while (
+                visits < MAX_VISITS
+                and len(receipts) < max_leases
+                and (not receipts or tx.buffered_writes() < PULL_WRITE_HEADROOM)
+            ):
                 visits += 1
                 if not ring:
                     break
@@ -577,7 +587,6 @@ class Scheduler:
                 # privacy, policy and pool checks before it can be leased.
                 eligible_queues.pop(queue_key, None)
                 owner_count = max(1, len(ring))
-                visits = 0
             # Ring rotations after the last lease commit with their deficits.
             control[field(int(priority), 'active')] = bool(ring)
             if not receipts and not eligible_queues:

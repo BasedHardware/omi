@@ -57,6 +57,8 @@ class SnapshotStore(MemoryStore):
             self.counts['transactions'] += 1
             tx = SnapshotTransaction(self.rows, self.counts)
             result = body(tx)
+            if len(tx.writes) > 450:
+                raise RuntimeError('batch transaction write budget exceeded')  # FirestoreTransaction.flush
             rows = deepcopy(self.rows)
             rows.update(tx.writes)
             self.rows = rows
@@ -244,6 +246,30 @@ def test_reserved_fresh_slots_still_bound_backfill_in_one_transaction():
         queue.enqueue(item(f'deep-{n}', capture=n), 0)
     capacity = PoolCapacity(observed_at=1, available_slots=4, reserved_fresh_slots=3)
     assert len(queue.pull(1, 8, capacity=capacity)) == 1
+
+
+@pytest.mark.parametrize('headroom', [None, 10**6])
+def test_long_heads_never_push_one_transaction_past_the_write_budget(monkeypatch, headroom):
+    # Every short head sits behind 31 long heads that only rotate, one queue
+    # write each. Bounding the whole walk, not each lease, keeps 512 queues
+    # from becoming 512 buffered writes in one transaction; the write
+    # headroom is a second, independent stop.
+    from utils.batch_pipeline import scheduler
+
+    if headroom is not None:
+        monkeypatch.setattr(scheduler, 'PULL_WRITE_HEADROOM', headroom)
+    store = SnapshotStore()
+    queue = Scheduler(store, worker_id='w')
+    items = [
+        item(f'{owner}-0', owner=owner, duration=30 if n % 32 == 31 else 7200)
+        for n, owner in enumerate(owners_in_shard(512))
+    ]
+    MemoryStore.run(store, lambda tx: [Scheduler.enqueue_in_transaction(tx, v, 0) for v in items])
+    store.counts.clear()
+    leases = queue.pull(1, 16)
+    assert len(leases) == 16 and {v.item.duration_seconds for v in leases} == {30}
+    if headroom is not None:
+        assert store.counts['transactions'] == 4  # 128 visits reach 4 short heads.
 
 
 def test_kill_switch_restores_one_lease_per_transaction(monkeypatch):
