@@ -164,6 +164,69 @@ def test_persisted_sibling_leaves_sweep_without_success_or_claim_release(monkeyp
     assert all(not t.creates and not t.sets for t in client.transactions)
 
 
+def ready_sibling_fixture():
+    client, store, old = projection_fixture()
+    binding = replace(old, segment_ids=(*old.segment_ids, 'other'))
+    job = deepcopy(client.rows[('batch_pipeline_dev_jobs', 'good')])
+    job['segment_id'] = 'other'
+    client.rows[('batch_pipeline_dev_jobs', 'other')] = job
+    entry = deepcopy(client.rows[('batch_pipeline_dev_results', 'good')])
+    entry['segment_id'] = 'other'
+    client.rows[('batch_pipeline_dev_results', 'other')] = entry
+    for sid in binding.segment_ids:
+        client.rows[('batch_pipeline_dev_jobs', sid)]['projection_binding'] = asdict(binding)
+    client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]['batch_pipeline'][
+        'segment_ids'
+    ] = list(binding.segment_ids)
+    return client, store, binding
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_quarantine_hold_settles_ready_sibling_hints_in_one_transaction(monkeypatch, enabled):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', enabled)
+    client, store, binding = ready_sibling_fixture()
+    before = deepcopy(client.rows)
+    assert store.hold_for_quarantine('good', binding, 100)
+    assert client.rows[('batch_pipeline_dev_results', 'good')]['projection_state'] == 'quarantine_held'
+    other = client.rows[('batch_pipeline_dev_results', 'other')]
+    assert other['projection_state'] == ('quarantine_held' if enabled == 'true' else 'ready')
+    assert other['projection'] == before[('batch_pipeline_dev_results', 'other')]['projection']
+    assert client.rows[('users', binding.owner_id, 'sync_content_ledger', 'content')]['status'] == 'processing'
+    assert all(not t.creates and not t.sets for t in client.transactions)
+
+
+@pytest.mark.parametrize('change', ['binding', 'owner', 'entry_owner', 'segment'])
+def test_group_hold_fails_closed_before_any_write_for_foreign_ready_sibling(monkeypatch, change):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    client, store, binding = ready_sibling_fixture()
+    job = client.rows[('batch_pipeline_dev_jobs', 'other')]
+    entry = client.rows[('batch_pipeline_dev_results', 'other')]
+    if change == 'binding':
+        job['projection_binding']['run_token'] = 'synthetic-foreign'
+        job['projection_binding']['run_epoch'] = 2
+    elif change == 'owner':
+        job['owner_id'] = 'synthetic-foreign'
+    elif change == 'entry_owner':
+        entry['owner_key'] = 'synthetic-foreign'
+    else:
+        entry['segment_id'] = 'synthetic-foreign'
+    before = deepcopy(client.rows)
+    with pytest.raises(ProjectionBlocked, match='ready sibling binding mismatch'):
+        store.hold_for_quarantine('good', binding, 100)
+    assert client.rows == before
+
+
+def test_group_hold_never_hides_unfinished_persisted_side_effects(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    client, store, binding = ready_sibling_fixture()
+    entry = client.rows[('batch_pipeline_dev_results', 'other')]
+    entry.update(projection_state='persisted', projection={'state': 'persisted'})
+    before = deepcopy(entry)
+    assert store.hold_for_quarantine('good', binding, 100)
+    assert entry == before
+
+
 @pytest.mark.parametrize('change', ['binding', 'privacy', 'not_ready', 'pending', 'ledger'])
 def test_hold_fails_closed_against_revoked_or_invalid_sibling(monkeypatch, change):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')

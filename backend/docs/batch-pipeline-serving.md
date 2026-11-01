@@ -892,7 +892,13 @@ and privacy fences; persisted rows still finish their own side effects and
 probe completion. Failed/cancelled probes clear the shared hint. The next
 discovery pass resets it, and priority/owed recovery wakes bypass it. Thus an
 unchanged ready row gets a fresh probe each cycle even when its dependency
-changed elsewhere. No cooldown or version cache is used.
+changed elsewhere. No cooldown or version cache is used. When the existing
+quarantine-hold transaction finds a quarantined sibling, it uses its existing
+read set to settle all matching ready siblings' discovery hints together.
+It verifies their full binding, owner and segment identity before any write;
+persisted side effects and receipt payloads are untouched. This prevents ready
+siblings leaving discovery one per later pass. The same kill switch restores
+single-row hold hints as well as independent completion probes.
 
 The execution read origin `task:batch_projection_followup` covers these row
 fences and sibling completion scans; candidate discovery runs in its caller's

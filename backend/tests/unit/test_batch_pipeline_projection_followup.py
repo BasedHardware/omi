@@ -431,6 +431,26 @@ async def test_ready_completion_probes_do_not_coalesce_different_run_bindings(fo
 
 
 @pytest.mark.asyncio
+async def test_persisted_sibling_unblocks_content_after_ready_probe_in_same_page(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    f.receipts['head']['state'] = 'ready'
+    completed = []
+
+    def complete(segment, binding):
+        if all(receipt['state'] == 'ready' for receipt in f.receipts.values()):
+            completed.append(segment)
+
+    f.projector.complete_content.side_effect = complete
+    f.projector.store.mark_enrichment.side_effect = lambda sid, *_args, **_kw: f.receipts[sid].update(state='ready')
+    await f.runner.schedule()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+    assert f.projector.complete_content.call_count == 2
+    assert completed == ['later']
+
+
+@pytest.mark.asyncio
 async def test_shutdown_cancellation_does_not_launch_remaining_outbox_wakeups(followup, monkeypatch):
     f = followup
     monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
