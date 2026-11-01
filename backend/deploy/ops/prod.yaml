@@ -71,8 +71,11 @@ cloud_run:
     # pump keeps conversation-finalization headroom (min 5 x concurrency 20, the
     # shape deploy-backend-stack sizes its queue against).
     # syncwall: source cap 50 -> 40; lead applies after fresh-latency review.
-    # Rollback: 50 (floor remains 5).
-    max_instances: 40
+    # 2026-11-01 margin G1: cap 40 -> 30 once #24264 (hourly re-poll of long-stuck
+    # custody deferrals) has served 7h and the syncdiet gates hold for 1h. Merging
+    # this does not apply it; the lead dispatches the config-train after the gates.
+    # Rollback: 40 (floor remains 5).
+    max_instances: 30
     min_instances: 5
   backend-sync-backfill:
     env:
