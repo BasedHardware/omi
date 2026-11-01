@@ -124,6 +124,8 @@ def test_shared_gpu_reservation_is_followed_through_the_owners_job(stores):
     rows.append(('gpus', 'gpu-a', {'token': 't1', 'segment_id': 'gp1', 'lease_until': 99.0}))
     _write(dual, rows)
     primary.delete('jobs', 'gp1')
+    with shadow.pool.connection() as conn:
+        shadow.delete_doc(conn, 'jobs', 'gp1')  # the job's own refresh landed: nothing links the GPU row any more
     primary.apply(('gpus', 'gpu-a'), {'token': '', 'lease_until': 0.0, 'released_token': 't1'})  # refresh dropped
 
     dual.purge_owner_now(uid)
@@ -171,6 +173,29 @@ def test_purge_waits_for_a_mirror_copy_that_read_the_pre_purge_primary(stores):
     purger.join(30)
     assert purged.is_set()
     assert _postgres(shadow, 'jobs', 'r1') == {}
+
+
+def test_second_scan_erases_a_copy_from_a_worker_without_the_barrier(stores, monkeypatch):
+    """Rolling deploy: an older mirror worker (no barrier) commits a pre-purge copy after the first scan."""
+    from database.jobstore import dual_store
+
+    customer, primary, shadow, dual = stores
+    uid = 'synthetic-rollout'
+    customer.add_user(uid)
+    _write(dual, _owner_rows(uid, 'o1'))
+    late = {**primary.get('jobs', 'o1')}
+    primary.delete('jobs', 'o1')
+    with shadow.pool.connection() as conn:
+        shadow.delete_doc(conn, 'jobs', 'o1')
+
+    def old_worker_commits(_seconds):
+        with shadow.pool.connection() as conn:
+            with conn.transaction():
+                shadow.write_doc(conn, 'jobs', 'o1', late)  # no barrier, no primary re-read
+
+    monkeypatch.setattr(dual_store.time, 'sleep', old_worker_commits)
+    dual.purge_owner_now(uid)
+    assert _postgres(shadow, 'jobs', 'o1') == {}
 
 
 def test_a_failed_reconcile_raises_so_the_deletion_retries(stores, monkeypatch):

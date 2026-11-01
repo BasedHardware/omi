@@ -63,6 +63,8 @@ QUEUE_LIMIT = 1000
 # A5 owner purge: deletion-flow work, so a real budget instead of the mirror's 200 ms, in bounded chunks.
 PURGE_TIMEOUT_S = 30.0
 PURGE_CHUNK = 200
+# Second-scan delay: longer than a mirror copy's pool wait plus one primary get_all in practice.
+PURGE_SETTLE_S = 2.0
 MIRRORED_TABLES = frozenset({'jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts'})
 _OFF = {'0', 'false', 'off', 'no'}
 _QUERY_CANCELED = '57014'
@@ -422,18 +424,25 @@ class DualStore:
             (namespace, sorted(MIRRORED_TABLES - {'jobs', 'results', 'control'}), key, owner_id),
         ).fetchall()
         rows.update((row[0], row[1]) for row in found)
-        # Shared GPU reservations are keyed by GPU and name the leased segment, not the owner: follow the
-        # owner's jobs to them.
-        segments = [row[0] for row in jobs]
-        gpus = sorted({row[1] for row in jobs if row[1]})
-        if segments or gpus:
-            found = conn.execute(
-                "SELECT key FROM docs WHERE namespace = %s AND tbl = 'gpus' "
-                "AND (key = ANY(%s) OR doc->>'segment_id' = ANY(%s))",
-                (namespace, gpus, segments),
-            ).fetchall()
-            rows.update(('gpus', row[0]) for row in found)
+        # Shared GPU reservations are keyed by GPU and name the leased segment, not the owner, and the job that
+        # linked them may already be gone from Postgres. There is one row per physical GPU, so reconcile them all.
+        found = conn.execute("SELECT key FROM docs WHERE namespace = %s AND tbl = 'gpus'", (namespace,)).fetchall()
+        rows.update(('gpus', row[0]) for row in found)
         return sorted(rows)
+
+    def _reconcile_owner(self, owner_id: str) -> list[tuple[str, str]]:
+        with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
+            with conn.transaction():
+                conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
+                # Exclusive barrier: in-flight copies that read the pre-purge primary commit first.
+                conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (self._purge_barrier(),))
+                rows = self.owner_rows(conn, owner_id)
+        for start in range(0, len(rows), PURGE_CHUNK):
+            with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
+                with conn.transaction():
+                    conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
+                    self.copy_current(conn, rows[start : start + PURGE_CHUNK])
+        return rows
 
     def purge_owner_now(self, owner_id: str) -> int:
         """A5: after the primary's purge, make Postgres hold exactly the primary's state for one owner.
@@ -444,19 +453,15 @@ class DualStore:
         re-copied from the primary under its key lock (deleted when the primary no longer has it, or
         overwritten with the erased form a conversation purge keeps), in bounded chunks. Returns the rows
         reconciled.
+
+        A second scan after ``PURGE_SETTLE_S`` covers copies from mirror workers that predate the purge
+        barrier (a rolling deploy): such a copy that read the pre-purge primary and committed after the first
+        scan is found and erased, provided it finishes within the settle window.
         """
         try:
-            with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
-                with conn.transaction():
-                    conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
-                    # Exclusive barrier: in-flight copies that read the pre-purge primary commit first.
-                    conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (self._purge_barrier(),))
-                    rows = self.owner_rows(conn, owner_id)
-            for start in range(0, len(rows), PURGE_CHUNK):
-                with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
-                    with conn.transaction():
-                        conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
-                        self.copy_current(conn, rows[start : start + PURGE_CHUNK])
+            rows = set(self._reconcile_owner(owner_id))
+            time.sleep(PURGE_SETTLE_S)
+            rows.update(self._reconcile_owner(owner_id))
         except Exception:
             _count('other', 'purge', ShadowParityOutcome.ERROR)
             raise
