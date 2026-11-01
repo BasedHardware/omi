@@ -277,7 +277,7 @@ async def test_batch_hand_off_reserves_the_candidates_units_before_it_is_durable
     reserved = {'hold-1': {'units': 40.0, 'period': PERIOD, 'batch_job_id': 'bp_job'}}
     saved = events[0][1]
     assert {k: {f: v for f, v in e.items() if f != 'reserved_at'} for k, e in saved.items()} == reserved
-    assert events[1:] == ['erase', 'release']
+    assert events[1:] == ['release']  # the hold keeps its audio until batch projects it (finish_handoff)
 
 
 # --- B: period attribution across a rollover --------------------------------------------------------

@@ -3652,7 +3652,7 @@ _add(
         'database.cap_hold_redrive.page',
         neutrals={'limit': _LIMIT},
         domains={
-            'kind': ['choices', 'staging', 'cleanup'],
+            'kind': ['choices', 'staging', 'cleanup', 'handoff'],
             'after': [None, 'users/synthetic/processing_backlog/current'],
         },
     )
@@ -3661,7 +3661,7 @@ _add(
     DriverEntry(
         'database.cap_hold_redrive.discover',
         neutrals={'limit': _LIMIT},
-        domains={'kind': ['choices', 'staging', 'cleanup']},
+        domains={'kind': ['choices', 'staging', 'cleanup', 'handoff']},
     )
 )
 _add(

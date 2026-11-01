@@ -200,10 +200,11 @@ async def test_draining_hands_the_hold_to_batch_and_never_runs_legacy(hook, monk
         lambda uid, hold_id, **kwargs: hook.events.append(('reserve', hold_id, kwargs['batch_job_id'])),
     )
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    # No erase at hand-off: until batch projects it, the staged batch object is the only other copy
+    # and the batch bucket may expire it by age. finish_handoff erases after projection.
     assert hook.events == [
         ('reserve', 'hold-1', 'bp_job'),
         ('save', {'state': 'batch_admitted', 'batch_job_id': 'bp_job'}),
-        ('erase',),
         ('release', 'lease'),
     ]
 
@@ -307,12 +308,69 @@ async def test_a_granted_hand_off_clears_an_earlier_pacing_deferral(hook, monkey
 
 
 @pytest.mark.asyncio
-async def test_reselecting_a_batch_admitted_row_is_a_no_op(hook, monkeypatch):
+@pytest.mark.parametrize('projected, erased', [(True, [('erase',)]), (False, [])], ids=['projected', 'pending'])
+async def test_reselecting_a_batch_admitted_row_erases_only_after_projection(hook, monkeypatch, projected, erased):
     hook.row.update(state='batch_admitted', batch_job_id='bp_job')
     monkeypatch.setattr(cap_hold, 'claim', lambda *a: pytest.fail('terminal hand-off claimed again'))
     monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('terminal hand-off re-admitted'))
+    monkeypatch.setattr(adapter, 'handoff_projected', lambda uid, job_id: projected)
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
-    assert hook.events == [('erase',)]  # finishes an interrupted erase only; never settles (no double bill)
+    assert hook.events == erased  # never settles (no double bill); never erases unprojected audio
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'row',
+    [
+        {'state': 'held', 'batch_job_id': 'bp_job'},
+        {'state': 'batch_admitted'},
+        {'state': 'purged', 'batch_job_id': 'bp_job'},
+    ],
+    ids=['not-handed-off', 'no-job', 'already-purged'],
+)
+async def test_finish_handoff_ignores_rows_that_are_not_pending_hand_offs(hook, monkeypatch, row):
+    monkeypatch.setattr(adapter, 'handoff_projected', lambda *a: pytest.fail('status read for a non hand-off'))
+    assert await cap_hold_recovery.finish_handoff(UID, hook.snapshot, row) is False
+    assert hook.events == []
+
+
+@pytest.mark.asyncio
+async def test_finish_handoff_keeps_the_audio_when_the_status_read_fails(hook, monkeypatch):
+    def unreadable(uid, job_id):
+        raise RuntimeError('store unavailable')
+
+    monkeypatch.setattr(adapter, 'handoff_projected', unreadable)
+    row = {'state': 'batch_admitted', 'batch_job_id': 'bp_job'}
+    assert await cap_hold_recovery.finish_handoff(UID, hook.snapshot, row) is False
+    assert hook.events == []
+
+
+class _LedgerStore:
+    def __init__(self, intakes, content):
+        self.docs = {'intakes': intakes, 'content': content}
+
+    def run(self, operation):
+        return operation(SimpleNamespace(get=lambda collection, key: self.docs[collection].get(key)))
+
+
+_COMPLETED = {'new_memories': [], 'updated_memories': [], 'total_segments': 1, 'failed_segments': 0, 'errors': []}
+
+
+@pytest.mark.parametrize(
+    'intake, ledger, expected',
+    [
+        ({'owner_id': UID, 'content_id': 'c'}, {'status': 'completed', 'result': _COMPLETED}, True),
+        ({'owner_id': UID, 'content_id': 'c'}, {'status': 'processing'}, False),
+        ({'owner_id': UID, 'content_id': 'c'}, {'status': 'partial', 'result': _COMPLETED}, False),
+        ({'owner_id': UID, 'content_id': 'c'}, None, False),
+        ({'owner_id': 'someone-else', 'content_id': 'c'}, {'status': 'completed', 'result': _COMPLETED}, False),
+        (None, None, False),
+    ],
+    ids=['completed', 'processing', 'partial', 'no-ledger', 'foreign-owner', 'no-intake'],
+)
+def test_handoff_projected_needs_a_completed_ledger_for_this_owner(intake, ledger, expected):
+    store = _LedgerStore({'bp_job': intake} if intake else {}, {f'{UID}/c': ledger} if ledger else {})
+    assert adapter.handoff_projected(UID, 'bp_job', store=store) is expected
 
 
 def test_batch_admitted_transition_leaves_nothing_held_so_checkpoint_decrements_the_summary():

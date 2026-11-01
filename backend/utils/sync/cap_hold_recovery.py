@@ -471,6 +471,30 @@ async def _handoff_paced(uid: str, snapshot: Any, row: dict) -> bool:
     return True
 
 
+async def finish_handoff(uid: str, snapshot: Any, row: dict | None = None) -> bool:
+    """Erase a handed-off hold's audio once its batch content is durably completed.
+
+    Until then this hold is the only copy outside the staged batch object, which the batch
+    bucket may expire by age. Unprojected or unreadable: keep the audio and let a later sweep
+    retry. Erasing twice is harmless (missing objects are skipped; the row is deleted or purged).
+    """
+    from utils.batch_pipeline import cap_hold_admission
+
+    row = row if row is not None else snapshot.to_dict() or {}
+    job_id = row.get('batch_job_id')
+    if row.get('state') != 'batch_admitted' or not job_id:
+        return False
+    try:
+        projected = await run_blocking(db_executor, cap_hold_admission.handoff_projected, uid, job_id)
+    except Exception as error:
+        logger.warning('event=cap_hold_handoff outcome=status_deferred exception_type=%s', type(error).__name__)
+        return False
+    if not projected:
+        return False
+    await run_blocking(storage_executor, _erase, uid, snapshot, row)
+    return True
+
+
 async def recover_selected(uid: str, snapshot: Any) -> bool:
     """One explicitly selected manifest, retaining existing claim/receipt fences."""
     row = snapshot.to_dict() or {}
@@ -481,9 +505,9 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
         await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
         return True
     if row.get('state') == 'batch_admitted':
-        # Terminal hand-off (lane 8): batch owns this audio. Only finish an interrupted erase; never
-        # claim, re-admit, or settle it (settlement would bill the batch-processed audio twice).
-        await run_blocking(storage_executor, _erase, uid, snapshot, row)
+        # Terminal hand-off (lane 8): batch owns this audio. Only erase once batch has projected it;
+        # never claim, re-admit, or settle it (settlement would bill the batch-processed audio twice).
+        await finish_handoff(uid, snapshot, row)
         return True
     row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
     if row is None:
@@ -519,7 +543,7 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
             )
             if not await _save(uid, snapshot, row, {'state': 'batch_admitted', 'batch_job_id': admitted.batch_job_id}):
                 return False
-            await run_blocking(storage_executor, _erase, uid, snapshot, row)
+            # The hold keeps its audio until batch projects it: finish_handoff erases it then.
             return True
         if not await _recover_row(uid, snapshot, row):
             return False
