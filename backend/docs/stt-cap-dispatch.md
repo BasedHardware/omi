@@ -462,7 +462,8 @@ A choice captures its month, cutoff and estimated remaining allowance. Renewable
 job and hold leases fence concurrent workers. Purchases, plan changes, renewals
 and the first real charge never start recovery: a paid owner's held audio waits,
 with the process action, until the owner taps. The only automatic recovery is a
-Stripe trial's start (`customer.subscription.*` with status `trialing`):
+Stripe trial's start (`customer.subscription.created` in status `trialing`; a later
+update, such as a plan change while trialing, never grants):
 `processing_backlog_worker.trial_started_async` chooses newest first with a budget
 of `TRIAL_RECOVERY_GRANT_HOURS` (25, `config/stt_cap_dispatch.py`) of held audio,
 or less when a finite allowance has less. The job's `remaining` is that budget.

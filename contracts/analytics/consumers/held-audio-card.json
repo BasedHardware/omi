@@ -2,7 +2,7 @@
   "id": "held-audio-card",
   "kind": "question",
   "owner": "Plans & Cost",
-  "question": "Does the personal Free held-recordings card (\"6 h 20 min of your recordings are safe but unprocessed. Upgrade to process now.\") raise Upgrade taps over the stable 10% holdout that still sees the previous card, per namespace and build? Compare Held Audio Upgrade Tapped per Held Audio Card Seen with variant=personal against variant=holdout. variant=paid rows are paid owners, who see the process action instead (Held Audio Process Tapped). The holdout changes copy only, never who can recover. No property identifies a person.",
+  "question": "Does the personal Free held-recordings card (\"6 h 20 min of your recordings are safe but unprocessed. Upgrade to process now.\") raise Upgrade taps over the stable 10% holdout that still sees the previous card? The registered query is the presence check (events per namespace and build). The lift readout splits the same events by their `variant` property in PostHog: Held Audio Upgrade Tapped per Held Audio Card Seen, variant=personal against variant=holdout. variant=paid rows are paid owners, who see the process action instead (Held Audio Process Tapped). The holdout changes copy only, never who can recover. No property identifies a person.",
   "query": "contracts/analytics/consumers/held-audio-card.sql",
   "events": [
     "heldAudioCardSeen",

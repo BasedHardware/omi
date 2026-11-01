@@ -1461,9 +1461,11 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
-                    # Held audio waits for a tap after a purchase; only a trial's start recovers on its own.
+                    # Held audio waits for a tap after a purchase; only a trial's start recovers on
+                    # its own. Created is the trial start; a later update (a plan change) never grants.
                     if (
-                        funded_processing_enabled(uid)
+                        event['type'] == 'customer.subscription.created'
+                        and funded_processing_enabled(uid)
                         and not adopted_active_paid
                         and is_paid_plan(new_subscription.plan)
                     ):

@@ -139,7 +139,7 @@ void main() {
     analytics.expectSingle('Held Audio Card Seen', {'surface': 'live', 'variant': 'holdout'});
   });
 
-  testWidgets('Free card with nothing held yet still drops the "until you choose" promise', (tester) async {
+  testWidgets('Free card with nothing held makes no waiting-recordings claim', (tester) async {
     await pump(
       tester,
       PlanType.basic,
@@ -147,7 +147,8 @@ void main() {
     );
     final text = l10n(tester);
     expect(find.text(text.processingPaused), findsOneWidget);
-    expect(find.text(text.processingFreeStored), findsOneWidget);
+    expect(find.text(text.processingFreeStored), findsNothing);
+    expect(find.text(text.processingFreeUpgrade), findsNothing);
     expect(find.text(text.processingStored), findsNothing);
   });
 

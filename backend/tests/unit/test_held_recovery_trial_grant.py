@@ -120,6 +120,11 @@ def test_payment_starts_recovery_only_from_a_trial_start():
     for retired in ('upgrade_async', 'processing_backlog_worker import upgrade\n', 'allowance_increased', 'choose('):
         assert retired not in source
     assert source.count('await trial_started_async(uid, subscription_obj)') == 1
+    # Only the subscription's creation (the trial start) may grant; an update such as a plan
+    # change while trialing never does, even when no earlier grant receipt exists.
+    call = source.index('await trial_started_async(uid, subscription_obj)')
+    gate = source.rindex('if (', 0, call)
+    assert "event['type'] == 'customer.subscription.created'" in source[gate:call]
 
 
 def test_trial_grant_is_a_plain_config_value():

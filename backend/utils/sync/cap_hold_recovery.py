@@ -75,7 +75,8 @@ async def _save(uid: str, snapshot: Any, row: dict, updates: dict) -> bool:
 
 
 def _new_dispatch_allowed(uid: str, lane: str) -> bool:
-    if not enabled(uid, lane) or not sync_allowed(uid, lane=lane):
+    """Rechecked before every new provider request, so a lapse between pieces stops spend."""
+    if not enabled(uid, lane) or not funded_processing.paid_owner(uid) or not sync_allowed(uid, lane=lane):
         return False
     restricted, _ = get_hard_restriction_status(uid)
     return not restricted and not is_daily_audio_ceiling_exceeded(uid)

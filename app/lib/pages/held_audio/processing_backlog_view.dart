@@ -209,11 +209,12 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
             : backlog.isProcessing
                 ? l10n.processingProgress
                 : l10n.processingWaiting(duration, processingPercentNumber(context, backlog.estimatedPercent));
-    final stored = !personal
+    // With nothing waiting, a Free owner gets no line: there is nothing safe-but-unprocessed yet.
+    final String? stored = !personal
         ? l10n.processingStored
         : backlog.waitingSeconds > 0
             ? l10n.processingFreeUpgrade
-            : l10n.processingFreeStored;
+            : null;
     return Padding(
       padding: widget.surface == 'c'
           ? EdgeInsets.zero
@@ -231,7 +232,8 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
           children: [
             Text(text, style: OmiType.headline),
             const SizedBox(height: OmiSpacing.xs),
-            if (!backlog.isProcessing) Text(stored, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+            if (!backlog.isProcessing && stored != null)
+              Text(stored, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
             if (backlog.deferredConversations > 0) ...[
               const SizedBox(height: OmiSpacing.xs),
               Text(

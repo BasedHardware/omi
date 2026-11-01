@@ -172,3 +172,15 @@ def test_free_process_route_returns_the_existing_402_and_keeps_holds(free, monke
         response = client.post('/v1/users/processing-backlog/process', headers={'Idempotency-Key': 'synthetic-tap'})
     assert response.status_code == 402
     assert response.json()['detail'] == {'error': 'usage_budget_exhausted', 'trigger': 'usage_budget'}
+
+
+def test_a_lapse_between_pieces_stops_the_next_provider_request(prod_scope, monkeypatch):
+    """A long hold dispatches several pieces; each new request rereads the entitlement."""
+    paid = iter([True, False])
+    monkeypatch.setattr(funded_processing, 'paid_owner', lambda uid: next(paid))
+    monkeypatch.setattr(cap_hold_recovery, 'sync_allowed', lambda uid, lane: True)
+    monkeypatch.setattr(cap_hold_recovery, 'get_hard_restriction_status', lambda uid: (False, None))
+    monkeypatch.setattr(cap_hold_recovery, 'is_daily_audio_ceiling_exceeded', lambda uid: False)
+    monkeypatch.setattr(cap_hold_recovery, 'enabled', lambda uid, lane: True)
+    assert cap_hold_recovery._new_dispatch_allowed(UID, 'sync') is True
+    assert cap_hold_recovery._new_dispatch_allowed(UID, 'sync') is False
