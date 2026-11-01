@@ -79,7 +79,7 @@ from utils.episodes import capture_groups as episode_groups
 from utils.episodes.capture_groups import calendar_identity as _calendar_identity
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
 from utils.episodes.moment import MomentInput
-from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
+from utils.episodes.state import apply_update, clean_text, is_placeholder_heading, provisional_items, render_state
 from utils.episodes.visibility import visible_episode, hidden_conversation
 from utils.episodes.recorded_recovery import record_walk, record_windows, unconsumed_moments
 
@@ -998,6 +998,14 @@ def _record_moment_once(
     )
     moments = [dict(m) for m in base.get('moments') or []]
     heading = result.update.moment_heading or clean_text(result.update.title, 48)
+    if is_placeholder_heading(heading):
+        heading = ''
+    # A finalize tail carries its whole conversation's bounds; the moment covers only the tail's words.
+    moment_start = moment.current_started_at or moment.started_at
+    moment_end = moment.current_ended_at or moment.ended_at
+    if moment.trigger == 'finalize' and segments:
+        moment_start = _wall(moment.started_at, start_offset) or moment_start
+        moment_end = _wall(moment.started_at, end_offset) or moment_end
     last = moments[-1] if moments else None
     if (
         not compose_owns
@@ -1006,14 +1014,14 @@ def _record_moment_once(
         and heading
         and str(last.get('heading') or '').casefold() == heading.casefold()
     ):
-        last.update({'ended_at': moment.current_ended_at or moment.ended_at, 'end_offset': end_offset})
+        last.update({'ended_at': moment_end, 'end_offset': end_offset})
     elif not compose_owns:
         moments.append(
             {
                 'id': uuid4().hex[:12],
                 'conversation_id': moment.conversation_id,
-                'started_at': moment.current_started_at or moment.started_at,
-                'ended_at': moment.current_ended_at or moment.ended_at,
+                'started_at': moment_start,
+                'ended_at': moment_end,
                 'start_offset': start_offset,
                 'end_offset': end_offset,
                 'heading': heading,
@@ -1056,7 +1064,7 @@ def _record_moment_once(
         **changes,
         **_with_conversation(base, moment.conversation_id, moment.source),
         'member_activity': {moment.conversation_id: moment.current_ended_at or moment.ended_at},
-        'moments': moments[-MAX_MOMENTS:],
+        'moments': _newest_moments(moments),
         'applied': applied,
         'usage': usage,
         'speaker_display_order': list(text.voice_order),
@@ -1860,6 +1868,38 @@ def episode_by_id(
     return visible_episode(uid, episode, firestore_client=c.firestore_client)
 
 
+def _newest_moments(moments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The cap drops the earliest moments by time; a late recording's moment arrives last and may be old."""
+    newest = sorted(moments, key=lambda m: str(m.get('started_at') or ''))[-MAX_MOMENTS:]
+    keep = {id(moment) for moment in newest}
+    return [moment for moment in moments if id(moment) in keep]
+
+
+def _wire_heading(heading: Any) -> str:
+    text = clean_text(heading, 240)
+    return '' if is_placeholder_heading(text) else text
+
+
+def _timeline_moments(moments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Moments in time order, not arrival order. A stored section seconds long runs to the next on its recording."""
+    ordered = sorted(moments, key=lambda m: str(m.get('started_at') or ''))
+    read = []
+    for index, moment in enumerate(ordered):
+        following = ordered[index + 1] if index + 1 < len(ordered) else None
+        start, end = moment.get('started_at'), moment.get('ended_at')
+        if (
+            moment.get('points')
+            and following
+            and following.get('conversation_id') == moment.get('conversation_id')
+            and isinstance(start, datetime)
+            and isinstance(end, datetime)
+            and (end - start).total_seconds() < composer.COMPOSER_MIN_SECTION_SECONDS
+        ):
+            moment = {**moment, 'ended_at': following.get('started_at'), 'end_offset': following.get('start_offset')}
+        read.append(moment)
+    return read
+
+
 def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     """Only the client-visible projection; applied offsets, usage and speaker keys stay server-side."""
     if not episode:
@@ -1903,10 +1943,10 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
                 'ended_at': m.get('ended_at') or m.get('started_at'),
                 'start_offset': float(m.get('start_offset') or 0.0),
                 'end_offset': float(m.get('end_offset') or 0.0),
-                'heading': clean_text(m.get('heading'), 240),
+                'heading': _wire_heading(m.get('heading')),
                 'points': composer.wire_points(m.get('points')),
             }
-            for m in episode.get('moments') or []
+            for m in _timeline_moments(episode.get('moments') or [])
             if m.get('id') and m.get('conversation_id') and m.get('started_at')
         ],
         'conversation_ids': [
