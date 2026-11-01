@@ -8,12 +8,18 @@ name: Backend Coverage Map
 # every test). This workflow records, per isolated test file, which first-party
 # function bodies it executes (backend/test.sh BACKEND_COVERAGE_MAP_DIR) and
 # publishes `backend-coverage-map` (source file -> tests) for the selector to use.
-# It runs off the PR critical path and outside the 720 s shard budget: nightly on
-# main, on demand, and on a PR that edits this file (one measurement run).
+# It runs off the PR critical path and outside the 720 s shard budget: from Main
+# Nightly Full (workflow_call, pinned main SHA), on demand, and on a PR that edits
+# this file (one measurement run).
 
 on:
-  schedule:
-    - cron: "17 6 * * *"
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   workflow_dispatch:
   pull_request:
     branches: [main]
@@ -44,6 +50,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
           filter: blob:none
 
@@ -121,6 +128,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -143,7 +152,7 @@ jobs:
           # Shards ran in /home/runner/work/omi/omi/backend; this checkout is the same path, so measured
           # file paths resolve against it.
           python scripts/build_test_coverage_map.py --data-dir "$RUNNER_TEMP/coverage-map" \
-            --out "$RUNNER_TEMP/backend-coverage-map.json" --sha "${{ github.sha }}"
+            --out "$RUNNER_TEMP/backend-coverage-map.json" --sha "${{ inputs.nightly_main_sha || github.sha }}"
 
       - name: Upload map
         uses: actions/upload-artifact@v7

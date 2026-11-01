@@ -44,6 +44,12 @@ jobs:
     with:
       nightly_main_sha: ${{ needs.source.outputs.main_sha }}
 
+  backend-coverage-map:
+    needs: source
+    uses: ./.github/workflows/backend-coverage-map.yml
+    with:
+      nightly_main_sha: ${{ needs.source.outputs.main_sha }}
+
   backend-edge:
     needs: source
     uses: ./.github/workflows/backend-edge.yml
@@ -191,6 +197,7 @@ jobs:
     needs:
       - source
       - backend-checks
+      - backend-coverage-map
       - backend-edge
       - backend-emulator-proofs
       - backend-hermetic-e2e
