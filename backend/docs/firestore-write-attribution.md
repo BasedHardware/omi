@@ -23,7 +23,7 @@ patches.
 | `omi_firestore_write_caller_label_overflow_total` | none |
 | `omi_firestore_ambiguous_commit_writes_total` | none |
 
-`op` is `create`, `update` (exists precondition: `update()`), `merge` (mask,
+`op` is `create`, `update` (exists or last-update-time precondition: `update()`), `merge` (mask,
 no precondition: `set(merge=True)`), `set` (whole-document replace), `delete`
 or `transform`. A failed Commit counts nothing; BatchWrite counts only writes
 with an OK status. A Commit that fails with DeadlineExceeded or Unavailable
