@@ -11,6 +11,8 @@ from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from google.api_core.exceptions import NotFound
+from prometheus_client import Counter
 import threading
 import time
 import math
@@ -58,6 +60,11 @@ if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
 
 logger = logging.getLogger(__name__)
+ARTIFACT_MISSING = Counter(
+    'omi_batch_artifact_missing_total',
+    'Batch staged artifact reads that found the object gone; the step closes instead of retrying',
+    ['site'],
+)
 # One owner-chain walk's bound (recovery wake or sweep continuation); the
 # periodic sweep resumes beyond it. One sweep spends at most the same budget on
 # continuations across all owners, so a heavy owner cannot stall the loop.
@@ -1239,7 +1246,16 @@ class Projector:
                 )
         if not survivors:
             return
-        audio = self.fetch_audio(item)
+        try:
+            audio = self.fetch_audio(item)
+        except NotFound:
+            # The generation-pinned staged object is gone (bucket lifecycle or
+            # erasure); no retry can restore it. The transcript is already
+            # projected, so close playback like a no-survivor input instead of
+            # re-queueing this follow-up forever.
+            ARTIFACT_MISSING.labels(site='playback').inc()
+            logger.error('event=batch_artifact_missing site=playback outcome=skipped')
+            return
         audio_end = receipt.get('audio_end') or item.capture_at + item.duration_seconds
         if capture_at != item.capture_at or audio_end != item.capture_at + item.duration_seconds:
             import io
