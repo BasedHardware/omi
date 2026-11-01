@@ -600,7 +600,7 @@ def test_exhausted_retries_keep_the_fragment_staged_for_redrive(delays, store, t
     monkeypatch.setattr(
         cap_hold_redrive.store,
         'discover',
-        lambda kind: [snap] if kind == 'staging' else [],
+        lambda kind, **_: [snap] if kind == 'staging' else [],
     )
     assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
     assert store.docs['summary']['count'] == 1
@@ -671,7 +671,7 @@ def test_resource_exhausted_past_the_budget_stays_staged_for_one_redrive(delays,
     monkeypatch.setattr(
         cap_hold_redrive.store,
         'discover',
-        lambda kind: [snap] if kind == 'staging' else [],
+        lambda kind, **_: [snap] if kind == 'staging' else [],
     )
     assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
     assert store.docs['summary']['count'] == 1

@@ -152,10 +152,6 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
-  - name: REPEAT_WORK_REVISION_ENABLED
-    value: "false"
-  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
-    value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
@@ -428,10 +424,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
+  # In-cluster callers reach these services by ClusterIP DNS; the internal-ALB
+  # routes stay for Cloud Run callers only (billed per GB inbound).
   - name: HOSTED_VAD_API_URL
-    value: "http://172.16.160.20/vad/v1/vad"
+    value: "http://prod-omi-vad.prod-omi-backend.svc.cluster.local:8080/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://172.16.160.20/diarizer"
+    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -479,7 +477,7 @@ env:
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
-    value: "http://pusher.omi.me"
+    value: "http://prod-omi-pusher.prod-omi-backend.svc.cluster.local:8080"
   - name: BUCKET_PLUGINS_LOGOS
     value: "omi_plugins"
   - name: LANGCHAIN_TRACING_V2
@@ -642,19 +640,21 @@ env:
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
-  # Cohort off 2026-11-01: at 5% the treatment arm fell well below control on words per capture second and transcribed share. Diagnose before re-ramping.
+  # Cohort off 2026-11-01: at 5% the treatment arm fell well below control on words per capture second and transcribed share
+  # (2 s drain cap; #24278 widens it). Treatment is now the speech gate: close 10 s after the first silent frame (6 s past
+  # the hangover), re-arm 2 s, cap 120/h. Percent stays 0 until the lead ramps it; rollback SONIOX_IDLE_COHORT_PERCENT=0.
   - name: SONIOX_IDLE_COHORT_PERCENT
     value: "0"
   - name: SONIOX_IDLE_COHORT_CLOSE_SECONDS
-    value: "20"
+    value: "10"
   - name: SONIOX_IDLE_COHORT_REARM_SECONDS
-    value: "15"
+    value: "2"
   - name: SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR
-    value: "20"
+    value: "120"
   - name: STT_SERVICE_MODELS
     value: "parakeet-window,modulate-velma-2,soniox"
   - name: HOSTED_TRANSLATION_API_URL
-    value: "http://172.16.160.20/nllb"
+    value: "http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
   - name: TRANSLATION_CACHE_TTL

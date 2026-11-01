@@ -206,7 +206,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "DEMAND_PROCESSING_UID_ALLOWLIST": "",
         "DEMAND_PROCESSING_PERCENT": "0",
         "PLAYBACK_ON_DEMAND_ENABLED": "true",
-        "REPEAT_WORK_REVISION_ENABLED": "false",
         "REPEAT_WORK_LLM_VERSION": "2026-10-16-v1",
         "SYNC_POLL_BACKOFF_ENABLED": "false",
         "AUDIO_ARCHIVE_LIVE_ENABLED": "true",
