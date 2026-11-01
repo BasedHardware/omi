@@ -19,8 +19,8 @@
     "config/policy": "policy snapshot (E1) owner"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 169,
-  "count": 196,
+  "budget": 165,
+  "count": 192,
   "names": {
     "BATCH_PIPELINE_RECORD_PROTOCOL_READY": {"owner": "two-lane lead", "review_by": "2026-11-01"},
     "CONVERSATION_OCCASION_RELEVANCE_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
@@ -200,10 +200,6 @@
     "SYNC_FRESH_MAX_AGE_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {"seeded": "2026-10-25"},
     "SYNC_LEGACY_COMPLETION_CONVERGENCE": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_BURST_TOKENS": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_ENABLED": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_HOURLY_TOKENS": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_PERCENT": {"seeded": "2026-10-25"},
     "SYNC_LIVE_OVERLAP_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_MAX_VAD_SEGMENT_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_MINIMAL_REDRIVE_ENABLED": {"seeded": "2026-10-25"},
@@ -222,6 +218,22 @@
   "retired": {
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_FRESH_BURST_TOKENS": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_FRESH_ENABLED": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_FRESH_HOURLY_TOKENS": {
+      "on": "2026-11-01",
+      "replaced_by": null
+    },
+    "SYNC_LEGACY_FRESH_PERCENT": {
+      "on": "2026-11-01",
       "replaced_by": null
     }
   }
