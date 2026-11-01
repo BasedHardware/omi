@@ -14542,6 +14542,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get episodeMoments => 'Στιγμές';
 
   @override
+  String get episodeFollowUps => 'Επόμενα βήματα';
+
+  @override
+  String get episodeOpenTranscript => 'Άνοιγμα απομαγνητοφώνησης';
+
+  @override
   String get episodeSoFar => 'Μέχρι τώρα';
 
   @override
@@ -14762,9 +14768,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Σε αυτό το τηλέφωνο';
-
-  @override
-  String get episodeOpenTranscript => 'Άνοιγμα απομαγνητοφώνησης';
 
   @override
   String get liveCardTitle => 'Ζωντανά';
@@ -15028,5 +15031,30 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Χρεώθηκαν σήμερα $amount. Ανανέωση στις $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count μέρη',
+      many: '$count μέρη',
+      few: '$count μέρη',
+      two: '$count μέρη',
+      one: '$count μέρος',
+      zero: '$count μέρη',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Στείλε το μήνυμα από τα $app. Αυτή η οθόνη ενημερώνεται μόλις το λάβει το Omi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Πάρε νέο κωδικό και στείλ\' τον από τα $app.';
   }
 }

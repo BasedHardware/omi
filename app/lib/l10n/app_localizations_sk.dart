@@ -14442,6 +14442,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get episodeMoments => 'Okamihy';
 
   @override
+  String get episodeFollowUps => 'Ďalšie kroky';
+
+  @override
+  String get episodeOpenTranscript => 'Otvoriť prepis';
+
+  @override
   String get episodeSoFar => 'Zatiaľ';
 
   @override
@@ -14660,9 +14666,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'V tomto telefóne';
-
-  @override
-  String get episodeOpenTranscript => 'Otvoriť prepis';
 
   @override
   String get liveCardTitle => 'Naživo';
@@ -14923,5 +14926,30 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Dnes účtované $amount. Obnovenie $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count častí',
+      many: '$count častí',
+      few: '$count časti',
+      two: '$count častí',
+      one: '$count časť',
+      zero: '$count častí',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošlite správu v aplikácii $app. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Získajte nový kód a pošlite ho z aplikácie $app.';
   }
 }

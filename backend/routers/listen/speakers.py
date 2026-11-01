@@ -55,6 +55,7 @@ from utils.observability.owner_recognition import (
     record_live_speaker_rollover,
     record_owner_reconnect,
 )
+from utils.observability.soniox_idle_arm import note_speaker_decision
 from utils.observability.speaker_embedding_budget import (
     BUDGET_EXITS,
     BUDGET_VOICES,
@@ -1147,10 +1148,9 @@ class SpeakerMatcher:
                 # evidence and reaches a decision, so it logs (below) but is not
                 # an exit reason.
                 self.diagnostics.observe('evidence_pending', segment.get('speaker_id_scope') or '')
-                record_live_speaker_decision(
-                    pending_decision_target(owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings),
-                    'pending',
-                )
+                pending_target = pending_decision_target(owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings)
+                record_live_speaker_decision(pending_target, 'pending')
+                note_speaker_decision(self.host, pending_target, 'pending')
                 logger.info(
                     'speaker_id_evidence surface=live speaker=%s clips=%d evidence_seconds=%.1f decision=pending session=%s',
                     speaker_id,
@@ -1289,6 +1289,7 @@ class SpeakerMatcher:
                 if owner_near_miss(decision):
                     decision_kind = 'pending'
                 record_live_speaker_decision(decision_target, decision_kind)
+                note_speaker_decision(self.host, decision_target, decision_kind)
             logger.info(
                 'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
                 'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s owner_contended=%s decision=%s '

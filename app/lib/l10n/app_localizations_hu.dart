@@ -14505,6 +14505,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeMoments => 'Pillanatok';
 
   @override
+  String get episodeFollowUps => 'Következő lépések';
+
+  @override
+  String get episodeOpenTranscript => 'Átirat megnyitása';
+
+  @override
   String get episodeSoFar => 'Eddig';
 
   @override
@@ -14723,9 +14729,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Ezen a telefonon';
-
-  @override
-  String get episodeOpenTranscript => 'Átirat megnyitása';
 
   @override
   String get liveCardTitle => 'Élő';
@@ -14988,5 +14991,30 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Ma terhelve: $amount. Megújul: $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rész',
+      many: '$count rész',
+      few: '$count rész',
+      two: '$count rész',
+      one: '$count rész',
+      zero: '$count rész',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Küldd el az üzenetet az $app alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Kérj új kódot, és küldd el az $app alkalmazásból.';
   }
 }

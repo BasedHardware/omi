@@ -1,4 +1,4 @@
-"""Serve-gated paid-notes floor. Word count is a compute policy, never a discard rule."""
+"""Default-on paid-notes floor. Word count is a compute policy, never a discard rule."""
 
 from __future__ import annotations
 
@@ -6,11 +6,14 @@ from types import SimpleNamespace
 from collections.abc import Mapping
 from typing import Any
 
-from config.refactor_modes import serving_for, shadow_or_serve
+from config.notes_short_clip import floor_serving
+from config.refactor_modes import shadow_or_serve
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.recovery import recovery_transcript_word_count
+from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE, normalize_relevance_text
 from utils.llm.notes_language_inputs import in_profile_segments
 from utils.llm.notes_refactor_metrics import shadow, result
+from utils.llm.notes_short_clip_policy import english_word_floor, has_existing_notes
 
 NOTES_MIN_WORDS = 12
 
@@ -49,26 +52,51 @@ def speech_seconds(segments: Any) -> float | None:
     return total if seen else None
 
 
-def below_short_clip_floor(*, words: int, speech_seconds: float | None) -> bool:
-    """The short-clip floor on either measure: few words, or speech too brief to carry them."""
-    if words < NOTES_MIN_WORDS:
+def below_short_clip_floor(*, words: int, speech_seconds: float | None, use_word_floor: bool = True) -> bool:
+    """Few English words, or speech too brief to carry a conversation in any language."""
+    if use_word_floor and words < NOTES_MIN_WORDS:
         return True
     return speech_seconds is not None and 0 <= speech_seconds < SHORT_CLIP_MAX_SPEECH_SECONDS
 
 
-def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None) -> Any:
+def has_explicit_reminder(segments: Any) -> bool:
+    text = ' '.join(
+        str((row.get('text') if isinstance(row, Mapping) else getattr(row, 'text', '')) or '').strip()
+        for row in segments or ()
+    )
+    return bool(EXPLICIT_REMINDER_RE.search(normalize_relevance_text(text)))
+
+
+def quiet_minimum(
+    uid: str,
+    conversation: Any,
+    *,
+    tz: str | None = None,
+    user_kept: bool = False,
+    summary_app_selected: bool = False,
+) -> Any:
     """A short nonempty speech capture is kept, without any paid notes.
 
-    Short is the floor on either measure (``below_short_clip_floor``): few
-    words, or a span of speech too brief to carry a conversation even when the
-    recognizer packed a dozen words into it. Either way the clip never reaches
-    the relevance tiers or the notes model, so no tier can keep it as a
-    standalone conversation with a generated title.
+    Known English captures use words or speech duration; other/unknown languages
+    use duration alone because reminder patterns only cover English. Existing
+    notes and user-selected apps always bypass the floor. Eligible clips skip
+    the relevance tiers and notes model.
 
     The emoji is the minimum's deterministic category emoji (💬): a blank value
     does not render blank in the app, it renders the client's random fallback.
     """
-    if not shadow_or_serve('NOTES_PACKET_V2_MODE') or getattr(conversation, 'photos', None):
+    serving = floor_serving(uid)
+    if (
+        (not serving and not shadow_or_serve('NOTES_PACKET_V2_MODE'))
+        or user_kept
+        or getattr(conversation, 'sync_relevance_user_kept', False)
+        or getattr(conversation, 'user_title', None)
+        or getattr(conversation, 'photos', None)
+        or getattr(conversation, 'has_photos', False)
+        or has_existing_notes(conversation)
+        or summary_app_selected
+        or getattr(conversation, 'app_id', None)
+    ):
         return None
     segments = list(getattr(conversation, 'transcript_segments', None) or ())
     if not segments and getattr(conversation, 'text', None):
@@ -76,18 +104,24 @@ def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None) -> Any:
         if getattr(source, 'value', source) != 'audio':
             return None
         segments = [SimpleNamespace(text=conversation.text)]
-    has_text = any(
+    text = ' '.join(
         str((row.get('text') if isinstance(row, Mapping) else getattr(row, 'text', '')) or '').strip()
         for row in segments
     )
+    if has_explicit_reminder(segments):
+        return None
     selected = [
         SimpleNamespace(**dict(row)) if isinstance(row, Mapping) else row for row in in_profile_segments(segments)
     ]
     view = SimpleNamespace(transcript_segments=selected, started_at=getattr(conversation, 'started_at', None))
     words = recovery_transcript_word_count(view)
-    eligible = has_text and below_short_clip_floor(words=words, speech_seconds=speech_seconds(selected))
+    eligible = bool(text.strip()) and below_short_clip_floor(
+        words=words,
+        speech_seconds=speech_seconds(selected),
+        use_word_floor=english_word_floor(conversation, normalize_relevance_text(text)),
+    )
     shadow('short_clip', 'disagree' if eligible else 'agree', words=words)
-    if not eligible or not serving_for('NOTES_PACKET_V2_MODE', uid):
+    if not eligible or not serving:
         return None
     minimum = build_deterministic_minimum_structured(view, uid=uid, tz_name_provider=lambda: tz)
     minimum.title_provenance = 'server_minimum'

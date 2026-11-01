@@ -194,6 +194,7 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captur
         'transaction_fixture_sha256': hashlib.sha256(transaction_fixture.read_bytes()).hexdigest(),
         **diff,
         'synthetic_comparison': incident_diff,
+        'synthetic_worker_results': {label: report.get('worker_results', {}) for label, report in incidents.items()},
         'synthetic_failures': synthetic_failures,
         'coverage_scope': 'firestore-structure+synthetic-boundaries',
         'coverage_ruling': 'lead:a76a1a',

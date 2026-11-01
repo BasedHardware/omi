@@ -5,6 +5,7 @@ from collections import Counter
 
 from fastapi import APIRouter, Depends, Request
 
+from config import refactor_modes
 from database.firestore_read_origin import read_origin
 from utils import dream_agent, dream_canary, dream_telemetry
 from utils.cloud_tasks import verify_cloud_tasks_oidc
@@ -12,6 +13,13 @@ from utils.cloud_tasks import verify_cloud_tasks_oidc
 router = APIRouter()
 logger = logging.getLogger(__name__)
 SWEEP_JOB = 'dream-agent-sweep-hourly'
+# The job ticks at :00 and :30 so Dream drains about 56 of every 60 minutes instead of 23.
+HALF_HOUR_SWEEP_ENV = 'DREAM_HALF_HOUR_SWEEP_ENABLED'
+
+
+def _half_hour_tick(scheduled_at: str) -> bool:
+    # RFC 3339 'YYYY-MM-DDTHH:MM...': the minute field is offset-independent for whole-hour zones.
+    return len(scheduled_at) >= 16 and scheduled_at[14:16] == '30'
 
 
 @router.post('/v2/dream-agent/canary', include_in_schema=False)
@@ -26,11 +34,15 @@ async def sweep_dream_agent(request: Request, _retry_count: int = Depends(verify
     # Scheduler identity, not request data: the job name is allowlisted and the
     # schedule time is a timestamp, so a redelivered tick shows a repeated time.
     job = request.headers.get('x-cloudscheduler-jobname', '')
+    scheduled_at = request.headers.get('x-cloudscheduler-scheduletime', '')[:64]
     sweep = {
         'retry_count': _retry_count,
         'caller': 'scheduler' if job == SWEEP_JOB else 'other' if job else 'none',
-        'scheduled_at': request.headers.get('x-cloudscheduler-scheduletime', '')[:25],
+        'scheduled_at': scheduled_at,
     }
+    if job == SWEEP_JOB and _half_hour_tick(scheduled_at) and not refactor_modes.default_on(HALF_HOUR_SWEEP_ENV):
+        logger.info('Dream sweep skipped: half-hour tick disabled')
+        return {'skipped': 'half_hour_disabled'}
     reports = await dream_agent.drain(sweep=sweep)
     # Structured twin (owner-level counts, reasons, retry count); fails open.
     dream_telemetry.record_sweep(sweep, reports)

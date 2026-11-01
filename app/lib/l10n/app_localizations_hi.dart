@@ -14431,6 +14431,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get episodeMoments => 'पल';
 
   @override
+  String get episodeFollowUps => 'आगे के कदम';
+
+  @override
+  String get episodeOpenTranscript => 'ट्रांस्क्रिप्ट खोलें';
+
+  @override
   String get episodeSoFar => 'अब तक';
 
   @override
@@ -14649,9 +14655,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'इस फ़ोन पर';
-
-  @override
-  String get episodeOpenTranscript => 'ट्रांस्क्रिप्ट खोलें';
 
   @override
   String get liveCardTitle => 'लाइव';
@@ -14912,5 +14915,30 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'आज $amount चार्ज किए गए। नवीनीकरण $date को।';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count भाग',
+      many: '$count भाग',
+      few: '$count भाग',
+      two: '$count भाग',
+      one: '$count भाग',
+      zero: '$count भाग',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app ऐप में मैसेज भेजें। Omi को मिलते ही यह स्क्रीन अपडेट हो जाएगी।';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'नया कोड लें और उसे $app ऐप से भेजें।';
   }
 }

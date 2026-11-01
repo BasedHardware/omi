@@ -222,7 +222,11 @@ def test_batch_admission_switches_still_bound_projection_cohort(monkeypatch, gat
         assert not store.rows
     else:
         assert admit(store, works, binding, 0, namespace='batch_pipeline_test_donor')['outcome'] == 'batch'
-        assert store.rows['jobs', 'segment']['projection_binding'] == asdict(binding)
+        stored = store.rows['jobs', 'segment']['projection_binding']
+        # Ordinary wire bindings omit the new partial-only default so old
+        # projection hosts can still construct them during the rollout.
+        assert 'partial_record' not in stored
+        assert ProjectionBinding(**stored) == binding
 
 
 def test_record_projection_replacement_rolls_over_before_staging_oversized_live_write(batch_projection, monkeypatch):

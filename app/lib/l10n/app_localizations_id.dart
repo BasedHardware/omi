@@ -14460,6 +14460,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get episodeMoments => 'Momen';
 
   @override
+  String get episodeFollowUps => 'Tindak lanjut';
+
+  @override
+  String get episodeOpenTranscript => 'Buka transkrip';
+
+  @override
   String get episodeSoFar => 'Sejauh ini';
 
   @override
@@ -14678,9 +14684,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Di ponsel ini';
-
-  @override
-  String get episodeOpenTranscript => 'Buka transkrip';
 
   @override
   String get liveCardTitle => 'Langsung';
@@ -14944,5 +14947,30 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return '$amount ditagih hari ini. Diperpanjang $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bagian',
+      many: '$count bagian',
+      few: '$count bagian',
+      two: '$count bagian',
+      one: '$count bagian',
+      zero: '$count bagian',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Kirim pesan di $app. Layar ini akan diperbarui segera setelah Omi menerimanya.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dapatkan kode baru lalu kirim dari $app.';
   }
 }

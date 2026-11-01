@@ -14483,6 +14483,12 @@ class AppLocalizationsHr extends AppLocalizations {
   String get episodeMoments => 'Trenuci';
 
   @override
+  String get episodeFollowUps => 'Sljedeći koraci';
+
+  @override
+  String get episodeOpenTranscript => 'Otvori transkript';
+
+  @override
   String get episodeSoFar => 'Dosad';
 
   @override
@@ -14701,9 +14707,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Na ovom telefonu';
-
-  @override
-  String get episodeOpenTranscript => 'Otvori transkript';
 
   @override
   String get liveCardTitle => 'Uživo';
@@ -14965,5 +14968,30 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Danas naplaćeno $amount. Obnavlja se $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dijelova',
+      many: '$count dijelova',
+      few: '$count dijela',
+      two: '$count dijelova',
+      one: '$count dio',
+      zero: '$count dijelova',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošalji poruku u aplikaciji $app. Ovaj se zaslon ažurira čim je Omi primi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dohvati novi kôd i pošalji ga iz aplikacije $app.';
   }
 }

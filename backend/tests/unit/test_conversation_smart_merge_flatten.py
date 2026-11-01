@@ -468,7 +468,8 @@ def test_flatten_off_donor_with_ancestry_is_ineligible(world, reads):
     assert not any(path[-1] in ('g1', 'g2') for _, path in reads)
 
 
-def test_flatten_off_plain_pair_keeps_baseline_write_shape(world, reads):
+def test_flatten_off_plain_pair_keeps_baseline_write_shape(world, reads, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10)
     world.raw('n')['sync_content_revision'] = 7
@@ -534,6 +535,10 @@ def test_flatten_off_persisted_patches_equal_absorb_payloads_output(world, monke
         UID, survivor_patch['transcript_segments'], bool(survivor_patch.get('transcript_segments_compressed'))
     )
     decoded_patch.pop('transcript_segments_compressed', None)
+    # Recording metadata is global even when ancestor flattening is disabled.
+    expected_survivor.update(
+        recorded_start=T0, recorded_end=T0 + timedelta(minutes=25), arrival_at=survivor_in['arrival_at'], clock='device'
+    )
     assert decoded_patch == expected_survivor
     assert donor_patch == expected_donor
     audit = world.store.rows[_audit_path('n')]

@@ -67,6 +67,7 @@ from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.live_speaker_ordinals import LiveSpeakerOrdinalTracker, record_live_speaker_ordinals
+from utils.observability import soniox_idle_arm
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
@@ -459,6 +460,7 @@ class ListenSessionRuntime:
             return
         try:
             outcome = self._session_transcript_outcome()
+            soniox_idle_arm.note_outcome(self, outcome)
             record_live_session_transcript_outcome(
                 outcome=outcome,
                 demand_cohort=host_cohort(self),
@@ -637,6 +639,7 @@ class ListenSessionRuntime:
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         capture_demand_admission(self)
+        soniox_idle_arm.start_plan_pin(self, user_db.get_user_valid_subscription)
         demand_vendor_start = self._demand_cohort == 'admitted'
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
         demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
@@ -1459,23 +1462,26 @@ class ListenSessionRuntime:
             except Exception as error:
                 logger.error('Conversation disconnect finalization failed type=%s', type(error).__name__)
         try:
+            try:
+                if not owner_persistence_blocked:
+                    await self.receiver.flush_multi_channel_tail()
+            finally:
+                if self.pusher_close:
+                    try:
+                        await self.pusher_close()
+                    except Exception as error:
+                        logger.error('Pusher close failed type=%s', type(error).__name__)
+            if self.onboarding_handler:
+                self.onboarding_handler.cleanup()
+            if self.language_observations is not None:
+                await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
             if not owner_persistence_blocked:
-                await self.receiver.flush_multi_channel_tail()
+                await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         finally:
-            if self.pusher_close:
-                try:
-                    await self.pusher_close()
-                except Exception as error:
-                    logger.error('Pusher close failed type=%s', type(error).__name__)
-        if self.onboarding_handler:
-            self.onboarding_handler.cleanup()
-        if self.language_observations is not None:
-            await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
-        if not owner_persistence_blocked:
-            await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-        # After the transcript loop drained and before the matcher's maps clear:
-        # the ordinal ledger needs both the final segments and final naming.
-        record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
+            # After the transcript loop drained and before the matcher's maps clear (also when
+            # cleanup failed): the ordinal ledger needs both the final segments and final naming.
+            speakers = record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
+            soniox_idle_arm.record_session(self, speakers)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()
@@ -1491,6 +1497,7 @@ async def run_listen_session(request: ListenRequest) -> None:
         runtime = ListenSessionRuntime(request)
         await runtime.run()
     finally:
+        soniox_idle_arm.record_session(runtime, None)  # idempotent; covers exits that skip teardown
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
             record_listen_no_audio_teardown(
                 source=request.source,

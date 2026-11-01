@@ -14498,6 +14498,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get episodeMoments => 'Моменти';
 
   @override
+  String get episodeFollowUps => 'Следващи стъпки';
+
+  @override
+  String get episodeOpenTranscript => 'Отвори транскрипцията';
+
+  @override
   String get episodeSoFar => 'Досега';
 
   @override
@@ -14716,9 +14722,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'На този телефон';
-
-  @override
-  String get episodeOpenTranscript => 'Отвори транскрипцията';
 
   @override
   String get liveCardTitle => 'На живо';
@@ -14980,5 +14983,30 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Днес са таксувани $amount. Подновяване на $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count части',
+      many: '$count части',
+      few: '$count части',
+      two: '$count части',
+      one: '$count част',
+      zero: '$count части',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Изпрати съобщението от $app. Този екран се обновява веднага щом Omi го получи.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Вземи нов код и го изпрати от $app.';
   }
 }

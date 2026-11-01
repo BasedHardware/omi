@@ -14442,6 +14442,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get episodeMoments => 'لحظه‌ها';
 
   @override
+  String get episodeFollowUps => 'پیگیری‌ها';
+
+  @override
+  String get episodeOpenTranscript => 'باز کردن پی‌نوشت';
+
+  @override
   String get episodeSoFar => 'تا اینجا';
 
   @override
@@ -14660,9 +14666,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'روی این گوشی';
-
-  @override
-  String get episodeOpenTranscript => 'باز کردن پی‌نوشت';
 
   @override
   String get liveCardTitle => 'زنده';
@@ -14924,5 +14927,30 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'امروز $amount کسر شد. تمدید در $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count بخش',
+      many: '$count بخش',
+      few: '$count بخش',
+      two: '$count بخش',
+      one: '$count بخش',
+      zero: '$count بخش',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'پیام را در $app ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'کد جدید بگیرید و از $app ارسال کنید.';
   }
 }

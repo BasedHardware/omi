@@ -77,8 +77,8 @@ def test_runtime_bound_is_unchanged_and_cannot_be_raised(monkeypatch):
     assert not independent_allowed(75.0)
 
 
-def duration_limited_unit(setup, monkeypatch, legacy_dependencies):
-    """The post-#23795 shape: the runtime refusal-settled >60s prepared guarded unit."""
+def duration_limited_unit(setup, monkeypatch, legacy_dependencies, *, historical=True):
+    """A historical #23795 refusal, or a current refusal without bound proof."""
     client, store, binding, artifacts, legacy, alternate, soniox = prepared_setup(
         setup, monkeypatch, legacy_dependencies, speech=30.0
     )
@@ -86,7 +86,20 @@ def duration_limited_unit(setup, monkeypatch, legacy_dependencies):
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', '190')
     recovery = setup[-1]
     recovery.stt = transcribe
-    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    if historical:
+        # The old guard ran before worker-VAD lookup. Recreate that durable
+        # receipt directly: current bound proof correctly permits Modulate.
+        job = row(client)
+        assert RecoveryStore(store).hold_duration_limit(
+            'bad',
+            job['recovery']['token'],
+            100,
+            audio_uri=job['audio_uri'],
+            audio_seconds=job['duration_seconds'],
+        )
+    else:
+        row(client).pop('worker_vad_receipt', None)
+        assert recovery.recover('bad', binding.owner_id) == 'failed_held'
     job = row(client)
     assert job['recovery_state'] == 'failed_held' and not job.get('result')
     assert not job['recovery'].get('recognizers') and not job['recovery'].get('started_at')
@@ -98,8 +111,8 @@ def duration_limited_unit(setup, monkeypatch, legacy_dependencies):
 
 
 def test_runtime_duration_limit_still_settles_without_a_provider_call(setup, monkeypatch, legacy_dependencies):
-    """#23795 identity: an impossible >60s unit terminally holds with a refusal, even with the flag on and env 190."""
-    duration_limited_unit(setup, monkeypatch, legacy_dependencies)
+    """Without bound worker proof, >60s still refuses despite the flag and env190."""
+    duration_limited_unit(setup, monkeypatch, legacy_dependencies, historical=False)
 
 
 def test_duration_limited_refusal_reopens_through_the_takeover(setup, monkeypatch, legacy_dependencies):

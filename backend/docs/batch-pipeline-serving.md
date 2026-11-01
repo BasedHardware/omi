@@ -554,42 +554,46 @@ an empty multilingual response from Modulate alone stays `failed_held` rather
 than terminal-empty. Timeouts, malformed responses, uncertain calls, missing
 evidence, and provider failures stay held. There are no paid-intent resets.
 
-**Second multilingual provider (long-speech units) — retired 2026-08-27.**
-This step used to spend exactly one more call, to cloud Deepgram nova-3 with
-language detection (`second_transcribe`), inside the same `running` intent.
-Deepgram is retired (no contract since 2026-08-27), so
-`config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` is `None` and
-`second_provider_eligible` answers False for every unit: no second call is
-spent, and an empty multilingual Modulate response settles `failed_held`
-(Modulate-only recovery, the same behavior as
-`BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false`). The wiring, flag and
-metering stay so a future second batch provider can be introduced by naming it
-in the policy again. Historical behavior, kept for reference:
+**Second multilingual provider — Soniox (ship on).**
+`config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` names `soniox`.
+An ordinary held unit whose Modulate response is validated empty gets at most
+one Soniox `stt-async-v5` call inside the same `running` recovery intent,
+using the existing sync/operator or async/serving batch adapter. This includes
+short validation holds and oversized units; it no longer requires a long-speech
+handoff. Already-settled padded-empty outcomes do not spend another call.
+`BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false` restores Modulate-only
+ordinary recovery (unset is on). The independent language-guard path keeps its
+separate switch, one-minute duration cap, and existing evidence rules.
 
-- Deepgram returns words: the unit recovers with those words (ordinary
-  `success` result).
-- Deepgram also returns valid-empty: with the terminal-empty flag on, the unit
-  settles `no_recoverable_speech` with `recognition_evidence`
-  `{gpu_padded_retry: skipped_long_speech, multilingual_recovery: empty,
-  second_multilingual_recovery: empty}`. This is the honest outcome. No one may
-  listen to the audio, so the pipeline has to settle it on evidence: VAD saw
-  speech-like energy, and two independent multilingual ASR systems, with
-  different models and language coverage, both found no words in it. It is the
-  same quality of evidence as GPU padded-empty plus Modulate-empty. Another
-  `failed_held` would only say "unknown", and nothing would ever retry it.
-- Deepgram errors, times out, returns a malformed answer, or the allowance
-  refuses: the unit stays `failed_held` with Modulate's
-  `response_validation/empty_asr` failure, as before.
+- Soniox words recover the unit with a `success` result and `words_provider=soniox`.
+- A second valid-empty answer can settle `no_recoverable_speech` only when the
+  terminal-empty policy and `terminal_empty_allowed` permit it. The ship-on
+  empty-ASR safety net still refuses positive strict-VAD disposal. Both provider
+  receipts record `empty` and zero words. Short/validation/oversize holds use
+  `{multilingual_recovery: empty, second_multilingual_recovery: empty}` plus
+  both receipts in the artifact; long-speech holds also retain their real
+  `gpu_padded_retry: skipped_long_speech` evidence. No GPU retry is fabricated.
+- Errors, timeouts, malformed answers, missing key or allowance refusal leave
+  the unit `failed_held`, without a result and with original audio in custody.
 
-A crash between the two calls leaves the intent `running`. The 900 s abandonment
-rule then settles it `failed_held` without another call. Each long-speech empty
-costs at most one extra Deepgram call of the unit's duration. Metering:
-`omi_batch_recovery_second_provider_total{provider=deepgram,outcome=words|empty|error|refused}`,
-the log `event=batch_recovery_second_provider provider=deepgram outcome=...`,
-and `omi_stt_cap_provider_audio_seconds{path=sync,outcome=accepted}` for both
-paid answers (`provider=modulate`, now also for valid-empty answers, and
-`provider=deepgram`). `BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false` (kill
-switch, unset is on) restores Modulate-only recovery.
+The allowance and consent are rechecked with `sync_allowed` for Soniox before
+spend, including managed recovery of BYOK admissions. A token/privacy-fenced
+`started` receipt claims the sole second call. A crash or cancellation leaves
+the intent `running`; the 900 s abandonment rule settles it `failed_held`
+without reissuing either provider call. The ordinary call uses the admitted
+unit's duration (at most 7,200 s) and the adapter's 120 s deadline, without retries.
+Cost is at most one extra Soniox call per Modulate-empty held unit. Metering:
+`omi_batch_recovery_second_provider_total{provider=soniox,outcome=words|empty|error|refused}`,
+`event=batch_recovery_second_provider provider=soniox outcome=...`, and
+`omi_stt_cap_provider_audio_seconds{path=sync,outcome=accepted}` for validated
+words and empty answers (`provider=modulate` and `provider=soniox`).
+
+Deploy the CPU recovery hosts with `SONIOX_API_KEY`; the GPU worker chart also
+references that key from `.Values.secretName` (prod: `prod-omi-backend-secrets`).
+The optional secret reference preserves worker startup if absent; readiness
+refuses the second call until configured. The lead verifies the key exists
+before deploying; never print its value. No admission/ramp or guarded-path
+flag change is part of this feature.
 
 This is an empty-words **terminal degradation**, distinct from silence. The
 encrypted result retains validated positive VAD and closed recognition evidence.

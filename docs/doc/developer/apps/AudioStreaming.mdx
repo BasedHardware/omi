@@ -1,5 +1,5 @@
 ---
-title: "Real-Time Audio Streaming"
+title: "Real-time audio streaming"
 icon: "headphones"
 description: "Stream raw audio bytes from your Omi device to any backend for custom speech processing, VAD, or audio analysis."
 ---
@@ -9,16 +9,16 @@ description: "Stream raw audio bytes from your Omi device to any backend for cus
 Omi allows you to stream audio bytes from your DevKit directly to your backend or any external service. This enables custom audio processing like:
 
 <CardGroup cols={2}>
-  <Card title="Custom Speech Recognition" icon="microphone">
+  <Card title="Custom speech recognition" icon="microphone">
     Use your own ASR models instead of Omi's default transcription
   </Card>
-  <Card title="Voice Activity Detection" icon="waveform-lines">
+  <Card title="Voice activity detection" icon="waveform-lines">
     Implement custom VAD logic for specialized use cases
   </Card>
-  <Card title="Audio Analysis" icon="chart-line">
+  <Card title="Audio analysis" icon="chart-line">
     Extract features, spectrograms, or embeddings in real-time
   </Card>
-  <Card title="Cloud Storage" icon="cloud-arrow-up">
+  <Card title="Cloud storage" icon="cloud-arrow-up">
     Store raw audio for later processing or compliance
   </Card>
 </CardGroup>
@@ -34,9 +34,7 @@ flowchart LR
     W --> P[Your Processing]
 ```
 
----
-
-## Technical Specifications
+## Technical specifications
 
 | Specification | Value |
 |---------------|-------|
@@ -51,12 +49,10 @@ flowchart LR
 The sample rate is passed as a query parameter so your endpoint can handle different device versions.
 </Note>
 
----
-
-## Setup Guide
+## Setup guide
 
 <Steps>
-  <Step title="Create Your Endpoint" icon="server">
+  <Step title="Create your endpoint" icon="server">
     Create a webhook that accepts POST requests with binary audio data.
 
     **Request format:**
@@ -72,14 +68,14 @@ The sample rate is passed as a query parameter so your endpoint can handle diffe
     - Process the raw bytes (buffer, save, or analyze)
     - Return 200 OK quickly to avoid timeouts
   </Step>
-  <Step title="Configure in Omi App" icon="mobile">
-    1. Open the Omi App
+  <Step title="Configure in the Omi app" icon="mobile">
+    1. Open the Omi app
     2. Go to **Settings** → **Developer Mode**
     3. Scroll to **Realtime audio bytes**
     4. Enter your webhook URL
     5. Set the **Every x seconds** field (e.g., `10` for 10-second chunks)
   </Step>
-  <Step title="Test Your Integration" icon="flask">
+  <Step title="Test your integration" icon="flask">
     Start speaking while wearing your Omi device. Audio bytes should arrive at your webhook at the configured interval.
 
     <Tip>
@@ -88,9 +84,7 @@ The sample rate is passed as a query parameter so your endpoint can handle diffe
   </Step>
 </Steps>
 
----
-
-## Working with Audio Bytes
+## Working with audio bytes
 
 ### Converting to WAV
 
@@ -115,7 +109,7 @@ def create_wav(audio_bytes: bytes, sample_rate: int) -> bytes:
     return buffer.read()
 ```
 
-### Accumulating Chunks
+### Accumulating chunks
 
 If you need continuous audio (not chunked), accumulate bytes across requests:
 
@@ -140,25 +134,23 @@ async def receive_audio(request: Request, uid: str, sample_rate: int):
     return {"status": "ok"}
 ```
 
----
-
-## Example: Save to Google Cloud Storage
+## Example: save to Google Cloud Storage
 
 A complete example that saves audio files to Google Cloud Storage.
 
 <Steps>
   <Step title="Create GCS Bucket" icon="bucket">
-    Follow the [Saving Audio Guide](/doc/developer/savingaudio) steps 1-5 to create a bucket with proper permissions.
+    Follow the [Cloud Audio Storage](#cloud-audio-storage) setup below to create a bucket, a service account, and a base64-encoded key.
   </Step>
-  <Step title="Fork the Example Repository" icon="code-fork">
+  <Step title="Fork the example repository" icon="code-fork">
     Fork [github.com/mdmohsin7/omi-audio-streaming](https://github.com/mdmohsin7/omi-audio-streaming)
   </Step>
-  <Step title="Clone and Deploy" icon="cloud-arrow-up">
+  <Step title="Clone and deploy" icon="cloud-arrow-up">
     Clone the repository and deploy to your preferred cloud provider (GCP, AWS, DigitalOcean) or run locally with ngrok.
 
-    The repository includes a Dockerfile for easy deployment.
+    The repository includes a Dockerfile.
   </Step>
-  <Step title="Set Environment Variables" icon="key">
+  <Step title="Set environment variables" icon="key">
     Configure these environment variables during deployment:
 
     | Variable | Description |
@@ -166,7 +158,7 @@ A complete example that saves audio files to Google Cloud Storage.
     | `GOOGLE_APPLICATION_CREDENTIALS_JSON` | GCP service account credentials (base64 encoded) |
     | `GCS_BUCKET_NAME` | Your GCS bucket name |
   </Step>
-  <Step title="Configure Omi App" icon="mobile">
+  <Step title="Configure the Omi app" icon="mobile">
     Set the endpoint in Developer Settings → Realtime audio bytes:
     ```
     https://your-deployment-url.com/audio
@@ -177,12 +169,10 @@ A complete example that saves audio files to Google Cloud Storage.
   </Step>
 </Steps>
 
----
-
-## Processing Ideas
+## Processing ideas
 
 <AccordionGroup>
-  <Accordion title="Custom Speech Recognition" icon="microphone">
+  <Accordion title="Custom speech recognition" icon="microphone">
     Feed audio to your own ASR models for specialized vocabulary or languages:
 
     ```python
@@ -204,7 +194,7 @@ A complete example that saves audio files to Google Cloud Storage.
         return {"text": result["text"]}
     ```
   </Accordion>
-  <Accordion title="Voice Activity Detection" icon="waveform-lines">
+  <Accordion title="Voice activity detection" icon="waveform-lines">
     Detect speech vs. silence for custom endpointing:
 
     ```python
@@ -230,7 +220,7 @@ A complete example that saves audio files to Google Cloud Storage.
         return speech_frames / total_frames > 0.5 if total_frames else False
     ```
   </Accordion>
-  <Accordion title="Audio Embeddings" icon="diagram-project">
+  <Accordion title="Audio embeddings" icon="diagram-project">
     Extract embeddings for speaker identification or audio similarity:
 
     ```python
@@ -246,7 +236,7 @@ A complete example that saves audio files to Google Cloud Storage.
         )
     ```
   </Accordion>
-  <Accordion title="Real-time Sentiment" icon="face-smile">
+  <Accordion title="Real-time sentiment" icon="face-smile">
     Analyze emotional tone from audio features:
 
     ```python
@@ -270,21 +260,19 @@ A complete example that saves audio files to Google Cloud Storage.
   </Accordion>
 </AccordionGroup>
 
----
-
-## Best Practices
+## Best practices
 
 <CardGroup cols={2}>
-  <Card title="Respond Quickly" icon="bolt">
+  <Card title="Respond quickly" icon="bolt">
     Return 200 OK immediately, process async. Slow responses may cause timeouts.
   </Card>
-  <Card title="Handle Missing Data" icon="triangle-exclamation">
+  <Card title="Handle missing data" icon="triangle-exclamation">
     Network issues may cause gaps. Design your processing to handle incomplete audio.
   </Card>
-  <Card title="Buffer Appropriately" icon="layer-group">
+  <Card title="Buffer appropriately" icon="layer-group">
     Choose chunk interval based on your use case. Larger chunks = fewer requests but higher latency.
   </Card>
-  <Card title="Monitor Usage" icon="chart-line">
+  <Card title="Monitor usage" icon="chart-line">
     Audio streaming generates significant data. Monitor storage and bandwidth costs.
   </Card>
 </CardGroup>
@@ -293,21 +281,86 @@ A complete example that saves audio files to Google Cloud Storage.
 Audio data is sensitive. Ensure your endpoint is secured with HTTPS and implement appropriate access controls.
 </Warning>
 
----
+## Cloud audio storage
 
-## Related Documentation
+Store audio files from your Omi device in Google Cloud Storage (GCS). You'll need an active [Google Cloud Platform account](https://console.cloud.google.com/).
+
+<Steps>
+  <Step title="Create a storage bucket" icon="bucket">
+    1. Go to the [GCS console](https://console.cloud.google.com/storage/browser)
+    2. Click **Create Bucket**
+    3. Configure the bucket:
+
+    | Setting | Recommended Value |
+    |---------|-------------------|
+    | Name | Something unique, e.g. `omi-audio-files` |
+    | Location | Multi-region for reliability, or single region for lower cost |
+    | Storage class | **Standard** (for frequently accessed files) |
+    | Public access | **Off** (keep audio private) |
+    | Access control | **Uniform** |
+
+    4. Click **Create**
+  </Step>
+  <Step title="Create a service account" icon="user-gear">
+    1. Go to **IAM & Admin → Service Accounts** in the GCP console
+    2. Click **Create Service Account**
+    3. Set the name (e.g. `omi-audio-uploader`)
+    4. Grant the **Storage Object User** role
+    5. Click **Done**
+  </Step>
+  <Step title="Generate a JSON key" icon="key">
+    1. Click on the service account you just created
+    2. Go to the **Keys** tab
+    3. Click **Add Key → Create new key → JSON**
+    4. The key file downloads automatically
+
+    <Warning>
+    Keep this key file secure. It grants access to your storage bucket.
+    </Warning>
+  </Step>
+  <Step title="Base64 encode the key" icon="lock">
+    Convert the key to Base64 for use as an environment variable:
+
+    <Tabs>
+      <Tab title="macOS / Linux" icon="terminal">
+        ```bash
+        base64 -i your-key-file.json
+        ```
+      </Tab>
+      <Tab title="Windows" icon="windows">
+        ```powershell
+        [Convert]::ToBase64String([IO.File]::ReadAllBytes("your-key-file.json"))
+        ```
+      </Tab>
+    </Tabs>
+
+    Copy the output — this is your `GOOGLE_APPLICATION_CREDENTIALS_JSON` value.
+  </Step>
+  <Step title="Note your bucket name" icon="clipboard">
+    Copy your bucket name from the [GCS console](https://console.cloud.google.com/storage/browser). This is your `GCS_BUCKET_NAME` value.
+  </Step>
+</Steps>
+
+You'll need these two values when deploying the audio streaming service:
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | Base64-encoded service account key |
+| `GCS_BUCKET_NAME` | Your storage bucket name |
+
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+  <Card title="Integration apps" icon="plug" href="/doc/developer/apps/Integrations">
     Overview of webhook-based integrations
   </Card>
-  <Card title="Saving Audio" icon="floppy-disk" href="/doc/developer/savingaudio">
+  <Card title="Cloud audio storage" icon="floppy-disk" href="#cloud-audio-storage">
     Guide to storing audio in cloud storage
   </Card>
-  <Card title="Real-time Transcription" icon="closed-captioning" href="/doc/developer/backend/transcription">
+  <Card title="Real-time transcription" icon="closed-captioning" href="/doc/how-omi-works/capture-and-transcription">
     How Omi's built-in transcription works
   </Card>
-  <Card title="Apps Introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+  <Card title="Apps introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
     Overview of all Omi app types
   </Card>
 </CardGroup>

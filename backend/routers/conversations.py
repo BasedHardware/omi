@@ -62,7 +62,7 @@ from models.conversation import (
     UpdateSummaryRequest,
     project_shared_conversation,
 )
-from utils.conversations.fragment_visibility import is_completed_rule_discard
+from utils.sync.bridge_pending import hidden_from_default_detail
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
@@ -1127,10 +1127,10 @@ def get_conversation_by_id(
         if conversation.get('source') != 'omi':
             raise HTTPException(status_code=404, detail="Conversation not found")
     # Omitted keeps the historical detail default (show a stored discard).
-    # A completed rule-discard is noise, not an archive row: the web permalink
-    # omits this flag, so it stays hidden unless the caller explicitly asks.
+    # Noise and pending live bridges stay out of the default detail response;
+    # the web permalink omits this flag, while explicit archive reads opt in.
     show_discarded = True if include_discarded is None else include_discarded
-    if is_completed_rule_discard(conversation) and include_discarded is not True:
+    if hidden_from_default_detail(conversation) and include_discarded is not True:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
         raise HTTPException(status_code=404, detail="Conversation not found")
