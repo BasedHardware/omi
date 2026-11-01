@@ -246,17 +246,12 @@
                 });
         }
 
-        function isAppleDevice() {
-            return /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-        }
-
-        let signInOptions = [
+        // Offer Apple on every platform: accounts created with Apple on iOS must be able
+        // to sign in from Windows, Linux and Android browsers too.
+        const signInOptions = [
             firebase.auth.GoogleAuthProvider.PROVIDER_ID,
+            'apple.com',
         ];
-
-        if (isAppleDevice()) {
-            signInOptions.push('apple.com');
-        }
 
         emailSignInForm.addEventListener('submit', function (event) {
             event.preventDefault();
