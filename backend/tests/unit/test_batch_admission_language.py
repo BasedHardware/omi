@@ -17,6 +17,7 @@ from tests.unit.test_batch_language_eligibility import admitted, upload
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
+from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from utils.sync import final_pass_rehome
 
 
@@ -158,10 +159,11 @@ async def test_unknown_multilingual_upload_admits_after_a_parakeet_safe_sample(
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', inherit)
     excluded = Mock()
     monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    evidence = IntakeRouteEvidence()
     response, staged, probe = await upload(
-        monkeypatch, user_language=user_language, conversation_language=conversation, mode='on'
+        monkeypatch, user_language=user_language, conversation_language=conversation, mode='on', evidence=evidence
     )
-    assert admitted(response, staged)
+    assert admitted(response, staged) and not evidence.language_excluded
     # The declared user language is never pinned: the audio itself is classified.
     assert probe.call_args.args[0] == 'multi'
     assert probe.staged_context['stt_language'] == 'en'
@@ -177,10 +179,15 @@ async def test_unsafe_or_unavailable_sample_keeps_the_upload_on_legacy(monkeypat
     excluded = Mock()
     monkeypatch.setattr(intake, 'admit', writer)
     monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
-    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', decision=sample)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', mode='on', decision=sample, evidence=evidence
+    )
     assert response is None and staged == [] and probe.call_count == 1
     writer.assert_not_called()
     assert excluded.call_args.args[1] == 'unknown_multilingual_conversation'
+    # The intake outcome counter (#24283) attributes the legacy landing to the language gate.
+    assert evidence.language_excluded and not evidence.heavy_owner_excluded
 
 
 @pytest.mark.asyncio

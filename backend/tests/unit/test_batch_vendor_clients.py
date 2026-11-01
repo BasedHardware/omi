@@ -208,15 +208,19 @@ def test_soniox_refusals_are_unbilled_only_before_the_paid_submission(monkeypatc
     assert raised.value.outcome is outcome
 
 
-def test_stage_transcribe_keeps_vendor_speaker_turns_discarded(monkeypatch):
+@pytest.mark.parametrize('killed', [False, True])
+def test_stage_transcribe_keeps_vendor_speaker_turns_unless_killed(monkeypatch, killed):
     async def words(*args, **kwargs):
         return [{'text': 'synthetic', 'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_01'}], 'ja'
 
     monkeypatch.setattr(modulate_batch, 'modulate_batch_async', words)
+    if killed:
+        monkeypatch.setenv('BATCH_VENDOR_SPEAKER_TURNS_ENABLED', 'false')
     item = WorkItem('p1', 'synthetic-owner', 10, 'gs://synthetic/audio/p1', 5.0, Priority.FRESH)
     inspected = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}])
     payload = asyncio.run(provider_stt.transcribe_async(item, 'ja', inspected, service='modulate'))
-    assert payload['diarization'] == {'turns': []} and payload['words_provider'] == 'modulate'
+    turns = [] if killed else [{'start': 0.5, 'end': 1.0, 'speaker': 'SPEAKER_01'}]
+    assert payload['diarization'] == {'turns': turns} and payload['words_provider'] == 'modulate'
 
 
 # --- LID survives a Modulate outage --------------------------------------------------------------

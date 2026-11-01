@@ -72,7 +72,12 @@ class ModulateBatchError(RuntimeError):
 
 
 async def modulate_batch_async(
-    audio_bytes: bytes, *, language: Optional[str] = None, diarize: bool = True, client: Any = None
+    audio_bytes: bytes,
+    *,
+    language: Optional[str] = None,
+    diarize: bool = True,
+    client: Any = None,
+    mark_fallback: bool = False,
 ) -> Tuple[List[Dict[str, Any]], str]:
     """One Velma batch POST awaited on the event loop: no executor thread held, no client retry.
 
@@ -123,6 +128,14 @@ async def modulate_batch_async(
         record_breaker_success(ENDPOINT_STT)
     record_vendor_burn(ENDPOINT_STT, 'ok', burn_seconds)
     try:
-        return cast(Tuple[List[Dict[str, Any]], str], modulate_batch_words(response.json(), True, language))
+        body = response.json()
+        words, detected = cast(Tuple[List[Dict[str, Any]], str], modulate_batch_words(body, True, language))
+        if mark_fallback and any(
+            str(utt.get('text') or '').strip() and not (type(utt.get('speaker')) is int and utt['speaker'] >= 1)
+            for utt in body['utterances']
+        ):
+            # The shared parser defaults a missing speaker to SPEAKER_00; that is not diarization.
+            words = [{**word, 'speaker_fallback': True} for word in words]
+        return words, detected
     except Exception:
         raise ModulateBatchError('invalid_response', posted=True) from None

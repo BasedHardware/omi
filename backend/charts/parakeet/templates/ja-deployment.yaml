@@ -1,0 +1,106 @@
+{{- /*
+Japanese live-window model: a separate Deployment and Service in this release,
+so it ships through the same Parakeet workflow and image. Its pods carry a
+different app name, so the main Service, headless pool, HPA and guards never
+select them, and Japanese audio never reaches the v3 pool (or the reverse).
+Listen points HOSTED_PARAKEET_JA_API_URL at the Service below.
+*/ -}}
+{{- if .Values.ja.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "parakeet.fullname" . }}-ja
+  labels:
+    helm.sh/chart: {{ include "parakeet.chart" . }}
+    app.kubernetes.io/name: {{ include "parakeet.name" . }}-ja
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.ja.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "parakeet.name" . }}-ja
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "parakeet.name" . }}-ja
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      serviceAccountName: {{ include "parakeet.serviceAccountName" . }}
+      containers:
+        - name: {{ .Chart.Name }}-ja
+          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $env := list }}
+          {{- range .Values.env }}
+          {{- if not (has .name (list "PARAKEET_MODEL" "PARAKEET_LID_MODEL")) }}
+          {{- $env = append $env . }}
+          {{- end }}
+          {{- end }}
+          env:
+            {{- with $env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            - name: PARAKEET_MODEL
+              value: {{ .Values.ja.model | quote }}
+            # The Whisper language gate guards the v3 language set; this pod serves ja only.
+            - name: PARAKEET_LID_MODEL
+              value: "off"
+            {{- with .Values.ja.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "parakeet.fullname" . }}-ja
+  labels:
+    app.kubernetes.io/name: {{ include "parakeet.name" . }}-ja
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "parakeet.name" . }}-ja
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

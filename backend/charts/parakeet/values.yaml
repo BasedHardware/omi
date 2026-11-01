@@ -209,6 +209,15 @@ affinity: {}
 
 topologySpreadConstraints: []
 
+# Japanese live-window model (templates/ja-deployment.yaml). Off by default; when on,
+# listen reaches it at http://<release>-parakeet-ja.<namespace>.svc.cluster.local:<port>
+# through HOSTED_PARAKEET_JA_API_URL, ramped by PARAKEET_JA_WINDOW_PERCENT.
+ja:
+  enabled: false
+  replicaCount: 1
+  model: nvidia/parakeet-tdt_ctc-0.6b-ja
+  extraEnv: []
+
 # Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
 gateway:
   enabled: false

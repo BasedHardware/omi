@@ -239,6 +239,20 @@ class SimStore:
             and row.get('available_at', float('inf')) <= now
         )
 
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        """Mirrors database.batch_pipeline_store.oldest_admissible_ready."""
+        from database.batch_pipeline_store import ADMISSIBLE_READY_SCAN_LIMIT, is_admissible_ready
+
+        rows = sorted(
+            (row['enqueued_at'], segment_id, row)
+            for segment_id in self._by_state.get('ready', ())
+            if (row := self.rows[('jobs', segment_id)]).get('priority') == priority
+        )
+        for enqueued_at, _, row in rows[:ADMISSIBLE_READY_SCAN_LIMIT]:
+            if is_admissible_ready(row, now):
+                return enqueued_at
+        return None
+
     def oldest_retry(self, priority: int) -> float | None:
         values = [
             row['retry_started_at']

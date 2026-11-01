@@ -17,6 +17,7 @@ import time
 import pytest
 
 from database import llm_usage
+from database.cap_recovery_pacing import Decision
 from database import processing_backlog as backlog_store
 from database.batch_pipeline_projection import ProjectionStore, usage_stamp
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -253,6 +254,7 @@ async def test_batch_hand_off_reserves_the_candidates_units_before_it_is_durable
     monkeypatch.setattr(cap_hold_recovery, 'recording_units_per_hour', lambda kind: RATE)
     monkeypatch.setattr(cap_hold_recovery.funded_processing, 'period_id', lambda: PERIOD)
     monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: True)
+    monkeypatch.setattr(cap_hold_recovery.cap_recovery_pacing, 'reserve', lambda seconds: Decision('granted'))
 
     async def selected_lane(uid, current):
         return 'sync'  # main #22494: recovery follows the hold's original lane (missing legacy origin = sync)
@@ -275,7 +277,7 @@ async def test_batch_hand_off_reserves_the_candidates_units_before_it_is_durable
     reserved = {'hold-1': {'units': 40.0, 'period': PERIOD, 'batch_job_id': 'bp_job'}}
     saved = events[0][1]
     assert {k: {f: v for f, v in e.items() if f != 'reserved_at'} for k, e in saved.items()} == reserved
-    assert events[1:] == ['erase', 'release']
+    assert events[1:] == ['release']  # the hold keeps its audio until batch projects it (finish_handoff)
 
 
 # --- B: period attribution across a rollover --------------------------------------------------------
