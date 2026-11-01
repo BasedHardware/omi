@@ -126,10 +126,11 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert env['BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED'] == 'true'
     assert env['BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED'] == 'false'
     hpa = manifests['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 1 and hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 300
+    assert hpa['minReplicas'] == 1 and hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 1800
+    assert hpa['behavior']['scaleDown']['policies'] == [{'type': 'Pods', 'value': 1, 'periodSeconds': 600}]
     assert len(hpa['metrics']) == 1
-    assert hpa['metrics'][0]['external']['metric']['name'] == 'omi_batch_pipeline_admissible_ready_units'
-    assert hpa['metrics'][0]['external']['target'] == {'type': 'AverageValue', 'averageValue': '16'}
+    assert hpa['metrics'][0]['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
+    assert hpa['metrics'][0]['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
     assert all(
         m['external']['metric']['selector']['matchLabels']['worker_release'] == 'synthetic-worker'
         for m in hpa['metrics']
@@ -302,12 +303,15 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         assert env['BATCH_PIPELINE_PERCENT'] == '0'
         assert h['scaleTargetRef']['name'] == name
         assert h['minReplicas'] == 1 and h['maxReplicas'] == 12
-        assert h['behavior']['scaleDown']['stabilizationWindowSeconds'] == 300
+        assert h['behavior']['scaleDown']['stabilizationWindowSeconds'] == 1800
         for metric in h['metrics']:
             labels = metric['external']['metric']['selector']['matchLabels']
             assert labels['worker_release'] == 'synthetic-worker' and labels['namespace'] == 'synthetic'
             assert 'priority' not in labels
-            assert metric['external']['target'] == {'type': 'AverageValue', 'averageValue': '32'}
+            assert metric['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
+            # Per-release chain busy is already scoped by worker_release; the
+            # shared-queue doubling does not apply to a rate metric.
+            assert metric['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
     assert (
         deployments['synthetic-worker']['metadata']['annotations']['omi.ai/required-companion-deployment']
         == 'synthetic-worker-spot'
@@ -323,7 +327,8 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         'autoscaling.maxReplicas=23',
         'autoscaling.maxReplicas=0',
         'autoscaling.balancedPools.spotNodePool=batch-pipeline-pool',
-        'autoscaling.targetQueuedUnitsPerWorker=0',
+        'autoscaling.targetChainBusyPerWorker=0',
+        'autoscaling.targetChainBusyPerWorker=1.5',
     ],
 )
 def test_balanced_pools_refuse_unsafe_or_ambiguous_budgets(setting):

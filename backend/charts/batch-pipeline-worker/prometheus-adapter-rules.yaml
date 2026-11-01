@@ -42,3 +42,20 @@ external:
           )
         ) == 3
       )
+  # Demand for the exclusive GPU chain: fleet worker_flight busy seconds per
+  # second. The HPA sizes on workers being productively busy, so a claim-chain
+  # wedge (units ready but unleasable) no longer buys idle replicas, while real
+  # chain load scales up immediately. Stale samples stay unavailable.
+  - seriesQuery: 'omi_batch_pipeline_stage_seconds_sum{namespace!="",worker_release!="",stage="worker_flight"}'
+    resources:
+      overrides:
+        namespace: {resource: namespace}
+    name:
+      matches: '^omi_batch_pipeline_stage_seconds_sum$'
+      as: omi_batch_pipeline_gpu_chain_busy_seconds
+    metricsQuery: |-
+      sum by (namespace, worker_release) (
+        rate(omi_batch_pipeline_stage_seconds_sum{<<.LabelMatchers>>,stage="worker_flight"}[2m])
+        and on (namespace, worker_release, pod)
+        (time() - omi_batch_pipeline_metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60)
+      )

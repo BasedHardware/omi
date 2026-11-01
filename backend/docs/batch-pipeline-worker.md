@@ -298,14 +298,18 @@ maximum (3 -> 16) in the same reviewed
 qualification window, using a real scale-up during the 25% soak as the
 scheduling proof.
 
-`targetQueuedUnitsPerWorker=16` is **provisional slot arithmetic**, not a
-qualified throughput target. Before enabling the scaler, op1 must benchmark
-useful completions and queue latency on the exact qualified worker during the
-25% soak, pin the measured target, verify the new index READY and the fresh
-external metric, and get the lead's exact apply approval. This source change
-does not itself expand admission or authorize deployment. accel3g owns the
-scaler PR (lead f05065), bramp3 does the bounded review, op1 installs and
-qualifies; MERGE READY by 10Z on 2026-10-28.
+The scaler sizes on **GPU-chain occupancy**, not the ready backlog: the
+external metric `omi_batch_pipeline_gpu_chain_busy_seconds` exposes fleet
+`worker_flight` busy seconds per second, and the HPA target is
+`targetChainBusyPerWorker=0.5` (~89% of the measured healthy per-worker chain
+ceiling 0.56; hpafit 2026-11-01 replay over 24h held mean 5.6 replicas with
+zero starved minutes while the earlier ready-backlog target of 16 units per
+worker thrashed 10-16 replicas through a claim-chain wedge and an L4 stockout).
+Scale-down sheds one pod per 600s after a 1800s window so a stockout never
+costs a warm on-demand node it cannot re-obtain; the earlier admissible-count
+rule stays installed so rollback is a values revert without an adapter
+redeploy. The target remains provisional pending throughput qualification
+before any apply.
 
 For cutover/rollback, op1 captures the current release values/manifest privately,
 keeps the image pinned, preserves all runtime bindings and the 1500s SIGTERM

@@ -20,23 +20,30 @@ spec:
       policies:
         - {type: Pods, value: 2, periodSeconds: 60}
     scaleDown:
-      stabilizationWindowSeconds: 300
+      # L4 stockouts run weekly-to-biweekly (vendor-routing runbook): a node
+      # released by a scale-down may be unobtainable for hours. Shed slowly and
+      # hold the warm fleet; the minReplicas floor stays standing regardless.
+      stabilizationWindowSeconds: {{ .instance.scaleDownStabilizationSeconds }}
       policies:
-        - {type: Pods, value: 1, periodSeconds: 120}
+        - {type: Pods, value: 1, periodSeconds: 600}
   metrics:
     - type: External
       external:
         metric:
-          name: omi_batch_pipeline_admissible_ready_units
+          name: omi_batch_pipeline_gpu_chain_busy_seconds
           selector:
             matchLabels:
               worker_release: {{ .Release.Name }}
               namespace: {{ .Release.Namespace }}
         target:
-          # Each pool sees the same total. Doubling the per-worker target in
-          # balanced mode divides demand, instead of buying it twice.
+          # Fleet worker_flight busy seconds per second, i.e. demand for the
+          # exclusive GPU chain each replica exists to hold. The 0.5 average
+          # is ~89% of the measured healthy per-worker chain ceiling (0.56,
+          # hpafit 2026-11-01 replay: 0 starved minutes over 24h; the prior
+          # ready-backlog metric thrashed 10-16 replicas during a stockout
+          # while GPU demand stayed under 3 GPU-equivalents).
           type: AverageValue
-          averageValue: {{ .instance.capacityTarget | quote }}
+          averageValue: {{ .instance.chainTarget | quote }}
 {{- end }}
 {{- end }}
 {{- if and .Values.enabled .Values.autoscaling.enabled }}
