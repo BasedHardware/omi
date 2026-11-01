@@ -2,11 +2,13 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from config.dream_session import SessionLimits
 from models.agent_tools import HarnessQuestion, Read
+from utils import dream_seed
 from utils.agent_capabilities import staging
 from utils.agent_capabilities.evidence import model_view
 from tests.unit.test_dream_session import call, turn
@@ -105,3 +107,30 @@ def test_empty_voice_fields_are_not_a_voice_profile():
     assert model_view('people/junk', {'name': 'Canadian', 'speech_samples': [], 'speaker_embedding': None}) == {
         'name': 'Canadian'
     }
+
+
+class _Query:
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: self
+
+    def stream(self):
+        return []
+
+
+def _seed_notes(monkeypatch, source):
+    monkeypatch.setattr(dream_seed.dream_history, 'history_count', lambda *args, **kwargs: 0)
+    monkeypatch.setattr(dream_seed.users, 'get_user_profile', lambda uid: {})
+    monkeypatch.setattr(dream_seed.dream_store, 'vocabulary', lambda uid: [])
+    monkeypatch.setattr(dream_seed.dream_store, 'dirty_refs', lambda uid, limit=32, newest=False: [])
+    monkeypatch.setattr(dream_seed.dream_store, 'own_runs', lambda uid, limit=1: [('run', {'source': source})])
+    monkeypatch.setattr(dream_seed.review_store, 'decode_doc', lambda uid, raw: raw)
+    monkeypatch.setattr(dream_seed.review_store, 'user', lambda uid: SimpleNamespace(collection=lambda name: _Query()))
+    return dream_seed.load('synthetic-owner', SimpleNamespace(tokens=1000, edits=1))[0]['previous_notes']
+
+
+def test_notes_from_before_the_narrowing_never_reach_a_prompt(monkeypatch):
+    assert _seed_notes(monkeypatch, {'notes': SECRET}) == ''
+
+
+def test_notes_written_after_the_narrowing_carry_forward(monkeypatch):
+    assert _seed_notes(monkeypatch, {'notes': 'Check tasks next.', 'notes_voice_free': True}) == 'Check tasks next.'
