@@ -107,7 +107,14 @@ def test_all_streaming_response_routes_are_exempt():
     scanned = 0
     streaming_paths = set()
     for source_path in routers_dir.glob('*.py'):
-        tree = ast.parse(source_path.read_text())
+        source = source_path.read_text()
+        if 'StreamingResponse' not in source:
+            # Cheap pre-filter: a router that never names StreamingResponse
+            # cannot declare a response_class=StreamingResponse route, and
+            # ast.parse over the whole routers/ dir trips the fast-unit CPU
+            # guard (1.07s > 1.00s on CI as routers grow).
+            continue
+        tree = ast.parse(source)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
