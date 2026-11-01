@@ -284,3 +284,61 @@ async def test_recovery_cohort_pct_0_parks_worker_and_recovery_before_any_work(h
     assert await cap_hold_recovery._recover_row(UID, held_sync.snapshot, {'state': 'held'}) is False
     assert await worker.run(UID) is None
     assert held_sync.events == [] and held_sync.lanes == []
+
+
+def _skipped(outcome):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value('omi_held_content_recovery_skipped_total', {'outcome': outcome}) or 0.0
+
+
+@pytest.mark.parametrize(
+    'origin,env,skip',
+    [
+        ('sync', {}, None),
+        (None, {}, None),
+        ('unknown', {}, 'unknown_origin'),
+        ('batch', {}, 'out_of_scope'),
+        ('sync', {'STT_CAP_OFFLINE_ENFORCEMENT': 'false'}, 'out_of_scope'),
+        ('live', {'STT_CAP_RECOVERY_COHORT': 'pct:0'}, 'out_of_scope'),
+    ],
+)
+async def test_worker_counts_every_scope_skip_by_bounded_outcome(prod_scope, monkeypatch, origin, env, skip):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    _hold_ref(monkeypatch, origin)
+    before = {outcome: _skipped(outcome) for outcome in ('out_of_scope', 'unknown_origin', 'unknown')}
+    assert await worker._selected(UID, {'kind': 'audio', 'id': 'held'}) is (skip is None)
+    after = {outcome: _skipped(outcome) for outcome in before}
+    assert {k: after[k] - before[k] for k in before} == {k: float(k == skip) for k in before}
+
+
+async def test_worker_counts_text_scope_skips_separately(prod_scope, monkeypatch):
+    monkeypatch.setattr(funded_processing, 'enabled', lambda uid, lane=None: lane != 'batch')
+    before = _skipped('text_out_of_scope')
+    assert await worker._selected(UID, {'kind': 'text', 'id': 'conversation'}) is False
+    assert _skipped('text_out_of_scope') == before + 1
+
+
+async def test_selected_and_missing_holds_count_no_skip(prod_scope, monkeypatch):
+    ref = Mock()
+    ref.document.return_value.get.return_value = SimpleNamespace(exists=False, to_dict=lambda: None)
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: ref)
+    before = _skipped('out_of_scope') + _skipped('unknown_origin')
+    assert await worker._selected(UID, {'kind': 'audio', 'id': 'gone'}) is True
+    assert _skipped('out_of_scope') + _skipped('unknown_origin') == before
+
+
+def test_skip_counter_is_armed_at_import_with_a_closed_vocabulary():
+    from prometheus_client import REGISTRY
+
+    from utils.observability import held_content
+
+    def sample(outcome):
+        return REGISTRY.get_sample_value('omi_held_content_recovery_skipped_total', {'outcome': outcome})
+
+    for outcome in ('out_of_scope', 'unknown_origin', 'text_out_of_scope', 'unknown'):
+        assert sample(outcome) is not None
+    before = sample('unknown')
+    held_content.record_recovery_skipped('owner-123')  # free text folds into unknown
+    assert sample('owner-123') is None and sample('unknown') == before + 1

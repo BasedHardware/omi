@@ -24,6 +24,7 @@ from utils import funded_processing
 from utils.sync import cap_hold, cap_hold_reservations, cap_recovery_plan, cap_work_budget
 from utils.sync.cap_hold_erasure import erase as _erase
 from utils.observability.held_content import record_recovery, record_pacing
+from utils.observability.reasons import HeldRecoverySkipOutcome
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from utils.sync.held_coverage import piece_state, covered_receipt
@@ -419,19 +420,31 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
         _erase(uid, snapshot, row)
 
 
-async def _selected_lane(uid: str, row: dict) -> str | None:
-    """The hold's original dispatch lane when this owner and lane are in recovery scope, else None.
+async def _scope(uid: str, row: dict) -> tuple[str | None, HeldRecoverySkipOutcome | None]:
+    """(original dispatch lane, None) when in recovery scope, else (None, why it is not).
 
     Recovery scope = execution admission plus main's optional recovery cohort (#22991)."""
     if not any_recovery_admission_enabled(uid):
-        return None
+        return None, HeldRecoverySkipOutcome.OUT_OF_SCOPE
     meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
     lane = hold_lane(meta)
-    return lane if lane is not None and enabled(uid, lane) else None
+    if lane is None:
+        return None, HeldRecoverySkipOutcome.UNKNOWN_ORIGIN
+    return (lane, None) if enabled(uid, lane) else (None, HeldRecoverySkipOutcome.OUT_OF_SCOPE)
+
+
+async def _selected_lane(uid: str, row: dict) -> str | None:
+    """The hold's original dispatch lane when this owner and lane are in recovery scope, else None."""
+    return (await _scope(uid, row))[0]
+
+
+async def recovery_skip(uid: str, row: dict) -> HeldRecoverySkipOutcome | None:
+    """Why this hold is out of recovery scope, or None when it is selected."""
+    return (await _scope(uid, row))[1]
 
 
 async def selected_for_recovery(uid: str, row: dict) -> bool:
-    return await _selected_lane(uid, row) is not None
+    return await recovery_skip(uid, row) is None
 
 
 async def recover_selected(uid: str, snapshot: Any) -> bool:

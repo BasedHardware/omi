@@ -153,6 +153,15 @@ class TransitionTailOutcome(StrEnum):
     SEALED = 'sealed'
 
 
+class HeldRecoverySkipOutcome(StrEnum):
+    """Why a processing choice skipped a backlog item without any recovery attempt."""
+
+    UNKNOWN = 'unknown'
+    OUT_OF_SCOPE = 'out_of_scope'
+    UNKNOWN_ORIGIN = 'unknown_origin'
+    TEXT_OUT_OF_SCOPE = 'text_out_of_scope'
+
+
 class StagingRetryOutcome(StrEnum):
     """Disposition of a held-audio staging attempt, including volatile custody."""
 

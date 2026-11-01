@@ -21,6 +21,8 @@ from utils.executors import db_executor, postprocess_executor, storage_executor,
 from utils.sync import cap_hold, cap_hold_recovery, cap_hold_reservations, cap_work_budget
 from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import hold_lane, recovery_admission_enabled, recovery_cohort_admits
+from utils.observability.held_content import record_recovery_skipped
+from utils.observability.reasons import HeldRecoverySkipOutcome
 
 logger = logging.getLogger(__name__)
 PAGE = 10
@@ -135,14 +137,19 @@ def _process_text(uid, identity) -> AttemptOutcome:
 
 
 async def _selected(uid, item) -> bool | None:
+    """Skips are counted here: they never reach a recovery attempt, so recovery_total cannot see them."""
     if item['kind'] == 'text':
-        return funded_processing.enabled(uid, 'batch')
-    try:
-        snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
-        return not snap.exists or await cap_hold_recovery.selected_for_recovery(uid, snap.to_dict() or {})
-    except Exception as error:
-        logger.warning('event=processing_backlog outcome=scope_deferred exception_type=%s', type(error).__name__)
-        return None
+        skip = None if funded_processing.enabled(uid, 'batch') else HeldRecoverySkipOutcome.TEXT_OUT_OF_SCOPE
+    else:
+        try:
+            snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
+            skip = await cap_hold_recovery.recovery_skip(uid, snap.to_dict() or {}) if snap.exists else None
+        except Exception as error:
+            logger.warning('event=processing_backlog outcome=scope_deferred exception_type=%s', type(error).__name__)
+            return None
+    if skip is not None:
+        record_recovery_skipped(skip)
+    return skip is None
 
 
 async def _release_excluded(uid, token, lease, period, item):
