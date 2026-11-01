@@ -371,6 +371,25 @@ void main() {
       expect(await engine.feedPcm16(Uint8List(4)), false);
     });
 
+    test('queued preview PCM keeps capture time rather than decode delivery time', () async {
+      var clock = DateTime.utc(2026, 10, 27);
+      final capturedAt = clock;
+      final native = FakeLivePreviewEngine();
+      final preview = LivePreviewController(
+          engine: native,
+          now: () => clock,
+          telemetry: LivePreviewTelemetry(emit: (_) {}),
+          platform: LivePreviewPlatform.ios,
+          osMajor: 26);
+      addTearDown(preview.dispose);
+      preview.admit(language: 'en');
+      await pumpEventQueue();
+      preview.onPhonePcm(List.filled(3200, 0));
+      clock = clock.add(const Duration(seconds: 10));
+      await pumpEventQueue();
+      expect(native.fedStartedAt.single, capturedAt.subtract(const Duration(milliseconds: 100)));
+    });
+
     test('start/feed/stop round-trip the native contract', () async {
       final calls = <MethodCall>[];
       messenger.setMockMethodCallHandler(channel, (call) async {
@@ -385,7 +404,10 @@ void main() {
       final start = await engine.start('en');
       expect(start.engine, LivePreviewEngineKind.speechTranscriber);
       expect(start.bundledInstalled, true);
-      expect(await engine.feedPcm16(Uint8List.fromList([1, 2])), true);
+      final capturedAt = DateTime.utc(2026, 10, 27);
+      expect(await engine.feedPcm16(Uint8List.fromList([1, 2]), startedAt: capturedAt), true);
+      expect((calls.last.arguments as Map)['startMs'], capturedAt.millisecondsSinceEpoch);
+      expect((calls.last.arguments as Map)['pcm'], Uint8List.fromList([1, 2]));
       await engine.stop();
       expect(calls.map((call) => call.method), ['start', 'feed', 'stop']);
       expect(calls.first.arguments, {'language': 'en'});

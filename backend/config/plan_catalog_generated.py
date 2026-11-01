@@ -29,8 +29,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = '24a9b9a4f77df6605c1e53ff78694621919ccdba13d4523754f1332aebbc5a0c'
-CATALOG_REVISION: Final = 11
+CATALOG_SHA256: Final = 'ffc47f59113f510e04b187c499122ceeaf626e810d72f433484b7281ca00c579'
+CATALOG_REVISION: Final = 12
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -212,7 +212,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                'display_name': 'Architect',
                'wire_aliases': ['pro'],
                'wire_fallback_plan': None,
-               'lifecycle': 'current',
+               'lifecycle': 'deprecated',
                'is_paid': True,
                'storefronts': ['macos', 'web', 'windows'],
                'desktop_profile': 'desktop_architect',
@@ -245,7 +245,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
               'display_name': 'Pro',
               'wire_aliases': [],
               'wire_fallback_plan': None,
-              'lifecycle': 'current',
+              'lifecycle': 'deprecated',
               'is_paid': True,
               'storefronts': ['macos', 'web', 'windows'],
               'desktop_profile': 'desktop_full',
@@ -272,7 +272,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
           'display_name': 'Plus',
           'wire_aliases': [],
           'wire_fallback_plan': 'unlimited',
-          'lifecycle': 'current',
+          'lifecycle': 'deprecated',
           'is_paid': True,
           'storefronts': ['android', 'ios', 'web'],
           'desktop_profile': 'desktop_free',
@@ -304,7 +304,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                   'lifecycle': 'current',
                   'is_paid': True,
                   'storefronts': ['android', 'ios', 'web'],
-                  'desktop_profile': 'desktop_free',
+                  'desktop_profile': 'desktop_full',
                   'conditional_desktop_profiles': [],
                   'fair_use_profile': 'unlimited_transcription',
                   'phone_calls_profile': 'paid',
@@ -336,7 +336,7 @@ PLAN_TYPE_VALUES: Final[frozenset[str]] = frozenset(['basic', 'unlimited', 'arch
 PAID_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.unlimited_v2})
 PAID_PLAN_IDS: Final[frozenset[str]] = frozenset(plan.value for plan in PAID_PLAN_TYPES)
 MOBILE_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.plus, PlanType.unlimited_v2})
-DESKTOP_ENTITLED_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.architect, PlanType.operator})
+DESKTOP_ENTITLED_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.architect, PlanType.operator, PlanType.unlimited_v2})
 UNLIMITED_TRANSCRIPTION_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.unlimited_v2})
 WIRE_FALLBACK_PLAN_TYPES: Final[dict[PlanType, PlanType]] = {
     PlanType.plus: PlanType.unlimited,

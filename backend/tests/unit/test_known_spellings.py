@@ -417,7 +417,7 @@ def test_reused_people_are_capped_and_do_not_leak_between_runs(monkeypatch):
         assert hints._people_spellings('synthetic-owner') == []
 
     fresh_run()
-    read.assert_called_once_with('synthetic-client', 'synthetic-owner', limit=200)
+    read.assert_called_once_with('synthetic-client', 'synthetic-owner', limit=200, memoize=True)
 
 
 def test_trusted_people_spellings_is_public():

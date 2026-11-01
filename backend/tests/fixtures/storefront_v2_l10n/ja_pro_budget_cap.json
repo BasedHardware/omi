@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "catalog_revision": 11,
+  "catalog_revision": 12,
   "show_subscription_ui": true,
   "header": "今月の使用量をすべて使用しました",
   "current": {
@@ -10,8 +10,11 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": false,
-    "line": "現在 Pro を利用中 · $49.99/月 · 11月1日 に更新",
-    "legacy_note": null
+    "line": "現在 Pro を利用中 · US$49.99/月 · 11月1日 に更新",
+    "legacy_note": null,
+    "amount_minor": 4999,
+    "currency": "usd",
+    "line_template": "現在 Pro を利用中 · {price}/月 · 11月1日 に更新"
   },
   "usage": {
     "kind": "usage_budget",
@@ -48,7 +51,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/月",
+          "headline": "US$199/月",
           "subline": null,
           "renewal_line": "解約するまで毎月自動更新されます。設定でいつでも解約できます。"
         },
@@ -57,8 +60,8 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/月",
-          "subline": "年額 $1,990 · 2か月無料",
+          "headline": "US$165.83/月",
+          "subline": "年額 US$1,990 · 2か月無料",
           "renewal_line": "解約するまで毎年自動更新されます。設定でいつでも解約できます。",
           "months_free": 2
         }
@@ -86,7 +89,7 @@
           "interval": "month",
           "amount_minor": 1999,
           "currency": "usd",
-          "headline": "$19.99/月",
+          "headline": "US$19.99/月",
           "subline": null,
           "renewal_line": "解約するまで毎月自動更新されます。設定でいつでも解約できます。"
         },
@@ -95,8 +98,8 @@
           "interval": "year",
           "amount_minor": 19990,
           "currency": "usd",
-          "headline": "$16.66/月",
-          "subline": "年額 $199.90 · 2か月無料",
+          "headline": "US$16.66/月",
+          "subline": "年額 US$199.90 · 2か月無料",
           "renewal_line": "解約するまで毎年自動更新されます。設定でいつでも解約できます。",
           "months_free": 2
         }
@@ -120,16 +123,23 @@
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
-          "headline": "$49.99/月",
-          "subline": "年額 $499.90 · 2か月無料",
+          "headline": "US$49.99/月",
+          "subline": "年額 US$499.90 · 2か月無料",
           "renewal_line": "解約するまで毎年自動更新されます。設定でいつでも解約できます。",
           "months_free": 2,
           "confirm_lines": [
             "月額プランは 11月1日 まで継続します",
-            "年額プランが開始すると、お支払い方法に $499.90 が請求されます",
+            "年額プランが開始すると、お支払い方法に US$499.90 が請求されます",
             "年額プランは 11月1日 に開始します"
           ],
-          "cta_label": "年払いに切り替える · $99.98 お得"
+          "cta_label": "年払いに切り替える · US$99.98 お得",
+          "cta_label_template": "年払いに切り替える · {saving} お得",
+          "saving_minor": 9998,
+          "confirm_line_templates": [
+            "月額プランは 11月1日 まで継続します",
+            "年額プランが開始すると、お支払い方法に {price} が請求されます",
+            "年額プランは 11月1日 に開始します"
+          ]
         }
       ]
     }

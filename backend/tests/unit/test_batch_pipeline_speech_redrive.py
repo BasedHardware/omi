@@ -14,7 +14,7 @@ from tests.unit.test_batch_pipeline_empty_disposition import wav, work, enable, 
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.quarantine_recovery import transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure
 from utils.batch_pipeline.speech_redrive import redrive_one
 

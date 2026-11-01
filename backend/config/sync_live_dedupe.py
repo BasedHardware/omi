@@ -11,7 +11,21 @@ window lexically covers it; lexical or exact-range text alone never
 suppresses — an unproven identical utterance is legitimate repetition. The
 exact-retry pass then drops identical normalized text plus identical absolute
 range or segment id only for a capture-proven segment or one sharing the
-stored line's nonempty ``sync:`` scope; anything ambiguous is kept.
+stored line's nonempty ``sync:`` scope; anything ambiguous is kept. On admitted
+live targets this contract composes with fleet safety-WAL fuzzy dedupe: the
+lineage lexical and exact-retry passes run first, then the unchanged fleet
+matcher runs on their survivors. Final survivors determine append and repeat
+timing. This contract retains precedence over capture-refactor serving
+proposals, which may not drop a lexical abstention.
+Non-cohort users retain their existing fleet/refactor policy.
+
+Stored sync donors consolidated into a live target use the same gate at the
+transactional content-transfer boundary, including smart absorb. Committed
+frame coverage also requires lexical safety checks; without it, the bounded lexical
+matcher supplies independent repeat proof, followed by the same exact-retry
+pass. Original donor receipts and the frozen pre-merge live snapshot stay
+separate. Retained timing overlap is observation only. See
+``utils/sync/ARCHITECTURE.md`` for bridge fields and widening gates.
 
 The same switch gates safe strict-overlap deferral in
 ``utils/sync/recording_lineage.py`` (``ambiguous_pending`` instead of guessing
@@ -22,8 +36,8 @@ and the ``event=sync_lineage_stamp_append`` telemetry line).
 ``SYNC_LINEAGE_LIVE_DEDUPE_ENABLED`` unset or blank means on. Only an explicit
 on-token keeps it on when set; every other value — including a mistyped kill
 switch — means off, and off restores the exact previous intake path: identical
-persistence, results and enrichment decisions, main-format lineage logging, no
-probe reads, and no dedupe stats or markers.
+persistence, results and enrichment decisions, main-format lineage logging and
+no probe reads. Append timing on the fleet path remains independently observable.
 
 The switch alone does not widen the change: activation additionally requires
 ``sync_lineage_resolve_active_for(uid)``, so it reaches only users admitted to

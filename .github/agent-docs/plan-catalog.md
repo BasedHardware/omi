@@ -26,13 +26,19 @@ See `backend/docs/storefront-contract.md` for schema, price admission and usage.
 
 ## Storefronts (installed-client APIs)
 
+**Omi Pro (`unlimited_v2`) is the only plan sold, on every platform** (Nik ruling 2026-10-26,
+extending the 2026-10-24 new-buyer rule). Plus, Pro/Operator, Architect and Neo are retired:
+a caller sees Omi Pro plus their own current plan, if it is a retired one, so they can manage,
+cancel, or move to Omi Pro. Omi Pro grants full desktop. `NEW_BUYER_SINGLE_PLAN_ENABLED=false`
+restores the per-platform catalog below.
+
+Per-platform catalog (kill switch off only):
+
 | Surface | Sells | Does not sell |
 |---|---|---|
 | Mobile (`ios` / `android`) | Plus + Unlimited (`unlimited_v2`) | Operator, Architect, Neo |
 | Desktop (`macos` / `windows`) | Operator + Architect | Plus, Unlimited, Neo |
 | Web | Plus + Unlimited + Operator + Architect | Neo |
-| New buyer, explicit mobile or web (`ios` / `android` / `web`) | Omi Pro (`unlimited_v2`) only | Everything else |
-| New buyer, missing or unknown platform | Pre-ruling catalog (unrestricted) | — |
 
 Neo (`PlanType.unlimited`) is the deprecated pre-Plus Unlimited. It is
 never a new-user SKU on any real client platform.
@@ -51,6 +57,8 @@ never a new-user SKU on any real client platform.
    subscriber opening iOS/Android sees **only** their current plan
    (Active, cancel, portal). They cannot Continue onto Plus / Unlimited /
    Neo. Immediate Stripe proration would strip desktop entitlement.
+   Exception (2026-10-26): Omi Pro (`unlimited_v2`) also grants desktop, so
+   the mobile sheet allows the switch onto it.
    Operator ↔ Architect stays allowed on desktop and web.
    The upgrade API (`desktop_to_consumer_plan_change_error`) is the
    same boundary: confirmation in the app is not an exception.
@@ -62,47 +70,40 @@ never a new-user SKU on any real client platform.
    `!isOnAnnualPlan` hide — that blocked Plus→Unlimited for annual
    subscribers.
 
-## New-buyer single-plan rule (2026-10-24 ruling)
+## Omi Pro only (2026-10-26 ruling)
 
 While `NEW_BUYER_SINGLE_PLAN_ENABLED` is on (default; `false`/`0`/`off`/`no`
-restores the previous catalog), a buyer with **no current paid subscription**
-(`basic`) on an **explicitly known non-desktop platform** — mobile
-(`ios`/`android`) or `web` — is offered **only Omi Pro** (`unlimited_v2`,
-$29.99/mo / $269.91/yr, 7-day trial):
+restores the per-platform catalog), Omi Pro (`unlimited_v2`) is the only plan
+sold, on every platform including desktop and missing/unknown platform headers:
 
-- Catalog: `filter_plans_for_user` returns only the `unlimited_v2` entries for
-  those callers, on `/v1/payments/available-plans` and
-  `/v1/users/me/subscription`. Catalog filtering keys off the same
-  period-valid plan lookup as checkout (`get_user_valid_subscription`): a
-  lapsed Operator/Architect record is a basic buyer and gets the Omi Pro
-  offer, not their expired desktop SKU.
-- v2 storefront: `/v2/payments/plans` serves those callers a single-tier Omi
-  Pro sheet (`build_single_plan_storefront`); the web client ranks
-  `unlimited_v2` on its ladder so that card can check out.
+- Catalog: `filter_plans_for_user` returns Omi Pro plus the caller's own
+  current plan on `/v1/payments/available-plans` and `/v1/users/me/subscription`.
+  It keys off the period-valid plan lookup (`get_user_valid_subscription`): a
+  lapsed retired-plan record is a basic buyer and gets only the Omi Pro offer.
+- v2 storefront: `/v2/payments/plans` serves a basic caller a single-tier Omi Pro
+  sheet (`build_single_plan_storefront`).
 - Checkout: `new_buyer_single_plan_violation` rejects any non-`unlimited_v2`
-  price for those callers with a 400; the caller cannot reach a legacy plan by
-  posting its price ID. Only a current **recurring personal subscription**
-  exempts a caller — an organization grant (`pi_…` PaymentIntent, or no
-  subscription id) is not a personal subscription. Outcomes are counted in
-  `omi_new_buyer_checkout_rejected_total{reason,plan}`: `non_omi_pro_price`
-  for rejections, `unknown_platform_allowed` for legacy prices allowed because
-  the platform header is missing/unknown.
+  price with a 400 unless the caller has a current **recurring personal
+  subscription** on that same plan (an organization grant is not one). Counted
+  in `omi_new_buyer_checkout_rejected_total{reason="non_omi_pro_price",plan}`.
+- Plan changes: `retired_plan_change_error` allows only a move to Omi Pro or an
+  interval change within the current plan.
+- Desktop: Omi Pro's catalog row is `desktop_full`, so it is in
+  `DESKTOP_ENTITLED_PLAN_TYPES`. Operator/Architect subscribers can move to it.
+- Referrals grant 30 days of Omi Pro; the chat-at-cap upgrade button points to
+  Omi Pro.
 
-Desktop platforms (`macos` / `windows` via `X-App-Platform`) are **unchanged**,
-a **missing or unknown platform header keeps the pre-ruling behaviour** (every
-desktop build ever shipped stamps the header on every request — macOS since
-the first desktop commit d51d10136e1c, Windows since its platform-identity
-hardening — but desktop compatibility outranks closing the header-less
-direct-API gap), and **current subscribers keep every plan-management rule**
-above, including the current-plan escape, manage-only fast paths and legacy →
-ladder blocks. Legacy plan prices and entitlements are not changed by this
-rule anywhere.
+Catalog `storefronts` keep their per-platform values: they also drive the
+released-client wire remap (`MOBILE_PLAN_TYPES`), so emptying them would send
+old builds plan values they cannot decode. Retirement is the `lifecycle:
+deprecated` marker plus the rules above.
 
 ## Where the code lives
 
 - Catalog filter: `backend/utils/subscription.py` → `filter_plans_for_user`
 - Single-plan rule + kill switch: `backend/utils/subscription.py` →
   `new_buyer_single_plan_applies` / `new_buyer_single_plan_enabled`
+- Plan-change guard: `backend/utils/subscription.py` → `retired_plan_change_error`
 - Checkout guard: `backend/utils/subscription.py` →
   `new_buyer_single_plan_violation`, routed from
   `backend/routers/payment.py` after every subscriber escape

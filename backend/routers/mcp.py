@@ -56,7 +56,7 @@ from utils.mcp_server.handlers import action_items as mcp_action_item_handlers
 from utils.mcp_server.handlers import conversations as mcp_conversation_handlers
 from utils.mcp_server.handlers import memories as mcp_memory_handlers
 from utils.mcp_server.handlers import other as mcp_other_handlers
-from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card
+from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card, public_transcript_timing
 from utils.mcp_server.registry import TOOL_REQUIRED_SCOPE, spec_for_tool
 import logging
 
@@ -652,7 +652,7 @@ def search_conversations(
     conversations = attach_match_snippets_to_conversations(conversations, query)
     for conv, card in zip(conversations, cards):
         card["apps_results"] = conv.get("apps_results") or []
-        card["match_snippets"] = conv.get("match_snippets") or []
+        card["match_snippets"] = [public_transcript_timing(snippet) for snippet in conv.get("match_snippets") or []]
     valid = []
     for card in cards:
         try:

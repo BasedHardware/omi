@@ -10,10 +10,10 @@ final class TranscriptionServiceScreenEvidenceQueryTests: XCTestCase {
   func testMeetingTimeoutCoversSustainAndResumeWithoutLeavingAnOrphanForFourHours() {
     XCTAssertEqual(
       TranscriptionService.conversationLifetimeQueryItems(role: .meeting),
-      [URLQueryItem(name: "conversation_timeout", value: "600")])
+      [URLQueryItem(name: "conversation_timeout", value: "1320")])
     XCTAssertGreaterThan(
       MeetingDetectionTiming.conversationTimeout,
-      MeetingDetectionTiming.inputOnlySustainPeriod + 8 + MeetingDetectionTiming.resumeWindow)
+      MeetingDetectionTiming.inputOnlySustainPeriod + 8 + MeetingDetectionTiming.meetingCodeResumeWindow)
     XCTAssertLessThan(MeetingDetectionTiming.conversationTimeout, 4 * 60 * 60)
   }
 

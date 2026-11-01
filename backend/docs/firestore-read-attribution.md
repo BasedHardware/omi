@@ -9,8 +9,7 @@ The daily bill-reconcile coverage numerator is the cumulative JSON read ledger
 emitted when `FIRESTORE_READ_LEDGER=1`. The service label is
 `FIRESTORE_READ_LEDGER_SERVICE` when that is set, otherwise Cloud Run
 `K_SERVICE` or `CLOUD_RUN_JOB`, otherwise `DD_SERVICE`. GKE listen and pusher
-use `DD_SERVICE` (`backend-listen` and `pusher`). `memory-maintenance-job`
-uses `CLOUD_RUN_JOB` so runtime env does not add another copy of that job name. The ledger reuses the probe's billed
+use `DD_SERVICE` (`backend-listen` and `pusher`). The ledger reuses the probe's billed
 `amount` and `kind`, scoped to clients in `based-hardware`; unknown client
 projects are counted and mark the day incomplete. It is sampled at p=1, so
 sampling error is zero. `backend` and `backend-listen` must show a snapshot
@@ -144,7 +143,6 @@ entrypoints do that before they read:
 | llm_gateway | `backend/llm_gateway/main.py` | Gateway still records provider accounting through its retained accounting boundary |
 | desktop-backend | `backend/desktop_backend.py` | imports `routers` |
 | pusher | `backend/pusher/main.py` | imports `routers.pusher`, which imports `database.users` |
-| memory-maintenance-job | `backend/modal/memory_maintenance_job.py` | maintenance cron imports `database._client` |
 | day3-reengagement-email-job | `backend/modal/day3_reengagement_email_job.py` | imports `database._client` |
 | frame-request-retention-job | `backend/modal/frame_request_retention_job.py` | retention service imports `database._client` |
 | notifications-job | `backend/modal/job.py` | `utils/other/jobs.py` imports `utils/x_connector.py`, which imports `database._client` |
@@ -203,9 +201,9 @@ from database.firestore_read_origin import read_origin
 with read_origin('job:daily_summary'):
     run_daily_summary()
 
-@read_origin('job:memory_maintenance')
-async def maintain():
-    await run_maintenance()
+@read_origin('job:x_connector_sync')
+async def sync():
+    await run_sync()
 ```
 
 Use source-code constants, never uid/job/session IDs, payload fields or raw URLs.
@@ -321,7 +319,6 @@ and an overlapping context for the same entrypoint.
 | S2's `main.py:_run_fsr_loop` (alternative fine-grained override around its existing body; loop names are S2's fixed registry) | `with read_origin(f'job:{loop_name}'):` |
 | `modal/job.py:main` (notifications + daily summaries) | `@read_origin('job:notifications')` |
 | `modal/x_connector_sync_job.py:main` | `@read_origin('job:x_connector_sync')` |
-| `modal/memory_maintenance_job.py:main` | `@read_origin('job:memory_maintenance')` |
 | `modal/frame_request_retention_job.py:main` | `@read_origin('job:frame_request_retention')` |
 | `modal/day3_reengagement_email_job.py:main` | `@read_origin('job:day3_reengagement_email')` |
 | `modal/conversation_selfheal_job.py:main` | `@read_origin('job:conversation_selfheal')` |

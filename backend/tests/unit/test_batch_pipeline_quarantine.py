@@ -67,7 +67,7 @@ async def test_pump_drains_already_ready_sibling_when_last_lease_quarantines(mon
     leases = {v.item.segment_id: v for v in queue.pull(0, 2)}
     queue.complete(WorkResult('later', 'gs://synthetic/later'), leases['later'].token, 1)
     queue.defer('poison', leases['poison'].token, 1, 1)
-    worker = Mock()
+    worker = Mock(spec=['process_batch'])
     worker.process_batch.return_value = []
     pump = Pump(queue, worker, capacity=lambda: PoolCapacity(time.time(), 8))
     assert await pump.run_once() == 1
@@ -205,7 +205,7 @@ def test_quarantine_counter_and_recovery_hold_emit_once(monkeypatch, caplog):
 
 def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '1')
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '5')
     memory = MemoryStore()
     queue = Scheduler(memory)
     queue.enqueue(replace(item('bad', owner='synthetic-owner'), privacy_generation=0), 0)
@@ -218,8 +218,10 @@ def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(
     monkeypatch.setattr(
         'utils.batch_pipeline.scheduler.logger.error', Mock(side_effect=RuntimeError('synthetic logger failure'))
     )
-    assert queue.fail('bad', lease.token, 1)
-    assert client.rows[('batch_pipeline_dev_jobs', 'bad')]['state'] == 'quarantined'
+    assert queue.fail('bad', lease.token, 1, worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'})
+    quarantined = client.rows[('batch_pipeline_dev_jobs', 'bad')]
+    assert quarantined['state'] == 'quarantined' and quarantined['worker_failure']['reason'] == 'unsupported_language'
+    assert quarantined['audio_uri'] == 'gs://synthetic/bad'
     assert not queue.fail('bad', lease.token, 2)
 
 

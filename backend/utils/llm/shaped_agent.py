@@ -138,6 +138,8 @@ class Turn:
     accounted_tokens: int | None = None
     price_weighted_tokens: int | None = None
     cache_unreported_tokens: int = 0
+    # Adapter-owned budget charge: cached calls may be free. None counts every call.
+    charged_tool_calls: int | None = None
 
 
 @dataclass
@@ -231,9 +233,12 @@ async def run_loop(
                 return LoopResult(None, 'token_budget', index + 1, used, tokens, accounted)
             if index + 1 == budget.turns and not budget.graceful:
                 return LoopResult(value, 'turn_budget', index + 1, used, tokens, accounted)
-            if not mount.tools or execute_tools is None or used + len(turn.tool_calls) > budget.tool_calls:
+            tool_charge = len(turn.tool_calls) if turn.charged_tool_calls is None else turn.charged_tool_calls
+            if type(tool_charge) is not int or not 0 <= tool_charge <= len(turn.tool_calls):
+                raise ValueError('Invalid tool-call charge')
+            if not mount.tools or execute_tools is None or used + tool_charge > budget.tool_calls:
                 return LoopResult(value, 'tool_budget', index + 1, used, tokens, accounted)
-            used += len(turn.tool_calls)
+            used += tool_charge
             messages.extend(turn.messages)
             tool_result = await execute_tools(turn.tool_calls)
             if isinstance(tool_result, LoopStop):

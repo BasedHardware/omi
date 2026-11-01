@@ -5,6 +5,8 @@ Provides shared executors with strict separation (bulkhead pattern):
   small session/code cache reads. Must never starve — gates every request.
 - quiet_replay_executor: bounded quiet-check replay leaves, separate from the DB coordinator.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
+- record_barrier_executor: pusher recording custody transactions, isolated from
+  integrations and webhook DB work even during Firestore retries.
 - context_executor: optional context reads and fresh mount fences, four workers,
   zero queue, isolated from setup's Firestore work even after caller cancellation.
 - llm_executor: persona generation, onboarding LLM, slow model-backed work. Bulkhead
@@ -35,8 +37,10 @@ import atexit
 import contextvars
 import functools
 import logging
+import os
 import queue
 import threading
+from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
 
@@ -45,6 +49,13 @@ from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
 from config.refactor_modes import serving_for
 
 logger = logging.getLogger(__name__)
+_worker_context = threading.local()
+
+
+def in_db_worker() -> bool:
+    """Identify the shared DB pool even for synchronous submissions."""
+    return getattr(_worker_context, 'executor', None) is db_executor
+
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -68,21 +79,19 @@ _TASKS = frozenset(
 )
 
 
-def _gauge(name: str, description: str) -> Gauge:
+def _gauge(name: str, description: str, labelnames: tuple[str, ...] = ('executor', 'task')) -> Gauge:
     try:
-        return Gauge(name, description, ['executor', 'task'])
+        return Gauge(name, description, labelnames)
     except ValueError:
         existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
-        if getattr(existing, '_type', None) != 'gauge' or getattr(existing, '_labelnames', None) != (
-            'executor',
-            'task',
-        ):
+        if getattr(existing, '_type', None) != 'gauge' or getattr(existing, '_labelnames', None) != labelnames:
             raise ValueError(f'executor metric {name} already has a different shape')
         return cast(Gauge, existing)
 
 
 EXECUTOR_ACTIVE = _gauge('omi_executor_task_active', 'Active worker tasks by bounded task kind.')
 EXECUTOR_QUEUED = _gauge('omi_executor_task_queued', 'Queued worker tasks by bounded task kind.')
+EXECUTOR_MAX_WORKERS = _gauge('omi_executor_max_workers', 'Configured worker capacity.', ('executor',))
 
 
 def _task_label(fn, args=()) -> str:
@@ -106,6 +115,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     ):
         super().__init__(**kwargs)
         self.name = name
+        EXECUTOR_MAX_WORKERS.labels(executor=name).set(self._max_workers)
         self._active_count = 0
         self._active_lock = threading.Lock()
         self.max_queue_size = max_queue_size
@@ -119,6 +129,9 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
         self._submission_slots = (
             threading.BoundedSemaphore(max_workers + max_queue_size) if max_queue_size is not None else None
         )
+        self._deferred_condition = threading.Condition(threading.RLock())
+        self._deferred: deque[tuple[Future[Any], Callable[..., Any], tuple, dict]] = deque()
+        self._deferred_shutdown = False
 
     @property
     def active_count(self) -> int:
@@ -167,8 +180,74 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 
         future.add_done_callback(cancelled)
         if slots is not None:
-            future.add_done_callback(lambda _future: slots.release())
+            future.add_done_callback(self._release_slot)
         return future
+
+    def _release_slot(self, _future: Future[Any]) -> None:
+        if self._submission_slots is not None:
+            self._submission_slots.release()
+        with self._deferred_condition:
+            self._drain_deferred()
+
+    def submit_when_available(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
+        """Queue a saturated sync submission, retried by capacity-release callbacks.
+
+        No retry thread or other feature pool is borrowed. At 64 deferred calls,
+        synchronous producers backpressure until an entry is admitted. Call only
+        from synchronous producers outside this executor, never the event loop.
+        Like the executor's ordinary queue this queue is process-local.
+        """
+        future: Future[T] = Future()
+        with self._deferred_condition:
+            while len(self._deferred) >= 64 and not self._deferred_shutdown:
+                self._deferred_condition.wait()
+            if self._deferred_shutdown:
+                raise RuntimeError('cannot schedule new futures after shutdown')
+            self._deferred.append((future, fn, args, kwargs))
+            self._drain_deferred()
+        return future
+
+    def _drain_deferred(self) -> None:
+        # Caller owns the reentrant condition: a very short task can finish before
+        # submit attaches its release callback, which then runs on this thread.
+        while self._deferred and not self._deferred_shutdown:
+            outer, fn, args, kwargs = self._deferred.popleft()
+            if outer.cancelled():
+                self._deferred_condition.notify_all()
+                continue
+            try:
+                inner = self.submit(fn, *args, **kwargs)
+            except ExecutorSaturatedError:
+                self._deferred.appendleft((outer, fn, args, kwargs))
+                return
+            except BaseException as error:
+                outer.set_exception(error)
+                self._deferred_condition.notify_all()
+                continue
+            self._deferred_condition.notify_all()
+
+            def completed(done: Future[Any], target: Future[Any] = outer) -> None:
+                if not target.set_running_or_notify_cancel():
+                    return
+                if done.cancelled():
+                    target.set_exception(RuntimeError('deferred executor work cancelled during shutdown'))
+                elif (error := done.exception()) is not None:
+                    target.set_exception(error)
+                else:
+                    target.set_result(done.result())
+
+            inner.add_done_callback(completed)
+
+    def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+        with self._deferred_condition:
+            if wait and not cancel_futures:
+                while self._deferred:
+                    self._deferred_condition.wait()
+            self._deferred_shutdown = True
+            while self._deferred:
+                self._deferred.popleft()[0].cancel()
+            self._deferred_condition.notify_all()
+        super().shutdown(wait=wait, cancel_futures=cancel_futures)
 
     def _tracked(self, fn: Callable[..., T], task: str, started: threading.Event, *args: Any, **kwargs: Any) -> T:
         started.set()
@@ -177,9 +256,12 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
         active.inc()
         with self._active_lock:
             self._active_count += 1
+        prior_executor = getattr(_worker_context, 'executor', None)
+        _worker_context.executor = self
         try:
             return fn(*args, **kwargs)
         finally:
+            _worker_context.executor = prior_executor
             active.dec()
             with self._active_lock:
                 self._active_count -= 1
@@ -191,7 +273,18 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 critical_executor = MonitoredThreadPoolExecutor(
     name="critical", max_workers=8, max_queue_size=64, thread_name_prefix="critical"
 )
-db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=24, thread_name_prefix="db")
+# Before the record-barrier rollout the measured DB peak was 20/24 workers.
+# Isolate barrier retries and retain 12 workers of headroom over that peak.
+db_executor = MonitoredThreadPoolExecutor(
+    name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
+)
+record_barrier_executor = MonitoredThreadPoolExecutor(
+    name="record_barrier",
+    max_workers=int(os.getenv('PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS', '16')),
+    max_queue_size=64,
+    wait_on_saturation=True,
+    thread_name_prefix="record-barrier",
+)
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
@@ -226,6 +319,7 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    record_barrier_executor,
     llm_executor,
     stripe_executor,
     sync_executor,
@@ -297,22 +391,48 @@ def get_rollout_executor() -> MonitoredThreadPoolExecutor:
         return _rollout_executor
 
 
+_after_db = contextvars.ContextVar[list[Callable[[], Coroutine[Any, Any, Any]]] | None]('after_db', default=None)
+
+
+def after_db_call(callback: Callable[[], Coroutine[Any, Any, Any]]) -> bool:
+    """Await post-commit IO in the async caller after its DB worker is released.
+
+    No task is detached. Cancellation leaves durable work for its retry owner.
+    A synchronous caller without a DB offload scope keeps its ordinary path.
+    """
+    callbacks = _after_db.get()
+    if callbacks is None:
+        return False
+    callbacks.append(callback)
+    return True
+
+
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
     loop = asyncio.get_running_loop()
+    callbacks: list[Callable[[], Coroutine[Any, Any, Any]]] = []
+    token = _after_db.set(callbacks) if executor is db_executor else None
     ctx = contextvars.copy_context()
     call = functools.partial(ctx.run, functools.partial(fn, *args, **kwargs))
-    while True:
-        try:
-            future = loop.run_in_executor(executor, call)
-            break
-        except ExecutorSaturatedError:
-            if not getattr(executor, 'wait_on_saturation', False):
-                raise
-            # Backpressure stays in the async caller, without occupying another
-            # worker or discarding work. Cancellation before admission is safe.
-            await asyncio.sleep(0.05)
-    return await future
+    try:
+        while True:
+            try:
+                future = loop.run_in_executor(executor, call)
+                break
+            except ExecutorSaturatedError:
+                if not getattr(executor, 'wait_on_saturation', False):
+                    raise
+                # Backpressure stays in the async caller, without occupying another worker.
+                await asyncio.sleep(0.05)
+        result = await future
+    finally:
+        if token is not None:
+            _after_db.reset(token)
+    # The worker has returned before any provider wait. Each callback owns its
+    # deadline/error policy; never start it in a cancelled or failed DB call.
+    for callback in callbacks:
+        await callback()
+    return result
 
 
 def _byok_detail_code(error: BaseException) -> str | None:
@@ -374,6 +494,16 @@ def submit_with_context(
     """
     ctx = contextvars.copy_context()
     future = executor.submit(ctx.run, fn, *args, **kwargs)
+    future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
+    return future
+
+
+def submit_with_context_retry(
+    executor: MonitoredThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+) -> Future[T]:
+    """Sync fire-and-forget admission with a bounded retry queue on saturation."""
+    ctx = contextvars.copy_context()
+    future = cast(Future[T], executor.submit_when_available(ctx.run, fn, *args, **kwargs))
     future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
     return future
 

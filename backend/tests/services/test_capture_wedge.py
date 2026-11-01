@@ -3,6 +3,8 @@ import json
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
+from services import capture_wedge
 from services.capture_wedge import (
     _emit,
     _isoformat_z,
@@ -17,6 +19,11 @@ from services.capture_wedge import (
     _default_push,
 )
 from utils.notification_dispatch import NotificationDispatchStatus, NotificationDispatchOutcome
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_users_through_deletion_fence(monkeypatch):
+    monkeypatch.setattr(capture_wedge, "account_deletion_blocks_user_work", lambda _uid: False)
 
 
 def test_emit(capsys):

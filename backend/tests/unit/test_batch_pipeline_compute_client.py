@@ -1,12 +1,13 @@
-"""GPU-safe RPC composition: bounded receipts, OIDC and no user/audio payloads."""
+"""GPU-safe private RPC composition, bounded bodies and OIDC."""
 
 import io
 import json
+from urllib.error import URLError
 from unittest.mock import Mock
 
 import pytest
 
-from utils.batch_pipeline.compute_client import ComputeClient
+from utils.batch_pipeline.compute_client import ComputeClient, failure_outcome, InvalidReceipt
 from utils.batch_pipeline.contracts import LeasedWork
 from tests.unit.test_batch_pipeline_scheduler import item
 
@@ -73,6 +74,46 @@ def test_hold_reason_receipt_round_trips_for_the_durable_decision():
 
 
 @pytest.mark.parametrize(
+    'error,expected',
+    [
+        (TimeoutError(), 'timeout'),
+        (URLError(TimeoutError()), 'timeout'),
+        (ConnectionError(), 'transport'),
+    ],
+)
+def test_client_faults_have_bounded_distinct_outcomes(error, expected):
+
+    assert failure_outcome(error) == expected
+    assert failure_outcome(InvalidReceipt()) == 'invalid_receipt'
+
+
+def test_malformed_json_is_invalid_receipt_and_never_permission():
+
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'aud',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(b'invalid-json'),
+    )
+    with pytest.raises(InvalidReceipt):
+        client([lease()])
+
+
+def test_deeply_nested_json_is_an_invalid_receipt_not_a_transport_failure():
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'aud',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(b'[' * 2000 + b']' * 2000),
+    )
+    with pytest.raises(InvalidReceipt) as error:
+        client([lease()])
+    assert failure_outcome(error.value) == 'invalid_receipt'
+
+
+@pytest.mark.parametrize(
     'url,audience,stage',
     [
         ('', 'aud', 'dev'),
@@ -86,3 +127,34 @@ def test_hold_reason_receipt_round_trips_for_the_durable_decision():
 def test_missing_or_unsafe_configuration_refuses_before_any_network(url, audience, stage):
     with pytest.raises(ValueError):
         ComputeClient(url, audience, stage)
+
+
+def test_shadow_projection_sends_ephemeral_payload_once_with_oidc():
+    sent = []
+
+    def send(request, timeout):
+        sent.append((request, timeout))
+        return io.BytesIO(b'{"status":"planned","reads":4,"planned_writes":2}')
+
+    client = ComputeClient('https://synthetic.invalid', 'audience', 'dev', token=lambda: 'synthetic', send=send)
+    result = client.shadow_project('synthetic-shadow', {'words': [{'word': 'synthetic'}]})
+    assert result['status'] == 'planned' and len(sent) == 1
+    request, timeout = sent[0]
+    assert request.full_url.endswith('/shadow-project') and timeout == 5
+    assert request.get_header('Authorization') == 'Bearer synthetic'
+    assert json.loads(request.data)['segment_id'] == 'synthetic-shadow'
+
+
+@pytest.mark.parametrize(
+    'raw', [b'x' * 4097, b'{"status":"published"}', b'[]'], ids=['oversized', 'unsafe-status', 'array']
+)
+def test_shadow_projection_refuses_unbounded_or_invalid_receipts(raw):
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'audience',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(raw),
+    )
+    with pytest.raises(ValueError):
+        client.shadow_project('synthetic-shadow', {'words': []})

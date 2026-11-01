@@ -157,7 +157,14 @@ def test_extraction_memory_id_is_deterministic_and_partitions_non_user_subjects(
     assert extraction_memory_id(**identity, subject_entity_id=USER_ENTITY_ID) == extraction_memory_id(**identity)
 
 
-def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_account):
+def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_account, monkeypatch):
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    def defer_normalization(*args, **kwargs):
+        # Provenance is independent of the external normalization service.
+        raise PromotionFlexDeferred('synthetic model unavailable')
+
+    monkeypatch.setattr('utils.memory.required_intake.normalize', defer_normalization)
     uid = "uid-manual-device-wire"
     device_id = "macos_a1b2c3d4"
     memory_db = MemoryDB.from_memory(

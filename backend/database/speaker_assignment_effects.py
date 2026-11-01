@@ -13,6 +13,7 @@ from typing import Any, Mapping, Optional, Sequence
 from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database import speaker_learning_jobs as learning_jobs
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
@@ -157,4 +158,5 @@ def persist_assignment_effects(
         transaction.update(user_ref, owner_update)
     for pid, update in updates.items():
         transaction.update(people[pid][0], update)
+        bump_people_generation(transaction, people[pid][0])
     return removed, relabeled

@@ -8,6 +8,7 @@ import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -87,9 +88,11 @@ class _SnapshotHost extends SiriIndexApi {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
+    Env.overrideApiBaseUrl('http://127.0.0.1:1/');
     SharedPreferences.setMockInitialValues({'uid': 'siri-fetch-owner'});
     await SharedPreferencesUtil.init();
   });
+  tearDown(Env.clearApiBaseUrlOverrideForTesting);
 
   _SnapshotHost hostForTest() {
     final host = _SnapshotHost();

@@ -82,13 +82,24 @@ _DEMAND_LISTEN_ONLY = frozenset(
 # Only listen WebSocket reconnects run the stale-page scanner. Pusher consumes
 # admitted jobs; this kill switch must not disable their finalization/retries.
 _RECONNECT_RECOVERY_LISTEN_ONLY = frozenset({'STALE_IN_PROGRESS_RECOVERY_ENABLED'})
+# main.py owns the singleton replay pass. Pusher consumes finalizations but
+# never schedules that pass; copying this binding there would imply ownership
+# it does not have. Live admission's dispatch mode remains unchanged.
+_FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
+    {
+        'LISTEN_FINALIZATION_REPLAY_ENABLED',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+        'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS',
+    }
+)
 # main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_UID_ALLOWLIST',
-        'BATCH_PIPELINE_PERCENT',
         'BATCH_PIPELINE_SERVING_ENABLED',
         'BATCH_PIPELINE_API_URL',
         'BATCH_PIPELINE_WORKER_ENABLED',
@@ -178,7 +189,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
-            "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
             "OMI_PARITY_PACK_ALLOWED_PRINCIPALS",
@@ -221,6 +231,10 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "MOBILE_STANDARD_BATCH_ENABLED",
             "MOBILE_STANDARD_BATCH_PERCENT",
             "MOBILE_STANDARD_BATCH_UIDS",
+            # Only listen reads the mobile server-batch-only cohort: server_batch.selected via
+            # request_eligible and via eligible <- create_in_progress_conversation, both called only
+            # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
+            "SERVER_BATCH_ONLY_MOBILE_PERCENT",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -232,9 +246,16 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_MAX_SESSIONS",
             "PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS",
             "PARAKEET_WINDOW_MAX_EMPTY_STREAK",
+            # Listen-only live-window kill switch (routerbench 2026-10-30).
+            "PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED",
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            # Listen-only Soniox idle-close treatment cohort; pusher opens no Soniox stream.
+            "SONIOX_IDLE_COHORT_PERCENT",
+            "SONIOX_IDLE_COHORT_CLOSE_SECONDS",
+            "SONIOX_IDLE_COHORT_REARM_SECONDS",
+            "SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
@@ -291,7 +312,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
-            "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "MEMORY_V3_CURSOR_SECRET",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
@@ -323,7 +343,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
-    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
+    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
+    | _FINALIZATION_REPLAY_LISTEN_ONLY,
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the

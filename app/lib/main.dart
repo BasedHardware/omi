@@ -20,6 +20,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
@@ -110,6 +111,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
+import 'package:omi/utils/analytics/session_replay.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -325,6 +327,10 @@ Future _init() async {
   );
   OnboardingSyncRuntime.initialize();
   SiriIntegration.instance.installEvents();
+  // The sync health watchdog's periodic loop: app bootstrap owns the timer
+  // (DeviceProvider only wires its evaluation callback, so tests that
+  // construct the provider directly never see a pending timer).
+  SyncHealthWatchdog.instance.startWatchdog();
 
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.
@@ -779,9 +785,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 child: KeyedSubtree(key: ValueKey(brightness), child: child!),
               );
               final guidedContent = BluetoothGuidanceListener(child: content);
-              return PlatformService.isIOS && Env.posthogApiKey != null
-                  ? RageClickContextTracker(child: guidedContent)
-                  : guidedContent;
+              return SessionReplayScope(
+                child: PlatformService.isIOS && Env.posthogApiKey != null
+                    ? RageClickContextTracker(child: guidedContent)
+                    : guidedContent,
+              );
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,

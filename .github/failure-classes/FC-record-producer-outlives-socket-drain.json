@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-record-producer-outlives-socket-drain",
+  "violated_contract": "A durable recording producer token must retain a live completion owner after its socket closes. Cancelling the sole drain at the socket cleanup deadline strands a token on a live process; unrelated later recordings must not gate an earlier conversation's drain proof.",
+  "canonical_prevention": "Transfer the existing durable drain to a bounded, shutdown-tracked process owner after the socket budget expires. Finish only after that conversation's queued and pending work drains, retry transient finish metadata failures, and preserve the token on failed or cancelled work. Drive the real socket loop and persisted barrier through timeout, late completion, later-recording pressure, failure, capacity and process-shutdown cases.",
+  "canonical_prevention_artifact": [
+    "backend/utils/pusher_record_finish.py",
+    "backend/tests/unit/test_audio_durable_outbox.py",
+    "backend/tests/unit/test_record_audio_seal.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/pusher.py",
+    "backend/utils/pusher_record_barrier.py",
+    "backend/utils/pusher_record_finish.py"
+  ],
+  "status": "open"
+}

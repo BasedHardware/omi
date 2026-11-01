@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
+from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
 from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
@@ -179,11 +180,25 @@ def register_batch_artifact(
         )
         redrive = job.get('speech_redrive') or {}
         redrive_write = (
-            policy.speech_empty_multilingual
+            (
+                (policy.speech_empty_multilingual and redrive.get('paid_epoch') == 2)
+                or (
+                    policy.recovery_enabled
+                    and redrive.get('paid_epoch') == REPAIR_EPOCH
+                    and redrive.get('provider') == REPAIR_PROVIDER
+                    and words_repair_eligible(job)
+                )
+                or (
+                    policy.recovery_enabled
+                    and language_guarded(job)
+                    and recovery.get('provider') == 'modulate'
+                    and redrive.get('paid_epoch') == 3
+                    and redrive.get('provider') == 'soniox'
+                )
+            )
             and job.get('state') == 'quarantined'
             and job.get('recovery_state') in {'held', 'failed_held'}
             and redrive.get('state') == 'running'
-            and redrive.get('paid_epoch') == 2
             and redrive.get('privacy_generation') == expected_generation
             and bool(redrive.get('token'))
             and uri.endswith(f"/{redrive['token']}.enc")

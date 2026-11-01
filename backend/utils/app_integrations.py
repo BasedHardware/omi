@@ -66,6 +66,7 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.episodes.live import on_realtime_segments
@@ -234,6 +235,8 @@ async def trigger_external_integrations(
     instead of failing the conversation's fanout one final time.
     """
     if not conversation or conversation.discarded:
+        return []
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         return []
     if conversation.is_locked:
         return []
@@ -415,6 +418,8 @@ async def trigger_realtime_integrations(
 ):
     logger.debug(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        return {}
     return await _async_trigger_realtime_integrations(
         uid,
         segments,
@@ -427,25 +432,37 @@ async def trigger_realtime_integrations(
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     logger.debug(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        return {}
     return await _async_trigger_realtime_audio_bytes(uid, sample_rate, data)
 
 
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
+    # The developer webhook supplies this context: a null or wrong-typed value must not crash the
+    # reader (the dispatch boundary swallows the exception and drops the notification).
+    user_context = user_context if isinstance(user_context, Mapping) else {}
+    question = user_context.get('question')
     with generated_compute_scope(uid):
-        vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
+        vector = generate_embedding(question) if isinstance(question, str) and question else [0] * 3072
     logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters = {}  # not support yet
-    filters = user_context.get('filters', {})
+    filters = user_context.get('filters')
+    filters = filters if isinstance(filters, Mapping) else {}
+
+    def filter_list(key: str) -> list:
+        value = filters.get(key)
+        return value if isinstance(value, list) else []
+
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=filters.get("people", []),
-        topics=filters.get("topics", []),
-        entities=filters.get("entities", []),
-        dates=filters.get("dates", []),
+        people=filter_list('people'),
+        topics=filter_list('topics'),
+        entities=filter_list('entities'),
+        dates=filter_list('dates'),
     )
     convos = conversations_db.get_conversations_by_id(uid, memories_id)
     return [c for c in convos if not c.get('is_locked')]
@@ -523,7 +540,7 @@ def _process_proactive_notification(uid: str, app: App, data):
     ERROR level, which is the exact signature this guard used to emit for
     every no-notification webhook response in production.
     """
-    if not generated_compute_allowed(uid, 'app_integration'):
+    if account_deletion_blocks_user_work(uid) or not generated_compute_allowed(uid, 'app_integration'):
         return None
     if not app.has_capability("proactive_notification"):
         logger.error(f"App {app.id} lacks proactive_notification capability {uid}")
@@ -561,10 +578,11 @@ def _process_proactive_notification(uid: str, app: App, data):
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    # `data.get(k, default)` returns the stored value even when it's an
-    # explicit JSON null — a default only fires on a MISSING key. `or` coerces
-    # {"prompt": null} to the default so len()/iteration/.get can't TypeError.
-    prompt = data.get('prompt') or ''
+    prompt = data.get('prompt')
+    if not isinstance(prompt, str):
+        # An explicit null (or any non-string) prompt is a present-but-invalid payload: treat it as
+        # absent so the len()/replace() below cannot raise into the dispatch boundary's `except: pass`.
+        prompt = ''
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -575,9 +593,9 @@ def _process_proactive_notification(uid: str, app: App, data):
         logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
-    # params/context can also be explicit JSON nulls — coerce to the default so
-    # iteration/lookup can't TypeError/AttributeError on None.
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params') or [])
+    params = data.get('params')
+    params = [param for param in params if isinstance(param, str)] if isinstance(params, list) else []
+    filter_scopes = app.filter_proactive_notification_scopes(params)
 
     user_name, user_facts = get_prompt_memories(uid)
 

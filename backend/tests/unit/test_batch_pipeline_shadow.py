@@ -11,31 +11,44 @@ from config import batch_pipeline_shadow as config
 from config.policy import resolve_batch_policy
 from database import batch_pipeline_store as storage
 from database.batch_pipeline_shadow import ShadowStore, identity
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.batch_pipeline.artifacts import ArtifactStore
-from utils.batch_pipeline.contracts import WorkItem, RecoveryWork
+from utils.batch_pipeline.contracts import WorkItem, RecoveryWork, ValidationFailureWork, vad_receipt
 from utils.batch_pipeline.projection import Projector, ProjectionBlocked
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.shadow_recovery import recover
 from utils.batch_pipeline.recovery_disposition import MultilingualEmpty
+from utils.batch_pipeline import shadow_recovery, projection as projection_module
+from utils.sync import assignment
+from utils.batch_pipeline.recovery_recognizers import words_payload
 
 
 @pytest.fixture
 def repository(monkeypatch):
-    # Production answers None (Deepgram retired 2026-08-27); the second-provider
-    # machinery these shadows exercise stays covered under a named provider.
-    from utils.batch_pipeline import quarantine_recovery as _qr
+    # Prepare the deferred serving module during fixture setup, as before;
+    # provider import cost is separate from the per-operation CPU guard.
+    from utils.batch_pipeline import quarantine_recovery as recovery
 
-    monkeypatch.setattr(_qr, 'SECOND_PROVIDER', 'deepgram')
+    assert recovery.SECOND_PROVIDER == 'soniox'
     monkeypatch.setenv('BATCH_PIPELINE_SHADOW_PERCENT', '100')
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false')
     monkeypatch.setattr(storage, 'assert_batch_write_allowed', lambda *args, **kwargs: 0)
+    original_get = StrictFirestoreDocument.get
+
+    def bounded_get(reference, *args, retry=None, **kwargs):
+        # The real planner explicitly disables SDK retries. Retain the strict
+        # fixture's read ordering and mask checks while accepting that option.
+        assert retry is None
+        return original_get(reference, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', bounded_get)
     store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=StrictFirestore())
     return ShadowStore(store, clock=lambda: 7200, busy=lambda: False)
 
 
-def running(repository, name='one', *, duration=300):
+def running(repository, name='one', *, duration=300, guarded=False, worker_speech=None, worker_receipt=False):
     repository.offer('worker-' + name)
     reservation = repository.reserve('synthetic-owner', name, 'deep')
     assert reservation
@@ -44,12 +57,166 @@ def running(repository, name='one', *, duration=300):
     )
     assert repository.ready(reservation, item, '')
     assert repository.take('worker-' + name) == item
-    assert repository.handoff(item.segment_id, RecoveryWork(item.segment_id, padded_retry='skipped_long_speech'))
+    evidence = (
+        ValidationFailureWork(
+            item.segment_id,
+            'vad_windows',
+            'unsupported_language',
+            worker_speech,
+            vad_receipt(item.audio_uri, round(duration * 16000), worker_speech) if worker_receipt else None,
+        )
+        if guarded
+        else RecoveryWork(item.segment_id, padded_retry='skipped_long_speech')
+    )
+    assert repository.handoff(item.segment_id, evidence)
     return item
 
 
 def row(repository, segment):
     return repository.store.run(lambda tx: tx.get('shadow_jobs', segment))
+
+
+@pytest.mark.parametrize(
+    'speech,expected', [(0, 'empty'), (0.016, 'empty'), (0.032, 'failed_held'), (4.384, 'failed_held')]
+)
+def test_guarded_shadow_handoff_uses_two_distinct_recognizers(repository, speech, expected):
+    item = running(repository, duration=20, guarded=True)
+    assert row(repository, item.segment_id)['worker_failure']['reason'] == 'unsupported_language'
+    spans = [{'start': 0, 'end': speech}] if speech else []
+    first, second = (Mock(side_effect=MultilingualEmpty(20, spans)) for _ in range(2))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=first,
+            second_stt=second,
+            inspect=lambda *a: (b'', 20, spans),
+        )
+        == expected
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['paid_providers'] == ['modulate', 'soniox']
+    assert settled['speech_seconds'] == speech
+    assert settled['recognizers'] == {
+        p: {'provider': p, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': speech}
+        for p in ('modulate', 'soniox')
+    }
+    assert first.call_args.kwargs['force_recognition'] is True
+    assert first.call_count == second.call_count == 1
+
+
+@pytest.mark.parametrize('failure', ['error', 'words_without_vad', 'disabled'])
+def test_guarded_shadow_zero_vad_requires_two_valid_empty_answers(repository, monkeypatch, failure):
+    from utils.batch_pipeline.recovery_disposition import WordsWithoutVad
+
+    item = running(repository, duration=20, guarded=True)
+    first = Mock(side_effect=(WordsWithoutVad(2) if failure == 'words_without_vad' else TimeoutError()))
+    second = Mock(side_effect=MultilingualEmpty(20, []))
+    if failure == 'disabled':
+        monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
+    expected = 'paid_skipped' if failure == 'disabled' else 'failed_held'
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=first,
+            second_stt=second,
+            inspect=lambda *a: (b'', 20, []),
+        )
+        == expected
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['speech_seconds'] == 0
+    if failure == 'disabled':
+        first.assert_not_called()
+        second.assert_not_called()
+        assert settled['paid_providers'] == []
+    else:
+        assert first.call_count == second.call_count == 1
+        assert settled['recognizers']['modulate']['word_count'] == (2 if failure == 'words_without_vad' else None)
+
+
+@pytest.mark.parametrize('provider', ['modulate', 'soniox'])
+def test_guarded_shadow_recovers_words_and_never_repeats(repository, provider):
+    from utils.batch_pipeline.recovery_recognizers import words_payload
+
+    item = running(repository, duration=20, guarded=True)
+    spans = [{'start': 0, 'end': 2}]
+    payload = words_payload(20, spans, [{'word': 'Synthetic', 'timestamp': [0, 1], 'speaker': '0'}], 'vi')
+    first = Mock(return_value=payload) if provider == 'modulate' else Mock(side_effect=MultilingualEmpty(20, spans))
+    second = Mock(return_value=payload)
+    artifacts = SimpleNamespace(fetch_audio=lambda _: b'synthetic')
+    assert (
+        recover(
+            repository, artifacts, item.segment_id, stt=first, second_stt=second, inspect=lambda *a: (b'', 20, spans)
+        )
+        == 'recovered'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['recognizers'][provider]['word_count'] == 1
+    assert settled['paid_providers'] == (['modulate'] if provider == 'modulate' else ['modulate', 'soniox'])
+    assert recover(repository, artifacts, item.segment_id, stt=first, second_stt=second) == 'held'
+    assert first.call_count == 1 and second.call_count == int(provider == 'soniox')
+
+
+def test_guarded_shadow_missing_key_refuses_without_claim(repository, monkeypatch):
+    monkeypatch.delenv('SONIOX_API_KEY', raising=False)
+    item = running(repository, duration=20, guarded=True)
+    first = Mock(side_effect=MultilingualEmpty(20, []))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=first,
+            inspect=lambda *a: (b'', 20, []),
+        )
+        == 'failed_held'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['paid_providers'] == ['modulate']
+    assert settled['recognizers']['soniox']['outcome'] == 'refused'
+
+
+def test_guarded_shadow_retains_positive_worker_evidence_when_cpu_is_zero(repository):
+    item = running(repository, duration=20, guarded=True, worker_speech=2)
+    empty = Mock(side_effect=MultilingualEmpty(20, []))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=empty,
+            second_stt=empty,
+            inspect=lambda *a: (b'', 20, []),
+        )
+        == 'failed_held'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['speech_seconds'] == settled['speech_loss_seconds'] == 2
+    assert all(r['vad_speech_seconds'] == 0 for r in settled['recognizers'].values())
+
+
+def test_guarded_shadow_inspection_error_keeps_prior_measured_speech(repository):
+    item = running(repository, duration=20, guarded=True, worker_speech=2)
+    provider = Mock()
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=provider,
+            second_stt=provider,
+            inspect=Mock(side_effect=ValueError()),
+        )
+        == 'error'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['speech_seconds'] == settled['speech_loss_seconds'] == 2
+    assert settled['vad'] == 'strict'
+    provider.assert_not_called()
 
 
 def test_cohort_is_static_independent_and_disjoint(monkeypatch):
@@ -127,7 +294,7 @@ def test_atomic_hourly_cap_shared_by_instances_and_each_provider(repository, mon
     another = ShadowStore(repository.store, clock=repository.clock, busy=lambda: False)
     assert repository.paid(first.segment_id, 'modulate')
     assert not another.paid(first.segment_id, 'modulate')
-    assert another.paid(first.segment_id, 'deepgram')
+    assert another.paid(first.segment_id, 'soniox')
     assert not repository.paid(second.segment_id, 'modulate')
     another.clock = lambda: 10800
     assert not another.paid(first.segment_id, 'modulate')  # same intent, next hour
@@ -149,6 +316,9 @@ def test_uncertain_spend_reservation_denies_provider_permission(repository, monk
 
 
 def test_full_second_provider_recovery_writes_only_hashed_shadow_outcome(repository, monkeypatch):
+    # This test isolates paid idempotency/privacy; real geometry and discarded
+    # assignment are exercised by test_paid_recovery_runs_real_discarded_projection.
+    monkeypatch.setattr(shadow_recovery, 'run_shadow_projection', Mock(return_value={'status': 'planned'}))
     monkeypatch.setenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'true')
     item = running(repository)
     artifacts = SimpleNamespace(fetch_audio=lambda _: b'private audio')
@@ -208,7 +378,7 @@ def test_cap_records_paid_skipped_without_provider_call(repository, monkeypatch)
     assert row(repository, item.segment_id)['speech_loss_seconds'] == 19
 
 
-def test_second_provider_requires_same_long_speech_handoff_as_live(repository):
+def test_second_provider_recovers_held_padded_empty_when_terminal_flag_off(repository):
     item = running(repository)
     repository.store.run(
         lambda tx: tx.put(
@@ -223,7 +393,7 @@ def test_second_provider_requires_same_long_speech_handoff_as_live(repository):
     )
     spans = [{'start': 0.0, 'end': 300.0}]
     first = Mock(side_effect=MultilingualEmpty(300, spans))
-    second = Mock()
+    second = Mock(side_effect=MultilingualEmpty(300, spans))
     assert (
         recover(
             repository,
@@ -235,7 +405,7 @@ def test_second_provider_requires_same_long_speech_handoff_as_live(repository):
         )
         == 'failed_held'
     )
-    second.assert_not_called()
+    second.assert_called_once()
 
 
 @pytest.mark.parametrize('safety,expected', [('false', 'empty'), ('true', 'failed_held')])
@@ -258,7 +428,7 @@ def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkey
     )
 
 
-@pytest.mark.parametrize('failed_provider', ['modulate', 'deepgram'])
+@pytest.mark.parametrize('failed_provider', ['modulate', 'soniox'])
 def test_provider_failures_keep_the_live_failed_held_disposition(repository, failed_provider):
     item = running(repository)
     spans = [{'start': 0.0, 'end': 300.0}]
@@ -281,7 +451,7 @@ def test_provider_failures_keep_the_live_failed_held_disposition(repository, fai
         )
         == 'failed_held'
     )
-    assert second.call_count == (failed_provider == 'deepgram')
+    assert second.call_count == (failed_provider == 'soniox')
 
 
 def test_active_recovery_reap_uses_its_start_time_and_transport_cannot_settle_it(repository, monkeypatch):
@@ -332,15 +502,188 @@ def test_artifact_sink_cannot_persist_shadow_transcript(repository):
         authorize=Mock(),
         key_for_owner=Mock(),
         register_artifact=Mock(),
-        shadow_result=lambda work, payload: shadow_result(repository.store, work, payload),
+        shadow_result=lambda work, payload: shadow_result(
+            repository.store, work, payload, projection=lambda *args: {'status': 'planned'}
+        ),
     )
     artifacts._write = Mock(side_effect=AssertionError('no durable transcript writes'))
     assert artifacts.persist_result(item, {'words': [{'word': 'secret'}], 'speech_seconds': 20}).startswith('shadow:')
     artifacts._write.assert_not_called()
     artifacts.register_artifact.assert_not_called()
+    assert row(repository, item.segment_id)['projection_status'] == 'planned'
+    assert row(repository, item.segment_id)['created_at'] == 7200
     assert 'secret' not in repr(repository.store.client.rows)
     with pytest.raises(PermissionError):
         artifacts.persist_recovery_result(item, {'words': []}, 'token')
+
+
+def test_projection_attempt_is_once_and_has_a_distributed_hourly_cap(repository):
+    item = running(repository)
+    # GPU success reaches projection while running, before the normal finish.
+    repository.store.run(
+        lambda tx: tx.put(
+            'shadow_jobs', item.segment_id, {**tx.get('shadow_jobs', item.segment_id), 'state': 'running'}
+        )
+    )
+    assert repository.projection_input(item.segment_id)['shadow'] is True
+    assert repository.projection_input(item.segment_id) is None
+    budget = repository.store.run(lambda tx: tx.get('shadow_spend', 'projection-2'))
+    assert budget['units'] == 1 and budget['expires_at'].timestamp() == 7200 + 2 * 86400
+    next_item = running(repository, 'another')
+    repository.store.run(
+        lambda tx: tx.put(
+            'shadow_jobs', next_item.segment_id, {**tx.get('shadow_jobs', next_item.segment_id), 'state': 'running'}
+        )
+    )
+    repository.store.run(lambda tx: tx.put('shadow_spend', 'projection-2', {**budget, 'units': 200}))
+    repository.offer('over-budget-worker')
+    assert repository.reserve('synthetic-owner', 'over-budget', 'deep') is None
+    denied = row(repository, identity('synthetic-owner', 'over-budget'))
+    assert denied['outcome'] == 'dropped' and 'item' not in denied
+    # A later hour or exhausted quota cannot reject speech already computed
+    # under an admission reservation and fabricate quality loss.
+    repository.clock = lambda: 10801
+    assert repository.projection_input(next_item.segment_id)['shadow'] is True
+    assert repository.projection_input(next_item.segment_id) is None
+
+
+def test_projection_failure_never_falls_back_to_normal_publication(repository):
+    from utils.batch_pipeline.artifact_policy import shadow_result
+
+    item = running(repository)
+    shadow_result(
+        repository.store,
+        item,
+        {'words': [{'word': 'synthetic'}], 'speech_seconds': 1},
+        projection=Mock(side_effect=RuntimeError('unavailable')),
+    )
+    assert row(repository, item.segment_id)['outcome'] == 'error'
+
+
+@pytest.mark.parametrize('guarded,provider', [(False, 'modulate'), (True, 'modulate'), (True, 'soniox')])
+def test_paid_recovery_runs_real_discarded_projection(repository, monkeypatch, guarded, provider):
+    monkeypatch.setattr(projection_module, 'cap_dispatch_enabled', lambda *args: False)
+    monkeypatch.setattr(assignment, 'smart_merge_flatten_enabled', lambda: False)
+    monkeypatch.setattr(assignment, 'sync_lineage_resolve_enabled', lambda: False)
+    item = running(repository, duration=20, guarded=guarded)
+    spans = [{'start': 0, 'end': 2}]
+    payload = words_payload(20, spans, [{'word': 'Synthetic', 'timestamp': [0, 1], 'speaker': '0'}], 'vi')
+    first = Mock(return_value=payload) if provider == 'modulate' else Mock(side_effect=MultilingualEmpty(20, spans))
+    second = Mock(return_value=payload)
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=first,
+            second_stt=second,
+            inspect=lambda *args: (b'', 20, spans),
+        )
+        == 'recovered'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['projection_status'] == 'planned'
+    assert settled['paid_providers'] == (['modulate'] if provider == 'modulate' else ['modulate', 'soniox'])
+    assert settled['speech_seconds'] == 2 and settled['speech_loss_seconds'] == 0
+    assert settled['created_at'] == 7200
+    assert all(path[0].startswith('batch_pipeline_dev_shadow_') for path in repository.store.client.rows)
+    assert 'Synthetic' not in repr(repository.store.client.rows)
+
+
+@pytest.mark.parametrize('status', ['busy', 'not_eligible', 'error', 'empty', 'unrecognized'])
+def test_paid_recovery_never_certifies_a_failed_projection(repository, monkeypatch, status):
+    projection = Mock(return_value={'status': status})
+    monkeypatch.setattr(shadow_recovery, 'run_shadow_projection', projection)
+    item = running(repository, duration=20)
+    spans = [{'start': 0, 'end': 2}]
+    payload = words_payload(20, spans, [{'word': 'Synthetic', 'timestamp': [0, 1], 'speaker': '0'}], 'vi')
+    stt = Mock(return_value=payload)
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=stt,
+            inspect=lambda *args: (b'', 20, spans),
+        )
+        == 'error'
+    )
+    projection.assert_called_once_with(repository.store, item.segment_id, payload)
+    settled = row(repository, item.segment_id)
+    assert settled['speech_loss_seconds'] == 2
+    assert settled['projection_status'] == (status if status in {'busy', 'not_eligible', 'error', 'empty'} else 'error')
+    assert recover(repository, SimpleNamespace(), item.segment_id, stt=stt) == 'held'
+    assert stt.call_count == 1 and projection.call_count == 1
+
+
+def test_recovery_projection_uses_existing_reservation_once(repository):
+    item = running(repository)
+    assert repository.start_recovery(item.segment_id)
+    assert repository.projection_input(item.segment_id)['state'] == 'recovering'
+    assert repository.projection_input(item.segment_id) is None
+    budget = repository.store.run(lambda tx: tx.get('shadow_spend', 'projection-2'))
+    assert budget['units'] == 1
+
+
+def test_recovery_empty_is_certified_without_assignment(repository, monkeypatch):
+    item = running(repository, duration=20)
+    assign = Mock(side_effect=AssertionError('empty projection must not assign'))
+    monkeypatch.setattr(assignment, 'assign_in_transaction', assign)
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            inspect=lambda *args: (b'', 20, []),
+        )
+        == 'empty'
+    )
+    assert row(repository, item.segment_id)['projection_status'] == 'empty'
+    assign.assert_not_called()
+
+
+@pytest.mark.parametrize('provider', ['modulate', 'soniox'])
+@pytest.mark.parametrize('bound_receipt', [False, True])
+@pytest.mark.parametrize('duration', [20, 61])
+def test_shadow_recovery_preserves_serving_worker_vad_evidence(
+    repository, monkeypatch, provider, bound_receipt, duration
+):
+    monkeypatch.setattr(projection_module, 'cap_dispatch_enabled', lambda *args: False)
+    monkeypatch.setattr(assignment, 'smart_merge_flatten_enabled', lambda: False)
+    monkeypatch.setattr(assignment, 'sync_lineage_resolve_enabled', lambda: False)
+    item = running(repository, duration=duration, guarded=True, worker_speech=2, worker_receipt=bound_receipt)
+    words = [{'word': 'Synthetic', 'timestamp': [1, 5], 'speaker': '0'}]
+    seen = []
+
+    def first(_item, binding, audio, **kwargs):
+        seen.append(kwargs.get('worker_speech'))
+        if provider == 'soniox':
+            raise MultilingualEmpty(duration, [])
+        return words_payload(duration, [], words, 'vi', worker_speech=kwargs.get('worker_speech'))
+
+    def second(_item, audio, empty):
+        seen.append(empty.worker_speech)
+        return words_payload(duration, [], words, 'vi', worker_speech=empty.worker_speech)
+
+    outcome = recover(
+        repository,
+        SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+        item.segment_id,
+        stt=first,
+        second_stt=second,
+        inspect=lambda *args: (b'', duration, []),
+    )
+    settled = row(repository, item.segment_id)
+    assert bool(seen) is (bound_receipt or duration <= 60)
+    assert all(value == (2 if bound_receipt else None) for value in seen)
+    expected_recovery = bound_receipt and (provider == 'modulate' or duration <= 60)
+    assert outcome == (
+        'recovered' if expected_recovery else 'paid_skipped' if not bound_receipt and duration > 60 else 'failed_held'
+    )
+    assert settled['speech_seconds'] == 2
+    assert settled['speech_loss_seconds'] == (0 if expected_recovery else 2)
+    assert settled.get('projection_status') == ('planned' if expected_recovery else None)
+    assert all(path[0].startswith('batch_pipeline_dev_shadow_') for path in repository.store.client.rows)
 
 
 def test_projection_and_normal_scheduler_refuse_shadow_before_any_side_effect():

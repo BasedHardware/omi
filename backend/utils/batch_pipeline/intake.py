@@ -8,7 +8,9 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import priority_for
+from config.batch_pipeline import known_unsupported_batch_language, language_inheritance_enabled, priority_for
+from config.batch_language_recovery import inherited_language
+from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
@@ -32,7 +34,7 @@ from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline.provider_stt import provider_enqueue, resolve_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
-from utils.batch_pipeline.language_metrics import record_route
+from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
@@ -399,6 +401,18 @@ async def accept_upload(
                 loaded_conversation=target,
                 policy=policy,
             )
+        admission_language = None
+        if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
+            admission_language, exclusion_reason = batch_admission_language(user, target)
+            if exclusion_reason:
+                # This is before re-home, decode, LID or custody. The caller's
+                # legacy-dark fence still refuses new legacy work outside ON.
+                record_admission_exclusion(
+                    target.get('language') or user.get('language'),
+                    exclusion_reason,
+                    legacy_available=mode is LegacySyncMode.ON,
+                )
+                return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
                 return None
@@ -420,11 +434,24 @@ async def accept_upload(
                     lane=lane,
                 )
         language = normalized_stt_language(target.get('language') or user.get('language'))
-        # Match legacy sync's effective input: a primary app language is not a
-        # promise that the audio is monolingual. Do this only before new custody;
-        # previous batch receipts above always stay owned by their original lane.
+        # Switch-off retains legacy sync's input; new custody inherits known
+        # context. Previous batch receipts above always keep their original lane.
         prefs = user.get('transcription_preferences') or {}
         input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
+        inherit = language_inheritance_enabled()
+        inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
+        if inherited:
+            language = inherited
+            if language_class(inherited) == 'supported':
+                # Bound supported context outranks a later user single-mode
+                # preference, including in the legacy eligibility guard.
+                input_language = inherited
+        elif inherit:
+            # Unknown declarations are classification inputs, not capability
+            # proof, even if single-language mode was selected.
+            language = input_language = 'multi'
+        if admission_language is not None:
+            language = input_language = admission_language
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':
             # Main's prerecorded language guard; with legacy draining or dark the C8
             # provider-STT route below serves unsupported speech instead of legacy.
@@ -433,6 +460,22 @@ async def accept_upload(
                 component='stt_selection', from_mode='batch', to_mode='modulate', reason='other', outcome='recovered'
             )
             return None
+        if (
+            mode is LegacySyncMode.ON
+            and target.get('record_lane_owner') != 'batch_sync_v1'
+            and known_unsupported_batch_language(language)
+        ):
+            # Batch eligibility (lead 41e13b, scope 304254): the conversation-or-user
+            # language names a language the batch Parakeet model cannot serve, so the
+            # worker guard would quarantine its speech. Keep it on legacy sync before
+            # any custody or probe spend. Blank, 'multi' and unknown languages are not
+            # known-unsupported and stay admitted exactly as before. A conversation
+            # with a durable batch-sync owner never falls through to legacy here.
+            record_route('intake', language, 'multilingual')
+            logger.info('event=batch_language_eligibility outcome=legacy reason=known_unsupported_language')
+            return None
+        if inherited:
+            input_language = inherited
         route = resolve_route(language, byok=byok_enabled)
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback.
@@ -490,27 +533,8 @@ async def accept_upload(
             if len(items) >= 128:
                 raise ValueError('capture bundle exceeds bounded conversation-unit limit')
             from utils.stt.batch_language import resolve_language
-            from config.stt_cap_dispatch import execution_admission_enabled
-            from utils.stt_cap_dispatch import sync_allowed
+            from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
 
-            # Classification runs on the CPU intake host, never under the GPU
-            # lock or with vendor credentials on a worker. Cap refusal does not
-            # license a probe; the worker retains uncertain speech for recovery.
-            language_decision = await run_blocking(
-                sync_executor,
-                resolve_language,
-                input_language,
-                unit.wav,
-                surface='batch',
-                cohort_key=uid,
-                before_probe=lambda duration=unit.duration_seconds: not execution_admission_enabled(uid, 'batch')
-                or sync_allowed(uid, duration, 'modulate', lane='batch'),
-            )
-            frozen_language = (
-                language_decision.language
-                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
-                else 'und' if language_guard_enabled() else input_language
-            )
             item = replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{len(items)}'.encode()).hexdigest(),
@@ -520,6 +544,25 @@ async def accept_upload(
                 conversation_id=conversation_id
                 or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
                 privacy_generation=context.generation,
+            )
+            probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
+            # Every self/vendor classification gets fresh dispatch authority on CPU.
+            language_decision = await run_blocking(
+                sync_executor,
+                resolve_language,
+                input_language,
+                unit.wav,
+                surface='batch',
+                cohort_key=uid,
+                before_probe=probe_guard,
+                before_self_probe=probe_guard,
+            )
+            # Refusal preserves the caller's source; never acknowledge or admit it.
+            probe_guard.raise_if_denied()
+            frozen_language = (
+                language_decision.language
+                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
+                else 'und' if language_guard_enabled() else input_language
             )
             frozen = await run_blocking(
                 sync_executor,
@@ -562,7 +605,7 @@ async def accept_upload(
             data_protection_level=context.level,
             target_conversation_id=conversation_id,
             privacy_generation=context.generation,
-            language=target.get('language'),
+            language=inherited or target.get('language'),
             record_origin=record_origin,
         )
         wakes: dict[str, str] = {}

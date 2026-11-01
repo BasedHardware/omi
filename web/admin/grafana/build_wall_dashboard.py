@@ -20,6 +20,9 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# Variable-margin goal, shared with lib/wall-cost.ts (VARIABLE_MARGIN_TARGET).
+MARGIN_GOAL_PCT = json.loads((HERE.parent / "lib/omi-tv-goals.json").read_text())["variableMarginTargetPct"]
+GOAL_COST = f"{MARGIN_GOAL_PCT:g}% target cost"
 DS = {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"}
 BASE = "http://127.0.0.1:8899/api/omi/stats/wall/series"
 COLUMNS = ["Growth", "Activation", "Retention", "Revenue", "Health"]
@@ -351,14 +354,14 @@ def columns():
         (4, chart("Cost run rate vs MRR",
                   "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot, USD-only: "
                   "non-USD paying subscriptions excluded), blue-grey = real monthly cost (trailing-7-day run "
-                  "rate × 30.44). Dashed green = the cost level where margin is 50% (½ MRR). Same scope as "
+                  f"rate × 30.44). Dashed green = the cost level where margin is {MARGIN_GOAL_PCT:g}%. Same scope as "
                   "the Variable margin tile above (GCP net ex prepaid Vertex reserved, one-time GCP incidents "
                   "included, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run "
                   "rate and the excluded prepaid reserved dollars. Settled D−2; a day without a book snapshot "
                   "gaps the MRR line, never borrows a neighbour's.",
                   [target("health", "variableMargin", [DATE, ("costPerMonth", "Cost run rate", "number"),
                                                        ("mrr", "MRR (book)", "number"),
-                                                       ("goalCost", "50% target cost", "number"),
+                                                       ("goalCost", GOAL_COST, "number"),
                                                        ("gcpPerMonth", "GCP /mo", "number"),
                                                        ("vertexReservedPerMonth", "Vertex reserved excluded", "number"),
                                                        ("openaiPerMonth", "OpenAI /mo", "number"),
@@ -368,7 +371,7 @@ def columns():
                   unit="currencyUSD", decimals=0, time_from="62d", soft_min=None,
                   overrides=[color("Cost run rate", COST["GCP"]),
                              line("MRR (book)", REVENUE, 3),
-                             dashed("50% target cost", STATUS_GOOD),
+                             dashed(GOAL_COST, STATUS_GOOD),
                              *[tooltip_only(n) for n in ("GCP /mo", "Vertex reserved excluded", "OpenAI /mo",
                                                           "Soniox /mo", "Modulate /mo", "Stripe fees /mo")]],
                   extra=disconnect_after(1.5))),
@@ -476,7 +479,7 @@ VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23)
                    "infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: "
                    "non-USD paying subscriptions are excluded from the figure and named with their count on the "
                    "line below. Settled through D−2; the sparkline is the daily trailing-7d series over 60 days. "
-                   "Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the "
+                   f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
                    "headline shows no value (no MRR book), never the previous day's margin. The line below names "
                    "each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
 
@@ -490,11 +493,11 @@ def variable_margin_stat():
     panel = {"type": "stat", "title": "Variable margin", "description": VARIABLE_MARGIN, "datasource": DS,
              "targets": [target("health", "variableMargin", [("marginPct", "Variable margin", "number")])],
              "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no MRR book",
-                                          # Below the 50% goal is red; at/above is green.
+                                          # Below the goal is red; at/above is green.
                                           "color": {"mode": "thresholds"},
                                           "thresholds": {"mode": "absolute", "steps": [
                                               {"color": STATUS_BAD, "value": None},
-                                              {"color": STATUS_GOOD, "value": 50}]}},
+                                              {"color": STATUS_GOOD, "value": MARGIN_GOAL_PCT}]}},
                              "overrides": []},
              "options": {"reduceOptions": {"calcs": ["last"], "fields": "", "values": False},
                          "textMode": "value", "colorMode": "value", "graphMode": "area",

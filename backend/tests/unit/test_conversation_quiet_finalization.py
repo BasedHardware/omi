@@ -290,7 +290,7 @@ def test_account_deletion_fences_recovery_admission(store, monkeypatch):
     quiet.arm('synthetic', 'old', 120, firestore_client=store)
     store.rows[('account_deletions', 'synthetic')] = {'wipe_status': 'running'}
     _advance(monkeypatch, 361)
-    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'refused_account_deleting'
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'account_pending_deletion'
     assert 'finalization_job_id' not in store.rows[ROW]
 
 
@@ -400,6 +400,7 @@ def test_reconciler_owns_quiet_wakes_and_reports_failures(monkeypatch, fails):
 
     monkeypatch.setattr(service.jobs_db, 'recover_stranded_byok_jobs', lambda **kw: {'blocked': 0, 'errors': 0})
     monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
     monkeypatch.setattr(service, '_publish_job_metrics', lambda **kw: None)
     monkeypatch.setattr(
         service.jobs_db,
@@ -498,6 +499,27 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
     monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
     assert checks.quiet_deadline(row, 120, uid='synthetic') == NOW - timedelta(minutes=3)
     assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) is None
+
+
+@pytest.mark.parametrize('legacy_finish', [None, NOW + timedelta(hours=1)])
+def test_quiet_run_admits_speech_only_or_stale_heartbeat_row_once(store, monkeypatch, legacy_finish):
+    """Exercise the whole check -> admission path, including its second quiet fence."""
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    row = store.rows[ROW]
+    row['last_speech_at'] = NOW - timedelta(minutes=5)
+    if legacy_finish is None:
+        row.pop('finished_at')
+    else:
+        row['finished_at'] = legacy_finish
+    store.rows[SESSION]['lease_expires_at'] = NOW - timedelta(seconds=1)
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    job_id = checks.quiet_check_id('synthetic', 'old')
+    assert quiet.run(job_id, 1, firestore_client=store) == 'queued'
+    assert store.rows[ROW]['status'] == 'processing'
+    assert store.rows[ROW]['finalization_revision'] == 1
+    assert quiet.run(job_id, 1, firestore_client=store) == 'stale'
+    assert quiet.run(job_id, _job(store)['dispatch_generation'], firestore_client=store) == 'done'
+    assert store.rows[ROW]['finalization_revision'] == 1
 
 
 def _oversized_write_rejection():

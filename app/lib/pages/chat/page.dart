@@ -100,6 +100,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   String? _selectedContext;
   bool _quotaSheetShown = false;
   ChatPageContext? _chatScope;
+  Timer? _draftSaveTimer;
 
   @override
   bool get wantKeepAlive => true;
@@ -107,7 +108,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
-    if (widget.initialDraft != null) textController.text = widget.initialDraft!;
+    if (widget.initialDraft != null) {
+      textController.text = widget.initialDraft!;
+    } else if (prefs.chatMessageDraft.isNotEmpty) {
+      // Keep typed input across app close/kill; cleared only after a send is
+      // accepted (see _sendMessageUtil).
+      textController.text = prefs.chatMessageDraft;
+    }
+    textController.addListener(_scheduleDraftSave);
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
@@ -189,6 +197,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     }
   }
 
+  /// Coalesce draft writes; SharedPreferences on every keystroke is wasteful.
+  void _scheduleDraftSave() {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 300), _persistDraft);
+  }
+
+  void _persistDraft() {
+    if (!mounted) return;
+    prefs.chatMessageDraft = textController.text;
+  }
+
   /// The keyboard shrinks the viewport after the initial jump to the bottom,
   /// which leaves the transcript parked mid-way (the list keeps its pixel offset
   /// while maxScrollExtent grows). Re-pin to the live edge on every inset change
@@ -219,6 +238,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     _cancelOwnedLifecycleTimers();
     _latestJumpIdleTimer?.cancel();
     _cancelPendingScrolls();
+    _draftSaveTimer?.cancel();
+    _persistDraft();
     textController.dispose();
     scrollController.dispose();
     textFieldFocusNode.dispose();
@@ -775,6 +796,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     });
     // Remove focus from text field
     FocusManager.instance.primaryFocus?.unfocus();
+    // Flush the composer draft synchronously: a pending debounce save must not
+    // race the send. The persisted copy now provably holds this send's text,
+    // so the post-send decision below can compare against it exactly.
+    final draftText = textController.text;
+    _draftSaveTimer?.cancel();
+    prefs.chatMessageDraft = draftText;
     if (currentContext != null) {
       text = 'Context: "$currentContext"\n\n$text';
     }
@@ -787,6 +814,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     _resumeFollowingAndScroll(delayMs: 300, animated: true);
 
     final turn = ++_sendTurn;
+    final messageCountBeforeReply = provider.messages.length;
     await provider.sendMessageStreamToServer(text, context: _chatScope);
 
     // Plans sheet is shown reactively via _onMessageProviderChanged listener
@@ -795,6 +823,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     if (turn != _sendTurn) return;
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
+    // The persisted draft is cleared only once the server accepted the send: a
+    // reply that arrived and did not fail. A failed reply, a quota refusal (no
+    // reply at all) or an interrupted send keeps the draft so the text
+    // survives a kill and is restored on reopen.
+    final reply = provider.messages.length > messageCountBeforeReply ? provider.messages.last : null;
+    final accepted = reply != null && !provider.isReplyFailed(reply) && !provider.isChatQuotaExceeded;
+    _draftSaveTimer?.cancel();
+    // Never clobber a newer draft the user typed while this reply streamed:
+    // the persisted copy is only replaced when it still holds this send's
+    // composer text (accepted: clear it; failed: keep it restorable).
+    final persisted = prefs.chatMessageDraft;
+    if (persisted == draftText) {
+      if (accepted) prefs.chatMessageDraft = '';
+    } else if (persisted.isEmpty && !accepted) {
+      prefs.chatMessageDraft = draftText;
+    }
   }
 
   /// Sends the message behind a failed reply again (the reply's Try Again).

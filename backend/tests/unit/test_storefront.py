@@ -86,8 +86,8 @@ def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
     plus = next(tier for tier in sheet.tiers if tier.plan_id == 'plus')
     assert plus.recommended and plus.cta_label == 'Get Plus'
     yearly = next(item for item in plus.prices if item.interval == 'year')
-    assert yearly.headline == '$16.66/month'
-    assert yearly.subline == '$199.90 billed yearly · 2 months free'
+    assert yearly.headline == 'US$16.66/month'
+    assert yearly.subline == 'US$199.90 billed yearly · 2 months free'
     assert yearly.months_free == 2
     pro = next(tier for tier in sheet.tiers if tier.plan_id == 'operator')
     assert pro.cta_label == 'Get Pro'
@@ -100,9 +100,9 @@ def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
     operator = next(tier for tier in paid.tiers if tier.plan_id == 'operator')
     assert operator.cta_label is None and operator.bullets == []
     assert [item.interval for item in operator.prices] == ['year']
-    assert operator.prices[0].headline == '$49.99/month'
-    assert operator.prices[0].subline == '$499.90 billed yearly · 2 months free'
-    assert operator.prices[0].cta_label == 'Switch to yearly · save $99.98'
+    assert operator.prices[0].headline == 'US$49.99/month'
+    assert operator.prices[0].subline == 'US$499.90 billed yearly · 2 months free'
+    assert operator.prices[0].cta_label == 'Switch to yearly · save US$99.98'
     assert not any(tier.recommended for tier in paid.tiers)
 
 
@@ -135,8 +135,8 @@ def test_single_plan_storefront_builder_pins_golden(monkeypatch):
     assert tier.name == 'Unlimited' and tier.recommended and tier.is_current is False
     assert tier.action == 'checkout' and tier.cta_label == 'Get Unlimited'
     assert [item.price_id for item in tier.prices] == ['price_omi_pro_month', 'price_omi_pro_year']
-    assert tier.prices[0].headline == '$29.99/month'
-    assert tier.prices[1].months_free == 3 and tier.prices[1].subline == '$269.91 billed yearly · 3 months free'
+    assert tier.prices[0].headline == 'US$29.99/month'
+    assert tier.prices[1].months_free == 3 and tier.prices[1].subline == 'US$269.91 billed yearly · 3 months free'
     assert sheet.current.plan_id == 'basic' and sheet.current.line == "You're on Free"
     free_card = sheet.tiers[1]
     assert free_card.is_current and free_card.action == 'current' and free_card.bullets == []
@@ -194,38 +194,24 @@ def _omi_pro_env(monkeypatch):
 
 
 def test_new_buyer_single_plan_rule_serves_omi_pro_sheet(client, monkeypatch):
-    """2026-10-24 ruling at the v2 route: a basic buyer on an explicit
-    non-desktop platform (mobile/web) gets a single-tier Omi Pro sheet — never
-    a 404, which the web plans panel renders as a dead "Couldn't load plans"
-    state. Missing/unknown platform headers, desktop platforms, existing
-    subscribers, and the kill switch keep the ladder sheet."""
+    """Omi Pro is the only plan sold: a basic buyer on every platform (desktop,
+    missing and unknown headers included) gets a single-tier Omi Pro sheet.
+    Existing subscribers and the kill switch keep the ladder sheet."""
     monkeypatch.delenv('NEW_BUYER_SINGLE_PLAN_ENABLED', raising=False)
     _omi_pro_env(monkeypatch)
 
-    for platform in ('ios', 'android', 'web'):
-        response = client.get('/v2/payments/plans', headers={'X-App-Platform': platform})
-        assert response.status_code == 200, platform
+    callers = [{'X-App-Platform': p} for p in ('ios', 'android', 'web', 'macos', 'windows', 'not-a-platform')] + [{}]
+    for headers in callers:
+        response = client.get('/v2/payments/plans', headers=headers)
+        assert response.status_code == 200, headers
         payload = response.json()
-        assert [tier['plan_id'] for tier in payload['tiers']] == ['unlimited_v2', 'basic'], platform
+        assert [tier['plan_id'] for tier in payload['tiers']] == ['unlimited_v2', 'basic'], headers
         assert [item['price_id'] for item in payload['tiers'][0]['prices']] == [
             'price_omi_pro_month',
             'price_omi_pro_year',
-        ], platform
+        ], headers
         assert payload['tiers'][0]['action'] == 'checkout'
         assert payload['current']['plan_id'] == 'basic'
-
-    # Desktop, missing header, unknown value, and current subscribers keep the
-    # ladder sheet (this fixture's ladder has no Omi Pro card).
-    ladder_callers = [
-        {'X-App-Platform': 'macos'},
-        {'X-App-Platform': 'windows'},
-        {},
-        {'X-App-Platform': 'not-a-platform'},
-    ]
-    for headers in ladder_callers:
-        response = client.get('/v2/payments/plans', headers=headers)
-        assert response.status_code == 200, headers
-        assert all(tier['plan_id'] != 'unlimited_v2' for tier in response.json()['tiers']), headers
 
     monkeypatch.setattr(
         route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription(plan=PlanType.plus)

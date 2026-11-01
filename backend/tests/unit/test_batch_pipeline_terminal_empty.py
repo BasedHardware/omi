@@ -17,7 +17,7 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from database.batch_pipeline_terminal_empty import TerminalEmptyStore, intent_snapshot, exhausted, CANARY_OPERATION
-from utils.batch_pipeline.quarantine_recovery import transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import terminal_empty_payload, result_outcome, RecoveryFailure
 from utils.batch_pipeline.merge import OrderedMerge
 

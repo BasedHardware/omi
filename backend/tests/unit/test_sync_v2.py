@@ -8,11 +8,14 @@ polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 v1 remains completely unchanged.
 """
 
+from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
+from utils.enrichment import admission  # noqa: F401 - retain shared custody types across package stubs
+from utils.conversations import size_limit as actual_size_limit
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
@@ -109,11 +112,11 @@ class TestSyncV2Structure:
         assert '"/v2/sync-local-files/{job_id}"' in source
         assert 'def get_sync_job_status' in source
 
-    def test_v1_endpoint_unchanged(self):
-        """v1 endpoint must still exist with original path and function name."""
+    def test_v1_endpoint_is_a_410_stub(self):
+        """v1 keeps its path and function name but answers 410 (lane 10 slice 2b; 7-day census: zero calls)."""
         source = self._read_sync_source()
-        assert '"/v1/sync-local-files"' in source
-        assert 'async def sync_local_files(' in source
+        assert '"/v1/sync-local-files", deprecated=True, status_code=410' in source
+        assert '\ndef sync_local_files(' in source
 
     def test_v2_returns_202_with_job_id(self):
         """v2 POST must return 202 with job_id."""
@@ -327,9 +330,7 @@ class TestSyncV2Structure:
     def test_device_provenance_survives_inline_and_cloud_task_dispatch(self):
         """Offline sync must stamp the conversation that canonical extraction reads."""
         source = self._read_sync_source()
-        v1_start = source.index('async def sync_local_files(')
         v2_start = source.index('async def sync_local_files_v2')
-        v1 = source[v1_start:v2_start]
         v2_end = source.find('\n@router.', v2_start + 1)
         v2 = source[v2_start:v2_end]
         task_handler = source[source.index('async def run_sync_job') :]
@@ -341,7 +342,6 @@ class TestSyncV2Structure:
             pipeline_source.index('def process_segment(') : pipeline_source.index('\ndef _store_sync_audio_chunk')
         ]
 
-        assert 'resolve_client_device_from_request(request)' in v1
         assert 'resolve_client_device(' in v2
         assert "'client_device_id': client_device_context.client_device_id" in v2
         assert 'client_device_id=client_device_context.client_device_id' in v2
@@ -667,68 +667,6 @@ class TestFullPipelineBackground:
 # ---------------------------------------------------------------------------
 
 
-class TestV1Unchanged:
-    """Verify v1 endpoint behavior is not modified by v2 addition."""
-
-    @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            return f.read()
-
-    def _get_v1_body(self):
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        # v1 ends at the v2 section comment
-        end = source.index('# v2 async sync-local-files', start)
-        return source[start:end]
-
-    def test_v1_returns_200_on_success(self):
-        """v1 must still return dict (200) on full success."""
-        body = self._get_v1_body()
-        assert 'return result' in body, "v1 must return result dict for 200"
-
-    def test_v1_returns_207_on_partial_failure(self):
-        """v1 must still return 207 on partial failure."""
-        body = self._get_v1_body()
-        assert 'status_code=207' in body, "v1 must return 207 for partial failure"
-
-    def test_v1_returns_500_on_total_failure(self):
-        """v1 must still raise 500 when all segments fail."""
-        body = self._get_v1_body()
-        assert 'status_code=500' in body, "v1 must raise 500 for total failure"
-
-    def test_v1_uses_synchronous_gather(self):
-        """v1 must process segments synchronously with asyncio.gather (no background)."""
-        body = self._get_v1_body()
-        assert 'asyncio.gather' in body, "v1 must use asyncio.gather for segment processing"
-        assert 'run_blocking' in body, "v1 must use run_blocking for blocking segment work"
-        assert 'sync_executor' in body, "v1 must use sync_executor for segment work"
-
-    def test_v1_cleanup_in_finally(self):
-        """v1 must still clean up files in finally block."""
-        body = self._get_v1_body()
-        assert 'finally:' in body
-        assert '_cleanup_files' in body
-
-    def test_v1_has_no_job_id(self):
-        """v1 must not reference job_id or Redis jobs."""
-        body = self._get_v1_body()
-        assert 'job_id' not in body, "v1 must not use job_id"
-        assert 'create_sync_job' not in body, "v1 must not use sync_jobs"
-
-    def test_v1_path_unchanged(self):
-        """v1 must still be at /v1/sync-local-files."""
-        source = self._read_sync_source()
-        # Find the v1 decorator line
-        v1_decorator_idx = source.index('"/v1/sync-local-files"')
-        # The next function def after this decorator should be sync_local_files
-        func_start = source.index('async def ', v1_decorator_idx)
-        func_line = source[func_start : source.index('\n', func_start)]
-        assert 'sync_local_files(' in func_line
-        assert 'v2' not in func_line
-
-
 # ---------------------------------------------------------------------------
 # 5. v2 endpoint contract tests
 # ---------------------------------------------------------------------------
@@ -765,8 +703,8 @@ class TestV2EndpointContract:
     def test_v2_reraises_http_exceptions(self):
         """v2 must re-raise HTTPException from fast-path helpers."""
         body = self._get_v2_post_body()
-        assert 'except HTTPException:' in body
-        assert 'raise' in body[body.index('except HTTPException:') :]
+        assert 'except HTTPException as error:' in body
+        assert 'raise' in body[body.index('except HTTPException as error:') :]
 
     def test_v2_finally_cleans_up_on_fast_path_failure(self):
         """v2 finally block must clean up raw files if fast-path fails."""
@@ -1374,6 +1312,7 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules = {}
         stubs = {}
         from database.sync_jobs import SyncLedgerFenceMode
+        from database.legal_holds import DestructiveOperationInProgress as actual_destructive_operation_in_progress
 
         prior_utils = sys.modules.get('utils')
         prior_utils_sync = sys.modules.get('utils.sync')
@@ -1393,6 +1332,7 @@ class TestAsyncCoordinatorBehavioral:
         prior_capture_evidence = sys.modules.get('utils.capture_evidence')
         from utils import capture_evidence as actual_capture_evidence
 
+        prior_size_limit = sys.modules.get('utils.conversations.size_limit')
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -1406,6 +1346,7 @@ class TestAsyncCoordinatorBehavioral:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.legal_holds',
             'database.sync_empty_recovery',
             'database.firestore_read_metrics',
             'firebase_admin',
@@ -1430,6 +1371,8 @@ class TestAsyncCoordinatorBehavioral:
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.smart_merge_policy',
+            'utils.conversations.smart_merge',
+            'utils.conversations.sync_hold_completion',
             'utils.conversations.process_conversation',
             'utils.sync.bridge',
             'utils.conversations.factory',
@@ -1474,6 +1417,8 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        sys.modules['database.legal_holds'].DestructiveOperationInProgress = actual_destructive_operation_in_progress
 
         # routers/sync.py resolves its handler budget at import time against the
         # dispatch deadline; a MagicMock attr cannot be compared inside min().
@@ -1567,6 +1512,10 @@ class TestAsyncCoordinatorBehavioral:
         # pipeline imports unknown_envelope at module scope, and a MagicMock
         # parent for utils is not a package.
         sys.modules['utils.capture_evidence'] = actual_capture_evidence
+        # Assignment's encoded-size primitive stays real even while the
+        # conversations parent package and cloud clients are stubbed.
+        saved_modules['utils.conversations.size_limit'] = prior_size_limit
+        sys.modules['utils.conversations.size_limit'] = actual_size_limit
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -1720,6 +1669,10 @@ class TestAsyncCoordinatorBehavioral:
         stubs['analytics'] = sys.modules['utils.analytics']
         stubs['pipeline'] = pipeline_mod
         stubs['saved_modules'] = saved_modules
+        # The coordinator reads segment clocks during persistence (the one
+        # request-wide capture offset); tests that do not pin their own clock
+        # reader get this numeric default instead of an automock.
+        pipeline_mod.get_timestamp_from_path = MagicMock(return_value=1700000001.0)
 
         return module, stubs
 
@@ -1736,7 +1689,9 @@ class TestAsyncCoordinatorBehavioral:
                 sys.modules[mod_name] = orig
 
     @pytest.fixture
-    def fenced_worker_module(self):
+    def fenced_worker_module(self, monkeypatch):
+        # This harness fakes the eager worker; hold scheduling is exercised by the consumer tests.
+        monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
         """Build the import-heavy behavioral harness outside the test call budget."""
         module, stubs = self._load_sync_module()
         # Release prior cyclic mock graphs during harness setup, so a full-heap
@@ -3429,8 +3384,11 @@ class TestV2EndpointExecution:
         prior_capture_evidence = sys.modules.get('utils.capture_evidence')
         from utils import capture_evidence as actual_capture_evidence
 
+        prior_size_limit = sys.modules.get('utils.conversations.size_limit')
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
+
+        from database.legal_holds import DestructiveOperationInProgress as actual_destructive_operation_in_progress
 
         heavy_deps = [
             'redis',
@@ -3442,6 +3400,7 @@ class TestV2EndpointExecution:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.legal_holds',
             'database.sync_empty_recovery',
             'database.firestore_read_metrics',
             'firebase_admin',
@@ -3466,6 +3425,8 @@ class TestV2EndpointExecution:
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.smart_merge_policy',
+            'utils.conversations.smart_merge',
+            'utils.conversations.sync_hold_completion',
             'utils.conversations.process_conversation',
             'utils.sync.bridge',
             'utils.conversations.factory',
@@ -3510,6 +3471,8 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        sys.modules['database.legal_holds'].DestructiveOperationInProgress = actual_destructive_operation_in_progress
 
         # routers/sync.py resolves its handler budget at import time against the
         # dispatch deadline; a MagicMock attr cannot be compared inside min().
@@ -3601,6 +3564,10 @@ class TestV2EndpointExecution:
         # pipeline imports unknown_envelope at module scope, and a MagicMock
         # parent for utils is not a package.
         sys.modules['utils.capture_evidence'] = actual_capture_evidence
+        # Assignment's encoded-size primitive stays real even while the
+        # conversations parent package and cloud clients are stubbed.
+        saved_modules['utils.conversations.size_limit'] = prior_size_limit
+        sys.modules['utils.conversations.size_limit'] = actual_size_limit
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.

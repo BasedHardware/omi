@@ -35,6 +35,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from websockets.exceptions import ConnectionClosed
 
+from testing.listen_pusher_stack.recorded_clock import age_conversation
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -163,6 +164,7 @@ class Stack:
         recording_lifecycle_fault: dict[str, str] | None = None,
         memory_enabled: str | None = 'on',
         finalization_worker_memory_enabled: str | None = 'on',
+        owner_memory_pilot: bool = False,
     ):
         if finalization_mode not in {'inline', 'cloud_tasks'}:
             raise ValueError(f'unsupported finalization mode: {finalization_mode}')
@@ -198,6 +200,7 @@ class Stack:
         self.recording_lifecycle_fault = recording_lifecycle_fault
         self.memory_enabled = memory_enabled
         self.finalization_worker_memory_enabled = finalization_worker_memory_enabled
+        self.owner_memory_pilot = owner_memory_pilot
         self.recording_lifecycle_retry_file = self.state_dir / 'release-recording-lifecycle-retry'
         ports = _free_ports(5)
         self.redis_port = ports[0]
@@ -234,6 +237,7 @@ class Stack:
                 'OMI_HARNESS_INSTANCE': 'listen-pusher-stack',
                 'OMI_ENV_STAGE': 'offline',
                 'PROVIDER_MODE': 'offline',
+                'SPEAKER_EVIDENCE_MODE': 'serve' if self.owner_memory_pilot else 'shadow',
                 'FIREBASE_PROJECT_ID': PROJECT,
                 'GOOGLE_CLOUD_PROJECT': PROJECT,
                 'GCLOUD_PROJECT': PROJECT,
@@ -631,9 +635,7 @@ class Stack:
         )
 
     def age_conversation(self, uid: str, conversation_id: str) -> None:
-        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).update(
-            {'finished_at': datetime.now(timezone.utc) - timedelta(seconds=121)}
-        )
+        age_conversation(self.firestore, uid, conversation_id)
 
     def release_inline_finalization(self) -> None:
         if not self.hold_inline_finalization:
@@ -1241,6 +1243,7 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
         return bool(conversation and conversation.get('has_content'))
 
     _wait_until(content_persisted, label='persisted content before REST finalization')
+    await _assign_owner_for_memory(stack, uid, conversation_id)
     responses = await _request_rest_finalization(
         stack, conversation_id, uid, requests=stack.rest_finalization_race_parties
     )
@@ -1451,6 +1454,7 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
     uid = 'stack-cloud-integration-retry'
     conversation_id = str(uuid.uuid4())
     task = await _cloud_task_for_clean_desktop_close(stack, uid, conversation_id)
+    await _assign_owner_for_memory(stack, uid, conversation_id)
     first = await stack.deliver_finalization_task(task, retry_count=0)
     if first != (500, {'status': 'retry'}):
         raise StackFailure(f'integration failure delivery did not request a retry: {first}')
@@ -1489,6 +1493,25 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
     expected_fanout_key_hash = sha256(fanout_key.encode('utf-8')).hexdigest()
     if len(integration_attempts) != 2 or fanout_key_hashes != {expected_fanout_key_hash}:
         raise StackFailure('integration retry did not preserve one idempotency key across both delivery attempts')
+
+
+async def _assign_owner_for_memory(stack: Stack, uid: str, conversation_id: str) -> None:
+    """Positive owner fixture through the real manual-label HTTP authority.
+
+    The synthetic STT voice starts unresolved. Tests that expect memory provider
+    work must explicitly establish its owner, rather than bypass admission.
+    Training is disabled; this is local emulator data only.
+    """
+    async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
+        response = await client.patch(
+            f'http://127.0.0.1:{stack.backend_port}/v1/conversations/{conversation_id}/assign-speaker/0',
+            params={'assign_type': 'is_user', 'value': 'true', 'use_for_speech_training': 'false'},
+            headers={'Authorization': f'Bearer {ADMIN_KEY}{uid}'},
+        )
+    if response.status_code != 200:
+        raise StackFailure(f'manual owner fixture returned HTTP {response.status_code}')
+    if not any(segment.get('is_user') for segment in response.json().get('transcript_segments', [])):
+        raise StackFailure('manual owner fixture did not label the synthetic voice')
 
 
 async def _memory_fence_blocks_durable_finalization(stack: Stack) -> None:
@@ -1737,6 +1760,7 @@ def _run_stack_scenario(
     recording_lifecycle_fault: dict[str, str] | None = None,
     memory_enabled: str | None = 'on',
     finalization_worker_memory_enabled: str | None = 'on',
+    owner_memory_pilot: bool = False,
     scenario: Callable[[Stack], Any],
 ) -> None:
     stack = Stack(
@@ -1750,6 +1774,7 @@ def _run_stack_scenario(
         recording_lifecycle_fault=recording_lifecycle_fault,
         memory_enabled=memory_enabled,
         finalization_worker_memory_enabled=finalization_worker_memory_enabled,
+        owner_memory_pilot=owner_memory_pilot,
     )
     try:
         stack.start()
@@ -1815,6 +1840,7 @@ def main() -> int:
             finalizer_failures=None,
             rest_finalization_race_uid='stack-cloud-rest-restart',
             rest_finalization_race_parties=4,
+            owner_memory_pilot=True,
             scenario=_rest_finalization_survives_listener_restart,
         )
         _run_stack_scenario(
@@ -1833,6 +1859,7 @@ def main() -> int:
             state_dir / 'cloud-integration-retry',
             finalization_mode='cloud_tasks',
             finalizer_failures={'integration': 1},
+            owner_memory_pilot=True,
             scenario=_integration_retry_preserves_processed_conversation,
         )
         _run_stack_scenario(

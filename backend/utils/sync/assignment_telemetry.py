@@ -14,6 +14,7 @@ CREATED_UNKNOWN_REASONS = (
     'candidate_unread',
     'invalid_extent',
     'observation_error',
+    'discovery_skipped',
     'not_recorded',
 )
 
@@ -38,7 +39,7 @@ def created_sync_row_observation(
     complete = False
     reasons: set[str] = set()
     try:
-        if lookup_incomplete_reason in ('lookup_failed', 'page_cap', 'no_device'):
+        if lookup_incomplete_reason in ('lookup_failed', 'page_cap', 'no_device', 'discovery_skipped'):
             reasons.add(lookup_incomplete_reason)
         has_device = bool(incoming.get('client_device_id'))
         complete = lookup_complete and has_device

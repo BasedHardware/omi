@@ -60,6 +60,29 @@ def test_plan_refuses_cross_owner_and_invalid_budgets():
         plan_owner(store, 'synthetic', max_units=0)
 
 
+def test_privacy_holds_are_repairable_and_the_plan_binds_the_control_receipt():
+    store = seed()
+    row = store.client.rows[('test_results', 'head')]
+    row.update(
+        projection_state='quarantine_held',
+        protocol_version=2,
+        privacy_quarantine_version=1,
+        projection_privacy_checkpoint={
+            'version': 1,
+            'ordering_settled': True,
+            'protocol_before': 1,
+            'state_before': 'pending',
+        },
+        projection_privacy_refusal={'version': 1, 'reason': 'data_protection_changed'},
+    )
+    first = plan_owner(store, 'synthetic')
+    assert first['units'] == ['old', 'head', 'tail']
+    row['projection_privacy_refusal']['reason'] = 'privacy_generation_changed'
+    assert plan_owner(store, 'synthetic')['plan_sha256'] != first['plan_sha256']
+    row.pop('privacy_quarantine_version')
+    assert plan_owner(store, 'synthetic')['units'] == ['old', 'tail']
+
+
 def test_plan_survives_missing_watermark_receipt_and_discovers_forward_units(monkeypatch):
     store = seed(missing_results={'old'})
     # Expired history truncates the backward walk; the plan itself stays

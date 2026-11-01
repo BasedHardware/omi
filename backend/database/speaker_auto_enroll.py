@@ -6,6 +6,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database._client import get_firestore_client
 from database import _client, speaker_profile_authority
 from database.legal_holds import external_write_fence
@@ -158,6 +159,7 @@ def publish(
                     'voice_needed_seconds': 0,
                 },
             )
+            bump_people_generation(transaction, person)
             transaction.update(source, {OWNER_INDEX: sorted(set([*source_index, person_id]))})
             transaction.update(user, {OWNER_INDEX: sorted(set([*index, person_id])), **authority_update})
             return True
@@ -184,6 +186,7 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> 
             transaction.update(
                 ref, {policy.POOL_FIELD: firestore.DELETE_FIELD, 'updated_at': datetime.now(timezone.utc)}
             )
+            bump_people_generation(transaction, ref)
         version = owner.get(PRIVACY_VERSION, 0)
         if type(version) is not int:
             raise ValueError('Invalid speaker enrollment privacy version')
@@ -228,6 +231,7 @@ def retract_conversation(uid: str, conversation_id: str, *, firestore_client: An
                 changes.append((ref, change))
         for ref, change in changes:
             transaction.update(ref, change)
+            bump_people_generation(transaction, ref)
         if changes and owner_snapshot.exists:
             transaction.update(
                 user, policy.authority_after(owner, {ref.id: change[policy.POOL_FIELD] for ref, change in changes})
@@ -259,6 +263,7 @@ def revoke_person(uid: str, person_id: str, *, firestore_client: Any = None) -> 
                     'updated_at': datetime.now(timezone.utc),
                 },
             )
+            bump_people_generation(transaction, person)
         if owner_snapshot.exists:
             transaction.update(
                 user,

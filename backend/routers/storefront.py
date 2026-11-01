@@ -110,16 +110,11 @@ def get_storefront(
     subscription = users_db.get_user_valid_subscription(uid, provision=False)
     if subscription is None:
         subscription = subscription_utils.get_default_basic_subscription()
-    # New-buyer single-plan rule (2026-10-24): the ladder sheet has no Omi Pro
-    # (`unlimited_v2`) card, and the web plans panel has no catalog fallback, so
-    # a buyer with no current paid subscription on an explicitly non-desktop
-    # platform gets a single-tier Omi Pro sheet instead of the ladder — never a
-    # 404, which that client renders as a dead "Couldn't load plans" panel.
-    # Desktop platforms, missing/unknown platform headers, and existing
-    # subscribers are unchanged; NEW_BUYER_SINGLE_PLAN_ENABLED=false restores
-    # the ladder sheet for everyone.
+    # Omi Pro is the only plan sold: a buyer with no current paid subscription
+    # gets a single-tier Omi Pro sheet on every platform (the ladder sheet has
+    # no Omi Pro card). NEW_BUYER_SINGLE_PLAN_ENABLED=false restores the ladder.
     usage = _usage(uid, subscription, locale)
-    if subscription_utils.new_buyer_single_plan_applies(subscription.plan, x_app_platform):
+    if subscription_utils.new_buyer_single_plan_applies(subscription.plan):
         return build_single_plan_storefront(
             catalog_revision=catalog.CATALOG_REVISION,
             subscription=subscription,

@@ -20,6 +20,7 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
+import 'package:omi/utils/conversation_cache_decode.dart';
 import 'package:omi/env/physical_qualification.dart';
 
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
@@ -88,6 +89,8 @@ class SharedPreferencesUtil {
   }
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
+    _conversationCacheReadSession++;
+    _cachedConversationsGeneration++;
     _preferences = await SharedPreferences.getInstance();
     if (!PhysicalQualification.enabled) await PreferenceQuarantine.restoreThenPrune(_preferences!);
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
@@ -723,6 +726,24 @@ class SharedPreferencesUtil {
 
   set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
 
+  // Whether the sync health watchdog may raise stall alerts (#15501).
+  // Defaults to true (kill switch): silent multi-day loss is the failure it exists for.
+  bool get syncAlertsEnabled => getBool('syncAlertsEnabled', defaultValue: true);
+
+  set syncAlertsEnabled(bool value) => saveBool('syncAlertsEnabled', value);
+
+  // Milliseconds epoch of the last observed sync activity (BLE audio, batch
+  // finalized, WAL accepted, pendant connect). 0 = never seen; the watchdog
+  // seeds it on first evaluation.
+  int get lastSyncTimestamp => getInt('lastSyncTimestamp', defaultValue: 0);
+
+  set lastSyncTimestamp(int value) => saveInt('lastSyncTimestamp', value);
+
+  // Milliseconds epoch of the last dispatched sync stall alert, for the daily cooldown.
+  int get lastSyncAlertTimestamp => getInt('lastSyncAlertTimestamp', defaultValue: 0);
+
+  set lastSyncAlertTimestamp(int value) => saveInt('lastSyncAlertTimestamp', value);
+
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {
     final json = getString('sttConfig_${provider.name}');
@@ -1008,6 +1029,11 @@ class SharedPreferencesUtil {
 
   set discardedOnlyExplained(bool value) => saveBool('discardedOnlyExplained', value);
 
+  /// When Home last showed the switch-to-yearly row (ms since epoch); it shows at most every 30 days.
+  int get yearlySwitchHomeShownAt => getInt('yearlySwitchHomeShownAt');
+
+  set yearlySwitchHomeShownAt(int value) => saveInt('yearlySwitchHomeShownAt', value);
+
   // Show short conversations - default is false (hidden)
   bool get showShortConversations => getBool('showShortConversations', defaultValue: false);
 
@@ -1120,6 +1146,12 @@ class SharedPreferencesUtil {
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
 
+  /// Composer text kept across app close/kill. Cleared only after a send is
+  /// accepted, so a failed or interrupted send still restores on reopen.
+  String get chatMessageDraft => getString('chatMessageDraft', defaultValue: '');
+
+  set chatMessageDraft(String value) => saveString('chatMessageDraft', value);
+
   String get lastUsedSummarizationAppId => getString('lastUsedSummarizationAppId');
 
   set lastUsedSummarizationAppId(String value) => saveString('lastUsedSummarizationAppId', value);
@@ -1148,6 +1180,63 @@ class SharedPreferencesUtil {
   /// Bumped by every cache write and by [clear]; an older background write
   /// never lands over a newer write or a sign-out clear.
   static int _cachedConversationsGeneration = 0;
+  // Clear/init invalidate reads even while their asynchronous cleanup is still
+  // running. Ordinary cache refreshes may instead retry the latest snapshot.
+  static int _conversationCacheReadSession = 0;
+
+  @visibleForTesting
+  // Raw JSON character budget, so one long transcript also uses the worker.
+  static int cachedConversationsBackgroundDecodeThreshold = 64 * 1024;
+
+  /// Restore full history off the UI isolate. A cleared/replaced account never
+  /// receives an old completion; a racing cache write gets one fresh attempt.
+  /// The synchronous getter remains available to compatibility-only callers.
+  Future<List<ServerConversation>> loadCachedConversations() async {
+    final session = _conversationCacheReadSession;
+    final ownerUid = uid;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final generation = _cachedConversationsGeneration;
+      final legacy = getBool('migratedMemories') && getStringList('cachedMemories').isNotEmpty;
+      final key = legacy ? 'cachedMemories' : 'cachedConversations';
+      final encoded = List<String>.of(getStringList(key));
+      var decoded = await offUiIsolate(() => decodeConversationCacheSnapshot(encoded),
+          size: encoded.fold<int>(0, (size, value) => size + value.length),
+          threshold: cachedConversationsBackgroundDecodeThreshold,
+          debugName: 'conversation_cache_decode');
+      if (session != _conversationCacheReadSession || uid != ownerUid) return [];
+      if (generation != _cachedConversationsGeneration) {
+        if (legacy) return []; // Never retry an old migration over a newer cache writer.
+        continue;
+      }
+      for (final type in decoded.unreadableTypes) {
+        Logger.debug('Skipping unreadable $key entry: $type');
+      }
+      if (legacy) {
+        // Use the existing guarded migration writer, and refuse a newer
+        // write/clear after its await too.
+        final migrationGeneration = generation + 1;
+        await cacheConversations(decoded.conversations);
+        if (session != _conversationCacheReadSession || uid != ownerUid) return [];
+        if (_cachedConversationsGeneration != migrationGeneration) return [];
+        // The old getter reads the just-written modern wire form. Preserve
+        // that normalization instead of returning pre-round-trip legacy rows.
+        final normalized = List<String>.of(getStringList('cachedConversations'));
+        decoded = await offUiIsolate(() => decodeConversationCacheSnapshot(normalized),
+            size: normalized.fold<int>(0, (size, value) => size + value.length),
+            threshold: cachedConversationsBackgroundDecodeThreshold,
+            debugName: 'conversation_cache_decode');
+        if (session != _conversationCacheReadSession || uid != ownerUid) return [];
+        if (_cachedConversationsGeneration != migrationGeneration) return [];
+        await saveBool('migratedMemories', true);
+        if (session != _conversationCacheReadSession || uid != ownerUid) return [];
+        if (_cachedConversationsGeneration != migrationGeneration) return [];
+      }
+      return decoded.conversations;
+    }
+    // Concurrent live rows are reconciled by the provider. Never publish a
+    // superseded cache snapshot merely to complete a best-effort fallback.
+    return [];
+  }
 
   @visibleForTesting
   static int cachedConversationsBackgroundEncodeThreshold = 20;
@@ -1156,12 +1245,16 @@ class SharedPreferencesUtil {
   /// UI isolate. The cache holds full transcripts and is refreshed on resume.
   Future<void> cacheConversations(List<ServerConversation> value) async {
     final generation = ++_cachedConversationsGeneration;
+    final session = _conversationCacheReadSession;
+    final ownerUid = uid;
     final snapshot = List<ServerConversation>.of(value);
     final encoded = await offUiIsolate(() => [for (final c in snapshot) jsonEncode(c.toJson())],
         size: snapshot.length,
         threshold: cachedConversationsBackgroundEncodeThreshold,
         debugName: 'conversation_cache_encode');
-    if (generation != _cachedConversationsGeneration) return;
+    if (generation != _cachedConversationsGeneration || session != _conversationCacheReadSession || uid != ownerUid) {
+      return;
+    }
     await saveStringList('cachedConversations', encoded);
   }
 
@@ -1371,6 +1464,7 @@ class SharedPreferencesUtil {
   /// Clears persisted user identity and server-backed display caches while
   /// preserving device, onboarding, permissions, and offline recording state.
   void clearUserDisplayCache() {
+    _conversationCacheReadSession++;
     final ownerUid = uid;
     if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
     authToken = '';
@@ -1537,6 +1631,7 @@ class SharedPreferencesUtil {
   Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
 
   Future<bool> clear() async {
+    _conversationCacheReadSession++;
     // Drop any in-flight background conversation cache write (sign-out, account deletion).
     _cachedConversationsGeneration++;
     _authTokenCache = '';

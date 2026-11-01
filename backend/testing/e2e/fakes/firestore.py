@@ -6,8 +6,9 @@ the same API surface as google.cloud.firestore — collections,
 subcollections, where filters, batch operations, get_all, etc.
 """
 
-from copy import deepcopy
+from copy import copy, deepcopy
 from datetime import datetime, timezone
+from functools import partial
 from typing import Optional
 
 from fake_firestore import MockFirestore
@@ -20,6 +21,8 @@ from fake_firestore.document import (
     get_by_path,
     set_by_path,
 )
+from fake_firestore.query import FakeQuery
+from fake_firestore.transaction import FakeTransaction
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
@@ -62,6 +65,18 @@ def _patch_document_id_query_ordering():
         return _DocumentIdAwareDict(data, self.id)
 
     FakeDocumentSnapshot.to_dict = _to_dict
+
+    # fake-firestore applies stable sorts in declaration order, making the LAST
+    # field primary. Firestore's first order_by is primary. #20629's explicit
+    # created_at/document-id cursor reproduced the reversal in the HTTP journey.
+    original_query_stream = FakeQuery.stream
+
+    def _ordered_stream(self, *args, **kwargs):
+        ordered = copy(self)
+        ordered.orders = list(reversed(self.orders))
+        return original_query_stream(ordered, *args, **kwargs)
+
+    FakeQuery.stream = _ordered_stream
 
 
 def _patch_document_merge_preserves_subcollections():
@@ -155,6 +170,15 @@ def get_mock_firestore() -> MockFirestore:
     return _mock_store
 
 
+def _patch_transaction_create():
+    """Stage real create semantics; fake-firestore's implementation is a no-op."""
+
+    def _create(self, reference, document_data):
+        self._add_write_op(partial(reference.create, deepcopy(document_data)))
+
+    FakeTransaction.create = _create
+
+
 def setup_fake_firestore() -> MockFirestore:
     """Create and register the global MockFirestore singleton."""
     global _mock_store
@@ -162,6 +186,7 @@ def setup_fake_firestore() -> MockFirestore:
     _patch_delete_field_missing_key_noop()
     _patch_document_delete_missing_doc_noop()
     _patch_document_id_query_ordering()
+    _patch_transaction_create()
     _mock_store = MockFirestore()
     return _mock_store
 

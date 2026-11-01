@@ -618,8 +618,11 @@ def test_purge_enumerates_noncurrent_generations(monkeypatch):
     class Generation:
         def __init__(self, value):
             self.value = value
+            self.generation = value
+            self.metageneration = 2
 
-        def delete(self):
+        def delete(self, **kwargs):
+            assert kwargs == {'if_generation_match': self.generation, 'if_metageneration_match': 2}
             generations.remove(self.value)
 
     def list_blobs(**kwargs):

@@ -1,0 +1,12 @@
+{
+  "schema": "record-trace/1",
+  "name": "drained_pod_token_blocks_seal",
+  "source": "sealrca 2026-10-30: a producer token left by a drained pusher pod blocks every later seal; no TTL",
+  "row": {"record_lane_owner": "batch_live_v1", "record_upload_sessions": {"drained-producer": true}},
+  "durable": [false, true],
+  "sessions": [
+    {"frames": ["conversation", "finalize"], "upload": "ok"}
+  ],
+  "expect": {"sealed": false, "upload_failed": false, "open_tokens": 1, "admissible": false},
+  "known_gap": "Stays unsealed with no transcript until the dead token is cleared (sealsweep plan, #24104). Flip this expectation in the PR that fixes it."
+}

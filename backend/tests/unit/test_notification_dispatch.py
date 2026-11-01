@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from types import ModuleType
 
 from testing.import_isolation import stub_modules
@@ -7,6 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from utils import notification_dispatch as notification_dispatch_module
 from utils.notification_dispatch import (
     APP_NOTIFICATION_LIMIT,
     APP_NOTIFICATION_RATE_LIMIT_POLICY,
@@ -16,6 +18,11 @@ from utils.notification_dispatch import (
     NotificationIntent,
     NotificationPolicy,
 )
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_users_through_deletion_fence(monkeypatch):
+    monkeypatch.setattr(notification_dispatch_module, 'account_deletion_blocks_user_work', lambda _uid: False)
 
 
 class _RateLimitReserve:
@@ -128,6 +135,50 @@ def test_internal_app_notification_bypasses_external_quota() -> None:
     assert outcome.rate_limit is None
     assert reserve.calls == []
     assert len(deliveries) == 1
+
+
+def test_pending_deletion_suppresses_sync_and_async_notifications() -> None:
+    deliveries: list[str] = []
+
+    async def async_delivery(*_args: object) -> None:
+        deliveries.append('async')
+
+    dispatcher = NotificationDispatcher(
+        sync_delivery=lambda *_args: deliveries.append('sync'),
+        async_delivery=async_delivery,
+        deletion_blocks=lambda uid: uid == 'user-1',
+    )
+
+    sync_result = dispatcher.dispatch(_intent())
+
+    async def dispatch_async():
+        return await dispatcher.dispatch_async(_intent(policy=NotificationPolicy.DIRECT))
+
+    async_result = asyncio.run(dispatch_async())
+
+    assert sync_result.status == NotificationDispatchStatus.SUPPRESSED
+    assert sync_result.reason == 'account_pending_deletion'
+    assert async_result.status == NotificationDispatchStatus.SUPPRESSED
+    assert async_result.reason == 'account_pending_deletion'
+    assert deliveries == []
+
+
+def test_notification_authority_failure_suppresses_delivery() -> None:
+    deliveries: list[object] = []
+
+    def unavailable(_uid: str) -> bool:
+        raise RuntimeError('synthetic marker outage')
+
+    dispatcher = NotificationDispatcher(
+        sync_delivery=lambda *args: deliveries.append(args),
+        deletion_blocks=unavailable,
+    )
+
+    result = dispatcher.dispatch(_intent())
+
+    assert result.status == NotificationDispatchStatus.SUPPRESSED
+    assert result.reason == 'deletion_authority_unavailable'
+    assert deliveries == []
 
 
 def test_app_intent_preserves_plugin_attribution_and_navigation() -> None:

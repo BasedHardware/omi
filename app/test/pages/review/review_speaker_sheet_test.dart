@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/review_item_sheet.dart';
@@ -42,6 +43,7 @@ Future<ReviewProvider> _review(List<(String, Map<String, dynamic>)> sent) async 
     isEligible: () => true,
     reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
     loadItems: () async => const ApiSuccess(ReviewItemsResponse(items: [_speaker], remainingToday: 1)),
+    loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])),
     sendAnswer: (item, answer) async {
       sent.add((item.itemId, answer.toJson(item.kind)));
       return const ApiSuccess(0);

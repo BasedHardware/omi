@@ -54,6 +54,12 @@ def create_subscription_checkout_session(
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime
         cancel_url = urljoin(base_url, 'v1/payments/cancel')  # type: ignore[reportArgumentType]  # base_url validated at runtime
 
+        # Pin the selected price's original currency as well as disabling FX.
+        # Multi-currency Prices can otherwise select a presentment currency by IP.
+        # Existing non-USD management/reactivation stays outside new Checkout.
+        price = stripe.Price.retrieve(price_id)
+        currency = price.currency.lower()
+
         # session creation parameters
         session_params: Dict[str, Any] = {
             'client_reference_id': uid,
@@ -65,6 +71,9 @@ def create_subscription_checkout_session(
                 },
             ],
             'mode': 'subscription',
+            'currency': currency,
+            # Language only; this does not choose or convert the currency.
+            'locale': 'auto',
             'success_url': success_url,
             'cancel_url': cancel_url,
             'metadata': {
@@ -84,6 +93,11 @@ def create_subscription_checkout_session(
             # minimum_amount evaluated against the USD-authored price (issue #23299).
             'adaptive_pricing': {'enabled': False},
         }
+
+        if currency == 'usd':
+            # Stripe owns its currency glyphs. Keep USD explicit even where its
+            # hosted template uses a dollar glyph rather than the app's US$.
+            session_params['custom_text'] = {'submit': {'message': 'All amounts are in USD (US dollars).'}}
 
         if trial_period_days:
             session_params['subscription_data']['trial_period_days'] = trial_period_days

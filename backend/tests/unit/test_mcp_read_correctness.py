@@ -15,7 +15,7 @@ from utils.mcp_data import clean_action_item
 import utils.mcp_dates as dates
 from utils.mcp_dates import local_date_window, offset_timestamp, resolve_timezone
 from utils.mcp_server.handlers import conversations, memories, other
-from utils.mcp_server.helpers import conversation_card
+from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card, public_transcript_timing
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.payloads import tool_response_serialized_chars
 from utils.mcp_server.constants import MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
@@ -34,6 +34,65 @@ def card(cid, text='x'):
         'structured': {'title': 'Synthetic', 'overview': text},
         'transcript_segments': [{'text': text, 'start': 0, 'end': 60}],
     }
+
+
+@pytest.mark.parametrize(
+    'start,end,expected',
+    [
+        (-285.0, -42.0, (0.0, 0.0)),
+        ('-285', '-42', (0, 0)),
+        (-0.25, 1.5, (0.0, 1.5)),
+        ('-0.25', 1.5, (0, 1.5)),
+        (0, 2, (0, 2)),
+        (1.25, 3.5, (1.25, 3.5)),
+    ],
+)
+def test_mcp_read_clamps_pre_origin_offsets_without_changing_storage(start, end, expected):
+    source = [{'id': 'synthetic-segment', 'text': 'synthetic', 'speaker_id': 0, 'start': start, 'end': end}]
+    projected, truncated = bounded_transcript_segments(source, max_segments=10, max_chars=100)
+    assert (projected[0]['start'], projected[0]['end']) == expected
+    assert projected[0]['text'] == 'synthetic'
+    assert source[0]['start'] == start and source[0]['end'] == end
+    assert not truncated
+
+
+def test_mcp_pre_origin_projection_preserves_fetch_bounds_and_conversation_origin(monkeypatch):
+    stored = card('synthetic-conversation')
+    stored['transcript_segments'] = [
+        {'text': 'before', 'start': -10, 'end': -2},
+        {'text': 'crossing', 'start': -1, 'end': 2},
+        {'text': 'after', 'start': 2, 'end': 3},
+    ]
+    monkeypatch.setattr(conversations, 'fetch_conversation_for_detail', lambda *a, **k: stored)
+    result = conversations.get_conversation_by_id(
+        OWNER, {'conversation_id': stored['id'], 'max_segments': 2, 'max_chars': 100}
+    )
+    projected = result['conversation']
+    assert result['truncated']
+    assert projected['started_at'] == stored['started_at']
+    assert [(s['start'], s['end']) for s in projected['transcript_segments']] == [(0, 0), (0, 2)]
+    assert stored['transcript_segments'][0]['start'] == -10
+
+
+def test_mcp_pre_origin_projection_keeps_text_budget():
+    source = [{'text': 'synthetic', 'start': -10, 'end': -2}, {'text': 'later', 'start': 1, 'end': 2}]
+    projected, truncated = bounded_transcript_segments(source, max_segments=10, max_chars=5)
+    assert truncated and len(projected) == 1
+    assert len(projected[0]['text']) <= 5
+    assert projected[0]['start'] == projected[0]['end'] == 0
+
+
+def test_mcp_snippet_seconds_and_milliseconds_use_the_same_nonnegative_projection():
+    source = {'text': 'synthetic', 'start': -2.5, 'end': 1.25, 'start_ms': -2500, 'end_ms': 1250}
+    projected = public_transcript_timing(source)
+    assert projected == {'text': 'synthetic', 'start': 0, 'end': 1.25, 'start_ms': 0, 'end_ms': 1250}
+    assert source['start'] == -2.5 and source['start_ms'] == -2500
+
+
+@pytest.mark.parametrize('unknown', [None, False, 'unplaced'])
+def test_mcp_timing_projection_does_not_invent_unknown_clock_metadata(unknown):
+    source = {'text': 'synthetic', 'start': unknown, 'end': 1.25}
+    assert public_transcript_timing(source) == source
 
 
 def test_updated_filter_runs_before_the_old_200_row_scan(monkeypatch):

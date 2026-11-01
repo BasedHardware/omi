@@ -722,8 +722,6 @@ def test_backend_deploy_workflows_do_not_materialize_an_ignored_service_account_
     workflows = (
         'gcp_backend_pusher_auto_deploy.yml',
         'gcp_llm_gateway.yml',
-        'gcp_memory_maintenance_job.yml',
-        'gcp_memory_maintenance_job_auto_dev.yml',
         'gcp_notifications_job.yml',
     )
 

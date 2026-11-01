@@ -8,7 +8,13 @@ import os
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
-from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
+from config.stt_provider_policy import (
+    MODULATE_SUPPORTED_LANGUAGES,
+    PARAKEET_MODEL_BY_SURFACE,
+    PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
+    STTServingSurface,
+    normalized_stt_language,
+)
 
 
 class Priority(IntEnum):
@@ -55,6 +61,44 @@ def fresh_gpu_priority_enabled() -> bool:
     )
 
 
+def language_inheritance_enabled() -> bool:
+    """Default-on context inheritance; false restores per-piece detection input."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def language_eligibility_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    While legacy sync is on, a new sync upload whose conversation-or-user language
+    is a named language the batch Parakeet model cannot serve stays on legacy sync
+    instead of entering batch custody, where the worker language guard would
+    quarantine it. Blank, ``multi`` and unknown languages are unaffected.
+    ``false`` restores admitting those uploads to batch.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def known_unsupported_batch_language(language: str | None) -> bool:
+    """True only for a recognized language code the batch Parakeet model cannot serve.
+
+    Lead ruling 304254: not English-only admission. Blank, ``multi``, ``auto``,
+    ``und`` and any unrecognized value are unknown, never "known unsupported";
+    only a code an STT provider recognizes (the stored-preference vocabulary)
+    that the prerecorded Parakeet model does not support qualifies.
+    """
+    if not language_eligibility_enabled() or not isinstance(language, str):
+        return False
+    code = normalized_stt_language(language.strip())
+    parakeet = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]]
+    return code in MODULATE_SUPPORTED_LANGUAGES and code not in parakeet
+
+
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
     if lane == 'fresh':
         if (
@@ -87,6 +131,12 @@ def live_record_admission_enabled() -> bool:
     return resolve_batch_policy('').live_admission_enabled
 
 
+def require_record_protocol_ready() -> None:
+    """One-time producer protocol cutover; never expires a pending obligation."""
+    if os.getenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'false').strip().lower() != 'true':
+        raise ValueError('record protocol cutover barrier closed')
+
+
 def live_record_enabled_for(owner_id: str) -> bool:
     from config.policy import resolve_batch_policy
 
@@ -116,6 +166,10 @@ def shared_live_enabled() -> bool:
 
 
 SCHEDULER_SHARDS = 64
+
+
+def shard_spread_enabled() -> bool:
+    return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
 
 
 def scheduler_control_key(hashed_owner: str) -> str:
@@ -182,6 +236,14 @@ def projection_contention_enabled() -> bool:
     return resolve_stage_policy('', 'projection').projection_contention
 
 
+def contention_retry_enabled() -> bool:
+    """Retry atomic batch Firestore contention by default; false is the kill switch."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_CONTENTION_RETRY_ENABLED',
+        os.getenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def speech_empty_multilingual_enabled() -> bool:
     from config.policy import resolve_stage_policy
 
@@ -237,8 +299,9 @@ def long_speech_handoff_enabled() -> bool:
 def second_multilingual_enabled() -> bool:
     """Kill switch (unset is on; only ``false`` disables it).
 
-    A long-speech handoff unit whose Modulate recovery came back valid-empty gets
-    one Deepgram multilingual call inside the same paid recovery intent.
+    A held unit whose Modulate recovery came back valid-empty gets one Soniox
+    multilingual call inside the same paid recovery intent. Language-guarded
+    recovery retains its separate switch and one-minute bound.
     """
     return rollout_default_on(
         'BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED',
@@ -420,7 +483,7 @@ def worker_pipeline_depth() -> int:
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
 
 
-WORKER_IO_CONCURRENCY_DEFAULT = 3
+WORKER_IO_CONCURRENCY_DEFAULT = 5
 WORKER_IO_CONCURRENCY_MAX = 8
 
 
@@ -441,10 +504,10 @@ def stage_profiling_enabled() -> bool:
 
 
 def worker_io_concurrency() -> int:
-    """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
+    """Shared bounded artifact fetch/decode and persistence across pump lanes.
 
     1 restores the fully serial chain. Malformed or out-of-range values keep the
-    conservative default; GPU work and the chain lock are unaffected either way.
+    bounded default; GPU work and the chain lock are unaffected either way.
     """
     try:
         value = int(os.getenv('BATCH_PIPELINE_WORKER_IO_CONCURRENCY', str(WORKER_IO_CONCURRENCY_DEFAULT)))

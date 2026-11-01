@@ -14,7 +14,8 @@ from perf_gate_report import SCENARIOS, summarize
 def load_tests(loader, tests, pattern):
     # Use the existing manifest check entrypoint for all heavy-account guards.
     for relative in ('test_perf_sim_report.py', 'test_perf_drive.py',
-                     'perf/test_device_tools.py', 'perf/test_ios_admission.py'):
+                     'perf/test_device_tools.py', 'perf/test_ios_admission.py', 'perf/test_virtual_admission.py',
+                     'perf/test_android_manifest.py', 'perf/test_host_load.py'):
         path = Path(__file__).parent / relative
         spec = importlib.util.spec_from_file_location('heavy_' + path.stem, path)
         module = importlib.util.module_from_spec(spec)
@@ -26,9 +27,17 @@ def load_tests(loader, tests, pattern):
 class PerfGateTests(unittest.TestCase):
     def test_shell_includes_production_wrappers_and_forces_ios_arm(self):
         code = generate((APP / 'lib/main.dart').read_text())
-        for name in ('WithForegroundTask(', 'MaterialApp(', 'RageClickContextTracker(', 'BluetoothGuidanceListener(', 'TalkerWrapper(', '_performanceTelemetry.attach()'):
+        for name in (
+            'WithForegroundTask(',
+            'MaterialApp(',
+            'RageClickContextTracker(',
+            'BluetoothGuidanceListener(',
+            'SessionReplayScope(',
+            'TalkerWrapper(',
+            '_performanceTelemetry.attach()',
+        ):
             self.assertIn(name, code)
-        self.assertIn('return widget.iosAnalytics', code)
+        self.assertIn('child: widget.iosAnalytics\n', code)
         self.assertNotIn('const AppShell()', code)
 
     def test_new_root_wrapper_is_not_silently_dropped(self):

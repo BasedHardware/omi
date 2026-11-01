@@ -17,6 +17,7 @@ READS = Counter(
 )
 
 BRIDGE_FIELDS = [
+    'sync_bridge_pending',
     'id',
     'deleted',
     'sync_merged_into',

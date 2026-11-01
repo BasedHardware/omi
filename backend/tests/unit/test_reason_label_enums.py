@@ -63,6 +63,7 @@ _ENUM_CLASS = re.compile(r'[A-Z]\w*(?:Reason|Outcome|Stage|Family)')
 CLOSED_HELPERS = frozenset(
     {
         'utils.observability.reasons.reason_label',
+        'utils.journey_metrics_contract.bounded_client_journey_issue_class',  # closed CLIENT_JOURNEY_ISSUE_CLASSES else 'unknown'
         'utils.stt.outcomes.bounded_provider',  # _KNOWN_PROVIDERS else 'unknown'
         'utils.stt.stream_close.bounded_stream_close_provider',  # STT_STREAM_CLOSE_PROVIDERS else 'unknown'
         'utils.stt.stream_close.bounded_stream_close_reason',  # STT_STREAM_CLOSE_REASONS else 'connection_lost'
@@ -73,6 +74,7 @@ CLOSED_HELPERS = frozenset(
         'utils.stt.local_send_diagnostics.bounded_local_send_provider',  # PROVIDERS (or enum .value) else 'other'
         'utils.episodes.metrics._label',  # value if in the given frozenset vocabulary else 'other'
         'utils.stt.provider_resilience.circuit_trip_reason',  # fixed auth/quota/5xx/latency/no_text/connect/capacity groups else 'unknown'
+        'utils.other.audio_outbox_metrics.bounded_custody_failure_reason',  # CUSTODY_FAILURE_REASONS else 'other'
     }
 )
 

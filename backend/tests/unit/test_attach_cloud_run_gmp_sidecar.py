@@ -325,7 +325,7 @@ def test_patch_service_adds_pinned_sidecar_without_losing_ingress_contract():
     assert logger == {'image': 'example/logger@sha256:def', 'name': 'logger'}
     assert collector['image'] == module.SIDECAR_IMAGE
     assert '@sha256:' in collector['image']
-    assert collector['resources']['limits'] == {'cpu': '1', 'memory': '512Mi'}
+    assert collector['resources']['limits'] == {'cpu': '0.25', 'memory': '512Mi'}
     assert {volume['name'] for volume in template['spec']['volumes']} == {
         'existing',
         'cloud-run-gmp-config',
@@ -1308,9 +1308,14 @@ def test_detach_cli_propagates_gcloud_failures(monkeypatch, phase):
 
 
 @pytest.mark.parametrize(
-    'service_name', ['backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend', 'desktop-backend']
+    'service_name',
+    ['backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend', 'desktop-backend', 'other-service'],
 )
-def test_sync_resource_profile_survives_render_without_changing_app(service_name):
+@pytest.mark.parametrize('backend_collector_cpu', ['0.25', '1'])
+@pytest.mark.parametrize('desktop_collector_cpu', ['0.25', '1'])
+def test_collector_resource_profile_survives_render_without_changing_app(
+    service_name, backend_collector_cpu, desktop_collector_cpu
+):
     module = _load_module()
     source = _service()
     source['metadata']['name'] = service_name
@@ -1327,6 +1332,8 @@ def test_sync_resource_profile_survives_render_without_changing_app(service_name
         ingress_container_name=app['name'],
         config_secret='cloud-run-gmp-config',
         config_secret_version='7',
+        backend_collector_cpu=backend_collector_cpu,
+        desktop_collector_cpu=desktop_collector_cpu,
     )
     rendered = yaml.load(yaml.safe_dump(patched), Loader=module.GcloudExportLoader)
     template = rendered['spec']['template']
@@ -1335,7 +1342,10 @@ def test_sync_resource_profile_survives_render_without_changing_app(service_name
     assert collector['resources']['limits'] == (
         {'cpu': '0.08', 'memory': '128Mi'}
         if service_name in {'backend-sync', 'backend-sync-backfill', 'backend-integration'}
-        else {'cpu': '1', 'memory': '512Mi'}
+        else {
+            'cpu': {'backend': backend_collector_cpu, 'desktop-backend': desktop_collector_cpu}.get(service_name, '1'),
+            'memory': '512Mi',
+        }
     )
     assert template['metadata']['annotations']['run.googleapis.com/cpu-throttling'] == 'false'
     assert rendered['spec']['traffic'] == source['spec']['traffic']
@@ -1344,6 +1354,22 @@ def test_sync_resource_profile_survives_render_without_changing_app(service_name
         'secretName': 'cloud-run-gmp-config',
         'items': [{'key': '7', 'path': 'config.yaml'}],
     }
+
+
+def test_desktop_collector_rejects_unqualified_allocation():
+    module = _load_module()
+    with pytest.raises(ValueError, match='desktop collector CPU must be 0.25 or 1'):
+        module.patch_service(
+            _service(),
+            project_number='123',
+            base_revision='base',
+            latest_created_revision='base',
+            final_revision='final',
+            ingress_container_name='desktop-backend-1',
+            config_secret='cloud-run-gmp-config',
+            config_secret_version='7',
+            desktop_collector_cpu='0.08',
+        )
 
 
 def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
@@ -1406,6 +1432,11 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_firestore_billed_reads_by_origin_total',
         'omi_firestore_caller_label_overflow_total',
         'omi_fsr_leader_lease_total',
+        # Firestore writes: billed writes by collection, caller and origin (write probe).
+        'omi_firestore_billed_writes_total',
+        'omi_firestore_billed_writes_by_caller_total',
+        'omi_firestore_write_caller_label_overflow_total',
+        'omi_firestore_ambiguous_commit_writes_total',
         # Legacy dark: drain_census and the soak gates (contract (h)).
         'omi_legacy_sync_mode',
         'omi_legacy_sync_admissions_total',
@@ -1423,6 +1454,11 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         # (stt-cap-dispatch.md) — decisions and metered provider audio.
         'omi_stt_cap_dispatch_decisions_total',
         'omi_stt_cap_provider_audio_seconds_total',
+        # C5 exact-input reuse (2026-10-26): the dedupe hit/miss/checkpoint
+        # counters are the soak readout on backend-sync/backfill/backend-integration.
+        'conversation_llm_input_dedupe_skipped_total',
+        'conversation_llm_input_dedupe_misses_total',
+        'conversation_llm_input_dedupe_checkpoint_errors_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):
@@ -1440,7 +1476,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     # RunMonitoring name becomes native GMP job; direct shadow mappings pin it.
     assert config['metadata']['name'] == shared['metadata']['name']
     assert shared['spec']['endpoints'][0]['interval'] == '30s'
-    assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == 'omi_.*'
+    assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == 'omi_.*|conversation_llm_input_dedupe_.*'
 
 
 def test_legacy_config_preparation_does_not_log_secret_metadata(monkeypatch, tmp_path, capsys):

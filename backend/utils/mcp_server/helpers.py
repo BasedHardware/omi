@@ -93,6 +93,25 @@ def conversation_card(conversation: Dict[str, Any], *, include_display: bool = T
 _conversation_card = conversation_card
 
 
+def public_transcript_timing(fields: Dict[str, Any]) -> Dict[str, Any]:
+    """Clamp public offsets without changing the source's pinned live clock.
+
+    A wholly pre-origin line remains text with a zero-duration, unplaced window;
+    it does not supply a playback interval. Search millisecond aliases agree.
+    """
+    projected = dict(fields)
+    for clock_key in ("start", "end", "start_ms", "end_ms"):
+        raw_offset = projected.get(clock_key)
+        if raw_offset is None or isinstance(raw_offset, bool):
+            continue
+        try:
+            if float(raw_offset) < 0:
+                projected[clock_key] = 0
+        except (OverflowError, TypeError, ValueError):
+            continue
+    return projected
+
+
 def bounded_transcript_segments(
     segments: Any,
     *,
@@ -140,7 +159,7 @@ def bounded_transcript_segments(
         if "speaker_name" in extra_keys and not segment.get("is_user"):
             item["speaker_name"] = display.label(segment)
         item["text"] = text
-        bounded.append(item)
+        bounded.append(public_transcript_timing(item))
         used_chars += len(text) + len(item.get('original_text') or "")
         if truncated:
             break

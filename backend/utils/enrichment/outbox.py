@@ -35,6 +35,7 @@ from config.summary_guarantee import (
 )
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
+from utils.sync import processing_hold
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON
@@ -220,6 +221,11 @@ def _wake_exists(row: Row) -> bool:
     return named_task_exists(row['dispatch']['queue'], _task_name(row))
 
 
+def effects_may_run_early(row: Any) -> bool:
+    # Explicit demand may skip the idle wait, never a worker's settlement fence.
+    return bool(row.get('effects_only') and not row.get('deferred_reason'))
+
+
 def _enqueue(row: dict[str, Any]) -> None:
     from utils.cloud_tasks import enqueue_named_task
 
@@ -251,13 +257,13 @@ def _enqueue(row: dict[str, Any]) -> None:
         dispatch,
         name,
         not_before=row['due_at'],
-        effects_only=bool(row.get('effects_only')),
+        effects_only=effects_may_run_early(row),
         immediate=bool(row.get('immediate')),
     ):
         return
     from config.demand_processing import enabled
 
-    eager_recovery = bool(row.get('effects_only')) and enabled(row['uid'])
+    eager_recovery = effects_may_run_early(row) and enabled(row['uid'])
     enqueue_named_task(
         dispatch['queue'],
         handler,
@@ -278,6 +284,8 @@ def mark(
     mutate: Callable | None = None,
     effects_only: bool = False,
     snapshot_summary: bool = False,
+    sync_hold: bool = False,
+    merge_hold: bool = False,
 ) -> None:
     """Record one enrichment obligation.
 
@@ -300,6 +308,8 @@ def mark(
         batch=mutate is not None,
         snapshot_summary=snapshot_summary,
         stamps=stamps,
+        sync_hold=sync_hold,
+        merge_hold=merge_hold,
     )
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)
@@ -326,6 +336,8 @@ def mark_update(
     new_dispatch: Callable[[], dict[str, str] | None] | None = None,
     snapshot_summary: bool = False,
     stamps: list[tuple[str, str]] | None = None,
+    sync_hold: bool = False,
+    merge_hold: bool = False,
 ) -> Callable[[Row | None], tuple[Row, tuple[Row, bool]]]:
     """The CAS operation behind ``mark`` and ``Outbox.enqueue``: one obligation per key, coalesced.
 
@@ -391,6 +403,22 @@ def mark_update(
             row['first_pending_at'] = row.get('first_pending_at', current)
             ceiling = 3540 if demand_enabled else 3600
             row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
+
+        if old and not old.get('dormant') and old.get('sync_hold') and not old.get('merge_hold'):
+            row['sync_hold_requested'] = True
+        if old and old.get('dormant'):
+            row.pop('merge_hold', None)
+            row.pop('sync_hold_requested', None)
+        if sync_hold or merge_hold:
+            row['sync_hold'] = True
+            if sync_hold and not merge_hold:
+                row['sync_hold_requested'] = True
+            if merge_hold:
+                row['merge_hold'] = True
+            row['due_at'] = min(
+                max(row.get('due_at') or 0, current + processing_hold.QUIET_SECONDS),
+                row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
+            )
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
         if old is None:
@@ -507,7 +535,9 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             return old, ('busy', None)
         row = dict(old)
         stamp_claim_policy(row, cache, stamps)
-        if row['due_at'] > current and (not row.get('effects_only') or not enabled(row['uid'])):
+        if row.get('sync_hold') and not processing_hold.enabled_for(row):
+            row['due_at'] = current
+        if row['due_at'] > current and (not effects_may_run_early(row) or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
 
@@ -532,12 +562,14 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     retry_revision = None
     empty_blocked = False
     held_reason: str | None = None
-    process_context = None
+    process_context: Row | None = None
     if row.get('effects_only'):
         from utils.conversations.lazy_enrichment import enrich_settled
 
         try:
             enrich_settled(row['uid'], row['conversation_id'], row['language'])
+        except processing_hold.ProcessingDeferred as error:
+            process_context = {'defer_reason': error.reason, 'defer_until': error.available_at}
         except InvalidArgument as error:
             if not _is_document_size_limit(error):
                 raise
@@ -552,9 +584,16 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         )
         process_context = (
             {'owner': owner, 'lease_until': row['lease_until']}
-            if summary_policy and not row.get('summary_seen')
+            if (summary_policy and not row.get('summary_seen')) or row.get('sync_hold')
             else None
         )
+        if process_context is not None:
+            process_context.update(
+                sync_hold=bool(row.get('sync_hold')),
+                merge_hold=bool(row.get('merge_hold')),
+                sync_hold_requested=bool(row.get('sync_hold_requested')),
+                first_pending_at=row['first_pending_at'],
+            )
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))
         context_token = summary_delivery.REPAIR_CONTEXT.set(row if row.get('summary_repair') else None)
@@ -573,10 +612,14 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                     custody = bool(
                         process_context and (process_context.get('redirect_to') or process_context.get('defer_reason'))
                     )
+                    if process_context and process_context.get('hold_skipped'):
+                        discarded = True  # No new paid obligation: prior receipt or late-content cap.
                     if output is None and preserves_admitted(row) and not discarded and not blocked and not custody:
                         raise FirstSummaryCallbackPending('first-summary callback has no output yet')
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
+        except processing_hold.ProcessingDeferred as error:
+            process_context = {'defer_reason': error.reason, 'defer_until': error.available_at}
         except summary_delivery.SummaryRepairSuperseded as error:
             output = None
             superseded = True
@@ -646,8 +689,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             pending = dict(old)
             pending.update(
                 deferred_reason=process_context['defer_reason'],
-                due_at=current + LIVE_DEFER_SECONDS,
-                task_due_at=current + LIVE_DEFER_SECONDS,
+                due_at=process_context.get('defer_until', current + LIVE_DEFER_SECONDS),
+                task_due_at=process_context.get('defer_until', current + LIVE_DEFER_SECONDS),
                 task_token=uuid.uuid4().hex,
                 lease_until=0,
                 owner=None,
@@ -757,9 +800,10 @@ def sweep(
     injected = wake is not None
     # One range/order field uses the automatic single-field index.
     previous, start = enrichment_scan.begin(client, COLLECTION) if cursor else (None, None)
+    rollback = not processing_hold.enabled() or not processing_hold.merge_before_processing_enabled()
     query = (
         client.collection(COLLECTION)
-        .where('due_at', '<=', current)
+        .where('due_at', '<=', current + processing_hold.MAX_HOLD_SECONDS if rollback else current)
         .order_by('due_at')
         .order_by('__name__')
         .limit(limit)
@@ -791,6 +835,17 @@ def sweep(
             if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
             row = dict(old)
+            release_hold = (
+                not processing_hold.enabled_for(row)
+                and row.get('sync_hold')
+                and (row['due_at'] > current or row.get('task_due_at', 0) > current)
+            )
+            if row['due_at'] > current and not release_hold:
+                return old, ('skipped', None)
+            if release_hold:
+                # Rotate the scheduled task name: its existing future delivery
+                # must not prevent an immediate rollback wake.
+                row.update(due_at=current, task_due_at=current, task_token=uuid.uuid4().hex, wake_check_after=0)
             # A lease that ran out is new information, so the wake-check throttle does not apply to it.
             expired = bool(row.get('owner')) and row.get('lease_until', 0) > 0
             if not expired and row.get('wake_check_after', 0) > current:
@@ -913,6 +968,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         conversation_id=conversation_id,
         language=language,
         effects_only=True,
+        deferred_reason=None,
         immediate=immediate,
         task_token=uuid.uuid4().hex,
         due_at=current + quiet_seconds,

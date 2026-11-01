@@ -84,6 +84,28 @@ async def test_heartbeat_renews_while_blocking_gpu_chain_runs(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pump_error_log_adds_static_source_site_without_exception_payload(monkeypatch, caplog):
+    import logging
+
+    _, _, pump = setup()
+    stop = asyncio.Event()
+
+    async def fail_once(**_kwargs):
+        stop.set()
+        raise RuntimeError('sensitive provider payload')
+
+    monkeypatch.setattr(pump, 'run_once', fail_once)
+    with caplog.at_level(logging.ERROR):
+        await pump._lane(stop)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 1
+    assert 'event=batch_pump outcome=retry exception_type=RuntimeError' in messages[0]
+    assert 'site=test_batch_pipeline_pump.py:' in messages[0]
+    assert 'sensitive provider payload' not in messages[0]
+
+
+@pytest.mark.asyncio
 async def test_lost_lease_discards_late_result(monkeypatch):
     monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
     release = threading.Event()
@@ -266,7 +288,8 @@ async def test_fatal_gpu_restarts_without_fail_or_attempt_charge_then_fresh_work
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('dispatch', [False, True])
-async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audio(monkeypatch, dispatch):
+@pytest.mark.parametrize('policy_retry', [60, 3600, 86400])
+async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audio(monkeypatch, dispatch, policy_retry):
     from utils.batch_pipeline.contracts import HeldWork
 
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
@@ -279,7 +302,7 @@ async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audi
         # reason, exactly like an owner whose allowance exhausted mid-flight.
         if len(calls) == 1:
             return {'allowed': calls[-1]}
-        return {'allowed': [], 'retry_after': {}, 'held_reason': {'first': 'allowance_exhausted'}}
+        return {'allowed': [], 'retry_after': {'first': policy_retry}, 'held_reason': {'first': 'allowance_exhausted'}}
 
     class RecheckingWorker:
         def process_batch(self, items, *, authorize_dispatch):
@@ -293,7 +316,7 @@ async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audi
     assert job['compute_decision'] == {
         'reason': 'allowance_exhausted',
         'outcome': 'held',
-        'at': job['available_at'] - 60,
+        'at': job['available_at'] - policy_retry,
     }
     assert ('results', 'first') not in store.rows
     assert calls == [['first'], ['first']]

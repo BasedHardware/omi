@@ -764,11 +764,26 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     // Voice response playback is triggered only from the Omi device-button
     // path (capture_provider). The chat-screen mic input does not pass
     // playResponseAudio=true.
-    final String playbackMessageId = message.id;
+    // Placeholder chat rows share an id. Playback cancellation must name this
+    // request so delayed cleanup cannot stop a later question's response.
+    final playbackMessageId = 'pendant:${const Uuid().v4()}';
+    var playbackAuthorized = playResponseAudio;
+    void stopPlayback(VoiceReplyPlaybackInterruptSource source) {
+      playbackAuthorized = false;
+      if (!playResponseAudio) return;
+      // Audio cleanup is best effort, not tutorial completion authority. A
+      // stalled native stop must not hold Processing or the voice busy guard.
+      unawaited(OmiVoicePlaybackService.instance
+          .interruptResponse(messageId: playbackMessageId, source: source)
+          .catchError((Object error) => Logger.warning('Voice reply cleanup failed: ${error.runtimeType}')));
+    }
+
     String? question;
     try {
       if (playResponseAudio) {
-        await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
+        await OmiVoicePlaybackService.instance
+            .beginResponse(messageId: playbackMessageId, canBegin: () => playbackAuthorized)
+            .timeout(_voiceReplyTimeout);
       }
       bool firstChunkRecieved = false;
       await for (var chunk in _voiceReplyWithDeadline(file)) {
@@ -845,9 +860,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           if (chunk.errorCode == 'no_speech') {
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.voiceQuestionNoSpeech ?? "Didn't catch that — try again";
-            if (playResponseAudio) {
-              await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
-            }
+            stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
             if (onNoSpeech != null) await onNoSpeech();
             completeChat(ProductOutcome.empty);
             notifyListeners();
@@ -859,9 +872,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             message.text = chatAtCap?.title ??
                 l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
-            if (playResponseAudio) {
-              await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.quotaError);
-            }
+            stopPlayback(VoiceReplyPlaybackInterruptSource.quotaError);
             notifyListeners();
             setShowTypingIndicator(false);
             _logChatFailure(ChatStreamFailureClass.quota, stage: 'voice_stream');
@@ -871,9 +882,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           final failure = _chunkFailureClass(chunk);
           _logChatFailure(failure, stage: 'voice_stream');
           _markReplyFailed(message, _FailedReply(failure: failure));
-          if (playResponseAudio) {
-            await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
-          }
+          stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
           completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
           notifyListeners();
           return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
@@ -883,9 +892,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       final failure = classifyChatStreamFailure(e);
       _logChatFailure(failure.kind, stage: 'voice_transport', status: failure.statusCode);
       _markReplyFailed(message, _FailedReply(failure: failure.kind));
-      if (playResponseAudio) {
-        await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
-      }
+      stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
       completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
       notifyListeners();
     } finally {
@@ -894,9 +901,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     }
 
     if (!chatAttemptCompleted) {
-      if (playResponseAudio) {
-        await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
-      }
+      stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
     return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);

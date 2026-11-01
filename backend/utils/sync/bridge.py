@@ -14,7 +14,7 @@ from _thread import LockType
 from typing import Callable, NotRequired, TypedDict
 
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
-from config import merge_ancestry
+from config import merge_ancestry, merge_before_processing
 from config import sync_operation_snapshot
 from config.firestore_read_levers import lever_enabled
 from config.sync_finalize import sync_finalize_target_recovery_enabled
@@ -39,6 +39,9 @@ from utils.sync.assignment_errors import (
 )
 from utils.sync.telemetry import bounded_exception_reason, bounded_exception_type
 from utils.sync.fsr_metadata import read_metadata
+from utils.sync import bridge_pending
+from utils.sync.live_overlap import choose_live_overlap
+from utils.conversations.fragment_visibility import is_user_curated
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +135,33 @@ def _bridge_source_defect(
     return 'chain_broken'
 
 
+def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
+    """Retry the ordinary assignment transaction once live recording proof lands.
+
+    A pending hint never authorizes a merge by itself. Re-read both records;
+    assignment repeats all identity, privacy, revision and size fences.
+    """
+    source = conversations_db.get_conversation(uid, conversation_id)
+    if not source or source.get('deleted') or not source.get(bridge_pending.FIELD):
+        return conversation_id
+    target_id = source[bridge_pending.FIELD].get('target_id')
+    if (
+        not isinstance(target_id, str)
+        or target_id == conversation_id
+        or is_user_curated(source)
+        or merge_before_processing.already_processed(source)
+    ):
+        return conversation_id
+    target = conversations_db.get_conversation(uid, target_id)
+    if not target or target.get('status') == 'in_progress':
+        return conversation_id
+    if choose_live_overlap([target], source, uid=uid) != target_id:
+        return conversation_id
+    assigned, _, _ = conversations_db.assign_sync_conversation(uid, source, target_id=target_id)
+    donor = conversations_db.get_conversation(uid, conversation_id)
+    return assigned['id'] if donor and donor.get('sync_merged_into') == assigned['id'] else conversation_id
+
+
 @read_origin('job:sync_operation_snapshot')
 def finish_sync_bridges(
     uid: str, conversation_id: str, *, audio_source_id: str | None = None, silent: bool = False
@@ -151,6 +181,11 @@ def finish_sync_bridges(
         if row.get('sync_merged_into'):
             conversation_id = row['sync_merged_into']
             continue
+        if recovery and row.get(bridge_pending.FIELD):
+            canonical = _finish_pending_live_bridge(uid, conversation_id)
+            if canonical != conversation_id:
+                conversation_id = canonical
+                continue
         flatten = smart_merge_flatten_enabled() and (row.get('smart_merge') or {}).get('role') == 'survivor'
         lineage = row.get('sync_merged_from', [])
         sources: dict[str, dict | None] = {}
@@ -276,6 +311,47 @@ def finish_sync_bridges(
         return conversation_id
 
 
+def resume_pending(uid: str, conversation_id: str, row: dict, context: dict | None) -> tuple[str, dict | None]:
+    """Retain enrichment custody until the pending live identity can be settled.
+
+    None means this callback yielded (or transferred) its obligation. Visibility
+    expiry does not release merge custody while the capture remains active.
+    """
+    if not row.get(bridge_pending.FIELD) or is_user_curated(row):
+        return conversation_id, row
+    canonical = (
+        finish_sync_bridges(uid, conversation_id) if sync_finalize_target_recovery_enabled() else conversation_id
+    )
+    if canonical != conversation_id:
+        if context is not None:
+            context['redirect_to'] = canonical
+            return canonical, None
+        conversation_id = canonical
+        current = conversations_db.get_conversation(uid, canonical)
+        if not current or current.get('deleted'):
+            return canonical, None
+        row = current
+    target = (
+        conversations_db.get_conversation(uid, row[bridge_pending.FIELD]['target_id'])
+        if row.get(bridge_pending.FIELD)
+        else None
+    )
+    target_active = bool(target and not target.get('deleted') and target.get('status') in ('in_progress', 'processing'))
+    if bridge_pending.hidden(row) or target_active:
+        if context is not None:
+            now = bridge_pending.current_time()
+            context.update(
+                defer_reason='pending_live_bridge',
+                defer_until=(
+                    min(now + 30, row[bridge_pending.FIELD]['expires_at'])
+                    if bridge_pending.hidden(row, now=now)
+                    else now + 30
+                ),
+            )
+        return conversation_id, None
+    return conversation_id, row
+
+
 def finish_sync_segment(
     uid: str,
     assigned: SyncBridgeAssignment,
@@ -286,7 +362,11 @@ def finish_sync_segment(
     audio_source_id: str | None = None,
 ) -> None:
     """One completion point, after audio persistence; follow a concurrent bridge."""
-    if not assigned.get('sync_merged_from') and not assigned.get('private_cloud_sync_enabled'):
+    if (
+        not assigned.get('sync_merged_from')
+        and not assigned.get('private_cloud_sync_enabled')
+        and not assigned.get(bridge_pending.FIELD)
+    ):
         return
     conversation_id = assigned['id']
     try:

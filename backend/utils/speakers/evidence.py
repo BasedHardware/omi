@@ -213,8 +213,13 @@ def build_evidence(
             decision = _manual_decision(metadata, references[metadata['id']], receipt, rejected)
             if decision and (decision.get('is_user') or decision.get('person_id')):
                 pid = OWNER if decision.get('is_user') else decision['person_id']
-                if not any(c.source == 'manual' and c.person_id == pid for c in candidates):
-                    candidates.append(SpeakerCandidate(person_id=pid, probability=1, band='confident', source='manual'))
+                candidate = next((c for c in candidates if c.source == 'manual' and c.person_id == pid), None)
+                if candidate is None:
+                    candidate = SpeakerCandidate(
+                        person_id=pid, probability=1, band='confident', source='manual', segment_ids=[]
+                    )
+                    candidates.append(candidate)
+                candidate.segment_ids = [*(candidate.segment_ids or ()), str(metadata['id'])]
         candidates.sort(key=lambda c: (-c.probability, c.source, c.person_id))
         cluster = VoiceCluster(
             id=f'v{len(clusters)}',

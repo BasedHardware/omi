@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-aha-first-summary-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Free, trial-eligible Omi owner reads their conversation summary for 3s+, then goes back. Left: the summary (same on both). Middle: main, Home with no paywall. Right: this change, the live trial arm's page slides up on Home with live prices (7 days free, then US$269.91/year). iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-free-cap-before-after.png",
+      "platform": "mobile-ios",
+      "description": "The free allowance locks a new conversation (Pending, View Usage row). Left: the locked row. Middle: main, nothing else happens. Right: this change, the trial offer about 1s later. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-upgrade-then-cap-no-stack.png",
+      "platform": "mobile-ios",
+      "description": "The reader opens the plans sheet themselves (the sheet the Processing paused Upgrade opens), closes it, then a conversation locks: no second paywall within 72h. iPhone 17 Pro simulator, this change.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-aha-first-summary-dark.png",
+      "platform": "mobile-ios",
+      "description": "Dark appearance: the summary, then the trial offer on Home (the trial page keeps its light canvas). iPhone 17 Pro simulator, this change.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-aha-rating-ask-no-stack.png",
+      "platform": "mobile-ios",
+      "description": "This change, a 9s read: iOS shows its rating ask on the summary; after Back, Home still shows the rating ask and the trial offer is not stacked on it (the moment waits for a later session). iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

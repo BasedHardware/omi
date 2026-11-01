@@ -12,10 +12,23 @@ continues to control raw playback reads independently.
 
 For consented capture, listen retains original packs through capacity pressure,
 upload errors and cancellation. Four commits can run at once; the fifth waits
-before removing its active pack. Transcript persistence and pusher audio flush
-both wait for the raw archive barrier. A transport send or transcript receipt
+before removing its active pack. LISTEN commits at the pack's own 60-second,
+conversation/hour/size boundary, 4096-frame cap, or disconnect tail. The relay
+path neither awaits uploads nor flushes an active window. Transcript
+persistence and live STT delivery continue immediately; coverage ledger writes
+and `capture_committed` events wait for the accepted original-audio checkpoint.
+Snapshots coalesce per conversation (at most 32 queued conversations); overflow
+withholds the optional coverage ACK and leaves the client's WAL retained.
+A later window cannot release coverage across an earlier failed commit.
+A transport send or transcript receipt
 alone is never an audio archive receipt. Cloud-storage consent still applies;
 users with storage disabled do not acquire a new archive obligation.
+For those users, coverage follows the pre-custody transcript receipt contract:
+only a successful durable transcript transaction permits coverage publication
+and WAL release. It is never an audio-only receipt or proof of an immutable
+audio archive. This preserves bounded client retention without inventing an
+archive obligation. With storage consent, an empty archive cannot certify
+coverage; its accepted-frame checkpoint must have committed original audio.
 
 Pusher commits every incoming PCM run before trimming overlap or adding it to
 any derivative buffer. Its queue holds at most 20 generation-pinned receipts.
@@ -48,8 +61,38 @@ opcode 203 with the same receipt when the caller opts in with
 `capture_committed` remains a transcript receipt. Client adoption of audio-only
 WAL release is a separate compatibility/deployment requirement; this server
 change cannot certify the retention behavior of already installed legacy apps.
+Windowed custody increases time-to-ACK and client WAL retention from roughly
+one relay cycle to pack completion: up to an active 60-second pack plus storage
+latency for audio-only receipts (or an earlier boundary). A coalesced coverage
+snapshot can include frames from the next pack, so coverage-based WAL release
+may wait into the following active window as well. A partial idle window stays unacknowledged until more audio
+closes its window or disconnect flushes it. During outages, WAL retention lasts
+through successful retry; there is no timed early release. A mid-window pod
+loss has issued no audio or coverage custody ACK for that uncommitted window.
 
 ## Recovery and acceptance
+
+After a record socket closes, inline finish waits up to 20 seconds for its
+projection. The existing socket drain gets another 30 seconds. If durable work
+still remains, pusher transfers that same worker to a tracked process owner
+(at most 32 closed drains per process). No projection is restarted or certified
+by the transfer. Queue accounting and close checks are per conversation;
+a later recording on the socket cannot keep the earlier close waiting for
+the whole socket queue to empty. Each pass consumes a bounded queue snapshot.
+
+Transient close metadata errors keep retrying at the drain's one-second cadence,
+including after the old three-attempt limit. Permanent projection/tail failures
+retain their producer token. A `producer_pending` seal refusal means another
+producer remains; the successfully drained caller has already released its own
+token. At closed-drain capacity, cleanup cancels the worker as before and leaves
+the immutable receipts and token for repair. SIGTERM cancels tracked drain owners
+and their workers; no cancellation or timer releases a token. Repair still needs
+the existing pod-death proof after process exit.
+
+`event=record_closed_finish` uses only closed outcomes: `retained`, `completed`,
+`failed`, `cancelled`, `capacity`. `completed` means the drain settled, not that
+every seal succeeded; projection failures and seal refusals retain their existing
+failure/refusal events. These events contain no recording or producer identity.
 
 After a pod loss, list raw-live objects for the affected owner/conversation and
 the corresponding immutable audio-outbox manifests. Fetch the pinned media
@@ -68,16 +111,20 @@ prove deployed playback or an installed client's WAL retention.
 
 `omi_audio_custody_would_drop_total{stage}` counts averted loss paths;
 `omi_audio_custody_backpressure_total{stage}` counts producer waits;
-`omi_audio_custody_failures_total{stage}` distinguishes commit and projection
-failures; `omi_audio_custody_commits_total` counts complete immutable receipts.
+`omi_audio_custody_failures_total{stage,reason}` distinguishes commit and projection
+failures; `reason` is `conflict` (deterministic projection mismatch, never retried),
+`transient` (non-deterministic failure that exhausted its bounded requeue passes),
+or `other`; `omi_audio_custody_commits_total` counts complete immutable receipts.
 `omi_audio_custody_last_risk_timestamp_seconds` also exposes a refusal before
 the first scrape, when a counter increase has no observed zero baseline.
 The source Grafana rule `omi-audio-custody-pressure` alerts immediately on any
 would-be drop or failure in five minutes. Provision split/combined alert JSON
 through the existing approved monitoring path and verify Telegram delivery.
 
-Small durable writes add storage operations before existing
-60-second projections. Measure GCS operation spend and listen latency during
+Windowed durable writes share the original pack boundaries, so Firestore
+fence, tombstone and protection reads occur per committed window rather than
+per relay cycle; no safety authority is cached across windows.
+Measure GCS operation spend and listen latency during
 the staging canary; tune batching only while preserving the custody barrier.
 PCM custody writes preserve the original bytes without invoking an encoder;
 encoding/decoding failure cannot prevent custody of even a one-sample frame.

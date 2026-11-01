@@ -6,6 +6,7 @@ import logging
 import time
 from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from config.batch_pipeline import MAX_PUBLISH_CONCURRENCY, publish_concurrency as configured_publish_concurrency
@@ -21,8 +22,9 @@ from utils.batch_pipeline.contracts import (
     ValidationFailureWork,
 )
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.errors import FatalGpuError
-from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
+from utils.batch_pipeline.errors import FatalGpuError, error_site_field
+from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
+from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -38,6 +40,16 @@ SEGMENT_OWNER_MEMO = 4096
 # Bound on one lease-renewal round trip; a timeout marks the lease lost but the
 # blocking DB leaf may still land later, fenced by its token.
 HEARTBEAT_TIMEOUT_SECONDS = 8
+
+
+async def _drain_task(task):
+    """Repeated caller cancellation cannot orphan a non-preemptible IO leaf."""
+    while True:
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.cancelled():
+                raise
 
 
 class Pump:
@@ -140,7 +152,11 @@ class Pump:
                 async with self._maintenance:
                     await self._maintain()
             except Exception as error:
-                logger.error('event=batch_maintenance outcome=retry exception_type=%s', type(error).__name__)
+                logger.error(
+                    'event=batch_maintenance outcome=retry exception_type=%s%s',
+                    type(error).__name__,
+                    error_site_field(error),
+                )
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=1)
             except asyncio.TimeoutError:
@@ -153,7 +169,11 @@ class Pump:
             except FatalGpuError:
                 raise  # Fatal CUDA requires process replacement, never another pull.
             except Exception as error:
-                logger.error('event=batch_pump outcome=retry exception_type=%s', type(error).__name__)
+                logger.error(
+                    'event=batch_pump outcome=retry exception_type=%s%s',
+                    type(error).__name__,
+                    error_site_field(error),
+                )
                 count = 0
             if not count:
                 try:
@@ -290,6 +310,8 @@ class Pump:
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
+        prepared = None
+        watching = None
         try:
             if self.shadow is not None:
                 try:
@@ -312,8 +334,13 @@ class Pump:
                             self._run_blocking('admission', db_executor, self.authorize_compute, required),
                             timeout=10,
                         )
-                    except Exception:
+                    except Exception as error:
+                        worker_metrics.admission(failure_outcome(error))
                         receipt = {}
+                    else:
+                        worker_metrics.admission('received')
+                else:
+                    worker_metrics.admission('unconfigured')
                 permitted = set(receipt.get('allowed') or [])
                 retries = receipt.get('retry_after') or {}
                 held_reason = receipt.get('held_reason') or {}
@@ -329,11 +356,13 @@ class Pump:
                             time.time(),
                             retries.get(lease.item.segment_id, 30),
                             held_reason=held_reason.get(lease.item.segment_id),
+                            admission_refused=True,
                         )
                 leases = [v for v in leases if v.item.segment_id not in lost]
                 if not leases:
                     return 0
             dispatch_kwargs = {}
+            dispatch_retries = {}
             if any(cap_dispatch_enabled(v.item.owner_id, 'batch') for v in leases):
 
                 def authorize_dispatch(segments):
@@ -348,15 +377,51 @@ class Pump:
                     if self.authorize_compute is not None:
                         try:
                             receipt = self.authorize_compute(selected) or {}
-                        except Exception:
+                        except Exception as error:
+                            worker_metrics.admission(failure_outcome(error))
                             receipt = {}
+                        else:
+                            worker_metrics.admission('received')
+                    else:
+                        worker_metrics.admission('unconfigured')
                     permitted = set(receipt.get('allowed') or [])
                     held = receipt.get('held_reason') or {}
+                    retries = receipt.get('retry_after') or {}
+                    for segment in segments:
+                        if segment not in permitted and segment in retries:
+                            dispatch_retries[segment] = retries[segment]
                     return {segment: (None if segment in permitted else held.get(segment, '')) for segment in segments}
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
+            prepare = getattr(self.worker, 'prepare_first', None)
+            if prepare is not None and not (stop_event is not None and stop_event.is_set()):
+                prepared = prepare([v.item for v in leases if v.item.segment_id not in lost])
+            if prepared is not None:
+
+                async def discard_invalid_preparation(handle):
+                    while handle.item.segment_id not in lost and not (stop_event is not None and stop_event.is_set()):
+                        await asyncio.sleep(0.1)
+                    # Cancellation is immediate for queued work. Running SDK
+                    # calls retain their reservation until the lane's final
+                    # drain, and cannot be reused by a replacement attempt.
+                    handle.cancel()
+
+                watching = asyncio.create_task(discard_invalid_preparation(prepared))
+            skipped: set[str] = set()
             try:
                 async with self._gpu:
+                    # Preparation belongs to the waiting lane. Once dispatch
+                    # starts, the current bounded chain drains on stop/loss;
+                    # cancelling a queued first fetch here would fake a failure.
+                    if watching is not None:
+                        watching.cancel()
+                        watched = asyncio.gather(watching, return_exceptions=True)
+                        try:
+                            await asyncio.shield(watched)
+                        except asyncio.CancelledError:
+                            await _drain_task(watched)
+                            raise
+                        watching = None
                     if stop_event is not None and stop_event.is_set() and self.flights > 1:
                         # Claimed behind a sibling's chain when SIGTERM or a
                         # fatal GPU error arrived: refund without an attempt
@@ -381,12 +446,25 @@ class Pump:
                                     type(error).__name__,
                                 )
                         return 0
+                    skipped = set(lost)
+                    if prepared is not None:
+                        # A queued decode may have been cancelled on stop/lease
+                        # loss. Never let it become this or a replacement attempt.
+                        if prepared.cancelled or prepared.item.segment_id in skipped:
+                            skipped.add(prepared.item.segment_id)
+                            # The fetch may already be running and cannot be
+                            # cancelled. Final cleanup drains it after GPU unlock,
+                            # with its reservation and lease renewal still held.
+                            prepared.cancel()
+                        else:
+                            dispatch_kwargs['prepared'] = prepared
+                    process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)
                     compute = asyncio.create_task(
                         self._run_blocking(
                             'worker_flight',
                             sync_executor,
-                            self.worker.process_batch,
-                            [v.item for v in leases],
+                            process,
+                            [v.item for v in leases if v.item.segment_id not in skipped],
                             **dispatch_kwargs,
                         )
                     )
@@ -395,7 +473,20 @@ class Pump:
                     try:
                         results = await asyncio.shield(compute)
                     except asyncio.CancelledError:
-                        results = await compute
+                        results = await _drain_task(compute)
+                        if callable(getattr(results, 'close', None)):
+                            await _drain_task(
+                                asyncio.shield(asyncio.create_task(run_blocking(sync_executor, results.close)))
+                            )
+                        raise
+                # CUDA is quiescent and the next lane may compute. Leases stay
+                # renewed until every write and fenced publication has settled.
+                if callable(getattr(results, 'settle', None)):
+                    settling = asyncio.create_task(self._run_blocking('persist_settle', sync_executor, results.settle))
+                    try:
+                        results = await asyncio.shield(settling)
+                    except asyncio.CancelledError:
+                        await _drain_task(settling)
                         raise
             except FatalGpuError:
                 # The whole GPU flight is uncertain. Return every owned lease
@@ -421,10 +512,32 @@ class Pump:
                 logger.error('event=batch_chain outcome=retry exception_type=%s', type(error).__name__)
                 results = []
             result_map = {v.segment_id: v for v in results}
+            for segment, result in result_map.items():
+                if isinstance(result, HeldWork) and segment in dispatch_retries:
+                    result_map[segment] = replace(result, retry_after=dispatch_retries[segment])
             if len(result_map) != len(results) or not set(result_map).issubset(v.item.segment_id for v in leases):
                 raise ValueError('worker returned duplicate or foreign results')
-            await self._publish_flight(leases, result_map, lost)
-            return len(leases)
+            # A renewal may recover after a waiting attempt was cancelled.
+            # Never interpret its intentionally absent result as a GPU failure.
+            for lease in leases:
+                if lease.item.segment_id in skipped:
+                    try:
+                        await self._run_blocking(
+                            'publication',
+                            db_executor,
+                            self.scheduler.defer,
+                            lease.item.segment_id,
+                            lease.token,
+                            time.time(),
+                            1,
+                        )
+                    except Exception as error:
+                        logger.error(
+                            'event=batch_flight outcome=lease_recovery exception_type=%s', type(error).__name__
+                        )
+            active = [v for v in leases if v.item.segment_id not in skipped]
+            await self._publish_flight(active, result_map, lost)
+            return len(active)
         except FatalGpuError:
             raise  # Its handler already refunded every lease without an attempt charge.
         except Exception:
@@ -433,9 +546,21 @@ class Pump:
             await self._release(claimed)
             raise
         finally:
-            self._normal_flights -= 1
-            done.set()
-            await renew
+            try:
+                if watching is not None:
+                    watching.cancel()
+                    await _drain_task(asyncio.gather(watching, return_exceptions=True))
+                if prepared is not None:
+                    cleanup = asyncio.create_task(run_blocking(sync_executor, prepared.close))
+                    try:
+                        await asyncio.shield(cleanup)
+                    except asyncio.CancelledError:
+                        await _drain_task(cleanup)
+                        raise
+            finally:
+                self._normal_flights -= 1
+                done.set()
+                await _drain_task(asyncio.shield(renew))
 
     async def _release(self, leases: list[LeasedWork]) -> None:
         for lease in leases:
@@ -539,6 +664,7 @@ class Pump:
                     time.time(),
                     result.retry_after,
                     held_reason=result.reason or None,
+                    admission_refused=True,
                 )
                 return False
             if isinstance(result, ValidationFailureWork):

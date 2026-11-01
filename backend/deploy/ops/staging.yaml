@@ -87,14 +87,14 @@ cloud_tasks:
     max_attempts: 5
     min_backoff: 60s
     max_backoff: 300s
-    log_sampling_ratio: 1.0
+    log_sampling_ratio: 0.1
   staging-sync-backfill-fresh:
     max_concurrent_dispatches: 90
     max_dispatches_per_second: 15
     max_attempts: 5
     min_backoff: 5s
     max_backoff: 60s
-    log_sampling_ratio: 1.0
+    log_sampling_ratio: 0.1
   staging-enrichment:
     # Off until prod's enrichment queue turns on at M3 (mirror test enforces it).
     enabled: false

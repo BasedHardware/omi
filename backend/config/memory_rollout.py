@@ -4,9 +4,9 @@ Memory and task product authority is universal for authenticated accounts. The
 one user-facing product switch is ``MEMORY_ENABLED=on|off``. Code fail-closes
 to ``off`` when it is unset.
 
-``on`` enables intake and list. It maps to write-mode intake, not scheduled
-ST→LT maintenance (that remains ``MEMORY_CANONICAL_MAINTENANCE_ENABLED`` on
-``memory-maintenance-job``).
+``on`` enables intake and list. It maps to write-mode intake; scheduled ST→LT
+maintenance was retired with ``memory-maintenance-job`` on 2026-10-26 (required
+intake runs inline at write time, Dream's sweep retries).
 """
 
 import os

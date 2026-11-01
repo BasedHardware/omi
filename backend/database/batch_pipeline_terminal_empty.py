@@ -3,11 +3,12 @@
 from copy import deepcopy
 from dataclasses import asdict
 from uuid import uuid4
+from config.batch_language_recovery import guarded_exhausted, language_guarded
 
 from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from utils.batch_pipeline.contracts import WorkResult
+from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
 
@@ -96,6 +97,14 @@ class TerminalEmptyStore:
             existing = tx.get('results', sid)
             marker = job.get('terminal_disposition') or {}
             if (
+                language_guarded(job)
+                and marker.get('state') != 'completed'
+                and not (outcome == 'no_recoverable_speech' and guarded_exhausted(job))
+            ):
+                # A guarded unit settles no-speech only with every recognizer's
+                # validated empty receipt; without them it stays held.
+                raise ProjectionBlocked('independent recovery required')
+            if (
                 binding.owner_id != uid
                 or intent_snapshot(job) != snapshot
                 or outcome not in {'silence', 'no_recoverable_speech', 'canary_recovery'}
@@ -110,7 +119,11 @@ class TerminalEmptyStore:
                     or marker.get('historical_attestation') != historical_attestation
                 ):
                     raise ProjectionBlocked('different terminal disposition')
+                if marker.get('state') != 'completed' and outcome == 'silence' and not held_silence_allowed(job, 0):
+                    raise ProjectionBlocked('held speech blocks no-provider silence')
                 return job
+            if outcome == 'silence' and not held_silence_allowed(job, 0):
+                raise ProjectionBlocked('held speech blocks no-provider silence')
             if not idle(job, existing, now) or not (spent_canary(job) or exhausted(job, historical_attestation)):
                 raise ProjectionBlocked('exhausted or spent canary required')
             if outcome == 'canary_recovery' and not spent_canary(job):
@@ -140,7 +153,7 @@ class TerminalEmptyStore:
         record_policy_observations(observations)
         return result
 
-    def complete(self, sid, token, plan, uri, now):
+    def complete(self, sid, token, plan, uri, now, *, measured_held_vad_speech_seconds=None):
         _, policy = load_stage_policy(self.store, sid, 'recovery', server_flags=self.server_flags)
         if policy is None or not policy.terminal_empty_disposition:
             return False
@@ -163,7 +176,19 @@ class TerminalEmptyStore:
                 return job.get('result') == result, 0, outcome
             if marker.get('state') != 'prepared' or not idle(job, existing, now):
                 return False, 0, None
+            census = held_vad_census(job, measured_held_vad_speech_seconds)
+            if language_guarded(job) and not (outcome == 'no_recoverable_speech' and guarded_exhausted(job)):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', sid, job)
+                return False, 0, None
+            if outcome == 'silence' and not held_silence_allowed(job, measured_held_vad_speech_seconds):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', sid, job)
+                return False, 0, None
             owner = tx.get('owners', owner_key(binding.owner_id))
+            job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured_held_vad_speech_seconds)
             owner['revision'] = owner.get('revision', 0) + 1
             marker.update(state='completed', completed_at=now)
             job.update(

@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, Optional
 
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database.speaker_profile_authority import owner_teaching_authorized, person_teaching_authorized
 from models.other import VoiceReadiness, voice_readiness
 from models.person_confidence import SOURCE_CARD
@@ -575,6 +576,7 @@ def _ledger_transaction(
             dirty = True
         for doc_ref, update in writes:
             transaction.update(doc_ref, update)
+            bump_people_generation(transaction, doc_ref)
         if dirty or events:
             _trim_jobs(jobs, events)
             transaction.set(ref, {'jobs': jobs})

@@ -1,3 +1,5 @@
+from google.api_core.exceptions import NotFound
+
 """Focus sessions — focus/distraction tracking and statistics.
 
 Collection: users/{uid}/focus_sessions
@@ -16,9 +18,10 @@ from ._client import db
 logger = logging.getLogger(__name__)
 
 
-def _user_col(uid: str, collection: str) -> Any:
+def _user_col(uid: str, collection: str, *, client: Any = None) -> Any:
     """Shorthand for users/{uid}/{collection}."""
-    return db.collection('users').document(uid).collection(collection)
+    firestore_client = client if client is not None else db
+    return firestore_client.collection('users').document(uid).collection(collection)
 
 
 def _typed_doc(doc: Any) -> Optional[Dict[str, Any]]:
@@ -155,12 +158,15 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
     return items
 
 
-def delete_focus_session(uid: str, session_id: str) -> bool:
-    ref = _user_col(uid, 'focus_sessions').document(session_id)
-    if not getattr(ref.get(), "exists", False):
+def delete_focus_session(uid: str, session_id: str, *, client: Any = None) -> bool:
+    ref = _user_col(uid, 'focus_sessions', client=client).document(session_id)
+    try:
+        if not getattr(ref.get(), "exists", False):
+            return False
+        ref.delete()
+        return True
+    except NotFound:
         return False
-    ref.delete()
-    return True
 
 
 def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:

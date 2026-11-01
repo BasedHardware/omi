@@ -117,6 +117,7 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/vad/',
     'backend/charts/diarizer/',
     'backend/charts/nllb-translation/',
+    'backend/charts/batch-pipeline-worker/',
     'backend/scripts/alert_backtest.py',
     'backend/charts/monitoring/metric-inventory.prod.json',
     'backend/charts/monitoring/expected-targets.prod.yaml',
@@ -367,6 +368,7 @@ AREA_TESTS = (
         (),
         (
             'tests/unit/test_monitoring_*.py',
+            'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_journey_observability.py',
             'tests/unit/test_verify_pusher_live_alert_route.py',
         ),

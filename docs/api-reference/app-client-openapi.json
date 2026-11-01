@@ -274,6 +274,135 @@
         "title": "AccountCutoverState",
         "type": "string"
       },
+      "AccountDeletionActionResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "pending_deletion": {
+            "default": false,
+            "title": "Pending Deletion",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "wipe_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wipe At"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "AccountDeletionActionResponse",
+        "type": "object"
+      },
+      "AccountDeletionLossSummary": {
+        "properties": {
+          "backlog_conversations": {
+            "default": 0,
+            "title": "Backlog Conversations",
+            "type": "integer"
+          },
+          "backlog_seconds": {
+            "default": 0,
+            "title": "Backlog Seconds",
+            "type": "integer"
+          },
+          "held_audio_seconds": {
+            "default": 0,
+            "title": "Held Audio Seconds",
+            "type": "integer"
+          },
+          "held_recordings": {
+            "default": 0,
+            "title": "Held Recordings",
+            "type": "integer"
+          }
+        },
+        "title": "AccountDeletionLossSummary",
+        "type": "object"
+      },
+      "AccountDeletionRestoreResponse": {
+        "properties": {
+          "billing_cancelled": {
+            "default": false,
+            "title": "Billing Cancelled",
+            "type": "boolean"
+          },
+          "restored": {
+            "title": "Restored",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "restored"
+        ],
+        "title": "AccountDeletionRestoreResponse",
+        "type": "object"
+      },
+      "AccountDeletionStatusResponse": {
+        "properties": {
+          "grace_period_days": {
+            "default": 0,
+            "title": "Grace Period Days",
+            "type": "integer"
+          },
+          "loss_summary": {
+            "$ref": "#/components/schemas/AccountDeletionLossSummary"
+          },
+          "pending_deletion": {
+            "default": false,
+            "title": "Pending Deletion",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "wipe_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wipe At"
+          }
+        },
+        "required": [
+          "loss_summary"
+        ],
+        "title": "AccountDeletionStatusResponse",
+        "type": "object"
+      },
       "Action": {
         "properties": {
           "action": {
@@ -4552,6 +4681,18 @@
             "title": "Id",
             "type": "string"
           },
+          "playback_start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Normalized server-clock start for playback wall math (v2 only)",
+            "title": "Playback Start"
+          },
           "provider": {
             "default": "gcp",
             "description": "Storage provider (e.g., 'gcp')",
@@ -8664,6 +8805,78 @@
         "title": "ClickUpTeamsResponse",
         "type": "object"
       },
+      "ClientFlag": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "payload_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "JSON-encoded payload when enabled",
+            "title": "Payload Json"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Multivariate value when enabled; null for boolean flags",
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "key",
+          "enabled"
+        ],
+        "title": "ClientFlag",
+        "type": "object"
+      },
+      "ClientFlagsResponse": {
+        "properties": {
+          "flags": {
+            "description": "Only keys the Omi store owns. A key not listed keeps the client's previous source.",
+            "items": {
+              "$ref": "#/components/schemas/ClientFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Store version; null when the store is unconfigured or unreadable",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "version",
+          "flags"
+        ],
+        "title": "ClientFlagsResponse",
+        "type": "object"
+      },
       "ClientProcessing": {
         "additionalProperties": false,
         "properties": {
@@ -8984,6 +9197,18 @@
             "title": "Apps Results",
             "type": "array"
           },
+          "arrival_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival At"
+          },
           "audio_files": {
             "default": [],
             "items": {
@@ -9104,6 +9329,16 @@
               }
             ]
           },
+          "clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedClock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content_kind": {
             "anyOf": [
               {
@@ -9155,6 +9390,17 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
           },
           "external_data": {
             "anyOf": [
@@ -9357,6 +9603,40 @@
                 "type": "null"
               }
             ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded End"
+          },
+          "recorded_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Start"
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -10315,6 +10595,18 @@
             "title": "Apps Results",
             "type": "array"
           },
+          "arrival_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival At"
+          },
           "audio_files": {
             "default": [],
             "items": {
@@ -10435,6 +10727,16 @@
               }
             ]
           },
+          "clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedClock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content_kind": {
             "anyOf": [
               {
@@ -10486,6 +10788,17 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
           },
           "external_data": {
             "anyOf": [
@@ -10696,6 +11009,40 @@
                 "type": "null"
               }
             ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded End"
+          },
+          "recorded_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Start"
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -11184,6 +11531,18 @@
       "ConversationTopicRequest": {
         "additionalProperties": false,
         "properties": {
+          "conversation_language": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Language"
+          },
           "transcript": {
             "maxLength": 100000,
             "minLength": 1,
@@ -13457,6 +13816,11 @@
       },
       "DeleteAccountRequest": {
         "properties": {
+          "erase_now": {
+            "default": false,
+            "title": "Erase Now",
+            "type": "boolean"
+          },
           "reason": {
             "anyOf": [
               {
@@ -15593,6 +15957,18 @@
             "title": "Conversation Ids",
             "type": "array"
           },
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "follow_ups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Follow Ups",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -15601,6 +15977,18 @@
             "format": "date-time",
             "title": "Last Activity At",
             "type": "string"
+          },
+          "lede": {
+            "default": "",
+            "title": "Lede",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeMember"
+            },
+            "title": "Members",
+            "type": "array"
           },
           "moments": {
             "items": {
@@ -15655,6 +16043,18 @@
             "title": "Status",
             "type": "string"
           },
+          "timer_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timer Started At"
+          },
           "title": {
             "default": "",
             "title": "Title",
@@ -15668,6 +16068,37 @@
           "last_activity_at"
         ],
         "title": "Episode",
+        "type": "object"
+      },
+      "EpisodeListResponse": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/Episode"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "EpisodeListResponse",
         "type": "object"
       },
       "EpisodeLiveResponse": {
@@ -15727,6 +16158,53 @@
         "title": "EpisodeLookupResponse",
         "type": "object"
       },
+      "EpisodeMember": {
+        "description": "Retained member metadata; transcript is hydrated by the existing detail API.",
+        "properties": {
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "default": "completed",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "started_at"
+        ],
+        "title": "EpisodeMember",
+        "type": "object"
+      },
       "EpisodeMoment": {
         "properties": {
           "conversation_id": {
@@ -15752,6 +16230,13 @@
             "title": "Id",
             "type": "string"
           },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodePoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
           "start_offset": {
             "default": 0.0,
             "title": "Start Offset",
@@ -15770,6 +16255,27 @@
           "ended_at"
         ],
         "title": "EpisodeMoment",
+        "type": "object"
+      },
+      "EpisodePoint": {
+        "description": "One point of a composed moment, with optional supporting specifics under it.",
+        "properties": {
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "EpisodePoint",
         "type": "object"
       },
       "EpisodeProvisionalItem": {
@@ -19423,6 +19929,67 @@
         "title": "HeldAudioSummary",
         "type": "object"
       },
+      "HiddenNoiseCountsResponse": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/HiddenNoiseDayCount"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "end_date": {
+            "format": "date-time",
+            "title": "End Date",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date-time",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "tz": {
+            "title": "Tz",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tz",
+          "start_date",
+          "end_date",
+          "days",
+          "total",
+          "truncated"
+        ],
+        "title": "HiddenNoiseCountsResponse",
+        "type": "object"
+      },
+      "HiddenNoiseDayCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "count"
+        ],
+        "title": "HiddenNoiseDayCount",
+        "type": "object"
+      },
       "IgnoredVoice": {
         "description": "A voice the user marked Not a Person; Omi does not ask about it again.",
         "properties": {
@@ -21412,6 +21979,20 @@
             ],
             "title": "Expected Calendar"
           },
+          "observed_call_tiles": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Call Tiles"
+          },
           "observed_screen_listing": {
             "anyOf": [
               {
@@ -22749,6 +23330,18 @@
             "title": "Conversation Ids",
             "type": "array"
           },
+          "merged_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable target ID allocated at admission; the worker may not have created it yet",
+            "title": "Merged Conversation Id"
+          },
           "message": {
             "default": "Merge started",
             "description": "Status message",
@@ -23747,6 +24340,93 @@
           }
         },
         "title": "OnboardingStateUpdate",
+        "type": "object"
+      },
+      "OpenLoopAnswerRequest": {
+        "properties": {
+          "action": {
+            "enum": [
+              "done",
+              "remind",
+              "drop"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "OpenLoopAnswerRequest",
+        "type": "object"
+      },
+      "OpenLoopAnswerResponse": {
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "done",
+              "remind",
+              "dropped"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "date",
+          "state"
+        ],
+        "title": "OpenLoopAnswerResponse",
+        "type": "object"
+      },
+      "OpenLoopCard": {
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "context_line": {
+            "title": "Context Line",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "date",
+          "question",
+          "context_line"
+        ],
+        "title": "OpenLoopCard",
+        "type": "object"
+      },
+      "OpenLoopCardsResponse": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/OpenLoopCard"
+            },
+            "title": "Cards",
+            "type": "array"
+          }
+        },
+        "title": "OpenLoopCardsResponse",
         "type": "object"
       },
       "OpenLoopDescriptor": {
@@ -27032,6 +27712,41 @@
         "title": "RecommendationSubjectKind",
         "type": "string"
       },
+      "RecordAudioPartial": {
+        "description": "Available transcript is incomplete; this never certifies a complete seal.",
+        "properties": {
+          "applied_generation": {
+            "default": 0,
+            "title": "Applied Generation",
+            "type": "integer"
+          },
+          "generation": {
+            "default": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "tail_lagging",
+              "budget_limit",
+              "tail_lost_or_unproven"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RecordAudioPartial",
+        "type": "object"
+      },
       "RecordLlmUsageBucketRequest": {
         "properties": {
           "account": {
@@ -27085,6 +27800,18 @@
         },
         "title": "RecordLlmUsageBucketRequest",
         "type": "object"
+      },
+      "RecordedClock": {
+        "enum": [
+          "device",
+          "estimated_device",
+          "frame",
+          "live_capture",
+          "imported",
+          "legacy"
+        ],
+        "title": "RecordedClock",
+        "type": "string"
       },
       "RedeemCodeRequest": {
         "properties": {
@@ -32074,6 +32801,16 @@
             "description": "Meeting notes/description",
             "title": "Notes"
           },
+          "participant_sources": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingParticipantSources"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "participants": {
             "description": "Meeting participants",
             "items": {
@@ -32194,10 +32931,32 @@
       },
       "StorefrontCurrent": {
         "properties": {
+          "amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Minor"
+          },
           "cancel_at_period_end": {
             "default": false,
             "title": "Cancel At Period End",
             "type": "boolean"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
           },
           "interval": {
             "anyOf": [
@@ -32232,6 +32991,17 @@
           "line": {
             "title": "Line",
             "type": "string"
+          },
+          "line_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Template"
           },
           "name": {
             "title": "Name",
@@ -32268,6 +33038,20 @@
             "title": "Amount Minor",
             "type": "integer"
           },
+          "confirm_line_templates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Line Templates"
+          },
           "confirm_lines": {
             "anyOf": [
               {
@@ -32292,6 +33076,17 @@
               }
             ],
             "title": "Cta Label"
+          },
+          "cta_label_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label Template"
           },
           "currency": {
             "title": "Currency",
@@ -32341,6 +33136,17 @@
               }
             ],
             "title": "Renewal Line"
+          },
+          "saving_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saving Minor"
           },
           "subline": {
             "anyOf": [
@@ -36794,6 +37600,17 @@
       },
       "UpgradeSubscriptionRequest": {
         "properties": {
+          "expected_amount_due": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Amount Due"
+          },
           "price_id": {
             "maxLength": 255,
             "minLength": 1,
@@ -36810,6 +37627,22 @@
               }
             ],
             "title": "Promotion Code"
+          },
+          "proration_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proration Date"
+          },
+          "switch_now": {
+            "default": false,
+            "title": "Switch Now",
+            "type": "boolean"
           }
         },
         "required": [
@@ -38526,6 +39359,134 @@
           "status"
         ],
         "title": "WrappedStatusResponse",
+        "type": "object"
+      },
+      "YearlySwitchResponse": {
+        "properties": {
+          "amount_due_today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Due Today"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "first_billing_period": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Billing Period"
+          },
+          "monthly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Amount"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          },
+          "proration_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proration Date"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "renews_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renews At"
+          },
+          "savings_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Savings Amount"
+          },
+          "yearly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Amount"
+          }
+        },
+        "required": [
+          "eligible",
+          "reason"
+        ],
+        "title": "YearlySwitchResponse",
         "type": "object"
       },
       "routers__desktop_tts_updates__TtsSynthesizeRequest": {
@@ -48516,6 +49477,120 @@
         ]
       }
     },
+    "/v1/conversations/hidden-noise-counts": {
+      "get": {
+        "description": "Count hidden noise/media without gating on MEDIA_NOISE_MODE for this uid.\n\nZero-count days are omitted. A 1000-row scan cap sets truncated=true when\nhit; days and total then represent lower bounds. Locked rows are eligible;\ndeletion/merge tombstones never count; Dream duplicates count because the\ninclude_discarded reveal list shows them. No hidden rows\nreturns empty days and total=0, even when the media/noise mode is disabled.",
+        "operationId": "get_hidden_noise_counts_v1_conversations_hidden_noise_counts_get",
+        "parameters": [
+          {
+            "description": "Inclusive start instant; naive timestamps use UTC",
+            "in": "query",
+            "name": "start_date",
+            "required": true,
+            "schema": {
+              "description": "Inclusive start instant; naive timestamps use UTC",
+              "format": "date-time",
+              "title": "Start Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive end instant; maximum window is 31 days",
+            "in": "query",
+            "name": "end_date",
+            "required": true,
+            "schema": {
+              "description": "Inclusive end instant; maximum window is 31 days",
+              "format": "date-time",
+              "title": "End Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "IANA timezone for local created_at day buckets",
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "description": "IANA timezone for local created_at day buckets",
+              "title": "Tz",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenNoiseCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Hidden Noise Counts",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/merge": {
       "post": {
         "description": "Admit completed sources, merge into a new ID asynchronously, then notify the client.",
@@ -55743,6 +56818,149 @@
         ]
       }
     },
+    "/v1/episodes": {
+      "get": {
+        "operationId": "list_episodes_v1_episodes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Episodes",
+        "tags": [
+          "episodes"
+        ]
+      }
+    },
     "/v1/episodes/by-conversation/{conversation_id}": {
       "get": {
         "operationId": "get_episode_for_conversation_v1_episodes_by_conversation__conversation_id__get",
@@ -56406,6 +57624,95 @@
         "tags": [
           "fair_use"
         ]
+      }
+    },
+    "/v1/flags": {
+      "get": {
+        "operationId": "client_flags_v1_flags_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "surface",
+            "required": true,
+            "schema": {
+              "enum": [
+                "macos",
+                "mobile",
+                "web-app",
+                "windows"
+              ],
+              "title": "Surface",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientFlagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Client Flags"
       }
     },
     "/v1/folders": {
@@ -66010,6 +67317,93 @@
         "summary": "Upgrade Subscription Endpoint"
       }
     },
+    "/v1/payments/yearly-switch": {
+      "get": {
+        "description": "Whether this monthly payer can switch to yearly now, and (with preview) exactly what it costs.",
+        "operationId": "get_yearly_switch_endpoint_v1_payments_yearly_switch_get",
+        "parameters": [
+          {
+            "description": "Include Stripe's invoice preview: the charge today and the renewal date.",
+            "in": "query",
+            "name": "preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include Stripe's invoice preview: the charge today and the renewal date.",
+              "title": "Preview",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YearlySwitchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Yearly Switch Endpoint"
+      }
+    },
     "/v1/paypal/payment-details": {
       "get": {
         "description": "Get the PayPal payment details for the user",
@@ -67324,6 +68718,206 @@
           }
         ],
         "summary": "Answer Review Item",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/v1/review/open-loops": {
+      "get": {
+        "description": "The day's pending open-loop cards, at most the three the daily pass wrote.\n\nThe day is resolved exactly as the pass dated it for this uid (see\n``open_loops_service.cards_display_day``), with a bounded fallback to the\nprevious day; the zone resolution follows the user usage endpoint: a valid\nrequest zone, else the stored profile zone, else UTC.",
+        "operationId": "get_review_open_loops_v1_review_open_loops_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "time_zone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Time Zone"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenLoopCardsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Review Open Loops",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/v1/review/open-loops/{date}/{card_id}/answer": {
+      "post": {
+        "operationId": "answer_review_open_loop_v1_review_open_loops__date___card_id__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "title": "Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "title": "Card Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenLoopAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenLoopAnswerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Answer Review Open Loop",
         "tags": [
           "review"
         ]
@@ -73374,6 +74968,16 @@
         "operationId": "delete_account_v1_users_delete_account_delete",
         "parameters": [
           {
+            "in": "query",
+            "name": "grace",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Grace",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -73415,7 +75019,9 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DeleteAccountRequest",
-                "default": {}
+                "default": {
+                  "erase_now": false
+                }
               }
             }
           }
@@ -73425,7 +75031,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserStatusResponse"
+                  "$ref": "#/components/schemas/AccountDeletionActionResponse"
                 }
               }
             },
@@ -73451,6 +75057,84 @@
           }
         ],
         "summary": "Delete Account",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/deletion-status": {
+      "get": {
+        "description": "Status plus metadata counts used by the account-deletion warning screen.",
+        "operationId": "get_account_deletion_status_endpoint_v1_users_deletion_status_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Account Deletion Status Endpoint",
         "tags": [
           "v1"
         ]
@@ -77945,6 +79629,84 @@
           }
         ],
         "summary": "Record Channel"
+      }
+    },
+    "/v1/users/restore-account": {
+      "post": {
+        "description": "Cancel a pending grace wipe while the deadline remains in the future.",
+        "operationId": "restore_account_deletion_endpoint_v1_users_restore_account_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionRestoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Restore Account Deletion Endpoint",
+        "tags": [
+          "v1"
+        ]
       }
     },
     "/v1/users/stats/chat-messages": {

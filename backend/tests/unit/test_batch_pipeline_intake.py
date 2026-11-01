@@ -153,6 +153,21 @@ def test_expired_route_receipt_cannot_rebind_a_retained_segment(cohort):
     assert ('content', 'synthetic-owner/content') not in store.rows
 
 
+def test_ordinary_binding_stays_legacy_readable_and_partial_authority_is_immutable(cohort):
+    store = MemoryStore()
+    works, binding = proposal()
+    submit(store, works, binding)
+    saved = store.rows['jobs', 'segment']['projection_binding']
+    assert 'partial_record' not in saved
+    # Explicit false from a newer writer is equivalent to an absent default.
+    saved['partial_record'] = False
+    del store.rows['content', 'synthetic-owner/content']
+    assert submit(store, works, binding)['outcome'] == 'batch'
+    del store.rows['content', 'synthetic-owner/content']
+    with pytest.raises(ValueError, match='immutable intake binding'):
+        submit(store, works, replace(binding, partial_record=True))
+
+
 def test_completed_legacy_content_gets_durable_alias_without_gpu_or_redis(cohort):
     from database.batch_pipeline_intake import cache_completed
 

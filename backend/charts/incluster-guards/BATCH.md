@@ -1,5 +1,12 @@
 # Batch admission rollback
 
+The batch percentage source is now the runtime `_ramp` document. This guard's
+env-only writer cannot override a seeded remote percentage, and its snapshot
+requires an env entry which new deploys no longer declare. Keep this guard
+disabled until a remote rollback path and its access/epoch/readback are separately
+qualified; retain an effective external safety owner in the meantime. See the
+[runtime ramp cutover](../../docs/runbooks/batch-runtime-ramp.md).
+
 With `batch.enabled: true`, production values install a separate five-minute
 CronJob, `prod-omi-incluster-guards-batch`, using a dedicated KSA with
 annotation
@@ -7,8 +14,11 @@ annotation
 Production currently keeps `batch.enabled: false` until the deployer RBAC for
 the `-batch` objects is approved (access change, David) and g2's producer
 exists. Development never installs this writer. `batch.cloudRunRollbackEnabled=false`
-removes the batch resources including its state ConfigMap; save state/audit
-evidence before removing them. `dryRun=true` retains state but suppresses all Cloud Run writes,
+removes the batch resources but retains its state ConfigMap with
+`helm.sh/resource-policy: keep`. Helm creates an empty shell and never templates
+the Job's data, including pending rollback intent; re-enabling reuses that state.
+See [failed-release recovery and state ownership](README.md#state-ownership-and-recovery-from-a-failed-helm-upgrade).
+`dryRun=true` retains state but suppresses all Cloud Run writes,
 including a previously pending rollback. Check active Jobs when stopping: new
 values do not change a running Job. A batch Job has an 840s deadline and no
 automatic Kubernetes retry; its durable intent allows the next scheduled Job
@@ -125,8 +135,19 @@ Require `0 <= since <= arm_since <= observed_at <= read_completed_at <= now` and
 <=600s. Missing/changed first-write clocks, wrong arming epoch/identity, negative, nonfinite, boolean, denied or
 stale safety values remain BLIND. Before the full new-state 30m window, valid
 input is WARMUP. After it, positive pinned-custody missing, per-unit proven
-terminal/failed-held VAD speech, new projection obligations older15m, or new
-stuck jobs older30m trip. Independently proven trips win over other unknowns.
+terminal/failed-held VAD speech trip. Independently proven trips win over other unknowns.
+David's 2026-10-29 ruling makes projection obligations older15m and stuck jobs
+older30m alert-only, including missing/malformed latency measurements; the guard
+logs these in `alerts` without creating a rollback intent. This consumer covers
+T1 custody and T2 proven speech loss. T4 language remains with the external
+language observer: this aggregate schema has no language fields and must never
+be described as complete T4 coverage. See the [batch entry runbook](../../docs/operational/batch-quality-entry.md)
+for the replacement external observer and single entry gate.
+New pending hard rollback intents persist their classified reasons across Job
+interruption. An existing intent without those reasons, or with a soft reason,
+is preserved for lead reconciliation and issues no Cloud Run writes. Before
+deploying, inspect whether such an intent exists; do not delete/hand-archive it
+to make a rollout appear clean.
 Fallback VAD/duration and missing safety evidence hold clean assessment; quality
 p95/first-summary/log errors remain WATCH and do not auto-trip. Blindness does
 not itself roll admission back (P90 fast-mode ruling).

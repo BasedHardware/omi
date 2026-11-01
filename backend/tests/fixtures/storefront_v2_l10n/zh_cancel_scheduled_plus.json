@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "catalog_revision": 11,
+  "catalog_revision": 12,
   "show_subscription_ui": true,
   "header": "你的 Plus 套餐将于 11月1日 结束",
   "current": {
@@ -10,8 +10,11 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": true,
-    "line": "你当前使用的是 Plus · $19.99/月",
-    "legacy_note": null
+    "line": "你当前使用的是 Plus · US$19.99/月",
+    "legacy_note": null,
+    "amount_minor": 1999,
+    "currency": "usd",
+    "line_template": "你当前使用的是 Plus · {price}/月"
   },
   "usage": {
     "kind": "unavailable",
@@ -44,7 +47,7 @@
           "interval": "month",
           "amount_minor": 1999,
           "currency": "usd",
-          "headline": "$19.99/月",
+          "headline": "US$19.99/月",
           "subline": null,
           "renewal_line": "按月自动续费，直到你取消。可随时在设置中取消。"
         }
@@ -68,7 +71,7 @@
           "interval": "month",
           "amount_minor": 0,
           "currency": "usd",
-          "headline": "$0",
+          "headline": "US$0",
           "subline": null,
           "renewal_line": null
         }
@@ -96,7 +99,7 @@
           "interval": "month",
           "amount_minor": 4999,
           "currency": "usd",
-          "headline": "$49.99/月",
+          "headline": "US$49.99/月",
           "subline": null,
           "renewal_line": "按月自动续费，直到你取消。可随时在设置中取消。"
         },
@@ -105,8 +108,8 @@
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
-          "headline": "$41.66/月",
-          "subline": "年付 $499.90 · 免费 2 个月",
+          "headline": "US$41.66/月",
+          "subline": "年付 US$499.90 · 免费 2 个月",
           "renewal_line": "按年自动续费，直到你取消。可随时在设置中取消。",
           "months_free": 2
         }
@@ -133,7 +136,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/月",
+          "headline": "US$199/月",
           "subline": null,
           "renewal_line": "按月自动续费，直到你取消。可随时在设置中取消。"
         },
@@ -142,8 +145,8 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/月",
-          "subline": "年付 $1,990 · 免费 2 个月",
+          "headline": "US$165.83/月",
+          "subline": "年付 US$1,990 · 免费 2 个月",
           "renewal_line": "按年自动续费，直到你取消。可随时在设置中取消。",
           "months_free": 2
         }

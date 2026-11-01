@@ -111,6 +111,8 @@ class _Query:
                 rows = [row for row in rows if _nested_value(row[1], field_path) == expected]
             elif op_string == "in":
                 rows = [row for row in rows if _nested_value(row[1], field_path) in expected]
+            elif op_string == ">=":
+                rows = [row for row in rows if _nested_value(row[1], field_path) >= expected]
             else:
                 raise AssertionError(f"unexpected operator: {op_string}")
         for field_path in reversed(self._order_fields):

@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from database import users as users_db
+from database import users as users_db, redis_db
 
 from config.refactor_modes import serving_for, uid_digest
 from models.speaker_evidence import SpeakerEvidence, VoiceCluster, SpeakerCandidate, ClusterSimilarity
@@ -42,6 +42,7 @@ def isolated_flags(monkeypatch):
         known_spellings, 'conversation_people_names', lambda *_args: FIXTURES['contact_spelling']['people']
     )
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: 'en')
+    monkeypatch.setattr(redis_db, 'get_user_preferred_app', lambda *_args: None)
 
 
 def prefix(**kwargs):
@@ -79,6 +80,19 @@ def test_local_capture_time_is_converted_in_code(tz, expected):
 def test_language_preference_precedes_noisy_conversation_language(monkeypatch, preference, conversation, expected):
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: preference)
     assert output_language.resolve_output_language('synthetic-account', conversation) == expected
+
+
+def test_notes_packet_normalizes_sentinel_output_language(monkeypatch):
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: '')
+    packet_data = packet.build_notes_packet(
+        prefix=prefix(),
+        uid='synthetic-account',
+        capture_evidence='synthetic',
+        words=30,
+        inputs=inputs(output_language_code='multi', language_code='vi'),
+    )
+    assert packet_data['output_language'] == 'vi'
+    assert packet_data['response_language'] == 'vi'
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'typo'])
@@ -182,7 +196,35 @@ def test_two_speakers_with_unknown_owner_never_get_named_attribution(evidence):
     assert fixture['segments'][0]['is_user'] is True  # Source labels are never rewritten.
 
 
-@pytest.mark.parametrize('band,expected', [('confident', 'Nik'), ('likely', 'likely Nik'), ('unknown', None)])
+@pytest.mark.parametrize('status,expected', [('unknown', None), ('ambiguous', None), ('user', 'Morgan')])
+def test_owner_boolean_without_positive_identity_stays_anonymous(status, expected):
+    rows = [
+        {
+            'id': 'synthetic-owner',
+            'text': 'A personal story.',
+            'speaker_id': 0,
+            'is_user': True,
+            'speaker_identity_status': status,
+            'speaker_match_source': 'conversation_voice' if status == 'user' else None,
+        }
+    ]
+    text, mapping = render_cluster_transcript(rows, names={}, owner_name='Morgan')
+    assert mapping['c0'] == expected
+    assert ('Morgan' in text) == (expected == 'Morgan')
+    assert rows[0]['is_user'] is True
+
+
+def test_unproven_legacy_owner_cannot_veto_a_manual_owner_on_another_voice():
+    rows = [
+        dict(id='legacy', speaker_id=0, text='Uncertain speech.', is_user=True, speaker_identity_status='user'),
+        dict(id='manual', speaker_id=1, text='Confirmed speech.', is_user=True, speaker_label_source='manual'),
+    ]
+    _, mapping = render_cluster_transcript(rows, names={}, owner_name='Morgan')
+    assert list(mapping.values()) == [None, 'Morgan']
+    assert all(row['is_user'] for row in rows)
+
+
+@pytest.mark.parametrize('band,expected', [('confident', 'Nik'), ('likely', None), ('unknown', None)])
 def test_renderer_uses_the_policy_band_and_higher_probability(band, expected):
     evidence = SpeakerEvidence(
         status='resolved',
@@ -229,7 +271,8 @@ def test_episode_moments_drop_classified_noise_and_use_the_notes_owner_gate(monk
     moment = incremental.render_moment(language['segments'], uid='synthetic-account')
     assert language['segments'][1]['text'] not in moment.text
     messages = incremental.build_messages('{}', moment.text, now=START, tz_name='UTC', output_language='en')
-    assert 'including title and moment_heading, in en' in messages[0][1]
+    assert 'Write all output in en.' in messages[0][1]
+    assert 'Keep names and quoted words verbatim.' in messages[0][1]
     assert 'language the people speak' not in messages[0][1]
 
 
@@ -255,7 +298,7 @@ def test_topic_title_has_resolved_english_instruction_and_no_chinese_noise(monke
         segments=fixture['segments'],
     )
     assert result.title == 'Workshop volunteer schedule'
-    assert prompts[0].startswith('Write the title in en.')
+    assert prompts[0].startswith('Write all output in en.')
     assert fixture['segments'][1]['text'] not in prompts[0]
 
 
@@ -272,7 +315,11 @@ def test_episode_shadow_has_exact_legacy_text(monkeypatch, mode):
 def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum):
     monkeypatch.setenv(packet.FLAG, 'serve')
     conversation = SimpleNamespace(
-        transcript_segments=[SimpleNamespace(text='word ' * words)], started_at=START, finished_at=START, photos=[]
+        transcript_segments=[SimpleNamespace(text='word ' * words)],
+        started_at=START,
+        finished_at=START,
+        photos=[],
+        language='en',
     )
     result = notes_short_clip.quiet_minimum('synthetic-account', conversation, tz='UTC')
     assert (result is not None) is minimum
@@ -282,6 +329,7 @@ def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum)
 
 
 def test_short_clip_shadow_does_not_serve_minimum(monkeypatch):
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     monkeypatch.setenv(packet.FLAG, 'shadow')
     conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='A brief synthetic remark')], photos=[])
     assert notes_short_clip.quiet_minimum('synthetic-account', conversation) is None
@@ -368,6 +416,7 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
     )
     conversation = SimpleNamespace(
         transcript_segments=[SimpleNamespace(text='A brief synthetic remark')],
+        language='en',
         started_at=START,
         photos=[],
         source='omi',
@@ -383,7 +432,8 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
         recovery_minimum_fallback_observer=lambda: minimum.append(True),
     )
     assert structured.title and structured.emoji == '💬' and not discarded
-    assert decisions[0].trigger == trigger and minimum == [True]
+    assert decisions[0].trigger == trigger
+    assert minimum == ([True] if trigger_name in ('SERVER_RECOVERY', 'SILENT_BACKFILL') else [])
 
 
 def test_no_names_when_whole_conversation_speaker_resolution_is_unavailable():
@@ -536,7 +586,9 @@ def test_shadow_moment_name_projection_is_the_exact_existing_labels(monkeypatch)
 
 def test_external_audio_fragments_also_get_the_model_free_minimum(monkeypatch):
     monkeypatch.setenv(packet.FLAG, 'serve')
-    audio = SimpleNamespace(text_source='audio', text='A short synthetic utterance', started_at=START, photos=[])
+    audio = SimpleNamespace(
+        text_source='audio', text='A short synthetic utterance', started_at=START, photos=[], language='en'
+    )
     minimum = notes_short_clip.quiet_minimum('synthetic-account', audio)
     assert minimum.title == 'A short synthetic utterance' and minimum.emoji == '💬'
 
@@ -648,3 +700,9 @@ def test_ambiguous_contact_names_keep_both_spellings_without_choosing(monkeypatc
     from utils.speakers.evidence import project_labels
 
     assert project_labels(ambiguous, {}) == {}
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

@@ -227,7 +227,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isDeviceRecording = liveSource != null && liveSource != 'phone';
     // Keep automatic repair and legitimate pendant sleep quiet. In particular,
     // never animate a Listening timer solely because a restored link is ready.
-    final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified;
+    // An exhausted recovery is not a wait: it reads as the failure it is.
+    final noAudio = isDeviceRecording && !provider.isPaused && provider.pendantCaptureActionRequired;
+    final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified && !noAudio;
 
     // Offline/batch mode: device or phone-mic audio is saved locally with no live
     // transcription, so show a dedicated, self-explanatory card instead of the
@@ -272,6 +274,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final displayState = liveCaptureDisplayState(
       audioInterrupted: micTaken,
       paused: isPaused,
+      pendantNoAudio: noAudio,
+      pendantUnverified: unverified,
       transcriptionUnavailable: hasTerminalTranscriptionFailure,
       bufferingFor: bufferingFor,
       reconnecting: interruption == CaptureInterruption.recovering,

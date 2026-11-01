@@ -49,6 +49,7 @@ struct DesktopMeetingPayload: Equatable, Sendable {
   let participants: [DesktopMeetingParticipant]
   let platform: String?
   let meetingLink: String?
+  var observedCallTiles: [DesktopMeetingParticipant]? = nil
 
   var calendarSource: String { source.calendarSource }
 
@@ -73,6 +74,17 @@ struct DesktopMeetingPayload: Equatable, Sendable {
           return value
         },
       ]
+      if let observedCallTiles {
+        body["participant_sources"] = [
+          "observed_screen_listing": body["participants"] ?? [],
+          "observed_call_tiles": observedCallTiles.map { participant in
+            var value: [String: String] = [:]
+            if let name = participant.name { value["name"] = name }
+            if let email = participant.email { value["email"] = email }
+            return value
+          },
+        ]
+      }
       if let platform { body["platform"] = platform }
       if let meetingLink { body["meeting_link"] = meetingLink }
       return body

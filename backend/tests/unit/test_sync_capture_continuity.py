@@ -231,12 +231,12 @@ def test_retry_of_absorbed_chunk_cannot_resurrect_deleted_survivor():
     assert not conversations(store)
 
 
-def test_discarded_filler_remains_recoverable_and_hidden():
+def test_new_sync_intake_defers_filler_discard_until_canonical_finalization():
     store = StrictFirestore()
     row = chunk('filler', 1000, text='Hmm.')
     row['discarded'] = True
     result, _, _ = intake(store, row)
-    assert result['discarded'] and result['sync_relevance'] == 'review'
+    assert not result['discarded'] and result['sync_relevance'] == 'review'
     assert result['transcript_segments'][0]['text'] == 'Hmm.'
     assert not result.get('deleted')
 

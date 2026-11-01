@@ -155,6 +155,8 @@ def test_exhausted_sessions_carry_the_ineligible_reason_and_zero_children_exist(
 
 
 def value(metric, **labels):
+    if metric is telemetry.WIRE_AUDIO:
+        labels.setdefault('origin', 'initial')
     return metric.labels(**labels)._value.get()
 
 
@@ -281,6 +283,7 @@ def test_metrics_only_expose_closed_labels():
                     'trigger',
                     'le',
                     'ineligible_reason',
+                    'origin',
                 }
                 assert sample.labels['demand_cohort'] in telemetry.DEMAND_COHORTS
                 reason = sample.labels.get('ineligible_reason')
@@ -291,7 +294,8 @@ def test_metrics_only_expose_closed_labels():
     for cohort in telemetry.DEMAND_COHORTS:
         assert (
             REGISTRY.get_sample_value(
-                'omi_stt_provider_wire_audio_seconds_total', {'provider': 'soniox', 'demand_cohort': cohort}
+                'omi_stt_provider_wire_audio_seconds_total',
+                {'provider': 'soniox', 'demand_cohort': cohort, 'origin': 'initial'},
             )
             is not None
         )

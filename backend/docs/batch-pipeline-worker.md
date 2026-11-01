@@ -190,13 +190,47 @@ priority, unit kind, optional conversation and pinned privacy generation.
 out of order. Each result supplies segment ID, encrypted URI and success/silence.
 Missing/failed items retry up to the quarantine ceiling; decode/provider failures never become silence.
 
-Inside one locked flight, artifact IO overlaps GPU work: up to
-`BATCH_PIPELINE_WORKER_IO_CONCURRENCY` (default 3, `1` = serial, max 8) items
+Artifact IO overlaps GPU work using one shared worker pool: up to
+`BATCH_PIPELINE_WORKER_IO_CONCURRENCY` (default 5, `1` = serial, max 8) items
 fetch/decrypt/decode ahead of the item on the GPU, and as many encrypted result
 writes run while later items diarize. Prefetch stays inside the existing
 two-audio-hour decode group and, beyond the next item, within 1800 audio seconds
 ahead. Model calls, CUDA work and the chain lock stay on the calling thread; a
 fatal GPU error waits for outstanding IO before the flight raises.
+
+Each pump lane may submit its first fetch/decode before acquiring the GPU lock.
+These prepared attempts share a strict 1800-audio-second budget across all lanes;
+oversize units take ordinary locked decode. An attempt-local handle carries its
+audio, language and capture stream, never another lease's cached context. Stop
+and lost-lease paths cancel queued preparation while a lane waits. After GPU
+dispatch, the current bounded chain drains; the waiting-lane watcher is stopped
+and joined before dispatch. Running IO drains before renewal ends.
+The first prepared unit counts against this budget until
+its lane finishes; the existing active-flight prefetch/group bounds still apply.
+
+The final bounded persist tail settles after CUDA quiescence and release of the
+pump GPU lock. Leases keep renewing through settlement and fenced publication.
+Only settled writes produce WorkResults; a persist failure takes the same
+per-unit failure/recovery path. Token, privacy and ordered-merge checks remain
+authoritative. Set Helm `worker.ioConcurrency=1` to remove preparation and
+restore serial artifact IO, including persistence under the model lock.
+
+`omi_batch_pipeline_completed_audio_seconds_total{outcome="success"|"silence"|"no_recoverable_speech"}`
+counts admitted capture seconds only on a new fenced completion, including
+silence; duplicate completion receipts contribute zero. It is not a projection
+or vendor-spend denominator. `events{event="requeued"}` counts retry-to-ready
+wakeups; `retry` now counts actual worker failures. Admission receipt outcomes
+are `received`, `timeout`, `transport`, `invalid_receipt`, and `unconfigured`.
+
+CPU-only strict VAD runs as record-only decode work. Its result never gates VAD,
+ASR, diarization, persistence or publication. The shadow counter records
+`evaluated`, `strict_silent`, `strict_silent_pyannote_nonempty`, and `unavailable`
+(including a missing pyannote comparison); synthetic shadow traffic is excluded.
+Thread CPU seconds and the optional `strict_vad_shadow` wall stage measure its
+cost. Local Apple Silicon synthetic silence/tone measurements at 60 seconds
+were 0.278/0.280 CPU seconds (about 0.47% of audio duration); first ONNX setup
+cost 0.094 CPU seconds. This is not an L4 CPU-cost certificate.
+No new model forward or GPU synchronization is added.
 
 B's dedicated process composes A's `Pump`, a fresh `PoolCapacity` callback and
 CUDA synchronization. Optional service-OIDC pull/heartbeat/complete/fail APIs
@@ -226,9 +260,59 @@ trough is an opportunity to measure slack, not permission to run.
 
 Export oldest pending/ready/retry age per class, freshness, admission-to-lease owner
 wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
-labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 seconds;
-reject stale samples. B's dedicated chart documents the external-metric HPA.
-CPU is not the scale signal; non-preemptible batch latency still needs bounds.
+labels. Queue age is an SLO diagnostic, not a replica demand multiplier: a parked
+allowance hold can re-enter `ready` after its backoff while keeping a days-old
+enqueue time. One such row must not buy the entire GPU ceiling.
+
+Capacity uses `omi_batch_pipeline_admissible_ready_units`, an indexed aggregate
+over ready, merge-pending, currently available work whose compute status is
+`unattempted` or `allowed`. New admission records `unattempted`; it does not
+authorize a paid call. Existing workers already replace that status with
+allowed/held or clear it on an unevaluated refusal, so mixed worker versions
+cannot leave a separate eligibility bit true. Held/parked/unevaluated and
+unmarked legacy debt do not request new GPUs; warm workers still drain them
+under the existing funding/privacy checks. No historical backfill is required.
+
+The three priority counts publish atomically with a separate capacity freshness
+clock. Only the dedicated worker's supervised sampler runs these aggregates;
+serving requests keep their existing gauges without scanning GPU capacity.
+A capacity-query failure leaves its clock unchanged and cannot fail recovery
+or projection. The adapter requires all three classes younger than60seconds, takes the
+maximum per class across identical worker samplers, then sums the classes.
+Absent/stale/partial data stays unavailable; never replace it with zero or sum
+the same global queue once per replica.
+
+Production values preserve the ratified three-worker on-demand floor (lead
+114a22/724762, 10-28) with autoscaling off, so an image roll cannot activate
+an unqualified capacity target. The qualified cutover shape (lead f05065,
+10-28) is a single OD-pinned HPA at min3/max16: every replica pins to
+`batch-pipeline-pool`, so the guaranteed floor and scale-out never depend on
+Spot (persistent L4 Spot stockout; Spot L4 bills above on-demand). The latent
+balanced-pool machinery stays available for non-production explicit-budget
+tests. The chart rejects it when the stage, values namespace, or Helm release
+namespace marks a production install, including even replica overrides. Going
+above 16 replicas is a second, separately qualified step; never pre-provision
+nodes. When the scaler is enabled, op1 raises `batch-pipeline-pool`'s node
+maximum (3 -> 16) in the same reviewed
+qualification window, using a real scale-up during the 25% soak as the
+scheduling proof.
+
+`targetQueuedUnitsPerWorker=16` is **provisional slot arithmetic**, not a
+qualified throughput target. Before enabling the scaler, op1 must benchmark
+useful completions and queue latency on the exact qualified worker during the
+25% soak, pin the measured target, verify the new index READY and the fresh
+external metric, and get the lead's exact apply approval. This source change
+does not itself expand admission or authorize deployment. accel3g owns the
+scaler PR (lead f05065), bramp3 does the bounded review, op1 installs and
+qualifies; MERGE READY by 10Z on 2026-10-28.
+
+For cutover/rollback, op1 captures the current release values/manifest privately,
+keeps the image pinned, preserves all runtime bindings and the 1500s SIGTERM
+drain, and verifies the single OD deployment/image, the HPA budget when enabled,
+and all count classes. Production has no Spot companion. If qualification
+fails, restore the prior release with autoscaling off and three Ready OD
+workers. CPU is not the scale signal; queue latency,
+useful throughput, GPU duty and the cost ledger still gate cohort expansion.
 
 ## Stage profiling (metrics-only)
 

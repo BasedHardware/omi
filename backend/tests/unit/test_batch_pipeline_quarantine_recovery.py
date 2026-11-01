@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import asdict, replace
+import logging
 from unittest.mock import Mock
 
 from types import SimpleNamespace
@@ -17,7 +18,7 @@ from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding, Priority, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery, log_failure
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
 
@@ -232,6 +233,13 @@ def test_deletion_or_protection_change_cancels_mid_recovery(setup, change, phase
     assert ('batch_pipeline_prod_results', 'bad') not in client.rows
 
 
+def test_log_failure_preserves_terminal_event(caplog):
+    with caplog.at_level(logging.WARNING):
+        log_failure({'stage': 'provider', 'reason': 'provider_failed'})
+    assert caplog.messages == ['event=batch_recovery_failure stage=provider reason=provider_failed']
+    assert all(record.exc_info is None for record in caplog.records)
+
+
 def test_failed_stt_is_permanently_held_without_loop_or_sensitive_logs(setup, caplog):
     client, _, binding, _, stt, recovery = setup
     stt.side_effect = RuntimeError('PRIVATE_SYNTHETIC_SENTINEL')
@@ -324,7 +332,7 @@ def test_legacy_adapter_preserves_original_clocks_and_uses_one_sync_client_attem
     import wave
 
     pre_recorded, vad, split_result, build_incoming, *_ = legacy_dependencies
-    from utils.batch_pipeline.quarantine_recovery import transcribe
+    from utils.batch_pipeline.recovery_recognizers import transcribe
 
     data = io.BytesIO()
     with wave.open(data, 'wb') as wav:

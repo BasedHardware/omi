@@ -33,6 +33,7 @@ def _patch_fair_use_deps(monkeypatch):
     _mock_redis.eval.side_effect = None
     monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
     monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
+    monkeypatch.setattr(fair_use_mod, 'fair_use_caps_for_user', lambda _uid: fair_use_mod.fair_use_caps_for_plan())
     # The record_fallback patch is applied per-test (see
     # TestNormalizeExpiredRestrictionState.setup_method) and restored here so
     # it cannot leak into other test classes.

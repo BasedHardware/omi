@@ -69,6 +69,7 @@ def checkout(monkeypatch):
     monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', state.retrieve)
     monkeypatch.setattr(payment.stripe.Subscription, 'modify', state.modify)
     monkeypatch.setattr(payment.stripe.Subscription, 'list', state.list_subscriptions)
+    monkeypatch.setattr(payment.stripe.Price, 'retrieve', MagicMock(return_value=SimpleNamespace(currency='usd')))
     monkeypatch.setattr(payment.stripe.checkout.Session, 'create', state.create)
     monkeypatch.setattr(payment.stripe_utils, 'base_url', 'https://omi.test/')
     app = FastAPI()
@@ -124,19 +125,18 @@ def test_terminal_subscription_permits_a_new_checkout(checkout, status):
 def test_new_buyer_without_a_stored_subscription_id_keeps_checkout(checkout):
     checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
     assert request_checkout(checkout).status_code == 200
+    assert checkout.create.call_args.kwargs['currency'] == 'usd'
     checkout.create.assert_called_once()
     checkout.retrieve.assert_not_called()
 
 
-def test_new_buyer_legacy_price_platform_matrix_at_http_layer(checkout, monkeypatch):
-    """2026-10-24 ruling at the HTTP layer: a buyer with no current paid
-    subscription posting a legacy (Plus) price gets 400 on the explicit
-    non-desktop platforms (mobile/web). A missing platform header keeps the
-    pre-ruling acceptance — every desktop build ever shipped sends the header,
-    but desktop compatibility outranks closing the header-less direct-API gap."""
+def test_new_buyer_retired_price_rejected_on_every_platform_at_http_layer(checkout, monkeypatch):
+    """Omi Pro is the only plan sold: a buyer with no current paid subscription
+    posting a retired (Plus) price gets 400 on every platform, desktop and a
+    missing header included. The kill switch restores the old checkout."""
     checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
 
-    for platform in ('ios', 'android', 'web'):
+    for platform in ('ios', 'android', 'web', 'macos', 'windows'):
         response = checkout.client.post(
             '/v1/payments/checkout-session',
             json={'price_id': OTHER_PRICE},
@@ -144,11 +144,10 @@ def test_new_buyer_legacy_price_platform_matrix_at_http_layer(checkout, monkeypa
         )
         assert response.status_code == 400, platform
         assert 'Omi Pro' in response.json()['detail'], platform
+    assert request_checkout(checkout, OTHER_PRICE).status_code == 400
     assert_no_new_billing(checkout)
 
-    # Missing header: pre-ruling behaviour — the legacy price is accepted.
-    assert request_checkout(checkout, OTHER_PRICE).status_code == 200
-    checkout.create.assert_called_once()
+    assert request_checkout(checkout, PRICE).status_code == 200
 
     monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
     assert (
@@ -161,19 +160,10 @@ def test_new_buyer_legacy_price_platform_matrix_at_http_layer(checkout, monkeypa
     )
 
 
-def test_new_buyer_desktop_platform_keeps_legacy_checkout(checkout):
-    checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
-    response = checkout.client.post(
-        '/v1/payments/checkout-session', json={'price_id': OTHER_PRICE}, headers={'X-App-Platform': 'macos'}
-    )
-    assert response.status_code == 200
-    checkout.create.assert_called_once()
-
-
 def test_referral_without_stripe_subscription_keeps_checkout(checkout):
     checkout.stored.stripe_subscription_id = None
     checkout.stored.current_period_end = checkout.payload['current_period_end']
-    assert request_checkout(checkout, OTHER_PRICE).status_code == 200
+    assert request_checkout(checkout, PRICE).status_code == 200
     checkout.create.assert_called_once()
     checkout.retrieve.assert_not_called()
 

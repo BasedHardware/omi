@@ -33,6 +33,16 @@ from utils.sync.repeat_work_metrics import record_feature
 SKIPPED = Counter(
     'conversation_llm_input_dedupe_skipped_total', 'Successful conversation feature input reused', ['feature']
 )
+MISSES = Counter(
+    'conversation_llm_input_dedupe_misses_total',
+    'Conversation feature calls evaluated with no reusable input',
+    ['feature'],
+)
+CHECKPOINT_ERRORS = Counter(
+    'conversation_llm_input_dedupe_checkpoint_errors_total',
+    'Input hash matched but the stored output checkpoint was unusable',
+    ['feature'],
+)
 NOTES_HASH = 'notes_llm_input_hash'
 NOTES_OUTPUT_HASH = 'notes_llm_output_hash'
 L1_HASH = 'l1_llm_input_hash'
@@ -169,7 +179,8 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
     )
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
     saved = None
-    if row.get(NOTES_HASH) == digest and row.get(NOTES_OUTPUT_HASH) and not row.get('discarded'):
+    matched_input = row.get(NOTES_HASH) == digest and not row.get('discarded')
+    if matched_input and row.get(NOTES_OUTPUT_HASH):
         from pydantic import ValidationError
 
         try:
@@ -185,6 +196,9 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         SKIPPED.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'reused')
     else:
+        if matched_input:
+            CHECKPOINT_ERRORS.labels(feature='notes').inc()
+        MISSES.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'invoked')
         output = generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
     hashes[NOTES_HASH] = digest
@@ -235,6 +249,8 @@ def l1_input(uid: str, conversation: Any, inputs: Any, *, db_client: Any = None)
     matched = _stored(uid, conversation, db_client=db_client).get(L1_HASH) == digest
     if matched:
         SKIPPED.labels(feature='l1').inc()
+    else:
+        MISSES.labels(feature='l1').inc()
     record_feature(uid, conversation, 'l1', 'reused' if matched else 'invoked')
     return digest, matched
 

@@ -68,6 +68,17 @@ class CaptureUploadStall {
   final int pendingSeconds;
 }
 
+/// No sync activity at all — no BLE audio, no WAL accepted by the server, no
+/// batch finalized — for the sync health watchdog's stall threshold. Declared
+/// and ended only by the watchdog's evaluation, so Activity's Needs attention
+/// row and the out-of-app stall alert speak for the same condition (#15501).
+class CaptureSyncSilence {
+  const CaptureSyncSilence({required this.since});
+
+  /// When sync activity was last observed.
+  final DateTime since;
+}
+
 typedef CaptureWedgeTrack = void Function(String event, Map<String, Object> properties);
 
 class CaptureWedgeMonitor extends ChangeNotifier {
@@ -136,12 +147,16 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   CaptureStorageAtRisk? _storageAtRisk;
   CaptureUploadStall? _uploadStall;
+  CaptureSyncSilence? _syncSilence;
   DateTime? _captureAttentionSeenAt;
 
   /// The latest slow-burn local capture state, for Activity's Needs attention rows.
   CaptureStorageAtRisk? get storageAtRisk => _storageAtRisk;
 
   CaptureUploadStall? get uploadStall => _uploadStall;
+
+  /// The sustained sync stall the watchdog declared, if any.
+  CaptureSyncSilence? get syncSilence => _syncSilence;
 
   /// The acute link episode the reader is being asked about (a stalled or
   /// silent pendant link, or an exhausted ingress recovery), if any. The
@@ -169,7 +184,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     return false;
   }
 
-  bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null || acuteEpisode != null;
+  bool get hasCaptureAttention =>
+      _storageAtRisk != null || _uploadStall != null || _syncSilence != null || acuteEpisode != null;
 
   /// True while a capture attention row is newer than the last Activity visit:
   /// lights the bell's warning dot. A new episode re-lights it. Acute link
@@ -196,9 +212,11 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final seen = _captureAttentionSeenAt;
     final storage = _storageAtRisk;
     final upload = _uploadStall;
+    final sync = _syncSilence;
     final acute = acuteEpisode;
     hasUnseenCaptureAttention.value = (storage != null && (seen == null || storage.engagedAt.isAfter(seen))) ||
         (upload != null && (seen == null || upload.since.isAfter(seen))) ||
+        (sync != null && (seen == null || sync.since.isAfter(seen))) ||
         (acute != null && (seen == null || acute.declaredAt.isAfter(seen)));
   }
 
@@ -288,7 +306,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       if (_ingressEvents[deviceId] != event) {
         _ingressEvents[deviceId] = event;
         if (!ClientTelemetrySchema.ingressPhaseMapped(health.phase)) {
-          DebugLogManager.logEvent('capture_ingress_unmapped_phase', {'phase': 'unmapped'});
+          DebugLogManager.logEvent('capture_ingress_unmapped_phase', {'phase': health.phase});
         }
         try {
           ClientTelemetry.instance.observeIngress(
@@ -331,10 +349,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       // over, so a later actionable snapshot of a *new* incident may alert.
       state.dismissedIngressGeneration = null;
     }
-    // A new, valid native ingress lease proves recovery independently of STT.
-    // Replaying the same cached lease must not resolve a later BLE episode.
+    // A new, valid native audio lease proves recovery independently of STT.
+    // Replaying the same cached lease must not resolve a later BLE episode, and
+    // a confirmed-subscription quiet cannot resolve a zero-byte dispute: only
+    // audio that actually arrived shows the link delivers.
     if (health != null &&
-        health.verifiedAt(_now()) &&
+        health.audioLeaseValid(_now()) &&
         (previousHealth?.generation != health.generation ||
             health.validUntilMs > (previousHealth?.validUntilMs ?? 0))) {
       _resolveIfActive(deviceId, state, bleIngressOnly: true);
@@ -516,6 +536,26 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   void _endUploadStall() {
     if (_uploadStall == null) return;
     _uploadStall = null;
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
+  /// The watchdog's verdict on the paired pendant's sync pipeline: a stall
+  /// declared (or still holding) with the wall time of its last observed
+  /// activity, or ended ([stalled] false). Unlike the other slow-burn rows
+  /// this one has no condition of its own here to observe — the watchdog owns
+  /// the evaluation — so it never clears on a local WAL reset, only when the
+  /// watchdog says the silence ended or [reset] drops all state.
+  void observeSyncSilence({required bool stalled, required DateTime since}) {
+    if (!stalled) {
+      if (_syncSilence == null) return;
+      _syncSilence = null;
+      _updateUnseenCaptureAttention();
+      notifyListeners();
+      return;
+    }
+    if (_syncSilence?.since == since) return;
+    _syncSilence = CaptureSyncSilence(since: since);
     _updateUnseenCaptureAttention();
     notifyListeners();
   }
@@ -757,6 +797,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _lastRetentionRiskFingerprint = null;
     _storageAtRisk = null;
     _uploadStall = null;
+    _syncSilence = null;
     _captureAttentionSeenAt = null;
     hasUnseenCaptureAttention.value = false;
     _connectedWatchdog?.cancel();

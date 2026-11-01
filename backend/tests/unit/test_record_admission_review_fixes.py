@@ -229,6 +229,8 @@ async def test_finalizer_reloads_contention_inside_attempt_and_defers_without_bu
 async def test_desktop_record_origin_uses_the_escape_language(
     monkeypatch, conversation_language, user_language, source, live_record, expected
 ):
+    # Pin record-origin behavior on the original admission path.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     from utils.batch_pipeline import intake
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.batch_pipeline.audio import audio_unit
