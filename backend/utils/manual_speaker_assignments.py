@@ -24,6 +24,7 @@ from models.transcript_segment import TranscriptSegment, legacy_conversation_seg
 TEACHING_CANDIDATE_LIMIT = 3
 LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT = 2
 LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT = 128
+LIVE_MERGE_ANCHOR_MAX_GAP_SECONDS = 3.0
 LIVE_TRANSCRIPT_REPLAY_RECEIPT_LIMIT = (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT * LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT
 )
@@ -438,6 +439,52 @@ def replay_receipt_commits(payload: Mapping[str, Any], document_path: str) -> li
     return parse_payload_strict(LiveTranscriptReplayReceipt, payload, document_path=document_path).commits
 
 
+def _live_merge_anchor(persisted: list[dict], fresh: list[dict]) -> int:
+    """Index of the stored segment a fresh batch continues (the tail unless it landed behind it).
+
+    Replayed words can land behind newer text from another provider. Merging them against
+    the timeline tail never succeeds, so every word would stay its own stored line.
+    """
+    tail = len(persisted) - 1
+    if tail < 0 or not fresh:
+        return tail
+    first = fresh[0]
+    for index in range(tail, -1, -1):
+        candidate = persisted[index]
+        if candidate.get('start', 0) <= first['start'] and (
+            first['start'] - candidate.get('end', 0) >= LIVE_MERGE_ANCHOR_MAX_GAP_SECONDS
+        ):
+            break
+        if (
+            candidate.get('start', 0) <= first['start']
+            and candidate.get('stt_provider') == first.get('stt_provider')
+            and candidate.get('speaker_id_scope') == first.get('speaker_id_scope')
+            and candidate.get('speaker') == first.get('speaker')
+        ):
+            return index
+    return tail
+
+
+def _kept_capture_proofs(
+    segments: list[TranscriptSegment],
+    result: list[dict],
+    capture_proofs: Optional[dict[str, CaptureWindowProof]],
+    *,
+    behind_tail: bool,
+) -> dict[str, CaptureWindowProof]:
+    """Proofs for the next merge: the tail's, plus the anchor's when the batch landed behind it."""
+    tail_id = result[-1].get('id') if result else None
+    kept = {
+        str(s.id): s.capture_merge_proof
+        for s in segments
+        if s.capture_merge_proof is not None and (behind_tail or s.id == tail_id)
+    }
+    tail_proof = (capture_proofs or {}).get(str(tail_id))
+    if behind_tail and tail_proof is not None:
+        kept[str(tail_id)] = tail_proof
+    return kept
+
+
 def merge_live_segments(
     persisted: list[dict],
     fresh: list[dict],
@@ -472,7 +519,8 @@ def merge_live_segments(
     # Plan against the identity the writer will store. Otherwise a fresh word
     # tagged by live inference never matches a manually decided tail's
     # speaker_match_source, and every word lands in its own segment.
-    tail = [TranscriptSegment(**segment) for segment in apply_manual_assignments(persisted[-1:], receipt)]
+    anchor = _live_merge_anchor(persisted, unique_fresh)
+    tail = [TranscriptSegment(**segment) for segment in apply_manual_assignments(persisted[anchor:][:1], receipt)]
     incoming = [TranscriptSegment(**segment) for segment in apply_manual_assignments(unique_fresh, receipt)]
     for segment in tail:
         if segment.audio_capture_start is None or segment.audio_capture_end is None:
@@ -504,7 +552,8 @@ def merge_live_segments(
         speaker_bound_ids=speaker_bound,
         preserve_capture_windows=live_capture_window_merge_preservation_enabled(),
     )
-    result = persisted[:-1] + [segment.model_dump() for segment in combined.segments]
+    kept = persisted[:anchor] + persisted[anchor:][1:]
+    result = kept + [segment.model_dump() for segment in combined.segments]
     result.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
     return LiveTranscriptMerge(
         result,
@@ -513,9 +562,5 @@ def merge_live_segments(
         combined.absorbed_into,
         {str(s.id): s.capture_window_reason for s in combined.joined if s.id},
         {str(s.id) for s in combined.segments if s.id and str(s.id) not in prior_ids},
-        {
-            str(s.id): s.capture_merge_proof
-            for s in combined.segments
-            if result and s.id == result[-1].get('id') and s.capture_merge_proof is not None
-        },
+        _kept_capture_proofs(combined.segments, result, capture_proofs, behind_tail=anchor != len(persisted) - 1),
     )

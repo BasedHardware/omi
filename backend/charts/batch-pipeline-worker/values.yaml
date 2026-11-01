@@ -2,6 +2,7 @@
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
 recordSealRules:
+  partialEnabled: true
   overlapTrimEnabled: true
   uploadFailedRepairEnabled: true
 image:
@@ -47,6 +48,9 @@ worker:
   batchSize: 8
   # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
   pipelineDepth: 2
+  # Shared artifact IO pool, including first decode before the GPU lock.
+  # 1 disables preparation and restores serial artifact IO.
+  ioConcurrency: 5
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
@@ -91,7 +95,7 @@ autoscaling:
   # The original deployment name stays on OD; a -spot deployment shares its
   # queue metric scope but has a distinct pod selector and PodMonitoring.
   # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
-  # a single OD-pinned HPA (prod 3/16); balanced stays machinery-only.
+  # a single OD-pinned HPA (prod 4/16); balanced stays machinery-only.
   balancedPools:
     enabled: false
     onDemandNodePool: batch-pipeline-pool

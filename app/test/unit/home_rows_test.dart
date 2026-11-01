@@ -13,11 +13,27 @@ ServerConversation conversation(String id, {bool discarded = false, int hours = 
       discarded: discarded,
       structured: Structured('Title $id', '', emoji: '☕'),
     );
-Episode episode({bool live = false, List<ServerConversation> members = const []}) => Episode(
+final composedMoments = [
+  EpisodeMoment(
+    id: 'm',
+    conversationId: 'a',
+    startedAt: start,
+    endedAt: start.add(const Duration(hours: 1)),
+    points: const [EpisodePoint('A real point')],
+  )
+];
+Episode episode(
+        {bool live = false,
+        List<ServerConversation> members = const [],
+        List<EpisodeMoment>? moments,
+        DateTime? closedAt}) =>
+    Episode(
       id: 'e',
       live: live,
       startedAt: start,
       lastActivityAt: start.add(const Duration(hours: 3)),
+      closedAt: closedAt,
+      moments: moments ?? composedMoments,
       conversationIds: const ['a', 'b'],
       members: members,
       title: 'Evening planning',
@@ -171,9 +187,66 @@ void main() {
     expect(buildHomeRows([a, b], [e], enabled: true).single.episode, isNotNull);
   });
   test('blank title and emoji fall back to the first retained member', () {
-    final e = Episode(id: 'e', live: false, startedAt: start, lastActivityAt: start, conversationIds: ['a', 'b']);
+    final e = Episode(
+        moments: composedMoments,
+        id: 'e',
+        live: false,
+        startedAt: start,
+        lastActivityAt: start,
+        conversationIds: ['a', 'b']);
     final row = buildHomeRows([conversation('a'), conversation('b')], [e], enabled: true).single;
     expect(row.conversation.structured.title, 'Title a');
     expect(row.conversation.structured.emoji, '☕');
+  });
+
+  group('closed episode waiting for its summary', () {
+    final closed = start.add(const Duration(hours: 3));
+    List<HomeRow> rows(Duration sinceClose, {List<EpisodeMoment> moments = const [], Set<String> live = const {}}) {
+      final a = conversation('a');
+      final b = conversation('b', hours: 2);
+      return buildHomeRows([b, a], [episode(moments: moments, closedAt: closed)],
+          enabled: true, liveConversationIds: live, now: closed.add(sinceClose));
+    }
+
+    test('holds on processing, never exposing draft notes', () {
+      final held = rows(const Duration(minutes: 14)).single;
+      expect(held.isProcessing, isTrue);
+      expect(held.episode?.id, 'e', reason: 'the row opens the same page throughout');
+      expect(held.conversation.id, 'episode:e');
+      expect(held.episodeConversationIds, {'a', 'b'});
+    });
+    test('the summary landing ends the hold at once', () {
+      final done = rows(const Duration(minutes: 1), moments: composedMoments).single;
+      expect(done.isProcessing, isFalse);
+      expect(done.episode?.id, 'e');
+    });
+    test('a summary that never lands keeps the one row', () {
+      final row = rows(Episode.summaryWait).single;
+      expect(row.conversation.id, 'episode:e');
+      expect(row.isProcessing, isFalse);
+      expect(row.episode?.id, 'e');
+    });
+    test('notes alone do not count as a summary', () {
+      final notesOnly = [
+        EpisodeMoment(id: 'm', conversationId: 'a', startedAt: start, endedAt: start, heading: 'Draft')
+      ];
+      expect(rows(const Duration(minutes: 1), moments: notesOnly).single.isProcessing, isTrue);
+    });
+    test('an episode closed locally before the server says so counts from its last activity', () {
+      final a = conversation('a');
+      final b = conversation('b', hours: 2);
+      final row = buildHomeRows([b, a], [episode(moments: const [])],
+              enabled: true, now: closed.add(const Duration(minutes: 1)))
+          .single;
+      expect(row.isProcessing, isTrue);
+    });
+    test('one member is unaffected: it already opens its own conversation', () {
+      final a = conversation('a');
+      final row = buildHomeRows([conversation('b', discarded: true), a], [episode(moments: const [], closedAt: closed)],
+              enabled: true, now: closed)
+          .single;
+      expect(row.conversation, same(a));
+      expect(row.isProcessing, isFalse);
+    });
   });
 }

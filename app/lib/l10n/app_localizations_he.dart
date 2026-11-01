@@ -14568,9 +14568,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get episodeOnThisPhone => 'בטלפון הזה';
 
   @override
-  String get liveCardTitle => 'בשידור חי';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'התמליל הסופי בפיגור של כ-$duration';
   }
@@ -14585,7 +14582,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'מקליט בבטחה';
 
   @override
-  String get livePreviewOnPhoneDivider => 'בשידור חי בטלפון הזה';
+  String get livePreviewOnPhoneDivider => 'ממש עכשיו, בטלפון הזה';
 
   @override
   String get livePreviewTurnOnLiveText => 'הפעל טקסט חי';
@@ -14825,21 +14822,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count חלקים',
-      many: '$count חלקים',
-      few: '$count חלקים',
-      two: '$count חלקים',
-      one: '$count חלק',
-      zero: '$count חלקים',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'שלחו את ההודעה באפליקציית $app. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.';
   }
@@ -14848,4 +14830,28 @@ class AppLocalizationsHe extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'קבלו קוד חדש ושלחו אותו מ$app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'כותבים הערות…';
+
+  @override
+  String get episodeWritingNotesDetail => 'קודם מסיימים את התמלול. אפשר לעזוב את הדף.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'מכסה עד $time · הערות מלאות בסיום';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'תומלל עד $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration נשמרו';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.';
 }

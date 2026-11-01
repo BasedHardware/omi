@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Poznámky začnou, až dorazí konečný přepis.",
     "episodeOnDeviceNotesFootnote": "Vytváří se na tvém telefonu, zatímco mluvíš. Kompletní poznámky dorazí s konečným přepisem.",
     "episodeOnThisPhone": "V tomto telefonu",
-    "liveCardTitle": "Živě",
     "livePreviewBehind": "Konečný přepis má zpoždění přibližně {duration}",
     "livePreviewCatchingUp": "Konečný přepis dohání",
     "livePreviewNoEngineBody": "Tvé slova se zde zobrazí jednu až dvě minuty po vyslovení.",
     "livePreviewNoEngineTitle": "Bezpečně nahrává",
-    "livePreviewOnPhoneDivider": "Živě v tomto telefonu",
+    "livePreviewOnPhoneDivider": "Právě teď, na tomto telefonu",
     "livePreviewTurnOnLiveText": "Zapnout živý text",
     "deviceCatchUpOnItsWay": "na cestě",
     "deviceCatchUpWhenOnline": "až bude připojení",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Roční platba teď pro váš plán není dostupná.",
     "yearlySwitchDoneTitle": "Teď platíte ročně",
     "yearlySwitchDoneBody": "Dnes účtováno {amount}. Obnovení {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} částí} one{{count} část} two{{count} částí} few{{count} části} many{{count} částí} other{{count} částí}}",
     "chatAppsWaitingMessageIn": "Pošli zprávu v aplikaci {app}. Tato obrazovka se aktualizuje, jakmile ji Omi dostane.",
-    "chatAppsCodeExpiredMessageIn": "Získej nový kód a pošli ho z aplikace {app}."
+    "chatAppsCodeExpiredMessageIn": "Získej nový kód a pošli ho z aplikace {app}.",
+    "episodeWritingNotes": "Píšeme poznámky…",
+    "episodeWritingNotesDetail": "Nejprve dokončujeme přepis. Tuto stránku můžete opustit.",
+    "episodeCoversUpTo": "Pokrývá do {time} · úplné poznámky po dokončení",
+    "liveTranscribedUpTo": "Přepsáno do {time}",
+    "liveAudioSaved": "Uloženo {duration}",
+    "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání."
 }

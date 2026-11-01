@@ -1116,7 +1116,7 @@
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-11-01 keyless index check: the gate now mints an OIDC token through the deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1206,7 +1206,7 @@
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3032,11 +3032,11 @@
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 2,
       "if": "inputs.nightly_main_sha == '' && github.event_name == 'workflow_dispatch'",
-      "matrix": "${{ fromJSON(needs.source-closure.outputs.matrix) }}",
+      "matrix": {},
       "matrix_size": 1,
-      "needs": "source-closure",
+      "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-11-01 secret-exposure PR: the authenticated GCP_CREDENTIALS branch was dead (that credential exists only in the development environment, which this job never bound, so the path never ran); needs/matrix dropped and the job reduced to a dispatch-only retirement notice that keeps the nightly job-set contract. Runner, trigger, and budget unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3166,6 +3166,42 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "ui-author-approval.yml/guard": {
+      "budget_p50_minutes": 5,
+      "display_name": "guard",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'pull_request_target' || github.event.issue.pull_request",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "resolve",
+      "owner": "CI maintainers",
+      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "ui-author-approval.yml/resolve": {
+      "budget_p50_minutes": 5,
+      "display_name": "resolve",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'pull_request_target' || github.event.issue.pull_request",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Resolve immutable SHA read-only before the per-SHA guard concurrency group; one API call and no checkout.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -6071,6 +6107,31 @@
       "rationale": "Initial workflow inventory",
       "triggers": {
         "workflow_dispatch": ""
+      }
+    },
+    "ui-author-approval.yml": {
+      "name": "UI author approval",
+      "owner": "CI maintainers",
+      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
+      "triggers": {
+        "issue_comment": {
+          "types": [
+            "created",
+            "edited",
+            "deleted"
+          ]
+        },
+        "pull_request_target": {
+          "branches": [
+            "main"
+          ],
+          "types": [
+            "opened",
+            "synchronize",
+            "reopened",
+            "ready_for_review"
+          ]
+        }
       }
     },
     "web-checks.yml": {

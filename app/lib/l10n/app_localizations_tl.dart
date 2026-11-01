@@ -14789,9 +14789,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get episodeOnThisPhone => 'Sa phone na ito';
 
   @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Naiwan ng mga $duration ang panghuling transcript';
   }
@@ -14807,7 +14804,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Ligtas na nagre-record';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live sa phone na ito';
+  String get livePreviewOnPhoneDivider => 'Ngayon lang, sa teleponong ito';
 
   @override
   String get livePreviewTurnOnLiveText => 'I-on ang live text';
@@ -15054,21 +15051,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count bahagi',
-      many: '$count bahagi',
-      few: '$count bahagi',
-      two: '$count bahagi',
-      one: '$count bahagi',
-      zero: '$count bahagi',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Ipadala ang mensahe sa $app. Mag-a-update ang screen na ito pagkatanggap ni Omi.';
   }
@@ -15077,4 +15059,28 @@ class AppLocalizationsTl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Kumuha ng bagong code at ipadala ito mula sa $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Isinusulat ang mga tala…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Hanggang $time · buong tala kapag natapos';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Na-transcribe hanggang $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration na-save';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.';
 }

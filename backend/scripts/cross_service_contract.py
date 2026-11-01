@@ -181,6 +181,7 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         audience_fallback=True,  # create_wake(): PROVIDER_STT_TASKS_OIDC_AUDIENCE or handler URL
         empty_target_ok=True,  # unset handler = provider-STT dispatch not configured on that host
         deadline_seconds=1500,
+        append_route=True,  # create_wake() joins ROUTE onto the handler origin, so the URL carries no path
     ),
 )
 

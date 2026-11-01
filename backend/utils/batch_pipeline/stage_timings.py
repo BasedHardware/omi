@@ -27,6 +27,8 @@ STAGES = frozenset(
         'flight_diarize',
         'diarize',
         'persist',
+        'persist_settle',
+        'strict_vad_shadow',
         'cuda_sync',
     }
 )

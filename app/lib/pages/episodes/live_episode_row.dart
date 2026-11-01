@@ -6,12 +6,9 @@ import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
-import 'package:omi/pages/episodes/start_trimmed_text.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/people_provider.dart';
-import 'package:omi/services/live_preview/live_preview_controller.dart';
-import 'package:omi/services/live_preview/live_preview_coverage.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
@@ -22,7 +19,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Home's live episode: the first row of Today. An outlined card, quieter than the filled rows
 /// around it: a tile with the running length ("24m"), the episode's title,
-/// and on line two the newest preview words (trimmed at the start) or "2 people · topic".
+/// and on line two "Listening · 3 people".
 /// It scrolls with the list; there is no overlay and nothing sticks to the header. Opens the live
 /// episode.
 class LiveEpisodeRow extends StatefulWidget {
@@ -36,17 +33,6 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   EpisodeProvider? _episodes;
   int? _peopleKey;
   int _people = 0;
-  (CaptureProvider, int, DateTime?)? _coverageKey;
-  LivePreviewCoverage? _coverage;
-
-  LivePreviewCoverage _previewCoverage(CaptureProvider capture) {
-    final key = (capture, capture.segmentsPhotosVersion, capture.liveTranscriptStartedAt);
-    if (_coverageKey != key) {
-      _coverageKey = key;
-      _coverage = LivePreviewCoverage.forFinals(capture.segments, capture.liveTranscriptStartedAt);
-    }
-    return _coverage!;
-  }
 
   /// How many people the transcript names: the owner plus speakers resolved to the user's people,
   /// as the live page's header names them. Raw diarization ids are not people (a long session
@@ -79,29 +65,22 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   Widget build(BuildContext context) {
     final episodes = context.watch<EpisodeProvider>();
     // Only what the row draws: the capture state, its start, whether it streams, and whether
-    // the reader's Reconnect is still running, plus transcript/preview revisions.
+    // the reader's Reconnect is still running, plus the transcript revision.
     // Unrelated socket chatter and BLE samples do not rebuild the row.
-    final (state, _, _, reconnecting, _, _, _) = context
-        .select<CaptureProvider, (CaptureDisplayState, DateTime?, String?, bool, int, LivePreviewController?, bool)>(
+    final (state, _, _, reconnecting, _) =
+        context.select<CaptureProvider, (CaptureDisplayState, DateTime?, String?, bool, int)>(
       (c) => (
         EpisodePresentation.displayState(c),
         c.liveCaptureStartedAt,
         EpisodePresentation.streamingSource(c),
         c.pendantReconnectInFlight,
         c.segmentsPhotosVersion,
-        c.livePreview,
-        c.localPreviewAdmitted,
       ),
     );
     final capture = context.read<CaptureProvider>();
-    final preview = capture.localPreviewAdmitted ? capture.livePreview : null;
-    // Share one snippet between the visible subtitle and its spoken label.
-    return ListenableBuilder(
-      listenable: preview ?? const AlwaysStoppedAnimation<double>(0),
-      builder: (context, _) => LiveEpisodeClock(
-        clock: episodes.now,
-        builder: (context, now) => _row(context, episodes, capture, state, now, reconnecting),
-      ),
+    return LiveEpisodeClock(
+      clock: episodes.now,
+      builder: (context, now) => _row(context, episodes, capture, state, now, reconnecting),
     );
   }
 
@@ -128,34 +107,17 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final title = noAudio ? l10n.captureNoAudioFromPendant : (named.isEmpty ? l10n.episodeListeningNow : named);
     final topics = noAudio || named.isNotEmpty ? '' : EpisodePresentation.topics(episode);
     final peopleNamed = noAudio ? 0 : _peopleCount(capture);
-    // A local-preview session reads its newest on-device words on line two, trimmed at the
-    // start so the latest words stay visible, for the whole session: words the final
-    // transcript already covers drop out, the rest stay. The duration lives in the tile.
-    final preview = listening && capture.localPreviewAdmitted ? capture.livePreview : null;
-    String previewText() {
-      if (!listening) return '';
-      final uncovered = preview == null
-          ? ''
-          : _textTail(_previewCoverage(capture).excludeCovered(preview.lines).reversed.map((line) => line.text));
-      // Cloud sessions have no local preview. When final segments cover local
-      // words, keep those words visible instead of replacing them with "Live".
-      return uncovered.isNotEmpty ? uncovered : _textTail(capture.segments.reversed.map((segment) => segment.text));
-    }
-
-    // Final coverage is reused across preview notifications and clock ticks.
-    final spokenPreview = previewText();
     final status = noAudio
         ? l10n.captureNoAudioDetail
         : listening
-            ? null
+            ? (named.isNotEmpty ? l10n.listening : null)
             : captureStateLabel(l10n, state);
     final details = [
       if (status != null) status,
       if (peopleNamed >= 2) l10n.peopleCount(peopleNamed),
       if (topics.isNotEmpty) topics,
     ];
-    // Line two without preview text is today's subtitle minus the duration the tile now
-    // carries; a bare live row with nothing else to say still says it is live.
+    // The running length lives in the tile; a bare live row with nothing else to say still says it is live.
     final rest = details.isEmpty ? l10n.live : details.join(' · ');
     final subtitleStyle = OmiType.subhead.copyWith(color: noAudio ? OmiColors.warning : OmiColors.textTertiary);
 
@@ -190,16 +152,14 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
           label: [
             title,
             if (listening) (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(elapsed),
-            if (spokenPreview.isNotEmpty) spokenPreview else rest,
+            rest,
           ].join(', '),
           onTap: open,
           excludeSemantics: true,
           child: Material(
             key: const Key('home_live_episode_row'),
-            // Outlined, not filled: the one row still happening reads as distinct from finished
-            // ones without a colored tile.
-            color: Colors.transparent,
-            shape: RoundedRectangleBorder(borderRadius: OmiRadius.xlAll, side: BorderSide(color: OmiColors.border)),
+            color: OmiColors.surface1,
+            shape: const RoundedRectangleBorder(borderRadius: OmiRadius.xlAll),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: open,
@@ -227,16 +187,7 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 3),
-                          spokenPreview.isNotEmpty
-                              ? StartTrimmedText(
-                                  key: const Key('home_live_episode_preview'),
-                                  runs: [(text: spokenPreview, style: null)],
-                                  style: subtitleStyle,
-                                  // At accessibility sizes one line holds a word or two; a
-                                  // second keeps the newest words readable.
-                                  maxLines: MediaQuery.textScalerOf(context).scale(10) > 16 ? 2 : 1,
-                                )
-                              : Text(rest, style: subtitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(rest, style: subtitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
@@ -259,20 +210,6 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
         ),
       ),
     );
-  }
-
-  /// The newest preview words, a few lines' worth: enough to fill one trimmed line.
-  static String _textTail(Iterable<String> lines) {
-    final tail = <String>[];
-    var length = 0;
-    for (final line in lines) {
-      final text = line.trim();
-      if (text.isEmpty) continue;
-      tail.insert(0, text);
-      length += text.length;
-      if (length > 160) break;
-    }
-    return tail.join(' ');
   }
 
   /// The tile's coarse length: seconds for the first minute, then whole minutes, then hours.

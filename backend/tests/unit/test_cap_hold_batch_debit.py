@@ -259,7 +259,7 @@ async def test_batch_hand_off_reserves_the_candidates_units_before_it_is_durable
 
     monkeypatch.setattr(cap_hold_recovery, '_selected_lane', selected_lane)
     monkeypatch.setattr(cap_hold_recovery, '_erase', lambda *a: events.append('erase'))
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
 
     async def admit(uid, snapshot, current):
         return adapter.HeldAdmission('admitted', 'bp_job')

@@ -164,6 +164,13 @@ are best effort; durable quarantined job records are the authoritative census
 
 ### Fenced recovery follow-up
 
+Status (2026-11-01): shipped. `utils/batch_pipeline/quarantine_recovery.py`
+gives each held unit one fenced paid recovery (`recovery.epoch`/`token` on the
+job). Prod census for the last 24h: 1,486 quarantines, 79% recovered and
+committed, the rest awaiting recovery or terminal `failed_held`. Only
+`failed_held` remains a transcript gap, and it needs a reviewed operator redrive
+(`redrive_scope.py`). The design notes below are the original plan.
+
 The existing legacy claim/run entry points own an entire upload, not one batch
 unit. Clearing that claim or dispatching the whole upload could replay already
 projected siblings. Recovery therefore needs a separate per-unit intent, keyed
@@ -190,13 +197,47 @@ priority, unit kind, optional conversation and pinned privacy generation.
 out of order. Each result supplies segment ID, encrypted URI and success/silence.
 Missing/failed items retry up to the quarantine ceiling; decode/provider failures never become silence.
 
-Inside one locked flight, artifact IO overlaps GPU work: up to
-`BATCH_PIPELINE_WORKER_IO_CONCURRENCY` (default 3, `1` = serial, max 8) items
+Artifact IO overlaps GPU work using one shared worker pool: up to
+`BATCH_PIPELINE_WORKER_IO_CONCURRENCY` (default 5, `1` = serial, max 8) items
 fetch/decrypt/decode ahead of the item on the GPU, and as many encrypted result
 writes run while later items diarize. Prefetch stays inside the existing
 two-audio-hour decode group and, beyond the next item, within 1800 audio seconds
 ahead. Model calls, CUDA work and the chain lock stay on the calling thread; a
 fatal GPU error waits for outstanding IO before the flight raises.
+
+Each pump lane may submit its first fetch/decode before acquiring the GPU lock.
+These prepared attempts share a strict 1800-audio-second budget across all lanes;
+oversize units take ordinary locked decode. An attempt-local handle carries its
+audio, language and capture stream, never another lease's cached context. Stop
+and lost-lease paths cancel queued preparation while a lane waits. After GPU
+dispatch, the current bounded chain drains; the waiting-lane watcher is stopped
+and joined before dispatch. Running IO drains before renewal ends.
+The first prepared unit counts against this budget until
+its lane finishes; the existing active-flight prefetch/group bounds still apply.
+
+The final bounded persist tail settles after CUDA quiescence and release of the
+pump GPU lock. Leases keep renewing through settlement and fenced publication.
+Only settled writes produce WorkResults; a persist failure takes the same
+per-unit failure/recovery path. Token, privacy and ordered-merge checks remain
+authoritative. Set Helm `worker.ioConcurrency=1` to remove preparation and
+restore serial artifact IO, including persistence under the model lock.
+
+`omi_batch_pipeline_completed_audio_seconds_total{outcome="success"|"silence"|"no_recoverable_speech"}`
+counts admitted capture seconds only on a new fenced completion, including
+silence; duplicate completion receipts contribute zero. It is not a projection
+or vendor-spend denominator. `events{event="requeued"}` counts retry-to-ready
+wakeups; `retry` now counts actual worker failures. Admission receipt outcomes
+are `received`, `timeout`, `transport`, `invalid_receipt`, and `unconfigured`.
+
+CPU-only strict VAD runs as record-only decode work. Its result never gates VAD,
+ASR, diarization, persistence or publication. The shadow counter records
+`evaluated`, `strict_silent`, `strict_silent_pyannote_nonempty`, and `unavailable`
+(including a missing pyannote comparison); synthetic shadow traffic is excluded.
+Thread CPU seconds and the optional `strict_vad_shadow` wall stage measure its
+cost. Local Apple Silicon synthetic silence/tone measurements at 60 seconds
+were 0.278/0.280 CPU seconds (about 0.47% of audio duration); first ONNX setup
+cost 0.094 CPU seconds. This is not an L4 CPU-cost certificate.
+No new model forward or GPU synchronization is added.
 
 B's dedicated process composes A's `Pump`, a fresh `PoolCapacity` callback and
 CUDA synchronization. Optional service-OIDC pull/heartbeat/complete/fail APIs
@@ -248,10 +289,11 @@ maximum per class across identical worker samplers, then sums the classes.
 Absent/stale/partial data stays unavailable; never replace it with zero or sum
 the same global queue once per replica.
 
-Production values preserve the ratified three-worker on-demand floor (lead
-114a22/724762, 10-28) with autoscaling off, so an image roll cannot activate
-an unqualified capacity target. The qualified cutover shape (lead f05065,
-10-28) is a single OD-pinned HPA at min3/max16: every replica pins to
+Production values hold a four-worker on-demand GPU floor (vendor routing,
+11-01; was three, lead 114a22/724762) so batch keeps GPUs through vendor
+outages and L4 stockouts; see `docs/runbooks/batch-vendor-routing-capacity.md`.
+The qualified cutover shape (lead f05065, 10-28) is a single OD-pinned HPA,
+now at min4/max16: every replica pins to
 `batch-pipeline-pool`, so the guaranteed floor and scale-out never depend on
 Spot (persistent L4 Spot stockout; Spot L4 bills above on-demand). The latent
 balanced-pool machinery stays available for non-production explicit-budget

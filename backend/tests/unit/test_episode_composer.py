@@ -246,6 +246,54 @@ def test_model_failure_never_raises_and_backs_off_on_the_same_evidence(store):
     assert store.episode['compose_failures'] == 0
 
 
+def test_a_refused_window_change_keeps_the_paid_notes_on_the_old_window(store, monkeypatch):
+    calls = []
+    update = store.update_episode
+
+    def refuse_window(uid, episode_id, *, updates, **kw):
+        if 'member_activity' in updates:
+            raise composer.episodes_db.EpisodeConflict('recorded_window_overlap')
+        return update(uid, episode_id, updates=updates, **kw)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', refuse_window)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert store.episode['title'] == 'Omi app bugs and labeling tool' and 'member_activity' not in store.episode
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
+    assert len(calls) == 1
+
+
+def test_a_final_write_that_keeps_conflicting_backs_off_instead_of_paying_again(store, monkeypatch):
+    calls = []
+    update = store.update_episode
+
+    def refuse_notes(uid, episode_id, *, updates, **kw):
+        if 'bullets' in updates:
+            raise composer.episodes_db.EpisodeConflict('conversation_already_owned')
+        return update(uid, episode_id, updates=updates, **kw)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', refuse_notes)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'conflict'
+    assert store.episode['compose_failures'] == 1 and store.episode['compose_lease'] is None
+    assert composer.needs_compose(store.episode) is False
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'backoff'
+    assert len(calls) == 1
+
+
+def test_a_sustained_version_race_keeps_activity_and_backs_off(store, monkeypatch):
+    calls = []
+    update = store.update_episode
+
+    def race(uid, episode_id, *, updates, **kw):
+        if 'bullets' in updates:
+            assert 'member_activity' in updates
+            raise composer.episodes_db.EpisodeConflict('state_version_changed')
+        return update(uid, episode_id, updates=updates, **kw)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', race)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'conflict'
+    assert store.episode['compose_failures'] == 1 and len(calls) == 1
+
+
 def test_a_visible_change_after_capped_failures_still_recomposes(store):
     done = {
         'status': 'closed',
@@ -585,3 +633,91 @@ def test_discarding_a_member_clears_the_composed_lede_and_follow_ups():
     assert set(cleared) == set(episodes_db.CONTENT_FIELDS) - {'moments', 'provisional_items'} | {
         'summary_needs_regeneration'
     }
+
+
+def _turn_row(*segments):
+    started = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
+    return {
+        'started_at': started,
+        'transcript_segments': [
+            {'start': start, 'end': end, 'text': text, 'speaker': speaker, 'is_user': False}
+            for start, end, speaker, text in segments
+        ],
+    }
+
+
+def test_transcript_lines_join_fragments_of_one_turn():
+    row = _turn_row(
+        (0, 5, 'SPEAKER_00', 'one'),
+        (5, 10, 'SPEAKER_00', 'two'),
+        (10, 15, 'SPEAKER_01', 'three'),
+        (15, 20, 'SPEAKER_00', 'four'),
+    )
+    lines = composer.transcript_lines(row, 'Me', ZoneInfo('UTC'))
+    assert [text for _, text in lines] == [
+        '[12:00:00] Speaker 00: one two',
+        '[12:00:10] Speaker 01: three',
+        '[12:00:15] Speaker 00: four',
+    ]
+
+
+def test_transcript_lines_restart_after_a_pause_and_inside_a_monologue():
+    row = _turn_row(
+        *[(i * 10, i * 10 + 10, 'SPEAKER_00', f'w{i}') for i in range(8)], (200, 205, 'SPEAKER_00', 'later')
+    )
+    lines = composer.transcript_lines(row, 'Me', ZoneInfo('UTC'))
+    assert [text.split(': ')[0] for _, text in lines] == [
+        '[12:00:00] Speaker 00',
+        '[12:01:00] Speaker 00',
+        '[12:03:20] Speaker 00',
+    ]
+
+
+def test_a_moment_ends_on_the_last_speech_of_a_merged_turn():
+    row = {'id': 'c1', **_turn_row(*[(i * 10, i * 10 + 10, 'SPEAKER_00', f'w{i}') for i in range(5)])}
+    tz = ZoneInfo('UTC')
+    assert len(composer.transcript_lines(row, 'Me', tz)) == 1
+    data = {'chapters': [{'title': 'Plans', 'start': '12:00:00', 'points': ['Point']}]}
+    moment = composer.to_updates(data, [row], tz)['moments'][0]
+    assert moment['end_offset'] >= 40
+
+
+def test_a_section_seconds_long_ends_on_the_last_line_it_owns():
+    row = {'id': 'c1', **_turn_row(*[(i * 60, i * 60 + 60, 'SPEAKER_00', f'w{i}') for i in range(30)])}
+    data = {
+        'chapters': [
+            {'title': 'Second', 'start': '12:10:00', 'end': '12:10:08', 'points': ['Point']},
+            {'title': 'First', 'start': '12:00:00', 'end': '12:00:22', 'points': ['Point']},
+        ]
+    }
+    first, second = composer.to_updates(data, [row], ZoneInfo('UTC'))['moments']
+    assert (first['heading'], second['heading']) == ('First', 'Second')
+    assert (first['ended_at'] - first['started_at']).total_seconds() == 9 * 60
+    assert (second['ended_at'] - second['started_at']).total_seconds() >= 19 * 60
+
+
+def test_the_wire_reads_moments_in_time_order_and_drops_placeholder_headings():
+    from utils.episodes import service as svc
+
+    moment = lambda mid, minutes, heading, **extra: {  # noqa: E731
+        'id': mid,
+        'conversation_id': 'c1',
+        'started_at': T0 + timedelta(minutes=minutes),
+        'ended_at': T0 + timedelta(minutes=minutes, seconds=8),
+        'heading': heading,
+        **extra,
+    }
+    points = [{'text': 'Point', 'details': []}]
+    wire = svc.to_wire(
+        {
+            'id': 'e',
+            'status': 'closed',
+            'started_at': T0,
+            'last_activity_at': T0,
+            'moments': [moment('b', 34, 'New moment', points=points), moment('a', 0, 'Checklist', points=points)],
+        }
+    )
+    assert [m['id'] for m in wire['moments']] == ['a', 'b']
+    assert wire['moments'][1]['heading'] == ''
+    assert wire['moments'][0]['ended_at'] == T0 + timedelta(minutes=34)
+    assert wire['moments'][1]['ended_at'] == T0 + timedelta(minutes=34, seconds=8)

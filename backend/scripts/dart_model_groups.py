@@ -186,6 +186,7 @@ SCHEMA_GROUPS = {
             'ConversationSpeakers',
             'AudioTimelineProvenance',
             'Conversation',
+            'RecordAudioPartial',
             'ProjectedActionItem',
             'ProjectedSection',
             'ProjectedEvent',

@@ -45,6 +45,18 @@ class FakeSession:
         return Response({})
 
 
+def test_dream_sweep_targets_backfill_with_its_sync_oidc_audience():
+    jobs = reconcile.load_manifest()['environments']['prod']['jobs']
+    dream = next(job for job in jobs if job['name'] == 'dream-agent-sweep-hourly')
+    target = dream['target']
+    assert target['uri'].split('/')[2].startswith('backend-sync-backfill-')
+    assert target['uri'] == target['oidc']['audience'].removesuffix('/v2/sync-jobs/run') + '/v2/dream-agent/sweep'
+    assert dream['schedule'] == '0,30 * * * *' and dream['attempt_deadline'] == '1740s'
+    cap_hold = next(job for job in jobs if job['name'] == 'cap-hold-durable-redrive')
+    assert cap_hold['target']['uri'].split('/')[2].startswith('backend-sync-')
+    assert not cap_hold['target']['uri'].split('/')[2].startswith('backend-sync-backfill-')
+
+
 def test_secret_headers_are_resolved_in_memory_and_never_in_diff_output():
     session = FakeSession()
     manifest = reconcile.load_manifest()
@@ -109,8 +121,10 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "omi-tv-rollup-daily",
         "sync-backfill-uid-sequencer",
     }
-    for jobs in (dev_jobs, prod_jobs):  # C4: planned until /v2/enrichment/sweep serves on backend-integration
-        assert jobs["enrichment-maintenance"]["lifecycle"] == "planned"
+    # C4: prod is active (Plan C prod activation; it also sweeps the provider-stt outbox); dev stays planned.
+    assert dev_jobs["enrichment-maintenance"]["lifecycle"] == "planned"
+    assert "lifecycle" not in prod_jobs["enrichment-maintenance"]
+    assert prod_jobs["enrichment-maintenance"]["state"] == "ENABLED"
     assert dev_jobs["enrichment-maintenance"]["state"] == "PAUSED"  # dev shares prod Firestore
     rollup = prod_jobs["omi-tv-rollup-daily"]
     assert rollup["lifecycle"] == "planned"

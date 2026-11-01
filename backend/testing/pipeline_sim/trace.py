@@ -456,6 +456,14 @@ GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # BYOK routes like everyone (David, 10-19): Parakeet, no vendor spend; the admission policy
     # records provider_reason=byok so the keyless dispatch re-check never re-holds it.
     'provider_stt_byok': lambda: _config('provider_stt_byok', byok=True, legacy_sync='draining', trace_policy=True),
+    # Unknown language reaches the real worker barrier, then fenced recovery.
+    'legacy_retirement_multi': lambda: _config(
+        'legacy_retirement_multi', language='multi', worker_language='und', legacy_sync='draining'
+    ),
+    # The real intake normalizes an unrecognized und preference to multi.
+    'legacy_retirement_und': lambda: _config(
+        'legacy_retirement_und', language='multi', worker_language='und', legacy_sync='draining'
+    ),
     # Provider errors for a window: retries exhaust attempts -> quarantine -> one paid recovery each.
     'provider_failure_quarantine': lambda: _config(
         'provider_failure_quarantine',

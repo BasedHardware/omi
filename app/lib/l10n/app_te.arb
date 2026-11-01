@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "చివరి ట్రాన్స్‌క్రిప్ట్ వచ్చినప్పుడు నోట్స్ ప్రారంభమవుతాయి.",
     "episodeOnDeviceNotesFootnote": "మీరు మాట్లాడుతున్నప్పుడు మీ ఫోన్‌లోనే రూపొందుతాయి. పూర్తి నోట్స్ చివరి ట్రాన్స్‌క్రిప్ట్‌తో వస్తాయి.",
     "episodeOnThisPhone": "ఈ ఫోన్‌లో",
-    "liveCardTitle": "లైవ్",
     "livePreviewBehind": "చివరి ట్రాన్స్‌క్రిప్ట్ సుమారు {duration} వెనుకబడి ఉంది",
     "livePreviewCatchingUp": "చివరి ట్రాన్స్‌క్రిప్ట్ అప్‌డేట్ అవుతోంది",
     "livePreviewNoEngineBody": "మీరు చెప్పిన ఒకటి రెణ्टు నిమిషాల్లో మీ మాటలు ఇక్కడ కనిపిస్తాయి.",
     "livePreviewNoEngineTitle": "సురక్షితంగా రికార్డ్ అవుతోంది",
-    "livePreviewOnPhoneDivider": "ఈ ఫోన్‌లో లైవ్",
+    "livePreviewOnPhoneDivider": "ఇప్పుడే, ఈ ఫోన్‌లో",
     "livePreviewTurnOnLiveText": "లైవ్ టెక్స్ట్ ఆన్ చేయండి",
     "deviceCatchUpOnItsWay": "వచ్చుతోంది",
     "deviceCatchUpWhenOnline": "ఆన్‌లైన్‌కి వచ్చాక",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "ప్రస్తుతం మీ ప్లాన్‌కు వార్షిక బిల్లింగ్ అందుబాటులో లేదు.",
     "yearlySwitchDoneTitle": "మీరు ఇప్పుడు వార్షిక ప్లాన్‌లో ఉన్నారు",
     "yearlySwitchDoneBody": "ఈరోజు {amount} వసూలు చేశాం. పునరుద్ధరణ {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} భాగాలు} one{{count} భాగాలు} two{{count} భాగాలు} few{{count} భాగాలు} many{{count} భాగాలు} other{{count} భాగాలు}}",
     "chatAppsWaitingMessageIn": "{app}లో మెసేజ్ పంపండి. Omiకి అందగానే ఈ స్క్రీన్ అప్‌డేట్ అవుతుంది.",
-    "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి."
+    "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి.",
+    "episodeWritingNotes": "నోట్స్ రాస్తున్నాం…",
+    "episodeWritingNotesDetail": "ముందు ట్రాన్స్‌క్రిప్ట్ పూర్తి చేస్తున్నాం. మీరు ఈ పేజీ వదిలి వెళ్లవచ్చు.",
+    "episodeCoversUpTo": "{time} వరకు · ముగిశాక పూర్తి నోట్స్",
+    "liveTranscribedUpTo": "{time} వరకు ట్రాన్స్‌క్రైబ్ అయింది",
+    "liveAudioSaved": "{duration} సేవ్ అయింది",
+    "liveAudioSavedDetail": "అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి."
 }
