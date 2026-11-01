@@ -60,6 +60,9 @@ T = TypeVar('T')
 
 BUDGET_S = 0.2
 QUEUE_LIMIT = 1000
+# A5 owner purge: deletion-flow work, so a real budget instead of the mirror's 200 ms, in bounded chunks.
+PURGE_TIMEOUT_S = 30.0
+PURGE_CHUNK = 200
 MIRRORED_TABLES = frozenset({'jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts'})
 _OFF = {'0', 'false', 'off', 'no'}
 _QUERY_CANCELED = '57014'
@@ -387,6 +390,55 @@ class DualStore:
             else:
                 self.shadow.delete_doc(conn, table, key)
 
+    def owner_rows(self, conn: Any, owner_id: str) -> list[tuple[str, str]]:
+        """Every mirrored Postgres row that belongs to ``owner_id``, plus its scheduler shard (sorted)."""
+        from config.batch_pipeline import scheduler_control_key
+        from database.batch_pipeline_privacy import privacy_owner_key
+
+        namespace, key = self.shadow.namespace, privacy_owner_key(owner_id)
+        rows = {('control', scheduler_control_key(key)), ('owners', key)}
+        rows.update(('queues', f'{priority}_{key}') for priority in range(3))
+        for table in ('jobs', 'results'):
+            found = conn.execute(
+                f"SELECT key FROM {table} WHERE namespace = %s AND (doc->>'owner_key' = %s OR doc->>'owner_id' = %s)",
+                (namespace, key, owner_id),
+            ).fetchall()
+            rows.update((table, row[0]) for row in found)
+        found = conn.execute(
+            "SELECT tbl, key FROM docs WHERE namespace = %s AND tbl = ANY(%s) "
+            "AND (doc->>'owner_key' = %s OR doc->>'owner_id' = %s)",
+            (namespace, sorted(MIRRORED_TABLES - {'jobs', 'results', 'control'}), key, owner_id),
+        ).fetchall()
+        rows.update((row[0], row[1]) for row in found)
+        return sorted(rows)
+
+    def purge_owner_now(self, owner_id: str) -> int:
+        """A5: after the primary's purge, make Postgres hold exactly the primary's state for one owner.
+
+        Account and conversation deletion must not depend on the best-effort mirror (a full queue or the
+        200 ms budget drops a refresh), so this runs in the deletion flow, synchronously, and RAISES on any
+        failure: the caller's purge is already bounded and retryable. Every Postgres row of the owner is
+        re-copied from the primary under its key lock (deleted when the primary no longer has it, or
+        overwritten with the erased form a conversation purge keeps), in bounded chunks. Returns the rows
+        reconciled.
+        """
+        try:
+            with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
+                with conn.transaction():
+                    conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
+                    rows = self.owner_rows(conn, owner_id)
+            for start in range(0, len(rows), PURGE_CHUNK):
+                with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
+                    with conn.transaction():
+                        conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
+                        self.copy_current(conn, rows[start : start + PURGE_CHUNK])
+        except Exception:
+            _count('other', 'purge', ShadowParityOutcome.ERROR)
+            raise
+        for table, _ in rows:
+            _count(table, 'purge', ShadowParityOutcome.MIRRORED)
+        return len(rows)
+
     def refresh_now(self, keys: list[tuple[str, str]]) -> None:
         """Re-copy ``keys`` from the primary into Postgres (upsert, or delete when gone). Never raises."""
         phase = ['postgres_connect']
@@ -643,6 +695,27 @@ def shadow_from_env(primary: Any) -> Any:
         _SHADOWED[namespace] = DualStore(primary, shadow)
         logger.info('event=jobstore_shadow outcome=enabled')
         return _SHADOWED[namespace]
+
+
+def purge_owner(namespace: str, owner_id: str) -> int:
+    """A5 deletion hook: reconcile ``owner_id``'s Postgres rows with the purged primary. RAISES on failure.
+
+    A no-op (0, nothing constructed) unless this process runs ``BATCH_JOBSTORE_MODE=shadow`` on an admitted
+    namespace with Postgres configured, exactly when the mirror could have copied the owner's documents.
+    ``JOBSTORE_SHADOW_WRITES=off`` stops new copies, not erasure of old ones, so it does not skip this.
+    """
+    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or not jobstore_shadow_admits(
+        namespace
+    ):
+        return 0
+    store = _SHADOWED.get(namespace)
+    if store is None:
+        from database.batch_pipeline_store import FirestoreStore
+
+        store = shadow_from_env(FirestoreStore(namespace))
+    if not isinstance(store, DualStore):
+        return 0  # shadow refused (unconfigured or no driver): the mirror never ran here
+    return store.purge_owner_now(owner_id)
 
 
 def mirror_refresh(namespace: str, keys) -> None:
