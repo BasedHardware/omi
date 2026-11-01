@@ -70,8 +70,14 @@ cloud_run:
     # 2026-10-24 costcut (live 22:48Z): cap 80 -> 50; warm floor 1 -> 5 so the sync
     # pump keeps conversation-finalization headroom (min 5 x concurrency 20, the
     # shape deploy-backend-stack sizes its queue against).
-    max_instances: 50
-    min_instances: 5
+    # retire100 candidate: apply only after batch-100 demand is qualified.
+    # 2026-11-01 ro-prod: 72h active-instance mean ~46, latest ~50;
+    # the old ~19-instance model does not establish headroom for cap 20.
+    # Floor 3 provides 60 concurrent handlers, down from 100 at floor 5;
+    # qualify queue latency/backlog as well as instance demand before apply.
+    # Rollback: 50/5.
+    max_instances: 20
+    min_instances: 3
   backend-sync-backfill:
     env:
       SYNC_TASKS_QUEUE: sync-backfill-fresh
@@ -92,10 +98,15 @@ cloud_run:
       MEETING_NOTES_EVIDENCE_WAIT_SECONDS: '25'
       MEMORY_MODE: 'off'
       TYPESENSE_HOST_PORT: '443'
-    # redis_guard.sh moves this between 8 and 40 from Redis memory. It is
+    # redis_guard.sh moves this between its bounds from Redis memory. It is
     # deleted with the sequencer (C10); until then the config-train only
     # enforces the bounds.
-    max_instances: {owner: redis_guard, floor: 8, ceiling: 40}
+    # retire100 candidate: ceiling 40 -> 10, pending fresh demand qualification.
+    # 2026-11-01 ro-prod: 72h active-instance mean 12.6, latest 14,
+    # single-revision peak 17. Cap 10 is not safe at that observed demand.
+    # Coordinate the redis_guard runtime ceiling before applying this bound.
+    # Rollback: ceiling 40 (live cap 16).
+    max_instances: {owner: redis_guard, floor: 8, ceiling: 10}
   backend-integration:
     env:
       SYNC_TASKS_QUEUE: sync-jobs-fresh

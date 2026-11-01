@@ -461,10 +461,11 @@ def test_prod_source_model_reads_deploy_flags_and_the_ops_file():
     # future regression of the prod 6Gi costcut is drift, not silence.
     assert model['backend-sync'].scale['memory'] == '6Gi'
     assert model['backend-sync-backfill'].scale['memory'] == '4Gi'
+    # Retirement candidate: ceiling 40 -> 10, gated on fresh batch-100 demand.
     assert model['backend-sync-backfill'].ops_scale['service_max'] == {
         'owner': 'redis_guard',
         'floor': 8,
-        'ceiling': 40,
+        'ceiling': 10,
     }
     assert dc.LISTEN in model and model[dc.LISTEN].scale['service_min'] is not None
 
