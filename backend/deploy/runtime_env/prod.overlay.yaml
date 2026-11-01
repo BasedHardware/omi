@@ -495,6 +495,13 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
+          # served by backend-integration. Rows keep the binding they were created with, so the kill switch
+          # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+          ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
+          ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
+          ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -835,6 +842,18 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
+          # served by backend-integration. Rows keep the binding they were created with, so the kill switch
+          # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+          ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
+          ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
+          ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
+          # Plan C8: provider-STT wakes (BYOK and non-Parakeet units) on the provider-stt queue, served by
+          # backend-integration. Dormant while legacy_sync=on; required before draining (provider_stt_live).
+          PROVIDER_STT_TASKS_QUEUE: {value: provider-stt, category: reliability}
+          PROVIDER_STT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app', category: reliability}
+          PROVIDER_STT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app', category: service_auth}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -1205,6 +1224,13 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
+          # served by backend-integration. Rows keep the binding they were created with, so the kill switch
+          # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+          ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
+          ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
+          ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
           # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
           # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
@@ -1546,6 +1572,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
+          # served by backend-integration. Rows keep the binding they were created with, so the kill switch
+          # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+          ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
+          ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
+          ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
+          # Plan C8: provider-STT wakes (BYOK and non-Parakeet units) on the provider-stt queue, served by
+          # backend-integration. Dormant while legacy_sync=on; required before draining (provider_stt_live).
+          PROVIDER_STT_TASKS_QUEUE: {value: provider-stt, category: reliability}
+          PROVIDER_STT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app', category: reliability}
+          PROVIDER_STT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app', category: service_auth}
           # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
           # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
