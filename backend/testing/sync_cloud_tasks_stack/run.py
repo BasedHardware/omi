@@ -573,7 +573,7 @@ def _seed_capture_conversation(stack: Stack, uid: str, conversation_id: str) -> 
         raise StackFailure(f'isolated capture provenance seed returned HTTP {response.status_code}')
 
 
-def _upload_with_manifest(stack: Stack, uid: str) -> tuple[str, httpx.Response]:
+def _upload_with_manifest(stack: Stack, uid: str, *, archive: bool = False) -> tuple[str, httpx.Response]:
     stack.seed_user(uid)
     if archive:
         stack.firestore.collection('users').document(uid).update({'private_cloud_sync_enabled': True})
