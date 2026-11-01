@@ -224,6 +224,26 @@ def test_close_needs_consecutive_successes_and_clean_window():
     assert vh.advance(record, dirty, now, t, 'ok').state == vh.OPEN
 
 
+def test_validated_empty_breaks_the_success_streak():
+    t = config.Thresholds()
+    record = vh.BreakerRecord(vh.OPEN, R.BREAKER_OPEN, START, 4)
+    now = START + 3600
+    buckets = {int(now // 60): {'n': 5, 'ok': 4, 'empty': 1}}
+    reset = vh.advance(record, buckets, now, t, 'empty')
+    assert reset.state == vh.OPEN and reset.successes == 0
+    assert vh.advance(reset, buckets, now, t, 'ok').state == vh.OPEN
+
+
+def test_route_provider_failure_is_state_unavailable_not_raised():
+    def boom():
+        raise RuntimeError('table read failed')
+
+    svc = _service(Clock())
+    svc.routes = boom
+    assert svc.allows('modulate') == (False, R.STATE_UNAVAILABLE)
+    assert svc.reserve('modulate', 10) == (False, R.STATE_UNAVAILABLE)
+
+
 def test_one_fleet_wide_probe_per_interval_across_pods():
     server = fakeredis.FakeServer()
     clock = Clock()

@@ -213,6 +213,9 @@ def advance(
         record = replace(record, opened_at=now, successes=0, reason=reason if trip == OPEN else record.reason)
     elif event == 'ok':
         record = replace(record, successes=record.successes + 1)
+    elif event == 'empty':
+        # Validated-empty is a failover outcome: it breaks the consecutive-success streak.
+        record = replace(record, successes=0)
     recent = window(buckets, now, t.close_window_s)
     failure_rate = _rate(recent.err + recent.funds + recent.rate, recent.n)
     if record.successes >= t.close_successes and trip != OPEN and failure_rate < t.close_error_rate:
@@ -522,12 +525,12 @@ class VendorHealthService:
                 return _legacy_view(service)
             t = self.settings().for_vendor(service)
             view, probe = self._current_view(service, t)
+            capped = self._cap_reason(service, view.usage)
         except Exception as error:
             logger.warning(
                 'event=batch_vendor_health outcome=state_unavailable exception_type=%s', type(error).__name__
             )
             return False, VendorHealthReason.STATE_UNAVAILABLE
-        capped = self._cap_reason(service, view.usage)
         if capped is not None:
             metrics.cap_hit(service, capped)
             return False, capped
