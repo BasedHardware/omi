@@ -362,6 +362,13 @@ def test_append_route_edge_with_path_fails(results: Results) -> None:
     ), results.mutations['recovery_audience_with_path']
 
 
+def test_provider_stt_edge_models_create_wake_route_join() -> None:
+    # utils/provider_stt_tasks.create_wake posts to PROVIDER_STT_TASKS_HANDLER_URL + ROUTE (test_wake_task_shape),
+    # so the configured URL is a bare origin; without append_route the contract demanded the doubled path.
+    edge = next(e for e in contract.TASK_EDGES if e.id == 'provider-stt')
+    assert edge.append_route is True
+
+
 def test_audience_pair_mismatch_fails(results: Results) -> None:
     # Dispatcher mints one audience, target verifies another: every task rejected 403.
     assert any(

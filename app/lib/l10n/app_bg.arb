@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Бележките започват, когато пристигне окончателната транскрипция.",
     "episodeOnDeviceNotesFootnote": "Създават се на телефона ти, докато говориш. Пълните бележки идват с окончателната транскрипция.",
     "episodeOnThisPhone": "На този телефон",
-    "liveCardTitle": "На живо",
     "livePreviewBehind": "Окончателната транскрипция изостава с около {duration}",
     "livePreviewCatchingUp": "Окончателната транскрипция настига",
     "livePreviewNoEngineBody": "Думите ти се появяват тук минута-две след като ги изговориш.",
     "livePreviewNoEngineTitle": "Записва безопасно",
-    "livePreviewOnPhoneDivider": "На живо на този телефон",
+    "livePreviewOnPhoneDivider": "Току-що, на този телефон",
     "livePreviewTurnOnLiveText": "Включи текста на живо",
     "deviceCatchUpOnItsWay": "на път",
     "deviceCatchUpWhenOnline": "при интернет връзка",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Годишното плащане в момента не е достъпно за вашия план.",
     "yearlySwitchDoneTitle": "Вече плащате годишно",
     "yearlySwitchDoneBody": "Днес са таксувани {amount}. Подновяване на {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} части} one{{count} част} two{{count} части} few{{count} части} many{{count} части} other{{count} части}}",
     "chatAppsWaitingMessageIn": "Изпрати съобщението от {app}. Този екран се обновява веднага щом Omi го получи.",
-    "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}."
+    "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}.",
+    "episodeWritingNotes": "Пишем бележките…",
+    "episodeWritingNotesDetail": "Първо довършваме транскрипцията. Можете да напуснете страницата.",
+    "episodeCoversUpTo": "Обхваща до {time} · пълните бележки при приключване",
+    "liveTranscribedUpTo": "Транскрибирано до {time}",
+    "liveAudioSaved": "Запазени {duration}",
+    "liveAudioSavedDetail": "Говорителите и окончателната транскрипция ще се появят тук при качването."
 }

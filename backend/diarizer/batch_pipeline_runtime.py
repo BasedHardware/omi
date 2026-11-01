@@ -30,6 +30,7 @@ from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.language_metrics import ROUTES as LANGUAGE_ROUTES
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
 from utils.batch_pipeline.gpu_skip_metrics import register_on as register_gpu_skip_counters
+from utils.batch_pipeline.worker_metrics import COLLECTORS as WORKER_IO_COLLECTORS
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
@@ -73,12 +74,25 @@ class SynchronizedWorker:
         self._unavailable = False
 
     def process_batch(self, items, **kwargs):
+        return self._process(items, self.worker.process_batch, **kwargs)
+
+    def prepare_first(self, items):
+        prepare = getattr(self.worker, 'prepare_first', None)
+        return prepare(items) if prepare is not None else None
+
+    def process_batch_deferred(self, items, **kwargs):
+        process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)
+        return self._process(items, process, **kwargs)
+
+    def _process(self, items, process, **kwargs):
         if self._unavailable:
             raise FatalGpuError('GPU chain unavailable; restart required')
+        pending = None
         try:
             baseline = self.memory_probe.begin() if self.memory_probe else None
             try:
-                return self.worker.process_batch(items, **kwargs)
+                pending = process(items, **kwargs)
+                return pending
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.
@@ -93,6 +107,12 @@ class SynchronizedWorker:
                         sample,
                     )
         except Exception as error:
+            # Synchronization can fail after compute handed off writes. Fatal
+            # CUDA must not leave those writes running beyond the receipt.
+            # Keep the poisoned GPU slot held until that fatal drain completes.
+            close = getattr(pending, 'close', None)
+            if callable(close):
+                close()
             if is_fatal_cuda_error(error):
                 self._unavailable = True
                 if self.on_fatal:
@@ -103,6 +123,8 @@ class SynchronizedWorker:
 
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
     registry.register(LANGUAGE_ROUTES)
+    for collector in WORKER_IO_COLLECTORS:
+        registry.register(collector)
     for collector in SHADOW_COLLECTORS:
         registry.register(collector)
     if cap_dispatch_enabled() or offline_enforcement_enabled('batch'):

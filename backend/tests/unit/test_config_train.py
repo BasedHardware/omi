@@ -20,6 +20,13 @@ import ops_train  # noqa: E402
 PROD_HEADER = 'schema: omi.ops/v1\nenvironment: prod\nproject: based-hardware\nregion: us-central1\n'
 
 
+def test_fresh_queue_smoothing_keeps_concurrency_and_retry_ownership():
+    queue = yaml.safe_load((BACKEND / 'deploy/ops/prod.yaml').read_text())['cloud_tasks']['sync-jobs-fresh']
+    assert queue['max_dispatches_per_second'] == 15
+    assert queue['max_concurrent_dispatches'] == 160
+    assert (queue['max_attempts'], queue['min_backoff'], queue['max_backoff']) == (5, '60s', '300s')
+
+
 def _container(image: str, env: dict[str, str], *, ports: bool = True, name: str = 'backend') -> dict[str, Any]:
     out: dict[str, Any] = {'name': name, 'image': image, 'env': [{'name': k, 'value': v} for k, v in env.items()]}
     if ports:
@@ -205,8 +212,13 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     queues = {q.name: q for q in spec.queues}
     recovery = queues['batch-quarantine-recovery'].fields
     assert (recovery['max_concurrent_dispatches'], recovery['max_dispatches_per_second']) == (16, 8.0)
-    # Lane 9's enrichment queue is declared but not created before M3.
-    assert queues['enrichment'].enabled is False
+    # Plan C prod activation: the config-train creates C3's enrichment and C8's provider-stt queues before the
+    # backend roll that points ENRICHMENT_ROUTE / PROVIDER_STT_TASKS_* at them (draining needs provider_stt_live).
+    assert queues['enrichment'].enabled is True
+    provider = queues['provider-stt']
+    assert provider.enabled is True
+    assert (provider.fields['max_concurrent_dispatches'], provider.fields['max_dispatches_per_second']) == (48, 10.0)
+    assert provider.fields['max_attempts'] == -1
 
 
 def test_staging_mirrors_prod_except_names():

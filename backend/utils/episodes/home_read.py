@@ -10,6 +10,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import (
+    home_hide_below_floor_rows_enabled,
     COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
     COMPOSER_MAX_SCHEDULED_PER_READ,
     COMPOSER_READ_THROTTLE_SECONDS,
@@ -20,8 +21,9 @@ from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
 from utils.episodes.policy import utc
 from models.episode import EpisodeCloseReason
+from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
-from utils.conversations.fragment_visibility import is_relevance_discarded
+from utils.conversations.fragment_visibility import is_relevance_discarded, is_user_curated
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,7 @@ def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
     return {**wire, 'emoji': episode.get('emoji') or '', 'members': []}
 
 
+BELOW_FLOOR_ROW_MAX_SECONDS = 60
 MEMBER_FIELDS = [
     'structured',
     'user_title',
@@ -103,6 +106,7 @@ MEMBER_FIELDS = [
     'photos',
     'starred',
     'folder_user_set',
+    'summary_blocked_reason',
 ]
 
 
@@ -127,7 +131,7 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
 
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
     members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
-    wires = [wire for row in rows if (wire := project_episode(uid, row, members=members)) is not None]
+    wires = [wire for row in rows if (wire := project_episode(uid, row, members=members, list_row=True)) is not None]
     contained = _contained_ids(rows, wires)
     wires = [wire for wire in wires if wire['id'] not in contained]
     schedule_missed_composes(uid, [row for row in rows if row.get('id') not in contained], wires)
@@ -226,13 +230,33 @@ def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[d
     return queued
 
 
+def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:
+    """A closed capture under the notes floor, too brief and too empty to be worth a row.
+
+    List only: search, a direct link and Show discarded still reach it, and nothing is stored.
+    """
+    if not home_hide_below_floor_rows_enabled() or row.get('summary_blocked_reason') != 'content_below_floor':
+        return False
+    if is_user_curated(row) or (row.get('status') or 'completed') != 'completed':
+        return False
+    if ((row.get('structured') or {}).get('overview') or '').strip():
+        return False
+    started, finished = row.get('started_at'), row.get('finished_at')
+    return bool(started and finished and (finished - started).total_seconds() < BELOW_FLOOR_ROW_MAX_SECONDS)
+
+
 def project_episode(
-    uid: str, episode: dict[str, Any] | None, *, members: dict[str, dict[str, Any]] | None = None
+    uid: str,
+    episode: dict[str, Any] | None,
+    *,
+    members: dict[str, dict[str, Any]] | None = None,
+    list_row: bool = False,
 ) -> dict[str, Any] | None:
     if episode is None:
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
     retained: list[dict[str, Any]] = []
+    hidden = 0
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
         if (
@@ -241,6 +265,9 @@ def project_episode(
             or is_relevance_discarded(row)
             or row.get('sync_merged_into')
         ):
+            continue
+        if list_row and _too_short_for_a_home_row(row):
+            hidden += 1
             continue
         structured: dict[str, Any] = row.get('structured') or {}
         retained.append(
@@ -253,8 +280,11 @@ def project_episode(
                 'status': row.get('status') or 'completed',
             }
         )
+    if list_row:
+        episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None
+    retained.sort(key=lambda member: str(member['started_at']))
     ids = {member['id'] for member in retained}
     wire = wire_episode(episode)
     assert wire is not None  # Non-null input always has a wire projection.

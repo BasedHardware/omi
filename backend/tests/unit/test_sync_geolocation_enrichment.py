@@ -272,6 +272,7 @@ async def test_partial_batch_carries_one_strike_and_keeps_the_healthy_sibling(pi
     fingerprint = 'persistence:document_size_limit'
     pipeline.checkpoint_sync_content_partial_result = MagicMock(return_value=True)
     pipeline.add_processed_sync_segment_id = MagicMock(return_value=True)
+    pipeline.checkpoint_and_mark_sync_segment = MagicMock(return_value='marked')
     pipeline._finalize_sync_job_for_run = MagicMock()
     pipeline.release_sync_content_claim = MagicMock(return_value=True)
     pipeline.release_sync_content_claim_after_job_retired = MagicMock(return_value=True)
@@ -320,9 +321,10 @@ async def test_partial_batch_carries_one_strike_and_keeps_the_healthy_sibling(pi
     # The healthy path adds no ledger read per segment.
     pipeline.get_processed_sync_segment_ids.assert_called_once()
     pipeline.get_sync_content_partial_result.assert_called_once()
-    # Only the successful sibling is checkpointed as processed.
-    assert [call.args[3] for call in pipeline.add_processed_sync_segment_id.call_args_list] == ['b']
-    pipeline.checkpoint_sync_content_partial_result.assert_called_once()
+    # Only the successful sibling is checkpointed and marked, in one ledger commit.
+    assert [call.args[4] for call in pipeline.checkpoint_and_mark_sync_segment.call_args_list] == ['b']
+    pipeline.add_processed_sync_segment_id.assert_not_called()
+    pipeline.checkpoint_sync_content_partial_result.assert_not_called()
     pipeline.mark_sync_content_completed.assert_not_called()
     result = pipeline._finalize_sync_job_for_run.call_args.args[2]
     assert result['failed_segments'] == 1 and result['total_segments'] == 2

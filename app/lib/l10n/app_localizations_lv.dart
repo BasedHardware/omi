@@ -14706,9 +14706,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get episodeOnThisPhone => 'Šajā tālrunī';
 
   @override
-  String get liveCardTitle => 'Tiešraide';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Galīgā transkripcija atpaliek aptuveni $duration';
   }
@@ -14723,7 +14720,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Droši ieraksta';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Tiešraide šajā tālrunī';
+  String get livePreviewOnPhoneDivider => 'Tikko, šajā tālrunī';
 
   @override
   String get livePreviewTurnOnLiveText => 'Ieslēgt tiešraides tekstu';
@@ -14969,21 +14966,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count daļas',
-      many: '$count daļas',
-      few: '$count daļas',
-      two: '$count daļas',
-      one: '$count daļa',
-      zero: '$count daļu',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Nosūtiet ziņu lietotnē $app. Šis ekrāns atjaunosies, tiklīdz Omi to saņems.';
   }
@@ -14992,4 +14974,28 @@ class AppLocalizationsLv extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Iegūstiet jaunu kodu un nosūtiet to no lietotnes $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Rakstām piezīmes…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Vispirms pabeidzam transkripciju. Varat pamest šo lapu.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Līdz $time · pilnas piezīmes beigās';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkribēts līdz $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Saglabāts $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.';
 }

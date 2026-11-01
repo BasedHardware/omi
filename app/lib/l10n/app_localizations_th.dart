@@ -14601,9 +14601,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get episodeOnThisPhone => 'บนเครื่องนี้';
 
   @override
-  String get liveCardTitle => 'แสดงสด';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'ถอดความฉบับสุดท้ายตามหลังอยู่ประมาณ $duration';
   }
@@ -14618,7 +14615,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'กำลังบันทึกอย่างปลอดภัย';
 
   @override
-  String get livePreviewOnPhoneDivider => 'แสดงสดบนเครื่องนี้';
+  String get livePreviewOnPhoneDivider => 'เมื่อสักครู่ บนโทรศัพท์เครื่องนี้';
 
   @override
   String get livePreviewTurnOnLiveText => 'เปิดข้อความสด';
@@ -14862,21 +14859,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ส่วน',
-      many: '$count ส่วน',
-      few: '$count ส่วน',
-      two: '$count ส่วน',
-      one: '$count ส่วน',
-      zero: '$count ส่วน',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'ส่งข้อความในแอป $app หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ';
   }
@@ -14885,4 +14867,28 @@ class AppLocalizationsTh extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'ขอรหัสใหม่แล้วส่งจากแอป$app';
   }
+
+  @override
+  String get episodeWritingNotes => 'กำลังเขียนบันทึก…';
+
+  @override
+  String get episodeWritingNotesDetail => 'กำลังทำบทถอดความให้เสร็จก่อน คุณออกจากหน้านี้ได้';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'ครอบคลุมถึง $time · บันทึกฉบับเต็มเมื่อจบ';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'ถอดความถึง $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'บันทึกแล้ว $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด';
 }

@@ -10,11 +10,14 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# The ratified batch floor is 3 on-demand workers (lead 114a22/724762, 10-28;
-# op1 readback 3 desired / 3 Ready). Image-only rolls preserve it.
-replicaCount: 3
+# GPU floor: 4 on-demand L4 workers held through vendor outages and L4
+# stockouts (vendor routing, vendorscope-ops option B; was 3, lead 114a22).
+# A stockout only fails scale-up, so the floor must already be standing. This
+# value and autoscaling.minReplicas are one floor setting; change both.
+# Rollback: 3. See docs/runbooks/batch-vendor-routing-capacity.md.
+replicaCount: 4
 # Latent queue scaler per the lead-accepted 100% capacity plan (f05065):
-# demand-driven, min 3 / max 16, OD-first - all replicas pin to the on-demand
+# demand-driven, min 4 / max 16, OD-first - all replicas pin to the on-demand
 # pool; Spot stays opportunistic and out of this cutover. Above 16 only as a
 # second qualified step. This latent budget authorizes no capacity and creates
 # no HPA while enabled is false; op1 raises batch-pipeline-pool's node max (3
@@ -22,7 +25,7 @@ replicaCount: 3
 # real scale-up during the 25% soak as the scheduling proof.
 autoscaling:
   enabled: true
-  minReplicas: 3
+  minReplicas: 4
   maxReplicas: 16
   balancedPools:
     enabled: false
@@ -42,15 +45,30 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+# L4 stockout (l4capacity 2026-11-01): out-of-resources in us-central1-a/b/c
+# alike, so nodes Parakeet frees as its floor falls go to up to 3 borrower
+# workers, not to GCE. Parakeet keeps priority 0 and preempts a borrower, which
+# stops within 120s (leases retry; no audio is lost). The OD floor above is
+# untouched. All three pools are on-demand g2-standard-8 + L4 with only the
+# nvidia.com/gpu taint. Kill switch: enabled false (removes -borrow and its HPA).
+borrowedNodePools:
+  enabled: true
+  pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
+  # #24213 IO 5 did not run in qualification (NO-GO 2026-11-01); hold the prior 3.
+  ioConcurrency: 3
   # Batch quality shadow at 25% (lead 2026-10-29, retro ruling "shadow 25% first").
   # Matches the four Cloud Run roles; paid recovery keeps the 200/h base cap
   # (lead ruling 12:15Z reversing the #23964 zero pin). Rollback: 0.
   shadowPercent: 25
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
+  # Strict-VAD shadow at 10% (batchdesign §9 PR-3, 2026-11-01): the shadow cost
+  # up to 0.6s of the 2.55s/unit flight. 100 restores full sampling for the
+  # silence qualification; 0 turns the shadow off entirely.
+  strictVadShadowPercent: 10
   apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
   audience: https://backend-sync-hhibjajaja-uc.a.run.app
   emptyAsrRecoveryEnabled: true

@@ -19,7 +19,11 @@ KINDS = {
     'choices': ('processing_backlog', 'processing'),
     'staging': ('stt_cap_holds', ['staging', 'sealing']),
     'cleanup': ('stt_cap_holds', True),
+    # Batch hand-offs keep their audio until batch projects it (same `state` group index).
+    'handoff': ('stt_cap_holds', 'batch_admitted'),
 }
+# Hand-offs arrive at held-recovery volume (~6.6k/day measured 11-01); 5 per 2-minute sweep is 3.6k/day.
+HANDOFF_PAGE = 50
 
 
 def _snapshot_timeout(timeout: float | None) -> float:

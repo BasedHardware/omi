@@ -26,6 +26,15 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+
+def projection_hold_recovery_enabled() -> bool:
+    """Ship-on hold age gate and automatic redrive; false restores old behavior."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED',
+        os.getenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 T = TypeVar('T')
 
 
@@ -170,6 +179,10 @@ SCHEDULER_SHARDS = 64
 
 def shard_spread_enabled() -> bool:
     return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
+
+
+def pull_multi_lease_enabled() -> bool:
+    return os.getenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'true').strip().lower() != 'false'
 
 
 def scheduler_control_key(hashed_owner: str) -> str:
@@ -317,6 +330,29 @@ def worker_validation_disposition_enabled() -> bool:
     )
 
 
+STRICT_VAD_SHADOW_PERCENT_DEFAULT = 10.0
+
+
+def strict_vad_shadow_percent() -> float:
+    """Sampled share of the CPU strict-VAD shadow; 0 disables, 100 restores full."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '10').strip())
+    except ValueError:
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    if not math.isfinite(value):
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    return min(100.0, max(0.0, value))
+
+
+def strict_vad_shadow_sampled(segment_id: str) -> bool:
+    """Deterministic by segment hash: a re-leased unit samples identically."""
+    if not segment_id:
+        return False
+    from config.policy import cohort_bucket
+
+    return cohort_bucket(segment_id, '') < strict_vad_shadow_percent()
+
+
 def head_priority_enabled() -> bool:
     from config.policy import resolve_stage_policy
 
@@ -370,6 +406,31 @@ def recovery_dispatch_interval_seconds() -> float:
     return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
 
 
+ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS = 1800
+ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400
+
+
+def allowance_hold_retry_seconds() -> int:
+    """Ship-on re-lease hold for an exhausted plan allowance or usage budget.
+
+    An exhausted allowance is durable until the plan changes, so a held unit's
+    lease + admission RPC + defer + requeue cycle runs for nothing while it
+    waits; the scheduler escalation ladder keeps today's behaviour below this
+    value. ``60`` restores the former short cycle (steady 300 s after
+    escalation). Malformed or out-of-range values keep the default.
+    """
+    raw = os.getenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '').strip()
+    if not raw:
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    if not math.isfinite(value):
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    return int(value) if 1 <= value <= ALLOWANCE_HOLD_RETRY_MAX_SECONDS else ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+
+
 def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
@@ -411,6 +472,13 @@ def projection_pending_page_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
+
+
+def projection_followup_page_enabled() -> bool:
+    """Kill switch: discover only finishable receipts, without per-row fetches."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
 
 
 def owner_drain_enabled() -> bool:
@@ -483,7 +551,7 @@ def worker_pipeline_depth() -> int:
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
 
 
-WORKER_IO_CONCURRENCY_DEFAULT = 3
+WORKER_IO_CONCURRENCY_DEFAULT = 5
 WORKER_IO_CONCURRENCY_MAX = 8
 
 
@@ -504,10 +572,10 @@ def stage_profiling_enabled() -> bool:
 
 
 def worker_io_concurrency() -> int:
-    """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
+    """Shared bounded artifact fetch/decode and persistence across pump lanes.
 
     1 restores the fully serial chain. Malformed or out-of-range values keep the
-    conservative default; GPU work and the chain lock are unaffected either way.
+    bounded default; GPU work and the chain lock are unaffected either way.
     """
     try:
         value = int(os.getenv('BATCH_PIPELINE_WORKER_IO_CONCURRENCY', str(WORKER_IO_CONCURRENCY_DEFAULT)))

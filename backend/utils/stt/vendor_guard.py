@@ -151,6 +151,23 @@ def record_breaker_quota_error(endpoint: str, budget: bool = False) -> None:
         _set_gauge(endpoint, 1)
 
 
+def breaker_refuses(endpoint: str) -> bool:
+    """Pure read of what ``breaker_allows`` would answer, without acquiring the half-open trial.
+
+    Batch vendor health's kill-switch view (BATCH_VENDOR_HEALTH_ENABLED=false) reads this.
+    """
+    if not vendor_fail_fast_enabled():
+        return False
+    state = _breaker_for(endpoint)
+    with state.lock:
+        now = _clock()
+        if state.opened_at is None:
+            return False
+        if now - state.opened_at < BREAKER_OPEN_SECONDS:
+            return True
+        return state.trial_in_flight and now - state.trial_started_at < BREAKER_TRIAL_TIMEOUT_SECONDS
+
+
 def breaker_budget_exhausted(endpoint: str) -> bool:
     state = _breaker_for(endpoint)
     with state.lock:

@@ -29,9 +29,30 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+# Borrow idle on-demand L4 nodes from other pools (L4 stockout, l4capacity
+# 2026-11-01). When on, a separate `<release>-borrow` Deployment with its own
+# HPA (min 1, max maxReplicas, same queue metric) runs only on `pools`, at a
+# negative PriorityClass so the owning workload (default priority 0) preempts
+# it, with a short grace so the owner gets the GPU back in minutes, not the OD
+# worker's 1500s drain. A freed node then passes straight to a borrower instead
+# of returning to GCE. The OD deployment, its HPA and its drain are unchanged.
+# Each pool must be on-demand g2-standard-8 + L4 whose only taint the worker
+# tolerates. Outside a stockout the min-1 borrower can make the autoscaler buy
+# one owner-pool node, so turn this off once OD scale-ups succeed again.
+borrowedNodePools:
+  enabled: false
+  pools: []
+  maxReplicas: 3
+  # A preempted borrower stops within this bound; its leases retry elsewhere.
+  terminationGracePeriodSeconds: 120
+  # In [-10, 0): below pods without a class (0), and not below the cluster
+  # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
+  priority: -1
 worker:
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
+  # One shard transaction leases up to the pull batch; false leases one per transaction.
+  pullMultiLeaseEnabled: true
   # Ship-on bounded Firestore transaction retry; false restores legacy behavior.
   contentionRetryEnabled: true
   # null preserves the runtime's stage-dependent profiling default.
@@ -48,9 +69,15 @@ worker:
   batchSize: 8
   # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
   pipelineDepth: 2
+  # Shared artifact IO pool, including first decode before the GPU lock.
+  # 1 disables preparation and restores serial artifact IO.
+  ioConcurrency: 5
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
+  # CPU strict-VAD shadow sampling percent; 0 disables the shadow, 100
+  # restores full sampling (the silence qualification reads this evidence).
+  strictVadShadowPercent: 10
   unitSeconds: 3600
   paddedSeconds: 272
   # Pack pyannote segmentation/embedding forwards across one flight's units.
@@ -92,16 +119,27 @@ autoscaling:
   # The original deployment name stays on OD; a -spot deployment shares its
   # queue metric scope but has a distinct pod selector and PodMonitoring.
   # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
-  # a single OD-pinned HPA (prod 3/16); balanced stays machinery-only.
+  # a single OD-pinned HPA (prod 4/16); balanced stays machinery-only.
   balancedPools:
     enabled: false
     onDemandNodePool: batch-pipeline-pool
     spotNodePool: batch-pipeline-pool-spot
   # External metrics from the supplied Prometheus adapter rules must be installed
   # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
-  # PROVISIONAL development target: slot bound only, NOT throughput evidence.
-  # Qualify useful throughput/queue latency before the production apply.
+  # Max-of-two (batchdesign 2026-11-01 PR-2): the HPA keeps the admissible-ready
+  # backlog target AND adds GPU-chain occupancy, sizing on the higher
+  # recommendation. The ready count holds capacity through claim-chain wedges
+  # (occupancy alone sheds lanes whenever claims bind rather than flights);
+  # occupancy keeps capacity through healthy drains where backlog reads low but
+  # flights are real (hpafit 2026-11-01 replay: 0 starved minutes over 24h and
+  # replica dominance over the ready-only answer whenever backlog exceeds the
+  # per-worker target).
   targetQueuedUnitsPerWorker: 16
+  # GPU-chain (worker_flight) busy seconds per second per worker; 0.5 is ~89%
+  # of the measured healthy chain ceiling (hpafit 2026-11-01 replay).
+  targetChainBusyPerWorker: "0.5"
+  # Stockout-aware scale-down window; with 1 pod / 600s this sheds ~6 nodes/hour.
+  scaleDownStabilizationSeconds: 1800
 podMonitoring:
   enabled: true
 recordSealRepair:

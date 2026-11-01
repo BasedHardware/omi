@@ -4,6 +4,6 @@ python-multipart==0.0.31
 requests==2.33.1
 requests-toolbelt==1.0.0
 pydantic==2.13.4
-cryptography==48.0.1
-PyJWT==2.13.0
+cryptography==50.0.2
+PyJWT==2.15.1
 ../omi-plugin-sdk

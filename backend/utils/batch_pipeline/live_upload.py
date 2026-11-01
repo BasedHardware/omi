@@ -27,6 +27,7 @@ from database.sync_ledger import LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.intake import durable_status, start_response
 from utils.batch_pipeline.artifact_policy import artifacts_for
+from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
@@ -94,12 +95,12 @@ def _covered(paths, jobs, artifacts):
     return True
 
 
-async def _legacy_mode(legacy_mode):
+async def _legacy_mode(legacy_mode, uid):
     """The caller's mode, else one off-loop read (a cold process gets its bounded first wait)."""
     # Imported per call: router harnesses stub ``utils`` wholesale.
     from utils.sync import legacy_dark
 
-    return legacy_mode if legacy_mode is not None else await run_blocking(db_executor, legacy_dark.current_mode)
+    return legacy_mode if legacy_mode is not None else await run_blocking(db_executor, legacy_dark.current_mode, uid)
 
 
 async def _legacy_final_pass_route(uid, conversation_id, store, legacy_mode) -> RecordUploadRoute:
@@ -114,14 +115,14 @@ async def _legacy_final_pass_route(uid, conversation_id, store, legacy_mode) -> 
 
     if not conversation_id:
         return RecordUploadRoute.LEGACY
-    mode = await _legacy_mode(legacy_mode)
+    mode = await _legacy_mode(legacy_mode, uid)
     outcome = await run_blocking(
         db_executor, final_pass_rehome.upload_rehome, mode, uid, conversation_id, firestore_client=store.client
     )
     return RecordUploadRoute.BATCH if final_pass_rehome.rehomes_to_batch(outcome) else RecordUploadRoute.LEGACY
 
 
-async def _legacy_takes_new_owner(policy, legacy_mode, language=None) -> bool:
+async def _legacy_takes_new_owner(policy, legacy_mode, uid, language=None) -> bool:
     """An ownerless conversation goes to legacy only at ``on``: for a narrowed uid,
     or (batch eligibility, lead 41e13b) a conversation language known to be
     unsupported by batch Parakeet.
@@ -134,7 +135,7 @@ async def _legacy_takes_new_owner(policy, legacy_mode, language=None) -> bool:
 
     if policy.batch_enabled and not known_unsupported_batch_language(language):
         return False
-    return await _legacy_mode(legacy_mode) is legacy_dark.LegacySyncMode.ON
+    return await _legacy_mode(legacy_mode, uid) is legacy_dark.LegacySyncMode.ON
 
 
 async def _language_exclusion(store, uid, conversation):
@@ -159,6 +160,7 @@ async def registered_record_response(
     loaded_conversation=None,
     policy=None,
     legacy_mode=None,
+    evidence: IntakeRouteEvidence | None = None,
 ) -> JSONResponse | RecordUploadRoute | None:
     policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
@@ -189,13 +191,10 @@ async def registered_record_response(
         row = snapshot.to_dict() or {}
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
-            if admission_language_exclusion_enabled():
-                legacy_mode = await _legacy_mode(legacy_mode)
-                if legacy_mode is not LegacySyncMode.ON:
-                    reason, language = await _language_exclusion(store, uid, row)
-                    if reason:
-                        record_admission_exclusion(language, reason, legacy_available=False)
-                        return RecordUploadRoute.LEGACY
+            # The upload follows a prior durable owner whether the re-home
+            # succeeds (BATCH) or holds (LEGACY): never a fresh batch admission.
+            if evidence is not None:
+                evidence.final_pass_owner_followed = True
             return await _legacy_final_pass_route(uid, conversation_id, store, legacy_mode)
         if row.get('record_lane_owner') == 'batch_sync_v1':
             return RecordUploadRoute.BATCH
@@ -213,18 +212,17 @@ async def registered_record_response(
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher. BYOK takes the
             # batch owner like any upload (David, 10-19): no request-scoped keys needed.
-            reason, language = await _language_exclusion(store, uid, row)
-            if reason:
+            legacy_mode = await _legacy_mode(legacy_mode, uid)
+            reason, language = (
+                await _language_exclusion(store, uid, row) if legacy_mode is LegacySyncMode.ON else (None, None)
+            )
+            if reason or legacy_mode is not LegacySyncMode.ON:
                 # A prior batch content receipt must drain before new-custody
                 # eligibility, even if this conversation has no owner marker.
                 prior = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
                 if prior.get('dispatch_protocol') == 'batch_v1':
                     return RecordUploadRoute.BATCH
-                if await _legacy_mode(legacy_mode) is not LegacySyncMode.ON:
-                    # No new owner in dark: intake rechecks eligibility after
-                    # its content fence, then the caller returns its retry fence.
-                    return None
-            legacy_owner = bool(reason) or await _legacy_takes_new_owner(policy, legacy_mode, row.get('language'))
+            legacy_owner = bool(reason) or await _legacy_takes_new_owner(policy, legacy_mode, uid, row.get('language'))
             owner = 'legacy_final_pass_v1' if legacy_owner else 'batch_sync_v1'
             revision = await run_blocking(
                 db_executor,
@@ -239,6 +237,15 @@ async def registered_record_response(
                 return _pending()
             if reason:
                 record_admission_exclusion(language, reason, legacy_available=True)
+            # A fresh legacy claim caused by this conversation's language is a
+            # language exclusion like ``reason``; a narrowed policy is not (the
+            # ramp already recorded its own exclusion).
+            if (
+                evidence is not None
+                and legacy_owner
+                and (reason or (policy.batch_enabled and known_unsupported_batch_language(row.get('language'))))
+            ):
+                evidence.language_excluded = True
             return RecordUploadRoute.BATCH if owner == 'batch_sync_v1' else RecordUploadRoute.LEGACY
         return None
     if byok_enabled or row.get('uses_custom_stt'):
