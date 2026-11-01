@@ -225,6 +225,27 @@ def test_our_own_failures_never_fail_over(store, error):
     assert vendors.calls == ['modulate']
 
 
+def test_terminal_failed_held_carries_its_measured_vad_speech_for_t2(store):
+    artifacts = Artifacts()
+    vendors = Vendors(
+        modulate=[failure(VendorAttemptOutcome.TIMEOUT)], soniox=[failure(VendorAttemptOutcome.ERROR_5XX)]
+    )
+    stage(store, artifacts, vendors).run('p1')
+    assert 'measured_held_vad_speech_seconds' not in job(store)  # failed over: not terminal yet
+    stage(store, artifacts, vendors, now=201.0).run('p1')
+    assert job(store)['recovery_state'] == 'failed_held'
+    assert job(store)['measured_held_vad_speech_seconds'] == 0.5  # SPEECH spans 0.5-1.0 s
+
+
+def test_an_unmeasured_failure_never_invents_vad_speech(store):
+    def broken(*_):
+        raise RecoveryFailure('audio_validation', 'invalid_audio')
+
+    stage(store, Artifacts(), Vendors(), inspect=broken).run('p1')
+    assert job(store)['recovery_state'] == 'failed_held'
+    assert 'measured_held_vad_speech_seconds' not in job(store)
+
+
 def test_validated_empty_fails_over_like_the_held_recovery_second_chance(store):
     artifacts, vendors = Artifacts(), Vendors(modulate=[RecoveryFailure('response_validation', 'empty_asr')])
     stage(store, artifacts, vendors).run('p1')

@@ -39,7 +39,7 @@ from database.outbox import Claim, OutboxKind, Outcome
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline import vendor_route_contracts as contracts
 from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, projection_speech_spans
+from utils.batch_pipeline.contracts import WorkItem, WorkResult, held_vad_census, projection_speech_spans
 from utils.batch_pipeline.recovery_disposition import (
     REASONS,
     STAGES,
@@ -304,6 +304,14 @@ def attempt_outcome_for(failure: RecoveryFailure) -> VendorAttemptOutcome:
     return VendorAttemptOutcome.LOCAL_FAILURE
 
 
+def _record_held_vad(job: dict, speech_seconds: float | None) -> None:
+    """F2: a terminal failed_held unit carries its strict-VAD speech, as quarantine recovery's do, so
+    the T2 observer measures it instead of falling back to the whole duration. Unmeasured stays unset."""
+    measured = held_vad_census(job, speech_seconds)
+    if measured is not None:
+        job['measured_held_vad_speech_seconds'] = measured
+
+
 class ProviderSttStore:
     """Job-row intent fences. Privacy and content ownership use RecoveryStore's checks."""
 
@@ -365,6 +373,7 @@ class ProviderSttStore:
         attempt_outcome: VendorAttemptOutcome | None = None,
         audio_seconds: float = 0.0,
         failover_to: tuple[str, ...] = (),
+        vad_speech_seconds: float | None = None,
     ) -> Literal['settled', 'failover', False]:
         """Settle the running attempt ``token``: a result, a failover back to pending, or terminal.
 
@@ -418,6 +427,7 @@ class ProviderSttStore:
                     quarantined_at=now,
                     recovery_state='failed_held',
                 )
+                _record_held_vad(job, vad_speech_seconds)
             else:
                 job.update(state='result_ready', result=asdict(WorkResult(segment_id, result_uri or '', outcome)))
             owner['revision'] = owner.get('revision', 0) + 1
@@ -427,7 +437,7 @@ class ProviderSttStore:
 
         return self.store.run(commit)
 
-    def terminal(self, segment_id: str, now: float, failure: dict) -> bool:
+    def terminal(self, segment_id: str, now: float, failure: dict, *, vad_speech_seconds: float | None = None) -> bool:
         """Terminal failed-held for a pending unit no vendor may serve any more (attempts spent)."""
 
         def commit(tx):
@@ -445,6 +455,7 @@ class ProviderSttStore:
                 recovery_state='failed_held',
             )
             job.setdefault('provider_intent', {})['failure'] = {'stage': failure['stage'], 'reason': failure['reason']}
+            _record_held_vad(job, vad_speech_seconds)
             owner['revision'] = owner.get('revision', 0) + 1
             tx.put('owners', key, owner)
             tx.put('jobs', segment_id, job)
@@ -527,6 +538,16 @@ _SONIOX_OUTCOMES = {
     'invalid_response': VendorAttemptOutcome.INVALID_RESPONSE,
     'error': VendorAttemptOutcome.ERROR_5XX,
 }
+
+
+def _speech_seconds(inspected: tuple | None) -> float | None:
+    """Strict-VAD speech seconds from ``inspect_audio``'s (pcm, duration, spans), or None."""
+    if not inspected:
+        return None
+    try:
+        return float(sum(span['end'] - span['start'] for span in inspected[2]))
+    except (KeyError, TypeError, ValueError, IndexError):
+        return None
 
 
 def _wav(pcm: bytes) -> bytes:
@@ -822,7 +843,8 @@ class ProviderSttStage:
                 'stage': 'provider',
                 'reason': 'provider_failed',
             }
-            if self.protocol.terminal(segment_id, self.clock(), reason):
+            speech = _speech_seconds(inspected) if failure is None else None
+            if self.protocol.terminal(segment_id, self.clock(), reason, vad_speech_seconds=speech):
                 self._log('failed_held', reason['reason'])
             return UnitOutcome('done', 'processed', provider_reason='provider_failed')
         if failure is not None or inspected is None or not inspected[2] or not self._armed():
@@ -874,6 +896,7 @@ class ProviderSttStage:
                 attempt_outcome=outcome,
                 audio_seconds=audio,
                 failover_to=failover_to,
+                vad_speech_seconds=_speech_seconds(plan.inspected) if plan.failure is None else None,
             )
             if not settled:
                 vendor_metrics.late_result(plan.service, 'ignored')
