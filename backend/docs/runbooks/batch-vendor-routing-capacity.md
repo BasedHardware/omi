@@ -227,6 +227,42 @@ Rollback at any step: vendor routing percent → 0 (or the kill switch), which
 serves the builtin table, today's routing. Units in flight finish on their
 stamped route, and held units keep their audio.
 
+## Overflow when the GPU floor is full
+
+Selection treats GPU as always healthy, so without overflow a saturated ring
+only queues (audio kept, transcripts late) while the HPA buys on-demand nodes.
+Overflow adds one capacity input (`utils/batch_pipeline/gpu_overflow.py`): the
+enqueue age of the oldest *admissible* fresh unit in the ring (same predicate as
+`ready_for_capacity`, so allowance holds and deferred retries never count). At
+`BATCH_VENDOR_OVERFLOW_ENTER_SECONDS` (default 1200) new **fresh** units that
+would start on GPU start on the table's next healthy primary vendor instead
+(reason `gpu_overflow`); below `BATCH_VENDOR_OVERFLOW_EXIT_SECONDS` (default
+600) they go back to GPU. Each process samples every 30 s off the event loop;
+any read failure answers "not saturated" (today's routing).
+
+What never overflows: the GPU floor share (`gpu_floor_percent` owners),
+backfill (recent/deep priority), a language the row has no primary vendor for,
+and anything when the only other healthy route is failover-only (Soniox stays
+failover). Overflow is part of vendor routing: owners must be in the
+vendor-routing cohort with legacy `draining` or `dark`, and every interlock
+above applies.
+
+Table to serve (same JSON on backend-sync and backend-integration):
+`selection: ordered`, rows `gpu_supported: [gpu, modulate, soniox]` and
+`*: [modulate, soniox]`, Soniox `failover_only`, a Modulate
+`daily_audio_hours_cap` as the durable daily budget, and `gpu_floor_percent`
+for the share that always waits for GPU. Arm with env
+`BATCH_VENDOR_ROUTING_PERCENT` (clamped to the batch percent); do not seed
+`batch-vendor-routing` in `_ramp` while the actuator's `ramp_set` predates
+nested names.
+
+Watch: `omi_batch_pipeline_vendor_gpu_overflow_active`,
+`omi_batch_pipeline_vendor_gpu_backlog_age_seconds`,
+`omi_batch_pipeline_vendor_route_decisions_total{reason="gpu_overflow"}` and
+the Modulate audio-hours gauge against its cap. Rollback:
+`BATCH_VENDOR_OVERFLOW_ENABLED=false` keeps vendor routing but stops overflow;
+routing percent → 0 stops both.
+
 ## Plays
 
 **Vendor outage.** Confirm the breaker state
@@ -237,5 +273,6 @@ Leave the floor alone. On close, watch `vendor_held` drain at the queue rate.
 **L4 stockout.** The floor holds and scale-up fails. Do not delete or recreate
 pool nodes, and do not lower the floor to free quota. Deep backlog is
 tolerated; audio is durable while it waits. If the floor itself drops below 4
-Ready (a node lost to maintenance), vendors carry the overflow; check that no
+Ready (a node lost to maintenance), vendors carry the overflow only where
+overflow is armed (section above) and only for fresh units; check that no
 vendor is also unhealthy before expanding any percent.

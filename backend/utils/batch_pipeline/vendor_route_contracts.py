@@ -583,6 +583,9 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
     'BATCH_VENDOR_ROUTING_UID_ALLOWLIST': ('B', 'cohort allowlist; default empty'),
     'BATCH_VENDOR_ROUTING_SHADOW_PERCENT': ('B', 'decisions computed and counted, routing unchanged; default 0'),
     'BATCH_VENDOR_ROUTE_TABLE': ('B', 'runtime RouteTable payload; unset serves BUILTIN_TABLE'),
+    'BATCH_VENDOR_OVERFLOW_ENABLED': ('B', 'ops_kill, on unless false; false never moves a capable unit off GPU'),
+    'BATCH_VENDOR_OVERFLOW_ENTER_SECONDS': ('B', 'fresh GPU backlog age that starts overflow; default 1200'),
+    'BATCH_VENDOR_OVERFLOW_EXIT_SECONDS': ('B', 'fresh GPU backlog age below which overflow stops; default 600'),
     # slice C
     'BATCH_VENDOR_HEALTH_ENABLED': ('C', 'ops_kill, on unless false; false keeps the process-local vendor_guard'),
     'BATCH_VENDOR_HEALTH_THRESHOLDS': ('C', 'runtime breaker thresholds (ops 1.4); unset keeps vendor_guard defaults'),
@@ -601,6 +604,8 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
 
 METRIC_ROUTE_DECISIONS: Final = 'omi_batch_pipeline_vendor_route_decisions_total'  # {route, reason}  B
 METRIC_TABLE_LOADS: Final = 'omi_batch_pipeline_vendor_route_table_loads_total'  # {outcome}  B
+METRIC_GPU_OVERFLOW_ACTIVE: Final = 'omi_batch_pipeline_vendor_gpu_overflow_active'  # B (overflow)
+METRIC_GPU_BACKLOG_AGE: Final = 'omi_batch_pipeline_vendor_gpu_backlog_age_seconds'  # B (overflow)
 METRIC_ATTEMPTS: Final = 'omi_batch_pipeline_vendor_attempts_total'  # {provider, outcome}  D
 METRIC_ATTEMPT_AUDIO: Final = 'omi_batch_pipeline_vendor_attempt_audio_seconds_total'  # {provider, outcome}  D
 METRIC_FAILOVERS: Final = 'omi_batch_pipeline_vendor_failovers_total'  # {from_route, to_route}  D

@@ -8,7 +8,7 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import known_unsupported_batch_language, language_inheritance_enabled, priority_for
+from config.batch_pipeline import Priority, known_unsupported_batch_language, language_inheritance_enabled, priority_for
 from config.batch_language_recovery import inherited_language
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from config.policy import BatchUnitPolicy, resolve_batch_policy
@@ -31,6 +31,7 @@ from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from database.outbox import OutboxKind, outbox_for
+from utils.batch_pipeline import gpu_overflow
 from utils.batch_pipeline.provider_stt import provider_enqueue
 from utils.batch_pipeline.route_selection import select_route
 from utils.sync import legacy_dark
@@ -480,13 +481,15 @@ async def accept_upload(
         if inherited:
             input_language = inherited
         # All-vendor routing: outside its cohort, with its kill switch off, or while this
-        # owner's legacy is on, this is resolve_route exactly (today's routing).
+        # owner's legacy is on, this is resolve_route exactly (today's routing). Only fresh
+        # units may overflow to a vendor when the GPU ring is past its SLO; backfill waits.
         route = select_route(
             language,
             byok=byok_enabled,
             uid=uid,
             batch_percent=policy.batch_percent,
             vendor_eligible=mode is not LegacySyncMode.ON,
+            gpu_saturated=(lambda: gpu_overflow.saturated(store)) if seed.priority == Priority.FRESH else None,
         ).route
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback; inside the
