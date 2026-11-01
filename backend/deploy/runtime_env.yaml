@@ -3145,6 +3145,16 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+            ENRICHMENT_TASKS_QUEUE:
+              value: enrichment
+              category: reliability
+            ENRICHMENT_TASKS_HANDLER_URL:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: reliability
+            ENRICHMENT_TASKS_OIDC_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: service_auth
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
               category: service_discovery
@@ -3538,6 +3548,25 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+            ENRICHMENT_TASKS_QUEUE:
+              value: enrichment
+              category: reliability
+            ENRICHMENT_TASKS_HANDLER_URL:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: reliability
+            ENRICHMENT_TASKS_OIDC_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: service_auth
+            PROVIDER_STT_TASKS_QUEUE:
+              value: provider-stt
+              category: reliability
+            PROVIDER_STT_TASKS_HANDLER_URL:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app
+              category: reliability
+            PROVIDER_STT_TASKS_OIDC_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app
+              category: service_auth
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
               category: service_discovery
@@ -3911,6 +3940,16 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+            ENRICHMENT_TASKS_QUEUE:
+              value: enrichment
+              category: reliability
+            ENRICHMENT_TASKS_HANDLER_URL:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: reliability
+            ENRICHMENT_TASKS_OIDC_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: service_auth
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
@@ -4225,6 +4264,25 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+            ENRICHMENT_TASKS_QUEUE:
+              value: enrichment
+              category: reliability
+            ENRICHMENT_TASKS_HANDLER_URL:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: reliability
+            ENRICHMENT_TASKS_OIDC_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: service_auth
+            PROVIDER_STT_TASKS_QUEUE:
+              value: provider-stt
+              category: reliability
+            PROVIDER_STT_TASKS_HANDLER_URL:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app
+              category: reliability
+            PROVIDER_STT_TASKS_OIDC_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app
+              category: service_auth
             BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill

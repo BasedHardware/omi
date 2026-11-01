@@ -148,10 +148,21 @@ cloud_tasks:
     max_backoff: 60s
     log_sampling_ratio: 0.1
   enrichment:
-    # Contract (a)/(d), lane 9. Created by the first prod config-train at M3.
-    enabled: false
+    # Contract (a)/(d), lane 9: plan C3's queue for new sr- obligations (ENRICHMENT_ROUTE=enrichment_queue).
+    # Created by the config-train before the backend roll that sets the route (planc, Plan C prod activation).
     max_concurrent_dispatches: 50
     max_dispatches_per_second: 25
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
+  provider-stt:
+    # Plan C8: provider-STT wakes for BYOK and non-Parakeet units, served by backend-integration. Idle while
+    # legacy_sync=on (the provider route needs draining/dark); it must exist before draining
+    # (DRAINING_PRECONDITIONS provider_stt_live). At 100% about 205k units/day take this route (2.4/s mean);
+    # 48 concurrent / 10 per second covers a 2x peak at ~10s per vendor call. One paid call per unit is
+    # enforced by the outbox intent, not by queue attempts.
+    max_concurrent_dispatches: 48
+    max_dispatches_per_second: 10
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
