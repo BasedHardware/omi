@@ -2395,6 +2395,21 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          LISTEN_FINALIZATION_REPLAY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          LISTEN_FINALIZATION_TASKS_QUEUE:
+            value: conversation-finalization
+            category: reliability
+          LISTEN_FINALIZATION_TASKS_HANDLER_URL:
+            value: https://backend-sync-hhibjajaja-uc.a.run.app/v1/conversation-finalization-jobs/run
+            category: reliability
+          LISTEN_FINALIZATION_TASKS_INVOKER_SA:
+            value: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            category: reliability
+          LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS:
+            value: '5'
+            category: reliability
           OMI_FLAGS_FIRESTORE_PROJECT:
             value: based-hardware
             category: service_discovery

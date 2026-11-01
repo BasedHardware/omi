@@ -371,6 +371,17 @@ env:
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
+  # Replay-only binding: keep live/stale-conversation admission in inline mode.
+  - name: LISTEN_FINALIZATION_REPLAY_ENABLED
+    value: "true"
+  - name: LISTEN_FINALIZATION_TASKS_QUEUE
+    value: "conversation-finalization"
+  - name: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+    value: "https://backend-sync-hhibjajaja-uc.a.run.app/v1/conversation-finalization-jobs/run"
+  - name: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+    value: "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+  - name: LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS
+    value: "5"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
