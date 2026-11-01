@@ -39,7 +39,7 @@ from database.batch_pipeline_privacy import (
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 # Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: keep the model import-light).
-PROVIDER_STATES = frozenset({'provider_pending', 'provider_running'})
+PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 T = TypeVar('T')
 
@@ -128,6 +128,10 @@ class SimTransaction:
             raise ValueError('only the conversation route owner may be patched by admission')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
+    def defer_set(self, ref: Any, value: dict) -> None:
+        # Same surface as FirestoreTransaction.defer_set; the sim has no Firestore document to join.
+        raise NotImplementedError('joining Firestore documents need the Firestore transaction')
+
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
 
@@ -213,8 +217,8 @@ class SimStore:
                 if table == 'jobs' and row.get('priority') == priority and row.get('state') == 'ready'
             ]
             return min(values) if values else None
-        # Mirrors database.batch_pipeline_store.oldest: a bounded FIFO prefix walked past allowance holds.
-        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold
+        # Mirrors database.batch_pipeline_store.oldest: a bounded FIFO prefix walked past policy holds.
+        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_policy_hold
 
         rows = sorted(
             (row['enqueued_at'], key, row)
@@ -223,7 +227,7 @@ class SimStore:
         )
         oldest_hold = None
         for enqueued_at, _, row in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
-            if not is_allowance_policy_hold(row):
+            if not is_policy_hold(row):
                 return enqueued_at
             oldest_hold = enqueued_at if oldest_hold is None else oldest_hold
         return oldest_hold if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
@@ -238,6 +242,20 @@ class SimStore:
             and (row.get('compute_decision') or {}).get('outcome') in {'unattempted', 'allowed'}
             and row.get('available_at', float('inf')) <= now
         )
+
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        """Mirrors database.batch_pipeline_store.oldest_admissible_ready."""
+        from database.batch_pipeline_store import ADMISSIBLE_READY_SCAN_LIMIT, is_admissible_ready
+
+        rows = sorted(
+            (row['enqueued_at'], segment_id, row)
+            for segment_id in self._by_state.get('ready', ())
+            if (row := self.rows[('jobs', segment_id)]).get('priority') == priority
+        )
+        for enqueued_at, _, row in rows[:ADMISSIBLE_READY_SCAN_LIMIT]:
+            if is_admissible_ready(row, now):
+                return enqueued_at
+        return None
 
     def oldest_retry(self, priority: int) -> float | None:
         values = [

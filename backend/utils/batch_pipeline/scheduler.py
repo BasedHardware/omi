@@ -406,13 +406,13 @@ class Scheduler:
                     break
                 receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
                 if receipts:
-                    for _, enqueued_at in receipts:
+                    for _, enqueued_at, relet in receipts:
                         if self.metrics:
                             try:
-                                self.metrics.record('leased', wait_seconds=now - enqueued_at)
+                                self.metrics.record('leased', wait_seconds=now - enqueued_at, relet=relet)
                             except Exception:
                                 pass  # Metrics cannot turn an issued lease into a failed pull.
-                    return [lease for lease, _ in receipts]
+                    return [lease for lease, _, _ in receipts]
                 if eligible == 'reserved':
                     return []
                 if eligible == 'busy':
@@ -582,7 +582,14 @@ class Scheduler:
                 tx.put('jobs', job['segment_id'], job)
                 control[field(int(priority), 'service')] += cost / owner_count
                 item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
-                receipts.append((LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']))
+                # defer() refunds the attempt, so an admission-deferred re-lease
+                # is a relet only through its admission_refusals streak; a
+                # charged attempt (> 1 after this lease's increment) marks every
+                # other re-lease.
+                relet = job.get('admission_refusals', 0) > 0 or job['attempt'] > 1
+                receipts.append(
+                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at'], relet)
+                )
                 # The owner's next head is a different unit: it gets its own
                 # privacy, policy and pool checks before it can be leased.
                 eligible_queues.pop(queue_key, None)
@@ -786,7 +793,10 @@ class Scheduler:
         deferred = self.store.run(commit)
         if deferred and admission_refused and self.metrics:
             try:
-                self.metrics.record('admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred')
+                self.metrics.record(
+                    'admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred',
+                    reason=held_reason,
+                )
             except Exception:
                 pass  # Metrics cannot turn a committed defer into a retry.
         return deferred

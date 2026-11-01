@@ -28,6 +28,7 @@ from config.batch_pipeline import (
     long_speech_handoff_enabled,
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
+    strict_vad_shadow_sampled,
     worker_io_concurrency,
     worker_silence_disposition_enabled,
     worker_validation_disposition_enabled,
@@ -445,7 +446,7 @@ class PipelineWorker:
         except Exception:
             stream = None
         strict_silent = None
-        if not item.shadow:
+        if not item.shadow and strict_vad_shadow_sampled(item.segment_id):
             try:
                 started = time.thread_time()
             except Exception:
@@ -893,7 +894,10 @@ class PipelineWorker:
                                 raise
                             spans = []
                     shapes[item.segment_id]['vad_spans'] = len(spans)
-                    if not item.shadow:
+                    # The sampling predicate is deterministic by segment hash, so
+                    # this re-evaluation agrees with the decode-time decision;
+                    # unsampled units emit no shadow counters at all.
+                    if not item.shadow and strict_vad_shadow_sampled(item.segment_id):
                         try:
                             worker_metrics.strict_vad(
                                 strict_shadow.get(item.segment_id) if pyannote_observed else None, bool(spans)

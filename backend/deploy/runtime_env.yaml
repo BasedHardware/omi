@@ -23,10 +23,9 @@ environments:
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -361,10 +360,9 @@ environments:
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -666,7 +664,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -715,6 +713,7 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - REPEAT_WORK_REVISION_ENABLED
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -769,7 +768,6 @@ environments:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
@@ -824,7 +822,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1033,7 +1031,6 @@ environments:
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
@@ -1094,7 +1091,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1147,9 +1144,7 @@ environments:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
-            SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'false'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'false'}
             USE_VERTEX_AI:
               value: 'true'
             SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
@@ -1295,6 +1290,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
         backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
@@ -1326,7 +1324,6 @@ environments:
               value: '8'
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
@@ -1381,7 +1378,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1434,9 +1431,7 @@ environments:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
-            SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'false'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'false'}
             USE_VERTEX_AI:
               value: 'true'
             SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
@@ -1574,6 +1569,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
         backend-integration:
           flags:
             --timeout: 3600s
@@ -1601,7 +1599,6 @@ environments:
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
@@ -1655,7 +1652,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1808,6 +1805,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
       jobs:
         notifications-job:
           flags:
@@ -1830,7 +1830,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1897,7 +1897,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1950,7 +1950,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2007,7 +2007,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2099,10 +2099,9 @@ environments:
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2285,7 +2284,7 @@ environments:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
-            value: http://172.16.160.20/diarizer
+            value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
           LISTEN_QUIET_FINALIZATION_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2344,7 +2343,7 @@ environments:
               key: MCP_OAUTH_CHATGPT_CLIENT_ID
           HOSTED_TRANSLATION_API_URL:
             category: service_discovery
-            value: http://172.16.160.20/nllb
+            value: http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080
           RAPID_API_HOST:
             config_map:
               name: prod-omi-backend-config
@@ -2418,9 +2417,9 @@ environments:
             category: service_discovery
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
-          SONIOX_IDLE_COHORT_CLOSE_SECONDS: {value: '20', category: rollout}
-          SONIOX_IDLE_COHORT_REARM_SECONDS: {value: '15', category: rollout}
-          SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR: {value: '20', category: rollout}
+          SONIOX_IDLE_COHORT_CLOSE_SECONDS: {value: '10', category: rollout}
+          SONIOX_IDLE_COHORT_REARM_SECONDS: {value: '2', category: rollout}
+          SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR: {value: '120', category: rollout}
           PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
             value: 'false'
             category: ops_kill
@@ -2540,10 +2539,9 @@ environments:
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2594,7 +2592,7 @@ environments:
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
-            value: http://172.16.160.20/diarizer
+            value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -2794,7 +2792,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2859,6 +2857,8 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -2940,7 +2940,6 @@ environments:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
@@ -2982,20 +2981,20 @@ environments:
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
-            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
-            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
+            BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3278,7 +3277,6 @@ environments:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_DURABLE_STATUS_RECONCILIATION: {value: 'true', category: rollout}
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL
@@ -3319,7 +3317,6 @@ environments:
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
@@ -3361,13 +3358,13 @@ environments:
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
-            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
-            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
+            BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
@@ -3380,7 +3377,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3433,9 +3430,7 @@ environments:
               value: 'on'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
-            SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'true'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'true'}
             USE_VERTEX_AI:
               value: 'true'
             SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
@@ -3599,6 +3594,7 @@ environments:
               category: reliability
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+            DREAM_STATE_PASS_MODE: {value: shadow, category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
@@ -3695,6 +3691,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync-backfill:
           secrets:
@@ -3724,7 +3723,6 @@ environments:
               value: '8'
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
@@ -3766,20 +3764,20 @@ environments:
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
-            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
-            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
+            BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3832,9 +3830,7 @@ environments:
               value: 'on'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
-            SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'true'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'true'}
             USE_VERTEX_AI:
               value: 'true'
             SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
@@ -3973,6 +3969,7 @@ environments:
               value: '8'
               category: reliability
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+            DREAM_STATE_PASS_MODE: {value: shadow, category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
@@ -4066,6 +4063,9 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - SYNC_REPROCESS_COALESCE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-integration:
           flags:
@@ -4094,7 +4094,6 @@ environments:
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
@@ -4135,20 +4134,20 @@ environments:
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
-            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
-            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
+            BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4303,6 +4302,9 @@ environments:
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
+            POSTPROCESS_EXECUTOR_WORKERS:
+              value: '64'
+              category: reliability
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
@@ -4344,7 +4346,6 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -4354,6 +4355,8 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       jobs:
         notifications-job:
@@ -4377,7 +4380,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4439,7 +4442,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4493,7 +4496,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4549,7 +4552,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}

@@ -64,7 +64,7 @@ shape_flags() {
     backend) echo "--concurrency=20 --cpu=2 --memory=8Gi --timeout=3600 --ingress=all" ;;
     backend-sync) echo "--concurrency=20 --cpu=2 --memory=6Gi --timeout=3600 --ingress=all" ;;
     backend-sync-backfill) echo "--concurrency=6 --cpu=2 --memory=4Gi --timeout=1500 --ingress=all" ;;
-    backend-integration) echo "--concurrency=40 --cpu=2 --memory=2Gi --ingress=all" ;;
+    backend-integration) echo "--concurrency=80 --cpu=2 --memory=4Gi --ingress=all" ;;
     *) return 1 ;;
   esac
 }

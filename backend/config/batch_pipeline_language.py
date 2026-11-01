@@ -20,6 +20,17 @@ def admission_language_exclusion_enabled() -> bool:
     )
 
 
+def admission_language_sample_enabled() -> bool:
+    """Ship-on; an unknown-multilingual upload is admitted only after its first unit's LID is Parakeet-safe.
+
+    Explicit false restores the full exclusion (every such upload stays on legacy).
+    """
+    return default_on(
+        'BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED',
+        os.getenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def batch_admission_language(user: dict, conversation: dict) -> tuple[str | None, str | None]:
     """Return the declared language or a bounded exclusion reason.
 

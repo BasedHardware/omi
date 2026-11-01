@@ -116,6 +116,29 @@ store lookup and retain their existing response. Cohort intake failures return
 202 and append after the committed log tail, preserving their capture clocks.
 BYOK cohorts receive a retryable refusal until their worker path is qualified.
 
+### Multi-vendor provider stage: arming and rollback
+
+The C8 provider-STT stage (`utils/batch_pipeline/provider_stt.py`) fails a vendor-side
+failure over to one other vendor the route table lists, and parks a unit in
+`vendor_held` (audio and owner order kept) when no permitted vendor is healthy.
+A worker built before this stage mishandles both states. It re-calls the
+admitted vendor on a failed-over `provider_pending` unit, and it acknowledges
+a `vendor_held` unit, which strands it. So both transitions arm only while a
+configured `BATCH_VENDOR_ROUTE_TABLE` is served.
+
+- **Arm:** serve a configured table only after every provider-STT worker
+  (backend-integration) runs this build.
+- **Disarm:** unset `BATCH_VENDOR_ROUTE_TABLE`. Every failure then stays
+  terminal `failed_held` as before. Existing holds still redrive.
+- **Roll back past this build:** disarm first. Then wait until no `vendor_held`
+  unit and no `provider_pending` unit with a settled `provider_attempts` entry
+  remains. Failed-over pending units are redelivered immediately, so this
+  normally takes seconds; holds redrive within `BATCH_VENDOR_HELD_REDRIVE_SECONDS`.
+- **Kill switches:** `BATCH_VENDOR_FAILOVER_ENABLED=false` makes a failed
+  attempt terminal and batch LID vendor-only. `BATCH_VENDOR_HELD_REDRIVE_ENABLED=false`
+  parks holds. They then go stale after `BATCH_VENDOR_HELD_STALE_GRACE_SECONDS`,
+  and the guards measure them again.
+
 ## Internal worker RPC
 
 Routes under `/v2/batch-pipeline` require Google service OIDC with exact verified
@@ -972,7 +995,10 @@ repeated failures at the front of the page from monopolizing those slots.
 A separate advisory segment claim coalesces replicas; it never owns the
 assignment watermark. Each bridge, playback and enrichment step is offloaded
 separately. After playback a second bridge check copies any late donor audio
-if a concurrent assignment redirected the target. Native records retain their
+if a concurrent assignment redirected the target. If the staged batch object
+is already gone (`NotFound`), playback closes like an input with no surviving
+segments and counts `omi_batch_artifact_missing_total{site=playback}`; a retry
+cannot restore deleted bytes. Native records retain their
 fixed target behavior. Privacy checks and the original retained-audio policy
 remain in effect. Enrichment and the ready receipt still commit together;
 usage/client/content completion still requires every sibling ready and commits

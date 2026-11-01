@@ -1692,6 +1692,7 @@ class TestAsyncCoordinatorBehavioral:
     def fenced_worker_module(self, monkeypatch):
         # This harness fakes the eager worker; hold scheduling is exercised by the consumer tests.
         monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+        monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'false')
         """Build the import-heavy behavioral harness outside the test call budget."""
         module, stubs = self._load_sync_module()
         # Release prior cyclic mock graphs during harness setup, so a full-heap
@@ -4035,7 +4036,8 @@ class TestBulkheadExecutors:
         assert 'sync_executor = MonitoredThreadPoolExecutor(' in source
         assert 'max_workers=16' in source
         assert 'postprocess_executor = MonitoredThreadPoolExecutor(' in source
-        assert 'max_workers=24' in source
+        # Default 24; backend-integration sets POSTPROCESS_EXECUTOR_WORKERS (prod overlay).
+        assert "max_workers=int(os.getenv('POSTPROCESS_EXECUTOR_WORKERS', '24'))" in source
         assert 'storage_executor = MonitoredThreadPoolExecutor(' in source
         assert 'max_workers=128' in source
 

@@ -8,6 +8,7 @@ from prometheus_client import Counter
 
 from config.policy.ramp import OPEN_WINDOW_SECONDS, READ_LIMIT, exclusion_enabled, exclusion_reason, owner_load
 from database._client import get_data_plane_firestore_client
+from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from utils.sync.stage import current_stage
 
 logger = logging.getLogger(__name__)
@@ -62,13 +63,22 @@ def read_owner_load(uid, *, firestore_client=None, now=None, incoming_audio_seco
 
 
 def ramp_admission_policy(
-    uid, policy, *, incoming_audio_seconds=0, firestore_client=None, content_id=None, conversation_id=None
+    uid,
+    policy,
+    *,
+    incoming_audio_seconds=0,
+    firestore_client=None,
+    content_id=None,
+    conversation_id=None,
+    evidence: IntakeRouteEvidence | None = None,
 ):
     """Filter only a new admission. Callers must honour prior durable owners first.
 
     Outside a partial ramp or with the kill switch off this does no reads.
     Read failures keep new work on the existing legacy path. They cannot cancel
-    or reroute previously accepted batch work.
+    or reroute previously accepted batch work. ``evidence`` records only this
+    request's owner-load exclusion for the caller's intake outcome counter; the
+    durable-owner returns above are prior decisions, not fresh exclusions.
     """
     if not policy.batch_enabled or not exclusion_enabled(policy.batch_percent):
         return policy
@@ -99,6 +109,8 @@ def ramp_admission_policy(
     reason = exclusion_reason(load)
     if reason is None:
         return policy
+    if evidence is not None:
+        evidence.heavy_owner_excluded = True
     EXCLUDED.labels(
         reason=(
             'open_backlog'

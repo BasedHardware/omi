@@ -194,7 +194,13 @@ class FirestoreProviderSttOutbox:
             old = snapshot.to_dict() if snapshot.exists else None
             new, (coalesced, row) = upsert(old)
             if new != old:
-                transaction.set(ref, new)
+                # Inside the batch admission view the set waits for its flush: a write here would make
+                # every later read of that transaction a read-after-write, which Firestore refuses.
+                defer = getattr(tx, 'defer_set', None)
+                if defer is not None:
+                    defer(ref, new)
+                else:
+                    transaction.set(ref, new)
         token = None if coalesced else row['task_token']
         if token and tx is None:
             try:

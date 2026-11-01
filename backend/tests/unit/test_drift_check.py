@@ -455,7 +455,7 @@ def test_prod_source_model_reads_deploy_flags_and_the_ops_file():
     model = dc.source_model('prod')
 
     integration = model['backend-integration']
-    assert integration.scale['revision_min'] == 3 and integration.scale['concurrency'] == 40
+    assert integration.scale['revision_min'] == 3 and integration.scale['concurrency'] == 80
     assert integration.ops_env['SUMMARY_DEBT_REPAIR_ENABLED'] == 'true'
     # The workflow's env-scoped backend_sync_memory fallback reaches the source model, so a
     # future regression of the prod 6Gi costcut is drift, not silence.

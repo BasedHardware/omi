@@ -7,6 +7,7 @@ import time
 from models.agent_tools import VerificationBatch
 from models.agent_refs import base_ref, cited_value
 from utils.agent_capabilities import verifiers
+from utils.agent_capabilities.evidence import model_view
 from utils.agent_capabilities.session import serialized_bytes
 from utils.llm.shaped_agent import Budget, Mount, run_loop
 
@@ -50,7 +51,7 @@ def minimal_context(ref, records):
     if not ref.startswith('conversations/'):
         # A memory/task/person is already a small cited record. Its provenance,
         # subject, dates and protection metadata are relevant to verification.
-        return cited_value(ref, records)
+        return model_view(ref, cited_value(ref, records))
     fields = ('id', 'status', 'created_at', 'started_at', 'finished_at', 'language', 'structured')
     context = {key: row[key] for key in fields if key in row}
     segments = row.get('transcript_segments') or []

@@ -285,6 +285,7 @@ def test_held_gate_blocks_transcript_vector_delete_before_provider_io(store, mon
     setup(store, monkeypatch)
     provider = Mock()
     monkeypatch.setattr(vector_db, 'index', provider)
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, 'default_db_client', store)
     store.rows[('legal_hold_deletion_gates', UID)] = {
         'schema_version': 'legal_hold_deletion_gate.v1',
@@ -310,6 +311,7 @@ def test_committed_transcript_gate_retry_finishes_vector_projection(store, monke
     provider = Mock()
     provider.list.return_value = [['synthetic-old-chunk']]
     monkeypatch.setattr(vector_db, 'index', provider)
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, 'default_db_client', store)
     embed = Mock(return_value=[[0.1]])
     monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_documents=embed))
@@ -355,6 +357,7 @@ def test_committed_transcript_gate_retry_keeps_applied_when_repair_fails(store, 
     provider = Mock()
     provider.list.return_value = [['synthetic-old-chunk']]
     monkeypatch.setattr(vector_db, 'index', provider)
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, 'default_db_client', store)
     attempts = []
 

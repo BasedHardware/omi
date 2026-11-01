@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 from pinecone import Pinecone
 
+from database.pinecone_partition_index import owner_index
+
 load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
 
@@ -30,7 +32,7 @@ openai_embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
 def query_vectors(query: str, uid: str, k: int = 1000) -> List[List[Any]]:
     xq = openai_embeddings.embed_query(query)
-    xc = index.query(vector=xq, top_k=k, filter={'uid': uid}, namespace="ns1", include_values=True)
+    xc = owner_index(index, uid).query(vector=xq, top_k=k, filter={'uid': uid}, namespace="ns1", include_values=True)
     data: List[List[Any]] = []
     for item in xc['matches']:
         data.append([item['id'].replace(f'{uid}-', ''), item['values']])

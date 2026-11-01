@@ -7,7 +7,7 @@ deploy-action flags, the ops-train values and the staging shape -- to the
 costcut values, so the next train can no longer silently revert them.
 
 Live reference (ro-prod, 2026-10-24 22:50Z): backend 8Gi/cpu 2/concurrency 20/
-min 3/max 100; backend-sync 6Gi/cpu 2/min 5/max 40 (syncwall source cap); backend-sync-backfill
+min 3/max 100; backend-sync 6Gi/cpu 2/min 5/max 30 (11-01 G1 source cap; was 40); backend-sync-backfill
 4Gi/cpu 2/concurrency 6/min 0 (cap redis_guard-bounded, live 16);
 backend-integration 2Gi/cpu 2/concurrency 40/min 3/max 50.
 """
@@ -58,7 +58,8 @@ def test_prod_deploy_flags_match_the_live_right_sizing():
     )
 
     integration = model['backend-integration'].scale
-    assert (integration['memory'], integration['cpu'], integration['concurrency']) == ('2Gi', '2', 40)
+    # 2026-11-01 packing (#24308): LLM-bound enrichment runs 80 per instance with 64 postprocess threads.
+    assert (integration['memory'], integration['cpu'], integration['concurrency']) == ('4Gi', '2', 80)
     assert (integration['revision_min'], integration['revision_max']) == (3, 50)
 
 
@@ -66,7 +67,7 @@ def test_ops_train_values_match_the_live_right_sizing():
     model = dc.source_model('prod')
 
     sync = model['backend-sync'].ops_scale
-    assert (sync['service_min'], sync['service_max']) == (5, 40)
+    assert (sync['service_min'], sync['service_max']) == (5, 30)
 
     # redis_guard owns the backfill cap between its bounds (live 16).
     backfill = model['backend-sync-backfill'].ops_scale

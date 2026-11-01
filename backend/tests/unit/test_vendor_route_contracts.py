@@ -82,8 +82,9 @@ def test_vendor_capability_is_code_owned_policy_admission():
     for service in c.VENDOR_SERVICES:
         assert c.route_capable(service, 'en') == provider_is_enabled(service, STTServingSurface.PRERECORDED)
     assert not c.route_capable('deepgram', 'en')
-    # Pinned on purpose: Soniox failover needs slice D's reviewed prerecorded admission, not a table edit.
-    assert not c.route_capable('soniox', 'en')
+    # Pinned on purpose: Soniox failover comes from slice D's reviewed prerecorded admission, not a table
+    # edit; tables still mark it failover_only (RouteConfig), so selection never picks it as cheapest.
+    assert c.route_capable('soniox', 'en')
     assert c.route_capable('gpu', None)  # unknown is multi, which Parakeet serves
     assert not c.route_capable('gpu', 'ja')
 
@@ -379,7 +380,7 @@ def test_flag_names_are_owned_by_one_slice():
 
 def test_metric_names_are_frozen_kept_and_backed_by_collectors():
     names = {value for key, value in vars(c).items() if key.startswith('METRIC_')}
-    assert len(names) == 15
+    assert len(names) == 17  # 15 frozen by slice A + 2 GPU-overflow gauges (slice B follow-up)
     assert all(name.startswith('omi_batch_pipeline_vendor_') for name in names)
     collected = {collector._name for collector in m.COLLECTORS}
     assert {name.removesuffix('_total') for name in names} == collected

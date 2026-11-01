@@ -41,7 +41,7 @@ import database.jobstore.codec as codec
 from database.jobstore.connection import Pool
 
 # Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: that module pulls in Firestore).
-PROVIDER_STATES = frozenset({'provider_pending', 'provider_running'})
+PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 T = TypeVar('T')
 
@@ -140,6 +140,11 @@ class PostgresTransaction:
             raise ValueError('only the conversation route owner may be patched by admission')
         self.store.require_table(table)
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
+
+    def defer_set(self, ref: Any, value: dict) -> None:
+        # A joining Firestore document (the provider-STT outbox row) commits only inside a Firestore
+        # admission transaction; this backend has none to make it atomic with.
+        raise NotImplementedError('joining Firestore documents need the Firestore transaction')
 
     def first_pending(self, owner_key: str) -> dict | None:
         row = self.store.first_pending_in(self.conn, owner_key)
@@ -257,8 +262,8 @@ class PostgresStore:
                     (self.namespace, priority),
                 ).fetchone()
             return row[0]
-        # The uncommitted-age proxy walks a bounded FIFO prefix past allowance holds, as on Firestore.
-        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold
+        # The uncommitted-age proxy walks a bounded FIFO prefix past policy holds, as on Firestore.
+        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_policy_hold
 
         with self._read_conn() as conn:
             rows = conn.execute(
@@ -268,7 +273,7 @@ class PostgresStore:
             ).fetchall()
         oldest_hold = None
         for enqueued_at, doc in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
-            if not is_allowance_policy_hold(doc):
+            if not is_policy_hold(doc):
                 return enqueued_at
             oldest_hold = enqueued_at if oldest_hold is None else oldest_hold
         # Truncated by the sentinel row: fail toward the oldest hold's age, never a false fresh zero.
@@ -284,6 +289,18 @@ class PostgresStore:
                 (self.namespace, priority, now),
             ).fetchone()
         return int(row[0])
+
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        """A bounded ready prefix walked past holds and deferred rows, as on Firestore."""
+        from database.batch_pipeline_store import ADMISSIBLE_READY_SCAN_LIMIT, is_admissible_ready
+
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND state = 'ready' "
+                'ORDER BY enqueued_at, key COLLATE "C" LIMIT %s',
+                (self.namespace, priority, ADMISSIBLE_READY_SCAN_LIMIT),
+            ).fetchall()
+        return next((enqueued_at for enqueued_at, doc in rows if is_admissible_ready(doc, now)), None)
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # A hint read outside any transaction; rows without ready_at never match (Firestore order_by semantics).
