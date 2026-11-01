@@ -4,6 +4,7 @@ Current source closure, with minimal-redrive-only behavior removed.
 No legacy upload admission, sequencer or job coordinator remains here.
 """
 
+from __future__ import annotations
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
