@@ -28,7 +28,7 @@ spec:
   # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
   # before new ones start, so the deadline covers drain plus startup.
   progressDeadlineSeconds: 2400
-  {{- $replicas := .Values.replicaCount }}
+  {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
   {{- if .Values.autoscaling.enabled }}
   {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
   {{- if $current }}
@@ -54,21 +54,10 @@ spec:
         app.kubernetes.io/instance: {{ .instance.name }}
     spec:
       serviceAccountName: {{ required "dedicated Workload Identity serviceAccountName required" .Values.serviceAccountName }}
-      terminationGracePeriodSeconds: 1500
-      {{- $selector := .instance.nodeSelector }}
-      {{- if .Values.borrowedNodePools.enabled }}
-      {{- $own := index $selector "cloud.google.com/gke-nodepool" | default "" }}
-      {{- $borrowed := .Values.borrowedNodePools.pools | default list }}
-      {{- if or (not $own) (empty $borrowed) .Values.autoscaling.balancedPools.enabled }}
-      {{- fail "borrowedNodePools needs a nodeSelector pool, a non-empty pools list and no balancedPools" }}
-      {{- end }}
-      {{- range $borrowed }}
-      {{- if or (eq . $own) (contains "spot" .) }}
-      {{- fail "borrowedNodePools.pools must be other on-demand pools" }}
-      {{- end }}
-      {{- end }}
-      {{- /* The pool label moves to affinity; `service` differs per pool. */}}
-      {{- $selector = omit $selector "cloud.google.com/gke-nodepool" "service" }}
+      {{- if .instance.borrowedPools }}
+      # Borrowed nodes must come back to their owner fast: a preempted borrower
+      # stops within this bound and its leases retry elsewhere.
+      terminationGracePeriodSeconds: {{ .instance.terminationGracePeriodSeconds }}
       priorityClassName: {{ printf "%s-borrower" .Release.Name }}
       affinity:
         nodeAffinity:
@@ -77,16 +66,11 @@ spec:
               - matchExpressions:
                   - key: cloud.google.com/gke-nodepool
                     operator: In
-                    values: {{ prepend $borrowed $own | toJson }}
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: cloud.google.com/gke-nodepool
-                    operator: In
-                    values: [{{ $own | quote }}]
+                    values: {{ .instance.borrowedPools | toJson }}
+      {{- else }}
+      terminationGracePeriodSeconds: 1500
       {{- end }}
-      {{- with $selector }}
+      {{- with .instance.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
