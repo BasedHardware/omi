@@ -189,6 +189,13 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
             ),
             "jiter": ("jiter", "jiter.jiter"),
         }
+        # CPython's ``_zoneinfo`` keeps its caches in C globals owned by the module
+        # object: ``m_free`` clears them once an evicted copy is finalized, but the
+        # static ``ZoneInfo`` type survives in every module that already imported
+        # it, so a later ``ZoneInfo(...)`` call goes through a null pointer and
+        # raises ``SystemError: null argument to internal routine``. The whole
+        # stdlib family therefore stays loaded once the C accelerator appears.
+        _zoneinfo_family = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
         extra_names = list(sys.modules.keys() - saved_keys)
         preserve_for_import_safety: set[str] = set()
         extra_name_set = set(extra_names)
@@ -208,6 +215,8 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
                         preserve_for_import_safety.add(companion_name)
                 elif _has_existing_file_origin(companion):
                     preserve_for_import_safety.add(companion_name)
+        if "_zoneinfo" in extra_name_set:
+            preserve_for_import_safety.update(name for name in _zoneinfo_family if name in extra_name_set)
         for extra in extra_names:
             if extra in preserve_for_import_safety:
                 continue

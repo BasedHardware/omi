@@ -287,6 +287,30 @@ def test_stub_modules_preserves_allowlisted_jiter_extension_with_existing_origin
     assert fake_package.jiter is fake_extension
 
 
+def test_stub_modules_keeps_stdlib_zoneinfo_family_loaded():
+    """First import of ``zoneinfo`` inside a stub block must not be evicted.
+
+    Regression for the CI flake ``test_memory_tools_sanitization`` failing with
+    ``SystemError: null argument to internal routine`` from ``ZoneInfo('UTC')``:
+    finalizing an evicted ``_zoneinfo`` module tears down the C state its
+    ``ZoneInfo`` type still runs on, so constructing the class afterwards raises
+    the internal error instead of resolving a zone.
+    """
+    zoneinfo_names = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+    originals = {name: sys.modules.pop(name) for name in zoneinfo_names if name in sys.modules}
+    try:
+        with stub_modules({}):
+            fresh_zoneinfo = importlib.import_module("zoneinfo")
+        for name in zoneinfo_names:
+            assert name in sys.modules, "evicting the _zoneinfo family corrupts the surviving ZoneInfo type"
+        assert fresh_zoneinfo.ZoneInfo("UTC").key == "UTC"
+    finally:
+        # With the fix the freshly imported family stays loaded; evicting it here
+        # would reintroduce the hazard this test guards against.
+        for name, module in originals.items():
+            sys.modules.setdefault(name, module)
+
+
 @pytest.fixture
 def atom_keyword_index_with_top_level_typesense_only():
     module_path = Path(__file__).resolve().parents[2] / "utils" / "memory" / "atom_keyword_index.py"
