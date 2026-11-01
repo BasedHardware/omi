@@ -87,6 +87,7 @@ class ProjectionFollowups:
         # cursor. They wait for the next discovery pass and join behind its page,
         # so they never jump discovered work and never keep discovery from running.
         for segment in tail:
+            self.forget_page(segment)  # Owed recovery work always probes completion.
             if segment in self.owed:
                 continue
             if len(self.owed) < MAX_OWED:
@@ -101,7 +102,7 @@ class ProjectionFollowups:
             # once the queue drains.
             first = [segment for segment in dict.fromkeys(priority) if segment not in self.tasks]
             for segment in first:
-                self.pages.pop(segment, None)  # Targeted recovery wakes always probe completion.
+                self.forget_page(segment)  # Targeted recovery wakes always probe completion.
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
             self.launch()
@@ -123,12 +124,12 @@ class ProjectionFollowups:
         # ahead of the discovered page instead of replacing the queue.
         queued = list(self.pending)
         discovered = [segment for segment in segments if segment not in self.tasks and segment not in queued]
-        # Only this discovered page shares completion probes. No negative hint
-        # survives another discovery pass, restart, priority wake or owed walk.
+        # Each discovered page gets fresh probes. Keep older page markers
+        # until its queued/running tasks finish; they never suppress a new page.
         self.page += 1
-        self.completion_attempts.clear()
         for segment in discovered:
-            self.pages[segment] = self.page
+            if segment not in self.owed:
+                self.pages[segment] = self.page
         owed = [
             segment
             for segment in self.owed
@@ -152,9 +153,14 @@ class ProjectionFollowups:
                 self.after = segment
             task.add_done_callback(lambda done, sid=segment: self.finished(sid, done))
 
+    def forget_page(self, segment):
+        page = self.pages.pop(segment, None)
+        if page is not None and page not in self.pages.values():
+            self.completion_attempts = {key for key in self.completion_attempts if key[0] != page}
+
     def finished(self, segment, task):
         self.tasks.pop(segment, None)
-        self.pages.pop(segment, None)
+        self.forget_page(segment)
         if task.cancelled():
             # Global background-task shutdown must not replenish a cancelled
             # worker with another task after the shutdown snapshot was taken.

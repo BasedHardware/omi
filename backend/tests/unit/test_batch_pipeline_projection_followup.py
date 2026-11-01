@@ -387,6 +387,94 @@ async def test_ready_probe_failure_does_not_suppress_next_queued_sibling(followu
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('next_page', [[], ['head']])
+async def test_next_discovery_keeps_running_pages_probe_and_starts_a_fresh_one(followup, next_page):
+    f = followup
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    started, release = asyncio.Event(), asyncio.Event()
+    finish = f.runner.finish_part
+
+    async def delayed(item, *args, **kwargs):
+        if item.segment_id == 'later':
+            started.set()
+            await release.wait()
+        await finish(item, *args, **kwargs)
+
+    f.runner.finish_part = delayed
+    try:
+        await f.runner.schedule()
+        head = f.runner.tasks['head']
+        await asyncio.wait_for(started.wait(), 2)
+        await head
+        await asyncio.sleep(0)
+        assert f.projector.complete_content.call_count == 1
+        assert 'later' in f.runner.tasks
+        f.projector.store.store.projection_pending.return_value = next_page
+        await f.runner.schedule()
+        if next_page:
+            await f.runner.tasks['head']
+            await asyncio.sleep(0)
+        release.set()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        assert f.projector.complete_content.call_count == 1 + bool(next_page)
+        assert not f.runner.pages and not f.runner.completion_attempts
+    finally:
+        release.set()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+
+
+@pytest.mark.asyncio
+async def test_owed_row_also_discovered_still_probes_completion(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    await f.runner.schedule(tail=('later',))
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+    assert f.projector.complete_content.call_count == 2
+    assert not f.runner.pages and not f.runner.completion_attempts
+
+
+@pytest.mark.asyncio
+async def test_owed_running_row_bypasses_its_existing_pages_probe(followup):
+    f = followup
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    started, release = asyncio.Event(), asyncio.Event()
+    finish = f.runner.finish_part
+
+    async def delayed(item, *args, **kwargs):
+        if item.segment_id == 'later':
+            started.set()
+            await release.wait()
+        await finish(item, *args, **kwargs)
+
+    f.runner.finish_part = delayed
+    try:
+        await f.runner.schedule()
+        head = f.runner.tasks['head']
+        await asyncio.wait_for(started.wait(), 2)
+        await head
+        await asyncio.sleep(0)
+        assert f.projector.complete_content.call_count == 1
+        f.projector.store.store.projection_pending.return_value = []
+        await f.runner.schedule(tail=('later',))
+        release.set()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        assert f.projector.complete_content.call_count == 2
+        assert not f.runner.pages and not f.runner.completion_attempts
+    finally:
+        release.set()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('wake', ['priority', 'owed'])
 async def test_recovery_wake_bypasses_same_page_ready_probe_hint(followup, wake):
     f = followup

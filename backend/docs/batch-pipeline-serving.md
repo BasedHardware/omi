@@ -889,8 +889,10 @@ or destination can unblock them without changing their own result version.
 Already-ready siblings in one discovered page share a content-completion
 probe for their exact immutable binding. Every row still rechecks its receipt
 and privacy fences; persisted rows still finish their own side effects and
-probe completion. Failed/cancelled probes clear the shared hint. The next
-discovery pass resets it, and priority/owed recovery wakes bypass it. Thus an
+probe completion. Failed/cancelled probes clear their marker. Each new
+discovery page gets a fresh probe; an older page keeps its marker until its
+queued/running rows finish. Priority/owed recovery work bypasses sharing,
+including owed rows also found by discovery or woken before their probe. Thus an
 unchanged ready row gets a fresh probe each cycle even when its dependency
 changed elsewhere. No cooldown or version cache is used. When the existing
 quarantine-hold transaction finds a quarantined sibling, it uses its existing
