@@ -1116,7 +1116,7 @@
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-11-01 keyless index check: the gate now mints an OIDC token through the deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1206,7 +1206,7 @@
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
