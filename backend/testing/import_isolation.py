@@ -39,8 +39,15 @@ from types import ModuleType
 from typing import Any, Iterable, Iterator, Mapping
 from unittest.mock import MagicMock
 
-# Stdlib modules that ``stub_modules`` keeps once loaded; see the eviction step.
-_ZONEINFO_FAMILY = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+import zoneinfo  # noqa: F401  # binds the real family objects below
+
+# Stdlib modules that ``stub_modules`` keeps once loaded; see the eviction step. Matched by
+# identity so a fake installed under one of these names is still evicted.
+_ZONEINFO_FAMILY = {
+    name: sys.modules[name]
+    for name in ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+    if name in sys.modules
+}
 
 
 class AutoMockModule(ModuleType):
@@ -215,8 +222,9 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         # collected, but the static ZoneInfo type lives on in every module that imported
         # it. An evicted copy collected after a later re-import nulls the globals under
         # the live type, and ZoneInfo(...) raises "null argument to internal routine".
-        if "_zoneinfo" in extra_name_set:
-            preserve_for_import_safety.update(name for name in _ZONEINFO_FAMILY if name in extra_name_set)
+        preserve_for_import_safety.update(
+            name for name, real in _ZONEINFO_FAMILY.items() if name in extra_name_set and sys.modules.get(name) is real
+        )
         for extra in extra_names:
             if extra in preserve_for_import_safety:
                 continue

@@ -304,6 +304,16 @@ def test_stub_modules_keeps_zoneinfo_first_imported_inside_the_block(monkeypatch
     assert originals["_zoneinfo"].ZoneInfo("UTC").key == "UTC"
 
 
+def test_stub_modules_still_evicts_a_fake_installed_under_a_zoneinfo_name(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delitem(sys.modules, "_zoneinfo")
+    fake = ModuleType("_zoneinfo")
+
+    with stub_modules({}):
+        sys.modules["_zoneinfo"] = fake
+
+    assert "_zoneinfo" not in sys.modules
+
+
 @pytest.fixture
 def atom_keyword_index_with_top_level_typesense_only():
     module_path = Path(__file__).resolve().parents[2] / "utils" / "memory" / "atom_keyword_index.py"
