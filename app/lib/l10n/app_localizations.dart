@@ -17253,10 +17253,10 @@ abstract class AppLocalizations {
   /// **'Speak Into Your Omi'**
   String get deviceOnboardingTranscriptionTitle;
 
-  /// Tutorial step 1 subtitle — explains that spoken words appear in real time
+  /// Tutorial step 1 subtitle: an example sentence the user can say into their Omi for the live-transcription demo. Keep the line break before the quoted sentence.
   ///
   /// In en, this message translates to:
-  /// **'Say a few words and watch them appear in real-time'**
+  /// **'Say something like\n“Remind me to call Sam tomorrow.”'**
   String get deviceOnboardingTranscriptionSubtitle;
 
   /// Tutorial step 1 success message after the user speaks enough words
@@ -17414,24 +17414,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Finish'**
   String get deviceOnboardingFinish;
-
-  /// Onboarding intro screen title shown before the device tutorial steps
-  ///
-  /// In en, this message translates to:
-  /// **'Get to Know Your Omi'**
-  String get deviceOnboardingIntroTitle;
-
-  /// Onboarding intro screen subtitle explaining the tutorial
-  ///
-  /// In en, this message translates to:
-  /// **'Try live transcription, asking a question, and the double-tap shortcut.'**
-  String get deviceOnboardingIntroSubtitle;
-
-  /// Onboarding intro screen estimated duration hint
-  ///
-  /// In en, this message translates to:
-  /// **'About 1 minute'**
-  String get deviceOnboardingIntroDuration;
 
   /// Accessibility label for a supporting transcript timestamp; duration uses localized time units
   ///

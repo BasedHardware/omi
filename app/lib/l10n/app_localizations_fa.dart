@@ -9273,7 +9273,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'با Omi خود صحبت کنید';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'چند کلمه بگویید و ظاهر شدن آن‌ها را به‌صورت لحظه‌ای ببینید';
+  String get deviceOnboardingTranscriptionSubtitle => 'چیزی مثل این بگویید\n«یادم بنداز فردا به سام زنگ بزنم.»';
 
   @override
   String get deviceOnboardingGoodJob => 'آفرین!';
@@ -9353,15 +9353,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'پایان';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'با Omi خود آشنا شوید';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'رونویسی زنده، پرسیدن یک سؤال و میان‌بر دوبار ضربه را امتحان کنید.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'حدود ۱ دقیقه';
 
   @override
   String quoteJumpToTime(String duration) {

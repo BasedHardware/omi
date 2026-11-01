@@ -9138,7 +9138,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Omi에 대고 말해보세요';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => '몇 마디 말하면 실시간으로 텍스트가 나타나요';
+  String get deviceOnboardingTranscriptionSubtitle => '이렇게 말해 보세요\n“내일 샘에게 전화하라고 알려 줘.”';
 
   @override
   String get deviceOnboardingGoodJob => '잘했어요!';
@@ -9217,15 +9217,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '완료';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Omi 알아보기';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => '실시간 받아쓰기, 질문하기, 두 번 탭 단축키를 체험해 보세요.';
-
-  @override
-  String get deviceOnboardingIntroDuration => '약 1분';
 
   @override
   String quoteJumpToTime(String duration) {

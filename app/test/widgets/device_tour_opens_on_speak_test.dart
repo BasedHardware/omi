@@ -1,0 +1,266 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_onboarding_provider.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+
+import '../support/device_tour_example.dart';
+import '../support/recording_analytics.dart';
+
+/// The tour's whole capture boundary: it attaches itself, pauses Transcribe Later while open, and on exit
+/// cancels only a voice session it started. Any other capture call fails the test.
+class _Capture extends ChangeNotifier implements CaptureProvider {
+  @override
+  DeviceOnboardingProvider? deviceOnboardingProvider;
+  final calls = <String>[];
+
+  @override
+  Future<void> suspendBatchModeForOnboarding() async => calls.add('suspend');
+  @override
+  Future<void> restoreBatchModeAfterOnboarding() async => calls.add('restore');
+  @override
+  void cancelTutorialOwnedVoiceSession() => calls.add('cancelTutorialVoice');
+  @override
+  dynamic noSuchMethod(Invocation i) => throw StateError('Unexpected capture call: ${i.memberName}');
+}
+
+class _Session implements AuthTokenGateway {
+  @override
+  AuthUserSnapshot get currentUser => const AuthUserSnapshot(uid: 'tour-owner');
+  @override
+  Future<RefreshedAuthToken?> forceRefresh() async => null;
+  @override
+  Future<void> signOut() async {}
+}
+
+class _Env implements EnvFields {
+  @override
+  dynamic noSuchMethod(Invocation i) => null;
+}
+
+const _speakTitle = 'Speak Into Your Omi';
+
+const _speakSubtitle = 'Say something like\n“Remind me to call Sam tomorrow.”';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  late _Capture capture;
+  late RecordingAnalytics analytics;
+  final navigator = GlobalKey<NavigatorState>();
+
+  setUpAll(() {
+    try {
+      Env.init(_Env());
+    } catch (_) {}
+    PackageInfo.setMockInitialValues(
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.0', buildNumber: '1', buildSignature: '');
+  });
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    AuthService.installLocalHarnessTokenGateway(_Session());
+    analytics = RecordingAnalytics();
+    AnalyticsManager.resetForTesting();
+    AnalyticsManager.configure(analytics.adapter);
+    await AnalyticsManager.init();
+    capture = _Capture();
+  });
+
+  tearDown(AnalyticsManager.resetForTesting);
+
+  Future<void> frames(WidgetTester tester, [int count = 6]) async {
+    // The step's pulse animation repeats forever, so pumpAndSettle never settles.
+    for (var i = 0; i < count; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+  }
+
+  Future<void> openTour(WidgetTester tester, {Locale locale = const Locale('en')}) async {
+    await tester.pumpWidget(ChangeNotifierProvider<CaptureProvider>.value(
+      value: capture,
+      child: MaterialApp(
+        navigatorKey: navigator,
+        locale: locale,
+        theme: buildOmiTheme(),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(body: Text('Home')),
+      ),
+    ));
+    // The same push Home makes once a CV1 connects.
+    navigator.currentState!.push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper()));
+    await frames(tester);
+  }
+
+  Future<void> speak(WidgetTester tester, String words) async {
+    capture.deviceOnboardingProvider!.onTranscriptSegments([
+      TranscriptSegment(
+          id: 's0',
+          text: words,
+          speaker: 'SPEAKER_00',
+          isUser: true,
+          personId: null,
+          start: 0,
+          end: 2,
+          translations: []),
+    ]);
+    await frames(tester, 8);
+  }
+
+  Future<List<String>> tourEvents(WidgetTester tester) async {
+    await tester.runAsync(() => AnalyticsManager.flushPending(force: true));
+    return analytics.names.where((name) => name.startsWith('Device Onboarding')).toList();
+  }
+
+  int dot(WidgetTester tester) =>
+      tester.widget<OnboardingProgressDots>(find.byType(OnboardingProgressDots)).currentStep;
+
+  testWidgets('opens on Speak Into Your Omi with the close X and no intro screen', (tester) async {
+    await openTour(tester);
+
+    expect(find.text(_speakTitle), findsOneWidget);
+    expect(find.text(_speakSubtitle), findsOneWidget);
+    expect(find.text('Get to Know Your Omi'), findsNothing);
+    expect(find.text('Get Started'), findsNothing);
+    expect(find.text('Skip'), findsNothing);
+    expect(find.byKey(const Key('device_onboarding_close_button')), findsOneWidget);
+    expect(find.bySemanticsLabel('Close'), findsOneWidget);
+    expect(dot(tester), 0);
+
+    // Live from the first frame: the pendant's words reach this step without a tap first.
+    final tour = capture.deviceOnboardingProvider!;
+    expect(tour.isOnboardingActive, isTrue);
+    expect(tour.currentStep, DeviceOnboardingProvider.transcriptionStep);
+    expect(capture.calls, ['suspend']);
+    expect(await tourEvents(tester), ['Device Onboarding Started']);
+    analytics.expectSingle('Device Onboarding Started', {'source': 'auto'});
+  });
+
+  // The owner says the example the step shows, in their app language. Chinese, Japanese and Thai are written
+  // without spaces, so a sentence there is one space-separated "word"; it still has to finish the step.
+  for (final code in ['en', 'ja', 'zh', 'ko', 'th']) {
+    testWidgets('$code: saying the example fills the card, then Continue opens the question step', (tester) async {
+      final l10n = lookupAppLocalizations(Locale(code));
+      final example = deviceTourExample(l10n.deviceOnboardingTranscriptionSubtitle);
+      await openTour(tester, locale: Locale(code));
+      await speak(tester, example);
+
+      expect(find.text(example), findsOneWidget);
+      expect(find.text(l10n.deviceOnboardingGoodJob), findsOneWidget);
+      await tester.tap(find.text(l10n.deviceOnboardingContinue));
+      await frames(tester);
+
+      expect(capture.deviceOnboardingProvider!.currentStep, DeviceOnboardingProvider.askQuestionStep);
+      expect(find.text(l10n.deviceOnboardingPressButtonTitle), findsOneWidget);
+      expect(dot(tester), 1);
+      expect(await tourEvents(tester), ['Device Onboarding Started', 'Device Onboarding Step Completed']);
+      analytics.expectSingle('Device Onboarding Step Completed', {'step': 'transcription_demo'});
+    });
+  }
+
+  for (final notSpeech in reviewedNonFinishers) {
+    testWidgets('"$notSpeech" shows in the card but does not finish the step', (tester) async {
+      await openTour(tester);
+      await speak(tester, notSpeech);
+
+      expect(find.text(notSpeech), findsOneWidget);
+      expect(find.text('Good job!'), findsNothing);
+      expect(find.text('Continue'), findsNothing);
+      expect(capture.deviceOnboardingProvider!.currentStep, DeviceOnboardingProvider.transcriptionStep);
+      expect(await tourEvents(tester), ['Device Onboarding Started']);
+    });
+  }
+
+  testWidgets('largest text size: nothing is cut off and Continue is reachable', (tester) async {
+    // iPhone 17 Pro at the largest accessibility size (body text 17 pt -> 53 pt).
+    tester.view.physicalSize = const Size(1206, 2622);
+    tester.view.devicePixelRatio = 3;
+    tester.platformDispatcher.textScaleFactorTestValue = 3.12;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await openTour(tester);
+    expect(tester.takeException(), isNull, reason: 'the first step must not overflow');
+    expect(find.text(_speakSubtitle), findsOneWidget);
+    await tester.ensureVisible(find.text(_speakSubtitle));
+
+    await speak(tester, 'Remind me to call Sam tomorrow.');
+    expect(tester.takeException(), isNull, reason: 'the transcript state must not overflow');
+    await tester.ensureVisible(find.text('Continue'));
+    await frames(tester, 2);
+    await tester.tap(find.text('Continue'));
+    await frames(tester);
+
+    expect(capture.deviceOnboardingProvider!.currentStep, DeviceOnboardingProvider.askQuestionStep);
+    expect(find.text('Press the button on your Omi'), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'the next step must not overflow either');
+  });
+
+  // One test on purpose: the completion save goes through a process-wide queue, so every close in this file
+  // shares one fake-async zone. Closing three times is also the repeat a real owner can do from Settings.
+  testWidgets('close X leaves from any screen, saves the tour as done and reports the screen it left on',
+      (tester) async {
+    await openTour(tester);
+    await tester.tap(find.byKey(const Key('device_onboarding_close_button')));
+    await frames(tester);
+
+    expect(find.byType(InteractiveDeviceOnboardingWrapper), findsNothing);
+    expect(find.text('Home'), findsOneWidget);
+    expect(SharedPreferencesUtil().deviceOnboardingCompleted, isTrue);
+    expect(capture.deviceOnboardingProvider, isNull);
+    expect(capture.calls, ['suspend', 'cancelTutorialVoice', 'restore']);
+    expect(await tourEvents(tester), ['Device Onboarding Started', 'Device Onboarding Abandoned']);
+    expect(analytics.propertiesOf('Device Onboarding Abandoned').single, containsPair('step', 0));
+
+    // Second time: leave on the next screen. The step index matches the screen; there is no intro offset.
+    navigator.currentState!.push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper()));
+    await frames(tester);
+    expect(find.text(_speakTitle), findsOneWidget);
+    await speak(tester, 'Remind me to call Sam tomorrow.');
+    await tester.tap(find.text('Continue'));
+    await frames(tester);
+    await tester.tap(find.byKey(const Key('device_onboarding_close_button')));
+    await frames(tester);
+
+    // Third time: open and leave right away again.
+    navigator.currentState!.push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper()));
+    await frames(tester);
+    expect(find.text(_speakTitle), findsOneWidget);
+    await tester.tap(find.byKey(const Key('device_onboarding_close_button')));
+    await frames(tester);
+
+    expect(find.byType(InteractiveDeviceOnboardingWrapper), findsNothing);
+    expect(await tourEvents(tester), [
+      'Device Onboarding Started',
+      'Device Onboarding Abandoned',
+      'Device Onboarding Started',
+      'Device Onboarding Step Completed',
+      'Device Onboarding Abandoned',
+      'Device Onboarding Started',
+      'Device Onboarding Abandoned',
+    ]);
+    expect(analytics.propertiesOf('Device Onboarding Abandoned').map((p) => p['step']),
+        [0, DeviceOnboardingProvider.askQuestionStep, 0]);
+    analytics.expectSingle('Device Onboarding Step Completed', {'step': 'transcription_demo'});
+  });
+}

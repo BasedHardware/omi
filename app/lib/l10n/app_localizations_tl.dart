@@ -9358,7 +9358,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingTranscriptionSubtitle =>
-      'Magsabi ng ilang salita at panoorin itong lumitaw nang real-time';
+      'Magsabi ng tulad ng\n“Paalalahanan mo akong tawagan si Sam bukas.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Magaling!';
@@ -9439,15 +9439,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Tapusin';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Kilalanin ang Iyong Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'Subukan ang live transcription, magtanong, at ang double-tap shortcut.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Mga 1 minuto';
 
   @override
   String quoteJumpToTime(String duration) {

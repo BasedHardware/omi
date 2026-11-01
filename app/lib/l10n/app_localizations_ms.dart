@@ -9292,8 +9292,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Bercakap dengan Omi Anda';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle =>
-      'Sebut beberapa patah perkataan dan lihat ia muncul secara langsung';
+  String get deviceOnboardingTranscriptionSubtitle => 'Sebut sesuatu seperti\n“Ingatkan saya untuk telefon Sam esok.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Syabas!';
@@ -9373,16 +9372,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Selesai';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Kenali Omi Anda';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Cuba transkripsi langsung, bertanya soalan, dan pintasan ketik dua kali.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Kira-kira 1 minit';
 
   @override
   String quoteJumpToTime(String duration) {
