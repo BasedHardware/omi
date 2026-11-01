@@ -13507,6 +13507,17 @@ class AppLocalizationsKn extends AppLocalizations {
   String get paywallTrialCancelNote => 'ಯಾವುದೇ ಸಮಯದಲ್ಲಿ ರದ್ದುಗೊಳಿಸಿ. ಯಾವುದೇ ಶುಲ್ಕಗಳಿಲ್ಲ, ಯಾವುದೇ ದಂಡಗಳಿಲ್ಲ.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'ಇಡೀ ವರ್ಷಕ್ಕೆ ಇನ್ನೂ ಸಿದ್ಧವಿಲ್ಲವೇ?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'ಬದಲಿಗೆ ಮಾಸಿಕದಿಂದ ಪ್ರಾರಂಭಿಸಿ. ಅದೇ $days ದಿನಗಳು ಉಚಿತ, ನಂತರ ತಿಂಗಳಿಗೆ $price. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದು ಮಾಡಿ.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'ಮಾಸಿಕವನ್ನು ಉಚಿತವಾಗಿ ಪ್ರಯತ್ನಿಸಿ';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'ನಿಮ್ಮ $days ದಿನಗಳ Omi Pro ಉಚಿತ ಪ್ರಯೋಗ ಪ್ರಾರಂಭವಾಗಿದೆ.';
   }

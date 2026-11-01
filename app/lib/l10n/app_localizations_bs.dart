@@ -13496,6 +13496,17 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paywallTrialCancelNote => 'Otkažite bilo kada. Bez naknada, bez kazni.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Još niste spremni za cijelu godinu?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Počnite s mjesečnim planom. Istih $days dana besplatno, zatim $price mjesečno. Otkažite bilo kada.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Isprobajte mjesečni besplatno';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Vaša $days-dnevna besplatna proba Omi Pro je počela.';
   }
