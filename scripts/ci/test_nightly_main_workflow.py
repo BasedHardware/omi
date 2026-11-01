@@ -101,10 +101,6 @@ class WorkflowTests(unittest.TestCase):
         base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"], cwd=ROOT,
                               capture_output=True, text=True, check=True).stdout.strip()
         for filename in self.calls.values():
-            exists = subprocess.run(["git", "cat-file", "-e", f"{base}:.github/workflows/{filename}"],
-                                    cwd=ROOT, capture_output=True)
-            if exists.returncode != 0:
-                continue  # added by this change: no earlier runner or timeout to keep
             baseline = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
                                       cwd=ROOT, capture_output=True, text=True, check=True).stdout
             before, after = jobs(baseline), jobs((WORKFLOWS / filename).read_text())
