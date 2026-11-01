@@ -2,6 +2,7 @@
 
 import datetime
 import sys
+import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -121,6 +122,48 @@ def test_document_writes_counted_by_op_and_caller(client, transport):
     assert _by_caller('users/conversations', 'set', caller) == by_caller + 1
     # The probe observes and never skips: five Commit RPCs still ran.
     assert len(transport.requests) == 5
+
+
+def test_transaction_retry_helper_is_not_the_caller(client, transport, monkeypatch):
+    from google.cloud.firestore_v1.types import BeginTransactionResponse
+
+    from database.firestore_transaction_retry import run_with_transaction_contention_retry
+
+    monkeypatch.setattr(
+        FirestoreClient,
+        'begin_transaction',
+        lambda self, request=None, **kw: BeginTransactionResponse(transaction=b'tx'),
+    )
+    caller = f'{__name__}:test_transaction_retry_helper_is_not_the_caller'
+    before = _by_caller('users/memories', 'set', caller)
+    ref = client.collection('users').document('u1').collection('memories').document('m1')
+
+    @firestore.transactional
+    def operation(transaction):
+        transaction.set(ref, {'x': 1})
+
+    run_with_transaction_contention_retry(client.transaction, operation, operation_name='probe_test')
+    assert _by_caller('users/memories', 'set', caller) == before + 1
+
+
+def test_generic_write_helper_names_its_caller(client, transport):
+    # A helper registered as (module, function) plumbing is skipped like a plumbing module.
+    def _cas(ref):
+        ref.set({'x': 1})
+
+    # Same code, but its frame reports the helper's module as __name__.
+    helper = types.FunctionType(_cas.__code__, {'__name__': 'utils.enrichment.outbox'}, '_cas')
+
+    def _mutate(cas, ref):
+        cas(ref)
+
+    # The outbox adapter's _mutate sits in front of the CAS helper; both are skipped.
+    adapter = types.FunctionType(_mutate.__code__, {'__name__': 'database.outbox_firestore'}, '_mutate')
+    caller = f'{__name__}:test_generic_write_helper_names_its_caller'
+    before = _by_caller('users/memories', 'set', caller)
+    helper(client.collection('users').document('u1').collection('memories').document('m1'))
+    adapter(helper, client.collection('users').document('u1').collection('memories').document('m2'))
+    assert _by_caller('users/memories', 'set', caller) == before + 2
 
 
 def test_batch_counts_each_write_and_failed_commit_counts_nothing(client, transport):
