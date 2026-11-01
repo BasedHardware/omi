@@ -92,7 +92,8 @@ def test_apply_refuses_missing_index(capsys):
     assert 'no vector index' in capsys.readouterr().err
 
 
-def test_write_loads_conversation_and_reports_created_or_updated():
+def test_write_loads_conversation_and_reports_created_or_updated(monkeypatch):
+    monkeypatch.setattr(script, 'owner_index', lambda raw, uid, **kwargs: raw)
     db = ModuleType('database.conversations')
     db.get_conversation = MagicMock(return_value=row())
     vector = ModuleType('database.vector_db')

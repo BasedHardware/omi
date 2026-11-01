@@ -1185,7 +1185,8 @@ class TestEntrypoint:
         assert "custom shared secret" not in source
         assert "MEMORY_VECTOR_REPAIR_OUTBOX_UID" in source
 
-    def test_production_dependency_resolver_builds_lazy_clients_and_loader_from_env(self):
+    def test_production_dependency_resolver_builds_lazy_clients_and_loader_from_env(self, monkeypatch):
+        monkeypatch.setattr(entrypoint, "owner_index", lambda raw, uid, **kwargs: raw)
         calls = []
         docs = {
             "users/u1/memory_items/mem1": {
@@ -1287,6 +1288,7 @@ class TestEntrypoint:
                 "PINECONE_API_KEY": "pc-key",
                 "PINECONE_INDEX_NAME": "memory-index",
                 "OPENAI_API_KEY": "openai-key",
+                "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1",
             },
             module_loader=module_loader,
         )

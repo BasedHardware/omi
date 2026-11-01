@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
+from database import vector_db
+
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchMode, SearchVectorHit, VectorRepairPurgeReason
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
@@ -1008,6 +1010,7 @@ def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
             calls.append({'ids': ids, 'filter': filter, 'namespace': namespace})
 
     monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr('database.vector_db.destructive_operation_gate', lambda *args, **kwargs: _AllowGate())
     from database.vector_db import delete_canonical_memory_vectors_by_ids
 
@@ -1075,6 +1078,7 @@ def test_canonical_delete_retries_gate_finish_when_exit_fails(monkeypatch):
             return False
 
     monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr('database.vector_db.destructive_operation_gate', lambda *args, **kwargs: _ExitFails())
     monkeypatch.setattr(
         'database.vector_db.finish_destructive_operation',
@@ -1103,6 +1107,7 @@ def test_hydration_skips_stale_delete_when_legal_hold_blocks_it(monkeypatch):
         raise LegalHoldActive('held')
 
     monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr('database.vector_db.destructive_operation_gate', blocked)
 
     response = fetch_default_vector_memory_search(

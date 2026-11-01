@@ -37,6 +37,7 @@ def test_summary_upsert_error_count_preserves_exception(monkeypatch):
     index = MagicMock()
     index.upsert.side_effect = RuntimeError('provider offline')
     monkeypatch.setattr(vector_db, 'index', index)
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: nullcontext())
     before = metric.labels(outcome='error')._value.get()
     with pytest.raises(RuntimeError, match='provider offline'):
@@ -50,6 +51,7 @@ def test_summary_upsert_reports_actual_provider_write(monkeypatch):
 
     index = MagicMock()
     monkeypatch.setattr(vector_db, 'index', index)
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: nullcontext())
     assert vector_db.upsert_vector2('uid', 'conv', [0.1], {}) is True
     assert index.upsert.call_args.kwargs['namespace'] == 'ns1'
