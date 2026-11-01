@@ -14,7 +14,7 @@ from database import processing_backlog as store, conversations as conversations
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.conversation import Conversation
 from utils import funded_processing
-from utils.processing_backlog import choose, is_active
+from utils.processing_backlog import choose, is_active, rolls
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
@@ -182,6 +182,17 @@ async def _process(uid, item) -> AttemptOutcome:
     return AttemptOutcome.COMPLETE if recovered else AttemptOutcome.RETRY
 
 
+async def _roll(uid: str, job: dict) -> dict:
+    """An Unlimited owner's earlier-month tap continues on its own; anything else stays parked."""
+    current = await run_blocking(db_executor, funded_processing.allowance, uid)
+    if not current.managed or not rolls(job, funded_processing.capacity(current)[0]):
+        return job
+    rolled = await run_blocking(
+        db_executor, partial(store.roll, uid, period=funded_processing.period_id(), cutoff=time.time())
+    )
+    return rolled or job
+
+
 async def run(
     uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None
 ) -> bool | None:
@@ -197,6 +208,8 @@ async def run(
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
         return
     job = await run_blocking(db_executor, store.read, uid)
+    if not is_active(job) and job.get('state') == 'processing':
+        job = await _roll(uid, job)
     if not is_active(job):
         return
     token = job['token']

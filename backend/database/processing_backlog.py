@@ -164,6 +164,51 @@ def start(
     return result
 
 
+def roll(uid: str, *, period: str, cutoff: float) -> dict | None:
+    """Carry an owner's own earlier-month choice into ``period``; never creates one.
+
+    The caller has just confirmed the owner's recovery spends no finite
+    allowance. Only an unleased manual choice rolls: a trial grant or legacy
+    upgrade intent was not a tap. It gets a new token (fencing out any worker
+    of the old month), the new period and a new cutoff. A reservation carries
+    over to finish under its source's idempotent claim and receipts.
+    """
+    client = get_firestore_client()
+    ref = summary_ref(uid)
+
+    @firestore.transactional
+    def commit(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        previous = row.get('period')
+        if (
+            row.get('state') != 'processing'
+            or row.get('automatic')
+            or not isinstance(previous, str)
+            or previous >= period
+            or row.get('lease_until', 0) > time.time()
+        ):
+            return None
+        updates = {
+            'period': period,
+            'token': uuid4().hex,
+            'cutoff': cutoff,
+            'remaining': None,
+            'pending_upgrade': {},
+            'scope_skipped': False,
+            'cursor_audio': None,
+            'cursor_text': None,
+            'lease_until': 0,
+            'rolled_from': previous,
+        }
+        tx.update(ref, updates)
+        return {**row, **updates}
+
+    with external_write_fence(uid, firestore_client=client):
+        result = commit(client.transaction())
+    _request_memo().forget_request_reads(uid)
+    return result
+
+
 def claim(uid: str, token: str, period: str) -> str | None:
     client = get_firestore_client()
     ref = summary_ref(uid)

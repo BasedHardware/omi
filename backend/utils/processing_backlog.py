@@ -48,7 +48,7 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None, paid=None) -
     rate = float(recording_units_per_hour('batch'))
     estimate = seconds * rate / 3600 + max(0, summary.get('units', 0))
     remaining, budget = funded_processing.capacity(allowance)
-    active = summary.get('state') == 'processing' and summary.get('period') == funded_processing.period_id()
+    active = is_active(summary) or rolls(summary, remaining)
     waiting = count + deferred > 0
     if waiting and paid is None:
         paid = funded_processing.paid_owner(uid)
@@ -149,3 +149,19 @@ def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> t
 
 def is_active(row: dict) -> bool:
     return row.get('state') == 'processing' and row.get('period') == funded_processing.period_id()
+
+
+def rolls(row: dict, remaining: float | None) -> bool:
+    """An earlier month's tap continues when recovery spends no finite allowance.
+
+    ``remaining`` is the owner's current capacity; None is the catalog's
+    unlimited marker. A finite plan (Plus) keeps the monthly tap, so prior
+    consent never spends a new month's allowance.
+    """
+    return (
+        remaining is None
+        and row.get('state') == 'processing'
+        and not row.get('automatic')
+        and isinstance(row.get('period'), str)
+        and row['period'] < funded_processing.period_id()
+    )

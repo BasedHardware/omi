@@ -471,7 +471,17 @@ retry, restart or later month a no-op, and the trial's own `trial_start` dates t
 intent: a first delivery in a later month is recorded as `stale_intent` and
 declined. Recordings made during the trial are not held (Unlimited) and never
 debit the grant; anything held after the grant's cutoff is outside it. Beyond the
-grant, the owner taps the same process action as anyone else. New recordings after reset process normally; older held audio
+grant, the owner taps the same process action as anyone else.
+
+A paid owner's tap expires at the monthly rollover only when recovery spends a
+finite allowance (Plus keeps the monthly tap, so prior consent never spends a new
+month). When the owner's current capacity is unlimited, the worker rolls an
+earlier month's unleased manual choice (`processing_backlog.rolls`,
+`database.processing_backlog.roll`) into the current month with a new token,
+period and cutoff, carrying any reservation to finish under its source's claim and
+receipts. This resumes choices parked by an earlier rollover without a new tap. A
+trial grant or legacy upgrade intent (`automatic`) never rolls, and nothing creates
+a choice for an owner who did not make one. New recordings after reset process normally; older held audio
 and deferred text stay waiting. For every explicitly chosen provider request, current
 funded allowance and the existing hard abuse restrictions must pass again before
 every new recovered provider request. Already persisted receipts can settle at
