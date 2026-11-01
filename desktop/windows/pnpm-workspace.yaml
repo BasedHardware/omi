@@ -48,7 +48,7 @@ overrides:
   '@xmldom/xmldom@0.9': '~0.9.12'
   body-parser: '^2.4.0'
   follow-redirects: '^1.16.2'
-  hono: '^4.13.11'
+  hono: '4.13.14'
   ip-address: '^10.7.1'
   proxy-addr: '^2.0.8'
   qs: '^6.16.1'
