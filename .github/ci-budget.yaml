@@ -660,7 +660,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -678,7 +678,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -696,7 +696,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -714,7 +714,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -732,7 +732,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -750,7 +750,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -768,7 +768,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -786,7 +786,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -823,7 +823,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -841,7 +841,7 @@
       "matrix_size": 1,
       "needs": "resolve",
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -859,7 +859,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -877,7 +877,7 @@
       "matrix_size": 1,
       "needs": "validate-recovery",
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": "./.github/workflows/desktop_promote_beta.yml",
       "runner": "reusable",
       "runner_counts": {
@@ -895,7 +895,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -913,7 +913,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -931,7 +931,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -949,7 +949,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -969,7 +969,7 @@
         "plan-and-tag"
       ],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -987,7 +987,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1023,7 +1023,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1041,7 +1041,7 @@
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1059,7 +1059,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1233,7 +1233,7 @@
       "matrix_size": 1,
       "needs": "firestore_readiness",
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1251,7 +1251,7 @@
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1269,7 +1269,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1395,7 +1395,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1413,7 +1413,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1575,7 +1575,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1665,7 +1665,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1701,7 +1701,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1737,7 +1737,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1755,7 +1755,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1773,7 +1773,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1791,7 +1791,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1867,7 +1867,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2610,7 +2610,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2646,7 +2646,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -2702,7 +2702,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2739,7 +2739,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2781,7 +2781,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2799,7 +2799,7 @@
       "matrix_size": 1,
       "needs": "build",
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3024,7 +3024,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3156,7 +3156,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3210,7 +3210,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "shipspeed W1 (2026-11-01): the full backend unit suite under coverage once a day; unit shards run p50 9-10 min and coverage adds ~1.3-1.6x",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
