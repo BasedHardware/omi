@@ -293,6 +293,12 @@ def get_action_items_tool(
         logger.error(f"❌ Error getting action items: {e}", exc_info=True)
         return "Error retrieving action items. Please try again."
 
+    raw_page_count = len(action_items) if action_items else 0
+    if action_items:
+        action_items = [
+            item for item in action_items if not item.get('is_locked', False) and not item.get('deleted', False)
+        ]
+
     action_items_count = len(action_items) if action_items else 0
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
 
@@ -326,7 +332,7 @@ def get_action_items_tool(
     # Bound how much goes back to the chat model so a broad request cannot overflow its context
     # (issue #4927). A full page (len == limit) may mean more rows exist beyond it, so flag the
     # result as truncated in that case too, not only when the per-call row cap trims it.
-    more_in_db = len(action_items) >= limit
+    more_in_db = raw_page_count >= limit
     action_items, capped_for_llm = _cap_action_items_for_llm(action_items)
     results_truncated = capped_for_llm or more_in_db
 
@@ -648,8 +654,10 @@ def update_action_item_tool(
     assert resolved_id is not None
     action_item_id = resolved_id
     existing_item = action_items_db.get_action_item(uid, action_item_id)
-    if not existing_item:
+    if not existing_item or existing_item.get('deleted', False):
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
+    if existing_item.get('is_locked', False):
+        return "Error: A paid plan is required to modify this action item."
 
     # Prepare update data
     update_data: Dict[str, Any] = {}

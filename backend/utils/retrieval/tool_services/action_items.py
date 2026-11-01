@@ -99,9 +99,11 @@ def get_action_items_text(
         logger.error(f"get_action_items_text error: {e}")
         return f"Error retrieving action items: {e}"
 
-    # Filter locked items (paid plan required)
+    # Filter locked and soft-deleted items (paid plan required / tombstones hidden)
     if action_items:
-        action_items = [item for item in action_items if not item.get('is_locked', False)]
+        action_items = [
+            item for item in action_items if not item.get('is_locked', False) and not item.get('deleted', False)
+        ]
 
     if not action_items:
         date_info = ""
@@ -243,9 +245,9 @@ def update_action_item_text(
     if not action_item_id or not action_item_id.strip():
         return "Error: action_item_id is required."
 
-    # Verify exists and not locked
+    # Verify exists, not soft-deleted, and not locked
     existing = action_items_db.get_action_item(uid, action_item_id)
-    if not existing:
+    if not existing or existing.get('deleted', False):
         return f"Error: Action item '{action_item_id}' not found."
     if existing.get('is_locked', False):
         return "Error: A paid plan is required to modify this action item."
@@ -278,7 +280,12 @@ def update_action_item_text(
         return "No changes specified."
 
     try:
-        action_items_db.update_action_item(uid, action_item_id, update_data)
+        from database import chat_edits
+
+        write_state = {
+            'before': chat_edits.encode({key: existing[key] for key in chat_edits.FIELDS['task'] if key in existing})
+        }
+        action_items_db.update_action_item(uid, action_item_id, update_data, expected_chat_state=write_state)
 
         # Re-fetch the authoritative post-write state so reminder reconciliation can't act on a stale
         # pre-update value (matches the update_action_item_tool path).
