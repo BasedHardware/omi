@@ -49,11 +49,15 @@ def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     now = 2_000_000_000
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')
     monkeypatch.setenv('SYNC_BACKFILL_MAX_AGE_SECONDS', '2592000')
+    monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda name: int(name.split('.')[0]))
 
     fresh = lanes.classify_sync_lane([f'{now - 60}.opus'], client_device_id='device-1', now=now)
     historical = lanes.classify_sync_lane([f'{now - 8 * 86400}.opus'], client_device_id='device-1', now=now)
-    future = lanes.classify_sync_lane([f'{now + 301}.opus'], client_device_id='device-1', now=now)
+    # Phone-clock skew inside the shared tolerance stays trusted fresh audio...
+    skewed = lanes.classify_sync_lane([f'{now + 301}.opus'], client_device_id='device-1', now=now)
+    # ...while stamps beyond it remain untrusted backfill.
+    future = lanes.classify_sync_lane([f'{now + 601}.opus'], client_device_id='device-1', now=now)
     invalid = lanes.classify_sync_lane(['invalid.opus'], client_device_id='device-1', now=now)
     legacy = lanes.classify_sync_lane([f'{now - 60}.opus'], client_device_id=None, now=now)
 
@@ -61,6 +65,9 @@ def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     assert fresh.trust == lanes.CaptureTimeTrust.DEVICE_BOUND
     assert historical.lane == lanes.SyncLane.BACKFILL
     assert historical.reason == 'historical_capture'
+    assert skewed.lane == lanes.SyncLane.FRESH
+    assert skewed.trust is lanes.CaptureTimeTrust.DEVICE_BOUND
+    assert skewed.newest_capture_at <= now
     assert future.lane == lanes.SyncLane.BACKFILL
     assert future.trust == lanes.CaptureTimeTrust.UNTRUSTED
     assert invalid.lane == lanes.SyncLane.BACKFILL
@@ -367,14 +374,16 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'ops_train.py" render-env --env prod' in action
     # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
-    # back it off, which previously stranded recordings for hours. A warm
-    # instance keeps a scale-from-zero poke from being rejected outright.
-    assert '--min-instances=3' in action
+    # back it off, which previously stranded recordings for hours. 2026-10-24
+    # right-sizing (lead's live change 06:06Z): the worker idles at min 0; the
+    # bounded queue backoff absorbs scale-from-zero dispatch latency.
+    assert '--min-instances=0' in action
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--concurrency=6' in action
     assert '--cpu=2' in action
-    assert '--memory=8Gi' in action
+    # 2026-10-24 right-sizing: prod worker 8->4 GiB (live 06:06Z); dev keeps 8 GiB.
+    assert "--memory=${{ inputs.project_id == 'based-hardware' && '4Gi' || '8Gi' }}" in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     # Runtime ops owns the cap; both deploy paths preserve it rather than reset it.
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
@@ -1044,26 +1053,39 @@ def test_completion_transaction_accepts_success_and_expected_silence():
 
 
 def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
+    from tests.unit.fixtures.shadow_usage_firestore import Store
+
     transaction = _Transaction()
     marker_ref = _Ref({'status': 'processing'})
-    usage_ref = _Ref()
+    store = Store({'users/uid': {'synthetic': True}})
+    user_ref = store.collection('users').document('uid')
+    usage_ref = user_ref.collection('hourly_usage').document('2026-10-23-15')
+    update = {'id': '2026-10-23-15', 'transcription_seconds': firestore.Increment(5)}
 
     recorded = user_usage._update_hourly_usage_once_transaction.to_wrap(
         transaction,
         marker_ref,
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
     duplicate = user_usage._update_hourly_usage_once_transaction.to_wrap(
         _Transaction(),
         _Ref({'usage_committed_at': datetime.now(timezone.utc)}),
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
 
     assert recorded is True
-    assert len(transaction.writes) == 2
+    assert len(transaction.writes) == 3
     assert transaction.writes[0][1].get('usage_committed_at') is not None
+    assert transaction.writes[1][0] is usage_ref
+    total_ref, total_update, total_merge = transaction.writes[2]
+    assert total_ref.path == 'users/uid/monthly_usage_totals/2026-10'
+    assert total_update['totals']['transcription_seconds'] is update['transcription_seconds']
+    assert total_update['days']['23']['transcription_seconds'] is update['transcription_seconds']
+    assert total_merge is True
     assert duplicate is False
 
 

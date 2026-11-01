@@ -22,6 +22,7 @@ os.environ.setdefault(
 )
 
 import database.users as users
+from database.account_deletion_policy import DELETION_WIPE_RETRY_MAX_DELAY, deletion_wipe_retry_delay
 
 
 def _doc(doc_id, data):
@@ -77,11 +78,11 @@ def _uids(rows):
 
 
 def test_backoff_doubles_per_attempt_and_saturates():
-    assert users.deletion_wipe_retry_delay(1) == timedelta(0)
-    assert users.deletion_wipe_retry_delay(2) == timedelta(minutes=5)
-    assert users.deletion_wipe_retry_delay(3) == timedelta(minutes=10)
-    assert users.deletion_wipe_retry_delay(4) == timedelta(minutes=20)
-    assert users.deletion_wipe_retry_delay(50) == users.DELETION_WIPE_RETRY_MAX_DELAY
+    assert deletion_wipe_retry_delay(1) == timedelta(0)
+    assert deletion_wipe_retry_delay(2) == timedelta(minutes=5)
+    assert deletion_wipe_retry_delay(3) == timedelta(minutes=10)
+    assert deletion_wipe_retry_delay(4) == timedelta(minutes=20)
+    assert deletion_wipe_retry_delay(50) == DELETION_WIPE_RETRY_MAX_DELAY
 
 
 def test_first_failure_is_retried_on_the_next_tick(monkeypatch):

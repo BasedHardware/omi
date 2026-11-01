@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -166,6 +166,30 @@ def _worker_without_head_priority() -> dict[str, str]:
     return {WORKER_VALUES: yaml.safe_dump(values, sort_keys=False)}
 
 
+def _worker_without_independent_recovery_chart() -> dict[str, str]:
+    path = 'backend/charts/batch-pipeline-worker/templates/deployment.yaml'
+    original = (REPO_ROOT / path).read_text(encoding='utf-8')
+    lines = original.splitlines(keepends=True)
+    kept = [line for line in lines if 'name: BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED,' not in line]
+    assert len(kept) == len(lines) - 1
+    return {path: ''.join(kept)}
+
+
+def _worker_without_independent_recovery() -> dict[str, str]:
+    # Prod recovery is declared on; dev stays off. Simulate a future source-default
+    # change as well: the explicit worker setting must still prevent a reader split
+    # in dev, where the recovery host remains pinned off.
+    overrides = _worker_without_independent_recovery_chart()
+    config_path = 'backend/config/batch_language_recovery.py'
+    source = (REPO_ROOT / config_path).read_text(encoding='utf-8')
+    changed = source.replace(
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')",
+    )
+    assert changed != source
+    return {**overrides, config_path: changed}
+
+
 MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'config_map_without_source': _manifest_mutation(_config_map_without_source),
     'recovery_without_audience': _manifest_mutation(_recovery_without_audience),
@@ -181,8 +205,14 @@ MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'uid_allowlist_appended': _manifest_mutation(_uid_allowlist_appended),
     'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
     'worker_without_head_priority': _worker_without_head_priority,
+    'worker_without_independent_recovery': _worker_without_independent_recovery,
+    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_chart,
 }
-HELM_MUTATIONS = {'worker_without_head_priority'}
+HELM_MUTATIONS = {
+    'worker_without_head_priority',
+    'worker_without_independent_recovery',
+    'worker_without_independent_recovery_default_off',
+}
 
 
 @dataclass
@@ -202,7 +232,10 @@ def results(tmp_path_factory: pytest.TempPathFactory) -> Results:
         if name in HELM_MUTATIONS and not HAS_HELM:
             continue
         source = OverlaySource(tmp_path_factory.mktemp(name), overrides())
-        context = contract.build_context(source, readers=baseline.readers)
+        # Source-default mutations need a fresh reader inventory; manifest/chart
+        # mutations can reuse the baseline AST scan.
+        readers = None if name == 'worker_without_independent_recovery' else baseline.readers
+        context = contract.build_context(source, readers=readers)
         mutations[name], _, _ = contract.partition(contract.evaluate(context), gaps)
     return Results(baseline=baseline, baseline_new=baseline_new, mutations=mutations)
 
@@ -276,6 +309,26 @@ def test_worker_missing_head_priority_fails_like_22121(results: Results) -> None
     assert ('coupled-flag', 'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED') in found
 
 
+@pytest.mark.skipif(not HAS_HELM, reason='Helm unavailable; worker chart render runs where helm is installed')
+@pytest.mark.parametrize(
+    'mutation,envs',
+    [
+        # Source default flipped on: dev's pinned-off recovery host would split.
+        ('worker_without_independent_recovery', {'dev'}),
+        # Source default off: prod's declared-on recovery host would split.
+        ('worker_without_independent_recovery_default_off', {'prod'}),
+    ],
+)
+def test_worker_missing_independent_recovery_kill_switch_fails(results: Results, mutation: str, envs: set) -> None:
+    found = results.mutations[mutation]
+    assert {
+        v.env
+        for v in found
+        if v.invariant == 'reader-split'
+        and v.scope == 'helm/batch-pipeline-worker/BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'
+    } == envs
+
+
 def test_unparseable_boolean_value_fails(results: Results) -> None:
     assert any(
         v.invariant == 'boolean-token'
@@ -344,6 +397,44 @@ def test_prod_service_url_in_dev_fails(results: Results) -> None:
 def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     # Read through SMART_MERGE_FLATTEN_ENV; a literal-only scanner would call this kill switch dead.
     assert 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED' in results.baseline.readers.all_reads
+
+
+def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
+    rel = 'backend/config/synthetic_wrapped_switch.py'
+    source = OverlaySource(
+        tmp_path,
+        {
+            rel: (
+                "import os\n"
+                "SWITCH_ENV = 'SYNTHETIC_WRAPPED_SWITCH_ENABLED'\n"
+                "UNREAD_ENV = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'\n"
+                "def _default_on(name):\n"
+                "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
+                "def enabled():\n"
+                "    return _default_on(SWITCH_ENV)\n"
+                "def unrelated():\n"
+                "    return lookup(UNREAD_ENV)\n"
+            )
+        },
+    )
+    reads = contract.scan_env_reads(source, [rel])
+    assert set(reads) == {'SYNTHETIC_WRAPPED_SWITCH_ENABLED'}
+    assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
+
+
+def test_ops_kill_without_reader_still_fails(results: Results) -> None:
+    key = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'
+    # This check reads manifest entries and the reader inventory only; reuse
+    # the rendered fixture instead of rebuilding every deployment in the call.
+    manifest = {
+        'environments': {
+            'prod': {'gke': {'backend-listen': {'env': {key: {'value': 'false', 'category': 'ops_kill'}}}}}
+        }
+    }
+    model = replace(results.baseline.models['prod'], manifest=manifest)
+    context = replace(results.baseline, models={'prod': model})
+    violations = contract.check_kill_switches(context)
+    assert any(violation.key == f'kill-switch-reader|prod|gke/backend-listen/{key}' for violation in violations)
 
 
 # Real pre-fix commits from the 2026-10-18 rollout, each with the invariant that must catch it and its fix:

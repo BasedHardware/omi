@@ -36,6 +36,7 @@ import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Toggle } from './SettingsToggle';
 import { Card } from '@/components/settings/SettingsCard';
+import { RedeemCodeCard } from './RedeemCodeCard';
 import {
   SECTION_INFO,
   SIGNED_OUT_DESTINATION,
@@ -1487,6 +1488,9 @@ export function UsageSectionContent({
                 )}
               </div>
             </>
+          )}
+          {subscription?.stripe_subscription_id && !isCancelingSubscription && (
+            <RedeemCodeCard onRedeemed={onSubscriptionUpdate} />
           )}
         </div>
       ) : (

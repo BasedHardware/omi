@@ -137,6 +137,9 @@ gateway:
   basicAuth:
     enabled: true
     existingSecret: loki-basic-auth
+  # Gateway access lines (nginx -> stderr, billed at ERROR severity) ran ~1.9
+  # GiB/day with no consumer; 4xx/5xx still log when verboseLogging is false.
+  verboseLogging: false
   nodeSelector:
     <<: *nodeSelector
 

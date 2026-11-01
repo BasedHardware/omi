@@ -13,7 +13,7 @@ import json
 import re
 import uuid
 from bisect import bisect_right
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from utils.committed_capture import PROOF_KIND, CommittedCaptureMap
 
@@ -190,7 +190,39 @@ def bounded_envelope(payload: dict) -> dict:
     return {'version': 1, 'capability': 'unknown', 'coverage': 'incomplete', 'reason': 'overflow'}
 
 
+def evidence_field(evidence: object, name: str):
+    """Read one receipt field from either the stored mapping or its model."""
+    if isinstance(evidence, Mapping):
+        return evidence.get(name)
+    return getattr(evidence, name, None)
+
+
+def ledger_bound_incomplete(evidence: object) -> bool:
+    """True when an 'incomplete' receipt states a ledger bound, not observed loss.
+
+    Two receipt shapes say 'incomplete' without any observed audio gap. The
+    live committed proof latches 'incomplete' once its in-process run ledger
+    evicts its oldest runs — runs cap at 30 seconds each and only 32 are
+    kept, so a continuous capture grows a new run every 30 seconds and any
+    capture beyond ~16 minutes latches the flag even with zero gaps, zero
+    conflicts, and a complete lifetime. Observed loss never takes the committed shape:
+    missing claims and conflicting ordinals fail the snapshot to None before
+    an envelope exists. Sync receipts keep 'incomplete' meaning real missing
+    frames (intake compares decoded frames against the claimed count), and the
+    bounded_envelope overflow stub can replace such a sync receipt, so an
+    overflow stub is never treated as a ledger bound.
+    """
+    lifetime = evidence_field(evidence, 'lifetime')
+    lifetime_complete = evidence_field(lifetime, 'complete') if lifetime is not None else None
+    return (
+        evidence_field(evidence, 'proof') == PROOF_KIND
+        and lifetime_complete is True
+        and not evidence_field(evidence, 'conflicts')
+    )
+
+
 def unknown_envelope(reason: str, *, origin: str) -> dict:
+    """Unbounded unknown reasons stay explicit; capability abstains."""
     if reason not in {'missing_source_position', 'untrusted_clock', 'multichannel_mix', 'compacted_lineage', 'legacy'}:
         raise ValueError('unbounded unknown reason')
     return {'version': 1, 'capability': 'unknown', 'coverage': 'unknown', 'origin': origin, 'reason': reason}

@@ -45,6 +45,8 @@ from utils.speaker_audio import legacy_speaker_clip_pcm
 from utils.other.audio_chunks import AudioChunkReadSession
 from utils.speaker_tag_prompts.clips import v2_relevant_timestamps
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
+from database import speaker_auto_enroll as auto_enroll_db
+from utils.speakers import auto_enroll
 import logging
 
 logger = logging.getLogger(__name__)
@@ -787,12 +789,64 @@ def _verify_outcome(reason: str) -> str:
     return outcome if outcome in _VERIFY_OUTCOMES else 'error'
 
 
+async def _audio_enrollment_guard(uid: str, required: bool) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    if not required:
+        return None, None
+    guard = await run_blocking(db_executor, auto_enroll_db.audio_guard, uid)
+    if not auto_enroll.retained(guard):
+        return guard, 'disabled'
+    if auto_enroll.unit(guard.get('speaker_embedding')) is None:
+        return guard, 'rejected_embedding'
+    return guard, None
+
+
+def _audio_enrollment_allows(guard: Optional[Dict[str, Any]], embedding: List[float]) -> bool:
+    return guard is None or auto_enroll.audio_allowed(guard, embedding, guard.get(auto_enroll_db.PRIVACY_VERSION, 0))
+
+
+def _audio_enrollment_kwargs(guard: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    return {'enrollment_privacy_version': guard.get(auto_enroll_db.PRIVACY_VERSION, 0)} if guard is not None else {}
+
+
+def _audio_source_outcome(required: bool, conversation: Dict[str, Any], person_id: str) -> Optional[str]:
+    if not required:
+        return None
+    if conversation.get('private_cloud_sync_enabled') is not True:
+        return 'disabled'
+    return None if auto_enroll.explicit_segments(conversation, person_id) else 'no_authorized_segments'
+
+
+def _audio_teaching_segments(conversation: Dict[str, Any], person_id: str, required: bool) -> Any:
+    return (
+        auto_enroll.explicit_segments(conversation, person_id)
+        if required
+        else authorized_teaching_segments(conversation, person_id)
+    )
+
+
+async def _person_sample_embedding(
+    wav_bytes: bytes, guard: Optional[Dict[str, Any]]
+) -> Tuple[Optional[List[float]], str]:
+    try:
+        embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
+    except Exception:
+        return None, 'embedding_failed'
+    embedding_list = embedding.flatten().tolist()
+    if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
+        return None, 'embedding_failed'
+    if not _audio_enrollment_allows(guard, embedding_list):
+        return None, 'rejected_embedding'
+    return embedding_list, 'stored'
+
+
 async def extract_speaker_samples(
     uid: str,
     person_id: str,
     conversation_id: str,
     segment_ids: List[str],
     sample_rate: int = 16000,
+    *,
+    require_owner_exclusion: bool = False,
 ) -> str:
     """
     Extract a pooled speech sample for ``person_id`` and store it as their voice profile.
@@ -807,6 +861,10 @@ async def extract_speaker_samples(
     person: Optional[Dict[str, Any]] = None
     clean_seconds = 0.0
     try:
+        enrollment_guard, guard_outcome = await _audio_enrollment_guard(uid, require_owner_exclusion)
+        if guard_outcome:
+            outcome = guard_outcome
+            return outcome
         # The user can turn off saving other people's voices; this is the one choke
         # point every teaching path (tag sheet, tag prompts, live socket) reaches.
         settings = await run_blocking(db_executor, voice_profiles_db.get_voice_profile_settings, uid)
@@ -826,6 +884,10 @@ async def extract_speaker_samples(
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
             outcome = 'conversation_missing'
+            return outcome
+        source_outcome = _audio_source_outcome(require_owner_exclusion, conversation, person_id)
+        if source_outcome:
+            outcome = source_outcome
             return outcome
 
         # Sample extraction runs live, while the conversation is still processing, so
@@ -861,7 +923,7 @@ async def extract_speaker_samples(
         requested_ids = {sid for sid in (segment_ids or []) if sid}
         receipt = conversation.get('manual_speaker_assignments') or {}
         if receipt.get('segments') or receipt.get('speakers'):
-            authorized = authorized_teaching_segments(conversation, person_id)
+            authorized = _audio_teaching_segments(conversation, person_id, require_owner_exclusion)
             anchor_groups = {segment_group(s) for s in authorized if s.get('id') in requested_ids}
             if not anchor_groups:
                 anchor_groups = {segment_group(s) for s in authorized}
@@ -1093,14 +1155,9 @@ async def extract_speaker_samples(
 
         # Complete embedding work before replacing anything. A failed provider
         # call leaves the prior profile intact and allows a later retry.
-        try:
-            embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
-        except Exception:
-            outcome = 'embedding_failed'
-            return outcome
-        embedding_list = embedding.flatten().tolist()
-        if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
-            outcome = 'embedding_failed'
+        embedding_list, embedding_outcome = await _person_sample_embedding(wav_bytes, enrollment_guard)
+        if embedding_list is None:
+            outcome = embedding_outcome
             return outcome
         path = await run_blocking(
             storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
@@ -1118,6 +1175,7 @@ async def extract_speaker_samples(
             contributing_ids,
             speech_seconds=clean_seconds,
             expected_receipt_generation=receipt.get('generation', 0),
+            **_audio_enrollment_kwargs(enrollment_guard),
         )
         if old_samples is None:
             await run_blocking(storage_executor, delete_sample_from_storage, path)

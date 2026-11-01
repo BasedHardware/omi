@@ -1,7 +1,8 @@
-# App (Flutter) — Operational Playbook
+# App (Flutter)
 
-Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
-UI rules: [docs/ux-contract.md](docs/ux-contract.md).
+UI: [contract](docs/ux-contract.md).
+
+Speakers: `SpeakerNames`/`DiarizationLabel` (`lib/ui/format/`); `EpisodePresentation.participants` counts names.
 
 ## Build Bootstrap
 
@@ -14,7 +15,7 @@ UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 `pubspec.yaml` (`1.0.543+992`) is the local placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest store version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only with no store history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER`. Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
 
 ### Release
-Daily GREEN gate (operator Mac, 13:15 UTC) → train: iOS `AFTER_APPROVAL` + phased rollout (100% after 12h); Android staged 1%→10%→50%→100%. `mobile-rollout-advance`: every 4h needs a ≤26h-old GREEN receipt. See `.github/agent-docs/mobile-release-process.md`.
+GREEN gate (13:15 UTC) → train: iOS phased 100% after 12h; Android 1%→10%→50%→100%; rollout-advance every 4h on a ≤26h GREEN receipt. **Never withdraw an iOS version Apple has to ship a newer one.** `.github/agent-docs/mobile-release-process.md`.
 
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
@@ -101,7 +102,9 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../scripts/dev-harness/IPHONE_HARNESS.md).
 
-CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
+### Performance
+UI: `bash app/tool/perf_gate.sh` ([guide](integration_test/perf/README.md)); red blocks shipping.
+Heavy: `bash app/tool/perf_device_run.sh` ([never-uninstall guide](tool/perf/README.md)).
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable

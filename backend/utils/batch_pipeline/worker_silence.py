@@ -8,7 +8,7 @@ import numpy as np
 from utils.batch_pipeline.recovery_disposition import inspect_audio, silence_payload
 
 
-def inspect_worker_silence(item, samples):
+def inspect_worker_vad(item, samples):
     # Worker decoding is lossless PCM16 / 32768. Reject other representations
     # rather than quantizing a different signal into false silence evidence.
     samples = np.asarray(samples)
@@ -28,4 +28,9 @@ def inspect_worker_silence(item, samples):
     # Exactly integration's audio validation, local VAD and span validation.
     # No provider, hosted VAD, cache, or account lookup belongs at this seam.
     _, duration, spans = inspect_audio(item, output.getvalue())
+    return duration, spans
+
+
+def inspect_worker_silence(item, samples):
+    duration, spans = inspect_worker_vad(item, samples)
     return None if spans else silence_payload(duration)

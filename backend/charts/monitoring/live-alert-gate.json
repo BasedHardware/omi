@@ -42,6 +42,7 @@
     "omi-stt-provider-terminal-failure-ratio",
     "omi-stt-chain-exhausted-ratio",
     "omi-stt-no-full-stage-target",
+    "omi-stt-pressure-sampler-stuck",
     "omi-redis-cache-conn-warn",
     "omi-redis-cache-conn-page"
   ]

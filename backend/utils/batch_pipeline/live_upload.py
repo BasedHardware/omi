@@ -15,19 +15,24 @@ import wave
 from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import (
+    known_unsupported_batch_language,
     record_capture_eligible,
 )
 from config.policy import resolve_batch_policy
+from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.intake import artifacts_for, durable_status, start_response
+from utils.batch_pipeline.intake import durable_status, start_response
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import OWNER, record_identity
+from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
 from utils.sync.stage import current_stage
+from utils.sync.legacy_dark import LegacySyncMode
 
 
 class RecordUploadRoute(Enum):
@@ -116,8 +121,10 @@ async def _legacy_final_pass_route(uid, conversation_id, store, legacy_mode) -> 
     return RecordUploadRoute.BATCH if final_pass_rehome.rehomes_to_batch(outcome) else RecordUploadRoute.LEGACY
 
 
-async def _legacy_takes_new_owner(policy, legacy_mode) -> bool:
-    """An ownerless conversation goes to legacy only for a narrowed uid at ``on``.
+async def _legacy_takes_new_owner(policy, legacy_mode, language=None) -> bool:
+    """An ownerless conversation goes to legacy only at ``on``: for a narrowed uid,
+    or (batch eligibility, lead 41e13b) a conversation language known to be
+    unsupported by batch Parakeet.
 
     Outside ``on`` legacy may take no new owner (M3 re-review): batch owns it even
     for a narrowed uid, as intake widens such an upload anyway. The mode is read
@@ -125,9 +132,18 @@ async def _legacy_takes_new_owner(policy, legacy_mode) -> bool:
     """
     from utils.sync import legacy_dark
 
-    if policy.batch_enabled:
+    if policy.batch_enabled and not known_unsupported_batch_language(language):
         return False
     return await _legacy_mode(legacy_mode) is legacy_dark.LegacySyncMode.ON
+
+
+async def _language_exclusion(store, uid, conversation):
+    """Only a new owner/re-home needs this preference read; rollback adds no IO."""
+    if not admission_language_exclusion_enabled():
+        return None, None
+    user = await run_blocking(db_executor, lambda: store.client.collection('users').document(uid).get().to_dict() or {})
+    _, reason = batch_admission_language(user, conversation)
+    return reason, conversation.get('language') or user.get('language')
 
 
 async def registered_record_response(
@@ -173,6 +189,13 @@ async def registered_record_response(
         row = snapshot.to_dict() or {}
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
+            if admission_language_exclusion_enabled():
+                legacy_mode = await _legacy_mode(legacy_mode)
+                if legacy_mode is not LegacySyncMode.ON:
+                    reason, language = await _language_exclusion(store, uid, row)
+                    if reason:
+                        record_admission_exclusion(language, reason, legacy_available=False)
+                        return RecordUploadRoute.LEGACY
             return await _legacy_final_pass_route(uid, conversation_id, store, legacy_mode)
         if row.get('record_lane_owner') == 'batch_sync_v1':
             return RecordUploadRoute.BATCH
@@ -190,7 +213,18 @@ async def registered_record_response(
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher. BYOK takes the
             # batch owner like any upload (David, 10-19): no request-scoped keys needed.
-            legacy_owner = await _legacy_takes_new_owner(policy, legacy_mode)
+            reason, language = await _language_exclusion(store, uid, row)
+            if reason:
+                # A prior batch content receipt must drain before new-custody
+                # eligibility, even if this conversation has no owner marker.
+                prior = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
+                if prior.get('dispatch_protocol') == 'batch_v1':
+                    return RecordUploadRoute.BATCH
+                if await _legacy_mode(legacy_mode) is not LegacySyncMode.ON:
+                    # No new owner in dark: intake rechecks eligibility after
+                    # its content fence, then the caller returns its retry fence.
+                    return None
+            legacy_owner = bool(reason) or await _legacy_takes_new_owner(policy, legacy_mode, row.get('language'))
             owner = 'legacy_final_pass_v1' if legacy_owner else 'batch_sync_v1'
             revision = await run_blocking(
                 db_executor,
@@ -203,6 +237,8 @@ async def registered_record_response(
             )
             if revision is None:
                 return _pending()
+            if reason:
+                record_admission_exclusion(language, reason, legacy_available=True)
             return RecordUploadRoute.BATCH if owner == 'batch_sync_v1' else RecordUploadRoute.LEGACY
         return None
     if byok_enabled or row.get('uses_custom_stt'):

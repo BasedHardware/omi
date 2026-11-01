@@ -51,6 +51,9 @@ CLICKUP_CLIENT_ID=your_client_id
 CLICKUP_CLIENT_SECRET=your_client_secret
 OAUTH_REDIRECT_URL=https://your-app-url.com/auth/callback
 
+# Secret used to sign the omi_clickup_settings cookie (required for settings writes)
+CLICKUP_SETTINGS_SECRET=your_random_secret
+
 # OpenAI for AI extraction
 OPENAI_API_KEY=your_openai_key
 

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
-import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Called with the conversation ids surfaced by a reconcile pass so the
@@ -77,12 +76,7 @@ class SyncReconciler {
     }
   }
 
-  Future<bool> _hasUploaded() async {
-    final phone = _phone;
-    if (phone == null) return false;
-    final wals = await phone.getAllWals();
-    return wals.any((w) => w.status == WalStatus.uploaded);
-  }
+  Future<bool> _hasUploaded() async => _phone?.hasUploadedWals ?? false;
 
   Future<void> _reschedule() async {
     _timer?.cancel();

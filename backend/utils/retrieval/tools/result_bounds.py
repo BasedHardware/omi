@@ -17,21 +17,26 @@ T = TypeVar("T")
 MAX_RESULT_CHARS = 60000
 
 
-def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, bool]:
+def cap_items_for_llm(items: List[T] | None, max_items: int) -> Tuple[List[T], int, bool]:
     """Keep at most ``max_items`` rows for the chat model.
 
     Callers pass rows in their chosen order, so this keeps a prefix without inferring relevance.
     Returns ``(capped_list, total_found, truncated)`` where ``truncated`` is True when some rows
     were dropped.
     """
-    total_found = len(items)
+    if items is None:
+        return [], 0, False
+    items_list = list(items)
+    total_found = len(items_list)
+    if max_items <= 0:
+        return [], total_found, total_found > 0
     if total_found > max_items:
-        return items[:max_items], total_found, True
-    return list(items), total_found, False
+        return items_list[:max_items], total_found, True
+    return items_list, total_found, False
 
 
 def bounded_result(
-    result: str,
+    result: object,
     truncated: bool,
     noun: str = "results",
     *,
@@ -44,13 +49,15 @@ def bounded_result(
     The note deliberately does not state a total count: callers may pass an already-paginated
     page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
     """
-    if len(result) > MAX_RESULT_CHARS:
-        result = result[:MAX_RESULT_CHARS]
+    text: str = "" if result is None else result if isinstance(result, str) else str(result)
+
+    if len(text) > MAX_RESULT_CHARS:
+        text = text[:MAX_RESULT_CHARS]
         truncated = True
     if truncated:
         # Generic callers may not know the row count, so report the number of rendered lines.
         # Callers that do know how many records survived the cap should pass that count.
-        shown_count = shown if shown is not None else len(result.splitlines())
+        shown_count = max(0, int(shown)) if shown is not None else len(text.splitlines())
         unit = noun if shown is not None else "result lines"
         next_step = "Ask for a narrower topic or date range, or page with the offset, for the rest."
         if order:
@@ -66,5 +73,5 @@ def bounded_result(
             note = note.replace(
                 "more were omitted, not absent.", "more may exist; omitted data is not evidence of absence."
             )
-        result += "\n\n" + note
-    return result
+        text += "\n\n" + note
+    return text

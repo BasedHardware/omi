@@ -1,12 +1,12 @@
 ---
-title: "Quick Start"
+title: "Quickstart"
 icon: "square-terminal"
 description: "Access your Omi data programmatically with the Developer API. Build custom integrations, analytics dashboards, and automation workflows using your memories, conversations, and action items."
 ---
 
 ## Overview
 
-The Omi Developer API provides programmatic access to your personal Omi data, allowing you to build custom applications and integrations. Use it to create analytics dashboards, export data to other services, build automation workflows, or contribute data back to your Omi account.
+The Omi Developer API gives programmatic access to your own Omi data. Use it to build custom apps and integrations, such as analytics dashboards, exports to other services, and automation workflows. You can also write data back to your Omi account.
 
 <CardGroup cols={4}>
   <Card title="Memories" icon="brain" color="#a855f7" href="/doc/developer/api/memories">
@@ -26,9 +26,7 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
   </Card>
 </CardGroup>
 
----
-
-## Quick Start
+## Quick start
 
 <Steps>
   <Step title="Get Your API Key" icon="key">
@@ -40,7 +38,7 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
     Connecting an agent rather than writing code yourself? Choose **Create API Key & Prompt**, then
     **Send to My Agent Securely**: the agent receives a one-time encrypted link instead of the key. See
     [Hand a key to an agent](/doc/developer/api/keys#hand-a-key-to-an-agent-without-pasting-it).
-    Otherwise copy the key immediately — you won't be able to see it again.
+    Otherwise, copy the key now. You can't view it again.
     </Tip>
   </Step>
   <Step title="Make Your First Request" icon="terminal">
@@ -76,7 +74,7 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
     </Tabs>
   </Step>
   <Step title="Explore the Endpoints" icon="rocket">
-    Check out the endpoint pages for detailed documentation on each resource.
+    See the endpoint pages for details on each resource.
   </Step>
 </Steps>
 
@@ -86,8 +84,6 @@ key with `memories:read` can return `403` with code `developer_memory_access_not
 not mean the key is invalid or missing its scope; see [Memories](/doc/developer/api/memories).
 </Note>
 
----
-
 ## Base URL
 
 ```
@@ -95,10 +91,8 @@ https://api.omi.me/v1/dev
 ```
 
 <Note>
-For self-hosted instances, replace with your backend URL.
+`api.omi.me` is the public Developer API host. The CLI, SDKs, and MCP server use the same host. (The mobile app's production backend, `api.omiapi.com`, is a separate surface that verifies app Firebase tokens and is not a valid target for developer keys; see [App Setup](/doc/developer/AppSetup).) When you run the backend yourself for development, replace the host with your own URL.
 </Note>
-
----
 
 ## Endpoints at a Glance
 
@@ -138,8 +132,6 @@ For self-hosted instances, replace with your backend URL.
   </Accordion>
 </AccordionGroup>
 
----
-
 ## Authentication
 
 Resource endpoints under `/v1/dev/user/...` and credential introspection at `/v1/dev/key` require a Developer API key in the `Authorization` header:
@@ -156,8 +148,6 @@ REST Developer API calls. For memories, conversations, folders, and action items
 Developer API key (`omi_dev_...`) and call endpoints under `/v1/dev/user/...` such as
 `/v1/dev/user/memories`. Never commit API keys to version control or share them publicly.
 </Warning>
-
----
 
 ## List freshness
 
@@ -205,8 +195,6 @@ Retry-After: 1800
 
 Wait at least the indicated time before retrying. Retry writes only when you know they were rejected before execution; avoid repeating ambiguous writes after transport failures.
 
----
-
 ## Error Responses
 
 <AccordionGroup>
@@ -235,8 +223,6 @@ Wait at least the indicated time before retrying. Retry writes only when you kno
   </Accordion>
 </AccordionGroup>
 
----
-
 ## Security Best Practices
 
 <CardGroup cols={2}>
@@ -257,8 +243,6 @@ Wait at least the indicated time before retrying. Retry writes only when you kno
 <Tip>
 If a key is compromised, revoke it immediately from **Settings → Developer** in the Omi app.
 </Tip>
-
----
 
 ## Developer API vs MCP
 
@@ -294,24 +278,22 @@ Developer API path `/v1/dev/user/memories` instead. If you see `401 Unauthorized
 Learn more about the Model Context Protocol in the [MCP documentation](/doc/developer/mcp/introduction).
 </Info>
 
----
-
 ## Other APIs
 
-Looking for different API capabilities? Omi offers several APIs for different use cases:
+Omi has other APIs for different use cases:
 
 <CardGroup cols={2}>
   <Card title="Integration Import APIs" icon="file-import" href="/doc/developer/apps/Import">
-    **For App Developers** - Create conversations and memories on behalf of users who have enabled your app
+    **For App Developers:** Create conversations and memories on behalf of users who have enabled your app
   </Card>
   <Card title="Webhook Triggers" icon="bell" href="/doc/developer/apps/Integrations">
-    **For App Developers** - Receive real-time notifications when memories are created or transcripts are processed
+    **For App Developers:** Receive real-time notifications when memories are created or transcripts are processed
   </Card>
   <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
-    **For App Developers** - Add custom tools that Omi's AI can invoke during conversations
+    **For App Developers:** Add custom tools that Omi's AI can invoke during conversations
   </Card>
   <Card title="Audio Streaming" icon="microphone" href="/doc/developer/apps/AudioStreaming">
-    **For App Developers** - Process raw audio bytes in real-time via WebSocket
+    **For App Developers:** Process raw audio bytes in real-time via WebSocket
   </Card>
 </CardGroup>
 

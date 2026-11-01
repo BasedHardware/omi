@@ -20,6 +20,8 @@ from models.conversation import Conversation
 from models.memories import MemoryDB
 from utils import encryption
 from database.fsr_read_cache import cache_writer
+from database.monthly_usage_totals import commit_fenced, queue_invalidation
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -133,16 +135,27 @@ def get_all_memories_for_user(uid: str) -> list[MemoryDB]:
 def delete_hourly_usage_for_user(uid: str):
     """Deletes all documents in the hourly_usage subcollection for a user to ensure idempotency."""
     logger.info(f"Deleting existing hourly usage data for user {uid}...")
-    coll_ref = db.collection('users').document(uid).collection('hourly_usage')
+    user_ref = db.collection('users').document(uid)
+    coll_ref = user_ref.collection('hourly_usage')
     batch_size = 200
     while True:
         docs = list(coll_ref.limit(batch_size).stream())
         if not docs:
             break
-        batch = db.batch()
-        for doc in docs:
-            batch.delete(doc.reference)
-        batch.commit()
+
+        def write(transaction):
+            months = set()
+            for doc in docs:
+                transaction.delete(doc.reference)
+                try:
+                    stamp = datetime.strptime(doc.id, '%Y-%m-%d-%H')
+                except ValueError:
+                    continue  # Noncanonical sources never have a ready projection.
+                months.add(stamp.replace(day=1, hour=0))
+            for stamp in months:
+                queue_invalidation(transaction, user_ref, stamp)
+
+        commit_fenced(user_ref, write, firestore_client=db)
         if len(docs) < batch_size:
             break
     logger.info(f"Finished deleting hourly usage data for user {uid}.")

@@ -176,6 +176,8 @@ def check_private_env_against_chart(
     env_entries = values.get("env") or []
     overridden = set(applied_override_names(overrides))
     for name in private_env:
+        if values.get("workloadIdentityOnly") and name in {"SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS"}:
+            raise ValueError(f"{PRIVATE_ENV_KEY}.{name} is forbidden by workloadIdentityOnly")
         if name in _CHART_OWNED_ENV:
             raise ValueError(f"{PRIVATE_ENV_KEY}.{name} is derived by the chart and cannot be overridden")
         if name in indices:

@@ -220,6 +220,36 @@ def dockerfiles(root: Path) -> Iterator[Path]:
                 yield Path(directory) / name
 
 
+def inspect_configmap_chart(root: Path, chart: Path, binding: dict[str, str], target: str) -> dict[str, int]:
+    """Validate mounted script provenance separately from built-image COPY provenance.
+
+    Only literal ConfigMap Files.Get/mount wiring is supported. The shared stdlib
+    module is a generated chart asset, checked byte-for-byte against its owner.
+    """
+    if target != binding['entrypoint']:
+        raise ValueError(f'{chart}: unexpected ConfigMap entrypoint {target}')
+    template = (chart / binding['template']).read_text()
+    mount = str(PurePosixPath(target).parent)
+    volume = re.escape(binding['volume'])
+    if not re.search(rf'- name: {volume}\s+mountPath: {re.escape(mount)}\s+readOnly: true', template):
+        raise ValueError(f'{chart}: script read-only volume mount missing')
+    match = re.search(rf'- name: {volume}\s+configMap:\s+name: (.+)', template)
+    if not match:
+        raise ValueError(f'{chart}: script ConfigMap volume missing')
+    configmap = next(
+        (block for block in template.split('---') if 'kind: ConfigMap' in block and f"name: {match[1]}" in block), ''
+    )
+    for source, name in [(binding['source'], PurePosixPath(target).name), (binding['logging'], 'omi_logging.py')]:
+        if not (chart / source).resolve().is_relative_to((chart / 'files').resolve()):
+            raise ValueError(f'{chart}: ConfigMap source must be inside chart files')
+        expected = f'  {name}: |\n' + '{{ .Files.Get "' + source + '" | indent 4 }}'
+        if expected not in configmap:
+            raise ValueError(f'{chart}: missing ConfigMap source binding for {name}')
+    if (chart / binding['logging']).read_bytes() != (root / 'backend/omi_logging.py').read_bytes():
+        raise ValueError(f'{chart}: shared omi_logging.py missing or shadowed; regenerate chart copy')
+    return source_violations((chart / binding['source']).read_text())
+
+
 def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
     contracts = [c for c in load_contracts() if c.source_root.is_relative_to(root / 'backend')]
     by_docker: dict[Path, list[Any]] = {}
@@ -227,6 +257,7 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
         by_docker.setdefault(c.dockerfile, []).append(c)
     registry = json.loads((root / 'backend/runtime_images.json').read_text())
     bindings: dict[str, str] = registry['logging_chart_images']
+    configmap_bindings = registry.get('logging_configmap_charts', {})
     # Non-Python images (the Rust listen-edge) log through their own runtime; the
     # registry records how, and this Python launch guard does not apply to them.
     native = {spec['dockerfile'] for spec in registry.get('native_images', {}).values()}
@@ -276,6 +307,13 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
             continue
         for path in sorted(set(chart.rglob('*.yaml')) | set(chart.rglob('*.yml'))):
             for position, target in enumerate(helm_targets(path.read_text())):
+                if chart.name in configmap_bindings:
+                    binding = configmap_bindings[chart.name]
+                    if path != chart / binding['template']:
+                        raise ValueError(f'{path}: ConfigMap launcher outside registered template')
+                    key = f"{(chart / binding['source']).relative_to(root).as_posix()}::configmap:{target}"
+                    sources[key] = inspect_configmap_chart(root, chart, binding, target)
+                    continue
                 if chart.name not in bindings or bindings[chart.name] not in by_name:
                     raise ValueError(f'{path}: Python launcher has no registered chart/image binding')
                 contract = by_name[bindings[chart.name]]

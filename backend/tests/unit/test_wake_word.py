@@ -113,7 +113,7 @@ def test_renderer_marks_invocation_segments_inline_and_escapes_spoken_marker(mon
 
     rendered = transcript_for_llm.conversation_transcript_for_action_items('uid-1', conversation, mark_wake_words=True)
 
-    assert rendered.splitlines()[0] == f'[seg-1 0] {WAKE_WORD_MARKER} Hey Omi, remember the budget.'
+    assert rendered.splitlines()[0] == f'[seg-1 c0] {WAKE_WORD_MARKER} Hey Omi, remember the budget.'
     assert f'[seg-2] I literally said {WAKE_WORD_MARKER_ESCAPED}.' in rendered
     assert rendered.count(WAKE_WORD_MARKER) == 1
     assert has_structural_wake_word_marker(rendered) is True
@@ -125,7 +125,7 @@ def test_unmatched_rendering_remains_byte_identical(monkeypatch):
 
     rendered = transcript_for_llm.conversation_transcript_for_action_items('uid-1', conversation, mark_wake_words=True)
 
-    assert rendered == '[seg-1 0] Send the budget.'
+    assert rendered == '[seg-1 c0] Send the budget.'
 
 
 def test_renderer_escapes_marker_syntax_from_segment_ids_and_text(monkeypatch):
@@ -149,7 +149,7 @@ def test_direct_renderer_call_does_not_mark_unrelated_prompt_consumers(monkeypat
 
     rendered = transcript_for_llm.conversation_transcript_for_action_items('uid-1', conversation)
 
-    assert rendered == f'[seg-1 0] Hey Omi, I said {WAKE_WORD_MARKER}.'
+    assert rendered == f'[seg-1 c0] Hey Omi, I said {WAKE_WORD_MARKER}.'
 
 
 def test_spoken_marker_position_is_not_trusted():

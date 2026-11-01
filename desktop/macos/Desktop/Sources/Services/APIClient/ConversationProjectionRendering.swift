@@ -77,7 +77,7 @@ enum ConversationProjectionRendering {
     }
     let structure = projection.structure
     let rendered = Structured(
-      title: structure.title, overview: structure.overview ?? "", emoji: structure.emoji ?? "🧠",
+      title: structure.title, overview: structure.overview ?? "", emoji: structure.emoji ?? "💬",
       category: structure.category.flatMap { $0 == ._unknown ? nil : $0.rawValue } ?? "other",
       actionItems: items,
       events: (structure.events ?? []).map {

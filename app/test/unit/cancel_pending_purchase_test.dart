@@ -21,6 +21,10 @@ void main() {
       CancelPendingPurchase.proceed,
     );
     expect(isUpgradePendingCancelConflict(409), isTrue);
+    expect(
+        isUpgradePendingCancelConflict(409,
+            detail: 'Please reopen Plans & Billing to select a price in your billing currency.'),
+        isFalse);
     expect(isUpgradePendingCancelConflict(400), isFalse);
   });
 }

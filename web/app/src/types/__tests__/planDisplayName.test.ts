@@ -5,11 +5,11 @@ describe('canonical plan presentation', () => {
   it.each([
     ['basic', 'Free'],
     ['plus', 'Plus'],
-    ['operator', 'Pro'],
+    ['operator', 'Operator'],
     ['architect', 'Architect'],
     ['pro', 'Architect'],
     ['unlimited', 'Neo'],
-    ['unlimited_v2', 'Unlimited'],
+    ['unlimited_v2', 'Omi Pro'],
     ['future_plan_123', 'Plan unavailable'],
   ])('%s is displayed as %s', (id, name) => {
     expect(planDisplayName(decodePlan(id))).toBe(name);

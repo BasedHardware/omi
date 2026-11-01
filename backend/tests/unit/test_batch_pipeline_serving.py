@@ -23,6 +23,7 @@ from utils.batch_pipeline.contracts import PoolCapacity
 from utils.batch_pipeline.serving import Serving
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline import admission
 
 
 @pytest.fixture
@@ -117,6 +118,39 @@ def test_storage_cleanup_failure_does_not_stop_projection_or_lease_recovery():
     cleanup = Mock(side_effect=TimeoutError('synthetic storage unavailable'))
     Serving(MemoryStore(), projector=projector, cleanup=cleanup).reconcile()
     projector.sweep.assert_called_once()
+
+
+def test_authorize_http_returns_before_worker_timeout_with_blocked_reservation(api, monkeypatch):
+    client, store = api
+    row = store.rows['jobs', 'synthetic']
+    row['requires_compute_admission'] = True
+    row['projection_binding'] = {'job_id': 'bp_job', 'content_id': 'content'}
+    store.rows['intakes', 'bp_job'] = {'total_audio_seconds': 30}
+    (lease,) = Scheduler(store).pull(time.time())
+    release, finished = threading.Event(), threading.Event()
+
+    def blocked(*args):
+        try:
+            release.wait(6)
+            return SimpleNamespace(allowed=True)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *args: False)
+    monkeypatch.setattr(admission, 'reserve_backfill_speech', blocked)
+    started = time.monotonic()
+    try:
+        response = client.post(
+            '/v2/batch-pipeline/authorize-compute',
+            json={'stage': 'dev', 'leases': [{'segment_id': 'synthetic', 'token': lease.token}]},
+        )
+        assert time.monotonic() - started < 4.8
+        assert response.status_code == 200
+        assert response.json() == {'allowed': [], 'retry_after': {'synthetic': 30}, 'held_reason': {}}
+    finally:
+        release.set()
+        assert finished.wait(2)
+    assert 'compute_admission_token' not in store.rows['jobs', 'synthetic']
 
 
 @pytest.mark.asyncio
@@ -288,6 +322,89 @@ def test_held_partial_scan_runs_on_a_slow_cadence_behind_its_kill_switch(monkeyp
     Serving(MemoryStore(), projector=SimpleNamespace(sweep=lambda: None)).reconcile()
 
 
+def test_budget_stopped_held_pass_resumes_next_tick_and_carries_its_bounds(monkeypatch):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': 10_000.0}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    results = [
+        {'partial': 0, 'waiting': 32, 'error': 0, 'units': 32, 'more': 1},
+        {'partial': 3, 'waiting': 2, 'error': 0, 'units': 5, 'more': 0},
+    ]
+    projector = Mock()
+    projector.sweep_held = Mock(side_effect=results)
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    call = projector.sweep_held.call_args
+    assert call.kwargs['deadline'] - clock['monotonic'] == serving_module.HELD_PARTIAL_TICK_SECONDS
+    assert call.kwargs['max_pages'] == (
+        serving_module.HELD_PARTIAL_READS_PER_HOUR // (32 * serving_module.HELD_PARTIAL_READS_PER_UNIT)
+    )
+    # A pass stopped mid-backlog does not wait out the interval.
+    assert service.held_partial_due == clock['monotonic']
+    clock['monotonic'] += 1
+    service.reconcile()
+    assert projector.sweep_held.call_count == 2
+    # A short page ends the pass and re-arms the slow interval.
+    assert service.held_partial_due == clock['monotonic'] + serving_module.HELD_PARTIAL_INTERVAL_SECONDS
+    assert service.held_partial_reads == [
+        (10_000.0, 32 * serving_module.HELD_PARTIAL_READS_PER_UNIT),
+        (10_001.0, 5 * serving_module.HELD_PARTIAL_READS_PER_UNIT),
+    ]
+
+
+def test_held_partial_kill_switch_stops_even_a_resuming_pass(monkeypatch):
+    projector = Mock()
+    projector.sweep_held = Mock(return_value={'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'more': 1})
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    assert projector.sweep_held.call_count == 1 and service.held_partial_due <= time.monotonic()
+    monkeypatch.setenv('BATCH_PIPELINE_HELD_PARTIAL_ENABLED', 'false')
+    service.reconcile()
+    assert projector.sweep_held.call_count == 1
+
+
+def test_held_partial_governor_charges_the_sweeps_exact_reads(monkeypatch):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': 20_000.0}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    projector = Mock()
+    projector.sweep_held = Mock(
+        return_value={'partial': 2, 'waiting': 0, 'error': 0, 'units': 32, 'reads': 500, 'more': 0}
+    )
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    # A sweep that reports its own reads (sibling-heavy uploads cost more than
+    # the per-unit estimate) is charged exactly what it reported.
+    assert projector.sweep_held.call_count == 1
+    assert service.held_partial_reads == [(20_000.0, 500)]
+
+
+def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(monkeypatch):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': 50_000.0}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    projector = Mock()
+    projector.sweep_held = Mock(return_value={'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'more': 0})
+    service = Serving(MemoryStore(), projector=projector)
+    service.held_partial_reads = [(clock['monotonic'], serving_module.HELD_PARTIAL_READS_PER_HOUR)]
+    service.reconcile()
+    service.reconcile()
+    # The hourly window is spent: no sweep, and the gate retries for free.
+    assert projector.sweep_held.call_count == 0 and service.held_partial_due == clock['monotonic']
+    clock['monotonic'] += serving_module.HELD_PARTIAL_WINDOW_SECONDS
+    service.reconcile()
+    assert projector.sweep_held.call_count == 1
+
+
 def test_recovery_is_scheduled_inside_service_but_metrics_reconcile_does_not_dispatch():
     from unittest.mock import Mock
 
@@ -382,17 +499,17 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     _, store = api
     service = routes.serving_for_stage('dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
-    entered, release = threading.Event(), threading.Event()
+    entered, release = asyncio.Event(), asyncio.Event()
 
-    def recover(segment, owner):
+    async def recover(segment, owner):
         entered.set()
-        assert release.wait(5)
+        await release.wait()
         return 'recovered'
 
     service.recovery = Mock()
-    service.recovery.recover.side_effect = recover
     from unittest.mock import AsyncMock
 
+    service.recovery.recover_async = AsyncMock(side_effect=recover)
     service.reconcile_async = AsyncMock()
     task = asyncio.create_task(
         routes.recover_quarantine(
@@ -400,7 +517,7 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
         )
     )
     try:
-        assert await asyncio.to_thread(entered.wait, 2)
+        await asyncio.wait_for(entered.wait(), 2)
         assert not task.done()  # The request stays active during the provider call.
         service.reconcile_async.assert_not_awaited()
     finally:
@@ -409,7 +526,8 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     service.reconcile_async.assert_awaited_once_with(
         owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic'
     )
-    assert service.recovery.recover.call_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+    assert service.recovery.recover_async.await_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+    service.recovery.recover.assert_not_called()
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
@@ -473,11 +591,7 @@ def _retry_count(reason):
 async def test_expected_enrichment_retries_are_409_and_unexpected_stay_500(monkeypatch, caplog, kind):
     from utils.sync import reprocess
 
-    # Importing the real sync pipeline costs seconds; the identity check below
-    # pins its defining module and name instead.
-    SyncConversationPersistenceFenced = type(
-        'SyncConversationPersistenceFenced', (RuntimeError,), {'__module__': 'utils.sync.pipeline'}
-    )
+    from utils.enrichment.admission import SyncConversationPersistenceFenced
 
     class StaleSnapshot(SyncConversationPersistenceFenced):
         pass
@@ -625,3 +739,71 @@ def test_serving_maintenance_fails_open_when_lease_store_errors():
     service = Serving(store, cleanup=Mock(), leader=LeaderLease(broken, SERVING_MAINTENANCE, ttl_seconds=60))
     service.reconcile(periodic=True)
     service.cleanup.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('blocked', ['reconcile', 'drain', None])
+async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, blocked):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+    counts = {'reconcile': 0, 'drain': 0}
+    cancelled = asyncio.Event()
+    progressed = asyncio.Event()
+    stages = []
+    stage = 'dev'
+    original_wait_for = asyncio.wait_for
+
+    async def short_wait(awaitable, timeout):
+        return await original_wait_for(awaitable, timeout=0.01 if timeout == 5 else 0.001)
+
+    async def tick(kind):
+        nonlocal stage
+        counts[kind] += 1
+        if kind == blocked:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        elif counts[kind] >= 2 and (blocked is not None or min(counts.values()) >= 2):
+            progressed.set()
+        stage = 'prod'
+        if kind == 'drain':
+            raise RuntimeError('synthetic drain failure')
+
+    async def reconcile_async(**kwargs):
+        await tick('reconcile')
+
+    async def drain_recordings(store):
+        assert store is service.store
+        await tick('drain')
+
+    service = SimpleNamespace(store=object(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+
+    def resolve(selected):
+        stages.append(selected)
+        return service
+
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'current_stage', lambda: stage)
+    monkeypatch.setattr(serving, 'serving_for_stage', resolve)
+    monkeypatch.setattr(serving, 'drain_recordings', drain_recordings)
+    monkeypatch.setattr(serving.asyncio, 'wait_for', short_wait)
+    runtime = serving.start_serving_from_env()
+    try:
+        await original_wait_for(progressed.wait(), timeout=1)
+    finally:
+        await serving.stop_serving(runtime)
+    assert runtime[1].done()
+    assert counts['reconcile'] >= (1 if blocked == 'reconcile' else 2)
+    assert counts['drain'] >= (1 if blocked == 'drain' else 2)
+    assert 'dev' in stages and 'prod' in stages
+    assert cancelled.is_set() is (blocked is not None)
+    stopped_counts = counts.copy()
+    await asyncio.sleep(0)
+    assert counts == stopped_counts
+
+
+async def _inline_serving_call(executor, fn, *args, **kwargs):
+    return fn(*args, **kwargs)

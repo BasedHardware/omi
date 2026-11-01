@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -58,6 +59,7 @@ class _NoSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     // Tests must never open a real transcription socket: connecting would hit
     // buildHeaders → AuthService.isSignedIn → FirebaseAuth, none of which are
@@ -70,7 +72,7 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
   int sendCount = 0;
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required void Function() onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
@@ -78,6 +80,7 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
     required bool playResponseAudio,
   }) async {
     sendCount++;
+    return const VoiceQuestionResult.answered("Test answer");
   }
 }
 

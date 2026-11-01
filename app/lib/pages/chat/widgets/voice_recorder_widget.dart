@@ -20,15 +20,10 @@ class VoiceRecorderWidget extends StatefulWidget {
   State<VoiceRecorderWidget> createState() => _VoiceRecorderWidgetState();
 }
 
-class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-
+class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
-      ..repeat(reverse: true);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final provider = context.read<VoiceRecorderProvider>();
@@ -38,12 +33,6 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
         provider.startRecording();
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
   }
 
   @override

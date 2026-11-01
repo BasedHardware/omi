@@ -60,10 +60,13 @@ terminal. Rejection uploads no screenshot unless audited.
 
 A fresh admission read every 30 seconds grants a 55-second lease measured from
 request start and bound to the owner/session that fetched it. An account or
-same-UID session transition revokes the lease immediately. SDK cached reload
-notifications cannot renew that lease. The
-client reads the public flag-evaluation endpoint and authenticated
-`GET /v1/screen-task/admission`; a failed refresh leaves existing leases to expire.
+same-UID session transition revokes the lease immediately. The client reads
+authenticated `GET /v1/screen-task/admission`; a failed refresh leaves existing
+leases to expire. The same tick renews the flag lease from the PostHog SDK's
+cached `screen_task_jev_gate` value without a network call; the SDK reloads
+flags every 30 minutes, because every PostHog flag request is billed. An explicit
+`false` therefore reaches running clients within about 30 minutes; the fast stop
+is `SCREEN_TASK_STOP`.
 `SCREEN_TASK_STOP=true` is a backend ops stop read at each gate and flagged
 screenshot dispatch. The admission endpoint reports it; gate/proxy return typed
 409 `screen_task_stopped`, never an ordinary provider error. Identified macOS

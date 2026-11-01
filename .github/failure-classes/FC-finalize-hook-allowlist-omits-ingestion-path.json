@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-finalize-hook-allowlist-omits-ingestion-path",
+  "violated_contract": "A post-finalization hook that a user-visible surface depends on must run for every finalize path that can produce the row it consumes. An allowlist of accepted processing triggers, hand-restated inside the hook, silently drops any ingestion lane the list never named: the episodes overlay reconciled only capture_end, client_finalize and server_recovery, so every offline-sync (WAL) conversation — finalized with sync_update on its own lane, which never even called the hook — was permanently invisible to episodes. No error, no metric: the row simply never folds under the live episode, and Home shows each sync fragment as its own row for the whole live episode. The same drift hid the app half of the contract: Home folded only members that were still in progress, so even an attached completed member stayed a separate row.",
+  "canonical_prevention": "Drive the hook from the ingestion lane itself, not from a trigger list restated at a second site: the sync lane schedules the same after-finalization episode hook every other finalize path uses (schedule_after_finalization with ProcessingTrigger.SYNC_UPDATE), and the hook's trigger set admits it. Behavioral coverage pins every guard the omission bypassed: a sync-finalized conversation joins the live episode covering its span, never reopens a closed one, never opens an episode on its own, a discarded one never joins, and an existing trigger keeps its behavior. The app's fold contract is pinned at the widget layer: every member of the live episode hides under its row whatever its status, non-members stay, processing rows stay, and closing the episode returns the members as ordinary rows.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_episodes_service.py",
+    "app/test/widgets/l5_home_visibility_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/episodes/",
+    "backend/utils/sync/pipeline.py",
+    "backend/utils/enrichment/callback.py",
+    "app/lib/pages/conversations/"
+  ],
+  "status": "open"
+}

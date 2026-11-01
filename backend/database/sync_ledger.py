@@ -638,6 +638,7 @@ def _mark_completed_transaction(
     now: datetime,
     run_token: str | None = None,
     run_epoch: int | None = None,
+    staging_custody: Dict[str, Any] | None = None,
 ) -> bool:
     """Publish completion only while ``job_id`` still owns the ledger entry."""
     # The caller-side pipeline checks this too, but completion is a durable
@@ -655,6 +656,7 @@ def _mark_completed_transaction(
         {
             'status': 'completed',
             'result': result,
+            **({'staging_custody': staging_custody} if staging_custody else {}),
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
         },
@@ -672,6 +674,7 @@ def mark_sync_content_completed(
     run_token: str | None = None,
     run_epoch: int | None = None,
     firestore_client: Any = None,
+    staging_custody: Dict[str, Any] | None = None,
 ) -> bool:
     """Atomically publish a completed result for the matching ledger owner."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -685,6 +688,7 @@ def mark_sync_content_completed(
         now,
         run_token,
         run_epoch,
+        staging_custody,
     )
 
 

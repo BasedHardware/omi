@@ -7,9 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 const String deletedAccountUidsKey = 'deletedAccountUids';
 const int maxDeletedAccountUids = 20;
 
-/// Read through the plugin's typed getter: after a cold start a list comes back from
-/// disk untyped (`List<Object?>`), and `SharedPreferencesUtil.getStringList` would
-/// quarantine it as a type mismatch instead of returning it.
+/// Read through the plugin's typed getter, which needs no `SharedPreferencesUtil.init` and
+/// converts the list that comes back from disk untyped (`List<Object?>`) after a cold start.
 Future<List<String>> readDeletedAccountUids() async {
   try {
     return (await SharedPreferences.getInstance()).getStringList(deletedAccountUidsKey) ?? const [];

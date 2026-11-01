@@ -43,7 +43,7 @@ def _install(monkeypatch, transfer_result):
     }
     monkeypatch.setattr(merge.conversations_db, "get_conversation", lambda uid, cid: sources.get(cid))
     monkeypatch.setattr(merge, "_collect_all_photos", lambda uid, convs: [])
-    monkeypatch.setattr(merge, "_copy_audio_chunks_for_merge", lambda uid, convs, new_id: [])
+    monkeypatch.setattr(merge, "_copy_audio_chunks_for_merge", lambda uid, convs, new_id, **_kw: [])
     monkeypatch.setattr(merge, "_determine_visibility", lambda convs: 'private')
     monkeypatch.setattr(merge, "_shared_client_device_provenance", lambda convs: (None, None))
     monkeypatch.setattr(

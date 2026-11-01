@@ -34,6 +34,7 @@ from config.plan_catalog import (
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
+from utils.metrics import OMI_NEW_BUYER_CHECKOUT_REJECTED
 from utils.plan_wire_capabilities import understands_plan_identity
 from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
@@ -601,6 +602,56 @@ _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 WEB_PLATFORMS = {'web'}
 
 
+NEW_BUYER_SINGLE_PLAN_ENV = 'NEW_BUYER_SINGLE_PLAN_ENABLED'
+_NEW_BUYER_SINGLE_PLAN_OFF_VALUES = ('false', '0', 'off', 'no')
+
+
+def new_buyer_single_plan_enabled() -> bool:
+    """Kill switch for the new-buyer single-plan catalog. On unless set off.
+
+    Omi Pro (`unlimited_v2`) is the only plan sold, on every platform
+    (2026-10-26: Plus, Pro/Operator, Architect and Neo are retired; a current
+    subscriber still sees and manages their own retired plan). Setting
+    NEW_BUYER_SINGLE_PLAN_ENABLED to false/0/off/no restores the per-platform
+    catalog.
+    """
+    return os.getenv(NEW_BUYER_SINGLE_PLAN_ENV, 'true').strip().lower() not in _NEW_BUYER_SINGLE_PLAN_OFF_VALUES
+
+
+def is_desktop_platform(platform: Optional[str]) -> bool:
+    """True for the X-App-Platform values desktop plan rules key off.
+
+    Anything that is not a real platform string (missing header, FastAPI's
+    Header default under direct invocation) is not desktop.
+    """
+    if not isinstance(platform, str):
+        return False
+    return platform.lower() in DESKTOP_PLATFORMS
+
+
+def new_buyer_single_plan_applies(current_plan: PlanType) -> bool:
+    """True when a caller with no current paid subscription gets only Omi Pro.
+
+    Applies on every platform, desktop included: Omi Pro grants full desktop.
+    """
+    if not new_buyer_single_plan_enabled():
+        return False
+    return current_plan == PlanType.basic
+
+
+def retired_plan_change_error(current_plan: PlanType, target_plan: PlanType) -> Optional[str]:
+    """Error text when a plan change targets a retired plan, else None.
+
+    Omi Pro is the only plan sold. A subscriber on a retired plan may switch
+    interval within it or move to Omi Pro, never onto another retired plan.
+    """
+    if not new_buyer_single_plan_enabled():
+        return None
+    if target_plan in (PlanType.unlimited_v2, current_plan):
+        return None
+    return "This plan is no longer available. Switch to Omi Pro instead."
+
+
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     """Plans hidden from the purchase catalog per platform.
 
@@ -653,10 +704,15 @@ def filter_plans_for_user(
        from the phone. Desktop and web keep selling both.
     3. Fully churned ex-Neo users are `basic` and receive Plus + Unlimited,
        the replacement catalog, not the deprecated Neo SKU.
-
-    The current-plan escape still applies on desktop/web so a Neo subscriber
-    opening those surfaces can manage/cancel.
+    4. While NEW_BUYER_SINGLE_PLAN_ENABLED is on (default), Omi Pro
+       (`unlimited_v2`) is the only plan sold on every platform. A subscriber
+       on a retired plan also sees their own plan so they can manage it. The
+       rules above apply only when the kill switch restores the old catalog.
     """
+    if new_buyer_single_plan_enabled():
+        visible = {PlanType.unlimited_v2, current_plan}
+        return [d for d in definitions if d.get('plan_type') in visible]
+
     is_mobile = (platform or '').lower() in _MOBILE_PLATFORM_TOKENS
     if is_mobile and current_plan in DESKTOP_ENTITLED_PLAN_TYPES:
         return [d for d in definitions if d.get('plan_type') == current_plan]
@@ -1534,6 +1590,108 @@ def is_pending_cancellation(subscription: Optional[Subscription], now: Optional[
     return subscription.current_period_end > (now or int(time.time()))
 
 
+NEW_BUYER_SINGLE_PLAN_ERROR = (
+    "Omi Pro is the only plan available for new subscriptions. Existing subscribers keep their current plan."
+)
+
+
+def _target_price_is_unlimited_v2(target_price_id: Optional[str]) -> bool:
+    if not target_price_id:
+        return False
+    try:
+        return get_plan_type_from_price_id(target_price_id) == PlanType.unlimited_v2
+    except ValueError:
+        return False
+
+
+# Closed label surfaces for omi_new_buyer_checkout_rejected_total. `reason`:
+# `non_omi_pro_price` — a checkout for a retired plan was rejected. `plan` is
+# the target price's plan id or `unknown`. Never widen these with a uid, price
+# id, or error text.
+NEW_BUYER_CHECKOUT_REJECT_REASONS = ('non_omi_pro_price',)
+NEW_BUYER_CHECKOUT_REJECT_PLANS = tuple(sorted({plan.value for plan in PlanType} | {'unknown'}))
+
+
+def _rejected_price_plan_label(target_price_id: Optional[str]) -> str:
+    if not target_price_id:
+        return 'unknown'
+    try:
+        return get_plan_type_from_price_id(target_price_id).value
+    except ValueError:
+        return 'unknown'
+
+
+def record_new_buyer_checkout_rejection(target_price_id: Optional[str]) -> None:
+    """Count one checkout rejection under the single-plan rule.
+
+    Never raises on the checkout path; the label surfaces are closed by
+    construction (no ids, no exception text). The reason is a literal at the
+    call site — the reason-label contract accepts literals only (a variable
+    needs a reviewed CLOSED_HELPERS helper or debt).
+    """
+    try:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(
+            reason='non_omi_pro_price', plan=_rejected_price_plan_label(target_price_id)
+        ).inc()
+    except Exception:
+        logger.warning('new-buyer checkout guard metric failed', exc_info=True)
+
+
+def _zero_initialize_rejection_children() -> None:
+    """Create every reachable label child so each series is born at 0.
+
+    A Counter child does not exist until its first ``.inc()``, and then reads
+    as a flat 1, invisible to rate()/increase() on a rare counter. Reasons are
+    literals at each call site (see the recorders above).
+    """
+    for plan in NEW_BUYER_CHECKOUT_REJECT_PLANS:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason='non_omi_pro_price', plan=plan)
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason='unknown_platform_allowed', plan=plan)
+
+
+_zero_initialize_rejection_children()
+
+
+def _has_personal_recurring_subscription(subscription: Any) -> bool:
+    """True when this stored entitlement is a personal recurring Stripe subscription.
+
+    Organization grants store a one-time PaymentIntent (`pi_…`) in the legacy
+    `stripe_subscription_id` field (see `_try_reactivate_subscription` and
+    billing_reconciliation's `manual_payment_entitlement` bucket), and some
+    grant shapes carry no id at all. A granted plan without a personal
+    subscription is a new buyer for the single-plan rule: the exemption is
+    only for a current recurring subscriber.
+    """
+    sid = getattr(subscription, 'stripe_subscription_id', None)
+    return bool(sid) and not str(sid).startswith('pi_')
+
+
+@fresh_reader
+def new_buyer_single_plan_violation(uid: str, target_price_id: Optional[str]) -> Optional[str]:
+    """Error text when checkout targets a retired plan, else None.
+
+    Omi Pro (`unlimited_v2`) is the only plan sold, on every platform. Call this
+    AFTER every subscriber escape (same-price reactivation, plan-change
+    deferrals). Only a current *recurring* personal subscription on the target's
+    own plan is exempt — a granted plan (`pi_…` PaymentIntent or no
+    subscription id) is not a personal subscription.
+    """
+    if not target_price_id or not new_buyer_single_plan_enabled():
+        return None
+    if _target_price_is_unlimited_v2(target_price_id):
+        return None
+    subscription = users_db.get_user_valid_subscription(uid)
+    if (
+        subscription is not None
+        and subscription.plan != PlanType.basic
+        and _has_personal_recurring_subscription(subscription)
+        and _rejected_price_plan_label(target_price_id) == subscription.plan.value
+    ):
+        return None
+    record_new_buyer_checkout_rejection(target_price_id)
+    return NEW_BUYER_SINGLE_PLAN_ERROR
+
+
 @fresh_reader
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
@@ -1731,6 +1889,7 @@ def resolve_transcription_allowance(
     byok_active: Any = _UNRESOLVED,
     omi_funded: bool = False,
     usage_cache: Any = None,
+    provision_subscription: bool = True,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1744,6 +1903,9 @@ def resolve_transcription_allowance(
     monthly usage and the BYOK enrolment pass them in, so the startup snapshot
     and this answer come from the same reads. (The trial paywall keeps its own
     cached reads; they are not shared.)
+
+    Spend admission passes ``provision_subscription=False``: checking an
+    allowance must not create a subscription or restore an erased user root.
 
     Order: reviewer → paywall → BYOK → plan → unlimited → remaining. A
     subscription the lookup calls invalid (an inactive basic account) has no
@@ -1759,12 +1921,23 @@ def resolve_transcription_allowance(
         # unlimited; resolved first so the paywall cannot contradict that snapshot.
         if is_marketplace_reviewer(uid):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer', limit_seconds=None)
+        # The fixed non-human release-probe identity exercises the full terminal
+        # desktop path (utils/release_probe.py gate convention). Its Free-plan
+        # account never buys a plan or BYOK keys, so once live STT cap-dispatch
+        # admission covers the whole fleet the strict desktop trial paywall
+        # holds every probe packet and the pusher prod canary finalization
+        # probe times out with zero transcripts (run 40190728003). Resolved
+        # before the paywall for the same reason as marketplace reviewers.
+        if uid == RELEASE_PROBE_UID:
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'release_probe', limit_seconds=None)
         # A Deepgram BYOK request is exempt from the trial paywall, as it is
         # from the quota: the user pays Deepgram directly. strict: a paywall
         # lookup failure must not open a billed socket for a paywalled account,
         # and only a validated key on this request (not a stored fingerprint)
         # exempts.
         paywall_kwargs = {'byok_exempt': False} if omi_funded else {}
+        if not provision_subscription:
+            paywall_kwargs['provision'] = False
         if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True, **paywall_kwargs):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_BLOCKED, 0, 'trial_paywalled')
         # Require the Deepgram header on this request so a user cannot activate
@@ -1776,7 +1949,8 @@ def resolve_transcription_allowance(
         if byok_active and get_byok_key('deepgram'):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'byok', limit_seconds=None)
         if subscription is _UNRESOLVED:
-            subscription = users_db.get_user_valid_subscription(uid)
+            subscription_kwargs = {} if provision_subscription else {'provision': False}
+            subscription = users_db.get_user_valid_subscription(uid, **subscription_kwargs)
         if not subscription:
             return _closed('subscription_inactive')
         budget_kwargs = {'session_cache': usage_cache} if usage_cache is not None else {}

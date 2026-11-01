@@ -114,7 +114,6 @@ class _UnsafeWebhookURLError(Exception):
 
 @pytest.fixture
 def integration_harness() -> Iterator[SimpleNamespace]:
-    process_mentor_notification = MagicMock(return_value=None)
     get_available_apps = MagicMock(return_value=[])
     add_app_message = MagicMock(return_value={'id': 'msg-1'})
     send_notification_async = AsyncMock(return_value=None)
@@ -134,6 +133,10 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         'utils.llms': _package('utils.llms', BACKEND_DIR / 'utils' / 'llms'),
         'utils.conversations': _package('utils.conversations', BACKEND_DIR / 'utils' / 'conversations'),
         'database': _package('database', BACKEND_DIR / 'database'),
+        'database.account_deletion_marker': _module(
+            'database.account_deletion_marker',
+            account_deletion_blocks_user_work=lambda _uid: False,
+        ),
         'models': _package('models', BACKEND_DIR / 'models'),
         'langchain_core': _package('langchain_core', BACKEND_DIR),
         'langchain_core.callbacks': _module(
@@ -234,10 +237,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             get_cached_developer=MagicMock(return_value=None),
             set_cached_developer=MagicMock(),
         ),
-        'utils.mentor_admission': _module(
-            'utils.mentor_admission',
-            mentor_plan_allows_evaluation=MagicMock(return_value=True),
-        ),
         'utils.subscription': _module(
             'utils.subscription',
             is_trial_paywalled=MagicMock(return_value=False),
@@ -279,10 +278,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             get_prompt_memories=MagicMock(return_value=('', '')),
         ),
         'utils.log_sanitizer': _module('utils.log_sanitizer', sanitize=MagicMock(side_effect=lambda value: value)),
-        'utils.mentor_notifications': _module(
-            'utils.mentor_notifications',
-            process_mentor_notification=process_mentor_notification,
-        ),
     }
 
     with stub_modules(stubs):
@@ -297,7 +292,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         yield SimpleNamespace(
             app=app_integrations,
             usage=usage_tracker,
-            process_mentor_notification=process_mentor_notification,
             get_available_apps=get_available_apps,
             add_app_message=add_app_message,
             send_notification_async=send_notification_async,
@@ -314,7 +308,7 @@ def test_realtime_integrations_feature_constant_exists(integration_harness):
 
 @pytest.mark.asyncio
 async def test_no_tracking_when_no_llm_calls(integration_harness):
-    """No mentor payload and no apps means no usage context is entered."""
+    """No app payload means no usage context is entered."""
     app = integration_harness.app
     usage = integration_harness.usage
     captured_contexts = []
@@ -327,8 +321,8 @@ async def test_no_tracking_when_no_llm_calls(integration_harness):
             yield
 
     with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app, 'process_mentor_notification', MagicMock(return_value=None)
-    ), patch.object(app, 'get_available_apps', MagicMock(return_value=[])):
+        app, 'get_available_apps', MagicMock(return_value=[])
+    ):
         await app.trigger_realtime_integrations('user-rt-2', [{'text': 'hello'}], 'conv-2')
 
     assert captured_contexts == []
@@ -403,7 +397,10 @@ async def test_trial_paywall_read_uses_db_executor_and_preserves_errors(integrat
         with pytest.raises(RuntimeError, match='paywall store unavailable'):
             await app.trigger_realtime_integrations('user-paywall', [{'text': 'hello'}], 'conv-1', source='desktop')
 
-    assert calls == [(app.db_executor, failing_paywall, ('user-paywall', 'desktop'), {})]
+    assert calls == [
+        (app.db_executor, app.account_deletion_blocks_user_work, ('user-paywall',), {}),
+        (app.db_executor, failing_paywall, ('user-paywall', 'desktop'), {}),
+    ]
 
 
 @pytest.mark.asyncio
@@ -417,10 +414,8 @@ async def test_realtime_message_uses_async_notification_boundary(integration_har
     notifier = AsyncMock(return_value=None)
 
     with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
-        app, 'process_mentor_notification', return_value=None
-    ), patch.object(app, 'get_webhook_client', return_value=client), patch.object(
-        app, 'send_app_notification_async', notifier
-    ):
+        app, 'get_webhook_client', return_value=client
+    ), patch.object(app, 'send_app_notification_async', notifier):
         result = await app.trigger_realtime_integrations('user-message', [{'text': 'hello'}], 'conv-1')
 
     notifier.assert_awaited_once_with('user-message', 'Test App', 'app-1', 'A useful notification')
@@ -438,10 +433,8 @@ async def test_realtime_notification_failure_remains_fail_soft(integration_harne
     integration_harness.add_app_message.reset_mock()
 
     with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
-        app, 'process_mentor_notification', return_value=None
-    ), patch.object(app, 'get_webhook_client', return_value=client), patch.object(
-        app, 'send_app_notification_async', AsyncMock(side_effect=RuntimeError('fcm unavailable'))
-    ):
+        app, 'get_webhook_client', return_value=client
+    ), patch.object(app, 'send_app_notification_async', AsyncMock(side_effect=RuntimeError('fcm unavailable'))):
         result = await app.trigger_realtime_integrations('user-message', [{'text': 'hello'}], 'conv-1')
 
     assert result == []
@@ -469,10 +462,8 @@ async def test_realtime_non_public_webhook_rejected_fail_soft(integration_harnes
     client = AsyncMock()
 
     with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
-        app, 'process_mentor_notification', return_value=None
-    ), patch.object(app, 'safe_request_target', side_effect=app.UnsafeWebhookURLError('private ip')), patch.object(
-        app, 'get_webhook_client', return_value=client
-    ):
+        app, 'safe_request_target', side_effect=app.UnsafeWebhookURLError('private ip')
+    ), patch.object(app, 'get_webhook_client', return_value=client):
         result = await app.trigger_realtime_integrations('user-ssrf', [{'text': 'hi'}], 'conv-ssrf')
 
     assert result == []

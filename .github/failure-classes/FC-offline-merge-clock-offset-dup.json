@@ -7,6 +7,7 @@
   "scope_hints": ["backend/utils/sync/**"],
   "status": "open",
   "canonical_prevention_artifact": [
-    "backend/tests/unit/test_safety_wal_dual_write.py"
+    "backend/tests/unit/test_safety_wal_dual_write.py",
+    "backend/tests/unit/test_sync_donor_live_dedupe.py"
   ]
 }

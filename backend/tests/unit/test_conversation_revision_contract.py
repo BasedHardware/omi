@@ -73,6 +73,9 @@ class _Transaction:
     def update(self, ref, data):
         ref.update(data)
 
+    def create(self, ref, data):
+        ref.create(data)
+
 
 class _PhotoRef:
     def __init__(self):
@@ -150,6 +153,13 @@ def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
         'folder_id': 'important',
         'visibility': 'shared',
         'data_protection_level': 'standard',
+        'record_audio_partial': {
+            'version': 1,
+            'reason': 'tail_lagging',
+            'upload_revision': 4,
+            'generation': 2,
+            'applied_generation': 1,
+        },
     }
     ref = _ConversationRef(_Snapshot(existing))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
@@ -160,6 +170,7 @@ def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
         'starred': False,
         'folder_id': None,
         'visibility': 'private',
+        'record_audio_partial': None,
         'status': 'completed',
         'data_protection_level': 'standard',
     }
@@ -175,6 +186,7 @@ def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
     assert written['folder_id'] == 'important'
     assert written['visibility'] == 'shared'
     assert written['status'] == 'completed'
+    assert written['record_audio_partial'] == existing['record_audio_partial']
 
 
 def test_processing_upsert_fills_user_fields_the_stub_left_null(monkeypatch):
@@ -234,6 +246,7 @@ def test_first_processing_write_still_creates_complete_document(monkeypatch):
 
 
 def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch):
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
     ref = _ConversationRef(_Snapshot(None, exists=False))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
     revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)

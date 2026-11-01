@@ -160,10 +160,10 @@ def test_ledger_bookkeeping_boundary_falls_back_label_only(world, monkeypatch, f
         tx._database.rows.clear()
         tx._database.rows.update(deepcopy(tx.review_before))
 
-    def stage_failure(tx, ref, payload):
+    def stage_failure(tx, ref, payload, **kwargs):
         if ref.path == LEDGER_PATH and failure == 'stage':
             raise ValueError('injected ledger-only staging failure')
-        return stage(tx, ref, payload)
+        return stage(tx, ref, payload, **kwargs)
 
     def commit_failure(tx):
         if any(path == LEDGER_PATH for path, _ in tx.sets) and failure == 'commit':
@@ -196,7 +196,8 @@ def test_ledger_bookkeeping_boundary_falls_back_label_only(world, monkeypatch, f
         assert len(world.store.transactions) == 1
     else:
         assert len(world.store.transactions) == 2
-        assert world.store.transactions[0].sets and world.store.transactions[-1].sets == []
+        assert any(path == LEDGER_PATH for path, _ in world.store.transactions[0].sets)
+        assert [path for path, _ in world.store.transactions[-1].sets] == [('users', 'u', 'people_meta', 'generation')]
         assert world.store.rows != baseline
 
 
@@ -282,7 +283,7 @@ def test_fallback_recomputes_receipt_evidence_and_owner_retraction(world, monkey
 
     assert len(world.store.transactions) == 3
     fallback_tx = world.store.transactions[-1]
-    assert fallback_tx.sets == []
+    assert [path for path, _ in fallback_tx.sets] == [('users', 'u', 'people_meta', 'generation')]
     updated = {path for path, _ in fallback_tx.updates}
     assert {CONV_PATH, PERSON_PATH, USER_PATH} <= updated
     fallback_reads = {path for tx, path in gets if tx is fallback_tx}

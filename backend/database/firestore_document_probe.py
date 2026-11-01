@@ -167,6 +167,7 @@ _PLUMBING_MODULES = frozenset(
         'database._client',
         'database.read_boundary',
         'database.helpers',
+        'database.released_memory_projection',
         'utils.other.list_budget',
         'utils.executors',
     }

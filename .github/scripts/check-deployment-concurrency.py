@@ -47,6 +47,7 @@ class LockContract:
 # shared target must keep resolving to the same value. Keep this explicit so a
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
+    "gcp_incluster_guards.yml": LockContract("deploy-incluster-guards-${{ github.event.inputs.environment }}"),
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
     "desktop_backend_prod.yml": LockContract("desktop-backend-prod"),
     "desktop_backend_recover_prod.yml": LockContract("desktop-backend-prod"),
@@ -88,10 +89,6 @@ LOCK_CONTRACTS = {
     "gcp_llm_gateway.yml": LockContract(
         "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
     ),
-    "gcp_memory_maintenance_job.yml": LockContract(
-        "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
-    ),
-    "gcp_memory_maintenance_job_auto_dev.yml": LockContract("deploy-cloud-run-memory-maintenance-job-development"),
     "gcp_day3_reengagement_email_job.yml": LockContract(
         "deploy-cloud-run-day3-reengagement-email-job-${{ github.event.inputs.environment }}"
     ),
@@ -862,7 +859,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_backend.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
-        ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
         ("gcp_day3_reengagement_email_job.yml", "gcp_day3_reengagement_email_job_auto_dev.yml"),
         ("gcp_backend_pusher.yml", "gcp_backend_pusher_auto_deploy.yml"),
     )
@@ -880,7 +876,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_diarizer.yml",
         "gcp_frame_request_retention_job.yml",
         "gcp_llm_gateway.yml",
-        "gcp_memory_maintenance_job.yml",
         "gcp_day3_reengagement_email_job.yml",
         "gcp_models.yml",
         "gcp_nllb_translation.yml",

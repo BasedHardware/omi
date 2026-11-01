@@ -135,6 +135,10 @@ void main() {
           case 'health':
             BleBridge.instance.onCaptureHealth(uuid, jsonEncode(step['snapshot']));
             final health = BleBridge.instance.ingressHealth(uuid)!;
+            // The incident never delivers audio (last_audio_at_ms stays 0 through
+            // every launch), so nothing ever verifies — not even its settled quiet:
+            // a confirmed subscription that never delivered is the wedge the wait
+            // grace and the unheard notice exist for, not Listening (#20378).
             expect(health.verifiedAt(DateTime.now()), isFalse);
             expect(health.actionable, isFalse);
           case 'disconnected':

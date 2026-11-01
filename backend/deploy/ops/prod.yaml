@@ -67,8 +67,11 @@ cloud_run:
       HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
       LANGCHAIN_TRACING_V2: 'false'
       MEMORY_MODE: 'off'
-    max_instances: 80
-    min_instances: 1
+    # 2026-10-24 costcut (live 22:48Z): cap 80 -> 50; warm floor 1 -> 5 so the sync
+    # pump keeps conversation-finalization headroom (min 5 x concurrency 20, the
+    # shape deploy-backend-stack sizes its queue against).
+    max_instances: 50
+    min_instances: 5
   backend-sync-backfill:
     env:
       SYNC_TASKS_QUEUE: sync-backfill-fresh
@@ -107,7 +110,9 @@ cloud_run:
       LANGCHAIN_TRACING_V2: 'false'
       MEMORY_MODE: 'off'
       TYPESENSE_HOST_PORT: '443'
-    min_instances: 1
+    # 2026-10-24: 3, matching the deploy flag (prod && 3); the old 1 fought every
+    # train and idled the projection pump between config-train applies.
+    min_instances: 3
 
 cloud_tasks:
   batch-quarantine-recovery:
@@ -126,7 +131,9 @@ cloud_tasks:
     max_attempts: 5
     min_backoff: 60s
     max_backoff: 300s
-    log_sampling_ratio: 1.0
+    # No alert, logs-based metric, or runbook reads task_operations_log entries;
+    # queue depth/age alerting uses platform metrics, so 10% dispatch records suffice.
+    log_sampling_ratio: 0.1
   sync-backfill-fresh:
     # Same rate and retry as sync-backfill (train ceiling 90 = 15 x 6 bounded by
     # the worker cap x concurrency 6). Attempts and doublings are unmanaged
@@ -136,7 +143,7 @@ cloud_tasks:
     max_attempts: 5
     min_backoff: 5s
     max_backoff: 60s
-    log_sampling_ratio: 1.0
+    log_sampling_ratio: 0.1
   enrichment:
     # Contract (a)/(d), lane 9. Created by the first prod config-train at M3.
     enabled: false

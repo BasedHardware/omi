@@ -15,6 +15,7 @@ from typing import Any, Mapping, cast
 
 from prometheus_client import Counter, Gauge, Histogram
 from config.summary_guarantee import deadline_seconds, enabled
+from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 
 Row = dict[str, Any]
 
@@ -97,6 +98,9 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     data['summary_output_present'] = present(structured)
     if field(structured, 'title_provenance') == 'server_minimum' and not present(structured):
         data['summary_title_provenance'] = 'server_minimum'
+        if intentional_short_clip_minimum(data):
+            data['summary_due_at'] = None
+            return
         if data.get('discarded'):
             # Intake discards owe no summary. Keep them out of the indexed debt
             # prefix, while allowing a later keep to start a fresh obligation.
@@ -121,6 +125,8 @@ def refusal(row: Row) -> str | None:
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
         return 'local_only'
+    if intentional_short_clip_minimum(row):
+        return 'content_below_floor'
     if row.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}:
         return 'privacy'
     if row.get('terminal_no_derived_effects') or row.get('client_processing'):
@@ -151,13 +157,14 @@ def finalization_pending(row: Row, uid: str, job_id: str) -> bool:
 
 
 def creation_result(write: Row, uid: str) -> Row | None:
-    # A deliberate minimum is durable debt, not a terminal summary receipt.
+    # Intake minima owe summaries; audited short-clip floors intentionally waive that debt.
     if (
         write.get('summary_title_provenance') == 'server_minimum'
         and not write.get('summary_output_present')
         and not write.get('terminal_no_derived_effects')
         and write.get('processing_state') != 'local_pending'
         and not write.get('deferred')
+        and not intentional_short_clip_minimum(write)
     ):
         return None
     return merge_result({}, write, uid)
@@ -172,6 +179,13 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         if name in existing:
             write[name] = existing[name]
     if write.get('status') != 'completed':
+        return None
+    if (
+        intentional_short_clip_minimum(write)
+        and not write.get('summary_output_present')
+        and not existing.get('summary_completed_at')
+    ):
+        waive_short_clip_summary_debt(write, PROCESS_CONTEXT.get())
         return None
     if (
         write.get('terminal_no_derived_effects')

@@ -147,13 +147,17 @@ class _ListingDb:
 def _matches(data: dict[str, Any], field: str | None, op: str, value: Any) -> bool:
     if not field:
         return True
-    if field not in data:
-        return False
-    actual = data[field]
+    actual = data
+    for part in field.split('.'):
+        if not isinstance(actual, dict) or part not in actual:
+            return False
+        actual = actual[part]
     if op == '==':
         return actual == value
     if op == 'in':
         return actual in value
+    if op == '>':
+        return actual > value
     if op == '>=':
         return actual >= value
     if op == '<=':
@@ -320,6 +324,13 @@ def test_detail_redirect_follows_only_live_survivor(monkeypatch: pytest.MonkeyPa
         conversations_db,
         'get_conversation',
         lambda uid, cid, **_: _rows_from_store(store).get(cid) if uid == 'u' else None,
+    )
+    # Keep real redirect/owner/deletion validation; replace only the hydration
+    # leaf, just as get_conversation above replaced photo/codec IO previously.
+    monkeypatch.setattr(
+        conversations_db,
+        '_hydrate_sync_conversation_snapshot',
+        lambda uid, row, **_: _rows_from_store(store).get(row['id']) if uid == 'u' else None,
     )
     result = routes._get_valid_conversation_by_id('u', donor_id, follow_sync_bridge=True)
     assert result['id'] == survivor_id

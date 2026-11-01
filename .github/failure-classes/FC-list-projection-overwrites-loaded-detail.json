@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-list-projection-overwrites-loaded-detail",
+  "violated_contract": "A list response that omits detail-only fields must not replace a client row whose detail has already been loaded with the omission read as empty. With indexed list reads on (OMI_INDEXED_LIST_READS_ENABLED), the conversations list leaves transcript_segments out by contract ('treat omitted transcript_segments as unknown/not loaded, not as an empty transcript') and the wire carries it as an empty array, which the app cannot tell from an empty transcript. Both ConversationProvider refresh paths (_fetchNewConversations and fetchConversations) replaced an unchanged row with the refreshed list row, so after the detail page had fetched the full conversation, an app resume or reconnect refresh put the transcript-less row back. The detail page reads its conversation from that list and only fetches the transcript when it opens, so an open transcript vanished until the conversation was reopened.",
+  "canonical_prevention": "ConversationProvider's refresh paths pass every replacing row through ServerConversation.keepingTranscriptOf: a refreshed row with no transcript keeps the transcript the row it replaces had already loaded, while a refreshed row that carries its own transcript replaces it and a locked row (redacted on purpose) keeps nothing. A kept transcript is marked transcriptCarried (local, never serialized) because the server may have changed it since; the detail page re-reads a carried conversation on open, and re-reads the open conversation when the app returns to the foreground. withTranscriptSegments copies every other field; its test sets each scalar and list field away from its default and checks the fields toJson leaves out directly, so dropping any of them fails. Nested-object fields (geolocation, calendar event, capture group, speaker resolution, external data, conversation audio) are not set by that test.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/conversation_list_keeps_loaded_transcript_test.dart",
+    "app/test/unit/conversation_detail_carried_transcript_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/backend/schema/conversation.dart",
+    "app/lib/providers/conversation_provider.dart",
+    "app/lib/pages/conversation_detail/page.dart"
+  ],
+  "status": "open"
+}

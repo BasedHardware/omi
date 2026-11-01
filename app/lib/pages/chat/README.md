@@ -72,6 +72,19 @@ readers receive only the final count. Closing and reopening the popup does not r
 
 ## Verification
 
+Memory-link cards resolve against the shared `MemoriesProvider`. A missing id
+requests its coalesced refresh even when the collection was already loaded,
+using the provider's account-scoped automatic hydration budget. Cached hits do
+not refresh. A failed or bounded list read cannot prove an individual memory
+was deleted; unresolved cards offer an explicit retry rather than saying
+“No longer available”. Replacing the referenced id retires the old card request;
+the provider retains authority over account changes and late list responses.
+This presentation does not change memory writes, lifecycle or MCP access policy.
+
+- `test/widgets/memory_link_resolution_test.dart`: warm-cache read-after-write,
+  cached hit, failed-read retry, incomplete-list absence without polling and
+  account replacement while hydration is in flight; opens the existing memory sheet.
+
 - `test/backend/chat_sessions_api_test.dart`: failed versus empty history, malformed identity,
   encoded explicit targeting, pagination and delete failures.
 - `test/providers/chat_history_state_test.dart`: delayed results, session creation failure and

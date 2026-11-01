@@ -71,6 +71,7 @@ def _loaded_notifications() -> Iterator[tuple[ModuleType, ModuleType, ModuleType
         set_silent_user_notification_sent=lambda uid: cache_writes['silent'].append(uid),
     )
     database_auth = _module('database.auth', get_user_from_uid=lambda _uid: None)
+    deletion_marker = _module('database.account_deletion_marker', account_deletion_blocks_user_work=lambda _uid: False)
 
     async def generate_notification_message(_uid: str, _name: str, _plan: str) -> tuple[str, str]:
         return 'Welcome', 'Subscription active'
@@ -91,6 +92,7 @@ def _loaded_notifications() -> Iterator[tuple[ModuleType, ModuleType, ModuleType
         'database.notifications': notification_db,
         'database.redis_db': redis_db,
         'database.auth': database_auth,
+        'database.account_deletion_marker': deletion_marker,
         'utils.llm.notifications': llm_notifications,
     }
 
@@ -230,6 +232,7 @@ def test_notification_enrichment_uses_auth_and_fcm_pool_without_consuming_db_poo
 
         assert calls == [
             (notifications.postprocess_executor, notifications._get_user),
+            (notifications.db_executor, notifications.account_deletion_blocks_user_work),
             (notifications.db_executor, notification_db.get_all_tokens),
             (notifications.postprocess_executor, notifications._send_messages),
         ]

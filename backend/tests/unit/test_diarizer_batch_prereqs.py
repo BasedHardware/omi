@@ -31,8 +31,10 @@ def rendered(batch):
 def test_batch_scheduling_and_resources_are_disjoint_from_embedding():
     batch, live = rendered(True), rendered(False)
     pod = batch['Deployment']['spec']['template']['spec']
-    assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
-    assert pod['nodeSelector']['service'] == 'diarizer-batch'
+    # No gke-nodepool pin: the on-demand pool and its Spot sibling share the
+    # service/env labels and omi.ai taints; the autoscaler prefers Spot first.
+    assert 'cloud.google.com/gke-nodepool' not in pod['nodeSelector']
+    assert pod['nodeSelector'] == {'service': 'diarizer-batch', 'env': 'prod'}
     assert 'affinity' not in pod
     assert {t['key']: t['value'] for t in pod['tolerations']}['omi.ai/diarizer-batch'] == 'true'
     assert live['Deployment']['spec']['template']['spec']['affinity']['nodeAffinity']

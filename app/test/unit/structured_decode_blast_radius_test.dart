@@ -128,4 +128,29 @@ void main() {
     });
     expect(structured.actionItems.single.sourceIndex, 0);
   });
+
+  test('a missing or blank emoji decodes to the neutral emoji, never the brain', () {
+    final missing = Structured.fromJson({
+      'title': 'Minimum row',
+      'overview': '',
+    });
+    expect(missing.emoji, Structured.neutralEmoji);
+    expect(missing.emoji, '💬');
+
+    final blank = Structured.fromJson(payload(actionItems: const []));
+    expect(blank.emoji, '💬');
+
+    // An unset field renders deterministically instead of a random pick.
+    expect(Structured('Untitled', '').getEmoji(), '💬');
+  });
+
+  test('a chosen emoji survives the decode', () {
+    final structured = Structured.fromJson({
+      'title': 'Pitch',
+      'overview': '',
+      'emoji': '🎯',
+      'category': 'business',
+    });
+    expect(structured.getEmoji(), '🎯');
+  });
 }

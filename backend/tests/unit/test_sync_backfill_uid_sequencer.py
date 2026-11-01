@@ -53,7 +53,9 @@ class _Query:
         self.client, self.path = client, path
         self.field, self.maximum, self.order, self.maximum_results, self.equals = field, maximum, order, limit, equals
 
-    def where(self, field, op, maximum):
+    def where(self, field=None, op=None, maximum=None, *, filter=None):
+        if filter is not None:
+            field, op, maximum = filter.field_path, filter.op_string, filter.value
         if op == '==':
             return _Query(
                 self.client, self.path, self.field, self.maximum, self.order, self.maximum_results, (field, maximum)

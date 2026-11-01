@@ -116,7 +116,7 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
     monkeypatch.setenv("SYNC_TASKS_LOCATION", "us-central1")
     monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_QUEUE", "conversation-finalization")
     monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_HANDLER_URL", "https://example.invalid/finalize")
-    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_INVOKER_SA", "worker@example.invalid")
+    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_INVOKER_SA", "worker@test-e2e-project.iam.gserviceaccount.com")
 
     cloud_tasks_module = sys.modules["utils.cloud_tasks"]
     monkeypatch.setattr(cloud_tasks_module, "enqueue_listen_finalization_job", lambda *a, **k: None)
@@ -164,7 +164,7 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
     assert persisted_body["transcript_segments"] == emitted_segments
 
 
-def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_headers, monkeypatch):
+def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_headers, monkeypatch, live_user):
     """The v2 sync API should create, run, and expose a completed job against hermetic fakes."""
     patch_fresh_sync_lane(monkeypatch)
     scheduled = []

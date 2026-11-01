@@ -22,7 +22,8 @@ class ClickUpService {
   }
 
   /// Start OAuth authentication flow (get URL from backend)
-  Future<bool> authenticate() => launchIntegrationOAuth(() => getOAuthUrl('clickup'));
+  Future<bool> authenticate({bool Function()? isCurrent}) =>
+      launchIntegrationOAuth(() => getOAuthUrl('clickup'), isCurrent: isCurrent);
 
   /// Handle OAuth callback
   Future<bool> handleCallback({String? userId}) async {

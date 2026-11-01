@@ -229,9 +229,20 @@ export function parseStorefront(raw: unknown): PlanStorefront {
   };
 }
 
-const LADDER: readonly CatalogPlanId[] = ['basic', 'plus', 'operator', 'architect'];
+// unlimited_v2 (Omi Pro) joins the ladder for the new-buyer single-plan sheet:
+// the backend sends it as the only tier for a buyer with no current paid
+// subscription, and it must rank above its cheaper sibling Plus so the card
+// can check out. Existing unlimited_v2 subscribers still see a legacy current
+// row from the backend and never check out from there.
+const LADDER: readonly CatalogPlanId[] = [
+  'basic',
+  'plus',
+  'unlimited_v2',
+  'operator',
+  'architect',
+];
 
-/** basic < plus < operator < architect; null off the ladder or unknown. */
+/** basic < plus < unlimited_v2 < operator < architect; null off the ladder or unknown. */
 function ladderRank(planId: string | null | undefined): number | null {
   if (!planId) return null;
   const plan = decodePlan(planId);
@@ -240,7 +251,7 @@ function ladderRank(planId: string | null | undefined): number | null {
   return index < 0 ? null : index;
 }
 
-/** True for Neo/Unlimited and for ids this client does not recognize. */
+/** True for Neo (`unlimited`) and for ids this client does not recognize. */
 function offLadder(planId: string | null | undefined): boolean {
   return planId != null && ladderRank(planId) === null;
 }
@@ -385,7 +396,10 @@ export function budgetExhausted(data: PlanStorefront): boolean {
   );
 }
 
-/** Pro gates apply only below Pro on the ladder and only when the backend lists them. */
+/**
+ * Pro gates apply only below Pro on the ladder and only when the backend lists them.
+ * Omi Pro (`unlimited_v2`) is the only plan sold, so it clears every gate.
+ */
 export function shouldGate(
   data: PlanStorefront,
   feature: string,
@@ -395,6 +409,8 @@ export function shouldGate(
   if (!data.showSubscriptionUi || !current || current.legacy) return false;
   if (!data.usage.proGates.includes(feature)) return false;
   if (offLadder(current.planId) || offLadder(livePlanId)) return false;
+  if (samePlan(current.planId, 'unlimited_v2')) return false;
+  if (livePlanId && samePlan(livePlanId, 'unlimited_v2')) return false;
   const rank = Math.max(ladderRank(current.planId) ?? -1, ladderRank(livePlanId) ?? -1);
   return rank < (ladderRank('operator') as number);
 }

@@ -7,6 +7,7 @@ import database.action_items as tasks
 import database.chat as chat
 from database import proactivity as ledger
 from database import proactivity_producers as mapping
+from tests.support.synthetic_proactivity_producers import synthetic_producers  # noqa: F401
 from tests.unit.test_proactivity_v2_budget import NOW, store
 from tests.unit.test_proactivity_v2_ledger import outcome, ready
 

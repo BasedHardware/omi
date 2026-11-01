@@ -94,6 +94,17 @@ class SearchConversationsRequest(BaseModel):
     end_date: Optional[str] = Field(default=None, description="ISO date with timezone")
     limit: int = Field(default=5, ge=1, le=20)
     include_transcript: bool = Field(default=True)
+    transcript_query: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description='Literal words/phrase to search directly in saved transcripts, including unindexed history',
+    )
+    transcript_cursor: Optional[str] = Field(
+        default=None,
+        max_length=4096,
+        description='Continuation returned by direct transcript search',
+    )
 
 
 class SearchMemoriesRequest(BaseModel):
@@ -179,6 +190,8 @@ def search_conversations(
         limit=body.limit,
         include_transcript=body.include_transcript,
         source_sink=sources,
+        transcript_query=body.transcript_query,
+        transcript_cursor=body.transcript_cursor,
     )
     return _ok("search_conversations", result, sources)
 

@@ -17,6 +17,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from database.firestore_transaction_retry import FirestoreContentionExhausted
+from google.api_core import exceptions as api_exceptions
+
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
@@ -35,10 +38,22 @@ class Doc(SimpleNamespace):
         return SimpleNamespace(to_dict=lambda: dict(self.row()) if self.row() is not None else None)
 
 
+class Tx:
+    """Fake transaction: routes updates to the durable rows behind a Doc."""
+
+    def __init__(self, log):
+        self.log = log
+
+    def update(self, ref, changes):
+        rows = self.log.results if ref.table == 'results' else self.log.jobs
+        rows[ref.sid].update(changes)
+
+
 class ResultLog:
     """Durable rows; ``ProjectionStore`` and ``FirestoreStore`` facades over them."""
 
     namespace = 'batch_pipeline_test_chain'
+    client = None
 
     def __init__(self, *, async_projection=True):
         self.results: dict[str, dict] = {}
@@ -53,7 +68,19 @@ class ResultLog:
         self.store = self  # Projector.store.store is the FirestoreStore facade.
 
     # --- writers ---------------------------------------------------------
-    def commit(self, owner, content, segment, siblings, *, state='pending', erased=False):
+    def commit(
+        self,
+        owner,
+        content,
+        segment,
+        siblings,
+        *,
+        state='pending',
+        erased=False,
+        record=False,
+        fresh_capture=None,
+        outcome='silence',
+    ):
         """OrderedMerge.commit_next: append at this owner's log tail."""
         key = owner_key(owner)
         self.clock += 1
@@ -63,17 +90,22 @@ class ResultLog:
             'previous_segment_id': self.tails.get(key),
             'committed_at': self.clock,
             'projection_state': 'erased' if erased else state,
-            'result': {'outcome': 'silence'},
+            'result': (
+                {'outcome': outcome, 'result_uri': f'gs://synthetic/results/{segment}'}
+                if outcome != 'silence'
+                else {'outcome': 'silence'}
+            ),
         }
         if state != 'pending' and not erased:
             self.results[segment]['projection'] = {'state': state}
             self.owners.setdefault(key, {})['projection_watermark'] = segment
         self.tails[key] = segment
-        binding = ProjectionBinding(owner, f'job-{content}', content, tuple(siblings))
+        binding = ProjectionBinding(owner, f'job-{content}', content, tuple(siblings), record_origin=record)
         self.bindings[segment] = binding
         self.jobs[segment] = {
             **asdict(WorkItem(segment, owner, self.clock, 'gs://synthetic/audio', 1, Priority.DEEP)),
             'policy_parts': {'projection': self.policy},
+            **({} if fresh_capture is None else {'fresh_capture': fresh_capture}),
         }
 
     # --- FirestoreStore facade --------------------------------------------
@@ -99,8 +131,11 @@ class ResultLog:
 
     # --- ProjectionStore facade -------------------------------------------
     def ref(self, table, sid):
-        assert table == 'results'
-        return Doc(row=lambda: self.results.get(sid))
+        assert table in ('results', 'jobs')
+        return Doc(table=table, sid=sid, row=lambda: (self.results if table == 'results' else self.jobs).get(sid))
+
+    def run(self, operation, **_):
+        return operation(Tx(self))
 
     def read(self, sid):
         if sid not in self.results:
@@ -114,11 +149,37 @@ class ResultLog:
         log = self
 
         class Session:
-            def persist_empty(self, **_):
+            policy = SimpleNamespace(projection_contention=False, projection_timing=False)
+
+            def prepare(self, transaction, **_):
                 log.check(self)
-                receipt = {'state': 'persisted'}
-                log.results[sid].update(projection=receipt, projection_state='persisted')
-                log.owners.setdefault(owner_key(binding.owner_id), {})['projection_watermark'] = sid
+
+            def validate_plan(self, transaction, planned):
+                pass
+
+            def persist(self, transaction, planned=None, **_):
+                return self.persist_empty()
+
+            def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False):
+                log.check(self)
+                receipt = {
+                    'state': 'quarantined' if quarantined else 'superseded' if superseded else 'persisted',
+                    'conversation_id': None,
+                    'enrichment_required': False,
+                    'audio_required': False,
+                }
+                log.results[sid].update(
+                    projection=receipt,
+                    projection_state='quarantine_held' if quarantined else 'persisted',
+                )
+                # Mirrors ProjectionSession.persist: a released held unit sits
+                # behind the watermark; its re-assignment must not drag the
+                # chain backward onto already-terminal rows.
+                if not log.results[sid].get('projection_redriven_at'):
+                    log.owners.setdefault(owner_key(binding.owner_id), {})['projection_watermark'] = sid
+                if quarantined:
+                    # Same transaction as the receipt: recovery owns the unit.
+                    log.jobs[sid]['recovery_state'] = 'held'
                 log.persist_order.append(sid)
                 return receipt
 
@@ -126,10 +187,19 @@ class ResultLog:
         session.segment_id, session.binding = sid, binding
         return session
 
+    def ready(self, sid, binding, now, *, part_index=None, policy=None):
+        receipt = {**(self.results[sid].get('projection') or {}), 'state': 'ready'}
+        self.results[sid].update(projection=receipt, projection_state='ready')
+        return receipt
+
     def check(self, session):
         row = self.results[session.segment_id]
         if row.get('projection'):
             raise ProjectionReplay(row['projection'])
+        if row.get('projection_redriven_at'):
+            # Mirrors ProjectionSession.prepare: released held units re-enter
+            # behind the watermark, past which the hold already advanced.
+            return
         predecessor, watermark = row['previous_segment_id'], self.projection_watermark(row['owner_key'])
         while predecessor != watermark:
             earlier = self.results.get(predecessor or '')
@@ -161,8 +231,8 @@ def advisory_claim(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', raising=False)
 
 
-def projector_for(log):
-    projector = projection.Projector(log, Mock())
+def projector_for(log, load_result=None):
+    projector = projection.Projector(log, load_result or Mock())
     projector.store = log
     return projector
 
@@ -233,6 +303,291 @@ def test_walk_stops_at_first_fenced_row_and_never_skips_it():
     log.session = real
     # The touched content's earlier persisted sibling is still owed a follow-up.
     assert projector.project_owner(BURST) == ids
+
+
+# --- record-target conflicts cannot wedge the owner chain ------------------------
+
+
+SUCCESS_PAYLOAD = {
+    'audio_seconds': 1.0,
+    'speech_seconds': 0.5,
+    'speech_spans': [{'start': 0.0, 'end': 0.5}],
+    'diarization': {'turns': [{'start': 0.0, 'end': 0.5, 'speaker': 'a'}]},
+    'words': [{'word': 'Hello.', 'timestamp': [0.0, 0.5]}],
+}
+
+
+def patch_conversation_assignment(monkeypatch, subtype, *, fail_first_n):
+    """``database.conversations`` fakes: the first ``fail_first_n`` assignment
+    calls raise the record-target conflict; the rest assign through the
+    projection session exactly as the real seam does."""
+    from utils.sync.assignment_errors import SyncAssignmentConflict
+
+    calls = {'n': 0}
+
+    def assign_sync_conversation(
+        uid,
+        incoming,
+        *,
+        target_id=None,
+        candidate_id=None,
+        before_assign=None,
+        validate_plan=None,
+        after_assign=None,
+        **_,
+    ):
+        calls['n'] += 1
+        if calls['n'] <= fail_first_n:
+            raise SyncAssignmentConflict('record target discarded', subtype=subtype)
+        transaction = object()
+        if before_assign is not None:
+            before_assign(transaction)
+        planned = ({**incoming}, False, [])
+        if validate_plan is not None:
+            validate_plan(transaction, planned[0])
+        if after_assign is not None:
+            after_assign(transaction, planned)
+        return planned
+
+    monkeypatch.setattr('database.conversations.assign_sync_conversation', assign_sync_conversation)
+    monkeypatch.setattr('database.conversations.get_closest_conversation_to_timestamps', lambda *args, **_: None)
+    return calls
+
+
+def test_discarded_record_target_cannot_wedge_the_owner_chain(monkeypatch):
+    """reentry29 10-29: a discarded record conversation raised at the chain head
+    on every sweep (live_projection.py), so every later capture for the owner
+    stayed pending behind it. The strike rule must take the held disposition
+    and let the chain advance."""
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f'w-{n}' for n in range(3)]
+    for sid in ids:
+        log.commit(BURST, 'w', sid, ids, record=True, fresh_capture=False, outcome='success')
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=1)
+    projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+    projector.project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.results[ids[0]]['projection']['state'] == 'quarantined'
+    # The job lands in the held scan in the same transaction, so the upload
+    # can complete as a client partial and the redrive queue owns the unit.
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+    # A later pass neither reassigns nor drops the held receipt: recovery owns it.
+    projector.project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
+
+
+def test_discarded_record_silence_head_quarantines_and_advances(monkeypatch):
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f's-{n}' for n in range(2)]
+    for sid in ids:
+        log.commit(BURST, 's', sid, ids, record=True, fresh_capture=False)
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=1)
+    projector_for(log).project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+
+
+def test_fresh_discarded_record_target_keeps_waiting(monkeypatch):
+    """Awaiting-writer conflicts on fresh rows keep waiting: the record may be
+    restored from discard, so the head stays pending and nothing quarantines."""
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f'f-{n}' for n in range(2)]
+    for sid in ids:
+        log.commit(BURST, 'f', sid, ids, record=True, fresh_capture=True, outcome='success')
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=10)
+    projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+    assert projector.project_owner(BURST) == []
+    assert log.persist_order == []
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+
+
+def test_retired_record_target_quarantines_even_on_fresh_rows(monkeypatch):
+    """Structural conflicts strike on every lane: no writer will ever resolve them."""
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f'r-{n}' for n in range(2)]
+    for sid in ids:
+        log.commit(BURST, 'r', sid, ids, record=True, fresh_capture=True, outcome='success')
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_RETIRED, fail_first_n=1)
+    projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+    projector.project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+
+
+# --- the generic poison-head rule (lead ruling 5d2ae7) --------------------------
+
+
+@pytest.mark.parametrize(
+    'error,transient',
+    [
+        (ConnectionError('synthetic'), True),
+        (TimeoutError('synthetic'), True),
+        (PermissionError('authorization wait'), True),
+        (OSError('storage error'), True),
+        (FirestoreContentionExhausted('exhausted'), True),
+        (api_exceptions.BadGateway('502'), True),
+        (api_exceptions.ServiceUnavailable('503'), True),
+        (api_exceptions.Aborted('409'), True),
+        (api_exceptions.TooManyRequests('429'), True),
+        (ValueError('payload contract'), False),
+        (TypeError('bug'), False),
+        (KeyError('bug'), False),
+    ],
+)
+def test_head_retry_classification(error, transient):
+    """Review r1/r2: every availability-shaped API error, storage error and
+    authorization wait retries (the taxonomy-declared kinds included); only
+    content poison and unknown permanent kinds hold."""
+    assert projection.projection_exception_transient(error) is transient
+    assert projection.head_holds_without_retry(error, None) is not transient
+
+
+def test_generic_poison_head_holds_and_unblocks_the_chain():
+    """Any non-transient exception at a chain head holds that unit (audio
+    retained, quarantine_held receipt) and advances the watermark; an unknown
+    decoder bug must not freeze every later capture behind it."""
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    real = log.session
+    raised = set()
+
+    def poisoned(sid, *args, **kwargs):
+        if sid == ids[0] and sid not in raised:
+            raised.add(sid)
+            raise ValueError('synthetic decoder bug')
+        return real(sid, *args, **kwargs)
+
+    log.session = poisoned
+    projector.project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.results[ids[0]]['projection']['state'] == 'quarantined'
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
+    assert log.results[ids[1]]['projection_state'] == 'persisted'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+    # Held rows never arm retention: the hold path writes no expiry receipt.
+    assert 'expires_at' not in log.results[ids[0]]
+    assert 'expires_at' not in log.jobs[ids[0]]
+    # A later pass neither reassigns nor drops the held receipt.
+    log.session = real
+    projector.project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+
+
+def test_transient_head_failure_retries_then_holds_at_the_bound():
+    """Infrastructure contention retries, but not forever: past the durable
+    bound the head takes the held disposition so the chain can advance."""
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    projector = projection.Projector(log, Mock(), clock=lambda: 1000.0)
+    projector.store = log
+    real = log.session
+    # The outage outlives both in-bound passes (assignment attempts 1 and 2)
+    # and the past-bound assignment (attempt 3); only the past-bound hold's
+    # own session call (attempt 4) must go through.
+    attempts: dict[str, int] = {}
+
+    def outage(sid, *args, **kwargs):
+        if sid == ids[0]:
+            attempts[sid] = attempts.get(sid, 0) + 1
+            if attempts[sid] <= 3:
+                raise api_exceptions.ServiceUnavailable('synthetic outage')
+        return real(sid, *args, **kwargs)
+
+    log.session = outage
+    assert projector.project_owner(BURST) == []
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+    assert log.results[ids[0]]['projection_blocked_since'] == 1000.0
+    assert log.results[ids[0]]['projection_block_type'] == 'ServiceUnavailable'
+    assert log.projection_watermark(owner_key(BURST)) is None
+    # Within the bound a second outage still only retries.
+    assert projector.project_owner(BURST) == []
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+    # Past the bound the same transient failure holds the head.
+    log.results[ids[0]]['projection_blocked_since'] = 1000.0 - projection.PROJECTION_HEAD_RETRY_SECONDS - 1
+    projector.project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+
+
+def test_fresh_awaiting_writer_conflict_is_bounded_not_forever(monkeypatch):
+    """The #23932 keep-waiting lane still gets the bound: a writer that never
+    lands can no longer wedge the owner chain indefinitely."""
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f'fw-{n}' for n in range(2)]
+    for sid in ids:
+        log.commit(BURST, 'fw', sid, ids, record=True, fresh_capture=True, outcome='success')
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=10**6)
+    projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+    assert projector.project_owner(BURST) == []
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+    assert 'projection_blocked_since' in log.results[ids[0]]
+    # The writer never lands; past the bound the head holds and the chain moves
+    # one row — the next row's own bound is what protects it, not the head's.
+    log.results[ids[0]]['projection_blocked_since'] -= projection.PROJECTION_HEAD_RETRY_SECONDS + 1
+    projector.project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[0]
+    assert log.results[ids[1]]['projection_state'] == 'pending'
+
+
+def test_transient_stamp_writes_once_per_episode():
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 1)
+    projector = projection.Projector(log, Mock(), clock=lambda: 1000.0)
+    projector.store = log
+    real = log.session
+
+    def outage(sid, *args, **kwargs):
+        raise TimeoutError('synthetic network')
+
+    log.session = outage
+    projector.project_owner(BURST)
+    stamped = log.results[ids[0]]['projection_blocked_since']
+    projector._note_head_blocked(ids[0], TimeoutError('again'))
+    assert log.results[ids[0]]['projection_blocked_since'] == stamped
+
+
+def test_sweep_page_poison_row_holds_instead_of_erroring_forever():
+    """The sweep's own page rows take the same generic rule: a terminally
+    failing row is held once instead of erroring on every pass."""
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 1)
+    projector = projection.Projector(log, Mock(), clock=lambda: 1000.0)
+    projector.store = log
+    real = log.session
+    raised = set()
+
+    def poisoned(sid, *args, **kwargs):
+        if sid not in raised:
+            raised.add(sid)
+            raise TypeError('synthetic sweep bug')
+        return real(sid, *args, **kwargs)
+
+    log.session = poisoned
+    counts = projector.sweep()
+    assert counts['error'] == 1
+    assert counts['blocked'] == 1
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
 
 
 def test_walk_stops_when_watermark_does_not_advance():

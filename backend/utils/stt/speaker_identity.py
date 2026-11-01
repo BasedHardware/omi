@@ -76,7 +76,20 @@ class ConversationSpeakerIdAllocator:
 
     def __init__(self) -> None:
         self._speaker_ids: dict[tuple[str, str], int] = {}
+        self._owner_speaker_id: Optional[int] = None
+        self._person_speaker_ids: dict[str, int] = {}
         self._next_id = 0
+
+    def _remember_identity(self, segment: Any, speaker_id: int) -> None:
+        if speaker_id == OMI_SPEAKER_ID_SENTINEL:
+            return
+        if _read(segment, 'speaker_label_source') == 'carried':
+            return
+        if _read(segment, 'is_user') is True:
+            if self._owner_speaker_id is None:
+                self._owner_speaker_id = speaker_id
+        elif person_id := _read(segment, 'person_id'):
+            self._person_speaker_ids.setdefault(str(person_id), speaker_id)
 
     def hydrate(self, segments: Iterable[Any]) -> None:
         """Learn persisted assignments before allocating IDs after a reconnect."""
@@ -84,6 +97,7 @@ class ConversationSpeakerIdAllocator:
             speaker_id = _read(segment, 'speaker_id')
             if isinstance(speaker_id, int):
                 self._next_id = max(self._next_id, speaker_id + 1)
+                self._remember_identity(segment, speaker_id)
             scope = _read(segment, 'speaker_id_scope')
             speaker = _read(segment, 'speaker')
             if scope and speaker and isinstance(speaker_id, int):
@@ -118,8 +132,18 @@ class ConversationSpeakerIdAllocator:
             speaker = f'SPEAKER_{segment["speaker_id"]}'
         speaker = canonical_speaker_label(str(speaker or 'SPEAKER_00'))
         key = (str(scope), speaker)
+        # A persisted scope/acoustic binding is authority; a later label hint
+        # must never renumber it or disagree with that binding. Batch voices require
+        # their acoustic registry decision, including its explicit abstentions.
         speaker_id = self._speaker_ids.get(key)
         if speaker_id is None:
-            speaker_id = self._allocate()
+            reuse_identity = str(scope).startswith('sync:') and segment.get('speaker_label_source') != 'carried'
+            if reuse_identity and segment.get('is_user') is True and self._owner_speaker_id is not None:
+                speaker_id = self._owner_speaker_id
+            elif reuse_identity and (person_id := segment.get('person_id')):
+                speaker_id = self._person_speaker_ids.get(str(person_id))
+            if speaker_id is None:
+                speaker_id = self._allocate()
             self._speaker_ids[key] = speaker_id
+        self._remember_identity(segment, speaker_id)
         segment['speaker_id'] = speaker_id

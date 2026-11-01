@@ -1,0 +1,7 @@
+{
+  "version": "0.12.538",
+  "date": "2026-10-25",
+  "changes": [
+    "Removed the proactive \"For you\" suggestion cards and their notifications"
+  ]
+}

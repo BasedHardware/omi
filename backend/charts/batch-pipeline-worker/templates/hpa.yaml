@@ -1,18 +1,19 @@
+{{- define "batch-pipeline-worker.hpa" -}}
 {{- if and .Values.enabled .Values.autoscaling.enabled }}
-{{- if lt (int .Values.autoscaling.minReplicas) 1 }}
+{{- if lt (int .instance.minReplicas) 1 }}
 {{- fail "queue sampling runs in workers: minReplicas must be >=1; scale-to-zero needs an independent sampler" }}
 {{- end }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ .instance.name }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ .Release.Name }}
-  minReplicas: {{ .Values.autoscaling.minReplicas }}
-  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+    name: {{ .instance.name }}
+  minReplicas: {{ .instance.minReplicas }}
+  maxReplicas: {{ .instance.maxReplicas }}
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
@@ -23,18 +24,25 @@ spec:
       policies:
         - {type: Pods, value: 1, periodSeconds: 120}
   metrics:
-    {{- range $priority, $target := .Values.autoscaling.targets }}
     - type: External
       external:
         metric:
-          name: omi_batch_pipeline_ready_age_seconds
+          name: omi_batch_pipeline_admissible_ready_units
           selector:
             matchLabels:
-              priority: {{ $priority }}
-              worker_release: {{ $.Release.Name }}
-              namespace: {{ $.Release.Namespace }}
+              worker_release: {{ .Release.Name }}
+              namespace: {{ .Release.Namespace }}
         target:
-          type: Value
-          value: {{ $target | quote }}
-    {{- end }}
+          # Each pool sees the same total. Doubling the per-worker target in
+          # balanced mode divides demand, instead of buying it twice.
+          type: AverageValue
+          averageValue: {{ .instance.capacityTarget | quote }}
+{{- end }}
+{{- end }}
+{{- if and .Values.enabled .Values.autoscaling.enabled }}
+{{- $root := . }}
+{{- range $instance := (include "batch-pipeline-worker.instances" . | fromYamlArray) }}
+{{ include "batch-pipeline-worker.hpa" (dict "Values" $root.Values "Release" $root.Release "instance" $instance) }}
+---
+{{- end }}
 {{- end }}

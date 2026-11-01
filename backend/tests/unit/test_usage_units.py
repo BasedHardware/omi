@@ -123,13 +123,14 @@ def test_hourly_write_keeps_root_meter_and_finops_counters_and_recovers_dotted_h
     path = 'users/u/hourly_usage/2026-10-01-08'
     store = Store(
         {
+            'users/u': {'synthetic': True},
             path: {
                 'id': '2026-10-01-08',
                 'year': 2026,
                 'month': 10,
                 'transcription_seconds': 70,
                 'plan_usage.plus.transcription_seconds': 70,
-            }
+            },
         }
     )
     user_usage.update_hourly_usage(
@@ -139,7 +140,7 @@ def test_hourly_write_keeps_root_meter_and_finops_counters_and_recovers_dotted_h
         firestore_client=store,
         usage_metadata={'provider': 'parakeet', 'funding': 'omi', 'source': 'test'},
     )
-    assert store.writes == 1
+    assert store.writes == 2  # hourly source + atomic monthly total
     data = store.docs[path]
     assert data['transcription_seconds'] == 82
     assert data['plan_usage.plus.transcription_seconds'] == 70
@@ -269,29 +270,20 @@ def test_v1_and_v2_usage_projections_keep_separate_card_identity(units, monkeypa
     assert 'usage_units_v1' not in attempt
 
 
-def test_sync_marker_and_nested_usage_remain_in_existing_two_write_transaction(units, monkeypatch):
+def test_sync_marker_and_nested_usage_share_transaction_with_monthly_total(units, monkeypatch):
     from database import user_usage
 
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *a, **k: 'plus')
-    original = user_usage._update_hourly_usage_once_transaction.to_wrap  # pyright: ignore[reportPrivateUsage]
-
-    class Transaction:
-        def set(self, ref, data, merge=False):
-            ref.set(data, merge=merge)
-
-    monkeypatch.setattr(
-        user_usage, '_update_hourly_usage_once_transaction', lambda tx, m, u, d: original(Transaction(), m, u, d)
-    )
-    store = Store()
+    store = Store({'users/u': {'synthetic': True}})
     date = datetime(2026, 10, 1, 8, tzinfo=timezone.utc)
     kwargs: dict[str, Any] = {
         'firestore_client': store,
         'usage_metadata': {'provider': 'parakeet', 'funding': 'omi', 'source': 'sync_v2'},
     }
     assert user_usage.update_hourly_usage_once('u', date, {'transcription_seconds': 60}, 'capture', **kwargs)
-    assert store.writes == 2
+    assert store.writes == 3
     assert not user_usage.update_hourly_usage_once('u', date, {'transcription_seconds': 60}, 'capture', **kwargs)
-    assert store.writes == 2
+    assert store.writes == 3
     assert store.docs['users/u/hourly_usage/2026-10-01-08']['plan_usage']['plus']['transcription_seconds'] == 60
 
 
@@ -326,7 +318,7 @@ def test_missing_history_and_shadow_price_failure_do_not_hide_gaps_or_break_lega
         raise ValueError('test')
 
     monkeypatch.setattr(units, 'price_transcription', broken)
-    store = Store()
+    store = Store({'users/u': {'synthetic': True}})
     date = datetime(2026, 10, 1, tzinfo=timezone.utc)
     user_usage.update_hourly_usage(
         'u',
@@ -335,7 +327,7 @@ def test_missing_history_and_shadow_price_failure_do_not_hide_gaps_or_break_lega
         firestore_client=store,
         usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'test'},
     )
-    assert store.writes == 1
+    assert store.writes == 2
     data = store.docs['users/u/hourly_usage/2026-10-01-00']
     assert data['transcription_seconds'] == 5
     assert data['shadow_v1']['features']['transcription']['funding']['omi']['status_counts'] == {'missing': 1}
@@ -443,7 +435,7 @@ def test_invalid_accepted_speech_never_suppresses_legacy_hourly_write(units, mon
         monkeypatch.setattr(
             units, 'price_transcription', lambda *a, **k: {'micro_units': 1, 'status': 'complete', 'reasons': []}
         )
-    store = Store()
+    store = Store({'users/u': {'synthetic': True}})
     user_usage.update_hourly_usage(
         'u',
         datetime(2026, 10, 1, tzinfo=timezone.utc),
@@ -456,7 +448,7 @@ def test_invalid_accepted_speech_never_suppresses_legacy_hourly_write(units, mon
             'accepted_speech_seconds': accepted,
         },
     )
-    assert store.writes == 1
+    assert store.writes == 2
     data = store.docs['users/u/hourly_usage/2026-10-01-00']
     assert data['transcription_seconds'] == 5
     leaf = data['shadow_v1']['features']['transcription']['funding']['omi']

@@ -8,6 +8,7 @@ Framework and storage are stubbed with zero external dependencies.
 import asyncio
 import html
 import importlib.util
+import os
 from pathlib import Path
 import sys
 import types
@@ -29,11 +30,20 @@ class Framework:
     post = on_event = get
 
 
+os.environ.setdefault("SLACK_SETTINGS_SECRET", "test-slack-settings-secret")
+
+
 class Response:
     def __init__(self, content=None, status_code=200, **kwargs):
         self.content = content
         self.status_code = status_code
+        self.cookies = {}
+        self.headers = {}
         self.__dict__.update(kwargs)
+
+    def set_cookie(self, key, value="", **kwargs):
+        self.cookies[key] = {"value": value, **kwargs}
+        self.headers["set-cookie"] = f"{key}={value}"
 
 
 def _make_module(name, **attributes):
@@ -260,6 +270,85 @@ class SlackSettingsPageEncodingTests(unittest.TestCase):
         with patch.object(main.SimpleUserStorage, "get_user", return_value=auth_user):
             auth_page = asyncio.run(main.root(uid="u1")).content
             self.assertIn('<meta charset="utf-8">', auth_page)
+
+    def _req(self, cookies=None, scheme="https"):
+        return types.SimpleNamespace(
+            cookies=cookies or {},
+            url=types.SimpleNamespace(scheme=scheme),
+        )
+
+    def _authed_req(self, uid):
+        return self._req({main.COOKIE_NAME: main.session_value(uid)})
+
+    def test_mutations_fail_closed_503_when_secret_unset(self):
+        with patch.dict(os.environ, {"SLACK_SETTINGS_SECRET": ""}):
+            for call in (
+                lambda: asyncio.run(main.update_channel(self._req(), uid="victim", channel="C2")),
+                lambda: asyncio.run(main.refresh_channels(self._req(), uid="victim")),
+                lambda: asyncio.run(main.logout(self._req(), uid="victim")),
+            ):
+                with self.assertRaises(main.HTTPException) as ctx:
+                    call()
+                self.assertEqual(ctx.exception.status_code, 503)
+
+    def test_mutations_reject_missing_mismatched_and_tampered_cookies(self):
+        bad_requests = [
+            self._req(),
+            self._authed_req("attacker"),
+            self._req({main.COOKIE_NAME: "victim.deadbeef"}),
+        ]
+        for req in bad_requests:
+            for call in (
+                lambda r=req: asyncio.run(main.update_channel(r, uid="victim", channel="C2")),
+                lambda r=req: asyncio.run(main.refresh_channels(r, uid="victim")),
+                lambda r=req: asyncio.run(main.logout(r, uid="victim")),
+            ):
+                with self.assertRaises(main.HTTPException) as ctx:
+                    call()
+                self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_oauth_callback_blocks_cross_workspace_rebind_without_session(self):
+        main.oauth_states["st-hijack"] = "victim"
+        with patch.object(
+            main.SimpleUserStorage,
+            "get_user",
+            return_value={"access_token": "xoxb-victim", "team_id": "T-VICTIM", "team_name": "Victim"},
+        ), patch.object(main.SimpleUserStorage, "save_user") as save_mock, patch.object(
+            main.slack_client,
+            "exchange_code_for_token",
+            return_value={"access_token": "xoxb-attacker", "team_id": "T-ATTACKER", "team_name": "Attacker"},
+        ), patch.object(
+            main.slack_client, "list_channels", return_value=[]
+        ) as channels_mock:
+            res = asyncio.run(main.auth_callback(self._req(), code="code-atk", state="st-hijack", error=None))
+
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("Already Connected", res.content)
+        self.assertNotIn(main.COOKIE_NAME, res.cookies)
+        save_mock.assert_not_called()
+        channels_mock.assert_not_called()
+
+    def test_oauth_callback_allows_same_workspace_reconnect_and_sets_cookie(self):
+        main.oauth_states["st-recover"] = "victim"
+        with patch.object(
+            main.SimpleUserStorage,
+            "get_user",
+            return_value={"access_token": "xoxb-victim", "team_id": "T-VICTIM", "team_name": "Victim"},
+        ), patch.object(main.SimpleUserStorage, "save_user") as save_mock, patch.object(
+            main.slack_client,
+            "exchange_code_for_token",
+            return_value={"access_token": "xoxb-victim-2", "team_id": "T-VICTIM", "team_name": "Victim"},
+        ), patch.object(
+            main.slack_client, "list_channels", return_value=[{"id": "C1", "name": "general"}]
+        ):
+            res = asyncio.run(main.auth_callback(self._req(), code="code-rec", state="st-recover", error=None))
+
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(main.COOKIE_NAME, res.cookies)
+        self.assertTrue(res.cookies[main.COOKIE_NAME]["httponly"])
+        self.assertEqual(res.cookies[main.COOKIE_NAME]["samesite"], "lax")
+        self.assertTrue(res.cookies[main.COOKIE_NAME]["secure"])
+        save_mock.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ from models.review import (
 )
 from models.speaker_tag_prompts import SpeakerTagPrompt, SpeakerTagPromptAnswer, SpeakerTagPromptAnswerRequest
 from utils import entity_pages
+from utils.speakers.display import display_participants
 from utils.speaker_tag_prompts import service as speakers
 from utils.task_intelligence import candidate_service
 from config.dream_agent import eligible
@@ -67,11 +68,12 @@ def _speaker_item(uid: str, prompt: SpeakerTagPrompt) -> ReviewItem | None:
     target_index = next((i for i, s in enumerate(segments) if s.get('id') in target), 0)
     start = conversation.get('started_at') or conversation.get('created_at') or datetime.now(timezone.utc)
     context = []
+    display = display_participants(segments, resolution=conversation.get('speaker_resolution'))
     for segment in segments[max(0, target_index - 1) : max(0, target_index - 1) + 3]:
         # Generic labels avoid leaking inferred names in a question quote/context.
         context.append(
             TranscriptLine(
-                speaker_label=f"Speaker {segment.get('speaker_id', 0)}",
+                speaker_label=display.label(segment),
                 text=one_line(segment.get('text')) or '',
                 at=start + timedelta(seconds=float(segment.get('start') or 0)),
                 is_target=segment.get('id') in target,
@@ -117,7 +119,7 @@ def _task_item(uid: str, candidate) -> ReviewItem:
         if quote and segment is not None:
             evidence = ReviewEvidence(
                 quote=quote,
-                speaker_label=f"Speaker {segment.get('speaker_id', 0)}",
+                speaker_label=display_participants(segments).label(segment),
                 at=conversation.get('started_at'),
                 conversation_id=ref.id,
                 conversation_title=(conversation.get('structured') or {}).get('title') or '',

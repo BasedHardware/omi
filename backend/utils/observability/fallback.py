@@ -191,6 +191,7 @@ ALLOWED_COMPONENTS = frozenset(
         'sync_dispatch',
         'pusher',
         'stt_selection',
+        'speaker_learning',
         'stt_live_session',
         'vad',
         'audio_merge',
@@ -205,12 +206,14 @@ ALLOWED_COMPONENTS = frozenset(
         'redis_ratelimit',
         'silent_mic',
         'firestore_read',
+        'usage_publication',
         'knowledge_graph',
         'agent_tools',
         'conversation_relevance',
         'conversation_finalization',
         'conversation_notes',
         'daily_summary',
+        'feature_flags',
         'other',
     }
 )

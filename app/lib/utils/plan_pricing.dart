@@ -1,4 +1,9 @@
 import 'package:collection/collection.dart';
+import 'package:omi/utils/billing_price.dart';
+
+/// Render the exact catalog amount. Never trust legacy server-formatted copy.
+String planBillingTotal(Map<String, dynamic> plan) =>
+    formatBillingPrice((plan['unit_amount'] as num).toInt(), plan['currency'] as String? ?? 'usd');
 
 /// Months saved by a tier's annual price, derived from the tier's own prices.
 ///
@@ -62,6 +67,7 @@ int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
 (double, double)? _monthlyAndYearly(List<Map<String, dynamic>> plans) {
   final monthly = plans.firstWhereOrNull((p) => p['interval'] == 'month');
   final yearly = plans.firstWhereOrNull((p) => p['interval'] == 'year');
+  if ((monthly?['currency'] ?? 'usd') != (yearly?['currency'] ?? 'usd')) return null;
   final monthlyAmount = (monthly?['unit_amount'] as num?)?.toDouble();
   final yearlyAmount = (yearly?['unit_amount'] as num?)?.toDouble();
   if (monthlyAmount == null || yearlyAmount == null || monthlyAmount <= 0) return null;
@@ -74,8 +80,8 @@ int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
 /// that hid Continue for every annual subscriber and blocked Plus → Unlimited.
 /// Hide only when the user is already on the selected tier's annual price.
 /// Desktop-entitled plans are manage-only on this sheet: same-tier
-/// monthly→annual is still a management action; switching onto Plus /
-/// Unlimited / Neo is not.
+/// monthly→annual is still a management action, and switching onto Omi Pro
+/// (`unlimited_v2`, which also grants desktop) is allowed; any other tier is not.
 bool shouldShowPlanContinueButton({
   required bool isOnAnnualPlan,
   required bool hasScheduledUpgrade,
@@ -87,7 +93,11 @@ bool shouldShowPlanContinueButton({
   bool selectedPriceIsCurrent = false,
 }) {
   if (!plansLoaded || isCancelled || hasScheduledUpgrade || selectedPriceIsCurrent) return false;
-  if (currentGrantsDesktop && selectedTierId != null && currentTierId != null && selectedTierId != currentTierId) {
+  if (currentGrantsDesktop &&
+      selectedTierId != null &&
+      currentTierId != null &&
+      selectedTierId != currentTierId &&
+      selectedTierId != 'unlimited_v2') {
     return false;
   }
   if (isOnAnnualPlan && (selectedTierId == null || selectedTierId == currentTierId)) return false;

@@ -140,8 +140,6 @@ def off(monkeypatch):
 
 @pytest.fixture
 def enable(monkeypatch):
-    # Production registry belongs to the integrator; emulate that registration.
-    monkeypatch.setattr(levers, 'KNOWN_LEVERS', levers.KNOWN_LEVERS | {'conversation_list_cursor'})
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"conversation_list_cursor":100}')
 
 
@@ -197,6 +195,7 @@ def test_read_count_page_one_vs_four(monkeypatch, enable, include_discarded):
 
 @pytest.mark.parametrize('photo', [False, True])
 def test_unregistered_new_lever_is_safe_and_off_shape_unchanged(monkeypatch, photo):
+    monkeypatch.setattr(levers, 'KNOWN_LEVERS', levers.KNOWN_LEVERS - {'conversation_list_cursor'})
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"conversation_list_cursor":100}')
     result, counts = fetch(monkeypatch, rows(), photo=photo, limit=2, offset=6, cursor='invalid', page_envelope=True)
     assert isinstance(result, list)

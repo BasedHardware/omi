@@ -649,7 +649,7 @@ class TestRestStatusContract:
         resp = client.get("/v1/mcp/conversations/c1")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["transcript_segments"][0]["speaker_name"] == "Speaker 0"
+        assert body["transcript_segments"][0]["speaker_name"] == "Speaker A"
         assert body["truncated"] is False
         assert body["apps_results"] == [{"app_id": "app-1", "content": "note"}]
 
@@ -1064,11 +1064,11 @@ class TestSyncedWriterTimestamps:
 
         docs = [SimpleNamespace(reference=SimpleNamespace(id=f"a{i}")) for i in range(3)]
         _, _, written = self._fake_db(monkeypatch, action_items_db, docs)
-        import database.account_deletion_marker as marker
+        from database import _client
 
         miss = SimpleNamespace(exists=False, to_dict=lambda: None)
         monkeypatch.setattr(
-            marker,
+            _client,
             'get_data_plane_firestore_client',
             lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
         )

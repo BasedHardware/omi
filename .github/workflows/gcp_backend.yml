@@ -711,7 +711,8 @@ jobs:
           LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         with:
           deploy_profile: manual
-          backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || '8Gi' }}
+          # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
+          backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: ${{ github.event.inputs.environment }}

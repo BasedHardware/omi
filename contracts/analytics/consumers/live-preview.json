@@ -1,0 +1,27 @@
+{
+  "id": "live-preview",
+  "kind": "question",
+  "owner": "Mobile capture",
+  "question": "For batch-lane mobile sessions admitted to the on-device live preview, which engine runs and why not, why a client did not ask for local preview (per-session gates its routing cannot journal around), by platform, OS major and release build; how long until the first preview word; and how many preview words and audio seconds each session rendered or dropped? For each socket that asked: how long until its admission verdict (p50/p95 by verdict and platform), how long and how many pendant frames were held meanwhile, and how often the 10 s timeout or overflow forced a replay? For sessions with preview text: how often did the on-device notes engine draft bullets (or report unavailable), how long did a draft take, and how many bullets did it return?",
+  "query": "contracts/analytics/consumers/live-preview-presence.sql",
+  "events": [
+    "livePreviewEngineSelected",
+    "livePreviewFirstWord",
+    "livePreviewSessionEnded",
+    "livePreviewNotRequested",
+    "livePreviewVerdict",
+    "livePreviewNotes"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number",
+    "engine",
+    "reason",
+    "platform",
+    "os_major",
+    "verdict",
+    "outcome"
+  ],
+  "zero_policy": "Presence is not quality. Engine none is an expected outcome (calm Transcribing state), not an error; report it by reason. First-word latency exists only for sessions that heard speech. Preview words are not compared with the batch record in this release (no text leaves the phone); disagreement needs a follow-up on-device comparison. Live Preview Engine is emitted per engine run: a runtime failure ends that run (Session Ended) and a one-time fallback emits a second Engine event (engine none, reason engine_error when nothing could take over), so count admitted sessions by their first Engine event. Live Preview Verdict is one row per socket that declared local_preview; socket_closed means no verdict arrived before the socket or capture ended. A timeout is detected only when a frame arrives after 10 s, so a slow verdict with no audio meanwhile reports as granted/refused with its real latency. Live Preview Notes has no text: engine, outcome, latency and bullet count only. one row per attempt (ok, unavailable, error, or one dropped_busy per busy stretch); the first draft needs 40 new preview words and drafts at most once a minute.",
+  "outcomes_query": "contracts/analytics/consumers/live-preview-verdict.sql"
+}

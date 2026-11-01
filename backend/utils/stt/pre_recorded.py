@@ -1316,15 +1316,17 @@ def prerecorded_from_bytes(
     )
 
 
-def _words_cleaning(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _words_cleaning(words: List[Dict[str, Any]], *, preserve_timestamps: bool = False) -> List[Dict[str, Any]]:
     words_cleaned: List[Dict[str, Any]] = []
     for i, w in enumerate(words):
         # if w['timestamp'][0] == w['timestamp'][1]:
         #     continue
         words_cleaned.append(
             {
-                'start': round(w['timestamp'][0], 2),
-                'end': round(w['timestamp'][1] or w['timestamp'][0] + 1, 2),
+                'start': w['timestamp'][0] if preserve_timestamps else round(w['timestamp'][0], 2),
+                'end': (
+                    w['timestamp'][1] if preserve_timestamps else round(w['timestamp'][1] or w['timestamp'][0] + 1, 2)
+                ),
                 'speaker': w['speaker'],
                 'text': str(w['text']).strip(),
                 'is_user': False,
@@ -1439,7 +1441,9 @@ def _capitalize_first(text: str) -> str:
     return text[:1].capitalize() + text[1:]
 
 
-def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegment]:
+def _segments_as_objects(
+    segments: List[Dict[str, Any]], *, preserve_timestamps: bool = False
+) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
@@ -1449,18 +1453,18 @@ def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegme
             speaker=segment['speaker'],
             is_user=segment['is_user'],
             person_id=None,
-            start=round(segment['start'] - starts_at, 2),
-            end=round(segment['end'] - starts_at, 2),
+            start=segment['start'] - starts_at if preserve_timestamps else round(segment['start'] - starts_at, 2),
+            end=segment['end'] - starts_at if preserve_timestamps else round(segment['end'] - starts_at, 2),
         )
         for segment in segments
     ]
 
 
 def postprocess_words(
-    words: List[Dict[str, Any]], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
+    words: List[Dict[str, Any]], duration: int, skip_n_seconds: int = 0, *, preserve_timestamps: bool = False
 ) -> List[TranscriptSegment]:
-    cleaned_words = _words_cleaning(words)
+    cleaned_words = _words_cleaning(words, preserve_timestamps=preserve_timestamps)
     user_speaker_id = _retrieve_user_speaker_id(cleaned_words, skip_n_seconds)
     segments = _merge_segments(cleaned_words, skip_n_seconds, user_speaker_id)
-    segments_objs = _segments_as_objects(segments)
+    segments_objs = _segments_as_objects(segments, preserve_timestamps=preserve_timestamps)
     return segments_objs

@@ -232,21 +232,20 @@ void main() {
     expect(sync.retried, 1);
   });
 
-  testWidgets('a persisted HTTP refusal offers recording retry and keeps Share Recording reachable', (tester) async {
+  testWidgets('a persisted HTTP refusal hides Retry and keeps Share Recording reachable', (tester) async {
     final wals = _tooOldAfternoon().take(2).toList();
-    final wal = wals.first
+    wals.first
       ..status = WalStatus.uploadRejected
       ..filePath = 'audio_refused.bin';
     final sync = await _pump(tester, wals);
 
-    expect(find.text('Delete'), findsNothing);
-    await tester.tap(find.text('Try Again').last);
-    await tester.pump();
-    expect(sync.manuallyRetried, [wal]);
+    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing);
+    expect(sync.manuallyRetried, isEmpty);
 
     await tester.tap(find.textContaining('6m').last);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Share Recording'), findsOneWidget);
-    expect(find.text('Try Again'), findsWidgets, reason: 'the individual file keeps the recovery action');
+    expect(find.text('Try Again'), findsNothing, reason: 'automatic recovery owns deterministic refusals');
   });
 }

@@ -6,7 +6,11 @@
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_chat_scope.py",
     "backend/tests/unit/test_mcp_transcript_search.py",
-    "backend/tests/unit/test_tools_router.py"
+    "backend/tests/unit/test_tools_router.py",
+    "backend/tests/unit/test_direct_transcript_search.py",
+    "backend/testing/e2e/test_retrieval_search.py",
+    "backend/tests/unit/test_chat_agent_provider_retry.py",
+    "backend/tests/unit/test_shaped_chat_context.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

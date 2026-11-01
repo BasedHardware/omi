@@ -29,12 +29,21 @@ def test_v1_response_bytes_do_not_change_with_storefront_flag(
     monkeypatch.setattr(
         payment.users_db,
         'get_user_subscription',
-        lambda uid: Subscription(
+        lambda uid, **kwargs: Subscription(
             plan=PlanType(plan),
             status=SubscriptionStatus.active,
             stripe_subscription_id='sub_fixture' if plan != 'basic' else None,
             cancel_at_period_end=cancel_at_period_end,
         ),
+    )
+    # Catalog filtering reads the period-valid projection (like checkout); this
+    # fixture's records carry no period end, so paid plans project to basic and
+    # the single-plan rule shapes mobile/web the same way in every flag state —
+    # what must not change is the v1 bytes across the storefront flag itself.
+    monkeypatch.setattr(
+        payment.users_db,
+        'get_user_valid_subscription',
+        lambda uid, **kwargs: Subscription(plan=PlanType(plan), status=SubscriptionStatus.active),
     )
     for name in ['UNLIMITED', 'PLUS', 'OPERATOR', 'ARCHITECT', 'UNLIMITED_V2']:
         monkeypatch.setenv(f'STRIPE_{name}_MONTHLY_PRICE_ID', f'price_{name}_month')
@@ -42,6 +51,7 @@ def test_v1_response_bytes_do_not_change_with_storefront_flag(
 
     def retrieve(identifier):
         row = MagicMock()
+        row.currency = 'usd'
         row.id = identifier
         row.unit_amount = 1900 if identifier.endswith('month') else 19000
         row.recurring.interval = 'month' if identifier.endswith('month') else 'year'
@@ -49,7 +59,10 @@ def test_v1_response_bytes_do_not_change_with_storefront_flag(
 
     monkeypatch.setattr(stripe.Price, 'retrieve', retrieve)
     stripe_sub = MagicMock()
-    stripe_sub.to_dict.return_value = {'items': {'data': [{'price': {'id': f'price_{plan.upper()}_month'}}]}}
+    stripe_sub.to_dict.return_value = {
+        'currency': 'usd',
+        'items': {'data': [{'price': {'id': f'price_{plan.upper()}_month'}}]},
+    }
     monkeypatch.setattr(stripe.Subscription, 'retrieve', lambda identifier: stripe_sub)
     headers = {'X-App-Platform': platform, 'X-App-Version': '99.0.0'}
     monkeypatch.delenv('STOREFRONT_LADDER_V1_ENABLED', raising=False)
