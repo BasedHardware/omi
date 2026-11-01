@@ -968,7 +968,7 @@ def load_canonical_product_state(
         records: list[dict[str, Any]] = []
         collection = user_ref.collection(name)
         query = (
-            collection.where('account_generation', '==', account_generation).limit(limit)
+            collection.where(filter=FieldFilter('account_generation', '==', account_generation)).limit(limit)
             if account_generation > 0
             else collection.limit(limit)
         )
@@ -980,10 +980,35 @@ def load_canonical_product_state(
                 records.append(payload)
         return records
 
-    tasks = load_collection('action_items', 500)
-    candidates = load_collection('candidates', 200)
-    goals = load_collection('goals', 100)
-    workstreams = load_collection('workstreams', 200)
+    # Note: Filtering occurs in-memory after Firestore server-side limits (500/200/100).
+    # Soft-deleted or inactive items can consume slots in the initial page.
+    def is_active_task(task: dict[str, Any]) -> bool:
+        if bool(task.get('deleted') or task.get('is_deleted') or task.get('completed')):
+            return False
+        status = str(task.get('status') or '').lower()
+        return status not in {'completed', 'cancelled', 'superseded'}
+
+    def is_active_candidate(candidate: dict[str, Any]) -> bool:
+        if bool(candidate.get('deleted') or candidate.get('is_deleted')):
+            return False
+        status = str(candidate.get('status') or '').lower()
+        return status not in {'rejected', 'expired'}
+
+    def is_active_goal(goal: dict[str, Any]) -> bool:
+        if goal.get('is_active') is False:
+            return False
+        status = str(goal.get('status') or '').lower()
+        return status not in {'achieved', 'abandoned'}
+
+    def is_active_workstream(workstream: dict[str, Any]) -> bool:
+        return not bool(
+            workstream.get('deleted') or workstream.get('is_deleted') or workstream.get('status') == 'archived'
+        )
+
+    tasks = [t for t in load_collection('action_items', 500) if is_active_task(t)]
+    candidates = [c for c in load_collection('candidates', 200) if is_active_candidate(c)]
+    goals = [g for g in load_collection('goals', 100) if is_active_goal(g)]
+    workstreams = [w for w in load_collection('workstreams', 200) if is_active_workstream(w)]
     artifacts: list[dict[str, Any]] = []
     workstream_events: list[dict[str, Any]] = []
     for workstream in workstreams:
