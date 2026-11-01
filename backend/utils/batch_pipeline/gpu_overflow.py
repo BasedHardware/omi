@@ -20,7 +20,7 @@ import contextvars
 import logging
 import time
 from threading import Lock
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from config.batch_pipeline import Priority
 from config.batch_pipeline_vendor_overflow import min_ready_units, thresholds
@@ -102,6 +102,15 @@ class GpuOverflow:
         metrics.gpu_overflow(active, age)
 
 
+_Oldest = Callable[[int, float], 'float | None']
+_Count = Callable[[int, float], int]
+
+
+def _fresh_sample(oldest: _Oldest, count: _Count) -> Sample:
+    fresh = int(Priority.FRESH)
+    return lambda now: (oldest(fresh, now), count(fresh, now))
+
+
 _overflow: GpuOverflow | None = None
 _bind_lock = Lock()
 
@@ -114,8 +123,7 @@ def saturated(store: Any) -> bool:
         count = getattr(store, 'ready_for_capacity', None)
         if not callable(oldest) or not callable(count):
             return False
-        fresh = int(Priority.FRESH)
         with _bind_lock:
             if _overflow is None:
-                _overflow = GpuOverflow(lambda now: (oldest(fresh, now), count(fresh, now)))
+                _overflow = GpuOverflow(_fresh_sample(cast(_Oldest, oldest), cast(_Count, count)))
     return _overflow.saturated()
