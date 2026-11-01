@@ -129,14 +129,33 @@ def recovery_cohort_admits(uid: str) -> bool:
     return state == 'unset' or state == 'set' and cohort_admits(uid, raw)
 
 
+def _offline_hold_recovery_selected(uid: str, lane: str) -> bool:
+    """Holds made by the default-on offline boundary recover under that boundary.
+
+    Offline enforcement creates sync holds without consulting the lane list, so a
+    live-only lane list must not strand them. Only recovery widens: intake and
+    consent gating keep reading ``execution_admission_enabled``.
+    """
+    return (
+        lane == 'sync'
+        and offline_enforcement_enabled(lane)
+        and execution_admission_configured()
+        and cohort_admits(uid, cohort_tokens())
+    )
+
+
 def recovery_admission_enabled(uid: str, lane: str) -> bool:
     """Additional intersection only: listen/capture admission stays unchanged."""
-    return recovery_cohort_admits(uid) and execution_admission_enabled(uid, lane)
+    return recovery_cohort_admits(uid) and (
+        execution_admission_enabled(uid, lane) or _offline_hold_recovery_selected(uid, lane)
+    )
 
 
 def any_recovery_admission_enabled(uid: str) -> bool:
     """Gate owner visits, consent and wakes before acquiring recovery work."""
-    return recovery_cohort_admits(uid) and any_execution_admission_enabled(uid)
+    return recovery_cohort_admits(uid) and (
+        any_execution_admission_enabled(uid) or _offline_hold_recovery_selected(uid, 'sync')
+    )
 
 
 def hold_lane(metadata: object) -> str | None:

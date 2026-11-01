@@ -20,7 +20,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
 from utils.sync import cap_hold, cap_hold_recovery, cap_hold_reservations, cap_work_budget
 from config.rate_card import recording_units_per_hour
-from config.stt_cap_dispatch import hold_lane, recovery_cohort_admits
+from config.stt_cap_dispatch import hold_lane, recovery_admission_enabled, recovery_cohort_admits
 
 logger = logging.getLogger(__name__)
 PAGE = 10
@@ -154,7 +154,7 @@ async def _release_excluded(uid, token, lease, period, item):
         manifest = snap.to_dict() or {}
         meta = await run_blocking(storage_executor, cap_hold.metadata, uid, manifest)
         lane = hold_lane(meta)
-        if lane is None or funded_processing.enabled(uid, lane):
+        if lane is None or recovery_admission_enabled(uid, lane):
             return None
     elif item['kind'] != 'text' or funded_processing.enabled(uid, 'batch'):
         return None

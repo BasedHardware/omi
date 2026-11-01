@@ -28,8 +28,17 @@ an allowance check must not create a default subscription or restore a missing
 user root. Existing usage-publication erasure fences remain authoritative.
 
 This audio-only predicate does **not** widen live listen, generic LLM/generated
-processing, held-backlog consent, or recovery rollout membership. Existing holds
-outside the recovery cohort stay in custody until their recovery scope is enabled.
+processing or held-backlog consent. Existing holds outside the recovery cohort stay
+in custody until their recovery scope is enabled.
+
+Sync-origin (and pre-origin) holds created by this boundary recover under the same
+boundary: while `STT_CAP_OFFLINE_ENFORCEMENT` is on, `recovery_admission_enabled`
+admits lane `sync` for a cap-cohort owner even when `STT_CAP_DISPATCH_LANES` omits
+`sync`. Before this, the live-only lane list stranded every sync hold, including
+after the owner bought credits. Only recovery widens: intake, consent and
+`execution_admission_enabled` still read the lane list, and recovery still needs
+explicit owner consent, current allowance on the original lane and shared pacing.
+Rollback is the offline kill switch, which also stops creating new sync holds.
 PTT voice-message allowance enforcement is a separate follow-up.
 
 Release owner: subscription session merges; deployment lead deploys. Offline
