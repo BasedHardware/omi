@@ -75,6 +75,7 @@ from fastapi.responses import HTMLResponse
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
+from utils import subscription_overlap
 from utils.overage import (
     OVERAGE_EXPLAINER_TITLE,
     PROVIDER_REFERENCE_RATES,
@@ -455,19 +456,13 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
         # Nonterminal Stripe state takes precedence over the projected Free
         # plan, even when the root customer ID or local billing period is stale.
         # Plan changes belong on the existing upgrade/management rail.
-        raise HTTPException(
-            status_code=409,
-            detail='You already have a subscription. Manage your existing subscription instead of starting a new checkout.',
-        )
+        raise HTTPException(status_code=409, detail=subscription_overlap.EXISTING_SUBSCRIPTION_DETAIL)
     except HTTPException:
         raise
     except Exception as exc:
         # Provider errors may contain account data. Log only the failure type.
         logger.error('Checkout subscription verification failed (%s)', type(exc).__name__)
-        raise HTTPException(
-            status_code=503,
-            detail="We couldn't verify your existing subscription. Please try again before starting checkout.",
-        ) from exc
+        raise HTTPException(status_code=503, detail=subscription_overlap.UNVERIFIED_SUBSCRIPTION_DETAIL) from exc
 
 
 @router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
@@ -767,6 +762,9 @@ def create_checkout_session_endpoint(
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
+    # A second Checkout on this customer double-bills whenever Stripe still holds a
+    # subscription that can charge it, whatever plan the stored row shows.
+    subscription_overlap.refuse_chargeable_subscription(uid, existing_customer_id)
     # A trial is only for a first-time subscriber. A client that asked for one on behalf of a former
     # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
     if request.trial_days and existing_customer_id:
@@ -1222,30 +1220,26 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 existing_subscription,
                 ResolvedStripeEvent(event['type'], session.get('subscription'), None, int(time.time())),
             )
-            if checkout_decision.outcome in ('duplicate_checkout', 'replacement_checkout'):
-                if checkout_decision.outcome == 'duplicate_checkout':
-                    logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
-                    # The paid plan is already stored. Stripe retries this
-                    # delivery when unlock raises. Do not acknowledge it until
-                    # unlock and the idempotent fair-use clear both finish:
-                    # the first delivery writes metadata uid only after that
-                    # clear, so this retry is what drops free_exhausted.
-                    await run_blocking(db_executor, _unlock_paid_content, uid)
-                    await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
-                    return {"status": "success", "message": "Subscription already processed."}
-                elif 'cancel_old_subscription' in checkout_decision.effects:
-                    # Cancel the old subscription to prevent double-charging
-                    old_sub_id = existing_subscription.stripe_subscription_id
-                    logger.info(
-                        f"User {uid} upgrading: canceling old subscription {old_sub_id}, activating new {session.get('subscription')}"
-                    )
-                    try:
-                        await run_blocking(stripe_executor, lambda: stripe.Subscription.cancel(old_sub_id))
-                        logger.info(f"Old subscription {old_sub_id} canceled for user {uid}")
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
-                        )
+            replaced_id = (
+                existing_subscription.stripe_subscription_id
+                if existing_subscription and 'cancel_old_subscription' in checkout_decision.effects
+                else None
+            )
+            # Before the duplicate return: the new subscription's created event
+            # often lands first and already overwrote the stored row.
+            await run_blocking(
+                stripe_executor, subscription_overlap.cancel_replaced_subscriptions, uid, session, replaced_id
+            )
+            if checkout_decision.outcome == 'duplicate_checkout':
+                logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
+                # The paid plan is already stored. Stripe retries this
+                # delivery when unlock raises. Do not acknowledge it until
+                # unlock and the idempotent fair-use clear both finish:
+                # the first delivery writes metadata uid only after that
+                # clear, so this retry is what drops free_exhausted.
+                await run_blocking(db_executor, _unlock_paid_content, uid)
+                await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+                return {"status": "success", "message": "Subscription already processed."}
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
