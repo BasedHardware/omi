@@ -17,15 +17,18 @@ module unchanged against local snapshots.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any, Mapping, Optional
 
 from models.conversation_enums import CategoryEnum
+from utils.llm.notes_agent_policy import lookup_efficiency_enabled
 from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
 
-PROMPT_VERSION = 'notes-agent-v6'
+PROMPT_VERSION = 'notes-agent-v8'
+LEGACY_PROMPT_VERSION = 'notes-agent-v7'
 SUBMIT = 'submit_notes'
 VIEW_SCREENSHOT = 'view_screenshot'
 OWNER_PROFILE_CHARACTERS = 1500
@@ -61,16 +64,19 @@ EVIDENCE
   name from general knowledge; omit an unclear incidental name instead of guessing.
 - Speaker keys are diarization clusters, not names: `spk k` entries and the `k` in `[segment-id k]` turn headers
   identify clusters (`?` = unresolved). Never write a cluster key, `spk`, `Speaker N` or `SPEAKER_00` in the notes.
-- NAME THE OTHER SPEAKER whenever the evidence supports it; a role description ("an unnamed candidate") is
-  a failure when the evidence names them. Strong evidence, especially when the transcript has one other voice:
-  a call window or chat titled with one person during the call (`people_on_screen` evidence `call_window`), a
-  profile page such as LinkedIn opened just before or during the call (`profile_page`), the human attendee on
-  the calendar event, a People record matching a name said aloud, or an earlier meeting with the same person.
-  Combine the transcript with this evidence; it does not have to be said aloud. AI notetakers and matchmakers
-  (Boardy, Otter, Fireflies, Read.ai and similar) are never the other speaker.
-- Record every person you name in `participants` with the transcript speaker key they map to and one line of
-  evidence, and use the name in the title and notes. Never list the owner, and never invent a name: when
-  evidence does not name someone, leave them out of `participants` and describe them by role.
+- A name identifies a speaker only with a resolved voice binding, the user's affirmative correction, or a
+  server-provided `screen_speaker_bindings` entry. That entry is a notes-only attribution for a two-speaker
+  desktop call with a captured owner and exactly one credible remote call-tile name. Use its exact speaker
+  key and name, and cite its screen evidence in the participant's evidence field. Never construct a binding
+  yourself from call_tile_names, a screenshot, an invite or a People result.
+  Apart from those server-provided bindings, calendar attendees and call tiles establish spelling,
+  not which voice said a statement. A People
+  record, personal lexicon, account profile, memory or past meeting never identifies an unresolved voice.
+- A name merely mentioned in the transcript may refer to a third party. Preserve names as heard with a hedge
+  when useful, but never promote that mention to a verified speaker identity or expand it from People alone.
+- Record evidenced non-owner participants with their speaker key and evidence. Otherwise omit the participant
+  and attribute the statement as "someone said". Lead the title with the topic
+  whenever the counterpart's identity is unverified; do not put a guessed or hedged identity in the title.
 - A calendar invitee or screen listing alone is not proof of attendance; never infer an absence or no-show from it.
 - Keep proposals, decisions, intentions and completed work distinct, and keep tense and hedges. A suggestion is
   not a decision; "I'll add it" is an intention, not done work. Do not attach a detail to the wrong company,
@@ -252,6 +258,42 @@ TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (*READ_TOOL_SCHEMAS, SUBMIT_SCHEMA)
 READ_TOOL_NAMES = frozenset(schema['function']['name'] for schema in READ_TOOL_SCHEMAS)
 
 
+def instructions_for_run() -> str:
+    if not lookup_efficiency_enabled():
+        return INSTRUCTIONS
+    return INSTRUCTIONS.replace(
+        'then confirm with search_people,',
+        'then confirm with the packet’s matched_people records or batched search_people(names=[...]),',
+    ).replace(
+        'Long meetings usually need five to eight lookups; independent lookups can go in one turn. Stay within the lookup\nbudget, then finish by calling submit_notes exactly once.',
+        'The packet already includes calendar_overlap, screen_activity and matched_people when available. '
+        'Use that evidence directly; do not fetch the same window or person again. Batch all unresolved names '
+        'in one search_people(names=[...]) call. Make only lookups that resolve a specific remaining uncertainty; '
+        'prefetched evidence counts toward investigation. Independent lookups can go in one turn. '
+        'Stay within the lookup budget, then finish by calling submit_notes exactly once.',
+    )
+
+
+def tools_for_run() -> tuple[dict[str, Any], ...]:
+    if not lookup_efficiency_enabled():
+        return TOOL_SCHEMAS
+    tools = deepcopy(TOOL_SCHEMAS)
+    people = next(tool['function'] for tool in tools if tool['function']['name'] == 'search_people')
+    people['description'] += ' Batch unresolved names in names; each name is matched independently. query still works.'
+    people['parameters']['properties']['names'] = {
+        'type': 'array',
+        'items': _STR,
+        'maxItems': 12,
+        'description': 'Names to resolve together (OR between names; all words within each name).',
+    }
+    people['parameters']['required'] = []
+    return tools
+
+
+def version_for_run() -> str:
+    return PROMPT_VERSION if lookup_efficiency_enabled() else LEGACY_PROMPT_VERSION
+
+
 def _with_breakpoint(text: str) -> list[dict[str, Any]]:
     return [{'type': 'text', 'text': text, 'prompt_cache_breakpoint': dict(EXPLICIT_CACHE_BREAKPOINT)}]
 
@@ -295,4 +337,6 @@ def screenshot_message(frame_id: str, offset_label: str, data_url: str) -> dict[
 
 def cache_key_material(owner: Mapping[str, Any]) -> str:
     """The stable bytes (instructions, tools, owner block) that name the per-user cache entry."""
-    return json.dumps([INSTRUCTIONS, list(TOOL_SCHEMAS), owner], ensure_ascii=False, sort_keys=True, default=str)
+    return json.dumps(
+        [instructions_for_run(), list(tools_for_run()), owner], ensure_ascii=False, sort_keys=True, default=str
+    )

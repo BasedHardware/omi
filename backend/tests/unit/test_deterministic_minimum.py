@@ -165,9 +165,19 @@ def test_structured_matches_every_column_of_the_spec_table() -> None:
     # NOT a fabricated summary and NOT a placeholder that looks like content.
     assert structured.overview == ''
     assert structured.category == CategoryEnum.other
+    # The category's deterministic emoji, never the "unset" brain default.
+    assert structured.emoji == '💬'
     assert structured.action_items == []
     assert structured.events == []
     assert structured.sections == []
+
+
+def test_structured_emoji_is_never_the_unset_brain() -> None:
+    for conversation in (
+        _conversation('Any first sentence sets a title.'),
+        _conversation(),  # empty transcript: the fallback title row
+    ):
+        assert build_deterministic_minimum_structured(conversation).emoji != '🧠'
 
 
 def test_structured_title_is_never_empty_for_an_empty_conversation() -> None:

@@ -93,7 +93,12 @@ _CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
         "items": {
             "type": "object",
             "properties": {
-                "speaker_id": {"type": ["integer", "string", "null"]},
+                "speaker_id": {
+                    "type": ["integer", "string", "null"],
+                    "description": "Legacy nullable field; display voice identity is speaker_key",
+                },
+                "speaker_key": {"type": "string"},
+                "speaker_label": {"type": "string"},
                 "person_id": {"type": ["string", "null"]},
                 "is_user": {"type": "boolean"},
             },
@@ -562,7 +567,9 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         title="Get conversation by ID",
         description=(
             "Deep-read one conversation card and a bounded transcript. Use only for a few ids selected from "
-            "get_conversations or search_conversations; the response reports truncated=true when clipped."
+            "get_conversations or search_conversations; the response reports truncated=true when clipped. "
+            "Transcript offsets are nonnegative: text before the conversation origin is clamped at zero; "
+            "a zero-duration interval is unplaced text, not a playback window."
         ),
         annotations=_read_annotations("Get conversation by ID"),
         input_schema={
@@ -754,7 +761,12 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                                 "end": {"type": ["number", "null"]},
                                 "start_ms": {"type": ["integer", "null"]},
                                 "end_ms": {"type": ["integer", "null"]},
-                                "speaker_id": {"type": ["integer", "string", "null"]},
+                                "speaker_id": {
+                                    "type": ["integer", "string", "null"],
+                                    "description": "Legacy nullable field; display voice identity is speaker_key",
+                                },
+                                "speaker_key": {"type": "string"},
+                                "speaker_label": {"type": "string"},
                             },
                         },
                     },

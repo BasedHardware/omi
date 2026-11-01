@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from utils.memory import promotion_flex
+from utils.llm import clients
 
 
 class _Snapshot:
@@ -96,7 +97,7 @@ def test_missing_or_unsupported_environment_fails_closed_without_firestore_read(
 def test_gateway_flex_client_has_no_sdk_retry(monkeypatch):
     calls = []
     monkeypatch.setattr(
-        promotion_flex,
+        clients,
         "get_or_create_omi_gateway_llm",
         lambda *args, **kwargs: calls.append((args, kwargs)) or object(),
     )

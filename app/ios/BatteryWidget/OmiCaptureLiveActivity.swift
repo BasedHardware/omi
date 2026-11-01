@@ -164,9 +164,9 @@ private func noticeIsland(snapshot: CaptureSnapshot, notice: CaptureNotice, id: 
         }
         DynamicIslandExpandedRegion(.bottom) {
             VStack(spacing: 10) {
-                // The longest title has no room beside the camera.
+                // The failure in plain words; the title beside the camera stays short.
                 if notice == .unheard {
-                    CaptureNoticeTitle(snapshot: snapshot, notice: notice)
+                    CaptureUnheardSentence()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 CaptureNoticeDetail(snapshot: snapshot, notice: notice, height: 38)
@@ -311,6 +311,9 @@ private struct CaptureStatus: View {
         case "reconnecting": return "Reconnecting…"
         // The pendant's audio is not verified yet: no Listening claim, as in the app.
         case "unverified": return "Omi pendant"
+        // Recovery is exhausted; the unheard notice card names it, this covers a
+        // frame before the manager swaps the card.
+        case "noAudio": return "No audio from pendant"
         default: return "Listening"
         }
     }
@@ -799,7 +802,8 @@ private struct CaptureNoticeValue: View {
     }
 }
 
-/// Below the title: Start for a pause, the charge left for a low battery, nothing otherwise.
+/// Below the title: Start for a pause, the charge left for a low battery, and for an
+/// unheard pendant the one action that can restore it — a reconnect of the link.
 @available(iOS 16.1, *)
 private struct CaptureNoticeDetail: View {
     let snapshot: CaptureSnapshot
@@ -821,8 +825,50 @@ private struct CaptureNoticeDetail: View {
             .frame(height: 6)
             .accessibilityHidden(true)
         case .unheard:
-            EmptyView()
+            CaptureNoticeReconnect(snapshot: snapshot, height: height)
         }
+    }
+}
+
+/// The unheard failure in plain words: the link is fine, the audio is not flowing.
+@available(iOS 16.1, *)
+private struct CaptureUnheardSentence: View {
+    var body: some View {
+        Text("Pendant connected, but no audio is reaching your phone")
+            .font(.footnote)
+            .foregroundStyle(CapturePalette.secondary)
+            .lineLimit(2)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+    }
+}
+
+/// Reconnect for an unheard pendant: one tap asks Flutter to re-establish the link
+/// (the same managed reconnect the app's own recovery uses); native capture health
+/// re-verifies the fresh generation on its own.
+@available(iOS 16.1, *)
+private struct CaptureNoticeReconnect: View {
+    let snapshot: CaptureSnapshot
+    let height: CGFloat
+
+    var body: some View {
+        #if compiler(>=6.4)
+        if #available(iOS 17.0, *), !snapshot.isStale {
+            Button(intent: OmiCaptureIntent(recordingId: snapshot.recordingId,
+                                            revision: snapshot.state.conversationRevision, action: "reconnect")) {
+                Text("Reconnect")
+                    .contentTransition(.identity)
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, minHeight: height)
+                    .foregroundStyle(CapturePalette.ink)
+                    .background(CapturePalette.label, in: Capsule())
+            }
+            .buttonStyle(CaptureActionStyle())
+            .disabled(snapshot.state.busy)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+        }
+        #endif
     }
 }
 

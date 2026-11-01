@@ -1,4 +1,4 @@
-"""GPU-safe RPC composition: bounded receipts, OIDC and no user/audio payloads."""
+"""GPU-safe private RPC composition, bounded bodies and OIDC."""
 
 import io
 import json
@@ -42,6 +42,10 @@ def test_oidc_client_sends_only_fenced_ids_and_reuses_short_lived_cached_token()
         {'allowed': [], 'retry_after': {'segment': float('nan')}},
         {'allowed': [], 'retry_after': {'segment': -1}},
         {'allowed': [], 'retry_after': {'foreign': 30}},
+        {'allowed': [], 'held_reason': {'foreign': 'allowance_exhausted'}},
+        {'allowed': [], 'held_reason': {'segment': ''}},
+        {'allowed': [], 'held_reason': {'segment': 'unbounded ' * 13}},
+        {'allowed': [], 'held_reason': {'segment': 60}},
     ],
 )
 def test_invalid_authorization_receipt_never_permits_compute(body):
@@ -54,6 +58,18 @@ def test_invalid_authorization_receipt_never_permits_compute(body):
     )
     with pytest.raises(ValueError):
         client([lease()])
+
+
+def test_hold_reason_receipt_round_trips_for_the_durable_decision():
+    body = {'allowed': [], 'retry_after': {'segment': 60}, 'held_reason': {'segment': 'allowance_exhausted'}}
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'audience',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(json.dumps(body).encode()),
+    )
+    assert client([lease()])['held_reason'] == {'segment': 'allowance_exhausted'}
 
 
 @pytest.mark.parametrize(
@@ -70,3 +86,34 @@ def test_invalid_authorization_receipt_never_permits_compute(body):
 def test_missing_or_unsafe_configuration_refuses_before_any_network(url, audience, stage):
     with pytest.raises(ValueError):
         ComputeClient(url, audience, stage)
+
+
+def test_shadow_projection_sends_ephemeral_payload_once_with_oidc():
+    sent = []
+
+    def send(request, timeout):
+        sent.append((request, timeout))
+        return io.BytesIO(b'{"status":"planned","reads":4,"planned_writes":2}')
+
+    client = ComputeClient('https://synthetic.invalid', 'audience', 'dev', token=lambda: 'synthetic', send=send)
+    result = client.shadow_project('synthetic-shadow', {'words': [{'word': 'synthetic'}]})
+    assert result['status'] == 'planned' and len(sent) == 1
+    request, timeout = sent[0]
+    assert request.full_url.endswith('/shadow-project') and timeout == 5
+    assert request.get_header('Authorization') == 'Bearer synthetic'
+    assert json.loads(request.data)['segment_id'] == 'synthetic-shadow'
+
+
+@pytest.mark.parametrize(
+    'raw', [b'x' * 4097, b'{"status":"published"}', b'[]'], ids=['oversized', 'unsafe-status', 'array']
+)
+def test_shadow_projection_refuses_unbounded_or_invalid_receipts(raw):
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'audience',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(raw),
+    )
+    with pytest.raises(ValueError):
+        client.shadow_project('synthetic-shadow', {'words': []})

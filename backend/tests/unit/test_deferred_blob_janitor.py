@@ -123,9 +123,9 @@ class TestSleepPatternRemoved:
         for rel in ('routers/sync.py', 'utils/chat.py'):
             assert 'time.sleep(480)' not in _read_source(rel), f'{rel} still parks threads as deletion timers'
 
-    def test_sync_uses_scheduler(self):
+    def test_sync_does_not_schedule_deletion_at_url_creation(self):
         pipeline_src = _read_source('utils/sync/pipeline.py')
-        assert 'schedule_syncing_temporal_file_deletion(path)' in pipeline_src
+        assert 'schedule_syncing_temporal_file_deletion' not in pipeline_src
 
     def test_chat_cleanup_has_two_explicit_owners(self):
         source = _read_source('utils/chat.py')

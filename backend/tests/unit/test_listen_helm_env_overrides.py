@@ -394,6 +394,18 @@ def test_private_env_rejects_names_that_would_shadow_chart_or_dispatch(name: str
         HELPER.check_private_env_against_chart({name: SENTINEL}, values, overrides)
 
 
+@pytest.mark.parametrize("stage", ("dev", "prod"))
+@pytest.mark.parametrize("name", ("SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS"))
+def test_keyless_prod_rejects_private_key_credentials_before_helm(stage: str, name: str):
+    values = _load_values(PROD_VALUES.with_name(f"{stage}_omi_backend_listen_values.yaml"))
+    if stage == "prod":
+        with pytest.raises(ValueError, match="workloadIdentityOnly") as error:
+            HELPER.check_private_env_against_chart({name: SENTINEL}, values, {})
+        assert SENTINEL not in str(error.value)
+    else:
+        HELPER.check_private_env_against_chart({name: SENTINEL}, values, {})
+
+
 def test_private_env_allows_blank_dispatch_override_of_same_name():
     values = _load_values(PROD_VALUES)
     HELPER.check_private_env_against_chart(

@@ -231,7 +231,6 @@ class SavedPendantReconnect {
       _emit(trigger, _attempt, 'skipped:user_or_pairing_block', _elapsed);
       return;
     }
-    if (connected(id)) return;
     final generation = _generation;
     _runningGeneration = generation;
     _timer?.cancel();
@@ -241,11 +240,11 @@ class SavedPendantReconnect {
         await configure(id, false);
         if (!current()) return;
         _emit(trigger, _attempt, 'skipped:kill_switch', _elapsed);
-        if (trigger == 'launch') await connect(id, true);
+        if (trigger == 'launch' && !connected(id)) await connect(id, true);
         return;
       }
       await configure(id, true);
-      if (!current()) return;
+      if (!current() || connected(id)) return;
       _disconnectedAt ??= DateTime.now();
       if (_attempt == 0) _trigger = trigger;
       _attempt++;

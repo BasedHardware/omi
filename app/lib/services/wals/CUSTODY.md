@@ -130,3 +130,30 @@ the legacy coverage trim is deleted (plan C, C11).
 | 4 | `unit/local_recordings_auto_upload_test.dart`, `unit/sync_poll_storm_test.dart` |
 | 5 | `unit/watch_custody_dedupe_test.dart` |
 | 6 | `widgets/phone_custody_home_render_test.dart` (real conversations page) |
+
+## Upload refusals and attention
+
+HTTP 400/413 is feedback for Omi, not a per-recording user repair. The ledger
+stores only a closed reason token, HTTP status, first refusal time and last
+attempt time. Daily attempts stop seven days after the first refusal; audio is
+retained and the aggregate counts it as reported. Restart and connectivity
+wakes respect the same persisted clock and do not reset it. Legacy refused rows
+start their window at the first recovery attempt. Each attempt uses one file so
+a request-level verdict never condemns siblings. Local-only custody stays closed;
+a held recording already submitted explicitly may recover automatically.
+
+A framed file of at most four bytes has no audio payload and completes as a
+no-op. Larger files, including tiny compressed speech, always retain normal
+server decoding/VAD. Refusals emit the registered `WAL Upload Refused` event with
+bounded reason and status. `SyncProvider.refusalSummary` exposes count, seconds,
+reported count and `userActionCanHelp=false`; refused rows do not enter user
+attention or offer Retry. Original audio remains in the full inventory.
+
+The Catching up dates cover the latest contiguous pending run on one local day.
+Old uploaded handles contribute dates only after a recent authoritative pending
+reply. Completion acknowledges custody; confirmed absence requeues intact audio
+through the existing deduplicated upload path. Missing/transient reads alone do
+not imply success or renew a pending span. All backlog counts remain available.
+
+Guard: `test/unit/sync_attention_policy_test.dart` and
+`test/providers/sync_provider_needs_attention_retry_test.dart`.

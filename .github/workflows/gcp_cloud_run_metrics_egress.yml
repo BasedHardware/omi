@@ -9,7 +9,9 @@ on:
       - 'backend/charts/monitoring/alerts/live-stt.json'
       - 'backend/charts/monitoring/alerts/resilience.json'
       - 'backend/charts/monitoring/live-alert-gate.json'
+      - 'backend/charts/monitoring/mute-timings.json'
       - 'backend/charts/monitoring/gmp/frontend-values.prod.yaml'
+      - 'backend/scripts/verify_pusher_live_alert_route.py'
       - '.github/workflows/gcp_cloud_run_metrics_egress.yml'
   workflow_dispatch:
     inputs:

@@ -13,8 +13,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
+from config.server_batch import owned as server_batch_owned
 
 from database import conversations as conversations_db
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
 from database.people_stats_cache import invalidate_people_stats_cache
 
@@ -254,6 +256,7 @@ def tombstone_and_delete_empty_conversation(
     deleted_conversation: dict[str, Any] | None = None,
     recovery_cutoff: datetime | None = None,
     require_expired_recording_lease: bool = False,
+    allow_empty_server_batch: bool = False,
 ) -> bool:
     """Atomically delete an empty live row and terminalize its bound session.
 
@@ -281,12 +284,23 @@ def tombstone_and_delete_empty_conversation(
         if not getattr(snapshot, 'exists', False):
             return False
         conversation = snapshot.to_dict() or {}
+        closed_empty_batch = bool(
+            server_batch_owned(conversation)
+            and (
+                (allow_empty_server_batch and conversation.get('server_batch_audio_closed') is True)
+                or (require_expired_recording_lease and conversation.get('server_batch_audio_received') is False)
+            )
+            and conversation.get('server_batch_audio_received') is False
+            and conversation.get('server_batch_audio_start') is None
+            and conversation.get('server_batch_audio_end') is None
+        )
         if (
-            conversation.get('status') != 'in_progress'
+            conversation.get('status') not in ({'in_progress', 'processing'} if closed_empty_batch else {'in_progress'})
             or conversation.get('discarded')
             or conversation.get('deleted')
             or conversation.get('is_locked')
             or conversation.get('sync_content_revision')
+            or (server_batch_owned(conversation) and not closed_empty_batch)
             or conversations_db.raw_conversation_has_content(uid, conversation)
         ):
             return False
@@ -344,6 +358,7 @@ def tombstone_and_delete_empty_conversation(
 
     deleted = _delete_empty(transaction)
     if deleted:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
         invalidate_people_stats_cache(uid)
     return deleted
 

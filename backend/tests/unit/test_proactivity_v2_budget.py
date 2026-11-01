@@ -8,6 +8,7 @@ from config.proactivity_v2 import AttemptEnvelope, ProactivityDenied, daily_cap
 from database import proactivity as ledger
 from database import proactivity_budget as money
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.support.synthetic_proactivity_producers import synthetic_producers  # noqa: F401
 
 NOW = datetime(2026, 10, 3, 12, tzinfo=timezone.utc)
 

@@ -1,9 +1,13 @@
+import 'dart:async';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/settings/restore_account.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -51,24 +55,34 @@ class _MobileAppState extends State<MobileApp> {
           // Cutover gate sits above onboarding and home so completed-onboarding
           // navigator replacements cannot bypass enforcement, and product
           // widgets are not constructed while blocked.
-          return AccountCutoverBlockingGate(
-            productBuilder: (context) {
-              // Returning users who haven't yet given consent under the new
-              // model must see the consent screen before any AI processing
-              // begins, even if the server says they completed onboarding
-              // previously. OnboardingWrapper renders the consent step in
-              // that case and routes them straight to home after Continue.
-              if (!SharedPreferencesUtil().aiConsentGiven) {
-                return const OnboardingWrapper();
-              }
-              if (SharedPreferencesUtil().onboardingCompleted && !OnboardingWrapper.rerunForTesting) {
-                if (!SharedPreferencesUtil().permissionsCompleted) {
-                  return const _PermissionsGate();
-                }
-                return const HomePageWrapper();
-              }
-              return const OnboardingWrapper();
+          return AccountDeletionGate(
+            key: ValueKey(authProvider.user?.uid ?? SharedPreferencesUtil().uid),
+            check: authProvider.checkAccountDeletion,
+            onFinished: () =>
+                Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false),
+            onRestored: () {
+              unawaited(AccountCutoverRuntime.instance.refresh());
+              Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
             },
+            productBuilder: (context) => AccountCutoverBlockingGate(
+              productBuilder: (context) {
+                // Returning users who haven't yet given consent under the new
+                // model must see the consent screen before any AI processing
+                // begins, even if the server says they completed onboarding
+                // previously. OnboardingWrapper renders the consent step in
+                // that case and routes them straight to home after Continue.
+                if (!SharedPreferencesUtil().aiConsentGiven) {
+                  return const OnboardingWrapper();
+                }
+                if (SharedPreferencesUtil().onboardingCompleted && !OnboardingWrapper.rerunForTesting) {
+                  if (!SharedPreferencesUtil().permissionsCompleted) {
+                    return const _PermissionsGate();
+                  }
+                  return const HomePageWrapper();
+                }
+                return const OnboardingWrapper();
+              },
+            ),
           );
         } else {
           // Signed out: the sign-in screen is the first screen (no separate welcome page).

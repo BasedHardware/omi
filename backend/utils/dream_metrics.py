@@ -197,7 +197,7 @@ def record_pass(report):
         SESSION_TOKENS.labels(bucket).observe(tokens)
     TURNS.inc(max(0, int(report.get('turns', 0))))
     for tool, count in report.get('tool_counts', {}).items():
-        if tool in {'search', 'read', 'propose_edit', 'ask', 'learn_term', 'finish', 'unknown'}:
+        if tool in {'search', 'read', 'propose_edit', 'ask', 'learn_term', 'finish', 'report_defect', 'unknown'}:
             TOOLS.labels(tool).inc(max(0, int(count)))
     for reason, count in report.get('rejected', {}).items():
         # Exact source-owned reason codes only. Arbitrary exception messages
@@ -245,6 +245,10 @@ def record_pass(report):
         max(0, int(report.get('price_weighted_tokens') or 0)),
         f'{cost:.4f}' if isinstance(cost, (int, float)) else 'unknown',
     )
+    # Structured twin of the line above; fails open and never raises into a pass.
+    from utils import dream_telemetry
+
+    dream_telemetry.record_pass(report)
 
 
 DREAM_VALUE_ERROR_CODES = (

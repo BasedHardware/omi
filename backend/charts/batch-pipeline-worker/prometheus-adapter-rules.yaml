@@ -16,3 +16,29 @@ external:
         and on (namespace, worker_release, pod)
         (time() - omi_batch_pipeline_metrics_refreshed_at_seconds < 60)
       )
+  - seriesQuery: 'omi_batch_pipeline_admissible_ready_units{namespace!="",worker_release!="",priority=~"fresh|recent|deep"}'
+    resources:
+      overrides:
+        namespace: {resource: namespace}
+    name:
+      matches: '^omi_batch_pipeline_admissible_ready_units$'
+      as: omi_batch_pipeline_admissible_ready_units
+    # Workers report the same global queue. Max before summing priorities avoids
+    # multiplying demand by replica count. All three fresh classes are required.
+    metricsQuery: |-
+      sum by (namespace, worker_release) (
+        max by (namespace, worker_release, priority) (
+          omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}
+          and on (namespace, worker_release, pod)
+          (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)
+        )
+      )
+      and on (namespace, worker_release) (
+        count by (namespace, worker_release) (
+          max by (namespace, worker_release, priority) (
+            omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}
+            and on (namespace, worker_release, pod)
+            (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)
+          )
+        ) == 3
+      )

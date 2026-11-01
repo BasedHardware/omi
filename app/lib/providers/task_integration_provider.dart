@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:omi/services/integrations/connection_read.dart';
 
 import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
@@ -18,6 +19,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   final Duration statusTimeout;
   Future<void>? _inFlightLoad;
   int _readGeneration = 0;
+  final _activeReads = <ConnectionRead<Object?>>{};
   bool _hasLoadError = false;
   TaskIntegrationApp _selectedApp;
   Map<String, dynamic> _connectionDetails = {};
@@ -42,25 +44,34 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool get hasLoadError => _hasLoadError;
 
   /// Load default app and connection details from backend
-  Future<void> loadFromBackend({bool forceRefresh = false}) {
+  Future<void> loadFromBackend({bool forceRefresh = false, bool silent = false}) {
     final existing = _inFlightLoad;
     if (existing != null && !forceRefresh) return existing;
     late final Future<void> started;
-    started = _loadFromBackendBody(++_readGeneration).whenComplete(() {
+    started = _loadFromBackendBody(++_readGeneration, silent: silent).whenComplete(() {
       if (identical(_inFlightLoad, started)) _inFlightLoad = null;
     });
     _inFlightLoad = started;
     return started;
   }
 
-  Future<void> _loadFromBackendBody(int readGeneration) async {
+  Future<void> _loadFromBackendBody(int readGeneration, {required bool silent}) async {
     final generation = _sessionGeneration;
     bool isCurrent() => generation == _sessionGeneration && readGeneration == _readGeneration;
-    _isLoading = true;
-    notifyListeners();
+    if (!silent) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
-      final response = await Future.sync(_fetchStatus).timeout(statusTimeout);
+      final read = ConnectionRead(_fetchStatus, statusTimeout);
+      _activeReads.add(read);
+      TaskIntegrationsResponse? response;
+      try {
+        response = await read.future;
+      } finally {
+        _activeReads.remove(read);
+      }
       if (!isCurrent()) return;
       if (response == null) {
         _hasLoadError = true;
@@ -105,9 +116,10 @@ class TaskIntegrationProvider extends ChangeNotifier {
       }
       _appleRemindersPermissionManuallySet = false;
 
-      if (response.defaultApp != null && response.defaultApp!.isNotEmpty) {
+      final defaultApp = response.defaultApp;
+      if (defaultApp != null && defaultApp.isNotEmpty) {
         _selectedApp = TaskIntegrationApp.values.firstWhere(
-          (app) => app.key == response.defaultApp,
+          (app) => app.key == defaultApp,
           orElse: () => PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks,
         );
       }
@@ -124,15 +136,35 @@ class TaskIntegrationProvider extends ChangeNotifier {
     }
   }
 
+  /// Default writes run one at a time in the order they were chosen, so the
+  /// server ends on the user's latest choice; only that choice publishes.
+  Future<void> _defaultWrites = Future.value();
+  int _defaultChoice = 0;
+
   /// Set default app and save to backend.
   ///
   /// Only publishes the selection after the server accepts it so local state
-  /// cannot claim a default that was never persisted.
+  /// cannot claim a default that was never persisted. A save made while an
+  /// earlier one is in flight waits for it; a choice replaced before it is sent
+  /// is skipped, and a replaced choice never publishes.
   Future<bool> setSelectedApp(TaskIntegrationApp app) async {
     final generation = _sessionGeneration;
+    final choice = ++_defaultChoice;
+    final previous = _defaultWrites;
+    final written = Completer<void>();
+    _defaultWrites = written.future;
     try {
-      final success = await Future.sync(() => _setDefaultTaskIntegration(app.key)).timeout(statusTimeout);
-      if (generation != _sessionGeneration || !success) return false;
+      await previous;
+      if (generation != _sessionGeneration || choice != _defaultChoice) return false;
+      final read = ConnectionRead(() => _setDefaultTaskIntegration(app.key), statusTimeout);
+      _activeReads.add(read);
+      bool success;
+      try {
+        success = await read.future;
+      } finally {
+        _activeReads.remove(read);
+      }
+      if (generation != _sessionGeneration || choice != _defaultChoice || !success) return false;
 
       // A status read issued before this write cannot restore the prior default.
       _readGeneration++;
@@ -144,6 +176,8 @@ class TaskIntegrationProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error saving default task integration: $e');
       return false;
+    } finally {
+      written.complete();
     }
   }
 
@@ -229,6 +263,10 @@ class TaskIntegrationProvider extends ChangeNotifier {
   void clearUserData() {
     _sessionGeneration++;
     _readGeneration++;
+    for (final read in _activeReads) {
+      read.cancel();
+    }
+    _activeReads.clear();
     _inFlightLoad = null;
     _hasLoadError = false;
     _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
@@ -242,5 +280,16 @@ class TaskIntegrationProvider extends ChangeNotifier {
     GoogleTasksService().setAuthenticated(false);
     ClickUpService().setAuthenticated(false);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _sessionGeneration++;
+    _readGeneration++;
+    for (final read in _activeReads) {
+      read.cancel();
+    }
+    _activeReads.clear();
+    super.dispose();
   }
 }

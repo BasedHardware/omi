@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Iterable, Optional
 
-from mobile_distribution import is_baseline_eligible, normalize_codemagic_build
+from mobile_distribution import ANDROID_HELD_CHANGES_MODE, is_baseline_eligible, normalize_codemagic_build
 
 BUILDS_API = "https://api.codemagic.io/builds"
 MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")
@@ -256,6 +256,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     for workflow_id, commits in pending_by_workflow.items():
         summary.append(f"{workflow_id}_pending={len(commits)}")
     print(" ".join(summary))
+
+    if ANDROID_HELD_CHANGES_MODE and "android-internal-auto" in pending_by_workflow:
+        # The Android baseline advances on the settled publishing action, which
+        # under held changes only proves the edit committed: testers cannot
+        # install it until the operator presses Send for review in Play
+        # Console -> Publishing overview. Say so on every scheduled run so the
+        # held distribution cannot stall silently.
+        print(
+            "android_distribution=held-changes-mode: the settled publish waits on the "
+            "Play Console -> Publishing overview -> Send for review press before testers receive it"
+        )
 
     if not should or args.dry_run:
         return 0

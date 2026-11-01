@@ -7,10 +7,15 @@ Scans all conversations for the specified user and patches source field.
 """
 
 import argparse
+import sys
+from pathlib import Path
 from typing import Any, List
 
-import firebase_admin
-from firebase_admin import firestore
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# Standalone writer: must go through database._client so the list-serving and
+# memory projection heads stay maintained on every write.
+from database._client import db
 
 
 def main() -> None:
@@ -18,11 +23,6 @@ def main() -> None:
     parser.add_argument('--uid', required=True, help='User UID to patch')
     parser.add_argument('--dry-run', action='store_true', help='Print affected doc IDs without modifying')
     args = parser.parse_args()
-
-    if not firebase_admin._apps:  # type: ignore[reportPrivateUsage]  # firebase_admin internals
-        firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
-
-    db: Any = firestore.client()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
     conversations_ref: Any = db.collection('users').document(args.uid).collection('conversations')
     query: Any = conversations_ref.where('source', '==', 'phone_call')

@@ -229,6 +229,22 @@ struct ConversationDetailView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       pageHeader
+      if displayConversation.discarded {
+        HStack(spacing: OmiSpacing.md) {
+          Text("Discarded · Hidden from your feed")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+          Spacer()
+          Button(isReprocessing ? "Restoring…" : "Restore Conversation") {
+            Task { await restoreConversation() }
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .disabled(isReprocessing)
+          .accessibilityIdentifier("conversation-detail-restore")
+        }
+        .padding(.horizontal, OmiSpacing.xl)
+        .padding(.vertical, OmiSpacing.sm)
+      }
       if let retrySpeakerAssignment {
         HStack {
           Text("Couldn't assign this speaker")
@@ -243,8 +259,20 @@ struct ConversationDetailView: View {
 
       switch Self.visiblePane(transcriptOpen: showTranscriptDrawer) {
       case .summary:
-        summaryPane
-          .transition(.opacity)
+        if displayConversation.discarded {
+          VStack(spacing: OmiSpacing.md) {
+            Text("Your audio and transcript stay available here. Restore this conversation to your feed.")
+              .foregroundColor(Ink.secondary)
+            Button("View Transcript") { showTranscriptDrawer = true }
+              .buttonStyle(OmiButtonStyle(.secondary))
+              .accessibilityIdentifier("discarded-view-transcript")
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .padding(OmiSpacing.xl)
+        } else {
+          summaryPane
+            .transition(.opacity)
+        }
       case .transcript:
         transcriptDrawerView
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -456,6 +484,7 @@ struct ConversationDetailView: View {
         editedTitle = displayConversation.title
         showEditDialog = true
       case "delete": showDeleteConfirmation = true
+      case "restore": Task { await restoreConversation() }
       default: break
       }
     }
@@ -1310,6 +1339,24 @@ struct ConversationDetailView: View {
   }
 
   // MARK: - Reprocess
+
+  private func restoreConversation() async {
+    guard displayConversation.discarded, !isReprocessing, let appState = AppState.current else { return }
+    let generation = detailLoadGeneration
+    isReprocessing = true
+    defer { isReprocessing = false }
+    do {
+      let restored = try await appState.restoreConversation(conversation.id)
+      guard isCurrentDetailRequest(generation) else { return }
+      loadedConversation = restored
+      OmiToastCenter.shared.confirm("Conversation restored")
+    } catch is CancellationError {
+      // The account changed before the response arrived.
+    } catch {
+      guard isCurrentDetailRequest(generation) else { return }
+      OmiToastCenter.shared.notice("Couldn't restore conversation. Try again.", systemImage: "exclamationmark.triangle")
+    }
+  }
 
   private func reprocessWithApp(_ app: OmiApp) async {
     let requestGeneration = detailLoadGeneration

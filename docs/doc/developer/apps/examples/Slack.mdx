@@ -1,67 +1,67 @@
 ---
 title: "Slack"
 icon: "slack"
-description: "Send Slack messages using voice commands through your OMI device"
+description: "Send Slack messages using voice commands through your Omi device"
 ---
 
 <CardGroup cols={2}>
-  <Card title="Install App" icon="download" href="https://h.omi.me/apps/SLACK_APP_ID">
-    Install the Slack app from the OMI App Store
+  <Card title="Install app" icon="download" href="https://h.omi.me/apps?q=slack">
+    Find the Slack app in the Omi App Store
   </Card>
-  <Card title="View Code" icon="code" href="https://github.com/BasedHardware/omi-slack-app">
-    Check out the full source code on GitHub
+  <Card title="View code" icon="code" href="https://github.com/BasedHardware/omi/tree/main/plugins/omi-slack-app">
+    Check out the full source code in the repo
   </Card>
 </CardGroup>
 
 ## Features
 
-- **Voice-Activated** - Say "Send message" and speak naturally
+- Voice-activated: say "Send message" and speak naturally
 - **AI-Powered Channel Matching** - AI intelligently matches spoken channel names to your workspace
-- **OAuth Authentication** - Secure Slack OAuth 2.0 integration
-- **Channel Selection** - Set a default channel or specify in voice command
-- **Flexible Settings** - Change channels anytime from mobile-first homepage
-- **Smart Message Extraction** - AI cleans up filler words and formats professionally
-- **Silent Collection** - Only notifies when message is sent
-- **Mobile-First UI** - Beautiful responsive Slack-themed design
+- OAuth authentication: secure Slack OAuth 2.0 integration
+- Channel selection: set a default channel or name one in the voice command
+- Flexible settings: change channels any time from the homepage
+- Smart message extraction: AI removes filler words and formats the message
+- Silent collection: notifies you only when the message is sent
+- Mobile-first UI: a responsive, Slack-themed design
 
-## Quick Start
+## Quick start
 
 <Steps>
-  <Step title="Install the App">
-    Install the Slack app in your OMI mobile app
+  <Step title="Install the app">
+    Install the Slack app in your Omi mobile app
   </Step>
   <Step title="Authenticate">
     Authenticate your Slack workspace (one-time setup)
   </Step>
-  <Step title="Select Default Channel">
+  <Step title="Select default channel">
     Choose a default channel (optional - you can specify in voice)
   </Step>
-  <Step title="Start Messaging">
+  <Step title="Start messaging">
     - Say: "Send message to general saying hello team!"
     - Say: "Post in marketing that the campaign is live"
     - Say: "Slack message to random saying great idea!"
   </Step>
 </Steps>
 
-### Trigger Phrases
+### Trigger phrases
 
 <AccordionGroup>
-  <Accordion title="Supported Voice Triggers">
+  <Accordion title="Supported voice triggers">
     - "Send Slack message" - "Send Slack message to general saying..."
     - "Post Slack message" - "Post Slack message in marketing that..."
     - "Post in Slack" - "Post in Slack to random saying..."
   </Accordion>
 </AccordionGroup>
 
-### How It Works
+### How it works
 
-**The app intelligently processes your voice commands:**
+The app processes your voice commands:
 1. Detects trigger phrase → Starts collecting
 2. Collects up to 5 segments OR stops if 5+ second gap detected
 3. AI extracts:
    - Channel name (fuzzy matches to your workspace channels)
    - Message content (cleaned and formatted)
-4. Fetches fresh channel list automatically (new channels work immediately!)
+4. Fetches the channel list automatically. New channels work immediately.
 5. Posts message to Slack
 6. Notifies you with confirmation!
 
@@ -83,11 +83,11 @@ You: "hope everyone is having a great day"
 → Message sent!
 </Note>
 
-## Using the App
+## Using the app
 
-### With OMI Device
+### With the Omi device
 
-1. Install the Slack app from the OMI App Store
+1. Install the Slack app from the Omi App Store
 2. Authenticate your Slack workspace
 3. Select a default channel (optional)
 4. Say: "Send message to general saying hello team!"
@@ -96,7 +96,7 @@ You: "hope everyone is having a great day"
 
 ## AI Processing
 
-The app uses OpenAI for intelligent processing:
+The app uses OpenAI for processing:
 
 1. **Channel Matching** - Fuzzy matches spoken channel names to workspace channels
 2. **Message Extraction** - Extracts clean message content from voice segments
@@ -115,9 +115,9 @@ Message: "Hello team, hope you're all doing great today"
 ```
 </CodeGroup>
 
-## How Segments Work
+## How segments work
 
-**OMI sends transcripts in segments** as you speak. The app:
+**Omi sends transcripts in segments** as you speak. The app:
 - Detects trigger phrase (Send Slack message / Post Slack message / Post in Slack)
 - Collects up to 5 segments MAX
 - Processes early if 5+ second gap detected (minimum 2 segments)
@@ -132,9 +132,9 @@ Message: "Hello team, hope you're all doing great today"
 - **Duration:** ~5-20 seconds depending on speech
 - **Auto-refresh:** Fetches latest channels every time (new channels work immediately!)
 
-## Channel Management
+## Channel management
 
-### Specifying Channel in Voice
+### Specifying the channel by voice
 
 You can always specify the channel in your voice command:
 - "Send message to **general** saying hello"
@@ -143,28 +143,28 @@ You can always specify the channel in your voice command:
 
 AI will fuzzy match to your workspace channels!
 
-### Using Default Channel
+### Using a default channel
 
 Set a default channel in settings, then just say:
 - "Send message saying quick update for everyone"
 - Message goes to your default channel
 
-### Refreshing Channel List
+### Refreshing the channel list
 
-The app **automatically fetches fresh channels** every time you send a message, so new channels work immediately without manual refresh!
+The app **automatically fetches fresh channels** every time you send a message, so new channels work immediately without manual refresh.
 
 You can also manually refresh:
 - Click "Refresh Channels" button on homepage
 - Or re-authenticate to get latest channels
 
-### Switching Workspaces
+### Switching workspaces
 
 Click "Switch Workspace" to:
 - Connect to a different Slack workspace
 - Re-authenticate with new team
 - Switch between multiple workspaces easily
 
-## Security & Privacy
+## Security and privacy
 
 <Check>
 **Security Features:**
@@ -206,10 +206,10 @@ Click "Switch Workspace" to:
 ## Support & Resources
 
 <CardGroup cols={3}>
-  <Card title="Integration App" icon="book" href="https://docs.omi.me/doc/developer/apps/Integrations/">
-    Integration App Guide
+  <Card title="Integration app" icon="book" href="https://docs.omi.me/doc/developer/apps/Integrations/">
+    Integration app guide
   </Card>
-  <Card title="Source Code" icon="code" href="https://github.com/BasedHardware/omi-slack-app">
+  <Card title="Source code" icon="code" href="https://github.com/BasedHardware/omi/tree/main/plugins/omi-slack-app">
     View the full codebase
   </Card>
 </CardGroup>

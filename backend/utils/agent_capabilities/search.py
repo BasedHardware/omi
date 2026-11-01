@@ -111,10 +111,19 @@ def project_search_row(row, *, person_id=None):
 
 
 class OwnerSearch:
-    def __init__(self, uid):
+    def __init__(self, uid, *, required_candidates=None):
         self.uid = uid
+        self.required_candidates = required_candidates or {}
 
     async def read(self, ref):
+        if ref in self.required_candidates:
+            return await run_blocking(
+                db_executor,
+                dream_reads.read_required_intake_candidate,
+                self.uid,
+                base_ref(ref),
+                self.required_candidates[ref],
+            )
         return await run_blocking(db_executor, dream_reads.read_record, self.uid, base_ref(ref))
 
     async def hydrate(self, ref, request):

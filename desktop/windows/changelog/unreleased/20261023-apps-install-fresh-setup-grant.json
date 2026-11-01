@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Installing an integration for the first time from the Apps page now opens a fresh sign-in link for your account, and stops cleanly if the link cannot be loaded or you switch accounts"
+  ]
+}

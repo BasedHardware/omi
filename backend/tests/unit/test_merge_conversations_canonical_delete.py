@@ -297,3 +297,17 @@ def test_canonical_link_failure_aborts_source_deletion():
         with pytest.raises(RuntimeError, match='link unavailable'):
             merge_mod._delete_conversation_and_related_data('u', 'source', merged_into='merged')
     delete_parent.assert_not_called()
+
+
+@pytest.mark.parametrize('purge_sync_sources', [False, True])
+def test_merge_source_document_delete_failure_propagates_on_current_main(purge_sync_sources):
+    """The merged_into path must withhold completion; nonmerge cleanup stays best effort."""
+    service = MagicMock()
+    with patch('utils.conversations.merge_conversations.MemoryService', return_value=service), patch(
+        'utils.conversations.merge_conversations.conversations_db.delete_conversation',
+        side_effect=RuntimeError('synthetic document unavailable'),
+    ):
+        with pytest.raises(RuntimeError, match='synthetic document unavailable'):
+            _delete_conversation_and_related_data(
+                'owner', 'source', purge_sync_sources=purge_sync_sources, merged_into='retained-target'
+            )

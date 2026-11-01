@@ -223,6 +223,8 @@ def conversations_db():
         "database.sync_live_overlap": sync_live_overlap,
         "utils.sync.live_overlap": live_overlap,
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
+        # Archive queries never invoke the separate speaker publication/revocation IO seam.
+        "database.speaker_auto_enroll": ModuleType("database.speaker_auto_enroll"),
         "database.speaker_learning_jobs": AutoMockModule("database.speaker_learning_jobs"),
         "database.users": AutoMockModule("database.users"),
         "models": models,
@@ -295,6 +297,12 @@ def conversations_db():
     # load the real module for the isolated utils package.
     fakes["utils.conversation_page_cursor"] = load_module_fresh(
         "utils.conversation_page_cursor", str(_BACKEND / "utils" / "conversation_page_cursor.py")
+    )
+    # The open-loop field-name constants are stdlib-only; database.conversations
+    # imports them at module level, so load the real module for the isolated
+    # utils package.
+    fakes["utils.open_loops.extraction"] = load_module_fresh(
+        "utils.open_loops.extraction", str(_BACKEND / "utils" / "open_loops" / "extraction.py")
     )
 
     with stub_modules(fakes):

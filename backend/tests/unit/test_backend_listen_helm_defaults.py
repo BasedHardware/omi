@@ -97,6 +97,37 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert 'name: TRANSLATION_NEGATIVE_CACHE_TTL\n              value: "21600"' in rendered
 
 
+def test_prod_listen_carries_an_explicit_zero_mobile_batch_only_percent():
+    """Ruling 73b217: the mobile batch-only cohort is a reviewed listen value, explicit 0 until a ramp PR changes it.
+
+    The value must reach the rendered container env (not only the values file), so a listen roll applies it.
+    """
+    values = _load_values(ENV_IDENTITY_DEFAULTS["prod"]["values_file"])
+    assert _env_value(values, "SERVER_BATCH_ONLY_MOBILE_PERCENT") == "0"
+    names = [entry.get("name") for entry in values.get("env", []) or [] if isinstance(entry, dict)]
+    assert names.count("SERVER_BATCH_ONLY_MOBILE_PERCENT") == 1
+
+    helm = shutil.which("helm")
+    if helm is None:
+        pytest.skip("helm is not installed")
+    rendered = subprocess.run(
+        [
+            helm,
+            "template",
+            "backend-listen",
+            str(CHART_DIR),
+            "-f",
+            str(ENV_IDENTITY_DEFAULTS["prod"]["values_file"]),
+            "--set-string",
+            "image.tag=abc1234",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert 'name: SERVER_BATCH_ONLY_MOBILE_PERCENT\n              value: "0"' in rendered
+
+
 def test_backend_listen_helm_template_requires_image_tag():
     helm = shutil.which("helm")
     if helm is None:
@@ -295,5 +326,7 @@ def test_prod_listen_hpa_scales_on_cpu_with_socket_guards():
         'backend_listen_requests_per_pod': 16,
         'backend_listen_active_ws_connections_per_pod': 35,
     }
-    # The floor is lowered separately from this retune, with its own evidence.
-    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (40, 60)
+    # 2026-10-24 right-sizing: the night fleet needs only ~31 pods at the 55%
+    # target, so the floor returns to its pre-#22623 value of 30; the peak
+    # path (max 60, requests, guards) is unchanged.
+    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (30, 60)

@@ -1,5 +1,5 @@
 ---
-title: "Adding a Speaker to CV1 & DevKit 1"
+title: "Adding a speaker to CV1 and DevKit 1"
 icon: "volume-2"
 description: "An experimental, community-written guide to adding an I2S amplifier and micro-speaker to Omi CV1 and DevKit 1. Not validated on hardware, and not supported by Omi firmware."
 ---
@@ -34,7 +34,7 @@ Only CV1 uses the nRF5340. DevKit 1 and DevKit 2 are both Xiao nRF52840 boards, 
 devkit firmware targets the upstream `xiao_ble_sense` board rather than an Omi board file.
 
 <Note>
-  These are source-level facts from this repository, not marketing copy: the SoC split is
+  These facts come from this repository's source, not marketing copy. The SoC split is
   documented in `docs/doc/hardware/OmiConsumer.mdx` and `docs/doc/hardware/DevKit2.mdx`,
   the CV1 main SoC is listed as `nRF5340-CLAA` in
   `docs/doc/hardware/consumer/electronics.mdx`, and the DevKit 2 audio hardware is listed in
@@ -98,13 +98,13 @@ The connection itself is conventional:
 
 Connections:
 
-1. **VIN** — connect to a supply the amplifier accepts. Use the board's regulated rail,
+1. **VIN**: connect to a supply the amplifier accepts. Use the board's regulated rail,
    and confirm the MAX98357A breakout's input range matches it.
-2. **GND** — common ground with the board.
-3. **BCLK** — I2S bit clock, from a GPIO you have assigned as `I2S_SCK`.
-4. **LRC** — I2S word select / left-right clock, from a GPIO assigned as `I2S_LRCK`.
-5. **DIN** — I2S data out from the SoC, from a GPIO assigned as `I2S_SDOUT`.
-6. **GAIN** — the MAX98357A has several gain settings. Tie it appropriately for your
+2. **GND**: common ground with the board.
+3. **BCLK**: I2S bit clock, from a GPIO you have assigned as `I2S_SCK`.
+4. **LRC**: I2S word select / left-right clock, from a GPIO assigned as `I2S_LRCK`.
+5. **DIN**: I2S data out from the SoC, from a GPIO assigned as `I2S_SDOUT`.
+6. **GAIN**: the MAX98357A has several gain settings. Tie it appropriately for your
    speaker and volume; the breakout's default is usually a reasonable starting point.
 
 ## What you would have to build
@@ -116,19 +116,19 @@ Connections:
 
 Concretely, the gaps are:
 
-- **No I2S output path in firmware.** CV1's board devicetree has no `i2s0` node, and
+- No I2S output path in firmware. CV1's board devicetree has no `i2s0` node, and
   `omi/firmware/boards/omi/omi-pinctrl.dtsi` defines UART, I2C, PDM, QSPI, SPI and PWM pin
   groups but no I2S group. A dormant `speaker.c` exists under the CV1 sources, but it is
   not in the CV1 build's source list and the speaker feature is disabled in
   `omi/firmware/omi/omi.conf` via `CONFIG_OMI_ENABLE_SPEAKER=n`.
-- **DevKit 1 has no audio output either.** Its standard overlay enables nothing and states
+- DevKit 1 has no audio output either. Its standard overlay enables nothing and states
   that no modules are used.
-- **The firmware does not synthesise speech.** Omi's device firmware consumes PCM; it does
+- The firmware does not synthesize speech. Omi's device firmware consumes PCM; it does
   not do text-to-speech. TTS exists in the mobile app, which calls the backend's
   `/v2/tts/synthesize` endpoint and plays the returned audio through the phone. A host-side
   script in the firmware tree does the same for DevKit 2, generating audio with a cloud TTS
   provider and streaming it to the device over BLE.
-- **You would need an audio source.** Since the device will not generate speech itself,
+- You would need an audio source. Since the device will not generate speech itself,
   sound has to come from the phone or a host computer. You would be bridging a new path
   (BLE or otherwise) from that source into an `i2s_write` call.
 
@@ -162,8 +162,8 @@ build target in this repository. If you are flashing a devkit, you are building 
 
 ## How DevKit 2 does it (verified)
 
-If your goal is simply "hear audio from the device", DevKit 2 is the supported path and
-you do not need this mod. Its firmware contains a working I2S transmit path:
+If you only want to hear audio from the device, DevKit 2 is the supported path, and you
+do not need this mod. Its firmware contains a working I2S transmit path:
 
 - The DevKit 2 overlay enables `i2s0` and assigns the I2S pins: **BCLK/SCK = P0.29**
   (board pad A3), **LRCLK = P0.28** (A2), **SDOUT = P0.03** (A1). The speaker driver also
@@ -186,8 +186,7 @@ client, and it targets DevKit 2's audio characteristic.
 
 ## Acoustic design tips
 
-These are general speaker-in-a-small-enclosure considerations and apply regardless of the
-board you are modifying.
+These apply to any small speaker enclosure, whichever board you modify.
 
 1. **Acoustic porting.** Give the enclosure a grille or an opening, roughly 1.5–2 mm,
    aligned with the front of the speaker diaphragm. Without a port, the enclosure walls

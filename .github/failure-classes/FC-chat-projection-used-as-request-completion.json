@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-chat-projection-used-as-request-completion",
+  "violated_contract": "A tutorial question must complete from its own request outcome. A chat list is a filtered projection: another selected thread can hide a successful answer and unrelated traffic can appear in the list. Neither list length nor any new AI row establishes that this request succeeded.",
+  "canonical_prevention": "Return the typed answer or terminal failure through the existing voice/capture pipeline to the owning tutorial attempt, preserve chat isolation, advance only on admitted capture transitions, bound the response stream, and reject stale callbacks after exit or restart.",
+  "canonical_prevention_artifact": ["app/test/widgets/pendant_tutorial_question_flow_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart", "app/lib/providers/device_onboarding_provider.dart", "app/lib/providers/message_provider.dart"],
+  "status": "open"
+}

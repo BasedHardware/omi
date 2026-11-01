@@ -37,8 +37,13 @@ Unhandled exceptions retain their validated trace IDs for the outer Uvicorn log
 after request context resets. The requested level also constrains named loggers.
 Cloud Run uses platform request logs. GKE suppresses successful health/metrics
 probes and uses LB logs for diarizer, nllb, parakeet, pusher and vad. Keep general
-access records for listen, llm-gateway and diarizer-batch until actual route
-coverage is proven. A local project ID alone does not suppress general access
+access records for llm-gateway and diarizer-batch until actual route
+coverage is proven. listen moved to `access_policy='platform'` on 2026-10-26:
+its uvicorn access records had grown to ~21M INFO lines/day (~23 GiB/day billed,
+the fleet's largest single stdout source) behind the fronting LB, while per-route
+debugging rides the LB request records and omi_* metrics; revert the
+`main.py` call if a route needs in-pod access lines again. A local project ID
+alone does not suppress general access
 records. Exceptions and ERROR records are never suppressed by noise filters.
 
 ## Consumer admission

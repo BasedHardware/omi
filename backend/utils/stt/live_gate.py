@@ -8,10 +8,35 @@ from functools import lru_cache
 from typing import Any
 
 from config.policy.listen import disruption_gate
+from config.live_stt_resilience import recovery_sample_guard_enabled
 
 # 10x 1,800 sessions/hour is 1,500 identities per five-minute window.
 HEALTHY_USERS = 2048
 FAILURE_RESERVE = 8
+RECOVERY_REBENCH_MINIMUM = 100
+RECOVERY_FAST_MINIMUM = 20
+RECOVERY_FAST_FAILURE_SHARE = 0.25
+# High digits identify an operator reset; low digits retain ordinary gate
+# generations. One million transitions of headroom keeps epochs distinct.
+RESET_GENERATION_STRIDE = 1_000_000
+
+
+def reset_generation_floor(raw: str | bytes | None) -> int:
+    if raw is None:
+        return 0
+    generation = int(raw)
+    if generation <= 0 or generation % RESET_GENERATION_STRIDE:
+        raise ValueError('invalid operator reset generation')
+    return generation
+
+
+def generation_allows(current: int, captured: int | None, *, connect: bool = False) -> bool:
+    """Connect failures follow ordinary gate changes, never an operator reset."""
+    if captured is None:
+        return current // RESET_GENERATION_STRIDE == 0
+    return current == captured or (
+        connect and current // RESET_GENERATION_STRIDE == captured // RESET_GENERATION_STRIDE
+    )
 
 
 @dataclass(frozen=True)
@@ -228,11 +253,21 @@ def transition(
     # short burst of five failures must not bench a mostly healthy target.
     detected = evidence[0] >= 12 or evidence[1] >= 11 or (sum(counts) >= 8 and evidence[2] >= 10)
     decisive = (broad_failure and detected) or (sparse_failure and max(evidence) >= 14)
-    if required:
+    guarded_trial = required and recovery_sample_guard_enabled()
+    if guarded_trial:
+        # The ordinary burst path needs a meaningful sample. A separately
+        # bounded high-failure path still removes a truly broken trial quickly.
+        # Both use admitted, non-censored outcomes and retain witness fairness.
+        fast_failure = n >= RECOVERY_FAST_MINIMUM and failures / n >= RECOVERY_FAST_FAILURE_SHARE and broad_failure
+        decisive = (decisive and n >= RECOVERY_REBENCH_MINIMUM and user_rate > gate) or fast_failure
+    elif required:
         decisive = decisive and user_rate > gate
-    rejected_trial = required and n >= required and user_rate > gate and broad_failure
+    rejected_trial = required and not guarded_trial and n >= required and user_rate > gate and broad_failure
     if n >= 8 and (decisive or rejected_trial):
-        strikes = min(state.strikes + 1, 10)
+        # A larger recovery sample must not multiply chronic-outage exposure.
+        # Advance one extra cooldown exponent on consecutive trial rejections;
+        # the first full-traffic bench and its first re-entry wait are unchanged.
+        strikes = min(state.strikes + (2 if guarded_trial else 1), 10)
         return GateState(
             threshold=gate,
             stage=0,
@@ -241,7 +276,7 @@ def transition(
             evidence=evidence,
             recent_failures=state.recent_failures,
             trial_users=state.trial_users,
-            until=now + min(14400, 300 * 2 ** (strikes - 1)),
+            until=now + min(21600 if guarded_trial else 14400, 300 * 2 ** (strikes - 1)),
             strikes=strikes,
             generation=state.generation + 1,
         )
@@ -288,7 +323,7 @@ def _promote_trial(state: GateState, now: float) -> GateState:
         return GateState(
             threshold=state.threshold,
             stage=25 if state.stage == 5 else 100,
-            strikes=state.strikes,
+            strikes=0 if state.stage == 25 and recovery_sample_guard_enabled() else state.strikes,
             generation=state.generation + 1,
             trial_started_at=now,
         )

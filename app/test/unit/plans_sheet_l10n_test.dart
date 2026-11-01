@@ -100,8 +100,14 @@ void main() {
     for (final arb in Directory('lib/l10n').listSync().whereType<File>()) {
       final name = arb.path.split('/').last;
       if (!name.startsWith('app_') || !name.endsWith('.arb')) continue;
-      final keys = _rawKeys(arb);
-      final duplicates = keys.where((k) => keys.where((o) => o == k).length > 1).toSet();
+      // Count with a map: the old nested `keys.where((k) => keys.where(...))`
+      // compared every key against every other key (~800^2 per file, ~15s per
+      // suite run) and was this suite's whole cost.
+      final counts = <String, int>{};
+      for (final key in _rawKeys(arb)) {
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      final duplicates = counts.entries.where((e) => e.value > 1).map((e) => e.key).toSet();
       expect(duplicates, isEmpty, reason: '$name defines these keys more than once: $duplicates');
     }
   });

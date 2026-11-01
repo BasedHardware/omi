@@ -60,7 +60,7 @@ def routes():
             ),
             'utils.mcp_server.helpers': module(
                 'utils.mcp_server.helpers',
-                conversation_card=lambda row: row,
+                conversation_card=lambda row, **kwargs: row,
                 parse_mcp_date=lambda value, field: (
                     datetime.fromisoformat(value).replace(tzinfo=timezone.utc) if value else None
                 ),

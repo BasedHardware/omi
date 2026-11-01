@@ -13,7 +13,8 @@ Codemagic `mobile-daily-train`, `mobile-rollout-advance`, and `mobile-store-prom
 to finish. Do not run any other Play writer or use Play Console concurrently. GitHub
 dispatch completion does not prove the Codemagic build it started has finished.
 Confirm that Play Console has no unrelated changes waiting to be sent for review:
-an API edit commit can submit those too. `CONFIRM=brake` attests these operator
+the later Play Console → Publishing overview → Send for review press submits
+every held change together, including a brake's. `CONFIRM=brake` attests these operator
 prerequisites in addition to authorizing the selected status change.
 
 These are operator prerequisites: the tool does not hold a distributed lock against
@@ -33,11 +34,22 @@ halted release's What's New and append `BRAKE_NOTES_LINE` (replacing the last li
 appending would pass Play's 500-character limit) to en-US and to every locale
 holding the identical English text; real translations stay unchanged. Completed releases
 stay untouched. Read status of the halted code first and of the new code afterwards.
+The daily train has the narrower held-mode sibling of this operation (2026-10-29,
+`plan_held_supersede` in `mobile_daily_train.py`): while Play holds changes for review it
+replaces a train-written held (not halted) staged release with the gate-pinned newer
+build at the same fraction. A halted release still needs this brake — the train never
+touches one.
 
 Halt and resume change status only. Country-targeted mutations are explicitly unsupported:
 Play allows `countryTargeting` only on `inProgress` releases, and stripping it would change
 more than status. Use an approved Play Console procedure for those releases. A brake
-commit uses `ERROR_IF_IN_REVIEW` to refuse cancellation/resubmission of existing reviews.
+commit uses `ERROR_IF_IN_REVIEW` to refuse cancellation/resubmission of existing
+reviews. When `promote.CHANGES_NOT_SENT_FOR_REVIEW` is True, halt and resume fail before
+opening a Play edit: a held status change only queues for Console review and does not
+change current rollout exposure. Halt or resume in Play Console (Test and release →
+Production/track → rollout), then verify the live track there. Stage still follows the
+shared held-changes flag, so a held stage may remain pending and fail its live readback;
+inspect Play Console and the live track before retrying.
 Readback must match the complete expected production track, including its original fraction.
 Unused-edit cleanup failures emit a static warning without hiding a verified result.
 

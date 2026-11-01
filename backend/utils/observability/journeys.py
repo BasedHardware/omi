@@ -192,11 +192,17 @@ def record_client_journey_terminal(
         journey_label = bounded_client_journey(journey)
         client_kind_label = bounded_client_kind(client_kind)
         outcome_label = bounded_client_journey_outcome(outcome)
+        # Reuse the closed issue enum; never export raw exceptions or caller text.
         OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
             journey=journey_label,
             client_kind=client_kind_label,
             app_build='unknown',
             outcome=outcome_label,
+            reason=(
+                bounded_client_journey_issue_class(issue_class)
+                if outcome_label in {'failure', 'degraded', 'unknown'}
+                else 'none'
+            ),
         ).inc()
         OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(
             journey=journey_label,

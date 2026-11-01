@@ -61,7 +61,6 @@ _utils_stubs = [
     "utils.llm.usage_tracker",
     "utils.llms",
     "utils.llms.memory",
-    "utils.mentor_notifications",
     "utils.log_sanitizer",
     "utils.http_client",
     "utils.subscription",
@@ -221,7 +220,6 @@ sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
 sys.modules["utils.llm.clients"].generate_embedding = MagicMock(return_value=[0] * 3072)
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
-sys.modules["utils.mentor_notifications"].process_mentor_notification = MagicMock(return_value=None)
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.subscription"].is_trial_paywalled = MagicMock(return_value=False)
@@ -328,10 +326,6 @@ def _make_tracking_run_blocking():
 
     return _tracking, calls
 
-
-def _make_executor_tracking_run_blocking():
-    calls = []
-
     async def _tracking(executor, fn, *args, **kwargs):
         calls.append((executor, fn, args, kwargs))
         return fn(*args, **kwargs)
@@ -351,7 +345,7 @@ class TestRealtimeIntegrationsOffload:
 
         with patch.object(app_integrations, "run_blocking", tracking), patch.object(
             app_integrations, "get_available_apps", get_apps
-        ), patch.object(app_integrations, "process_mentor_notification", MagicMock(return_value=None)):
+        ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
         offloaded_fns = [fn for (fn, _a, _kw) in calls]
@@ -380,34 +374,10 @@ class TestRealtimeIntegrationsOffload:
 
         with patch.object(app_integrations, "run_blocking", tracking), patch.object(
             app_integrations, "get_available_apps", MagicMock(return_value=[app1])
-        ), patch.object(app_integrations, "process_mentor_notification", MagicMock(return_value=None)), patch.object(
-            app_integrations, "get_webhook_client", return_value=mock_client
-        ), patch.object(
+        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client), patch.object(
             app_integrations, "record_app_usage", record_usage
         ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
         offloaded_fns = [fn for (fn, _a, _kw) in calls]
         assert record_usage in offloaded_fns, "record_app_usage was not offloaded via run_blocking"
-
-    @pytest.mark.asyncio
-    async def test_mentor_admission_and_cohort_resolution_offloaded(self, monkeypatch):
-        """The v2-only mentor section must run through run_blocking, never on the loop."""
-        tracking, calls = _make_executor_tracking_run_blocking()
-        admission = MagicMock(return_value=[{"text": "hi"}])
-        resolve = MagicMock(return_value=None)  # flag denies; no v2 dispatch
-
-        monkeypatch.setenv("MENTOR_PIPELINE", "cohort")
-        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "process_mentor_notification", admission
-        ), patch.object(app_integrations.proactivity_flags, "mentor_pipeline", resolve), patch.object(
-            app_integrations, "get_available_apps", MagicMock(return_value=[])
-        ):
-            await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
-
-        admission_call = next(call for call in calls if call[1] is admission)
-        assert admission_call[0] is app_integrations.db_executor
-        assert admission_call[2] == ("uid-1", [{"text": "hi"}])
-        resolve_call = next(call for call in calls if call[1] is resolve)
-        assert resolve_call[0] is app_integrations.db_executor
-        assert resolve_call[2] == ("uid-1",)

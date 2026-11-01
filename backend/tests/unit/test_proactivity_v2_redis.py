@@ -7,6 +7,7 @@ import pytest
 from config.proactivity_v2 import AttemptEnvelope, ProactivityDenied
 from database import proactivity as ledger
 from database import proactivity_budget as money
+from tests.support.synthetic_proactivity_producers import synthetic_producers  # noqa: F401
 from database import proactivity_redis as v2
 from utils.llm import vertex_reservation_state as vertex
 

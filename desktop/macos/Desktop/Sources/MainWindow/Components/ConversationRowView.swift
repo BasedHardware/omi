@@ -102,8 +102,14 @@ struct ConversationRowView: View {
   /// a hover menu.
   @ViewBuilder
   private func statusCluster(phase: ConversationProcessingPhase) -> some View {
-    ConversationStatusBadge(state: conversation.displayState, phase: phase)
-    if isLivePipelineRow && phase == .stalled {
+    if conversation.discarded {
+      Text("Discarded")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+    } else {
+      ConversationStatusBadge(state: conversation.displayState, phase: phase)
+    }
+    if !conversation.discarded && isLivePipelineRow && phase == .stalled {
       Button {
         Task { await reprocessConversation() }
       } label: {
@@ -278,7 +284,15 @@ struct ConversationRowView: View {
   /// can never again disagree on order, casing or wording.
   @ViewBuilder
   private var actionMenuItems: some View {
-    if offersReprocess(now: Date()) {
+    if conversation.discarded {
+      Button {
+        Task { await restoreConversation() }
+      } label: {
+        Text(isReprocessing ? "Restoring…" : "Restore Conversation")
+      }
+      .disabled(isReprocessing)
+      .accessibilityIdentifier("conversation-row-restore-\(conversation.id)")
+    } else if offersReprocess(now: Date()) {
       Button {
         Task { await reprocessConversation() }
       } label: {
@@ -344,6 +358,20 @@ struct ConversationRowView: View {
       prompts.requestDelete(conversation)
     } label: {
       Label("Delete Conversation…", systemImage: "trash")
+    }
+  }
+
+  private func restoreConversation() async {
+    guard !isReprocessing else { return }
+    isReprocessing = true
+    defer { isReprocessing = false }
+    do {
+      _ = try await appState.restoreConversation(conversation.id)
+      OmiToastCenter.shared.confirm("Conversation restored")
+    } catch is CancellationError {
+      // The account changed before the response arrived.
+    } catch {
+      OmiToastCenter.shared.notice("Couldn't restore conversation. Try again.", systemImage: "exclamationmark.triangle")
     }
   }
 

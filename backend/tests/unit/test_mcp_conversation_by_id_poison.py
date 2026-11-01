@@ -101,3 +101,23 @@ class TestGetConversationByIdPoisonRecord:
             rest.get_conversation_by_id(conversation_id='conv-poison', uid=UID)
 
         assert exc_info.value.status_code == 404
+
+
+def test_high_speaker_ids_are_safe_and_response_compatible(monkeypatch, mcp_test_client):
+    conversation = _conversation()
+    conversation['transcript_segments'] = [
+        {'id': 's1', 'text': 'hello', 'speaker_id': 378, 'start': 0, 'end': 1},
+        {'id': 's2', 'text': 'there', 'speaker_id': 379, 'start': 1, 'end': 2},
+    ]
+    monkeypatch.setattr(
+        rest.mcp_conversation_handlers.conversations_db,
+        'get_mcp_conversations_by_id',
+        lambda *_a, **_kw: [conversation],
+    )
+    response = mcp_test_client.get('/v1/mcp/conversations/conv-good')
+    assert response.status_code == 200, response.text
+    rows = response.json()['transcript_segments']
+    assert [row['speaker_id'] for row in rows] == [None, None]
+    assert [row['speaker_key'] for row in rows] == ['c0', 'c1']
+    assert [row['speaker_name'] for row in rows] == ['Speaker A', 'Speaker B']
+    assert '378' not in response.text and '379' not in response.text

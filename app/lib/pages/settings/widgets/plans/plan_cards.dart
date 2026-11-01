@@ -115,8 +115,7 @@ class PlanOptionCard extends StatelessWidget {
                 Text(featureSummary!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
               if (featureSummary != null && (desktopAccess != null || features.isNotEmpty))
                 const SizedBox(height: OmiSpacing.xs),
-              // Desktop access — explicit ✓/✗ so Neo (mobile/web only) is clearly distinguished from
-              // Operator/Architect.
+              // Desktop access — explicit ✓/✗ so mobile-only plans are clearly distinguished.
               if (desktopAccess != null)
                 _CheckLine(
                   granted: desktopAccess!,

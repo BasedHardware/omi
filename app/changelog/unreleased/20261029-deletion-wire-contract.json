@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Generate the existing account-deletion wire contract and use it in the response adapter while retaining conservative legacy normalization. No deletion-policy or UI change."
+}

@@ -23,6 +23,7 @@ abstract class ISocketService {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   });
 
   /// [customSttConfig] switches the session to on-device transcription
@@ -66,6 +67,7 @@ class SocketServicePool extends ISocketService {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     await _mutex.acquire();
     try {
@@ -78,7 +80,8 @@ class SocketServicePool extends ISocketService {
           _socket?.state == SocketServiceState.connected &&
           _socket?.sttConfigId == sttConfigId &&
           _socket?.geolocation?.time == geolocation?.time &&
-          _socket?.clientConversationId == clientConversationId) {
+          _socket?.clientConversationId == clientConversationId &&
+          _socket?.localPreview == localPreview) {
         Logger.debug("Reusing existing socket connection");
         return _socket;
       }
@@ -109,6 +112,8 @@ class SocketServicePool extends ISocketService {
           sttConfigId: sttConfigId,
           geolocation: geolocation,
           clientConversationId: clientConversationId,
+          // Custom STT never declares it: the server refuses it there anyway.
+          localPreview: localPreview,
         );
       }
 
@@ -133,6 +138,7 @@ class SocketServicePool extends ISocketService {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     Logger.debug(
       "socket conversation > $codec $sampleRate $force source: $source customStt: ${customSttConfig?.provider}",
@@ -146,6 +152,7 @@ class SocketServicePool extends ISocketService {
       clientConversationId: clientConversationId,
       customSttConfig: customSttConfig,
       geolocation: geolocation,
+      localPreview: localPreview,
     );
   }
 

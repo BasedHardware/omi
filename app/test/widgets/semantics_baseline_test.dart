@@ -608,6 +608,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => connected;
 
   @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
+
+  @override
   BtDevice? get connectedDevice => null;
 
   @override

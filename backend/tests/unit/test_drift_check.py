@@ -1,8 +1,9 @@
 """scripts/ops/drift_check.py: live vs source, live staging vs live prod (lessons 7-9).
 
-Fixtures reproduce the three staging misses (batch serving leader at min-instances 0, recovery off,
-backfill on backend-sync's task audience) and the prod live-only setting
-(BATCH_PIPELINE_RECOVERY_ALL_ADMITTED=true on backend-integration, absent from source).
+Fixtures reproduce the staging misses that shaped the checker (recovery off, backfill on
+backend-sync's task audience; the cold serving-leader miss was allowed by the 2026-10-24
+right-sizing) and the prod live-only setting (BATCH_PIPELINE_RECOVERY_ALL_ADMITTED=true on
+backend-integration, absent from source).
 """
 
 from __future__ import annotations
@@ -88,13 +89,13 @@ def test_a_mirrored_staging_passes():
     assert _unexplained(dc.compare_staging_prod(_staging_mirrored(), _prod())) == []
 
 
-def test_cold_batch_serving_leader_fails():
+def test_cold_batch_serving_leader_is_allowed_after_right_sizing():
+    # 2026-10-24 right-sizing retired the warm-exception (lesson 8, #22757):
+    # staging may idle even while prod's serving leader stays warm.
     staging = _staging_mirrored()
     staging['services']['backend-integration-staging']['scale']['revision_min'] = 0
 
-    assert _unexplained(dc.compare_staging_prod(staging, _prod())) == [
-        'backend-integration-staging/min_instances: staging 0, prod 3 (rule: warm whenever prod is)'
-    ]
+    assert _unexplained(dc.compare_staging_prod(staging, _prod())) == []
 
 
 def test_recovery_off_in_staging_fails():
@@ -204,22 +205,23 @@ def test_no_covering_ramp_set_fails_and_keys_a_set_does_not_judge_are_compared()
     ]
 
 
-def test_staging_idles_by_design_except_the_serving_leader():
+def test_staging_idles_by_design():
+    # 2026-10-24 right-sizing: every service idles at min 0, serving leader included.
     staging = _staging_mirrored()
-    for name in ('backend-sync-staging', 'backend-sync-backfill-staging'):
+    for name in ('backend-sync-staging', 'backend-sync-backfill-staging', 'backend-integration-staging'):
         staging['services'][name]['scale']['revision_min'] = 0  # overlay scale_flags: --min-instances 0
     assert _unexplained(dc.compare_staging_prod(staging, _prod())) == []
 
 
-def test_an_annotation_split_cannot_hide_a_cold_leader_or_a_higher_cap():
+def test_an_annotation_split_cannot_hide_a_higher_min_or_cap():
     staging = _staging_mirrored()
     leader = staging['services']['backend-integration-staging']['scale']
     leader.update(service_min=0, revision_min=3)  # service-level 0 wins when it is set
     sync = staging['services']['backend-sync-staging']['scale']
     sync.update(service_max=80, revision_max=4)  # service-level cap above prod's 40
 
+    # The cold leader is allowed since the 2026-10-24 right-sizing; only the higher cap fails.
     assert _unexplained(dc.compare_staging_prod(staging, _prod())) == [
-        'backend-integration-staging/min_instances: staging 0, prod 3 (rule: warm whenever prod is)',
         'backend-sync-staging/max_instances: staging 80 > prod 40',
     ]
 
@@ -455,6 +457,10 @@ def test_prod_source_model_reads_deploy_flags_and_the_ops_file():
     integration = model['backend-integration']
     assert integration.scale['revision_min'] == 3 and integration.scale['concurrency'] == 40
     assert integration.ops_env['SUMMARY_DEBT_REPAIR_ENABLED'] == 'true'
+    # The workflow's env-scoped backend_sync_memory fallback reaches the source model, so a
+    # future regression of the prod 6Gi costcut is drift, not silence.
+    assert model['backend-sync'].scale['memory'] == '6Gi'
+    assert model['backend-sync-backfill'].scale['memory'] == '4Gi'
     assert model['backend-sync-backfill'].ops_scale['service_max'] == {
         'owner': 'redis_guard',
         'floor': 8,
@@ -468,8 +474,9 @@ def test_staging_source_model_composes():
 
     assert model['backend-integration'].ops_env['SUMMARY_DEBT_REPAIR_ENABLED'] == 'true'
     assert model['backend-sync-backfill'].scale['concurrency'] == 6
-    # The overlay's scale_flags reach the source model, so a cold staging leader fails `source`.
-    assert model['backend-integration'].scale['revision_min'] == 1
+    # 2026-10-24 right-sizing: the overlay's warm override is gone, so the source
+    # model declares every staging service cold and a cold live leader matches source.
+    assert model['backend-integration'].scale['revision_min'] == 0
     assert model['backend-sync'].scale['revision_min'] == 0
 
 
@@ -542,8 +549,14 @@ def test_cli_exit_codes(tmp_path: Path, capsys):
     staging.write_text(json.dumps(_staging_mirrored()))
     assert dc.main(['staging-vs-prod', '--staging', str(staging), '--prod', str(prod), '--known', '/dev/null']) == 0
 
+    # Cold serving leader exits 0 since the 2026-10-24 right-sizing retired the warm-exception.
     cold = _staging_mirrored()
     cold['services']['backend-integration-staging']['scale']['revision_min'] = 0
     staging.write_text(json.dumps(cold))
+    assert dc.main(['staging-vs-prod', '--staging', str(staging), '--prod', str(prod), '--known', '/dev/null']) == 0
+
+    hot = _staging_mirrored()
+    hot['services']['backend-sync-staging']['scale'].update(service_max=80, revision_max=4)
+    staging.write_text(json.dumps(hot))
     assert dc.main(['staging-vs-prod', '--staging', str(staging), '--prod', str(prod), '--known', '/dev/null']) == 1
     assert '1 unexplained difference(s)' in capsys.readouterr().out

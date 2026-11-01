@@ -4,6 +4,7 @@ Every phrase and audio sample is synthetic; no incident customer data.
 """
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -172,7 +173,6 @@ def test_batch_provider_stamp(independent_job_pipeline, monkeypatch, flag, expec
     pipeline, transcript_segment, lifecycle = independent_job_pipeline
     store = StrictFirestore()
     pipeline.get_syncing_file_temporal_signed_url = lambda path: path
-    pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
     pipeline.get_prerecorded_service = lambda language: ('test', None, 'parakeet')
     pipeline.prerecorded = lambda *a, **kw: ([{}], 'en')
     pipeline.postprocess_words = lambda *a: [
@@ -219,6 +219,49 @@ def test_revision_does_not_zero_live_slop(monkeypatch):
     result, created, survivors = intake(store, incoming, target_id='live')
     assert not created and not survivors
     assert len(result['transcript_segments']) == 2
+
+
+def test_cohort_revision_keeps_fleet_fuzzy_dedupe_without_capture_proof(monkeypatch, caplog):
+    from config.sync_live_dedupe import sync_live_dedupe_active_for
+    from database import conversations as db
+    from tests.unit.test_sync_cross_job_assignment import chunk
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
+    monkeypatch.setattr(db, 'index_sync_assignment', lambda *a: None)
+    assert sync_live_dedupe_active_for('u')
+    store = StrictFirestore()
+    first = 'Please bring the blue notebook to our planning meeting'
+    second = 'Our synthetic budget discussion needs a separate exact transcript anchor'
+    live = chunk('live', T, text=first)
+    live.update(sync_live_target=True, sync_content_revision=5)
+    live['transcript_segments'] = [
+        dict(segment(first, T), start=0, end=8),
+        dict(segment(second, T + 10), start=10, end=18),
+    ]
+    store.rows[('users', 'u', 'conversations', 'live')] = live
+    incoming = chunk('wal', T + 35, text=first)
+    incoming['transcript_segments'] = [
+        dict(segment(first.lower(), T + 35), start=0, end=8),
+        dict(segment(second.lower(), T + 45), start=10, end=18),
+    ]
+    assert 'capture_evidence' not in incoming and 'capture_evidence' not in live
+    with caplog.at_level(logging.INFO):
+        result, created, survivors = db.assign_sync_conversation(
+            'u', incoming, target_id='live', firestore_client=store
+        )
+    assert not created and not survivors
+    assert len(result['transcript_segments']) == 2
+    assert store.rows[('users', 'u', 'conversations', 'live')] == live
+    lines = [r.message for r in caplog.records if 'event=sync_lineage_append ' in r.message]
+    assert len(lines) == 1
+    assert 'appended_seconds=0.00 ' in lines[0]
+    assert 'appended_seconds_overlapping_live=0.0 ' in lines[0]
+    assert 'dropped_as_repeat_seconds=16.00 ' in lines[0]
+    assert 'repeat_only=True ' in lines[0]
 
 
 @pytest.mark.parametrize('flag', ['off', 'typo', 'false'])
@@ -390,6 +433,90 @@ def test_different_or_unknown_speakers_are_kept(person):
     assert dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, estimated_offset_seconds=0) == incoming
 
 
+def test_fuzzy_overlap_dedupes_unidentified_speakers_and_joins_unidentified_live_windows():
+    # Regression for #22755 / #23364: in a 1-on-1 conversation where the owner's
+    # live line is short (<8 tokens) and the other participant is unidentified
+    # (person_id=None, is_user=False), fuzzy live+sync overlap must still
+    # corroborate the clock offset from unidentified speaker anchors, join
+    # consecutive unidentified live segments in _live_windows, and drop duplicates.
+    live = [
+        dict(
+            text='I am really excited to be here.',
+            timestamp=T + 232.92,
+            start=232.92,
+            end=234.12,
+            speaker='SPEAKER_0',
+            speaker_id=10,
+            is_user=True,
+            person_id=None,
+        ),
+        dict(
+            text='How are you? Good to see you. It has been a while.',
+            timestamp=T + 235.16,
+            start=235.16,
+            end=240.38,
+            speaker='SPEAKER_1',
+            speaker_id=11,
+            is_user=False,
+            person_id=None,
+        ),
+        dict(
+            text='Wait, let me grab a chair',
+            timestamp=T + 241.00,
+            start=241.00,
+            end=246.00,
+            speaker='SPEAKER_2',
+            speaker_id=12,
+            is_user=False,
+            person_id=None,
+        ),
+        dict(
+            text='so we can sit down and talk properly.',
+            timestamp=T + 246.50,
+            start=246.50,
+            end=252.52,
+            speaker='SPEAKER_2',
+            speaker_id=12,
+            is_user=False,
+            person_id=None,
+        ),
+    ]
+    incoming = [
+        dict(
+            text='How are you? Good to see you. It has been a while.',
+            timestamp=T + 233.80,
+            start=233.80,
+            end=239.00,
+            speaker='SPEAKER_1',
+            speaker_id=15,
+            is_user=False,
+            person_id=None,
+        ),
+        dict(
+            text='Wait, let me grab a chair so we can sit down and talk properly.',
+            timestamp=T + 239.50,
+            start=239.50,
+            end=251.10,
+            speaker='SPEAKER_2',
+            speaker_id=16,
+            is_user=False,
+            person_id=None,
+        ),
+        dict(
+            text='Yes, let us go over the schedule first.',
+            timestamp=T + 290.76,
+            start=290.76,
+            end=293.04,
+            speaker='SPEAKER_0',
+            speaker_id=19,
+            is_user=True,
+            person_id=None,
+        ),
+    ]
+    survivors = dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, text_match_slop_seconds=60)
+    assert survivors == [incoming[2]]
+
+
 def test_two_inconsistent_text_offsets_preserve_all_speech():
     first = 'Please bring the blue notebook to our planning meeting'
     second = 'Our synthetic budget discussion needs a separate exact transcript anchor'
@@ -538,3 +665,48 @@ async def test_empty_cut_cannot_acknowledge_a_fully_suppressed_job(coordinator, 
     cut.assert_awaited_once()
     assert len(state.vad_seen) == 1 and len(state.processed) == 1
     assert state.outcomes[-1].value == 'success'  # Only after actual VAD/STT intake.
+
+
+def test_unknown_fuzzy_match_requires_compatible_duration():
+    from utils.sync.merge_dedupe import _duration_compatible
+
+    text = 'Please bring the blue notebook to our planning meeting'
+    live = [dict(segment(text, T, duration=18), person_id=None, is_user=False)]
+    incoming = [dict(segment(text, T, duration=2), person_id=None, is_user=False)]
+    assert dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, estimated_offset_seconds=0) == incoming
+    assert not _duration_compatible({'person_id': None, 'is_user': False}, {'person_id': None, 'is_user': False})
+    assert not _duration_compatible(
+        {'start': 0.0, 'end': 4.0, 'person_id': None, 'is_user': False},
+        {'duration': None, 'person_id': None, 'is_user': False},
+    )
+
+
+def test_unknown_repeated_occurrences_are_not_chosen_arbitrarily():
+    text = 'Please bring the blue notebook to our planning meeting'
+    live = [dict(segment(text, T + shift), person_id=None, is_user=False) for shift in (0, 1)]
+    incoming = [dict(segment(text, T + 0.5), person_id=None, is_user=False)]
+    assert dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, estimated_offset_seconds=0) == incoming
+
+
+def test_anonymous_live_window_requires_a_shared_scoped_voice():
+    from utils.sync.merge_dedupe import _live_windows
+
+    first = dict(
+        text='first half of a synthetic utterance',
+        abs_start=T,
+        duration=4,
+        members=(0,),
+        speaker_id=1,
+        speaker_id_scope='live:a',
+    )
+    other = dict(
+        text='second half of a synthetic utterance',
+        abs_start=T + 4,
+        duration=4,
+        members=(1,),
+        speaker_id=2,
+        speaker_id_scope='live:a',
+    )
+    assert len(_live_windows([first, other])) == 2
+    same = dict(other, speaker_id=1)
+    assert len(_live_windows([first, same])) == 3

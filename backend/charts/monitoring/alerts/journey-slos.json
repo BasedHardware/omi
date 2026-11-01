@@ -111,12 +111,20 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-live-critical",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -232,12 +240,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-live-warning",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -353,12 +372,20 @@
       "instatus_component": "ai-chat",
       "alert_identity": "omi-slo-chat-critical",
       "component": "ai-chat",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -474,12 +501,23 @@
       "instatus_component": "ai-chat",
       "alert_identity": "omi-slo-chat-warning",
       "component": "ai-chat",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -595,12 +633,20 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-pusher-critical",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -716,12 +762,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-pusher-warning",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -835,12 +892,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-live-signal-dead",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   }

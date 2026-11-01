@@ -38,6 +38,19 @@ def is_user_curated(data: Mapping[str, Any]) -> bool:
     )
 
 
+def is_relevance_discarded(data: Mapping[str, Any]) -> bool:
+    """Final visibility verdict; sync_relevance is only intake's keep/review hint.
+
+    A restore outranks an older assessment. The stored discarded flag also
+    covers explicit discards without a relevance receipt.
+    """
+    decision = data.get('relevance_decision')
+    return bool(
+        data.get('discarded')
+        or (isinstance(decision, Mapping) and decision.get('verdict') == 'discard' and not is_user_curated(data))
+    )
+
+
 _RULE_DISCARD_REASONS = frozenset({'no_content_words', 'filler_only', 'mic_check', 'empty_transcript'})
 
 
@@ -49,6 +62,24 @@ def is_rule_discard_decision(decision: Any) -> bool:
         and decision.get('decided_by') == 'rule'
         and isinstance(decision.get('reason'), str)
         and decision.get('reason') in _RULE_DISCARD_REASONS
+    )
+
+
+def superseded_intake_discard(data: Mapping[str, Any], content_changed: bool) -> bool:
+    """Meaningful appended speech supersedes an automatic verdict on older text.
+
+    Called only by the atomic intake writer after it constructs a new content
+    revision. Transport replays and content still needing fragment review retain
+    the previous model assessment.
+    Deterministic rule receipts keep their existing occasion-deferral behavior.
+    """
+    decision = data.get('relevance_decision')
+    return is_rule_discard_decision(decision) or bool(
+        content_changed
+        and data.get('sync_relevance') == 'keep'
+        and isinstance(decision, Mapping)
+        and decision.get('verdict') == 'discard'
+        and decision.get('decided_by') in {'model', 'jev', 'deterministic'}
     )
 
 

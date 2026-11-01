@@ -15,7 +15,7 @@ import pytest
 from config.batch_pipeline import worker_io_concurrency
 from diarizer import batch_pipeline
 from diarizer.batch_pipeline import PipelineWorker
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult, FailedWork
 from utils.batch_pipeline.errors import FatalGpuError
 
 
@@ -188,7 +188,8 @@ def test_prefetch_never_crosses_the_two_hour_decode_group():
     assert all(not pending for _, pending in seen)
 
 
-def test_fetch_and_persist_failures_stay_per_item_and_in_order():
+def test_fetch_and_persist_failures_stay_per_item_and_in_order(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
     model = Model(scale=0.02)
     failures = []
 
@@ -204,7 +205,12 @@ def test_fetch_and_persist_failures_stay_per_item_and_in_order():
 
     worker = model.worker(3, decode=decode, persist=persist, on_failure=lambda i, e: failures.append(i.segment_id))
     results = worker.process_batch(flight())
-    assert [r.segment_id for r in results] == ['s0', 's2', 's3', 's5', 's6']
+    assert [r.segment_id for r in results if isinstance(r, WorkResult)] == ['s0', 's2', 's3', 's5', 's6']
+    failed = {r.segment_id: r for r in results if isinstance(r, FailedWork)}
+    assert set(failed) == {'s1', 's4'}
+    assert failed['s1'].measured_held_vad_speech_seconds is None  # fetch never reached VAD
+    assert failed['s4'].measured_held_vad_speech_seconds == flight()[4].duration_seconds
+    assert failed['s4'].worker_vad_receipt['captured_samples'] == round(flight()[4].duration_seconds * 16000)
     assert sorted(failures) == ['s1', 's4']
     assert worker.counts['failed'] == 2
 

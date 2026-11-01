@@ -14,7 +14,7 @@ from typing import Any, Callable, ContextManager
 from config import live_stt_state
 from config.live_stt_resilience import escape_trial_votes_enabled
 from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
-from utils.stt.live_gate import GateState, begin_trial, transition
+from utils.stt.live_gate import GateState, begin_trial, transition, generation_allows, reset_generation_floor
 from utils.stt.live_metrics import (
     COST_BENCH,
     COST_EVENTS,
@@ -370,7 +370,11 @@ class CostHealthMixin(ABC):
                     state = cached
                 if 0 < state.stage < minimum_share:
                     continue
-                if generations is None or state.generation == generations.get(lang, state.generation):
+                if generation_allows(
+                    state.generation,
+                    generations.get(lang) if generations is not None else None,
+                    connect=outcome == 'connect_failure',
+                ):
                     updated = transition(state, failed, self._fleet_now(), witness=witness, language_only=lang != 'all')
                     self._cost_local.pop(key, None)
                     self._cost_local[key] = updated
@@ -384,7 +388,14 @@ class CostHealthMixin(ABC):
                         self._cost_event(target, lang, state, updated, failed, local=True)
         self.schedule(
             self._write_cost_result(
-                target, language, failed, generations, witness, minimum_share, expected_identity=identity
+                target,
+                language,
+                failed,
+                generations,
+                witness,
+                minimum_share,
+                connect=outcome == 'connect_failure',
+                expected_identity=identity,
             ),
             write_path='cost_routing_result',
             kind='result',
@@ -533,7 +544,18 @@ class CostHealthMixin(ABC):
                 raise _RedisCallFailed('Redis GET failed') from exc
             if self._check_identity() != identity:
                 raise _IdentityChanged('live STT state identity changed')
-            old = GateState.decode(json.loads(raw)) if raw else GateState()
+            if raw:
+                old = GateState.decode(json.loads(raw))
+            else:
+                # Healthy evidence may expire, but a reset fence must outlive
+                # even long-lived pre-reset sessions and outstanding dials.
+                try:
+                    floor = await self._redis().get(live_stt_state.cost_reset_key(target))
+                except Exception as exc:
+                    raise _RedisCallFailed('Redis reset generation GET failed') from exc
+                if self._check_identity() != identity:
+                    raise _IdentityChanged('live STT state identity changed')
+                old = GateState(generation=reset_generation_floor(floor))
             new = update(old)
             if new == old:
                 with self._lock:
@@ -591,6 +613,7 @@ class CostHealthMixin(ABC):
         witness: str,
         minimum_share: int = 5,
         *,
+        connect: bool = False,
         expected_identity: str | None = None,
     ) -> None:
         write_committed = False
@@ -624,7 +647,9 @@ class CostHealthMixin(ABC):
                     if 0 < state.stage < minimum_share:
                         result = 'stage'
                         return state
-                    if generations is not None and state.generation != generations.get(lang, state.generation):
+                    if not generation_allows(
+                        state.generation, generations.get(lang) if generations is not None else None, connect=connect
+                    ):
                         result = 'generation'
                         return state
                     updated = transition(state, failed, now, witness=witness, language_only=lang != 'all')
@@ -737,15 +762,20 @@ class CostHealthMixin(ABC):
         keys = [key for key in keys if key_targets[key] is not None]
         lease_keys = {key: live_stt_state.cost_lease_key(key_targets[key], key[1]) for key in keys if key in preferred}
         redis_keys = [live_stt_state.cost_key(key_targets[key], key[1]) for key in keys]
+        reset_keys = [live_stt_state.cost_reset_key(target) for target in targets]
 
         async def refresh():
             fleet_now = await self._server_now(identity)
-            values = await self._redis().mget(redis_keys)
+            values = await self._redis().mget([*redis_keys, *reset_keys])
             if self._check_identity() != identity:
                 raise _IdentityChanged('live STT state identity changed')
-            if not isinstance(values, list) or len(values) != len(keys):
+            if not isinstance(values, list) or len(values) != len(keys) + len(reset_keys):
                 raise ValueError('invalid cost gate snapshot')
-            states = {key: GateState.decode(json.loads(raw)) if raw else GateState() for key, raw in zip(keys, values)}
+            floors = {target.id: reset_generation_floor(raw) for target, raw in zip(targets, values[len(keys) :])}
+            states = {
+                key: GateState.decode(json.loads(raw)) if raw else GateState(generation=floors[key[0]])
+                for key, raw in zip(keys, values[: len(keys)])
+            }
             with self._lock:
                 local_benches = {
                     key: state

@@ -256,12 +256,14 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
 
 def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
     captured = {}
-    model_worker = object()
+    model_worker = SimpleNamespace()
     monkeypatch.setattr(runtime, 'load_worker', lambda artifacts: model_worker)
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
     monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '4')
     monkeypatch.setenv('BATCH_PIPELINE_UNIT_SECONDS', '3600')
     monkeypatch.delenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_STAGE_PROFILING_ENABLED', raising=False)
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
 
     class Pump:
         def __init__(self, scheduler, worker, **kwargs):
@@ -270,6 +272,7 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
         async def run(self, stop):
             assert captured['scheduler'].pool == 'batch'
             assert captured['worker'].worker is model_worker
+            assert captured['timings'] is model_worker.timings is captured['worker'].timings
             snapshot = captured['capacity']()
             assert snapshot.available_slots == 4 and snapshot.max_item_seconds == 3600
             assert (
@@ -280,9 +283,35 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
 
     monkeypatch.setattr(runtime, 'Pump', Pump)
     state = runtime.RuntimeState()
-    asyncio.run(runtime.run_process(object(), object(), CollectorRegistry(), state))
+    registry = CollectorRegistry()
+    asyncio.run(runtime.run_process(object(), object(), registry, state))
     assert not state.ready and captured['batch_size'] == 4
     assert captured['flights'] == 2
+    # Profiling defaults off outside the dev stage: no histogram is registered.
+    assert 'omi_batch_pipeline_stage_seconds' not in [metric.name for metric in registry.collect()]
+
+
+def test_process_stage_profiling_flag_shares_one_timings_instance_on_the_registry(monkeypatch):
+    captured = {}
+    model_worker = SimpleNamespace()
+    monkeypatch.setattr(runtime, 'load_worker', lambda artifacts: model_worker)
+    monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
+    monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '4')
+    monkeypatch.setenv('BATCH_PIPELINE_STAGE_PROFILING_ENABLED', 'true')
+
+    class Pump:
+        def __init__(self, scheduler, worker, **kwargs):
+            captured.update(scheduler=scheduler, worker=worker, **kwargs)
+
+        async def run(self, stop):
+            assert captured['timings'] is model_worker.timings is captured['worker'].timings
+            stop.set()
+
+    monkeypatch.setattr(runtime, 'Pump', Pump)
+    state = runtime.RuntimeState()
+    registry = CollectorRegistry()
+    asyncio.run(runtime.run_process(object(), object(), registry, state))
+    assert 'omi_batch_pipeline_stage_seconds' in [metric.name for metric in registry.collect()]
 
 
 @pytest.mark.parametrize('raw,expected', [(None, 2), ('1', 1), ('4', 4), ('0', 2), ('9', 2), ('two', 2)])

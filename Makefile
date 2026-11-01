@@ -65,6 +65,12 @@ lane-bootstrap:
 preflight:
 	$(PYTHON_RUNNER) .github/scripts/pr_preflight.py --lane local --base origin/main
 
+# Offline operator gate: the caller wraps this target in omi-heavy on shared hosts.
+.PHONY: batch-replay
+batch-replay:
+	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CORPUS)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CORPUS OUTPUT'; exit 2)
+	backend/.venv/bin/python -I backend/testing/batch_replay/gate.py --ref "$(REF)" --base "$(BASE)" --corpus "$(CORPUS)" --output "$(OUTPUT)"
+
 # Backend ratchet guard tests (test_*ratchet*.py plus the reason-label enums)
 # through backend/test.sh; included by scripts/pr-preflight --all for backend
 # changes so CI-only ratchets surface before the push, not after it.

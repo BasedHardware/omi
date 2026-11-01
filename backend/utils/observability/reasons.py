@@ -44,6 +44,13 @@ class ReasonFamily(StrEnum):
     STAGING_FENCE = 'staging_fence'
     HELD_CONTENT = 'held_content'
     SPEAKER_EVIDENCE = 'speaker_evidence'
+    NOTES_AGENT_FORCE = 'notes_agent_force'
+    NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
+    SYNC_DISPATCH = 'sync_dispatch'
+    SYNC_CAPTURE_TIME = 'sync_capture_time'
+    SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
+    RECORD_PARTIAL_RERUN = 'record_partial_rerun'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -61,6 +68,26 @@ OMI_REASON_TOTAL = Counter(
 for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
     REASON_UNKNOWN_TOTAL.labels(family=_family.value)
     OMI_REASON_TOTAL.labels(family=_family.value)
+
+
+class SyncProcessingHoldOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    QUIET_WAIT = 'quiet_wait'
+    WATERMARK_WAIT = 'watermark_wait'
+    READY = 'ready'
+    MAX_HOLD = 'max_hold'
+    UNCHANGED = 'unchanged'
+    IMMATERIAL = 'immaterial'
+    LATE_CAP = 'late_cap'
+
+
+class ListenSessionTranscriptOutcome(StrEnum):
+    """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
+
+    UNKNOWN = 'unknown'
+    TRANSCRIBED = 'transcribed'
+    NO_TRANSCRIPT = 'no_transcript'
+    TOO_SHORT = 'too_short'
 
 
 class PersonVoiceQualityReason(StrEnum):
@@ -135,6 +162,31 @@ class StagingRetryOutcome(StrEnum):
     EXHAUSTED = 'exhausted'
     PERMANENT = 'permanent'
     RETAINED = 'retained'
+
+
+class SyncDispatchFailureReason(StrEnum):
+    """Closed reasons for a sync v2 staging/dispatch refusal."""
+
+    UNKNOWN = 'unknown'
+    DISPATCH_HOLD = 'dispatch_hold'
+    STAGING_FAILED = 'staging_failed'
+
+
+class SyncCaptureTimeReason(StrEnum):
+    """Disposition of one sync upload capture time against the shared window.
+
+    Owner: `utils/sync/capture_clock.py`. `accepted_future_skew` is a real
+    capture whose phone clock runs ahead of the server within tolerance;
+    `rejected_future`/`rejected_early` are implausible stamps (bogus device
+    clock marker, pre-2024 fragment) that stay refused.
+    """
+
+    UNKNOWN = 'unknown'
+    ACCEPTED = 'accepted'
+    ACCEPTED_FUTURE_SKEW = 'accepted_future_skew'
+    REJECTED_FUTURE = 'rejected_future'
+    REJECTED_EARLY = 'rejected_early'
+    REJECTED_MALFORMED = 'rejected_malformed'
 
 
 class WorkOutcome(StrEnum):
@@ -253,6 +305,33 @@ class LiveSttReason(StrEnum):
     NO_TEXT = 'no_text'
 
 
+class LocalPreviewOutcome(StrEnum):
+    """Mobile local-preview lane admission at listen session start (routers/listen/local_preview.py)."""
+
+    UNKNOWN = 'unknown'
+    ADMITTED = 'admitted'
+    NOT_REQUESTED = 'not_requested'
+    KILL_SWITCH = 'kill_switch'
+    CUSTOM_STT = 'custom_stt'
+    MULTI_CHANNEL = 'multi_channel'
+    ONBOARDING = 'onboarding'
+    PHONE_CALL = 'phone_call'
+    PRIVATE_SYNC_OFF = 'private_sync_off'
+    NOT_BATCH_LANE = 'not_batch_lane'
+    POLICY_ERROR = 'policy_error'
+
+
+class ServiceWindowOutcome(StrEnum):
+    """Disposition of one admitted service-VIP window POST (`utils/stt/window_replicas.py`)."""
+
+    UNKNOWN = 'unknown'
+    ERROR = 'service_error'
+    QUEUE_TIMEOUT = 'service_queue_timeout'
+    TEXT = 'service_text'
+    EMPTY = 'service_empty'
+    CANCELLED = 'service_cancelled'
+
+
 class WorkerValidationStage(StrEnum):
     """Worker validation stage tokens."""
 
@@ -346,6 +425,8 @@ class FallbackReason(StrEnum):
     TEXT = 'text'
     NO_TEXT = 'no_text'
     GATE_UNAVAILABLE = 'gate_unavailable'
+    USAGE_ROOT_MISSING = 'usage_root_missing'
+    USAGE_FENCE_BLOCKED = 'usage_fence_blocked'
     HTTP_ERROR = 'http_error'
     HTTP_429 = 'http_429'
     TRANSPORT_ERROR = 'transport_error'
@@ -381,6 +462,29 @@ class FallbackReason(StrEnum):
     ACQUIRE_UNSETTLED = 'acquire_unsettled'
     MARKER_TIMEOUT = 'marker_timeout'
     PREAMBLE_TIMEOUT = 'preamble_timeout'
+
+
+class NotesAgentForceReason(StrEnum):
+    """Why an agentic notes run was given a system-directed submit turn (first reason only)."""
+
+    UNKNOWN = 'unknown'
+    LOOKUP_CAP = 'lookup_cap'
+    SUBMISSION_REJECTED_AT_CAP = 'submission_rejected_at_cap'
+    SUBMISSION_REJECTED = 'submission_rejected'
+    TEXT_ONLY_RESPONSE = 'text_only_response'
+    PRIOR_REJECTION = 'prior_rejection'
+    TURN_LIMIT = 'turn_limit'
+    COST_LIMIT = 'cost_limit'
+    DEADLINE = 'deadline'
+
+
+class NotesAgentTransportReason(StrEnum):
+    """Why a notes run could not use the managed tool transport."""
+
+    UNKNOWN = 'unknown'
+    MISSING_OWNER = 'missing_owner'
+    BYOK = 'byok'
+    UNSUPPORTED_MODEL = 'unsupported_model'
 
 
 def reason_values(enum: type[StrEnum]) -> frozenset[str]:

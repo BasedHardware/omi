@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-transient-capture-edge-finalizes-logical-session",
+  "violated_contract": "A temporary loss of call evidence may close the capture gate but must not irreversibly finalize a confirmed logical meeting before a bounded same-call resume window has elapsed",
+  "canonical_prevention": "Separate provisional capture, confirmed meeting identity and finalization. Resume matching identities inside a bounded window without rotating; expire at the original off edge. Preserve confirmed-app evidence hysteresis, pending notices, cloud lifetime and final ASR draining across that window. Resolve interrupted-meeting provenance before creating a relaunch session.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/MeetingSessionResumeTests.swift",
+    "desktop/macos/Desktop/Tests/TranscriptionStorageRecoveryTests.swift",
+    "desktop/macos/Desktop/Tests/LocalTranscriptionCaptureGapTests.swift",
+    "desktop/macos/Desktop/Tests/TranscriptionServiceScreenEvidenceQueryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MeetingDetector.swift",
+    "desktop/macos/Desktop/Sources/AppState/AppState+MeetingBoundaries.swift",
+    "desktop/macos/Desktop/Sources/LocalTranscriptionService.swift",
+    "desktop/macos/Desktop/Sources/TranscriptionService.swift"
+  ],
+  "status": "open"
+}

@@ -477,6 +477,17 @@ extension APIClient {
       "v1/conversations/\(conversationId)/reprocess", body: EmptyBody())
   }
 
+  /// Same explicit restore intent as mobile. The server carries `user_kept`
+  /// from the stored discarded state through reprocessing and persists it;
+  /// this endpoint does not accept a client `user_kept` body/query field.
+  func restoreConversation(conversationId: String) async throws -> ServerConversation {
+    // Reprocessing may take minutes; match the phone's bounded restore timeout.
+    let restored: ServerConversation = try await post(
+      "v1/conversations/\(conversationId)/reprocess", body: EmptyBody(), requestTimeout: 180)
+    invalidateConversationsCountCache()
+    return restored
+  }
+
   private struct EmptyBody: Encodable {}
 
   /// Sets the user's preferred summarization app; the backend keys future

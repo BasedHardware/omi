@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@tschk/moonshine-next/navigation', () => ({
@@ -37,15 +37,18 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import { AppDetail } from '@/components/apps/AppDetail';
+import { getApp } from '@/lib/api';
 
 describe('AppDetail setup steps', () => {
-  it('links each setup step with the signed-in uid', async () => {
+  it('opens each freshly fetched setup step with the signed-in uid', async () => {
+    const tab = { opener: window, location: { href: '' }, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
     render(<AppDetail appId="app-1" />);
 
-    const link = (await screen.findByText('Connect Notion')).closest('a')!;
-
-    expect(link.getAttribute('href')).toBe(
-      'https://ex.com/connect?source=omi&uid=user-1',
+    fireEvent.click(await screen.findByRole('button', { name: /Connect Notion/ }));
+    await waitFor(() =>
+      expect(tab.location.href).toBe('https://ex.com/connect?source=omi&uid=user-1'),
     );
+    expect(getApp).toHaveBeenCalledTimes(2);
   });
 });

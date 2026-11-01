@@ -28,6 +28,7 @@ def state(monkeypatch):
         return result
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(reprocess, '_mutate', mutate)
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
     monkeypatch.setattr(reprocess, '_wake_exists', lambda *_: False)
@@ -179,13 +180,14 @@ def test_pipeline_flags_off_eager_and_process_now_bypasses_coalescing(monkeypatc
     process, mark = Mock(), Mock()
     monkeypatch.setattr(pipeline, '_reprocess_conversation_after_update', process)
     monkeypatch.setattr(reprocess, 'mark', mark)
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
     monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'false')
     pipeline._reprocess_merged_conversations('u', {'_merged': {'c': 'en'}})
     process.assert_called_once_with('u', 'c', 'en')
     mark.assert_not_called()
     monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'true')
     pipeline._reprocess_merged_conversations('u', {'_merged': {'c': 'en'}})
-    mark.assert_called_once_with('u', 'c', 'en')
+    mark.assert_called_once_with('u', 'c', 'en', sync_hold=False)
     process.assert_called_once()
     pipeline._reprocess_merged_conversations('u', {'_merged': {'c': 'en'}}, user_selected=True)
     assert process.call_count == 2 and mark.call_count == 1
@@ -226,12 +228,13 @@ def test_owns_runtime_only_allows_production_or_emulator(monkeypatch, stage, nam
 
 
 def test_partial_result_replay_recovers_intent_without_transient_merged_map(pipeline, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'true')
     mark = Mock()
     monkeypatch.setattr(reprocess, 'mark', mark)
     response = {'updated_memories': {'c', 'fenced'}, pipeline._RESPONSE_FENCED_CONVERSATION_IDS: {'fenced'}}
     pipeline._reprocess_merged_conversations('u', response)
-    mark.assert_called_once_with('u', 'c', pipeline._LINEAGE_RETRY_LANGUAGE)
+    mark.assert_called_once_with('u', 'c', pipeline._LINEAGE_RETRY_LANGUAGE, sync_hold=True)
 
 
 def test_backfill_recovery_retains_its_queue_worker_and_identity(state, monkeypatch):
@@ -266,20 +269,50 @@ def runtime_manifest():
     return yaml.load(path.read_text(), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
 
 
-def test_train1_runtime_flags_are_on_only_for_prod_sync_hosts(runtime_manifest):
-    selected = {'backend-sync', 'backend-sync-backfill'}
-    switches = ('SYNC_REPROCESS_COALESCE_ENABLED', 'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED')
+def test_exact_input_dedupe_and_coalesce_host_pinning(runtime_manifest):
+    prod_on = {
+        # C5 2026-10-26: byte-identical exact-input reuse extends past the sync
+        # pair; time-window coalescing stays sync-only, revision reuse stays off.
+        'SYNC_REPROCESS_COALESCE_ENABLED': {'backend-sync', 'backend-sync-backfill'},
+        'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED': {
+            'backend',
+            'backend-sync',
+            'backend-sync-backfill',
+            'backend-integration',
+        },
+    }
     for stage, environment in runtime_manifest['environments'].items():
         for name, service in environment['cloud_run']['services'].items():
             env = service.get('env', {})
-            for switch in switches:
+            for switch, selected in prod_on.items():
                 enabled = str(env.get(switch, {}).get('value', 'false')).lower() == 'true'
                 assert enabled == (stage == 'prod' and name in selected), (stage, name, switch)
-            if name in selected:
+            if name in prod_on['SYNC_REPROCESS_COALESCE_ENABLED']:
                 assert env['SYNC_REPROCESS_SETTLE_SECONDS']['value'] == '600'
         for name, service in environment['gke'].items():
-            for switch in switches:
+            for switch in prod_on:
                 assert str(service.get('env', {}).get(switch, {}).get('value', 'false')).lower() != 'true'
+    import yaml
+    from pathlib import Path
+
+    listen_values = yaml.load(
+        (Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text(),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
+    listen_env = {entry['name']: entry.get('value') for entry in listen_values['env']}
+    assert listen_env['CONVERSATION_LLM_INPUT_DEDUPE_ENABLED'] == 'true'
+    assert listen_env['REPEAT_WORK_REVISION_ENABLED'] == 'false'
+    assert 'SYNC_REPROCESS_COALESCE_ENABLED' not in listen_env
+    # Pusher co-hosts conversation finalization with backend-listen; the
+    # co-host env-diff gate requires the reuse switch to move with it.
+    pusher_values = yaml.load(
+        (Path(__file__).resolve().parents[2] / 'charts/pusher/prod_omi_pusher_values.yaml').read_text(),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
+    pusher_env = {entry['name']: entry.get('value') for entry in pusher_values['env']}
+    assert pusher_env['CONVERSATION_LLM_INPUT_DEDUPE_ENABLED'] == 'true'
+    assert pusher_env['REPEAT_WORK_REVISION_ENABLED'] == 'false'
+    assert 'SYNC_REPROCESS_COALESCE_ENABLED' not in pusher_env
 
 
 @pytest.fixture(scope='module')
@@ -979,6 +1012,8 @@ def test_preserved_callback_rule_discard_receipt_settles_without_empty_failure(s
 
 @pytest.mark.parametrize('persisted', [False, True])
 def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monkeypatch, persisted):
+    # Legacy intake-discard receipt contract; occasion mode defers this decision.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     monkeypatch.setattr(
         pipeline.conversations_db,
         'get_conversation',
@@ -1006,6 +1041,7 @@ def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monke
 
 @pytest.mark.parametrize('with_context', [False, True])
 def test_pipeline_receipts_an_intake_discarded_fragment_without_a_second_write(pipeline, monkeypatch, with_context):
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     # The read predicate shows every uncurated review row as discarded, so the
     # callback cannot tell a stored discard apart from an unpersisted one; only
     # the write's own outcome can.
@@ -1042,6 +1078,7 @@ def test_pipeline_receipts_an_intake_discarded_fragment_without_a_second_write(p
 def test_intake_discarded_fragment_settles_admitted_obligation_instead_of_callback_pending(
     state, pipeline, monkeypatch
 ):
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
@@ -1071,6 +1108,40 @@ def test_intake_discarded_fragment_settles_admitted_obligation_instead_of_callba
 
     assert reprocess.run(key, token, callback, now=120) == 'processed'
     assert key not in rows
+
+
+@pytest.mark.parametrize('with_context', [False, True])
+def test_occasion_review_reaches_canonical_processing_before_fragment_discard(pipeline, monkeypatch, with_context):
+    monkeypatch.delenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', raising=False)
+    monkeypatch.setattr(
+        pipeline.conversations_db,
+        'get_conversation',
+        lambda *_: {'status': 'completed', 'sync_relevance': 'review', 'discarded': True, 'transcript_segments': []},
+    )
+    monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
+    rule = Mock(side_effect=AssertionError('occasion mode must assess the canonical span'))
+    monkeypatch.setattr(pipeline, 'fragment_rule', rule)
+    client = object()
+    monkeypatch.setattr(pipeline, 'get_firestore_client', lambda: client)
+    claim = Mock(return_value=True)
+    monkeypatch.setattr(pipeline, 'claim_from_snapshot', claim)
+
+    # Stop at the canonical processing boundary; providers and persistence are
+    # covered by their own suites, and must not be reached through test ADC.
+    class CanonicalProcessingReached(Exception):
+        pass
+
+    monkeypatch.setattr(pipeline, 'deserialize_conversation', Mock(side_effect=CanonicalProcessingReached))
+    context = {} if with_context else None
+    token = pipeline.PROCESS_CONTEXT.set(context)
+    try:
+        with pytest.raises(CanonicalProcessingReached):
+            pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    rule.assert_not_called()
+    assert claim.call_count == int(with_context)
+    assert not (context or {}).get('discarded')
 
 
 @pytest.mark.parametrize('preserve', [False, True])

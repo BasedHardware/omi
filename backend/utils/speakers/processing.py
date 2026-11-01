@@ -188,6 +188,21 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
                     continue
                 if segment.id in labels:
                     segment.is_user, segment.person_id = labels[segment.id]
+                    cluster = by_segment.get(segment.id)
+                    if (
+                        segment.is_user
+                        and segment.speaker_label_source not in ('manual', 'carried')
+                        and cluster is not None
+                        and any(
+                            c.person_id == 'owner'
+                            and c.label_eligible
+                            and c.band == 'confident'
+                            and c.source in ('voice', 'channel', 'near_field')
+                            for c in cluster.candidates
+                        )
+                    ):
+                        segment.speaker_match_source = 'speaker_evidence_v2'
+                        segment.speaker_label_source = 'auto'
                     segment.speaker_identity_status = (
                         'user'
                         if segment.is_user

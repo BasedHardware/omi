@@ -775,6 +775,8 @@ class ReplayTailSocket:
                             expired_mid = True
                             break
                         entry.start = position
+                        if getattr(self.connection, 'idle_cost_reselect_requested', False) is True:
+                            self._retain_idle_onset()
                         self._dead = True
                         return
                     try:
@@ -878,6 +880,33 @@ class ReplayTailSocket:
         self.tail.clear()
         self._tail_bytes = 0
 
+    def _retain_idle_onset(self) -> None:
+        # Both the pump and owner-side transfer call this: the monitor can
+        # observe planned death before the pacer's final yield returns.
+        onset = self.connection.take_unsent_packet()
+        if onset is None or not self.tail:
+            return
+        data, spans = onset
+        if not spans or sum(length for _, length in spans) * 2 != len(data):
+            return
+        received = self.tail[0].received
+        boundary = max(start + length for start, length in spans)
+        while self.tail and self.tail[0].start < boundary:
+            entry = self.tail[0]
+            cut = min(len(entry.data) // 2, boundary - entry.start)
+            entry.start += cut
+            entry.data = entry.data[cut * 2 :]
+            if not entry.data:
+                self.tail.popleft()
+        offset = 0
+        retained = []
+        for start, length in spans:
+            chunk = data[offset * 2 : (offset + length) * 2]
+            retained.append(TailPacket(start, chunk, received, admitted=True))
+            offset += length
+        self.tail.extendleft(reversed(retained))
+        self._tail_bytes = sum(len(entry.data) for entry in self.tail)
+
     def take_tail(self) -> deque[TailPacket]:
         """Transfer unwritten capture before aborting a leg without a replay ring.
 
@@ -885,6 +914,8 @@ class ReplayTailSocket:
         off packets. Confirmed writes are debited; an ambiguous write remains
         owed to the successor. The original capture timestamps stay intact.
         """
+        if getattr(self.connection, 'idle_cost_reselect_requested', False) is True:
+            self._retain_idle_onset()
         self._closing = True
         if self._task is not None:
             self._task.cancel()
