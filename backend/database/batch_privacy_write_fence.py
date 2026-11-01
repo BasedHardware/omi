@@ -25,7 +25,7 @@ from google.cloud.firestore_v1.types import (
     WriteResult,
 )
 from google.rpc import status_pb2
-from database.batch_privacy_attempt import TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
+from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
 Status = cast(Any, status_pb2).Status
@@ -33,9 +33,7 @@ Status = cast(Any, status_pb2).Status
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 _ROOT_AUTHORITIES = frozenset({'account_deletions', 'legal_holds', 'legal_hold_deletion_gates'})
 _USER_FIELDS = frozenset({'data_protection_level', 'migration_status', 'private_cloud_sync_enabled'})
-_CONVERSATION_FIELDS = frozenset(
-    {'deleted', 'sync_merged_into', 'record_lane_owner', 'uses_custom_stt', 'private_cloud_sync_enabled'}
-)
+_CONVERSATION_FIELDS = CONVERSATION_AUTHORITY_FIELDS
 
 
 def _changes_answer(write: Any, fields: frozenset[str]) -> bool:

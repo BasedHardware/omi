@@ -10,6 +10,12 @@ from threading import RLock
 TOKEN_FIELD = 'memo_token'
 SCHEMA_FIELD = 'memo_schema'
 TOKEN_SCHEMA = 1
+# Conversation fields the batch privacy decision reads. A commit that writes any
+# of them rotates the owner's token (database.batch_privacy_write_fence), so
+# writers should omit a field whose stored value they are not changing.
+CONVERSATION_AUTHORITY_FIELDS = frozenset(
+    {'deleted', 'sync_merged_into', 'record_lane_owner', 'uses_custom_stt', 'private_cloud_sync_enabled'}
+)
 
 
 class PrivacyAttempt:

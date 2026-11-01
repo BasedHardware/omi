@@ -22,6 +22,7 @@ from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
+from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, STRUCTURAL_REASONS
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES
 from utils.conversations.size_limit import (
@@ -962,6 +963,8 @@ def assign_in_transaction(
         result.update(write_span(result, arrival_at=incoming.get('arrival_at')))
         payload = encode(result)
         payload.pop('photos', None)
+        if current is not None:
+            _omit_unchanged_authority_fields(payload, current)
         donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
         estimated_bytes = _stored_document_bytes(collection.document(canonical), payload, current, invalidate)
         absorption_bytes = max(
@@ -1344,6 +1347,21 @@ def assign_in_transaction(
     result['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
     capture_assignment_metrics(result, [chosen, *extra_plans])
     return result, created, survivors
+
+
+def _omit_unchanged_authority_fields(payload: dict, current: dict) -> None:
+    """Drop authority fields the update would rewrite with the value already stored.
+
+    ``current`` is this transaction's read of the row, so an omitted field is
+    still the committed value (a concurrent change aborts the transaction).
+    An update replaces only the fields it names, so the stored document is
+    identical; the batch-privacy fence then rotates the owner's token only for
+    a real authority change. A field absent from the row is never omitted:
+    absent consent means enabled, which an explicit value may change.
+    """
+    for field in CONVERSATION_AUTHORITY_FIELDS:
+        if field in payload and field in current and payload[field] == current[field]:
+            del payload[field]
 
 
 def _donor_redirect_patch(row: dict, canonical: str) -> dict:

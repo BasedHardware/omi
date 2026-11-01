@@ -135,7 +135,10 @@ class FirestoreTransaction:
         )
 
     def flush(self):
-        if len(self.writes) + len(self.patches) > 450:
+        # Conversation patches set record_lane_owner, a batch-privacy authority
+        # field, so the commit-boundary fence appends one token write per owner.
+        fence_tokens = len({key.split('/', 1)[0] for table, key in self.patches if table == 'conversations'})
+        if len(self.writes) + len(self.patches) + fence_tokens > 450:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
