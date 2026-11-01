@@ -13,8 +13,9 @@ def sync_off_enabled() -> bool:
 
 
 def vendor_turns_enabled() -> bool:
-    # Off restores words-only vendor units (unit-local `sync:` labels) at every
-    # read site, including results already committed with vendor turns.
+    # Off: new and replayed projections are words-only (`sync:` labels) and no
+    # resolver reads vendor evidence. Like centroid expiry, it does not regroup
+    # or rename conversations already resolved; that would rewrite user data.
     return default_on(VENDOR_SPEAKER_TURNS_ENV)
 
 
