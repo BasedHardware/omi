@@ -104,8 +104,8 @@ def followup(monkeypatch, owner_claim):
         side_effect=lambda **kw: (projector.store.store.projection_pending(), None)
     )
     projector.store.ref = Mock(
-        side_effect=lambda _, sid: SimpleNamespace(
-            get=lambda: SimpleNamespace(to_dict=lambda: {'projection': receipts[sid]})
+        side_effect=lambda table, sid: SimpleNamespace(
+            get=lambda: SimpleNamespace(to_dict=lambda: jobs[sid] if table == 'jobs' else {'projection': receipts[sid]})
         )
     )
     projector.complete_content = Mock()
@@ -269,6 +269,7 @@ async def test_private_playback_follows_concurrent_bridge_before_enrichment(foll
 @pytest.mark.asyncio
 async def test_partial_assignments_do_not_take_slots_and_failed_front_rotates(followup, monkeypatch):
     f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', 'false')
     monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
     f.projector.store.store.projection_pending.return_value = ['partial', 'head', 'later']
     f.projector.store.ref.side_effect = lambda _, sid: SimpleNamespace(
@@ -279,6 +280,46 @@ async def test_partial_assignments_do_not_take_slots_and_failed_front_rotates(fo
     while f.runner.tasks:
         await asyncio.gather(*list(f.runner.tasks.values()))
     assert [call.args[0] for call in f.runner.run.await_args_list] == ['head', 'later']
+
+
+@pytest.mark.asyncio
+async def test_finish_page_checks_pinned_sync_policy_before_any_side_effect(followup):
+    f = followup
+    f.jobs['head']['policy_parts']['projection'] = ProjectionPolicy(async_projection=False).to_dict()
+    await f.runner.run('head')
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.complete_content.assert_not_called()
+    assert not f.owner_claim
+
+
+@pytest.mark.asyncio
+async def test_unchanged_ready_receipt_retries_when_external_sibling_unblocks(followup):
+    f = followup
+    f.receipts['head']['state'] = 'ready'
+    f.projector.store.store.projection_pending.return_value = ['head']
+    sibling_ready = False
+    completed = []
+
+    def complete(segment, binding):
+        if sibling_ready:
+            completed.append(segment)
+
+    f.projector.complete_content.side_effect = complete
+
+    async def pass_once():
+        await f.runner.schedule()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+
+    await pass_once()
+    assert not completed
+    # Nothing about head's receipt changes: only the external sibling does.
+    sibling_ready = True
+    await pass_once()
+    assert completed == ['head']
+    assert f.projector.complete_content.call_count == 2
 
 
 @pytest.mark.asyncio

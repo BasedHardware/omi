@@ -13,8 +13,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from config.batch_pipeline import projection_followup_page_enabled
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
+from database.batch_pipeline_store import PROJECTION_FINISH_STATES
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.projection import error_site_field, error_type, projection_phase
@@ -46,6 +48,25 @@ class ProjectionFollowups:
         self.discovery = ProjectionDiscovery(projector.store.store)
 
     def candidates(self):
+        if projection_followup_page_enabled():
+            # The query is already the durable receipt hint. Do not refetch
+            # each result twice just to choose work. Filter pinned sync policy
+            # before queueing so it cannot delay async recovery/owed rows.
+            # Keep retrying unchanged receipts: a sibling or destination can
+            # unblock them without changing this result's version.
+            self.discovery.states = PROJECTION_FINISH_STATES
+            candidates = []
+            for sid in self.discovery.next(limit=100):
+                job = self.projector.store.ref('jobs', sid).get().to_dict() or {}
+                raw = (job.get('policy_parts') or {}).get('projection')
+                if raw is None:
+                    # Legacy unpinned policy follows the same privacy-aware
+                    # resolution as before. The common pinned path is one read.
+                    raw = self.projector.store.read(sid)[0]['policy_parts']['projection']
+                if ProjectionPolicy.from_dict(raw).async_projection:
+                    candidates.append(sid)
+            return candidates
+        self.discovery.states = None
         store = self.projector.store
         # Assignment failures/partial multipart output must not consume the
         # follow-up slots ahead of rows that have actually persisted.
@@ -166,6 +187,10 @@ class ProjectionFollowups:
             if not acquired:
                 return
             job, entry, binding = await run_blocking(db_executor, self.read_persisted, segment)
+            if projection_followup_page_enabled():
+                policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+                if not policy.async_projection:
+                    return  # The synchronous sweep owns these receipts.
             item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
             parts = entry.get('projection_parts')
             for index, receipt in (

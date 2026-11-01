@@ -865,13 +865,26 @@ with phase timings before claiming the target or increasing admission.
 
 `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
 `false` restores oldest-100 discovery). Assignment and async follow-ups each
-advance their own bounded 100-row keyset scan across pending, persisted and
-ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+advance their own bounded 100-row keyset scan. Assignment scans pending
+results; async follow-ups scan persisted/ready results by default. The cursor uses `(committed_at, document ID)`, so equal timestamps
 and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
 restart begins at the head without dropping any durable obligations. Follow-ups
 launch the whole bounded page before fetching the next one. Discovery order is
 only a hint: existing transactional predecessor, privacy, all-sibling readiness,
 receipt replay and paid-intent fences remain authoritative.
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED` defaults to `true`.
+Follow-up discovery uses only the persisted/ready result page, plus one job
+read per receipt for its pinned policy. It no longer fetches each result twice
+after the query. Synchronous receipts are filtered before queueing so they
+cannot delay async recovery wakeups. Legacy unpinned policies still use the
+existing privacy-aware resolution; execution rechecks policy and receipt fences. Setting the switch to `false` restores the mixed page and
+per-candidate reads. Pagination's separate kill switch still controls rotation.
+Pending partial assignments and quarantine-held rows do not enter the finish
+page; recovery and repair still return them through pending assignment to
+persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
+or destination can unblock them without changing their own result version.
+No cooldown or version cache delays that retry, including priority/owed wakes.
 
 The query reuses the declared prod/dev results composite index:
 `projection_state ASC, committed_at ASC, __name__ ASC` in
@@ -983,8 +996,8 @@ what the mixed page did for those rows:
 - async-policy rows are not touched there, but seeing any of them keeps
   follow-ups scheduled.
 
-Async follow-up discovery keeps its own mixed page and cursor unchanged. All
-three pages use the same `in` filter on the declared results composite index
+Async follow-up discovery keeps its own cursor and uses a persisted/ready
+page by default (its kill switch restores the mixed page). All three pages use the same `in` filter on the declared results composite index
 (`projection_state, committed_at, __name__`), so no index changes are needed.
 
 ### Per-owner projection drain (Phase 1)
