@@ -584,8 +584,7 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
     'BATCH_VENDOR_ROUTING_SHADOW_PERCENT': ('B', 'decisions computed and counted, routing unchanged; default 0'),
     'BATCH_VENDOR_ROUTE_TABLE': ('B', 'runtime RouteTable payload; unset serves BUILTIN_TABLE'),
     'BATCH_VENDOR_OVERFLOW_ENABLED': ('B', 'ops_kill, on unless false; false never moves a capable unit off GPU'),
-    'BATCH_VENDOR_OVERFLOW_ENTER_SECONDS': ('B', 'fresh GPU backlog age that starts overflow; default 1200'),
-    'BATCH_VENDOR_OVERFLOW_EXIT_SECONDS': ('B', 'fresh GPU backlog age below which overflow stops; default 600'),
+    'BATCH_VENDOR_OVERFLOW_ENTER_SECONDS': ('B', 'fresh GPU backlog age that starts overflow (stops at half); 1200'),
     'BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS': ('B', 'admissible fresh units waiting before age counts; default 300'),
     # slice C
     'BATCH_VENDOR_HEALTH_ENABLED': ('C', 'ops_kill, on unless false; false keeps the process-local vendor_guard'),

@@ -18,7 +18,6 @@ import os
 from config.refactor_switches import default_on as rollout_default_on
 
 ENTER_SECONDS_DEFAULT = 1200.0
-EXIT_SECONDS_DEFAULT = 600.0
 SECONDS_MIN = 60.0
 SECONDS_MAX = 21600.0
 MIN_READY_UNITS_DEFAULT = 300
@@ -54,10 +53,9 @@ def _number(raw: str | None, default: float, low: float, high: float) -> float:
 
 def thresholds() -> tuple[float, float]:
     """``(enter, exit)`` fresh backlog ages in seconds. Saturation starts at ``enter`` and stops once the
-    age falls below ``exit``; an exit at or above enter falls back to half of enter (hysteresis)."""
+    age falls below half of it (hysteresis; one tunable keeps the flag budget small)."""
     enter = _number(os.getenv('BATCH_VENDOR_OVERFLOW_ENTER_SECONDS'), ENTER_SECONDS_DEFAULT, SECONDS_MIN, SECONDS_MAX)
-    exit_ = _number(os.getenv('BATCH_VENDOR_OVERFLOW_EXIT_SECONDS'), EXIT_SECONDS_DEFAULT, SECONDS_MIN, SECONDS_MAX)
-    return enter, exit_ if exit_ < enter else enter / 2
+    return enter, enter / 2
 
 
 def min_ready_units() -> int:

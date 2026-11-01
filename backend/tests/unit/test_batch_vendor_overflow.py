@@ -183,19 +183,18 @@ def test_a_raising_probe_serves_todays_routing(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'enter,exit_,expected',
+    'enter,expected',
     [
-        (None, None, (1200.0, 600.0)),
-        ('900', '300', (900.0, 300.0)),
-        ('900', '900', (900.0, 450.0)),  # exit at/above enter would never leave: half of enter
-        ('nan', 'x', (1200.0, 600.0)),
-        ('5', '999999', (1200.0, 600.0)),  # out of range keeps defaults
+        (None, (1200.0, 600.0)),
+        ('900', (900.0, 450.0)),  # exit is half of enter
+        ('nan', (1200.0, 600.0)),
+        ('5', (1200.0, 600.0)),  # out of range keeps the default
+        ('999999', (1200.0, 600.0)),
     ],
 )
-def test_thresholds(monkeypatch, enter, exit_, expected):
-    for name, value in (('BATCH_VENDOR_OVERFLOW_ENTER_SECONDS', enter), ('BATCH_VENDOR_OVERFLOW_EXIT_SECONDS', exit_)):
-        if value is not None:
-            monkeypatch.setenv(name, value)
+def test_thresholds(monkeypatch, enter, expected):
+    if enter is not None:
+        monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_ENTER_SECONDS', enter)
     assert thresholds() == expected
 
 

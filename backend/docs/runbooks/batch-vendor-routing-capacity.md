@@ -236,8 +236,8 @@ ring reads **saturated** when the oldest *admissible* fresh unit (same predicate
 as `ready_for_capacity`, so allowance holds and deferred retries never count)
 is at least `BATCH_VENDOR_OVERFLOW_ENTER_SECONDS` (default 1200) old **and** at
 least `BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS` (default 300) admissible fresh
-units wait. It stops below `BATCH_VENDOR_OVERFLOW_EXIT_SECONDS` (default 600) or
-below half the unit gate. The count gate exists because stuck heads look old in
+units wait. It stops below half the age (default 600 s) or below half the unit
+gate. The count gate exists because stuck heads look old in
 an idle ring: at 2026-11-01 18:01Z, 111 admissible fresh units from 4 parked
 owners were 42 h old with the fleet idle. Each process samples every 30 s off
 the event loop; any read failure answers "not saturated" (today's routing).
