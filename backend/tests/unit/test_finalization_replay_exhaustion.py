@@ -10,6 +10,7 @@ from database import conversation_finalization_jobs as jobs
 from services import conversation_finalization as service
 from models.account_cutover import AccountCutoverRecord, AccountCutoverState
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations import lifecycle
 
 NOW = datetime(2026, 10, 31, tzinfo=timezone.utc)
 JOB_PATH = (jobs.FINALIZATION_JOBS_COLLECTION, 'synthetic-job')
@@ -329,8 +330,6 @@ def test_replay_kill_switch_also_stops_cloud_tasks_host(store, monkeypatch, inli
 
 @pytest.mark.parametrize('kind', ['listen_quiet_check', 'conversation_merge'])
 def test_inline_replay_does_not_run_or_defer_other_job_kinds(store, monkeypatch, inline_replay, kind):
-    from utils.conversations import lifecycle
-
     store.rows[JOB_PATH].update(kind=kind, reconcile_after_at=NOW - timedelta(minutes=1))
     before = deepcopy(store.rows)
     quiet = Mock()
