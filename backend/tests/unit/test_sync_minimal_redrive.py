@@ -72,13 +72,18 @@ async def test_kill_switch_off_refuses_before_any_work(monkeypatch, sequenced):
     monkeypatch.setattr(sync_router, 'warm_rollout_cohorts', AsyncMock())
     body = AsyncMock()
     monkeypatch.setattr(sync_router, '_run_sync_job_body', body)
-    # C10: a stale sequenced task is still refused by the kill switch first (retained, 409).
+    # C10: a stale sequenced task can never run again (its sequencer is gone), so it is acknowledged before the
+    # kill switch; an unsequenced minimal task is still refused and retained (409).
     extra = {'sequencer_epoch': 3} if sequenced else {}
 
     response = await sync_router.run_sync_job(_task_request(redrive_mode='minimal', **extra), task_retry_count=0)
 
-    assert response.status_code == 409
-    assert json.loads(response.body) == {'status': 'minimal_redrive_disabled'}
+    if sequenced:
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'dropped', 'reason': 'sequencer_retired'}
+    else:
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'minimal_redrive_disabled'}
     body.assert_not_awaited()  # No lock, download or provider call.
 
 

@@ -2671,7 +2671,13 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload, monke
         route = next(route for route in module.router.routes if route.path == '/v2/sync-jobs/run')
         response = await route.endpoint(request, task_retry_count=0)
         assert response.status_code == 200
-        assert response.body == b'{"status":"foreign_stage"}'
+        # C10: a sequenced task is acknowledged as retired on every stage; plain backfill is foreign in dev.
+        expected = (
+            b'{"status":"dropped","reason":"sequencer_retired"}'
+            if 'sequencer_epoch' in payload
+            else b'{"status":"foreign_stage"}'
+        )
+        assert response.body == expected
         module.get_sync_ledger_fence_mode.assert_not_called()
         module.get_sync_job.assert_not_called()
         module.try_acquire_job_run_lock.assert_not_called()
