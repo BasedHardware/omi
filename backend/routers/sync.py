@@ -1186,6 +1186,12 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
     except Exception:
         return await _run_sync_job_body(request, task_retry_count, entry_state)
+    if isinstance(payload, dict) and payload.get('sequencer_epoch') is not None:
+        # C10: a task enqueued by the deleted backfill sequencer; its owner state no longer exists.
+        # Acknowledged before cohort warming and the minimal-redrive kill switch so a stale task is never
+        # retried. STANDBY still answers 503 above without parsing (cutover contract); the task is ACKed
+        # here on its first delivery after the fence turns ACTIVE.
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'sequencer_retired'})
     if isinstance(payload, dict) and isinstance(payload.get('uid'), str):
         try:
             async with asyncio.timeout_at(route_deadline):
@@ -1195,10 +1201,6 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             return _budget_deferral_fallback('preamble_timeout', 'degraded')
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
-    if isinstance(payload, dict) and payload.get('sequencer_epoch') is not None:
-        # C10: a task enqueued by the deleted backfill sequencer; its owner state no longer exists.
-        # Ahead of the minimal-redrive kill switch so a stale task is acknowledged, never retried.
-        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'sequencer_retired'})
     if minimal_redrive.parse_mode(payload) and not minimal_redrive.enabled():
         # Kill switch, before any lock, download or paid call: the task, staged
         # audio and ledger claim stay retained.

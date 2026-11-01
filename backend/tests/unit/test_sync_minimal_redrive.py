@@ -69,7 +69,8 @@ async def test_kill_switch_off_refuses_before_any_work(monkeypatch, sequenced):
     monkeypatch.setattr(
         sync_router, 'get_sync_ledger_fence_mode', Mock(return_value=sync_router.SyncLedgerFenceMode.ACTIVE)
     )
-    monkeypatch.setattr(sync_router, 'warm_rollout_cohorts', AsyncMock())
+    warm = AsyncMock()
+    monkeypatch.setattr(sync_router, 'warm_rollout_cohorts', warm)
     body = AsyncMock()
     monkeypatch.setattr(sync_router, '_run_sync_job_body', body)
     # C10: a stale sequenced task can never run again (its sequencer is gone), so it is acknowledged before the
@@ -81,6 +82,7 @@ async def test_kill_switch_off_refuses_before_any_work(monkeypatch, sequenced):
     if sequenced:
         assert response.status_code == 200
         assert json.loads(response.body) == {'status': 'dropped', 'reason': 'sequencer_retired'}
+        warm.assert_not_awaited()  # Acknowledged before cohort warming.
     else:
         assert response.status_code == 409
         assert json.loads(response.body) == {'status': 'minimal_redrive_disabled'}
