@@ -586,8 +586,10 @@ async def accept_upload(
                 before_probe=probe_guard,
                 before_self_probe=probe_guard,
             )
+            # Refusal preserves the caller's source; never acknowledge or admit it.
+            probe_guard.raise_if_denied()
             if sampled and not items and not language_decision.parakeet_safe:
-                # Nothing is staged yet. An unsafe sample, or a skipped/refused probe
+                # Nothing is staged yet. An unsafe sample, or a cap-skipped probe
                 # (which resolves 'und'), keeps today's legacy route for the whole upload.
                 record_admission_exclusion(
                     target.get('language') or user.get('language'),
@@ -597,8 +599,6 @@ async def accept_upload(
                 return None
             if sampled and not items:
                 record_route('intake', language_decision.language, 'parakeet')
-            # Refusal preserves the caller's source; never acknowledge or admit it.
-            probe_guard.raise_if_denied()
             frozen_language = (
                 language_decision.language
                 if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'

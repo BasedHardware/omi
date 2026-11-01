@@ -15,6 +15,7 @@ from config.policy import BatchUnitPolicy
 from database.batch_pipeline_intake import admit
 from tests.unit.test_batch_language_eligibility import admitted, upload
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
 from utils.sync import final_pass_rehome
 
@@ -180,6 +181,29 @@ async def test_unsafe_or_unavailable_sample_keeps_the_upload_on_legacy(monkeypat
     assert response is None and staged == [] and probe.call_count == 1
     writer.assert_not_called()
     assert excluded.call_args.args[1] == 'unknown_multilingual_conversation'
+
+
+@pytest.mark.asyncio
+async def test_refused_sample_probe_keeps_the_refusal_instead_of_legacy(monkeypatch):
+    # Consent revoked during the first unit's LID: the guard's refusal wins over the
+    # unsafe-sample legacy route, so the client keeps its audio and retries.
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: False)
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    unsafe = decision('und', False, 0.0)
+
+    def refused(*args, **kwargs):
+        assert kwargs['before_probe']() is False
+        return unsafe
+
+    excluded = Mock()
+    monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', decision=unsafe)
+    assert response is None and excluded.call_count == 1  # control: unrefused unsafe sample → legacy
+    excluded.reset_mock()
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', decision=refused)
+    assert probe.call_count == 1
+    assert response is not None and response.status_code == 503 and staged == []
+    excluded.assert_not_called()
 
 
 @pytest.mark.asyncio

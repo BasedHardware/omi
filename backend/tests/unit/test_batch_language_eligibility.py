@@ -69,7 +69,7 @@ async def upload(
         )
     )
     if decision is not None:
-        probe = Mock(return_value=decision)
+        probe = Mock(side_effect=decision) if callable(decision) else Mock(return_value=decision)
     if real_language:
         probe = Mock(wraps=batch_language.resolve_language)
     conversation_id = 'synthetic-conversation' if conversation_language is not None else None
