@@ -50,6 +50,7 @@ from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
 from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
+from config.batch_conversation_speakers import vendor_speaker_authority
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
     SyncAssignmentSuperseded,
@@ -291,9 +292,12 @@ def build_incoming(
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
     aligned = align_projection_words(words, payload, item.segment_id)
-    authoritative = (binding.record_origin or (policy or ProjectionPolicy()).authoritative_labels) and payload.get(
-        'recovery_version'
-    ) != 1
+    # Vendor words already carry the vendor's labels; with its turns they join
+    # the same unit scope, centroids and conversation resolver as GPU units.
+    vendor_turns = vendor_speaker_authority(payload)
+    authoritative = (binding.record_origin or (policy or ProjectionPolicy()).authoritative_labels) and (
+        payload.get('recovery_version') != 1 or vendor_turns
+    )
     if authoritative:
         # The legacy grouper imputes None from adjacent voices. Keep each gap an
         # explicit anonymous abstention instead of borrowing a speaker/owner.
@@ -329,7 +333,9 @@ def build_incoming(
             abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
             segment.is_user, segment.person_id = False, None
             segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
-            segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
+            segment.speaker_match_source = (
+                'batch_abstention' if abstained else 'batch_vendor' if vendor_turns else 'batch_pyannote'
+            )
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
     finished = datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc)
     # Projected sync must use the same narrow admission rules as legacy sync.

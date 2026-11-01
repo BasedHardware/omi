@@ -15,9 +15,11 @@ order and price routes that policy admits on the ``prerecorded`` surface, so a
 bad table degrades to today's routing, never to an unauthorized vendor. Prices,
 caps, the GPU floor and quality rows are table values, never constants here.
 
-Vendor speaker turns stay discarded on the vendor route (words-only, like
-recovered units): ``speaker_turns`` is reserved with the single value
-``'discard'`` so a later change can add a value without a schema bump.
+Vendor speaker turns are kept on the provider payload unless the
+``BATCH_VENDOR_SPEAKER_TURNS_ENABLED`` kill switch is off
+(``provider_stt.vendor_turns``). The table's ``speaker_turns`` stays reserved
+with the single value ``'discard'`` and is not read at runtime, so a later
+per-route value needs no schema bump.
 """
 
 from __future__ import annotations
