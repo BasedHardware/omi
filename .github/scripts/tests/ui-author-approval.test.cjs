@@ -32,36 +32,67 @@ test('API truncation fails closed even with approval', () => {
   assert.equal(decision({...pr,commits:250},ui,[],[approve]).allowed,false);
   assert.equal(decision({...pr,changed_files:3001},ui,[],[approve]).allowed,false);
 });
-test('workflow blocks, deduplicates, approves and revokes on the same API path', async () => {
-  const run = require('../ui-author-approval.cjs');
-  const p = {...pr,user:actor,state:'open',base:{ref:'main'}};
-  const comments = [];
+const run = require('../ui-author-approval.cjs');
+function fixture() {
+  const p = {...pr,number:1,user:actor,state:'open',base:{ref:'main',sha:'c'.repeat(40)}};
+  const prs = [p];
+  const comments = {1:[]};
   const statuses = [];
-  const pulls = {get:async () => ({data:p}),listFiles:'files',listCommits:'commits'};
-  const github = {rest:{pulls,issues:{listComments:'comments',createComment:async ({body}) => {
-    comments.push({id:10,user:{type:'Bot'},body});
-  }},repos:{createCommitStatus:async s => statuses.push(s)}},
-  paginate:async method => ({files:ui,commits:[],comments})[method],
-  graphql:async () => ({repository:{pullRequest:{commits:{nodes:[],pageInfo:{hasNextPage:false}}}}})};
+  const calls = [];
+  const github = {rest:{pulls:{get:async ({pull_number}) => ({data:prs.find(p => p.number === pull_number)}),list:'prs'},
+    issues:{listComments:'comments',createComment:async ({issue_number,body}) => {
+      comments[issue_number].push({id:10,user:{type:'Bot'},body});
+    }},repos:{createCommitStatus:async s => statuses.push(s),compareCommitsWithBasehead:async args => {
+      calls.push(args);return {data:{files:ui,commits:[{sha:'d'.repeat(40)}],total_commits:1}};
+    }}},paginate:async (method,args) => method === 'prs' ? prs.map(p => ({...p})) : comments[args.issue_number],
+    graphql:async (query,args) => ({repository:{object:{oid:args.oid,authors:{totalCount:0,nodes:[]}}}})};
   const context = {repo:{owner:'test',repo:'test'},payload:{pull_request:{number:1}}};
-  await run({github,context});
-  await run({github,context});
-  await run({github,context});
-  assert.equal(comments.length,1);
-  assert.ok(comments[0].body.includes('@kodjima33'));
-  assert.equal(statuses.at(-1).state,'failure');
-  comments.push(approve);
-  await run({github,context});
-  assert.equal(statuses.at(-1).state,'success');
-  comments.pop();
-  await run({github,context});
-  assert.equal(statuses.at(-1).state,'failure');
-  p.head = {sha:'b'.repeat(40)};
-  comments.push(approve);
-  await run({github,context});
-  assert.equal(statuses.at(-1).state,'failure');
-  assert.equal(comments.filter(c => c.user.type === 'Bot').length,2);
-  github.graphql = async () => {throw new Error('API failure');};
-  await assert.rejects(run({github,context}),/API failure/);
-  assert.equal(statuses.at(-1).state,'failure');
+  return {p,prs,comments,statuses,calls,github,context};
+}
+test('workflow blocks repeatedly, notifies once per head, approves and revokes', async () => {
+  const f = fixture();
+  await run(f); await run(f); await run(f);
+  assert.equal(f.comments[1].length,1);
+  assert.ok(f.comments[1][0].body.includes('@kodjima33'));
+  assert.equal(f.statuses.at(-1).state,'failure');
+  f.comments[1].push(approve); await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+  f.comments[1].pop(); await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  f.p.head = {sha:'b'.repeat(40)};
+  f.comments[1].push(approve); await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  assert.equal(f.comments[1].filter(c => c.user.type === 'Bot').length,2);
+  f.github.graphql = async () => {throw new Error('API failure');};
+  await assert.rejects(run(f),/API failure/);
+  assert.equal(f.statuses.at(-1).state,'failure');
+});
+test('another opener sharing SHA cannot clear the actor PR requirement', async () => {
+  const f = fixture();
+  f.prs.push({...f.p,number:2,user:{id:2}}); f.comments[2]=[];
+  f.context.payload.pull_request.number=2;
+  await run(f); assert.equal(f.statuses.at(-1).state,'failure');
+  f.comments[1].push(approve);
+  await run(f); assert.equal(f.statuses.at(-1).state,'success');
+});
+test('all evidence is immutable across H -> B -> H movement', async () => {
+  const f = fixture();
+  f.github.rest.pulls.listFiles = () => {throw new Error('mutable files forbidden');};
+  f.github.rest.pulls.listCommits = () => {throw new Error('mutable commits forbidden');};
+  await run(f);
+  assert.equal(f.calls[0].basehead,`${f.p.base.sha}...${f.p.head.sha}`);
+  f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:Array(300).fill(ui[0]),commits:[],total_commits:0}});
+  await assert.rejects(run(f),/Incomplete immutable file/);
+  assert.equal(f.statuses.at(-1).state,'failure');
+});
+test('actual desktop view locations are gated, services stay out', () => {
+  for (const filename of ['desktop/windows/src/renderer/src/insightToast.tsx',
+    'desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift',
+    'desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift']) {
+    assert.equal(decision({...pr,user:actor},[{filename}],[],[]).allowed,false,filename);
+  }
+  for (const filename of ['desktop/macos/Desktop/Sources/Services/TranscriptionService.swift',
+    'desktop/windows/src/main/transcription.ts']) {
+    assert.equal(decision({...pr,user:actor},[{filename}],[],[]).allowed,true,filename);
+  }
 });

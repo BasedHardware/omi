@@ -11,7 +11,7 @@ permissions:
   issues: write
   statuses: write
 concurrency:
-  group: ui-author-approval-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: ui-author-approval
   cancel-in-progress: false
 env:
   GIT_HTTP_LOW_SPEED_LIMIT: "1000"
