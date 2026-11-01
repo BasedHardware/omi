@@ -498,7 +498,11 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
             ),
         ]
         failures = [
-            ("Google API error", lambda: GoogleAPIError(f"Bad request: {self.SENSITIVE}", status_code=400), "code=400"),
+            (
+                "Google API error",
+                lambda: GoogleAPIError(f"Bad request: {self.SENSITIVE}", status_code=400),
+                "code=400 diagnostic=[redacted] exception_type=GoogleAPIError",
+            ),
             ("Network error", lambda: ConnectError(self.SENSITIVE), "code="),
         ]
         for kind, failure, code in failures:
