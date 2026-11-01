@@ -412,9 +412,13 @@ def encode_conversation_for_write(
     return _prepare_conversation_for_write(conversation_data, uid, level)
 
 
+class TranscriptSegmentsDecodeError(ValueError):
+    """The stored transcript field cannot safely authorize a segment merge."""
+
+
 def _require_segment_list(parsed: Any) -> List[Any]:
     if not isinstance(parsed, list):
-        raise ValueError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
+        raise TranscriptSegmentsDecodeError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
     return parsed
 
 
@@ -448,20 +452,26 @@ def _decode_transcript_segments_blob(
     """
     if isinstance(raw_segments, list):
         return raw_segments
-    if isinstance(raw_segments, str):
-        payload = encryption.decrypt(raw_segments, uid)
-        if require_decryption and payload == raw_segments:
-            # decrypt's display fallback returns the input on authentication
-            # failure. Even parseable plaintext is not a successful decode.
-            raise ValueError('undecodable transcript_segments: decryption failed')
-        if compressed:
-            parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
-        else:
-            parsed = json.loads(payload)
-        return _require_segment_list(parsed)
-    if isinstance(raw_segments, bytes) and compressed:
-        return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
-    raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
+    try:
+        if isinstance(raw_segments, str):
+            payload = encryption.decrypt(raw_segments, uid)
+            if require_decryption and payload == raw_segments:
+                # A display fallback is not proof of successful decryption.
+                raise TranscriptSegmentsDecodeError('undecodable transcript_segments: decryption failed')
+            if compressed:
+                parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+            else:
+                parsed = json.loads(payload)
+            return _require_segment_list(parsed)
+        if isinstance(raw_segments, bytes) and compressed:
+            return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
+    except TranscriptSegmentsDecodeError:
+        raise
+    except (ValueError, TypeError, zlib.error) as error:
+        raise TranscriptSegmentsDecodeError('undecodable transcript_segments: invalid encoding') from error
+    raise TranscriptSegmentsDecodeError(
+        f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}'
+    )
 
 
 def decode_transcript_segments_verified(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:

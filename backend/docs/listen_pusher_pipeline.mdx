@@ -4587,6 +4587,27 @@ only the model title plus the first structural error's `loc` and `type`
 (`validation_model`/`validation_loc`/`validation_type`) — never input
 values, field contents, or transcript text.
 
+### Legacy transcript decoder recovery
+
+An explicit null or absent stored transcript field merges as empty. Other
+malformed shapes and encodings raise `TranscriptSegmentsDecodeError` and remain
+unchanged. Only that decoder failure earns the legacy persist loop's escape:
+five consecutive pre-commit failures on the same conversation, with probes at
+most once per 60 seconds. Unrelated validation, replay-receipt, and absorption
+errors reset that streak. Diagnostics use the fixed `reason=` allowlist.
+
+After a successful escape, the displaced generation enters the existing
+`process_conversation` / finalization handoff in a tracked background task.
+This runs for single-channel and multi-channel sessions, survives socket
+teardown, and lets buffered speech persist on the new generation immediately.
+Normal finalization and episode processing retain their existing policies;
+this does not repair a corrupt stored transcript or force an episode boundary.
+A failed or unchanged-owner rollover retains the entire pending speech batch.
+
+The segment transaction's commit is also the legacy speech retry boundary.
+Later photo or reply failures retain photos for retry without replaying already
+committed speech into a fresh conversation.
+
 ## 6. Event Wire Protocol
 
 ### Server → Client (JSON over WS text frames)

@@ -130,6 +130,10 @@ class LateTranscriptReplyError(RuntimeError):
     """Late speech committed, but its read-side reply could not be built."""
 
 
+class LegacyPhotoPersistError(RuntimeError):
+    """Speech committed; retry the photos without replaying that speech."""
+
+
 class ConversationCache:
     """Cache one live conversation without hiding its freshness contract."""
 
@@ -614,6 +618,8 @@ class TranscriptProcessor:
                     # duplicate text on a different conversation.
                     self._queue_v2_photos(photos)
                 else:
+                    if getattr(self, '_legacy_segments_committed', False):
+                        raise LegacyPhotoPersistError
                     return None
             else:
                 if getattr(self.host.state, 'capture_timeline_v2', False):
@@ -1160,10 +1166,13 @@ class TranscriptProcessor:
                 value_error_failures = 0
                 continue
             except asyncio.CancelledError:
-                self._requeue_legacy_persist(legacy_retry_segments, photos)
+                self._requeue_legacy_persist(None if self._legacy_segments_committed else legacy_retry_segments, photos)
                 raise
             except Exception as error:
-                if isinstance(error, ValueError) and not self._legacy_segments_committed:
+                if (
+                    isinstance(error, conversations_db.TranscriptSegmentsDecodeError)
+                    and not self._legacy_segments_committed
+                ):
                     value_error_failures = (
                         value_error_failures + 1 if value_error_conversation_id == conversation_id else 1
                     )
@@ -1231,7 +1240,7 @@ class TranscriptProcessor:
                         log=logger,
                     )
                     continue
-                self._requeue_legacy_persist(legacy_retry_segments, photos)
+                self._requeue_legacy_persist(None if self._legacy_segments_committed else legacy_retry_segments, photos)
                 logger.error(
                     'Live transcript persist failed; retained %d segment(s) for retry type=%s reason=%s',
                     len(legacy_retry_segments or []),
@@ -1250,7 +1259,7 @@ class TranscriptProcessor:
                     # a failed nor a no-op probe consumes speech or resets debt.
                     self._oversized_rollover_probe_at = time.monotonic() + OVERSIZED_ROLLOVER_PROBE_SECONDS
                     try:
-                        await self.host.conversations.create_new_in_progress_conversation(rollover=True)
+                        await self.host.conversations.rollover_after_transcript_decode_failure()
                     except asyncio.CancelledError:
                         raise
                     except Exception as probe_error:
