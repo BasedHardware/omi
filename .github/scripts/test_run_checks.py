@@ -1452,13 +1452,16 @@ class DeferredMarkerTests(unittest.TestCase):
     def test_new_marker_requires_tracking_issue(self) -> None:
         module = load_deferred_marker_module()
         marker = "TO" + "DO"
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT, prefix=".manifest-marker-") as tmp:
-            root = Path(tmp)
-            candidate = root / "fixture.txt"
-            changed = root / "changed.txt"
-            relative = candidate.relative_to(REPO_ROOT).as_posix()
-            changed.write_text(f"{relative}\n", encoding="utf-8")
-
+        # The fixture must sit in the repository (the guard diffs repo-relative paths), but as single files, never
+        # a temporary directory: manifest checks now run in parallel, and a directory that vanishes mid-walk
+        # crashes another check's rglob (agents-md-lean FileNotFoundError, 2026-11-01). A vanished file does not,
+        # wherever TMPDIR points.
+        with tempfile.NamedTemporaryFile(dir=REPO_ROOT, prefix=".manifest-marker-", suffix=".txt", delete=False) as handle:
+            candidate = Path(handle.name)
+        with tempfile.NamedTemporaryFile(prefix="manifest-marker-changed-", suffix=".txt", delete=False) as handle:
+            changed = Path(handle.name)
+        try:
+            changed.write_text(f"{candidate.relative_to(REPO_ROOT).as_posix()}\n", encoding="utf-8")
             candidate.write_text(f"// {marker}: missing owner\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 1)
@@ -1466,6 +1469,9 @@ class DeferredMarkerTests(unittest.TestCase):
             candidate.write_text(f"// {marker}(#9448): owned follow-up\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 0)
+        finally:
+            candidate.unlink(missing_ok=True)
+            changed.unlink(missing_ok=True)
 
     def test_marker_guard_ignores_product_text_and_reformatted_existing_comments(self) -> None:
         module = load_deferred_marker_module()
