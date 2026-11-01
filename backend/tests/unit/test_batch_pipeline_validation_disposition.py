@@ -104,7 +104,7 @@ async def test_deterministic_failure_first_attempt_keeps_custody_and_drains_sibl
 
     worker, *_ = setup_worker(vad=broken)
     assert worker.process_batch([before]) == [ValidationFailureWork('poison', 'vad_windows', reason.value)]
-    worker = Mock()
+    worker = Mock(spec=['process_batch'])
     worker.process_batch.return_value = [
         ValidationFailureWork('poison', stage, reason.value),
         WorkResult('after', 'encrypted://after'),

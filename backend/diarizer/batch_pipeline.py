@@ -621,7 +621,7 @@ class PipelineWorker:
     ) -> Sequence[WorkResult | HeldWork | FailedWork | RecoveryWork | ValidationFailureWork]:
         return self.process_batch_deferred(items, authorize_dispatch=authorize_dispatch).settle()
 
-    def process_batch_deferred(self, items, *, authorize_dispatch=None, prepared=None):
+    def process_batch_deferred(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
         if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
@@ -637,15 +637,17 @@ class PipelineWorker:
             # Bound decoded host memory to two audio-hours (~460 MB float32).
             for item in items:
                 if group and seconds + item.duration_seconds > 7200:
-                    results.extend(self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared))
+                    results.extend(
+                        self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared).settle()
+                    )
                     prepared = None
                     group, seconds = [], 0
                 group.append(item)
                 seconds += item.duration_seconds
-            tail = self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared, defer_settle=True)
+            tail = self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared)
             return PendingResults(lambda: [*results, *tail.settle()], tail._futures)
 
-    def _process(self, items, *, authorize_dispatch=None, prepared=None, defer_settle=False):
+    def _process(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
         states: dict[str, dict[str, Any]] = {}
         windows, failed, results = [], set(), []
         failure_records = []
@@ -1263,7 +1265,7 @@ class PipelineWorker:
                         silence_records.append(item.segment_id)
                 except Exception as exc:
                     fail(item, exc, stage)
-            handed_off = defer_settle
+            handed_off = True
         finally:
             if prefetch is not None:
                 prefetch.close()
@@ -1370,5 +1372,4 @@ class PipelineWorker:
                     pass  # Observability failure must never discard healthy results.
             return results
 
-        pending = PendingResults(finish, [entry[2] for entry in pending_persist])
-        return pending if defer_settle else pending.settle()
+        return PendingResults(finish, [entry[2] for entry in pending_persist])
