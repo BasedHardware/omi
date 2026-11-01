@@ -1,8 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:omi/env/env.dart';
-import 'package:omi/env/environment_profile.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/ui/ui.dart';
 
@@ -90,16 +87,12 @@ class OnboardingStep extends StatelessWidget {
   }
 }
 
-/// How sign-in and the data & privacy step look: the Omi pendant on the light onboarding surface
-/// (default), or the launch film full-screen under white type. The film is a design comparison for
-/// now: `--dart-define=OMI_ONBOARDING_HERO=video`, honoured in debug and local_dev builds only.
+/// How sign-in and the data & privacy step look: the launch film full-screen under white type.
 abstract final class OnboardingHero {
-  static const _flag = String.fromEnvironment('OMI_ONBOARDING_HERO');
+  static const bool video = true;
 
-  static bool get video => (kDebugMode || Env.profile == AppEnvironmentProfile.localDev) && _flag == 'video';
-
-  /// Type and buttons: white over the film, the theme's own over the pendant.
-  static OmiPalette get palette => video ? OmiPalette.dark : OmiColors.active;
+  /// Type and buttons: white over the film.
+  static OmiPalette get palette => OmiPalette.dark;
 }
 
 /// Sign-in and data & privacy: the hero (pendant or film) above, [headline] centred in the space

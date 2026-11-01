@@ -14997,4 +14997,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Vraag een nieuwe code aan en stuur die vanuit $app.';
   }
+
+  @override
+  String get consentShortMessage => 'Omi maakt met AI notities van je gesprekken. Je kunt ze altijd verwijderen.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Verwerkt met $providers.';
+  }
 }

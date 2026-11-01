@@ -4518,5 +4518,7 @@
     "yearlySwitchDoneBody": "تم خصم {amount} اليوم. يتجدد في {date}.",
     "episodePartsCount": "{count, plural, zero{{count} أجزاء} one{{count} جزء} two{{count} جزءان} few{{count} أجزاء} many{{count} جزءًا} other{{count} جزء}}",
     "chatAppsWaitingMessageIn": "أرسل الرسالة من تطبيق {app}. تتحدث هذه الشاشة فور وصولها إلى Omi.",
-    "chatAppsCodeExpiredMessageIn": "احصل على رمز جديد وأرسله من {app}."
+    "chatAppsCodeExpiredMessageIn": "احصل على رمز جديد وأرسله من {app}.",
+    "consentShortMessage": "يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.",
+    "consentAiProviders": "تتم المعالجة بواسطة {providers}."
 }

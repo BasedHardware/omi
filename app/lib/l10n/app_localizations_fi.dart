@@ -14962,4 +14962,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Hae uusi koodi ja lähetä se $app-sovelluksesta.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Käsittely: $providers.';
+  }
 }

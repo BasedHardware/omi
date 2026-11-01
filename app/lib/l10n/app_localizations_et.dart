@@ -14951,4 +14951,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Hangi uus kood ja saada see rakendusest $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Töödeldakse teenustega $providers.';
+  }
 }

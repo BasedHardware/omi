@@ -15077,4 +15077,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Kumuha ng bagong code at ipadala ito mula sa $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Ginagamit ng Omi ang AI para gawing notes ang iyong mga usapan. Puwede mo itong burahin anumang oras.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Pinoproseso gamit ang $providers.';
+  }
 }

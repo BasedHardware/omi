@@ -15057,4 +15057,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Πάρε νέο κωδικό και στείλ\' τον από τα $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Επεξεργασία μέσω $providers.';
+  }
 }

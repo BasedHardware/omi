@@ -14745,4 +14745,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return '新しいコードを取得して、$appアプリから送信してください。';
   }
+
+  @override
+  String get consentShortMessage => 'OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers で処理されます。';
+  }
 }

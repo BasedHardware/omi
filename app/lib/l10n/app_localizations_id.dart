@@ -14973,4 +14973,13 @@ class AppLocalizationsId extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Dapatkan kode baru lalu kirim dari $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi menggunakan AI untuk mengubah percakapanmu menjadi catatan. Kamu bisa menghapusnya kapan saja.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Diproses dengan $providers.';
+  }
 }

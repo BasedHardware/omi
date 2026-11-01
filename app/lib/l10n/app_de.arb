@@ -4518,5 +4518,7 @@
     "yearlySwitchDoneBody": "Heute {amount} abgebucht. Verlängerung am {date}.",
     "episodePartsCount": "{count, plural, zero{{count} Teile} one{{count} Teil} two{{count} Teile} few{{count} Teile} many{{count} Teile} other{{count} Teile}}",
     "chatAppsWaitingMessageIn": "Sende die Nachricht in {app}. Dieser Bildschirm aktualisiert sich, sobald Omi sie erhält.",
-    "chatAppsCodeExpiredMessageIn": "Hol dir einen neuen Code und sende ihn in {app}."
+    "chatAppsCodeExpiredMessageIn": "Hol dir einen neuen Code und sende ihn in {app}.",
+    "consentShortMessage": "Omi macht mit KI aus deinen Gesprächen Notizen. Du kannst sie jederzeit löschen.",
+    "consentAiProviders": "Verarbeitet mit {providers}."
 }

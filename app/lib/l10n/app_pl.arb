@@ -4553,5 +4553,7 @@
     "yearlySwitchDoneBody": "Dziś pobrano {amount}. Odnowienie {date}.",
     "episodePartsCount": "{count, plural, zero{{count} części} one{{count} część} two{{count} części} few{{count} części} many{{count} części} other{{count} części}}",
     "chatAppsWaitingMessageIn": "Wyślij wiadomość w aplikacji {app}. Ten ekran odświeży się, gdy tylko Omi ją odbierze.",
-    "chatAppsCodeExpiredMessageIn": "Pobierz nowy kod i wyślij go z aplikacji {app}."
+    "chatAppsCodeExpiredMessageIn": "Pobierz nowy kod i wyślij go z aplikacji {app}.",
+    "consentShortMessage": "Omi za pomocą AI zamienia Twoje rozmowy w notatki. Możesz je usunąć w każdej chwili.",
+    "consentAiProviders": "Przetwarzane przez {providers}."
 }

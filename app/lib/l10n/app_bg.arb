@@ -4518,5 +4518,7 @@
     "yearlySwitchDoneBody": "Днес са таксувани {amount}. Подновяване на {date}.",
     "episodePartsCount": "{count, plural, zero{{count} части} one{{count} част} two{{count} части} few{{count} части} many{{count} части} other{{count} части}}",
     "chatAppsWaitingMessageIn": "Изпрати съобщението от {app}. Този екран се обновява веднага щом Omi го получи.",
-    "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}."
+    "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}.",
+    "consentShortMessage": "Omi използва ИИ, за да превърне разговорите ви в бележки. Можете да ги изтриете по всяко време.",
+    "consentAiProviders": "Обработва се с {providers}."
 }

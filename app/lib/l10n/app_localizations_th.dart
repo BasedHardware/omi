@@ -14885,4 +14885,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'ขอรหัสใหม่แล้วส่งจากแอป$app';
   }
+
+  @override
+  String get consentShortMessage => 'Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'ประมวลผลด้วย $providers';
+  }
 }

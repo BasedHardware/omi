@@ -14952,4 +14952,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Získajte nový kód a pošlite ho z aplikácie $app.';
   }
+
+  @override
+  String get consentShortMessage => 'Omi pomocou AI mení vaše konverzácie na poznámky. Kedykoľvek ich môžete vymazať.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Spracúva $providers.';
+  }
 }

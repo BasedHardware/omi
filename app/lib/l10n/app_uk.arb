@@ -4518,5 +4518,7 @@
     "yearlySwitchDoneBody": "Сьогодні списано {amount}. Поновлення {date}.",
     "episodePartsCount": "{count, plural, zero{{count} частини} one{{count} частина} two{{count} частини} few{{count} частини} many{{count} частин} other{{count} частини}}",
     "chatAppsWaitingMessageIn": "Надішліть повідомлення в застосунку «{app}». Цей екран оновиться, щойно Omi його отримає.",
-    "chatAppsCodeExpiredMessageIn": "Отримайте новий код і надішліть його з застосунку «{app}»."
+    "chatAppsCodeExpiredMessageIn": "Отримайте новий код і надішліть його з застосунку «{app}».",
+    "consentShortMessage": "Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.",
+    "consentAiProviders": "Обробка: {providers}."
 }

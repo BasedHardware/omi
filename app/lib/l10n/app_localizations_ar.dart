@@ -14870,4 +14870,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'احصل على رمز جديد وأرسله من $app.';
   }
+
+  @override
+  String get consentShortMessage => 'يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'تتم المعالجة بواسطة $providers.';
+  }
 }

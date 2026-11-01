@@ -11944,5 +11944,7 @@
     "yearlySwitchDoneBody": "ఈరోజు {amount} వసూలు చేశాం. పునరుద్ధరణ {date}.",
     "episodePartsCount": "{count, plural, zero{{count} భాగాలు} one{{count} భాగాలు} two{{count} భాగాలు} few{{count} భాగాలు} many{{count} భాగాలు} other{{count} భాగాలు}}",
     "chatAppsWaitingMessageIn": "{app}లో మెసేజ్ పంపండి. Omiకి అందగానే ఈ స్క్రీన్ అప్‌డేట్ అవుతుంది.",
-    "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి."
+    "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి.",
+    "consentShortMessage": "Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.",
+    "consentAiProviders": "{providers} ద్వారా ప్రాసెస్ చేయబడుతుంది."
 }

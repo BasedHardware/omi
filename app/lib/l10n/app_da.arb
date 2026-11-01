@@ -4560,5 +4560,7 @@
     "yearlySwitchDoneBody": "{amount} trukket i dag. Fornyes {date}.",
     "episodePartsCount": "{count, plural, zero{{count} dele} one{{count} del} two{{count} dele} few{{count} dele} many{{count} dele} other{{count} dele}}",
     "chatAppsWaitingMessageIn": "Send beskeden i {app}. Denne skærm opdateres, så snart Omi modtager den.",
-    "chatAppsCodeExpiredMessageIn": "Få en ny kode, og send den fra {app}."
+    "chatAppsCodeExpiredMessageIn": "Få en ny kode, og send den fra {app}.",
+    "consentShortMessage": "Omi bruger AI til at gøre dine samtaler til noter. Du kan slette dem når som helst.",
+    "consentAiProviders": "Behandles med {providers}."
 }

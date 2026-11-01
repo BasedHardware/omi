@@ -14960,4 +14960,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Lấy mã mới và gửi từ $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Được xử lý bằng $providers.';
+  }
 }

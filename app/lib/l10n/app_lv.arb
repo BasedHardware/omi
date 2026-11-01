@@ -4518,5 +4518,7 @@
     "yearlySwitchDoneBody": "Šodien iekasēti {amount}. Atjaunojas {date}.",
     "episodePartsCount": "{count, plural, zero{{count} daļu} one{{count} daļa} two{{count} daļas} few{{count} daļas} many{{count} daļas} other{{count} daļas}}",
     "chatAppsWaitingMessageIn": "Nosūtiet ziņu lietotnē {app}. Šis ekrāns atjaunosies, tiklīdz Omi to saņems.",
-    "chatAppsCodeExpiredMessageIn": "Iegūstiet jaunu kodu un nosūtiet to no lietotnes {app}."
+    "chatAppsCodeExpiredMessageIn": "Iegūstiet jaunu kodu un nosūtiet to no lietotnes {app}.",
+    "consentShortMessage": "Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.",
+    "consentAiProviders": "Apstrādā {providers}."
 }

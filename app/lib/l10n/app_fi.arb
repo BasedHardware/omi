@@ -4518,5 +4518,7 @@
     "yearlySwitchDoneBody": "Tänään veloitettiin {amount}. Uusiutuu {date}.",
     "episodePartsCount": "{count, plural, zero{{count} osaa} one{{count} osa} two{{count} osaa} few{{count} osaa} many{{count} osaa} other{{count} osaa}}",
     "chatAppsWaitingMessageIn": "Lähetä viesti {app}-sovelluksessa. Tämä näkymä päivittyy heti, kun Omi saa sen.",
-    "chatAppsCodeExpiredMessageIn": "Hae uusi koodi ja lähetä se {app}-sovelluksesta."
+    "chatAppsCodeExpiredMessageIn": "Hae uusi koodi ja lähetä se {app}-sovelluksesta.",
+    "consentShortMessage": "Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.",
+    "consentAiProviders": "Käsittely: {providers}."
 }

@@ -14986,4 +14986,13 @@ class AppLocalizationsSl extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Pridobite novo kodo in jo pošljite iz aplikacije $app.';
   }
+
+  @override
+  String get consentShortMessage =>
+      'Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Obdelano z $providers.';
+  }
 }
