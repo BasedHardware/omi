@@ -1936,6 +1936,11 @@ checks:
     triggers: ["backend/utils/mcp_server/registry.py", "scripts/generate_mcp_tools_doc.py", "docs/doc/developer/mcp/tools.mdx", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the MCP tools page hand-paraphrased all 26 advertised tools and had already lagged the registry (missing fields/summary_only/cursor/timezone parameters on conversation and screen-activity tools); the tool inventory (name, description, scope) is now generated from TOOL_SPECS so an undocumented new tool fails the drift check"
+  - id: plugins-setup-url-hardening-tests
+    command: ["python3", "plugins/test_plugins_setup_url_hardening.py"]
+    triggers: ["plugins/omi-linear-app/**", "plugins/omi-hive-app/**", "plugins/omi-shopify-app/**", "plugins/test_plugins_setup_url_hardening.py"]
+    lanes: ["local", "ci"]
+    reason: "harden setup page templates and redirect URLs in linear, hive, and shopify plugins against parameter/query injection"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
