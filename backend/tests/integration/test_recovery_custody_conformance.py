@@ -102,7 +102,8 @@ def held_recovery(h, monkeypatch, *, speech=1.0):
     artifacts.find_recovery_result.return_value = None
     artifacts.persist_recovery_result.return_value = 'gs://synthetic/result#18'
     provider = Mock(side_effect=MultilingualEmpty(DURATION, spans))
-    second = Mock(side_effect=AssertionError('no second provider is admitted'))
+    # An uncertain second-chance call (a866d27: one Soniox second chance for Modulate-empty held units).
+    second = Mock(side_effect=RuntimeError('synthetic second-provider failure'))
     recovery = quarantine_recovery.QuarantineRecovery(
         h.store,
         artifacts,
@@ -133,7 +134,9 @@ def test_pl049_positive_speech_empty_recovery_keeps_custody_and_spends_once(h, m
     assert provider.call_count == artifacts.fetch_audio.call_count == 1
     artifacts.persist_recovery_result.assert_not_called()
     assert artifacts.method_calls == [call.fetch_audio(ANY)]
-    second.assert_not_called()
+    # Positive speech earns at most one independent second chance; an uncertain call keeps custody held and
+    # is never repeated by later sweeps.
+    assert second.call_count == 1
 
 
 def test_pl049_measured_silence_can_settle_without_paid_recovery(h, monkeypatch):
