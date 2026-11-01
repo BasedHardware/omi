@@ -41,7 +41,7 @@ import database.jobstore.codec as codec
 from database.jobstore.connection import Pool
 
 # Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: that module pulls in Firestore).
-PROVIDER_STATES = frozenset({'provider_pending', 'provider_running'})
+PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 T = TypeVar('T')
 
@@ -257,8 +257,8 @@ class PostgresStore:
                     (self.namespace, priority),
                 ).fetchone()
             return row[0]
-        # The uncommitted-age proxy walks a bounded FIFO prefix past allowance holds, as on Firestore.
-        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold
+        # The uncommitted-age proxy walks a bounded FIFO prefix past policy holds, as on Firestore.
+        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_policy_hold
 
         with self._read_conn() as conn:
             rows = conn.execute(
@@ -268,7 +268,7 @@ class PostgresStore:
             ).fetchall()
         oldest_hold = None
         for enqueued_at, doc in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
-            if not is_allowance_policy_hold(doc):
+            if not is_policy_hold(doc):
                 return enqueued_at
             oldest_hold = enqueued_at if oldest_hold is None else oldest_hold
         # Truncated by the sentinel row: fail toward the oldest hold's age, never a false fresh zero.
