@@ -562,6 +562,17 @@ class TestSyncEndpointCodeStructure:
         source = self._read_sync_source()
         assert 'run_blocking(critical_executor, get_hard_restriction_status, uid)' in source
 
+    def test_hard_restricted_429_uses_retry_after_headers(self):
+        """Hard-restricted v2 sync responses share an explicit machine-readable contract (v1 is a 410 stub)."""
+        source = self._read_sync_source()
+        v2 = self._function_body(source, 'async def sync_local_files_v2(')
+        assert 'get_hard_restriction_retry_after_seconds' not in source
+        assert 'FAIR_USE_RATE_LIMIT_CODE' in source
+        assert 'headers = fair_use_rate_limit_headers(safe_retry_after, base_headers)' in source
+        assert 'return await _fair_use_restriction_response(' in v2
+        assert 'retry_after=retry_after' in v2
+        assert 'run_blocking(critical_executor, fair_use_rate_limit_headers' not in source
+
     def test_v2_propagates_app_version_into_rejection_telemetry(self):
         source = self._function_body(self._read_sync_source(), 'async def sync_local_files_v2(')
         assert "x_app_version: Optional[str] = Header(None, alias='X-App-Version')" in source
