@@ -917,6 +917,7 @@ def test_frames_without_speech_do_not_trigger_the_no_frames_close(monkeypatch):
     async def run():
         socket, idle, _, _, _, tick = build(monkeypatch, seconds=45)
         silence = b'\x00\x00' * 1600
+        idle._last_speech_at = tick[0] - 100  # heard speech long ago: the 45 s VAD wait applies
         for _ in range(40):
             tick[0] += 1
             socket.send(silence, wall_time=tick[0])
@@ -1068,10 +1069,14 @@ def test_default_rearm_holds_a_reopened_socket_for_sixty_seconds(monkeypatch):
         silence = SimpleNamespace(is_speech=False, audio_to_send=b'')
         idle.observe_vad(silence, 'active')
         tick[0] += 20
-        before = REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'vad'}) or 0
+        # No speech yet on this leg: the silent start closes under the pre_speech trigger.
+        before = REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'pre_speech'}) or 0
         idle.observe_vad(silence, 'active')
         await idle._close_task
-        assert REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'vad'}) == before + 1
+        assert (
+            REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'pre_speech'})
+            == before + 1
+        )
         assert socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
         assert await socket.complete_send()
         reopened = tick[0]
@@ -1299,6 +1304,57 @@ def test_no_frames_refusal_is_counted_once_across_watchdog_retries(monkeypatch):
         tick[0] += 65
         assert idle.check_no_frames() is None
         await idle._close_task
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def _closes(trigger):
+    return REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': trigger}) or 0
+
+
+def test_silent_session_start_closes_at_the_floor_and_reopens_on_first_speech(monkeypatch):
+    async def run():
+        socket, idle, gate, peers, _, tick = build(monkeypatch, seconds=45)
+        silence = b'\x00\x00' * 1600
+        before = _closes('pre_speech')
+        socket.send(silence, wall_time=tick[0])
+        tick[0] += 19.9
+        socket.send(silence, wall_time=tick[0])
+        assert idle._close_task is None
+        tick[0] += 0.1
+        socket.send(silence, wall_time=tick[0])
+        await idle._close_task
+        assert _closes('pre_speech') == before + 1
+        assert peers[0].closed and not socket.is_connection_dead
+        assert _bytes(peers[0]) == b''  # nothing was paid for but silence
+        speech = b'\x01\x00' * 1600
+        tick[0] += 5
+        assert socket.send(speech, wall_time=tick[0])
+        assert len(peers) == 1
+        assert await socket.complete_send()
+        socket.commit_send()
+        await settle()
+        assert len(peers) == 2
+        assert _bytes(peers[1]).endswith(speech)  # the onset (pre-roll + speech) reaches the reopened socket
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_after_speech_the_full_vad_wait_applies(monkeypatch):
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch, seconds=45)
+        before = _closes('vad')
+        socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        tick[0] += 44
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        assert idle._close_task is None
+        tick[0] += 1
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        await idle._close_task
+        assert _closes('vad') == before + 1
         await idle.drain_and_close()
 
     asyncio.run(run())

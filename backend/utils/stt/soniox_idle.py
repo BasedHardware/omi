@@ -15,6 +15,7 @@ from typing import Any, Awaitable, Callable
 
 from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
 from config.soniox_idle import (
+    MIN_IDLE_CLOSE_SECONDS,
     IdleCohortSettings,
     VAD_HANGOVER_SECONDS,
     cohort_armed,
@@ -43,6 +44,10 @@ from config.live_stt_idle import idle_reopen_cost_reselect_enabled
 IDLE_DRAIN_SECONDS = 8.0
 # PCM retained while the transport is closed (VAD pre-roll included).
 ONSET_BUFFER_SECONDS = 10
+# Before a leg has heard any speech there are no words to finalize and no
+# speaker scope to split, so a silent session start closes at the threshold
+# floor instead of paying the full VAD wait. The first onset reopens it.
+PRE_SPEECH_CLOSE_SECONDS = MIN_IDLE_CLOSE_SECONDS
 _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
 
 
@@ -206,7 +211,7 @@ class IdleSonioxSocket(STTSocket):
             self._refusal_counted = False
         elif self._silent_since is None:
             self._silent_since = now
-        elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._seconds:
+        elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._threshold():
             # ``audio_to_send`` is non-empty through the VAD hangover, so a
             # close can only start after the gate released the word boundary.
             if not self._idle_budget.reserve_close(now):
@@ -215,7 +220,13 @@ class IdleSonioxSocket(STTSocket):
             # Reserve before scheduling so repeated VAD callbacks cannot spend
             # the same rolling-hour slot. These limits belong to the logical
             # session and survive each replacement transport.
-            self._begin_idle_close(now, 'vad')
+            self._begin_idle_close(now, 'vad' if self._heard_speech() else 'pre_speech')
+
+    def _heard_speech(self) -> bool:
+        return self._last_speech_at != float('-inf')
+
+    def _threshold(self) -> float:
+        return self._seconds if self._heard_speech() else min(self._seconds, PRE_SPEECH_CLOSE_SECONDS)
 
     def _count_refusal(self, now: float) -> None:
         # Once per idle episode: VAD calls this per frame and the watchdog per

@@ -421,7 +421,7 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                 ),
                 Counter(
                     'omi_soniox_idle_closes_by_trigger_total',
-                    'Planned paid transport closes by trigger (vad silence or no client frames)',
+                    'Planned paid transport closes by trigger (vad silence, pre_speech silence or no client frames)',
                     ['trigger'],
                 ),
                 Counter(
@@ -470,7 +470,7 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                 _soniox_idle_metrics.drains.labels(outcome=_outcome)
             for _reason in ('rearm', 'cap'):
                 _soniox_idle_metrics.close_refusals.labels(reason=_reason)
-            for _trigger in ('vad', 'no_frames'):
+            for _trigger in ('vad', 'pre_speech', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
                 for _arm in SONIOX_IDLE_COHORT_ARMS:
                     _soniox_idle_metrics.cohort_closes_by_trigger.labels(arm=_arm, trigger=_trigger)
