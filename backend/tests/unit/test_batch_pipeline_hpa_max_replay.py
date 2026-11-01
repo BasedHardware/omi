@@ -59,12 +59,20 @@ def _load_series():
     payload = json.loads(FIXTURE.read_text())
     epochs = [row[0] for row in payload['rows']]
     actual = [(row[0], row[1]) for row in payload['rows']]
-    chain = [(row[0], row[2]) for row in payload['rows'] if row[2] is not None]
-    pool = [(row[0], row[3]) for row in payload['rows'] if row[3] is not None]
+    # Null samples stay in the series: a gap must read as unavailable, never
+    # as an interpolation between its neighbors.
+    chain = [(row[0], row[2]) for row in payload['rows']]
+    pool = [(row[0], row[3]) for row in payload['rows']]
     return epochs, actual, chain, pool
 
 
 def _interp(series, t):
+    """Value at t, or None while the metric is unavailable.
+
+    A sample gap means the external metric returned no value; the controller
+    cannot interpolate through it, so steps bracketed by a missing sample are
+    unavailable (hold), matching the fail-safe of the adapter rules.
+    """
     if t <= series[0][0]:
         return series[0][1]
     if t >= series[-1][0]:
@@ -77,6 +85,8 @@ def _interp(series, t):
         else:
             hi = mid
     (t0, v0), (t1, v1) = series[lo], series[hi]
+    if v0 is None or v1 is None:
+        return None
     if t1 == t0:
         return v0
     return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
@@ -111,8 +121,11 @@ def _replay(recommendations, config):
             down_window.append((t, rec))
             window = [r for stamp, r in down_window if stamp >= t - config['down_stab']]
             if window and max(window) < current:
+                # The Pods policy bounds how fast the fleet may shrink: even a
+                # sustained floor recommendation sheds at most down_pods per
+                # down_period, never jumping straight to the recommendation.
                 allowance = config['down_pods'] * max(1, STEP_SECONDS // config['down_period'])
-                current = max(config['min_replicas'], min(rec, current - allowance))
+                current = max(config['min_replicas'], max(rec, current - allowance))
         trace.append((t, current))
         t += STEP_SECONDS
     return trace

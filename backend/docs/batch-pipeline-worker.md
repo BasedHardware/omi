@@ -309,7 +309,7 @@ ready backlog is real work that converts the moment the wedge clears, so the
 ready count holds capacity exactly when occupancy under-reads. Occupancy pays
 the reverse dividend — through a healthy drain the backlog reads low while
 flights are real, and the 24h replay shows the chain signal covering hours the
-ready-only answer starves (52 minutes), with the combined replay at 0 starved
+ready-only answer starves (37 minutes), with the combined replay at 0 starved
 minutes and replica counts at or above the ready-only answer whenever backlog
 exceeds 16 units per worker. Scale-down sheds one pod per 600s after a 1800s
 window so a stockout never costs a warm on-demand node it cannot re-obtain; the
