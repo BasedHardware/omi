@@ -113,8 +113,11 @@ Neither vendor's rate limit is in our records. Find them on staging only,
 never with a burst in prod.
 
 1. Preconditions: `staging-provider-stt` exists at the #24222 size; the lead
-   raises it for the window only (staging config-train) to 50 concurrent / 20
-   per second, so the 25 and 50 rungs are reachable, and restores it after.
+   raises it for the window only (staging config-train) and restores it after.
+   Each rung sets `max_concurrent_dispatches` to its C and
+   `max_dispatches_per_second` to at least C / L, where L is rung 1's measured
+   latency (50 per second covers every rung down to L = 1s). A rung whose
+   dispatch rate caps its in-flight count below C is not a measurement.
    Slice C's breaker is on in staging. Synthetic 30s units (non-speech and
    speech fixtures, no user audio).
 2. Audio budget: a rung of C concurrent calls at latency L sends C / L units/s,
@@ -167,7 +170,9 @@ outage counts as the drill for its step. Repeat at 25% at low peak.
 ## Guard interlocks (must hold before any provider traffic)
 
 Lead ruling `d914f8` (11-01): **no legacy draining cohort and no provider
-traffic in prod until F1 and F2 are fixed and adopted** in the observer. These
+traffic in prod until F1 and F2 are fixed and adopted** in the observer. Vendor
+routing above 0% additionally needs F3 adopted, because only then can
+`vendor_held` units exist and age past the 2h backstop. These
 findings come from offline tests at 150k units against the observer's own
 predicates:
 
@@ -201,8 +206,8 @@ through the HPA. `vendor_held` units that reroute to the ring do.
 
 Follows vendorscope-ops section 5. Each step is one write to roll back.
 
-0. Preconditions: #24222 queues live; slices A–D merged dormant; F1/F2
-   adopted (above); staging drill table green; staging ladder receipt; floor 4
+0. Preconditions: #24222 queues live; slices A–D merged dormant; F1, F2 and
+   F3 adopted (above); staging drill table green; staging ladder receipt; floor 4
    live with at least 4 Ready OD nodes.
 1. Shadow at the current batch percent: decisions counted, routing unchanged.
 2. 1% vendor routing with floor share on, plus the prod drill.
