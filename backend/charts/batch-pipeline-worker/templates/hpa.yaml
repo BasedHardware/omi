@@ -42,7 +42,9 @@ spec:
 {{- if and .Values.enabled .Values.autoscaling.enabled }}
 {{- $root := . }}
 {{- range $instance := (include "batch-pipeline-worker.instances" . | fromYamlArray) }}
+{{- if not (hasKey $instance "fixedReplicas") }}
 {{ include "batch-pipeline-worker.hpa" (dict "Values" $root.Values "Release" $root.Release "instance" $instance) }}
 ---
+{{- end }}
 {{- end }}
 {{- end }}

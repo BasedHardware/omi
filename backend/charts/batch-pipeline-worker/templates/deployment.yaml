@@ -29,7 +29,14 @@ spec:
   # before new ones start, so the deadline covers drain plus startup.
   progressDeadlineSeconds: 2400
   {{- $replicas := .Values.replicaCount }}
-  {{- if .Values.autoscaling.enabled }}
+  {{- if hasKey .instance "fixedReplicas" }}
+  {{- $replicas = .instance.fixedReplicas }}
+  {{- /* Operators scale the fallback with kubectl; upgrades keep the live count. */}}
+  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
+  {{- if $current }}
+  {{- $replicas = dig "spec" "replicas" $replicas $current }}
+  {{- end }}
+  {{- else if .Values.autoscaling.enabled }}
   {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
   {{- if $current }}
   {{- $replicas = dig "spec" "replicas" $replicas $current }}

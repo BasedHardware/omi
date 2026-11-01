@@ -229,7 +229,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
-        assert len(deployments) == 1 and deployment['spec']['replicas'] == 4  # Preserve baseline/live count for HPA.
+        assert len(deployments) == 2 and deployment['spec']['replicas'] == 4  # Preserve baseline/live count for HPA.
         hpa = manifests['HorizontalPodAutoscaler']['spec']
         assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 16
         assert 'omi.ai/required-companion-deployment' not in deployment['metadata'].get('annotations', {})
@@ -385,10 +385,12 @@ def test_production_cutover_is_single_od_hpa_min4_max16():
     assert list(hpas) == ['synthetic-worker']
     assert hpas['synthetic-worker']['minReplicas'] == 4
     assert hpas['synthetic-worker']['maxReplicas'] == 16
-    pods = [d for d in docs if d['kind'] == 'Deployment']
-    assert len(pods) == 1
-    selector = pods[0]['spec']['template']['spec']['nodeSelector']
+    pods = {d['metadata']['name']: d for d in docs if d['kind'] == 'Deployment'}
+    assert set(pods) == {'synthetic-worker', 'synthetic-worker-t4'}
+    selector = pods['synthetic-worker']['spec']['template']['spec']['nodeSelector']
     assert selector['cloud.google.com/gke-nodepool'] == 'batch-pipeline-pool'
+    # The T4 stockout fallback ships at zero replicas with no HPA.
+    assert pods['synthetic-worker-t4']['spec']['replicas'] == 0
 
 
 @pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '2400s'), ('diarizer', '600s')])
@@ -476,7 +478,11 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert config['image']['digest'] == ''  # Workflow supplies the built prod digest.
     result = render('-f', str(values), '--set-string', 'image.digest=sha256:' + 'c' * 64)
     assert result.returncode == 0, result.stderr
-    docs = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
+    rendered = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    docs = {doc['kind']: doc for doc in rendered}
+    docs['Deployment'] = next(
+        d for d in rendered if d['kind'] == 'Deployment' and d['metadata']['name'] == 'synthetic-worker'
+    )
     env = {e['name']: e.get('value') for e in docs['Deployment']['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_ENABLED'] == 'true'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
@@ -588,3 +594,43 @@ def test_worker_dispatch_scope_can_be_bound_without_changing_other_admission():
     assert env['STT_CAP_DISPATCH_COHORT'] == 'uid:synthetic'
     assert env['STT_CAP_DISPATCH_LANES'] == 'batch'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
+
+
+def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'autoscaling.enabled=true,autoscaling.minReplicas=4,autoscaling.maxReplicas=16,t4Fallback.enabled=true',
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    deployments = {d['metadata']['name']: d for d in docs if d['kind'] == 'Deployment'}
+    hpas = {d['metadata']['name'] for d in docs if d['kind'] == 'HorizontalPodAutoscaler'}
+    monitors = {d['metadata']['name'] for d in docs if d['kind'] == 'PodMonitoring'}
+    assert set(deployments) == monitors == {'synthetic-worker', 'synthetic-worker-t4'}
+    assert hpas == {'synthetic-worker'}
+    primary, t4 = deployments['synthetic-worker'], deployments['synthetic-worker-t4']
+    assert t4['spec']['replicas'] == 0
+    pod = t4['spec']['template']
+    assert pod['metadata']['labels']['app.kubernetes.io/instance'] == 'synthetic-worker-t4'
+    assert t4['spec']['selector']['matchLabels'] == pod['metadata']['labels']
+    assert pod['spec']['nodeSelector'] == {
+        **primary['spec']['template']['spec']['nodeSelector'],
+        'cloud.google.com/gke-nodepool': 'batch-pipeline-t4-pool',
+    }
+    assert pod['spec']['tolerations'] == primary['spec']['template']['spec']['tolerations']
+    assert pod['spec']['containers'][0]['image'] == primary['spec']['template']['spec']['containers'][0]['image']
+    assert t4['spec']['strategy']['type'] == 'Recreate'
+
+
+@pytest.mark.parametrize('setting', ['t4Fallback.nodePool=batch-pipeline-pool', 't4Fallback.replicas=-1'])
+def test_t4_fallback_refuses_the_primary_pool_or_negative_replicas(setting):
+    result = render(*enabled_arguments(), '--set', 't4Fallback.enabled=true', '--set', setting)
+    assert result.returncode != 0
+
+
+def test_t4_fallback_is_off_outside_production_values():
+    result = render(*enabled_arguments())
+    assert result.returncode == 0, result.stderr
+    names = [d['metadata']['name'] for d in yaml.safe_load_all(result.stdout) if d and d['kind'] == 'Deployment']
+    assert names == ['synthetic-worker']

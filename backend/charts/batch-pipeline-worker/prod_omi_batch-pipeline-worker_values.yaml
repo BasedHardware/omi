@@ -36,6 +36,11 @@ nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
   service: batch-pipeline
   env: prod
+# L4 stockout fallback (11-01: 13 workers Pending on L4 at peak). Ships at zero
+# replicas; scale <release>-t4 up only while L4 workers are Pending, then back
+# to 0. Needs batch-pipeline-t4-pool (n1-standard-8 + T4, zones a/b/c/f).
+t4Fallback:
+  enabled: true
 tolerations:
   - key: omi.ai/batch-pipeline
     operator: Equal
