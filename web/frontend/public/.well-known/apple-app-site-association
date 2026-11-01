@@ -24,6 +24,22 @@
             {
               "/":"/tasks/*",
               "comment":"Matches any URL with a path that starts with /tasks/."
+            },
+            {
+              "/":"/conversation/*",
+              "comment":"Private conversation link (singular). Plural /conversations/ is the public share page."
+            },
+            {
+              "/":"/task/*",
+              "comment":"Private task link (singular). Plural /tasks/ is the public shared-tasks page."
+            },
+            {
+              "/":"/memory/*",
+              "comment":"Private memory link (singular)."
+            },
+            {
+              "/":"/items",
+              "comment":"Private list of items: /items?conversation=<id>&task=<id>&memory=<id> (any query)."
             }
           ]
         }

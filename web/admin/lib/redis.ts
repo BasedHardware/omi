@@ -1,21 +1,31 @@
-import Redis from 'ioredis';
+import Redis from "ioredis";
 
 let _redis: Redis | null = null;
 
-function getRedis(): Redis | null {
+export function getRedis(): Redis | null {
   if (_redis) return _redis;
 
   const host = process.env.REDIS_HOST;
-  const port = parseInt(process.env.REDIS_PORT || '6379', 10);
+  const port = parseInt(process.env.REDIS_PORT || "6379", 10);
   const password = process.env.REDIS_PASSWORD;
 
   if (!host) {
-    console.warn('REDIS_HOST not set — cache invalidation will be skipped');
+    console.warn("REDIS_HOST not set — cache invalidation will be skipped");
     return null;
   }
 
-  _redis = new Redis({ host, port, password: password || undefined, lazyConnect: true });
-  _redis.on('error', (err) => console.error('Redis error:', err.message));
+  _redis = new Redis({
+    host,
+    port,
+    password: password || undefined,
+    lazyConnect: true,
+    // Best-effort invalidation must release durable writes during a blackhole.
+    connectTimeout: 100,
+    commandTimeout: 100,
+    maxRetriesPerRequest: 0,
+    autoResendUnfulfilledCommands: false,
+  });
+  _redis.on("error", (err) => console.error("Redis error:", err.message));
   return _redis;
 }
 
@@ -42,11 +52,15 @@ export async function getJsonCache<T>(key: string): Promise<T | null> {
  * Write a JSON value to Redis with a TTL (in seconds). Fail-open: any
  * serialization or transport error is logged and swallowed.
  */
-export async function setJsonCache(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+export async function setJsonCache(
+  key: string,
+  value: unknown,
+  ttlSeconds: number
+): Promise<void> {
   const redis = getRedis();
   if (!redis) return;
   try {
-    await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+    await redis.set(key, JSON.stringify(value), "EX", ttlSeconds);
   } catch (err) {
     console.error(`Redis set ${key} failed:`, err);
   }
@@ -64,6 +78,6 @@ export async function invalidateEnforcementCache(uid: string): Promise<void> {
   try {
     await redis.del(`fair_use:stage:${uid}`);
   } catch (err) {
-    console.error('Failed to invalidate enforcement cache:', err);
+    console.error("Failed to invalidate enforcement cache:", err);
   }
 }

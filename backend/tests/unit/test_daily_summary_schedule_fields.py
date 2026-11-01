@@ -92,6 +92,36 @@ def test_set_daily_summary_hour_local_rejects_out_of_range():
         notifications_module.set_daily_summary_hour_local('uid1', 24)
 
 
+def test_daily_summary_depth_round_trips_without_replacing_schedule():
+    path = ('users', 'uid1')
+    store = StrictFirestore({path: {'daily_summary_enabled': False, 'daily_summary_hour_local': 0}})
+
+    assert notifications_module.get_daily_summary_depth('uid1', firestore_client=store) == 'brief'
+    assert notifications_module.set_daily_summary_depth('uid1', 'deep', firestore_client=store) is True
+    assert notifications_module.get_daily_summary_depth('uid1', firestore_client=store) == 'deep'
+    assert store.rows[path] == {
+        'daily_summary_enabled': False,
+        'daily_summary_hour_local': 0,
+        'daily_summary_depth': 'deep',
+    }
+
+
+def test_daily_summary_depth_handles_missing_and_malformed_profiles():
+    path = ('users', 'uid1')
+    store = StrictFirestore()
+    assert notifications_module.get_daily_summary_depth('uid1', firestore_client=store) == 'brief'
+
+    store.rows[path] = {'daily_summary_depth': 'unsupported'}
+    assert notifications_module.get_daily_summary_depth('uid1', firestore_client=store) == 'brief'
+
+
+def test_daily_summary_depth_rejects_invalid_write_without_transaction():
+    store = StrictFirestore()
+    with pytest.raises(ValueError, match='Invalid daily summary depth'):
+        notifications_module.set_daily_summary_depth('uid1', 'unsupported', firestore_client=store)
+    assert not store.transactions
+
+
 @pytest.mark.parametrize('time_zone', [None, 'Asia/Kolkata'])
 def test_token_registration_delegates_defaults_instead_of_reusing_its_migration_snapshot(monkeypatch, time_zone):
     # Token migration is not a transaction fake; only its delegation is under test.
@@ -108,3 +138,38 @@ def test_token_registration_delegates_defaults_instead_of_reusing_its_migration_
     )
     schedule.assert_called_once_with('uid1', {'time_zone': time_zone} if time_zone else {}, firestore_client=store)
     user.set.assert_not_called()
+
+
+@pytest.mark.parametrize('time_zone', ['America/Coyhaique', 'Invalid/Timezone', '', '   '])
+def test_save_token_unschedulable_timezone_omits_schedule_time_zone(monkeypatch, time_zone):
+    store = MagicMock()
+    user = store.collection.return_value.document.return_value
+    user.get.return_value.exists = False
+    user.collection.return_value.document.return_value.get.return_value.exists = False
+    schedule = MagicMock()
+    monkeypatch.setattr(notifications_module, '_update_summary_schedule', schedule)
+    notifications_module.save_token(
+        'uid1',
+        {'device_key': 'synthetic', 'fcm_token': 'not-a-real-token', 'time_zone': time_zone},
+        firestore_client=store,
+    )
+    schedule.assert_called_once_with('uid1', {}, firestore_client=store)
+    user.set.assert_not_called()
+
+
+@pytest.mark.parametrize('time_zone', ['America/Coyhaique', 'Invalid/Timezone', '', '   '])
+def test_set_user_time_zone_unschedulable_timezone_omits_schedule_time_zone(monkeypatch, time_zone):
+    store = MagicMock()
+    schedule = MagicMock()
+    monkeypatch.setattr(notifications_module, '_update_summary_schedule', schedule)
+    notifications_module.set_user_time_zone('uid1', time_zone, firestore_client=store)
+    schedule.assert_called_once_with('uid1', {}, firestore_client=store)
+
+
+@pytest.mark.parametrize('time_zone', ['America/Coyhaique', 'Invalid/Timezone', '', '   '])
+def test_set_user_time_zone_if_missing_rejects_unschedulable_timezone(monkeypatch, time_zone):
+    store = MagicMock()
+    schedule = MagicMock()
+    monkeypatch.setattr(notifications_module, '_update_summary_schedule', schedule)
+    assert notifications_module.set_user_time_zone_if_missing('uid1', time_zone, firestore_client=store) is False
+    schedule.assert_not_called()

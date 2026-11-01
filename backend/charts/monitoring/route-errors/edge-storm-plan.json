@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "state": "held",
+  "auto_apply": false,
+  "admission_authorized": false,
+  "metric_set_sha256": "3768ab6ccb7ee8d9a3408ab2aefe6088151ac177f748c816800b504afcc02e17",
+  "existing_rules_action": "unchanged-until-separate-reviewed-cutover",
+  "source": {
+    "project": "based-hardware",
+    "resource_type": "http_load_balancer",
+    "log_name": "projects/based-hardware/logs/requests",
+    "scope": "project-level user-defined emitted-LB-log metrics; inherit backend_service_name and other resource labels",
+    "google_field_shape_verified": true,
+    "live_filter_engine_and_coverage_verified": false
+  },
+  "storm_predicate": {
+    "method": "GET",
+    "http_status": 429,
+    "url_regex": "^https://api[.]omi[.]me/v2/sync-local-files/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:[?][^#]*)?$",
+    "static_route": "/v2/sync-local-files/{job_id}",
+    "job_shape": "canonical lowercase UUID; noncanonical/unknown paths remain nonstorm",
+    "reason": "known429 status-poll cohort only; do not infer403 or identify individual callers"
+  },
+  "families": {
+    "4xx": {
+      "storm": "omi_edge_4xx_storm",
+      "nonstorm": "omi_edge_4xx_nonstorm"
+    },
+    "armor_deny": {
+      "storm": "omi_edge_armor_deny_storm",
+      "nonstorm": "omi_edge_armor_deny_nonstorm"
+    }
+  },
+  "calibration": {
+    "4xx": {
+      "storm_floor_per_minute": null,
+      "observed_storm_ceiling_per_minute": null,
+      "escalation_per_minute": null,
+      "reviewed": false
+    },
+    "armor_deny": {
+      "storm_floor_per_minute": null,
+      "observed_storm_ceiling_per_minute": null,
+      "escalation_per_minute": null,
+      "reviewed": false
+    }
+  },
+  "historical_reference": {
+    "observed_armor_denials_per_minute": [
+      10000,
+      12000
+    ],
+    "proposed_prior_escalation_per_minute": 15000,
+    "transferable_to_new_counters": false,
+    "reason": "previous metric/source/sampling receipt does not establish identical LB-log population"
+  },
+  "routing_candidates": [
+    {
+      "existing_title": "Backend - 4XX error rate is high",
+      "future_input": "omi_edge_4xx_nonstorm",
+      "resource_backend_selector": null,
+      "warning_threshold_per_minute": null,
+      "hold": "CloudRunbackend warning is not equivalent to all-LB4xx. Verify backend mapping, source semantics, sampled coverage and calibrate; keep current rule until reviewed replacement."
+    },
+    {
+      "existing_title": "Cloud Armor denied requests per second is high",
+      "future_input": "omi_edge_armor_deny_nonstorm",
+      "resource_backend_selector": null,
+      "warning_threshold_per_minute": null,
+      "hold": "Reconcile existing deny filter with union of backend/edge DENY and statusDetails fallbacks; calibrate same-stream remainder."
+    }
+  ],
+  "storm_signal": {
+    "future_inputs": [
+      "omi_edge_4xx_storm",
+      "omi_edge_armor_deny_storm"
+    ],
+    "deduplication": "ArmorDENY429 is a subset of4xx; never add the two families",
+    "route_label_if_admitted": "/v2/sync-local-files/{job_id}",
+    "threshold_per_minute": null,
+    "inhibit": "none; eventual routing changes only exact storm instance, never nonstorm/security/escalation/5xx"
+  },
+  "coverage_receipt": null,
+  "required_acceptance": [
+    "Verify all relevant LB backend sources and logConfig generation sample rates; preserve same configuration through calibration",
+    "Project-level user-defined metrics include sink-excluded entries; do not calibrate from retained sampled logs as if they were metric counts",
+    "Same fixed UTCwindow >=24h, exact filter fingerprints and observed partition identities per resource",
+    "Empty streams are unknown until source health proves expected ingestion; retain independent datasource/source canaries",
+    "Normal-floor and storm-ceiling evidence for each family in same emitted-count/minute units",
+    "Escalation must exceed positive calibrated floor and observed same-stream storm ceiling; remain globally uninhibited",
+    "Unrelated403/401/409 and unknownroutes/methods remain nonstorm; known429 is the only stormstatus",
+    "Independently verify Grafana notification and resolve receipts before any separate source/routing cutover",
+    "No new Monitoring policy plane; no active rule object, silent broad mute or automatic apply"
+  ]
+}

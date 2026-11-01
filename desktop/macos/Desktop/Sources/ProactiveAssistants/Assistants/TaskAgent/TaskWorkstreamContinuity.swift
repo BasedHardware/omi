@@ -98,6 +98,14 @@ enum TaskWorkstreamContinuity {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     control: Control? = nil
   ) async throws -> TaskKernelPrepareReceipt {
+    if control == nil {
+      let configuredPath = TaskAgentSettings.shared.workingDirectory
+      _ = try await TaskChatRuntime.prepareSession(
+        workstreamId: workstreamId,
+        workspacePath: configuredPath.isEmpty ? NSHomeDirectory() : configuredPath,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    }
     var input: [String: Any] = [
       "workstreamId": workstreamId,
       "taskIds": Array(Set(taskIds)).sorted(),

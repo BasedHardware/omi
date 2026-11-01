@@ -20,11 +20,12 @@ interface CacheEntry {
   hasMore: boolean;
 }
 
-function getCacheKey(folderId?: string, startDate?: Date, endDate?: Date): string {
+function getCacheKey(folderId?: string, startDate?: Date, endDate?: Date, starred?: boolean): string {
   return cacheKeys.conversations(
     folderId,
     startDate?.toISOString().split('T')[0],
-    endDate?.toISOString().split('T')[0]
+    endDate?.toISOString().split('T')[0],
+    starred
   );
 }
 
@@ -65,7 +66,7 @@ export function useConversations(
   const { enabled = true, limit = 50, ...params } = options;
 
   // Get cache key and check for cached data
-  const cacheKey = getCacheKey(params.folderId, params.startDate, params.endDate);
+  const cacheKey = getCacheKey(params.folderId, params.startDate, params.endDate, params.starred);
   const cachedEntry = getFromCache(cacheKey);
 
   const [conversations, setConversations] = useState<Conversation[]>(cachedEntry?.conversations || []);
@@ -79,9 +80,13 @@ export function useConversations(
   const prevStartDate = useRef(params.startDate?.getTime());
   const prevEndDate = useRef(params.endDate?.getTime());
   const prevFolderId = useRef(params.folderId);
+  const prevStarred = useRef(params.starred);
 
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
+  // Cache key of the filters the list belongs to. A fetch that returns after the
+  // filters changed was for another list, so its response is dropped.
+  const activeKeyRef = useRef(cacheKey);
 
   // Group conversations by date - memoized for performance
   const groupedConversations = useMemo<GroupedConversations>(() => {
@@ -110,7 +115,14 @@ export function useConversations(
       if (fetchingRef.current) return;
       fetchingRef.current = true;
 
-      const key = getCacheKey(params.folderId, params.startDate, params.endDate);
+      const key = getCacheKey(params.folderId, params.startDate, params.endDate, params.starred);
+
+      // A callback from before the filters changed (a refresh after an await) must not
+      // load the old filters' list into the new one
+      if (key !== activeKeyRef.current) {
+        fetchingRef.current = false;
+        return;
+      }
 
       try {
         // Only show loading spinner if not a background refresh and no cached data
@@ -127,7 +139,11 @@ export function useConversations(
           startDate: params.startDate,
           endDate: params.endDate,
           folderId: params.folderId,
+          starred: params.starred,
         });
+
+        // The filters changed while this fetch was in flight
+        if (key !== activeKeyRef.current) return;
 
         // Sort by date descending
         const sorted = data.sort((a, b) => {
@@ -148,15 +164,19 @@ export function useConversations(
           return newConversations;
         });
       } catch (err) {
+        if (key !== activeKeyRef.current) return;
         setError(err instanceof Error ? err.message : 'Failed to load conversations');
         console.error('Failed to fetch conversations:', err);
       } finally {
-        setLoading(false);
-        fetchingRef.current = false;
+        // Loading and the guard belong to the current filters, not to a dropped fetch
+        if (key === activeKeyRef.current) {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
       }
     },
     // Only depend on primitive values, not objects
-    [enabled, limit, params.statuses, params.includeDiscarded, params.startDate, params.endDate, params.folderId]
+    [enabled, limit, params.statuses, params.includeDiscarded, params.startDate, params.endDate, params.folderId, params.starred]
   );
 
   // Initial fetch and refetch when filter params change
@@ -164,23 +184,34 @@ export function useConversations(
     const startDateChanged = params.startDate?.getTime() !== prevStartDate.current;
     const endDateChanged = params.endDate?.getTime() !== prevEndDate.current;
     const folderIdChanged = params.folderId !== prevFolderId.current;
+    const starredChanged = params.starred !== prevStarred.current;
 
     // Update refs
     prevStartDate.current = params.startDate?.getTime();
     prevEndDate.current = params.endDate?.getTime();
     prevFolderId.current = params.folderId;
+    prevStarred.current = params.starred;
 
-    const key = getCacheKey(params.folderId, params.startDate, params.endDate);
+    const key = getCacheKey(params.folderId, params.startDate, params.endDate, params.starred);
     const cached = getFromCache(key);
 
+    // The list now belongs to the new filters. A fetch still in flight for the old
+    // ones must not hold back theirs, and its response is dropped when it returns.
+    if (key !== activeKeyRef.current) {
+      activeKeyRef.current = key;
+      fetchingRef.current = false;
+    }
+
     // If filter params changed, check cache for new filter
-    if (startDateChanged || endDateChanged || folderIdChanged) {
+    if (startDateChanged || endDateChanged || folderIdChanged || starredChanged) {
       if (cached) {
         // Load from cache immediately
         setConversations(cached.conversations);
         setOffset(cached.offset);
         setHasMore(cached.hasMore);
         setLoading(false);
+        // A fresh cache starts no fetch, so clear the error left by the old filters
+        setError(null);
 
         // If cache is stale, do background refresh
         if (isCacheStale(key)) {
@@ -188,6 +219,7 @@ export function useConversations(
         }
       } else {
         // No cache, do normal fetch
+        setConversations([]);
         setOffset(0);
         setHasMore(true);
         fetchConversations(0, false);
@@ -201,7 +233,7 @@ export function useConversations(
       // Have cached data but it's stale, do background refresh
       fetchConversations(0, false, true);
     }
-  }, [params.startDate, params.endDate, params.folderId, fetchConversations]);
+  }, [params.startDate, params.endDate, params.folderId, params.starred, fetchConversations]);
 
   // Subscribe to cache invalidation - refetch when conversations are modified
   useEffect(() => {

@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from google.cloud.firestore_v1 import transactional
 
+from database.people_generation import bump_people_generation
 from models.other import VoiceReadiness, voice_readiness
 
 from ._client import get_firestore_client, run_transactional
@@ -51,6 +52,7 @@ def _update_voice_learning_transaction(
             'voice_needed_seconds': needed_seconds,
         },
     )
+    bump_people_generation(transaction, person_ref)
     return True
 
 

@@ -30,10 +30,13 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth-provider";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
+import { pageScope } from "@/lib/admin-access";
 
 export function DashboardSidebar() {
   const pathname = usePathname();
   const { signOut } = useAuth();
+  const { access, error: accessError } = useAdminAccess();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Load collapsed state from localStorage on mount
@@ -149,6 +152,17 @@ export function DashboardSidebar() {
     },
   ];
 
+  // Hide pages the viewer's role cannot use; the server enforces regardless.
+  // If access cannot be loaded, show everything and let each page's API answer.
+  const visibleItems = access
+    ? navItems.filter((item) => {
+        const scope = pageScope(item.href);
+        return !scope || access.scopes.includes(scope);
+      })
+    : accessError
+    ? navItems
+    : [];
+
   const handleLogout = async () => {
     await signOut();
   };
@@ -203,7 +217,7 @@ export function DashboardSidebar() {
       </div>
       <div className="flex flex-1 flex-col justify-between py-6">
         <nav className="space-y-1 px-2">
-          {navItems.map((item) => (
+          {visibleItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}

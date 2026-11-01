@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
@@ -12,6 +12,66 @@ from utils.task_integrations_ops import create_task_internal
 import logging
 
 logger = logging.getLogger(__name__)
+
+_AUTO_SYNC_ERROR = 'Auto-sync failed'
+
+# Closed outcomes for a single cloud create. The sweeper retries only the first two.
+# ``in_doubt`` means the provider may already have the task (timeout after POST, or
+# the create succeeded and the local ``exported`` write failed).
+_PROVIDER_NOT_SENT = frozenset(
+    {
+        "no_access_token",
+        "token_refresh_failed",
+        "no_workspace",
+        "no_list",
+        "unsupported",
+        "not_sent",
+    }
+)
+
+
+def _provider_attempt_outcome(result: Dict[str, Any]) -> str:
+    if result.get("success"):
+        return "accepted"
+    code = result.get("error_code")
+    if code == "api_error":
+        # A 5xx (or a gateway 504) can arrive after the provider committed the create.
+        status = result.get("status_code")
+        if isinstance(status, int) and status < 500:
+            return "definite_error"
+        return "in_doubt"
+    if code in _PROVIDER_NOT_SENT:
+        return "not_sent"
+    return "in_doubt"
+
+
+def _external_task_id(result: Dict[str, Any]) -> Optional[str]:
+    external_id = result.get("external_task_id")
+    if isinstance(external_id, str) and external_id:
+        return external_id
+    return None
+
+
+class _CloudAttempt:
+    """Candidate-only record of one cloud create. Absent on the public batch path."""
+
+    def __init__(self, on_provider_attempt: Optional[Callable[[str], bool]] = None) -> None:
+        self.outcome = "not_sent"
+        self.external_task_id: Optional[str] = None
+        self.export_platform: Optional[str] = None
+        self._on_provider_attempt = on_provider_attempt
+
+    def note(self, outcome: str, external_task_id: Optional[str] = None) -> None:
+        self.outcome = outcome
+        if external_task_id is not None:
+            self.external_task_id = external_task_id
+
+    def begin_provider(self, app_key: str) -> bool:
+        """Remember the app key and let the caller persist it before the POST."""
+        self.export_platform = app_key
+        if self._on_provider_attempt is None:
+            return True
+        return self._on_provider_attempt(app_key)
 
 
 async def auto_sync_action_item(
@@ -28,35 +88,70 @@ async def auto_sync_action_item(
     Returns:
         dict: {"synced": bool, "platform": str, "external_task_id": str, "error": str}
     """
+    result, _outcome, _external_task_id = await auto_sync_action_item_with_outcome(
+        uid, action_item, skip_apple_reminders=skip_apple_reminders
+    )
+    return result
+
+
+async def auto_sync_action_item_with_outcome(
+    uid: str,
+    action_item: Dict[str, Any],
+    skip_apple_reminders: bool = False,
+    *,
+    on_provider_attempt: Optional[Callable[[str], bool]] = None,
+) -> tuple[Dict[str, Any], str, Optional[str]]:
+    """Run auto-sync and report the provider attempt without changing the public dict.
+
+    The dict is the origin/main ``auto_sync_action_item`` result. The outcome and
+    recorded provider id are for candidate integration dispatch only. A failed
+    export-marker write stays ``in_doubt`` and still carries the provider id,
+    which the public error dict does not. ``on_provider_attempt`` runs with the
+    app key immediately before a cloud create so the outbox can store
+    ``export_platform``.
+    """
+    attempt = _CloudAttempt(on_provider_attempt)
     try:
         default_app = await run_blocking(db_executor, users_db.get_default_task_integration, uid)
         if not default_app:
-            return {"synced": False, "reason": "no_default_integration"}
+            return {"synced": False, "reason": "no_default_integration"}, "not_sent", None
 
         integration = await run_blocking(db_executor, users_db.get_task_integration, uid, default_app)
         if not integration:
-            return {"synced": False, "reason": "integration_not_found"}
+            return {"synced": False, "reason": "integration_not_found"}, "not_sent", None
 
         if not integration.get("connected"):
-            return {"synced": False, "reason": "integration_not_connected"}
+            return {"synced": False, "reason": "integration_not_connected"}, "not_sent", None
 
         # Route to appropriate handler
         if default_app == "apple_reminders":
             if skip_apple_reminders:
-                return {"synced": False, "reason": "client_handles_sync"}
-            return await _sync_to_apple_reminders(uid, [action_item])
+                return {"synced": False, "reason": "client_handles_sync"}, "not_sent", None
+            result = await _sync_to_apple_reminders(uid, [action_item])
+            return result, "not_sent", None
         else:
-            return await _sync_to_cloud_service(uid, default_app, integration, action_item)
+            result = await _sync_to_cloud_service(uid, default_app, integration, action_item, attempt=attempt)
+            return result, attempt.outcome, attempt.external_task_id
 
     except Exception as e:
         logger.error(f"Auto-sync failed for user {uid}: {e}")
-        return {"synced": False, "error": str(e)}
+        return {"synced": False, "error": _AUTO_SYNC_ERROR}, attempt.outcome, attempt.external_task_id
 
 
 async def _sync_to_cloud_service(
-    uid: str, app_key: str, integration: Dict[str, Any], action_item: Dict[str, Any]
+    uid: str,
+    app_key: str,
+    integration: Dict[str, Any],
+    action_item: Dict[str, Any],
+    *,
+    attempt: Optional[_CloudAttempt] = None,
 ) -> Dict[str, Any]:
-    """Create task in external service using shared task integration ops."""
+    """Create task in external service using shared task integration ops.
+
+    The returned dict matches the public auto-sync contract. Exceptions propagate
+    so a batch can keep the per-item ``Auto-sync failed`` result. ``attempt`` is
+    set only by the candidate dispatch path.
+    """
     # A retried POST /v1/action-items dedups the Firestore document by idempotency key but still
     # submits auto-sync, and create_task_internal has no idempotency key of its own. Re-read the
     # persisted export state and skip the external call when the item was already exported, so a
@@ -65,7 +160,12 @@ async def _sync_to_cloud_service(
     if item_id:
         existing = await run_blocking(db_executor, action_items_db.get_action_item, uid, item_id)
         if existing and existing.get("exported"):
+            if attempt is not None:
+                attempt.note("not_sent")
             return {"synced": True, "platform": app_key, "reason": "already_exported"}
+
+    if attempt is not None and not attempt.begin_provider(app_key):
+        return {"synced": False, "reason": "lease_lost"}
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         result = await create_task_internal(
@@ -78,20 +178,35 @@ async def _sync_to_cloud_service(
         )
 
     if result.get("success"):
-        # Mark action item as exported
-        await run_blocking(
-            db_executor,
-            action_items_db.update_action_item,
-            uid,
-            action_item["id"],
-            {
-                "exported": True,
-                "export_platform": app_key,
-                "export_date": datetime.now(timezone.utc),
-            },
-        )
+        external_id = _external_task_id(result)
+        exported = {
+            "exported": True,
+            "export_platform": app_key,
+            "export_date": datetime.now(timezone.utc),
+        }
+        if external_id is not None:
+            exported["external_task_id"] = external_id
+        # The provider may already have the task. If the local write fails, the
+        # candidate path must keep in_doubt plus the provider id.
+        if attempt is not None:
+            attempt.note("in_doubt", external_id)
+        try:
+            await run_blocking(
+                db_executor,
+                action_items_db.update_action_item,
+                uid,
+                action_item["id"],
+                exported,
+            )
+        except Exception:
+            logger.error("Auto-sync export marker write failed user=%s app=%s", uid, app_key)
+            raise
+        if attempt is not None:
+            attempt.note("accepted", external_id)
         return {"synced": True, "platform": app_key, "external_task_id": result.get("external_task_id")}
 
+    if attempt is not None:
+        attempt.note(_provider_attempt_outcome(result))
     return {"synced": False, "platform": app_key, "error": result.get("error")}
 
 
@@ -153,10 +268,10 @@ async def auto_sync_action_items_batch(uid: str, action_items: List[Dict[str, An
                     reason='other',
                     outcome='degraded',
                 )
-                result = {'synced': False, 'platform': default_app, 'error': 'Auto-sync failed'}
+                result = {'synced': False, 'platform': default_app, 'error': _AUTO_SYNC_ERROR}
             results.append(result)
         return results
 
     except Exception as e:
         logger.error(f"Auto-sync batch failed for user {uid}: {e}")
-        return [{"synced": False, "error": str(e)}] * len(action_items)
+        return [{"synced": False, "error": _AUTO_SYNC_ERROR}] * len(action_items)

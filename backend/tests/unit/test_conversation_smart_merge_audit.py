@@ -42,6 +42,7 @@ AUDIT_KEYS = {
     'model',
     'question_version',
     'mode',
+    'flattened_ancestor_count',
 }
 GATE = ('legal_hold_deletion_gates', UID)
 MARKER = ('account_deletions', UID)
@@ -64,7 +65,6 @@ class _Recorder:
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.delenv(config.SMART_MERGE_AUDIT_ENV, raising=False)
     return World(monkeypatch)
 
@@ -175,7 +175,7 @@ def test_no_audit_and_no_gate_read_when_the_pair_is_skipped_or_rejected(world, r
     world.add('n', 71, 10)  # gap outside the window: never reaches Jev
     assert world.finish('n') is False
     result = smart_merge_db.absorb_conversation(
-        UID, 'p', 'n', expected_revision=0, plan=lambda *a: ('survivor_changed', None, None)
+        UID, 'p', 'n', expected_revision=0, plan=lambda *a: ('survivor_changed', None, None, {})
     )
     assert result.outcome == 'rejected' and result.audit == 'none'
     assert GATE not in [path for _, path in reads]
@@ -392,7 +392,6 @@ def test_audit_outcome_does_not_change_any_conversation_write(monkeypatch):
     for scenario in ('on', 'off', 'gate', 'deletion', 'invalid', 'read_error'):
         with monkeypatch.context() as patch:
             patch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-            patch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
             patch.setenv(config.SMART_MERGE_AUDIT_ENV, 'off' if scenario == 'off' else 'on')
             world = World(patch)
             if scenario == 'gate':
@@ -535,6 +534,14 @@ def test_survivor_purge_counts_once_after_the_delete(recorded, monkeypatch):
     }
     purged = []
     monkeypatch.setattr(merge_conversations.conversations_db, 'get_conversation', lambda uid, cid: row)
+    # Donor tombstone writes bind to their own module-level client; keep the
+    # purge hermetic and assert the intent was recorded before the donor purge.
+    tombstones = []
+    monkeypatch.setattr(
+        merge_conversations.conversation_tombstones,
+        'record_deletion',
+        lambda uid, cid: tombstones.append(cid),
+    )
     monkeypatch.setattr(
         merge_conversations, '_delete_conversation_and_related_data', lambda uid, cid, **kw: purged.append(cid)
     )
@@ -542,7 +549,7 @@ def test_survivor_purge_counts_once_after_the_delete(recorded, monkeypatch):
         merge_conversations.conversations_db, 'delete_conversation', lambda uid, cid: purged.append(cid)
     )
     merge_conversations.delete_conversation_with_sync_sources(UID, 'p')
-    assert purged == ['n', 'p'] and recorded.deleted == ['lt_1h']
+    assert purged == ['n', 'p'] and recorded.deleted == ['lt_1h'] and tombstones == ['n']
 
 
 def test_failed_survivor_delete_is_not_counted(recorded, monkeypatch):
@@ -563,3 +570,23 @@ def test_plain_conversation_delete_is_not_counted(recorded, monkeypatch):
     monkeypatch.setattr(merge_conversations.conversations_db, 'delete_conversation', lambda uid, cid: None)
     merge_conversations.delete_conversation_with_sync_sources(UID, 'c')
     assert recorded.deleted == []
+
+
+@pytest.fixture(autouse=True)
+def stable_recording_arrival(monkeypatch):
+    from datetime import datetime, timezone
+    from database import conversation_recorded_time
+
+    class ArrivalType(type):
+        def __instancecheck__(cls, value):
+            return isinstance(value, datetime)
+
+    class FixedArrival(datetime, metaclass=ArrivalType):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 20, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(conversation_recorded_time, 'datetime', FixedArrival)
+    from database import conversations
+
+    monkeypatch.setattr(conversations, 'datetime', FixedArrival)

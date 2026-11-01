@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-saved-browse-filter-narrows-search",
+  "violated_contract": "A search over a list must reach every row the search covers. A browsing filter that the list saves across visits must not also narrow the search, or a result found elsewhere is missing from the view that opens to show it. Global Search looks through every memory category and opens Memories filtered by its query, but Memories also applied the category selection saved in memories_filter_categories (set in the Memory management sheet and not shown on the page), so a tapped memory from an unchecked category was not listed and the page said no memories were found.",
+  "canonical_prevention": "Apply a saved browsing filter only while no search is active, so a search typed on the list or handed over by another surface covers every category, and clearing the search brings the saved filter back. Prove it with a hermetic widget test that saves a filter excluding the chosen result's category, opens the result through the real Global Search hand-off and asserts it is listed, plus a control that the list without a search is still narrowed by the saved filter.",
+  "canonical_prevention_artifact": [
+    "app/test/pages/search/global_search_memory_category_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/memories_provider.dart",
+    "app/lib/pages/search/global_search.dart"
+  ],
+  "status": "open"
+}

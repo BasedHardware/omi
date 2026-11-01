@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/pages/settings/developer_firmware_flash_page.dart';
 import 'package:omi/pages/settings/developer_mcp_section.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
@@ -26,8 +28,8 @@ import 'package:omi/utils/other/temp.dart';
 /// Developer Settings: developer tools only (D4) — creator payouts, debug logs, API keys, MCP,
 /// webhooks, experiments and custom firmware. Everyday settings live in top-level Settings.
 ///
-/// Every switch applies when flipped. The webhook URL fields are the one editor on the page: they
-/// wait for Save, and leaving with unsaved edits asks first (chat-apps-settings #2, nav #24).
+/// Every switch applies when flipped. Webhook URLs and the custom backend URL wait for Save, and
+/// leaving with unsaved edits asks first (chat-apps-settings #2, nav #24).
 class DeveloperSettingsPage extends StatelessWidget {
   const DeveloperSettingsPage({super.key});
 
@@ -66,7 +68,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     return const Rect.fromLTWH(0, 0, 100, 100);
   }
 
-  /// Asks before throwing away unsaved webhook edits. Resolves whether the page may close.
+  /// Asks before throwing away unsaved webhook or backend URL edits. Resolves whether the page may close.
   Future<bool> _confirmDiscard(DeveloperModeProvider provider) async {
     final l10n = context.l10n;
     final discard = await showOmiConfirm(
@@ -205,6 +207,22 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  Widget _buildCustomBackendUrl(DeveloperModeProvider provider) {
+    return OmiSettingsGroup(
+      header: context.l10n.customBackendUrlTitle,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          child: _DeveloperTextField(
+            controller: provider.customBackendUrl,
+            label: context.l10n.backendUrlLabel,
+            hint: 'https://omi.example.com/',
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildWebhooks(DeveloperModeProvider provider) {
     final l10n = context.l10n;
     return Column(
@@ -288,6 +306,14 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           value: provider.vadGateEnabled,
           onChanged: provider.onVadGateChanged,
         ),
+        OmiSettingsRow.toggle(
+          key: const Key('developer_home_daily_recaps_toggle'),
+          leading: const FaIcon(FontAwesomeIcons.calendarDay),
+          title: l10n.dailyRecapsOnHome,
+          subtitle: l10n.dailyRecapsOnHomeDescription,
+          value: HomeDailyRecapsSetting.enabled,
+          onChanged: (v) => setState(() => HomeDailyRecapsSetting.enabled = v),
+        ),
       ],
     );
   }
@@ -352,6 +378,21 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               body: ListView(
                 padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xxl),
                 children: [
+                  // Agent setup leads: most people open this page to connect Claude, ChatGPT or
+                  // Codex, and the web developer home is where prompts and keys live.
+                  OmiSettingsGroup(
+                    children: [
+                      OmiSettingsRow(
+                        key: const ValueKey('developer_connect_agent'),
+                        leading: const FaIcon(FontAwesomeIcons.terminal),
+                        title: l10n.connectAnAgent,
+                        subtitle: l10n.connectAnAgentSubtitle,
+                        showChevron: true,
+                        onTap: () => openSettingsDestination(context, SettingsDestination.connectAgent),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: OmiSpacing.xxl),
                   OmiSettingsGroup(
                     header: l10n.appCreators,
                     children: [
@@ -369,6 +410,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   const SizedBox(height: OmiSpacing.xxl),
                   const DeveloperMcpSection(),
                   const SizedBox(height: OmiSpacing.xxl),
+                  if (!kReleaseMode) ...[_buildCustomBackendUrl(provider), const SizedBox(height: OmiSpacing.xxl)],
                   _buildWebhooks(provider),
                   const SizedBox(height: OmiSpacing.xxl),
                   _buildExperimental(provider),
@@ -384,10 +426,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
 }
 
 class _DeveloperTextField extends StatelessWidget {
-  const _DeveloperTextField({required this.controller, required this.label, this.keyboardType});
+  const _DeveloperTextField({required this.controller, required this.label, this.hint, this.keyboardType});
 
   final TextEditingController controller;
   final String label;
+  final String? hint;
   final TextInputType? keyboardType;
 
   @override
@@ -400,6 +443,7 @@ class _DeveloperTextField extends StatelessWidget {
       style: OmiType.subhead,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         labelStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
         filled: true,
         fillColor: OmiColors.surface2,

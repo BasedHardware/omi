@@ -192,12 +192,32 @@ def write_read_ratio(totals: Totals) -> float | None:
     return writes / reads
 
 
+def _card_effective_from(card: Mapping[str, Any]) -> date | None:
+    value = card.get('effective_from')
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and value.strip():
+        return date.fromisoformat(value.strip())
+    return None
+
+
+def _effective_on(card: Mapping[str, Any], as_of: date) -> bool:
+    start = _card_effective_from(card)
+    return start is None or start <= as_of
+
+
+def _effective_rank(card: Mapping[str, Any]) -> date:
+    return _card_effective_from(card) or date.min
+
+
 def load_rates(model: str, rate_card_path: Path, *, rate_card_id: str = '') -> Rates:
     """Read rates from the gateway rate card.
 
     ``rate_card_id`` selects the exact card an attempt was priced on and is preferred when the
-    ledger recorded one; ``model`` is the fallback for rows predating that field, and picks
-    whichever card currently carries the name.
+    ledger recorded one;     ``model`` is the fallback for rows predating that field, and picks the
+    card in effect today when several cards share the name.
 
     Raises ``LookupError`` when nothing matches, because reporting an unpriced
     total silently understates spend.
@@ -208,6 +228,8 @@ def load_rates(model: str, rate_card_path: Path, *, rate_card_id: str = '') -> R
     cards = raw.get('rate_cards')
     if not isinstance(cards, list):
         raise LookupError(f'{rate_card_path} has no rate_cards list')
+    as_of = datetime.now(timezone.utc).date()
+    chosen = None
     for card in cards:
         if not isinstance(card, Mapping):
             continue
@@ -216,6 +238,15 @@ def load_rates(model: str, rate_card_path: Path, *, rate_card_id: str = '') -> R
                 continue
         elif card.get('model') != model:
             continue
+        elif _effective_on(card, as_of) is False:
+            continue
+        elif chosen is not None and _effective_rank(card) <= _effective_rank(chosen):
+            continue
+        chosen = card
+        if rate_card_id:
+            break
+    if chosen is not None:
+        card = chosen
         input_rate = int(card.get('input_micro_usd_per_million', 0))
         return Rates(
             rate_card_id=str(card.get('rate_card_id', model)),

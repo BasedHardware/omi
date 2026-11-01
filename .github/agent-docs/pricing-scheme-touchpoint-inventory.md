@@ -13,7 +13,7 @@ This repo already has an in-flight catalog migration — `.github/agent-docs/pla
 | `app/lib/models/subscription.dart` (line 77-79) doc comment | feature_limit_number | Yes (comment only) — "1500 min/month" for Plus will read stale if the real limit changes; runtime value itself is live |
 | `app/test/utils/plan_pricing_test.dart` (line 17-27,47-56) | test_fixture | Yes (comments/docs) — fixtures encode today's real Plus/Unlimited/Neo prices; math functions themselves are price-agnostic |
 | `app/test/unit/plans_sheet_l10n_test.dart` (line 60-63,186,193-198) | test_fixture | Yes — one assertion hardcodes formatted string "$161.91" (today's real Plus annual price) |
-| `app/lib/l10n/app_en.arb` (line 10668,10676,10684) `neoSubtitle`/`operatorSubtitle`/`architectSubtitle` | plan_name_or_tier_copy | Yes, if resurrected — currently no call sites found outside generated l10n files |
+| `app/lib/l10n/app_en.arb` `neoSubtitle`/`operatorSubtitle` (`architectSubtitle` removed 2026-10-10) | plan_name_or_tier_copy | Yes, if resurrected — currently no call sites found outside generated l10n files |
 | `app/lib/pages/settings/widgets/plans_sheet.dart` (line 1569,2086-2094) `tierOrder` list | plan_name_or_tier_copy | Yes — hardcoded canonical plan-ID list; new/retired plan IDs require updating this literal |
 | `app/lib/pages/settings/widgets/plans_sheet.dart` plan titles/prices/features (~2043-2075, 1671-1697) | reads_live_no_update_needed | No — sourced live from backend availablePlans/planData |
 | `app/lib/utils/plan_pricing.dart` (whole file); `app/lib/pages/settings/usage_page.dart` (line 1030-1059) | reads_live_no_update_needed | No — discount badges and usage/quota figures derive from live monthly/yearly unit amounts and subscription response |

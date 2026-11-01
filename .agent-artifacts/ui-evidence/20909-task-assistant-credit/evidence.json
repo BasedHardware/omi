@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-reported-credit-error.png",
+      "platform": "desktop-macos",
+      "description": "Original Task Assistant credit-balance error screenshot supplied with Discord issue #20909",
+      "captured_by": "human",
+      "source": "manual"
+    },
+    {
+      "file": "002-desktop-macos-credit-recovery-fixture.png",
+      "platform": "desktop-macos",
+      "description": "Injected Claude billing failure rendered through production TaskChatState and TaskChatPanel, showing provider-specific copy and explicit recovery; this is a local fixture, not the reporter's live account",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

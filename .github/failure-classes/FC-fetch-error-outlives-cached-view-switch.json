@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-fetch-error-outlives-cached-view-switch",
+  "violated_contract": "A view that switches to data it already holds, such as the cached list for a newly selected filter, must reset the request status that described the data it replaces. The web conversations hook (useConversations) cleared its error only when a fetch started, and a filter change served from a fresh cache starts no fetch, so the error of an earlier failed fetch stayed: the error banner rendered above the valid cached list, or in place of an empty folder's empty state, until something else fetched.",
+  "canonical_prevention": "Clear request status on every path that replaces the displayed data, not only on the fetch path, or keep the error with the filter key it came from. Prove it with a failed fetch for one filter followed by a switch to a filter whose cached list is fresh, asserting that the cached list is shown without a request and that the error is cleared.",
+  "canonical_prevention_artifact": [
+    "web/app/src/hooks/__tests__/useConversations.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/hooks/**"
+  ],
+  "status": "open"
+}

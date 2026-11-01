@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/user_data_export.dart' as export_user_data;
@@ -80,10 +81,7 @@ class MobileFeedbackReceipt {
   /// Parses the server's durable-write receipt. A 201 alone is insufficient:
   /// callers may only complete the product journey after the ledger confirms
   /// persistence and returns its bounded event coordinate.
-  static MobileFeedbackReceipt? fromJson(
-    Map<String, dynamic> payload, {
-    required String expectedFeedbackId,
-  }) {
+  static MobileFeedbackReceipt? fromJson(Map<String, dynamic> payload, {required String expectedFeedbackId}) {
     try {
       // The generated model applies OpenAPI defaults for these fields. Keep
       // the receipt gate strict: both markers must be present on the wire so
@@ -193,22 +191,24 @@ Future<bool> setUserWebhookUrl({required String type, required String url}) asyn
   return false;
 }
 
-Future<String> getUserWebhookUrl({required String type}) async {
+/// The webhook URL saved for [type], `''` when none is set, or null when it could not be read: a
+/// failed read is not an unset webhook, and saving it back as empty turns the webhook off.
+Future<String?> getUserWebhookUrl({required String type}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return '';
+  if (response == null) return null;
   if (response.statusCode == 200) {
     final data = wire.GeneratedUserWebhookUrlResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return data.url ?? '';
   }
-  return '';
+  return null;
 }
 
-Future disableWebhook({required String type}) async {
+Future<bool> disableWebhook({required String type}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type/disable',
     headers: {},
@@ -216,11 +216,11 @@ Future disableWebhook({required String type}) async {
     body: '',
   );
   if (response == null) return false;
-  if (response.statusCode == 204) return true;
+  if (response.statusCode == 200) return true;
   return false;
 }
 
-Future enableWebhook({required String type}) async {
+Future<bool> enableWebhook({required String type}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type/enable',
     headers: {},
@@ -228,7 +228,7 @@ Future enableWebhook({required String type}) async {
     body: '',
   );
   if (response == null) return false;
-  if (response.statusCode == 204) return true;
+  if (response.statusCode == 200) return true;
   return false;
 }
 
@@ -250,7 +250,7 @@ Future webhooksStatus() async {
 Future<bool> deleteAccount({String? reason, String? reasonDetails}) async {
   final hasFeedback = (reason != null && reason.isNotEmpty) || (reasonDetails != null && reasonDetails.isNotEmpty);
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/delete-account',
+    url: '${Env.apiBaseUrl}v1/users/delete-account?grace=true',
     headers: hasFeedback ? {'Content-Type': 'application/json'} : {},
     method: 'DELETE',
     body: hasFeedback ? jsonEncode({'reason': reason, 'reason_details': reasonDetails}) : '',
@@ -359,16 +359,14 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
-  var response = await makeApiCall(
-    url:
-        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  if (response.statusCode == 200) {
+class PeopleListResponse {
+  const PeopleListResponse({required this.people, this.statsTruncated = false});
+
+  final List<Person> people;
+  final bool statsTruncated;
+
+  static PeopleListResponse? fromResponse(http.Response response) {
+    if (response.statusCode != 200) return null;
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
       return Person.fromGenerated(
@@ -378,9 +376,20 @@ Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool inclu
     }).toList();
     // sort by name
     people.sort((a, b) => a.name.compareTo(b.name));
-    return people;
+    return PeopleListResponse(people: people, statsTruncated: isOmiListTruncated(response));
   }
-  return null;
+}
+
+Future<PeopleListResponse?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
+  var response = await makeApiCall(
+    url:
+        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  return PeopleListResponse.fromResponse(response);
 }
 
 @visibleForTesting
@@ -576,6 +585,20 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
   return data.status == 'ok';
 }
 
+/// Clears the server preferred summary template, so automatic processing uses Omi's own summary.
+Future<bool> clearPreferredSummarizationAppServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/preferences/app',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
+}
+
 Future<String?> getUsageDeviceTimeZone() async {
   try {
     return (await FlutterTimezone.getLocalTimezone()).identifier;
@@ -586,16 +609,10 @@ Future<String?> getUsageDeviceTimeZone() async {
 }
 
 Future<UserUsageResponse?> getUserUsage({required String period, required String? timeZone}) async {
-  final url = Uri.parse('${Env.apiBaseUrl}v1/users/me/usage').replace(queryParameters: {
-    'period': period,
-    if (timeZone != null) 'time_zone': timeZone,
-  });
-  var response = await makeApiCall(
-    url: url.toString(),
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  final url = Uri.parse(
+    '${Env.apiBaseUrl}v1/users/me/usage',
+  ).replace(queryParameters: {'period': period, if (timeZone != null) 'time_zone': timeZone});
+  var response = await makeApiCall(url: url.toString(), headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {
@@ -692,6 +709,23 @@ Future<UserSubscriptionResponse?> getUserSubscription() async {
   return null;
 }
 
+/// Explicit, authenticated and idempotent backlog choice. Reset alone never calls this.
+Future<ProcessingBacklog?> processProcessingBacklog({required String idempotencyKey}) async {
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+    throw ArgumentError.value(idempotencyKey, 'idempotencyKey', 'Must contain 8..128 characters');
+  }
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/processing-backlog/process',
+    headers: {'Idempotency-Key': idempotencyKey},
+    method: 'POST',
+    body: '{}',
+  );
+  if (response == null || response.statusCode != 200) return null;
+  return ProcessingBacklog.fromGenerated(
+    subscription_wire.GeneratedProcessingBacklog.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+  );
+}
+
 // Daily Summary Settings
 
 class DailySummarySettings {
@@ -761,6 +795,9 @@ Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30,
 
   try {
     final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (data.summaries == null) {
+      throw const FormatException('Invalid daily recap list response');
+    }
     return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
@@ -858,26 +895,6 @@ Future<bool> deleteDailySummary(String summaryId) async {
   return data.status == 'ok';
 }
 
-/// Generate a daily summary for a specific date (or today if not specified)
-/// Returns the summary_id on success, null on failure
-Future<String?> generateDailySummary({String? date}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
-    headers: {},
-    method: 'POST',
-    body: date != null ? jsonEncode({'date': date}) : '',
-  );
-  if (response == null || response.statusCode != 200) return null;
-
-  try {
-    final data = wire.GeneratedDailySummaryTestResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaryId;
-  } catch (e) {
-    Logger.debug('Error parsing generate summary response: $e');
-    return null;
-  }
-}
-
 // Onboarding State
 
 Future<Map<String, dynamic>?> getUserOnboardingState() async {
@@ -891,6 +908,7 @@ Future<Map<String, dynamic>?> getUserOnboardingState() async {
 }
 
 Future<bool> updateUserOnboardingState({
+  required AuthSessionSnapshot session,
   bool? completed,
   String? acquisitionSource,
   bool? deviceOnboardingCompleted,
@@ -906,17 +924,20 @@ Future<bool> updateUserOnboardingState({
     body['device_onboarding_completed'] = deviceOnboardingCompleted;
   }
 
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/onboarding',
-    headers: {},
-    method: 'PATCH',
-    body: jsonEncode(body),
-  );
-  if (response == null) return false;
-  Logger.debug('updateUserOnboardingState response: ${response.body}');
-  if (response.statusCode != 200) return false;
-  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  return data.status == 'ok';
+  try {
+    final response = await sendUncaughtApiCall(
+      url: '${Env.apiBaseUrl}v1/users/onboarding',
+      headers: {},
+      method: 'PATCH',
+      body: jsonEncode(body),
+      canSend: () => AuthService.instance.isSessionSnapshotCurrent(session),
+    );
+    if (!AuthService.instance.isSessionSnapshotCurrent(session) || response.statusCode != 200) return false;
+    final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
+  } catch (_) {
+    return false;
+  }
 }
 
 // Mentor Notification Settings

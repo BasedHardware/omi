@@ -21,7 +21,6 @@ class Transcripts:
 
 def test_existing_client_state_drives_independent_admission_after_telemetry_cap(monkeypatch):
     monkeypatch.setenv('TRANSLATION_DEMAND_GATE_ENABLED', 'true')
-    monkeypatch.setenv('TRANSLATION_ONDEMAND_UID_ALLOWLIST', 'u')
     now = [0.0]
 
     async def run():
@@ -46,7 +45,7 @@ def test_existing_client_state_drives_independent_admission_after_telemetry_cap(
             json.dumps({'type': 'client_state', 'foreground': True, 'transcript_visible': True})
         )
         await asyncio.sleep(0)
-        assert receiver.translation_demand.snapshot(lease_v1_enabled=False).policy == DemandPolicy.viewed
+        assert receiver.translation_demand.snapshot().policy == DemandPolicy.viewed
         assert transcripts.changes == 1
         receiver._translation_expiry_task.cancel()
         await asyncio.gather(*spawned, return_exceptions=True)
@@ -56,7 +55,6 @@ def test_existing_client_state_drives_independent_admission_after_telemetry_cap(
 
 def test_flag_off_report_does_not_start_translation_work(monkeypatch):
     monkeypatch.setenv('TRANSLATION_DEMAND_GATE_ENABLED', 'false')
-    monkeypatch.setenv('TRANSLATION_DEMAND_SHADOW_ENABLED', 'false')
 
     async def run():
         receiver = ListenReceiver.__new__(ListenReceiver)
@@ -71,6 +69,6 @@ def test_flag_off_report_does_not_start_translation_work(monkeypatch):
         )
         assert transcripts.changes == 0
         assert receiver._translation_expiry_task is None
-        assert receiver.translation_demand.snapshot(lease_v1_enabled=False).policy == DemandPolicy.legacy_unknown
+        assert receiver.translation_demand.snapshot().policy == DemandPolicy.legacy_unknown
 
     asyncio.run(run())

@@ -32,6 +32,7 @@ rm -rf /var/lib/apt/lists/* cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd
 
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/modal/ .
+COPY backend/utils/logging_config.py ./utils/logging_config.py
 
 EXPOSE 8080
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]

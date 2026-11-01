@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/ui/ui.dart';
@@ -18,8 +18,10 @@ class _SourceOption {
 
 class FoundOmiWidget extends StatefulWidget {
   final Function goNext;
+  @visibleForTesting
+  final Future<bool> Function(String source)? saveSource;
 
-  const FoundOmiWidget({super.key, required this.goNext});
+  const FoundOmiWidget({super.key, required this.goNext, this.saveSource});
 
   @override
   State<FoundOmiWidget> createState() => _FoundOmiWidgetState();
@@ -27,6 +29,7 @@ class FoundOmiWidget extends StatefulWidget {
 
 class _FoundOmiWidgetState extends State<FoundOmiWidget> {
   String? _selectedSource;
+  bool _saving = false;
   final TextEditingController _otherController = TextEditingController();
 
   List<_SourceOption> _getSources(BuildContext context) {
@@ -60,11 +63,19 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_saving) return;
+    setState(() => _saving = true);
     FocusManager.instance.primaryFocus?.unfocus();
     final source = _selectedSource == context.l10n.otherSource ? _otherController.text.trim() : _selectedSource!;
+    final saved = await (widget.saveSource?.call(source) ?? OnboardingSyncRuntime.enqueue(acquisitionSource: source));
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (!saved) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
+    }
     SharedPreferencesUtil().foundOmiSource = source;
-    updateUserOnboardingState(acquisitionSource: source);
     PlatformManager.instance.analytics.onboardingUserAcquisitionSource(source);
     OmiHaptics.selection();
     widget.goNext();
@@ -72,6 +83,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
 
   /// The survey is optional: Skip moves on without recording a source.
   void _skip() {
+    if (_saving) return;
     FocusManager.instance.primaryFocus?.unfocus();
     OmiHaptics.selection();
     widget.goNext();
@@ -89,22 +101,24 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
             child: Text(context.l10n.whereDidYouHearAboutOmi, style: OmiType.title1, textAlign: TextAlign.center),
           ),
           const SizedBox(height: OmiSpacing.xl),
-          for (final source in sources) ...[
-            _SourceTile(
-              option: source,
-              selected: _selectedSource == source.label,
-              onTap: () {
-                OmiHaptics.light();
-                setState(() {
-                  _selectedSource = _selectedSource == source.label ? null : source.label;
-                  if (_selectedSource != context.l10n.otherSource) {
-                    _otherController.clear();
-                  }
-                });
-              },
-            ),
-            const SizedBox(height: 10),
-          ],
+          LayoutBuilder(builder: (context, constraints) {
+            final columns = MediaQuery.textScalerOf(context).scale(1) > 1.3 || constraints.maxWidth < 280 ? 1 : 2;
+            return Wrap(spacing: OmiSpacing.sm, runSpacing: OmiSpacing.sm, children: [
+              for (final source in sources)
+                SizedBox(
+                    width: (constraints.maxWidth - OmiSpacing.sm * (columns - 1)) / columns,
+                    child: _SourceTile(
+                        option: source,
+                        selected: _selectedSource == source.label,
+                        onTap: () {
+                          OmiHaptics.light();
+                          setState(() {
+                            _selectedSource = _selectedSource == source.label ? null : source.label;
+                            if (_selectedSource != context.l10n.otherSource) _otherController.clear();
+                          });
+                        })),
+            ]);
+          }),
           if (_selectedSource == context.l10n.otherSource) ...[
             const SizedBox(height: OmiSpacing.xxs),
             Container(
@@ -132,15 +146,21 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
           const SizedBox(height: OmiSpacing.sm),
           OmiButton(
             key: const Key('found_omi_continue'),
+            labelStyle: OmiType.callout
+                .copyWith(fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
             label: context.l10n.continueButton,
             expand: true,
-            onPressed: _canContinue ? _submit : null,
+            onPressed: _canContinue && !_saving ? _submit : null,
+            isLoading: _saving,
           ),
-          OmiButton.tertiary(
+          OmiButton(
+            variant: OmiButtonVariant.tertiary,
+            labelStyle: OmiType.callout
+                .copyWith(fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
             key: const Key('found_omi_skip'),
             label: context.l10n.skip,
             expand: true,
-            onPressed: _skip,
+            onPressed: _saving ? null : _skip,
           ),
         ],
       ),
@@ -173,11 +193,11 @@ class _SourceTile extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.sm),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.sm),
               child: Row(
                 children: [
                   ExcludeSemantics(child: FaIcon(option.icon, size: 18, color: foreground)),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: OmiSpacing.sm),
                   Expanded(
                     child: Text(
                       option.label,

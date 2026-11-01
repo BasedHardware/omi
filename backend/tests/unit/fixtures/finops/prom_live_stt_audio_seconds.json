@@ -1,0 +1,22 @@
+{
+  "status": "success",
+  "data": {
+    "resultType": "matrix",
+    "result": [
+      {
+        "metric": {"provider": "modulate"},
+        "values": [
+          [1792540800, "36000"],
+          [1792627200, "7200"]
+        ]
+      },
+      {
+        "metric": {"provider": "soniox"},
+        "values": [
+          [1792540800, "100000"],
+          [1792627200, "90000"]
+        ]
+      }
+    ]
+  }
+}

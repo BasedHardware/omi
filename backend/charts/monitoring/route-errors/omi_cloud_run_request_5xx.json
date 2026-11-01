@@ -1,0 +1,25 @@
+{
+  "description": "All Cloud Run service platform request-log 5xx. Service is inherited from monitored resource. Unknown route/action remain empty; only Gemini is classified.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"based-hardware\" AND logName=\"projects/based-hardware/logs/run.googleapis.com%2Frequests\" AND httpRequest.status >= 500 AND httpRequest.status < 600",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": [
+      {
+        "key": "route",
+        "valueType": "STRING",
+        "description": "Only fixed Gemini route family; empty means unclassified, not a template for other paths."
+      },
+      {
+        "key": "action",
+        "valueType": "STRING",
+        "description": "Four fixed Gemini actions or empty; never model, URL, ID or arbitrary action."
+      }
+    ]
+  },
+  "labelExtractors": {
+    "route": "REGEXP_EXTRACT(httpRequest.requestUrl, \"^https?://[^/?#]+(/v1/proxy/gemini-stream|/v1/proxy/gemini)(?:/|[?#]|$)\")",
+    "action": "REGEXP_EXTRACT(httpRequest.requestUrl, \"^https?://[^/?#]+/v1/proxy/gemini(?:-stream)?/[^?#]*:(batchEmbedContents|embedContent|generateContent|streamGenerateContent)(?:[?#]|$)\")"
+  }
+}

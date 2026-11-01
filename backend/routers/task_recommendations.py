@@ -1,5 +1,7 @@
 """Canonical task feedback and What Matters Now APIs."""
 
+from utils.generated_compute import generated_compute_scope, require_generated_compute
+
 from typing import Annotated, NoReturn, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -128,16 +130,18 @@ def get_what_matters_now(
     device_id: Optional[str] = Query(default=None, min_length=1, max_length=128),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    require_generated_compute(uid, 'what_matters_now')
     task_control_db.ensure_development_smoke_fixture(uid)
     rollout = _require_product(uid)
     bound_device_id = _bound_device_id(request_context, device_id, required=False)
     try:
-        projection = recommendations.evaluate(
-            uid,
-            EvaluationRequest(device_id=bound_device_id),
-            judgment=_live_judgment(),
-            account_generation=rollout.account_generation,
-        )
+        with generated_compute_scope(uid):
+            projection = recommendations.evaluate(
+                uid,
+                EvaluationRequest(device_id=bound_device_id),
+                judgment=_live_judgment(),
+                account_generation=rollout.account_generation,
+            )
     except recommendation_db.TaskRecommendationStoreError as exc:
         _raise_store_error(exc)
     _require_same_product_rollout(uid, rollout)
@@ -150,15 +154,17 @@ def evaluate_what_matters_now(
     request_context: Request,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    require_generated_compute(uid, 'what_matters_now')
     rollout = _require_product(uid)
     device_id = _bound_device_id(request_context, request.device_id, required=False)
     try:
-        projection = recommendations.evaluate(
-            uid,
-            request.model_copy(update={'device_id': device_id}),
-            judgment=_live_judgment(),
-            account_generation=rollout.account_generation,
-        )
+        with generated_compute_scope(uid):
+            projection = recommendations.evaluate(
+                uid,
+                request.model_copy(update={'device_id': device_id}),
+                judgment=_live_judgment(),
+                account_generation=rollout.account_generation,
+            )
     except recommendation_db.TaskRecommendationStoreError as exc:
         _raise_store_error(exc)
     _require_same_product_rollout(uid, rollout)

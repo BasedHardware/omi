@@ -110,22 +110,27 @@ def _delete_source_with_tasks(tasks):
     notifications = ModuleType("utils.notifications")
     notifications.sync_action_item_reminder = MagicMock()
     service = MagicMock()
+    vectors = []
 
     with patch("utils.conversations.merge_conversations.retraction_can_be_skipped", return_value=True), patch(
         "utils.conversations.merge_conversations.MemoryService", return_value=service
     ), patch.object(
         sys.modules["database.action_items"], "get_action_items_by_conversation", return_value=list(tasks)
+    ), patch(
+        "utils.conversations.merge_conversations.delete_action_item_vectors_batch",
+        lambda uid, ids: vectors.append((uid, list(ids))),
+        create=True,
     ), patch.dict(
         "sys.modules", {"utils.notifications": notifications}
     ):
         _delete_conversation_and_related_data("uid-any", "conv-1")
 
-    return notifications.sync_action_item_reminder
+    return notifications.sync_action_item_reminder, vectors
 
 
 def test_a_deleted_source_task_cancels_its_reminder():
     due = "2026-09-21T09:00:00+00:00"
-    cancel = _delete_source_with_tasks(
+    cancel, _vectors = _delete_source_with_tasks(
         [
             {"id": "task-open", "description": "Send the budget", "due_at": due, "completed": False},
             {"id": "task-done", "description": "Old item", "due_at": due, "completed": True},
@@ -139,6 +144,33 @@ def test_a_deleted_source_task_cancels_its_reminder():
 
 
 def test_a_source_without_open_dated_tasks_sends_nothing():
-    cancel = _delete_source_with_tasks([{"id": "task-undated", "description": "No deadline", "due_at": None}])
+    cancel, vectors = _delete_source_with_tasks([{"id": "task-undated", "description": "No deadline", "due_at": None}])
 
     cancel.assert_not_called()
+    # The task had no reminder, but its search vector still goes with the row.
+    assert vectors == [("uid-any", ["task-undated"])]
+
+
+def test_a_source_without_tasks_drops_no_vectors():
+    cancel, vectors = _delete_source_with_tasks([])
+
+    cancel.assert_not_called()
+    assert vectors == []
+
+
+def test_a_deleted_source_task_drops_its_search_vector():
+    """A deleted task's vector must not survive as a ghost.
+
+    find_similar_action_items feeds the extraction prompt so the LLM can suppress
+    duplicate tasks; a deleted task's orphaned vector makes a real new task look
+    like a duplicate and it is silently never created.
+    """
+    due = "2026-09-21T09:00:00+00:00"
+    _cancel, vectors = _delete_source_with_tasks(
+        [
+            {"id": "task-open", "description": "Send the budget", "due_at": due, "completed": False},
+            {"id": "task-undated", "description": "No deadline", "due_at": None, "completed": False},
+        ]
+    )
+
+    assert vectors == [("uid-any", ["task-open", "task-undated"])]

@@ -88,7 +88,7 @@ dyld: Library not loaded: @rpath/Sparkle.framework/Versions/B/Sparkle
   … mapping process and mapped file (non-platform) have different Team IDs
 ```
 
-The same rule rejects the bundled Sentry and onnxruntime frameworks.
+The same rule rejects the bundled onnxruntime framework.
 
 **The failure hides from the usual checks:**
 

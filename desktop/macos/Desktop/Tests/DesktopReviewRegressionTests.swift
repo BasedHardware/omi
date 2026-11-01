@@ -5,14 +5,100 @@ import XCTest
 final class DesktopReviewClaudeAuthRegressionTests: XCTestCase {
   func testExplicitClaudeOAuthSuccessSurvivesPassiveStatusRefresh() {
     XCTAssertFalse(
-      ChatProvider.claudeConnectionStatus(configToken: nil, explicitAuthSucceeded: false)
+      ChatProvider.claudeConnectionStatus(configToken: nil, explicitAuthSucceeded: false, providerRejected: false)
     )
     XCTAssertTrue(
-      ChatProvider.claudeConnectionStatus(configToken: nil, explicitAuthSucceeded: true)
+      ChatProvider.claudeConnectionStatus(configToken: nil, explicitAuthSucceeded: true, providerRejected: false)
     )
     XCTAssertTrue(
-      ChatProvider.claudeConnectionStatus(configToken: "legacy-token", explicitAuthSucceeded: false)
+      ChatProvider.claudeConnectionStatus(
+        configToken: "legacy-token", explicitAuthSucceeded: false, providerRejected: false)
     )
+  }
+
+  func testAnObservedRejectionOutranksACachedTokenAndAnEarlierSuccess() {
+    XCTAssertFalse(
+      ChatProvider.claudeConnectionStatus(
+        configToken: "legacy-token", explicitAuthSucceeded: true, providerRejected: true)
+    )
+  }
+}
+
+/// The real ChatProvider auth state, driven through the handlers the runtime's
+/// `auth_required` / `auth_success` events call. No real config file or browser.
+@MainActor
+final class ClaudeProviderRejectionTests: XCTestCase {
+  private let signInURL =
+    "https://claude.ai/oauth/authorize?response_type=code&client_id=c&state=s1&code_challenge=x"
+    + "&code_challenge_method=S256&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback"
+
+  private func withUserClaude(_ body: (ChatProvider, () -> [URL]) -> Void) {
+    let saved = UserDefaults.standard.string(forKey: .chatBridgeMode)
+    defer {
+      if let saved {
+        UserDefaults.standard.set(saved, forKey: .chatBridgeMode)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .chatBridgeMode)
+      }
+    }
+    UserDefaults.standard.set(ChatProvider.BridgeMode.userClaude.rawValue, forKey: .chatBridgeMode)
+    let provider = ChatProvider()
+    var opened: [URL] = []
+    provider.openClaudeSignInURL = { opened.append($0) }
+    provider.readLegacyClaudeConfigToken = { "cached-token" }  // the old token is still on disk
+    body(provider, { opened })
+  }
+
+  func testARejectedCredentialOffersConnectAndAPassiveRefreshCannotResurrectIt() {
+    withUserClaude { provider, opened in
+      provider.markClaudeAuthSucceeded()
+      provider.checkClaudeConnectionStatus()
+      XCTAssertTrue(provider.isClaudeConnected)
+
+      provider.handleClaudeAuthRequired(methods: [], authUrl: nil)  // a chat turn was rejected
+      // Both Settings surfaces render `claudeConnectionRow`, which offers Connect Claude
+      // exactly when this is false.
+      XCTAssertFalse(provider.isClaudeConnected)
+
+      provider.checkClaudeConnectionStatus()
+      XCTAssertFalse(provider.isClaudeConnected, "a cached token and the earlier success no longer count")
+      XCTAssertTrue(opened().isEmpty, "a chat failure never opens the browser")
+    }
+  }
+
+  func testAChatFailureCarryingASignInURLStillWaitsForConnect() {
+    withUserClaude { provider, opened in
+      provider.markClaudeAuthSucceeded()
+      provider.handleClaudeAuthRequired(methods: [], authUrl: signInURL)
+      XCTAssertFalse(provider.isClaudeConnected)
+      XCTAssertTrue(opened().isEmpty)
+      XCTAssertEqual(provider.claudeAuthUrl, signInURL, "the live flow is kept for an explicit Connect")
+    }
+  }
+
+  func testExplicitReconnectRestoresConnectedOnlyAfterVerifiedSuccessAndCanRetry() {
+    withUserClaude { provider, opened in
+      provider.readLegacyClaudeConfigToken = { nil }  // the new token lives only in Keychain
+      provider.handleClaudeAuthRequired(methods: [], authUrl: nil)
+
+      provider.handleClaudeAuthRequired(methods: [], authUrl: signInURL)  // runtime answers Connect
+      provider.startClaudeAuth()  // the explicit Connect path
+      XCTAssertEqual(opened().map(\.absoluteString), [signInURL])
+      provider.startClaudeAuth()
+      XCTAssertEqual(opened().count, 1, "the same live callback flow is not opened twice")
+      XCTAssertFalse(provider.isClaudeConnected, "opening the browser is not authentication")
+
+      // The first attempt timed out; a retry gets a fresh flow and may open it.
+      let retryURL = signInURL.replacingOccurrences(of: "state=s1", with: "state=s2")
+      provider.handleClaudeAuthRequired(methods: [], authUrl: retryURL)
+      provider.startClaudeAuth()
+      XCTAssertEqual(opened().count, 2)
+
+      provider.handleClaudeAuthSuccess()
+      XCTAssertTrue(provider.isClaudeConnected)
+      provider.checkClaudeConnectionStatus()
+      XCTAssertTrue(provider.isClaudeConnected, "a verified sign-in survives passive refresh")
+    }
   }
 }
 

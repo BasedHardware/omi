@@ -7,6 +7,8 @@ import { TaskRow } from './TaskRow';
 import type { ActionItem } from '@/types/conversation';
 
 interface TaskListViewProps {
+  // The rows to show, already narrowed by searchQuery. TaskHub resolves focusedIndex
+  // against these same rows (pending first, then completed), so do not filter them here.
   pendingTasks: ActionItem[];
   completedTasks: ActionItem[];
   showCompleted: boolean;
@@ -42,20 +44,7 @@ export function TaskListView({
   searchQuery = '',
   onEnterSelectionMode,
 }: TaskListViewProps) {
-  // Filter tasks based on search query
-  const filteredPending = searchQuery
-    ? pendingTasks.filter((t) =>
-        t.description.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : pendingTasks;
-
-  const filteredCompleted = searchQuery
-    ? completedTasks.filter((t) =>
-        t.description.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : completedTasks;
-
-  const isEmpty = filteredPending.length === 0 && filteredCompleted.length === 0;
+  const isEmpty = pendingTasks.length === 0 && completedTasks.length === 0;
 
   if (isEmpty && !searchQuery) {
     return (
@@ -86,7 +75,7 @@ export function TaskListView({
       {/* Pending tasks - flat list */}
       <div className="border border-bg-tertiary rounded-lg">
         <AnimatePresence mode="popLayout">
-          {filteredPending.map((task, index) => (
+          {pendingTasks.map((task, index) => (
             <TaskRow
               key={task.id}
               task={task}
@@ -103,7 +92,7 @@ export function TaskListView({
           ))}
         </AnimatePresence>
 
-        {filteredPending.length === 0 && (
+        {pendingTasks.length === 0 && (
           <div className="px-4 py-8 text-center text-text-tertiary text-sm">
             No pending tasks
           </div>
@@ -111,7 +100,7 @@ export function TaskListView({
       </div>
 
       {/* Completed tasks toggle */}
-      {filteredCompleted.length > 0 && (
+      {completedTasks.length > 0 && (
         <div className="mt-4">
           <button
             onClick={onToggleShowCompleted}
@@ -127,8 +116,8 @@ export function TaskListView({
               <ChevronDown className="w-4 h-4" />
             )}
             <span>
-              {showCompleted ? 'Hide' : 'Show'} {filteredCompleted.length} completed task
-              {filteredCompleted.length !== 1 ? 's' : ''}
+              {showCompleted ? 'Hide' : 'Show'} {completedTasks.length} completed task
+              {completedTasks.length !== 1 ? 's' : ''}
             </span>
           </button>
 
@@ -142,7 +131,7 @@ export function TaskListView({
                 className="overflow-hidden"
               >
                 <div className="border border-bg-tertiary rounded-lg overflow-hidden mt-2">
-                  {filteredCompleted.map((task, index) => (
+                  {completedTasks.map((task, index) => (
                     <TaskRow
                       key={task.id}
                       task={task}
@@ -153,7 +142,7 @@ export function TaskListView({
                       onSetDueDate={onSetDueDate}
                       isSelected={selectedIds.has(task.id)}
                       onSelect={isSelectMode ? onSelect : undefined}
-                      isFocused={focusedIndex === filteredPending.length + index}
+                      isFocused={focusedIndex === pendingTasks.length + index}
                       onEnterSelectionMode={onEnterSelectionMode}
                     />
                   ))}

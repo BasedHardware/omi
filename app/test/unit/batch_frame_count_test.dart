@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/services/wals/native_recording_intake.dart';
 
 /// A length-prefixed frame: `[4-byte LE length][payload]`.
 Uint8List _frame(int len) {

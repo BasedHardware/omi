@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-dashboard-panel-breeds-query-budget",
+  "violated_contract": "A monitoring dashboard panel added or edited inside a budget-audited dashboard JSON must satisfy that dashboard's checked-in query-budget contract (rate()/increase() range windows no wider than the sanctioned bound on timeseries panels; day-scale aggregates use $__range so they evaluate once). A panel merged in the same file as passing guard tests still regresses the batch budget when it lands after the audit without the guard running on main.",
+  "canonical_prevention": "Every dashboard JSON change runs the budget contract test in the PR's own CI on the exact head (never rely on an earlier same-file green), and new day-scale aggregates copy the $__range pattern from the existing instant panels instead of pinning a fixed [Nd] window.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_monitoring_dashboard_query_budget.py",
+    "backend/charts/monitoring/dashboards/general/omi-core-features.json"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/monitoring/dashboards/*.json",
+    "backend/tests/unit/test_monitoring_dashboard_query_budget.py"
+  ],
+  "status": "open"
+}

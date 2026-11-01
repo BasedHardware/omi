@@ -78,9 +78,45 @@ ALIGNMENT_COVERAGE_POLL_SECONDS = 5
 class ProbeError(RuntimeError):
     """A bounded probe stage failed without retaining response or transcript data."""
 
-    def __init__(self, stage: str):
+    def __init__(self, stage: str, *, close_code: int | None = None):
         super().__init__(stage)
         self.stage = stage
+        # The WebSocket close code only; the free-form reason never enters the receipt.
+        self.close_code = close_code
+
+
+def _verify_producer_environment(args: argparse.Namespace) -> None:
+    """Dev identity comes from its authenticated Kubernetes tunnel, not its public hostname.
+
+    The dev workflow owns the port-forward process to
+    dev-omi-backend/service/dev-omi-backend-listen. Its public API hostname
+    intentionally forwards Beta clients to production. Keep the existing
+    isolated production-canary path independent of this dev-only contract.
+    """
+    project, namespace = getattr(args, 'project', None), getattr(args, 'namespace', None)
+    if project != 'based-hardware-dev' and namespace != 'dev-omi-backend':
+        return
+    try:
+        parsed = urllib.parse.urlparse(args.api_url)
+        if not (
+            project == 'based-hardware-dev'
+            and namespace == 'dev-omi-backend'
+            and args.allow_local_http
+            and parsed.scheme == 'http'
+            and parsed.hostname == '127.0.0.1'
+            and parsed.port is not None
+            and 0 < parsed.port <= 65535
+            and parsed.path in ('', '/')
+            and not (parsed.username or parsed.password or parsed.query or parsed.fragment)
+        ):
+            raise ProbeError('producer_environment_mismatch')
+        context = subprocess.run(
+            ['kubectl', 'config', 'current-context'], check=False, capture_output=True, text=True, timeout=10
+        )
+        if context.returncode != 0 or not context.stdout.strip().startswith('gke_based-hardware-dev_'):
+            raise ProbeError('producer_environment_mismatch')
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise ProbeError('producer_environment_mismatch') from error
 
 
 @dataclass(frozen=True)
@@ -159,6 +195,19 @@ async def _receive_json(websocket: Any, deadline: float) -> Any:
     raise ProbeError("listen_timeout")
 
 
+@dataclass
+class _ListenProgress:
+    """Handshake progress already computed by the listen sample.
+
+    Threaded into early-close classification so a crash before session
+    bind/ready stays distinct from a socket that drops after the handshake.
+    """
+
+    session_bound: bool = False
+    ready: bool = False
+    transcripts_received: bool = False
+
+
 async def _listen_sample(
     base_url: str,
     token: str,
@@ -167,6 +216,7 @@ async def _listen_sample(
     *,
     allow_local_http: bool = False,
     hold_open: asyncio.Event | None = None,
+    progress: _ListenProgress | None = None,
 ) -> tuple[bool, str]:
     parsed = urllib.parse.urlparse(base_url)
     local_http = allow_local_http and parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}
@@ -191,6 +241,14 @@ async def _listen_sample(
     transcripts: list[str] = []
     session_bound = False
     ready = False
+
+    def _note_listen_progress() -> None:
+        if progress is None:
+            return
+        progress.session_bound = session_bound
+        progress.ready = ready
+        progress.transcripts_received = bool(transcripts)
+
     async with websockets.connect(
         websocket_url,
         extra_headers={"Authorization": f"Bearer {token}", "X-App-Platform": "desktop"},
@@ -216,6 +274,7 @@ async def _listen_sample(
                 and payload.get("status") == "ready"
             ):
                 ready = True
+            _note_listen_progress()
         chunk_bytes = fixture.sample_rate * 2 * CHUNK_MILLISECONDS // 1000
 
         async def receive_transcripts() -> None:
@@ -242,6 +301,7 @@ async def _listen_sample(
                         for segment in segments
                         if isinstance(segment, dict) and segment.get("text")
                     )
+                    _note_listen_progress()
 
         receiver = asyncio.create_task(receive_transcripts())
         # Loop the fixture so the durable transcript in the CLIENT conversation
@@ -538,7 +598,6 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
     live_word_count: int | None = None
     expected_word_count: int | None = None
     try:
-        token = _read_token(args.bearer_token_file)
         fixture = load_fixture()
         deployment_receipt = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))
         if not isinstance(deployment_receipt, dict) or not deployment_receipt.get("source_sha"):
@@ -552,6 +611,8 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
         )
         if base != "https://api.omiapi.com" and not local_test:
             raise ProbeError("dev_api_url")
+        _verify_producer_environment(args)
+        token = _read_token(args.bearer_token_file)
         status, sync_state = await asyncio.to_thread(_http_json_method, f"{base}/v1/users/private-cloud-sync", token)
         enabled = bool(sync_state and sync_state.get("private_cloud_sync_enabled"))
         if status != 200:
@@ -812,14 +873,25 @@ def _durable_fixture_matches(conversation: dict[str, Any], expected_phrase: str)
     return expected_phrase in durable_text
 
 
-def _early_listen_failure(task: asyncio.Task[tuple[bool, str]]) -> ProbeError:
+def _closed_in_listen_bootstrap(progress: _ListenProgress | None) -> bool:
+    """True when the socket died before audio and before session bind/ready."""
+    if progress is None:
+        return False
+    return not progress.transcripts_received and not (progress.session_bound and progress.ready)
+
+
+def _early_listen_failure(task: asyncio.Task[tuple[bool, str]], progress: _ListenProgress | None = None) -> ProbeError:
     """Classify a socket that died before the durable conversation finalized."""
     try:
         task.result()
     except websockets.exceptions.ConnectionClosed as error:
         # The listen service uses 1011 when every STT leg has failed. Keep the
         # provider's free-form close reason out of the bounded probe receipt.
-        return ProbeError("stt_unavailable" if error.code == 1011 else "listen_closed_early")
+        if error.code == 1011:
+            return ProbeError("stt_unavailable")
+        if _closed_in_listen_bootstrap(progress):
+            return ProbeError("listen_bootstrap_error", close_code=error.code)
+        return ProbeError("listen_closed_early", close_code=error.code)
     except ProbeError as error:
         return error
     except Exception:
@@ -892,6 +964,7 @@ def _receipt(
     live_word_count: int | None = None,
     expected_word_count: int | None = None,
     consumer_readback_passed: bool = False,
+    listen_close_code: int | None = None,
 ) -> dict[str, Any]:
     image = deployment_receipt.get("image") if isinstance(deployment_receipt.get("image"), dict) else {}
     receipt: dict[str, Any] = {
@@ -923,6 +996,8 @@ def _receipt(
     }
     if failure_stage is not None:
         receipt["failure_stage"] = failure_stage
+    if listen_close_code is not None:
+        receipt["listen_close_code"] = listen_close_code
     return receipt
 
 
@@ -935,9 +1010,8 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
     live_word_count: int | None = None
     expected_word_count: int | None = None
     consumer_readback_passed = False
+    listen_close_code: int | None = None
     try:
-        token = _read_token(args.bearer_token_file)
-        fixture = load_fixture()
         deployment_receipt = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))
         if not isinstance(deployment_receipt, dict):
             raise ProbeError("deployment_receipt")
@@ -947,8 +1021,12 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
                 json.dumps(deployment_receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")
             ).hexdigest()
         )
+        _verify_producer_environment(args)
+        token = _read_token(args.bearer_token_file)
+        fixture = load_fixture()
         conversation_id = str(uuid.uuid4())
         probe_socket_hold = asyncio.Event()
+        listen_progress = _ListenProgress()
         listen_task = asyncio.create_task(
             _listen_sample(
                 args.api_url.rstrip("/"),
@@ -957,6 +1035,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
                 conversation_id,
                 allow_local_http=args.allow_local_http,
                 hold_open=probe_socket_hold,
+                progress=listen_progress,
             )
         )
         readback_task = asyncio.create_task(
@@ -971,7 +1050,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
         try:
             done, _ = await asyncio.wait({listen_task, readback_task}, return_when=asyncio.FIRST_COMPLETED)
             if listen_task in done:
-                raise _early_listen_failure(listen_task)
+                raise _early_listen_failure(listen_task, listen_progress)
             conversation = readback_task.result()
             live_word_count, expected_word_count = _alignment_word_counts(
                 conversation.get("transcript_segments") or [], fixture.expected_phrase, DISCARD_KEEP_AUDIO_PASSES
@@ -1002,6 +1081,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             raise ProbeError("transcript_word_count")
     except (OSError, json.JSONDecodeError, ProbeError) as error:
         failure_stage = error.stage if isinstance(error, ProbeError) else "deployment_receipt"
+        listen_close_code = error.close_code if isinstance(error, ProbeError) else None
         deployment_receipt = locals().get("deployment_receipt", {})
         deployment_receipt_sha256 = locals().get("deployment_receipt_sha256", "")
     finally:
@@ -1022,6 +1102,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             live_word_count=live_word_count,
             expected_word_count=expected_word_count,
             consumer_readback_passed=consumer_readback_passed,
+            listen_close_code=listen_close_code,
             **receipt_kwargs,
         ),
         passed,
@@ -1062,6 +1143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"Pusher semantic probe status={receipt['status']} "
         f"failure_stage={receipt.get('failure_stage', 'none')} "
+        f"listen_close_code={receipt.get('listen_close_code', 'none')} "
         f"word_counts_live={counts['live']} word_counts_expected={counts['expected']} "
         f"consumer_readback={receipt['consumer_readback']['status']} "
         f"candidate_pod_count={receipt['producer_observation']['candidate_pod_count']} "

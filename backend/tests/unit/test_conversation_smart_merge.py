@@ -7,18 +7,24 @@ logic run for real. All text is synthetic.
 """
 
 from datetime import datetime, timedelta, timezone
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
 
 from config import conversation_smart_merge as config
+from database import conversation_quiet_checks as quiet_checks
+from google.cloud import firestore
 from database import conversation_finalization_jobs as jobs_db
+from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
 from database import sync_bridges, action_item_refresh as refresh_db
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY, INDEX_ONLY_REQUIREMENTS
 from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from tests.unit.test_sync_size_rollover import _RejectingStore
+from utils.conversations.size_limit import projected_document_bytes
 from utils.conversations import finalizer
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import smart_merge
@@ -67,6 +73,7 @@ class World:
         self.process_persisted = True
         self.retract_error = None
         self.on_ask = None
+        self.preceding_calls = []
         for module in (smart_merge_db, sync_bridges, conversations_db, refresh_db):
             monkeypatch.setattr(module, 'get_firestore_client', lambda: self.store)
         monkeypatch.setattr(refresh_db, 'bump_action_items_list_version', lambda uid: None)
@@ -77,7 +84,7 @@ class World:
         self.invalidated = []
         monkeypatch.setattr(
             conversations_db,
-            '_invalidate_client_processing',
+            'clear_client_processing',
             lambda payload: self.invalidated.append('transcript_segments' in payload),
         )
         monkeypatch.setattr(smart_merge_db, 'find_preceding_conversations', self.preceding)
@@ -123,17 +130,38 @@ class World:
         )
         return row
 
-    def preceding(self, uid, *, source, created_before, limit, firestore_client=None):
+    def preceding(
+        self,
+        uid,
+        *,
+        source,
+        created_before,
+        limit=None,
+        discarded=False,
+        transaction=None,
+        firestore_client=None,
+        client_device_id=None,
+    ):
+        if transaction is not None:
+            assert_read_allowed = getattr(transaction, '_assert_read_allowed', None)
+            if assert_read_allowed is not None:
+                assert_read_allowed()
+        self.preceding_calls.append(
+            {'source': source, 'discarded': discarded, 'limit': limit, 'transaction': transaction is not None}
+        )
         rows = [
             dict(value, id=key[-1])
             for key, value in self.store.rows.items()
             if key[:3] == ('users', uid, 'conversations')
-            and value.get('discarded') is False
+            and value.get('discarded') is discarded
             and value.get('source') == source
+            and value.get('status') in smart_merge_db._ALL_STATUSES
             and value['created_at'] < created_before
+            and (not client_device_id or limit is not None or value.get('client_device_id') == client_device_id)
         ]
         rows.sort(key=lambda row: row['created_at'], reverse=True)
-        return [{k: v for k, v in row.items() if k != 'transcript_segments'} for row in rows[:limit]]
+        projected = [{k: v for k, v in row.items() if k != 'transcript_segments'} for row in rows]
+        return projected if limit is None else projected[:limit]
 
     # -- fakes
     def ask(self, state, questions, *, lane, timeout_seconds, max_attempts):
@@ -151,7 +179,7 @@ class World:
         if not self.process_persisted:
             persistence_observer(False)
             return conversation
-        assert trigger is ProcessingTrigger.SMART_MERGE
+        assert trigger in {ProcessingTrigger.SMART_MERGE, ProcessingTrigger.SYNC_UPDATE}
         assert smart_merge_refresh[0] == self.raw(conversation.id)['smart_merge']['revision']
         self.processed.append((conversation.id, len(conversation.transcript_segments)))
         raw = self.raw(conversation.id)
@@ -183,7 +211,6 @@ class World:
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     return World(monkeypatch)
 
 
@@ -216,13 +243,6 @@ def test_unset_mode_is_merge_by_default(monkeypatch):
     monkeypatch.delenv(config.SMART_MERGE_MODE_ENV, raising=False)
     assert config.smart_merge_mode() is config.SmartMergeMode.MERGE
     assert config.DEFAULT_SMART_MERGE_MODE is config.SmartMergeMode.MERGE
-
-
-def test_uid_allowlist(monkeypatch):
-    monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, 'a, b')
-    assert config.smart_merge_uid_allowed('a') and not config.smart_merge_uid_allowed('c')
-    monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, '')
-    assert config.smart_merge_uid_allowed('c')
 
 
 def test_metric_reason_is_bounded_to_known_values(monkeypatch):
@@ -371,8 +391,19 @@ def test_merge_at_threshold_absorbs_redirects_and_refreshes_once(world):
     world.add('p', 0, 10)
     world.add('n', 15, 10, private_cloud_sync_enabled=True)
     world.jev_answers = [0.35]
+    quiet_paths = [('conversation_finalization_jobs', quiet_checks.quiet_check_id(UID, cid)) for cid in ('p', 'n')]
+    for path in quiet_paths:
+        world.store.rows[path] = {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 1,
+            'reconcile_after_at': T0,
+        }
 
     assert world.finish('n') is True
+    for path in quiet_paths:
+        assert world.store.rows[path]['status'] == 'quiet_done'
+        assert world.store.rows[path]['reconcile_after_at'] is firestore.DELETE_FIELD
 
     donor = world.raw('n')
     assert donor['deleted'] is True and donor['discarded'] is True and donor['sync_merged_into'] == 'p'
@@ -390,6 +421,31 @@ def test_merge_at_threshold_absorbs_redirects_and_refreshes_once(world):
     assert donor['sync_bridge_audio_target'] == 'p'
     # Owner detail reads follow the existing redirect contract to the survivor.
     assert conversations_db.resolve_sync_conversation_redirect(UID, 'n') == 'p'
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('upgrade', [False, True])
+def test_absorb_preserves_open_loop_blobs_and_upgrades_retained_content(world, level, upgrade):
+    field, marker = 'open_loop_extractions', 'open_loop_extractions_compressed'
+    extracted = {'version': 1, 'delegated_by_user': [], 'commitments_by_others': []}
+    survivor = world.add('p', 0, 10)
+    survivor.update(data_protection_level=level, **{field: extracted})
+    world.store.rows[_path('p')] = conversations_db.encode_conversation_for_write(UID, survivor, level)
+    donor_level = 'enhanced' if upgrade else level
+    donor = world.add('n', 15, 10)
+    donor.update(data_protection_level=donor_level, **{field: extracted})
+    world.store.rows[_path('n')] = conversations_db.encode_conversation_for_write(UID, donor, donor_level)
+    before_survivor, before_donor = deepcopy(world.raw('p')), deepcopy(world.raw('n'))
+    world.jev_answers = [0.35]
+
+    assert world.finish('n') is True
+    saved, donor = world.raw('p'), world.raw('n')
+    assert saved['data_protection_level'] == donor_level
+    assert isinstance(saved[field], str if donor_level == 'enhanced' else bytes)
+    assert conversations_db.decode_open_loop_extractions(UID, saved[field], saved[marker]) == extracted
+    if level == donor_level:
+        assert saved[field] == before_survivor[field]
+    assert donor[field] == before_donor[field] and donor[marker] == before_donor[marker]
 
 
 def test_merge_below_threshold_keeps_both(world):
@@ -678,6 +734,7 @@ class _Jobs:
 
 @pytest.mark.asyncio
 async def test_failed_refresh_is_finished_by_the_finalization_retry_exactly_once(world, monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10, private_cloud_sync_enabled=True, finalization_job_id=JOB, finalization_revision=1)
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
@@ -808,7 +865,7 @@ def test_expired_delivery_cannot_release_a_new_delivery_of_the_same_job(world, m
         old = kwargs['smart_merge_refresh'][1]
         world.raw('p')['smart_merge']['refresh_lease']['until'] = T0
 
-        def paused(uid, cid, revision, *, owner):
+        def paused(uid, cid, revision, *, owner, skip_processing=False):
             newer.update(world.raw('p')['smart_merge']['refresh_lease'])
             assert owner != old
 
@@ -854,6 +911,7 @@ async def test_stale_or_terminal_donor_delivery_is_read_only(world, monkeypatch,
 
 @pytest.mark.asyncio
 async def test_permanently_failed_donor_dead_letters_without_mutating_conversations(world, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10, finalization_job_id=JOB, finalization_revision=1)
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
@@ -864,6 +922,7 @@ async def test_permanently_failed_donor_dead_letters_without_mutating_conversati
             await jobs.attempt()
     claim = jobs_db.claim_finalization_job(JOB, 1)
     donor, survivor = world.get(UID, 'n'), world.get(UID, 'p')
+    assert donor['smart_merge']['role'] == 'donor' and donor['discarded']
     assert jobs_db.mark_finalization_dead_letter(JOB, 1, claim['lease_epoch'], 3)
     assert jobs.job['status'] == 'dead_letter'
     assert world.get(UID, 'n') == donor and world.get(UID, 'p') == survivor
@@ -883,6 +942,7 @@ def test_seven_fragment_evening_becomes_one_survivor_with_six_redirects(world):
         assert world.finish(cid, owner=f'job-{index}') is True
 
     survivor = world.get(UID, 'f0')
+    assert survivor['recorded_end'] == T0 + timedelta(minutes=104)
     assert not survivor.get('deleted')
     for cid in ids[1:]:
         assert world.raw(cid)['sync_merged_into'] == 'f0' and world.raw(cid)['deleted'] is True
@@ -947,3 +1007,111 @@ def test_preceding_query_uses_the_registered_spec_and_an_existing_index():
     assert ('limit', (6,), {}) in log
     selected = next(args[0] for name, args, _ in log if name == 'select')
     assert 'transcript_segments' not in selected
+
+
+@pytest.mark.parametrize('protected', ['p', 'n'])
+def test_transaction_never_rekeys_corrected_capture_anchors(world, protected):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.raw(protected)['has_transcript_corrections'] = True
+    before = deepcopy(world.store.rows)
+    result = smart_merge_db.absorb_conversation(
+        UID,
+        'p',
+        'n',
+        expected_revision=0,
+        plan=lambda *_: (_ for _ in ()).throw(AssertionError('corrected captures must not reach the merge planner')),
+        firestore_client=world.store,
+    )
+    assert result.outcome == 'rejected'
+    assert world.store.rows == before
+
+
+@pytest.mark.parametrize('level', ['enhanced', 'standard'])
+def test_smart_absorb_encoded_cap_and_separate_finalization(world, monkeypatch, level, caplog):
+    world.add('p', 0, 10)
+    world.add('n', 13, 10)
+    if level == 'standard':
+        for cid in ('p', 'n'):
+            decoded = world.get(UID, cid)
+            decoded['data_protection_level'] = level
+            world.store.rows[_path(cid)] = conversations_db.encode_conversation_for_write(UID, decoded, level)
+    snapshot = deepcopy(world.store.rows)
+    measured = []
+
+    def observe(ref, payload, current=None):
+        size = projected_document_bytes(ref, payload, current)
+        measured.append((size, deepcopy(payload)))
+        return size
+
+    monkeypatch.setattr(smart_merge_db, 'projected_document_bytes', observe)
+    assert world.finish('n')
+    assert measured and isinstance(measured[0][1]['transcript_segments'], str if level == 'enhanced' else bytes)
+    assert measured[0][1]['data_protection_level'] == level
+    projected = max(size for size, _ in measured)
+    world.store.rows = deepcopy(snapshot)
+    monkeypatch.setattr(smart_merge_db, 'CONVERSATION_ABSORPTION_BYTE_CAP', projected)
+    assert world.finish('n')  # exactly the encoded cap fits, including encryption overhead
+    world.store.rows = deepcopy(snapshot)
+    monkeypatch.setattr(smart_merge_db, 'CONVERSATION_ABSORPTION_BYTE_CAP', projected - 1)
+    world.processed.clear()
+    world.retracted.clear()
+    assert not world.finish('n')
+    assert world.raw('p') == snapshot[_path('p')]
+    # The absorb committed no donor patch or redirect. Only the caller's kept
+    # decision metadata changes as normal finalization continues on this row.
+    after = deepcopy(world.raw('n'))
+    after.pop('smart_merge_decision', None)
+    assert after == snapshot[_path('n')]
+    assert not world.processed and not world.retracted
+    assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'
+    assert 'projected_size_bucket=lt_500k' in caplog.text
+
+
+@pytest.mark.parametrize('named', ['survivor', 'donor', 'unnamed'])
+def test_smart_absorb_size_commit_rejection_rolls_over(world, monkeypatch, named, caplog):
+    if named == 'unnamed':
+        store = _RejectingStore(0, name=lambda _: None)
+    else:
+        cid = 'p' if named == 'survivor' else 'n'
+        store = _RejectingStore(0, name=lambda _: f'users/{UID}/conversations/{cid}')
+    world.store = store
+    world.add('p', 0, 10)
+    world.add('n', 13, 10)
+    # Decision metadata is written before absorption; reject only the absorb.
+    original = smart_merge_db.absorb_conversation
+
+    def reject_once(*args, **kwargs):
+        store.failures[:] = [True]
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(smart_merge_db, 'absorb_conversation', reject_once)
+    before = deepcopy(store.rows)
+    assert not world.finish('n')
+    assert world.raw('p') == before[_path('p')]
+    assert world.transcript('n') == _segments('n', 10)
+    assert not world.raw('n').get('deleted')
+    assert not world.retracted and not world.processed
+    assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'
+    assert 'reason=size_limit_retry outcome=rejected' in caplog.text
+    rollover = next(r.message for r in caplog.records if 'reason=size_rollover ' in r.message)
+    assert 'outcome=rolled_over' in rollover and 'rollover_target_kind=sibling_row' in rollover
+    assert 'segments_bucket=unknown' not in rollover and 'stage=commit' in rollover
+    assert 'job_ref=none attempt_ref=none' in rollover
+    rejected = next(r.message for r in caplog.records if 'reason=size_limit_retry ' in r.message)
+    for field in ('segments_bucket', 'speech_seconds_bucket'):
+        assert (
+            dict(token.split('=', 1) for token in rejected.split())[field]
+            == dict(token.split('=', 1) for token in rollover.split())[field]
+        )
+
+
+def test_smart_absorb_cap_checks_retained_donor_patch(world, caplog):
+    world.add('p', 0, 10)
+    world.add('n', 13, 10)
+    world.raw('n')['retained_metadata'] = 'x' * (801 * 1024)
+    before = deepcopy(world.raw('p'))
+    assert not world.finish('n')
+    assert world.raw('p') == before
+    assert not world.raw('n').get('deleted')
+    assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'

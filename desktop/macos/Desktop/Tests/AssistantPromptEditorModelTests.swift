@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// The three proactive-assistant prompt editors share one draft model: edits stay local until Save,
+/// The task and memory prompt editors share one draft model: edits stay local until Save,
 /// Cancel discards them, and Reset clears the stored prompt rather than re-storing the default.
 @MainActor
 final class AssistantPromptEditorModelTests: XCTestCase {
@@ -85,11 +85,10 @@ final class AssistantPromptEditorModelTests: XCTestCase {
   }
 
   func testTheRealStoresRouteToTheirOwnAssistant() {
-    XCTAssertEqual(AssistantPromptStore.insight.defaultPrompt, InsightAssistantSettings.defaultAnalysisPrompt)
     XCTAssertEqual(AssistantPromptStore.task.defaultPrompt, TaskAssistantSettings.defaultAnalysisPrompt)
     XCTAssertEqual(AssistantPromptStore.memory.defaultPrompt, MemoryAssistantSettings.defaultAnalysisPrompt)
     XCTAssertEqual(
-      Set([AssistantPromptStore.insight.title, AssistantPromptStore.task.title, AssistantPromptStore.memory.title])
-        .count, 3)
+      Set([AssistantPromptStore.task.title, AssistantPromptStore.memory.title])
+        .count, 2)
   }
 }

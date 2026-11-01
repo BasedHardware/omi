@@ -27,6 +27,14 @@ enum ExtensionCatalogService {
     }
   }
 
+  /// The persisted identity, rather than the catalog title: a configured server with that name
+  /// may already exist, so setup must continue against the collision-resolved entry just added.
+  /// This receipt carries no credentials and does not claim that a server is authenticated.
+  enum InstallReceipt: Equatable, Sendable {
+    case mcpServer(LocalMcpStore.Entry)
+    case skill(slug: String)
+  }
+
   // MARK: - Browse
 
   /// With no query the user sees the curated featured servers rather than the registry's
@@ -174,14 +182,21 @@ enum ExtensionCatalogService {
 
   /// Writes the entry into `~/.omi`. `secrets` fills the env variables or auth header the entry
   /// declared it needs; an entry with `install.needsInput == false` takes an empty dictionary.
-  static func install(_ entry: ExtensionCatalog.Entry, secrets: [String: String] = [:]) async throws {
+  @discardableResult
+  static func install(_ entry: ExtensionCatalog.Entry, secrets: [String: String] = [:]) async throws
+    -> InstallReceipt
+  {
+    try Task.checkCancellation()
     switch entry.install {
     case .mcpRemote(let url, let transport, let secretHeader):
       var raw: [String: Any] = ["url": url, "transport": transport]
       if let secretHeader, let token = nonEmpty(secrets[secretHeader]) {
         raw["headers"] = [secretHeader: authorizationValue(header: secretHeader, secret: token)]
       }
-      try LocalMcpStore.upsertServer(availableServerName(for: entry.name), entry: raw)
+      let name = availableServerName(for: entry.name)
+      try Task.checkCancellation()
+      try LocalMcpStore.upsertServer(name, entry: raw)
+      return .mcpServer(LocalMcpStore.Entry(name: name, summary: url, isCommand: false))
 
     case .mcpStdio(let command, let args, let requiredEnv):
       var raw: [String: Any] = ["command": command, "args": args]
@@ -189,7 +204,11 @@ enum ExtensionCatalogService {
         if let value = nonEmpty(secrets[name]) { result[name] = value }
       }
       if !env.isEmpty { raw["env"] = env }
-      try LocalMcpStore.upsertServer(availableServerName(for: entry.name), entry: raw)
+      let name = availableServerName(for: entry.name)
+      try Task.checkCancellation()
+      try LocalMcpStore.upsertServer(name, entry: raw)
+      return .mcpServer(
+        LocalMcpStore.Entry(name: name, summary: ([command] + args).joined(separator: " "), isCommand: true))
 
     case .skill(let source):
       guard let markdownURL = source.markdownURL,
@@ -200,8 +219,10 @@ enum ExtensionCatalogService {
         throw CatalogError.emptySkill
       }
       let files = await bundledFiles(of: source)
-      _ = try LocalSkillsStore.saveSkillBundle(
+      try Task.checkCancellation()
+      let slug = try LocalSkillsStore.saveSkillBundle(
         title: entry.name, markdown: markdown, files: files)
+      return .skill(slug: slug)
     }
   }
 

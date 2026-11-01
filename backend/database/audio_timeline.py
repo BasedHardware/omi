@@ -49,6 +49,11 @@ def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
     Only a real mapping is a metadata document: a GCS blob carries ``None`` or
     a dict, and anything else (an ORM/test double answering attribute probes)
     is not span evidence and must fail closed to the legacy listing behavior.
+
+    A well-formed ``v2_playback_start`` — finite and never ahead of the raw
+    span start, since skew normalization only moves capture starts back onto
+    the server clock — rides along as ``playback_start`` for playback wall
+    math; malformed values leave the span on the raw capture clock.
     """
     if not isinstance(metadata, dict):
         return None
@@ -60,7 +65,14 @@ def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
         return None
     if samples <= 0 or rate <= 0:
         return None
-    return {'start': start, 'samples': samples, 'sample_rate': rate}
+    span = {'start': start, 'samples': samples, 'sample_rate': rate}
+    try:
+        playback_start = float(metadata['v2_playback_start'])
+    except (KeyError, TypeError, ValueError):
+        return span
+    if math.isfinite(playback_start) and playback_start <= start:
+        span['playback_start'] = playback_start
+    return span
 
 
 def chunk_span_bounds(item: object) -> Optional[Tuple[float, float]]:
@@ -135,3 +147,32 @@ def group_chunks_by_coverage(
         else:
             groups[-1].append(chunk)
     return groups
+
+
+def get_extension_for_path(path: str) -> str:
+    """Extract the private cloud sync extension from a GCS path."""
+    if path.endswith('.batch.enc'):
+        return 'batch.enc'
+    elif path.endswith('.batch.bin'):
+        return 'batch.bin'
+    elif path.endswith('.opus.enc'):
+        return 'opus.enc'
+    elif path.endswith('.opus'):
+        return 'opus'
+    elif path.endswith('.enc'):
+        return 'enc'
+    elif path.endswith('.bin'):
+        return 'bin'
+    return 'bin'
+
+
+def strip_extension(filename: str) -> str:
+    """Strip private cloud sync extension to get the timestamp string.
+
+    Handles both single-chunk filenames (e.g. '1000.000.opus') and
+    batch filenames (e.g. '1000.000-1010.000.batch.bin').
+    """
+    for ext in ('.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin'):
+        if filename.endswith(ext):
+            return filename[: -len(ext)]
+    return filename.rsplit('.', 1)[0]

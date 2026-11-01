@@ -12,7 +12,10 @@ go test -race ./...
 The race-enabled suite exercises streaming-transcriber readiness with in-memory
 WebSocket connections; it needs no device, API credentials, or network service.
 Parakeet ignores PCM until its server sends `ready`, while Deepgram accepts PCM
-as soon as its connection is established.
+as soon as its connection is established. If the Parakeet server closes the
+stream before `ready` (for example 1013 `capacity_full` or `service_not_ready`),
+`AppendPCM` and `Stop` return an error wrapping its `*websocket.CloseError`, so
+callers can retry or switch engines.
 
 `ParakeetWSURL` overrides an existing `sample_rate`, including percent-encoded
 query keys, and emits one rate parameter. Other query parameters retain their

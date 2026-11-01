@@ -8,6 +8,7 @@ empty later pages do not synthesize a greeting. The route now validates rows int
 
 from datetime import datetime, timezone
 
+import database.chat as chat_db
 import routers.chat as chat_router
 
 
@@ -107,7 +108,7 @@ def test_get_messages_empty_later_page_does_not_create_greeting(monkeypatch):
     assert greeted == []
 
 
-def test_get_messages_empty_first_page_still_creates_greeting(monkeypatch):
+def test_get_messages_empty_first_page_never_creates_an_unprompted_greeting(monkeypatch):
     monkeypatch.setattr(
         chat_router,
         'resolve_chat_target',
@@ -128,11 +129,45 @@ def test_get_messages_empty_first_page_still_creates_greeting(monkeypatch):
         lambda uid, app_id=None, chat_session_id=None: {'id': 'greeting', 'app_id': app_id},
     )
 
-    assert chat_router.get_messages(
-        plugin_id=None,
-        app_id='app-1',
-        chat_session_id=None,
-        limit=100,
-        offset=0,
-        uid='uid-1',
-    ) == [{'id': 'greeting', 'app_id': 'app-1'}]
+    assert (
+        chat_router.get_messages(
+            plugin_id=None,
+            app_id='app-1',
+            chat_session_id=None,
+            limit=100,
+            offset=0,
+            uid='uid-1',
+        )
+        == []
+    )
+
+
+def test_automatic_history_filter_uses_provenance_and_preserves_agent_rich_blocks():
+    blocks = [
+        {'type': 'taskCard', 'taskId': 'task'},
+        {'type': 'goalLink', 'goalId': 'goal'},
+        {'type': 'conversationLink', 'conversationId': 'meeting'},
+    ]
+    reply = {'sender': 'ai', 'type': 'text', 'content_blocks': blocks, 'metadata': '{"continuityKey":"user-turn"}'}
+    assert not chat_db.is_automatic_chat_message(reply)
+    for marker in (
+        'daily_opener',
+        'cold_start_rich',
+        'cold_start_sparse',
+        'capture_arrival',
+        'agent_judgment',
+        'deferral_reraise',
+    ):
+        assert chat_db.is_automatic_chat_message({**reply, 'metadata': '{"chatFirstIntentSource":"' + marker + '"}'})
+    assert chat_db.is_automatic_chat_message({**reply, 'metadata': '{"chatFirstIntentId":"old-intent"}'})
+    assert chat_db.is_automatic_chat_message({**reply, 'metadata': '{"continuityKey":"notification:old"}'})
+    assert not chat_db.is_automatic_chat_message({**reply, 'metadata': 'malformed'})
+
+
+def test_user_notification_followup_and_cold_start_answer_remain_visible():
+    user = {'sender': 'human', 'type': 'text', 'text': 'My answer'}
+    for metadata in (
+        {'continuityKey': 'notification:old'},
+        {'continuityKey': 'user-answer', 'coldStartSequence': {'id': 'old-sequence', 'step': 1}},
+    ):
+        assert not chat_db.is_automatic_chat_message({**user, 'metadata': metadata})

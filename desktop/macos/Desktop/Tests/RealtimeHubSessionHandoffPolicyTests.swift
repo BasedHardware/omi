@@ -255,7 +255,7 @@ import XCTest
           reason: "quota",
           mintAttemptId: "mint-42"))
 
-      let snapshot = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().last
+      let snapshot = DesktopDiagnosticsManager.shared.currentSnapshots().last
       XCTAssertEqual(snapshot?["event"] as? String, "fallback_triggered")
       XCTAssertEqual(snapshot?["area"] as? String, "realtime_hub")
       XCTAssertEqual(snapshot?["from"] as? String, "openai")
@@ -375,6 +375,22 @@ import XCTest
           canReplaceIdleSession: false,
           hasBufferedTurn: false),
         .deferUntilIdle)
+    }
+
+    func testAssistantVoiceHandoffDefersWhileActiveAndReplacesIdle() {
+      XCTAssertEqual(RealtimeHubSessionHandoffReason(rawValue: "assistant_voice"), .assistantVoice)
+      XCTAssertEqual(
+        RealtimeHubSessionHandoffPolicy.decide(
+          bindingMatchesRequirement: false,
+          canReplaceIdleSession: false,
+          hasBufferedTurn: false),
+        .deferUntilIdle)
+      XCTAssertEqual(
+        RealtimeHubSessionHandoffPolicy.decide(
+          bindingMatchesRequirement: false,
+          canReplaceIdleSession: true,
+          hasBufferedTurn: false),
+        .replacePreservingBufferedTurn)
     }
 
     func testCapturedTurnGetsOneTransparentRebindThenFallsBack() {

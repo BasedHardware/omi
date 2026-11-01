@@ -7,6 +7,7 @@ ID token issued by the app. Presenting the wrong one otherwise fails as a generi
 endpoint rather than a key/endpoint mismatch.
 """
 
+import re
 from typing import Optional
 
 MCP_KEY_PREFIX = "omi_mcp_"
@@ -53,3 +54,17 @@ def wrong_key_family_detail(token: Optional[str], expected_family: str) -> Optio
     if presented == expected_family or presented == FIREBASE_FAMILY:
         return None
     return f"{_KEY_USAGE[presented]}. {_ENDPOINT_EXPECTATION[expected_family]}."
+
+
+def malformed_api_key_detail(token: str, expected_family: str) -> Optional[str]:
+    """Validate public key shape without consulting storage or echoing secrets."""
+    prefix = MCP_KEY_PREFIX if expected_family == MCP_FAMILY else DEV_KEY_PREFIX
+    if re.fullmatch(re.escape(prefix) + r'[0-9a-f]{32}', token):
+        return None
+    label = 'MCP' if expected_family == MCP_FAMILY else 'Developer'
+    return f"Malformed {label} API key. Expected {prefix} followed by 32 hexadecimal characters; copy the full secret, not the displayed key prefix."
+
+
+def unknown_api_key_detail(expected_family: str) -> str:
+    label = 'MCP' if expected_family == MCP_FAMILY else 'Developer'
+    return f"Unknown or revoked {label} API key. Check the full secret or create a new key."

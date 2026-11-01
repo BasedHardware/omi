@@ -6,12 +6,13 @@ import {
   getDailySummaries,
   getDailySummary,
   deleteDailySummary,
-  generateTestDailySummary,
+  createDailySummary,
 } from '@/lib/api';
-import { getCache, setCache, updateCache, CACHE_TTL } from '@/lib/cache';
+import { getCache, setCache, CACHE_TTL } from '@/lib/cache';
 
 export interface UseRecapsOptions {
   limit?: number;
+  accountId?: string;
 }
 
 export interface UseRecapsReturn {
@@ -23,33 +24,15 @@ export interface UseRecapsReturn {
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
   removeRecap: (id: string) => Promise<boolean>;
-  generateForDate: (date: string) => Promise<DailySummary | null>;
+  generateForDate: (date: string) => Promise<DailySummary>;
   getRecapDetail: (id: string) => Promise<DailySummary | null>;
 }
 
-// Cache key for recaps data - uses centralized cache system
-const RECAPS_CACHE_KEY = 'recaps:list';
-
-// Structure stored in centralized cache
+// Each authenticated owner has its own recap snapshot.
 interface RecapsCacheData {
   recaps: DailySummary[];
   offset: number;
   hasMore: boolean;
-}
-
-function getFromCache(): { data: RecapsCacheData; isStale: boolean } | null {
-  return getCache<RecapsCacheData>(RECAPS_CACHE_KEY);
-}
-
-function setToCache(recaps: DailySummary[], offset: number, hasMore: boolean): void {
-  setCache<RecapsCacheData>(RECAPS_CACHE_KEY, { recaps, offset, hasMore }, CACHE_TTL.MEDIUM);
-}
-
-function updateCacheRecaps(updater: (recaps: DailySummary[]) => DailySummary[]): void {
-  updateCache<RecapsCacheData>(RECAPS_CACHE_KEY, (data) => ({
-    ...data,
-    recaps: updater(data.recaps),
-  }));
 }
 
 // Parse YYYY-MM-DD as local date (not UTC)
@@ -95,184 +78,169 @@ function normalizeRecapsResponse(response: unknown): DailySummary[] {
       return obj.data;
     }
   }
-  return [];
+  throw new Error('Invalid recap list response');
 }
 
 export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
-  const { limit = 30 } = options;
-
-  const cachedEntry = getFromCache();
-
-  // Initialize state from cache if available
-  const [recaps, setRecaps] = useState<DailySummary[]>(cachedEntry?.data.recaps || []);
-  const [loading, setLoading] = useState(!cachedEntry);
+  const { limit = 30, accountId } = options;
+  const cacheKey = `recaps:owner=${encodeURIComponent(accountId ?? 'session')}:list`;
+  const owner = useRef(accountId);
+  const generation = useRef(0);
+  if (owner.current !== accountId) generation.current++;
+  owner.current = accountId;
+  const alive = useRef(true);
+  const mutationRevision = useRef(0);
+  const activeRead = useRef<symbol | null>(null);
+  const cached = getCache<RecapsCacheData>(cacheKey);
+  const [snapshot, setSnapshot] = useState({
+    generation: generation.current,
+    recaps: cached?.data.recaps ?? [],
+  });
+  const rows = useRef(snapshot.recaps);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(cachedEntry?.data.hasMore ?? true);
+  const [hasMore, setHasMore] = useState(cached?.data.hasMore ?? true);
+  const offset = useRef(cached?.data.offset ?? 0);
+  const more = useRef(cached?.data.hasMore ?? true);
+  const current = useCallback(
+    (admitted: number) => alive.current && generation.current === admitted,
+    [],
+  );
 
-  // Use ref for offset to avoid dependency issues
-  const offsetRef = useRef(cachedEntry?.data.offset || 0);
-  // Track if a fetch is in progress to prevent concurrent fetches
-  const fetchingRef = useRef(false);
-  // Track if initial fetch is done
-  const initializedRef = useRef(false);
+  const publish = useCallback(
+    (recaps: DailySummary[]) => {
+      rows.current = recaps;
+      setSnapshot({ generation: generation.current, recaps });
+      setCache<RecapsCacheData>(
+        cacheKey,
+        {
+          recaps,
+          offset: offset.current,
+          hasMore: more.current,
+        },
+        CACHE_TTL.MEDIUM,
+      );
+    },
+    [cacheKey],
+  );
 
-  // Compute grouped recaps
-  const groupedRecaps = useMemo(() => groupByMonth(recaps), [recaps]);
-
-  // Core fetch function
-  const doFetch = useCallback(async (currentOffset: number): Promise<DailySummary[]> => {
-    const result = await getDailySummaries({
-      limit,
-      offset: currentOffset,
-    });
-    return normalizeRecapsResponse(result);
-  }, [limit]);
-
-  // Initial load
-  useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-
-    const cached = getFromCache();
-
-    // If we have fresh cache, use it and skip fetch
-    if (cached && !cached.isStale) {
-      setRecaps(cached.data.recaps);
-      setHasMore(cached.data.hasMore);
-      offsetRef.current = cached.data.offset;
-      setLoading(false);
-      return;
-    }
-
-    // If we have stale cache, show it but refresh in background
-    if (cached) {
-      setRecaps(cached.data.recaps);
-      setHasMore(cached.data.hasMore);
-      offsetRef.current = cached.data.offset;
-      setLoading(false);
-    }
-
-    const loadInitial = async () => {
-      if (fetchingRef.current) return;
-      fetchingRef.current = true;
-
-      if (!cached) {
-        setLoading(true);
-      }
+  // One owner for initial reads, refreshes and pagination. A read admitted
+  // before a successful creation/deletion cannot overwrite that mutation.
+  const readPage = useCallback(
+    async (append: boolean) => {
+      if (activeRead.current || (append && !more.current)) return;
+      const admitted = generation.current;
+      const lease = Symbol('recap read');
+      activeRead.current = lease;
+      setLoading(true);
       setError(null);
-
+      const pageOffset = append ? offset.current : 0;
       try {
-        const result = await doFetch(0);
-        setRecaps(result);
-        offsetRef.current = result.length;
-        setHasMore(result.length >= limit);
-        setToCache(result, result.length, result.length >= limit);
-      } catch (err) {
-        if (!cached) {
-          setError(err instanceof Error ? err.message : 'Failed to load recaps');
+        while (current(admitted)) {
+          const revision = mutationRevision.current;
+          const result = normalizeRecapsResponse(
+            await getDailySummaries({ limit, offset: pageOffset }),
+          );
+          if (!current(admitted) || activeRead.current !== lease) return;
+          // Re-read after the write, using the server's pagination. The stale
+          // response must never erase a recovered row or resurrect a deletion.
+          if (revision !== mutationRevision.current) continue;
+          const existingIds = new Set(rows.current.map((recap) => recap.id));
+          const updated = append
+            ? [...rows.current, ...result.filter((recap) => !existingIds.has(recap.id))]
+            : result;
+          updated.sort((a, b) => b.date.localeCompare(a.date));
+          offset.current = pageOffset + result.length;
+          more.current = result.length >= limit;
+          setHasMore(more.current);
+          publish(updated);
+          return;
         }
+      } catch (err) {
+        if (current(admitted))
+          setError(err instanceof Error ? err.message : 'Failed to load recaps');
       } finally {
-        setLoading(false);
-        fetchingRef.current = false;
+        if (activeRead.current === lease) {
+          activeRead.current = null;
+          if (current(admitted)) setLoading(false);
+        }
       }
-    };
+    },
+    [current, limit, publish],
+  );
 
-    loadInitial();
-  }, [doFetch, limit]);
-
-  // Load more (pagination)
-  const loadMore = useCallback(async () => {
-    if (fetchingRef.current || !hasMore) return;
-    fetchingRef.current = true;
-    setLoading(true);
-
-    try {
-      const result = await doFetch(offsetRef.current);
-
-      setRecaps((prev) => {
-        // Deduplicate
-        const existingIds = new Set(prev.map((r) => r.id));
-        const newRecaps = result.filter((r) => !existingIds.has(r.id));
-        const updated = [...prev, ...newRecaps];
-        const newOffset = offsetRef.current + result.length;
-        const newHasMore = result.length >= limit;
-        setToCache(updated, newOffset, newHasMore);
-        return updated;
-      });
-
-      offsetRef.current += result.length;
-      setHasMore(result.length >= limit);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load more recaps');
-    } finally {
-      setLoading(false);
-      fetchingRef.current = false;
-    }
-  }, [doFetch, hasMore, limit]);
-
-  // Refresh
-  const refresh = useCallback(async () => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-    setLoading(true);
+  useEffect(() => {
+    alive.current = true;
+    // Retire the previous owner's request without letting its finally block
+    // unlock this owner's newer read. No old owner's rows are rendered.
+    activeRead.current = null;
+    const entry = getCache<RecapsCacheData>(cacheKey);
+    rows.current = entry?.data.recaps ?? [];
+    offset.current = entry?.data.offset ?? 0;
+    more.current = entry?.data.hasMore ?? true;
+    setSnapshot({ generation: generation.current, recaps: rows.current });
+    setHasMore(more.current);
     setError(null);
+    setLoading(!entry);
+    if (!entry || entry.isStale) void readPage(false);
+    return () => {
+      alive.current = false;
+    };
+  }, [cacheKey, readPage]);
 
-    try {
-      const result = await doFetch(0);
-      setRecaps(result);
-      offsetRef.current = result.length;
-      setHasMore(result.length >= limit);
-      setToCache(result, result.length, result.length >= limit);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh recaps');
-    } finally {
-      setLoading(false);
-      fetchingRef.current = false;
-    }
-  }, [doFetch, limit]);
+  const loadMore = useCallback(() => readPage(true), [readPage]);
+  const refresh = useCallback(() => readPage(false), [readPage]);
 
-  // Remove recap
-  const removeRecap = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      await deleteDailySummary(id);
-      const updater = (prev: DailySummary[]) => prev.filter((r) => r.id !== id);
-      setRecaps(updater);
-      updateCacheRecaps(updater);
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete recap');
-      return false;
-    }
-  }, []);
+  const removeRecap = useCallback(
+    async (id: string): Promise<boolean> => {
+      const admitted = generation.current;
+      try {
+        await deleteDailySummary(id);
+        if (!current(admitted)) return false;
+        mutationRevision.current++;
+        publish(rows.current.filter((recap) => recap.id !== id));
+        return true;
+      } catch (err) {
+        if (current(admitted))
+          setError(err instanceof Error ? err.message : 'Failed to delete recap');
+        return false;
+      }
+    },
+    [current, publish],
+  );
 
-  // Generate recap for a specific date
-  const generateForDate = useCallback(async (date: string): Promise<DailySummary | null> => {
-    try {
-      const newRecap = await generateTestDailySummary(date);
-      setRecaps((prev) => {
-        // Add to beginning and sort by date descending
-        const updated = [newRecap, ...prev.filter((r) => r.id !== newRecap.id)];
-        updated.sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
-        updateCacheRecaps(() => updated);
-        return updated;
-      });
-      return newRecap;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate recap');
-      return null;
-    }
-  }, []);
+  const generateForDate = useCallback(
+    async (date: string): Promise<DailySummary> => {
+      const admitted = generation.current;
+      const recap = await createDailySummary(date);
+      if (!current(admitted))
+        throw new Error('Recap request belongs to an earlier session');
+      mutationRevision.current++;
+      const updated = [recap, ...rows.current.filter((row) => row.id !== recap.id)];
+      updated.sort((a, b) => b.date.localeCompare(a.date));
+      publish(updated);
+      return recap;
+    },
+    [current, publish],
+  );
 
-  // Get single recap detail
-  const getRecapDetail = useCallback(async (id: string): Promise<DailySummary | null> => {
-    try {
-      return await getDailySummary(id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load recap detail');
-      return null;
-    }
-  }, []);
+  const getRecapDetail = useCallback(
+    async (id: string): Promise<DailySummary | null> => {
+      const admitted = generation.current;
+      try {
+        const recap = await getDailySummary(id);
+        return current(admitted) ? recap : null;
+      } catch (err) {
+        if (current(admitted))
+          setError(err instanceof Error ? err.message : 'Failed to load recap detail');
+        return null;
+      }
+    },
+    [current],
+  );
 
+  const recaps = snapshot.generation === generation.current ? snapshot.recaps : [];
+  const groupedRecaps = useMemo(() => groupByMonth(recaps), [recaps]);
   return {
     recaps,
     groupedRecaps,

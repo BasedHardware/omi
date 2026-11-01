@@ -25,7 +25,13 @@ Future<void> openOmiStore({Future<bool> Function(Uri)? launcher}) async {
 }
 
 class ConnectDevicePage extends StatefulWidget {
-  const ConnectDevicePage({super.key});
+  const ConnectDevicePage({super.key, this.onConnected, this.onSkip});
+
+  /// Onboarding returns to its completion owner before Home can be entered.
+  final VoidCallback? onConnected;
+
+  /// Onboarding's "Not now". Home passes nothing, so Home shows no skip.
+  final VoidCallback? onSkip;
 
   @override
   State<ConnectDevicePage> createState() => _ConnectDevicePageState();
@@ -70,9 +76,11 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                   if (!onboardingProvider.isConnected)
                     ScanningRippleWidget(
                       isScanning: !onboardingProvider.isConnected,
-                      size: MediaQuery.sizeOf(context).height <= 700 ? 280 : 360,
+                      size: (MediaQuery.sizeOf(context).height <= 700 ? 280.0 : 360.0) *
+                          (onboardingProvider.pairingFailureReason == null ? 1 : 0.5),
                     ),
                   DeviceAnimationWidget(
+                    sizeMultiplier: onboardingProvider.pairingFailureReason == null ? 1 : 0.5,
                     isConnected: onboardingProvider.isConnected,
                     deviceName: onboardingProvider.deviceName,
                     deviceType: onboardingProvider.deviceType,
@@ -81,13 +89,18 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                 ],
               ),
               FindDevicesPage(
-                isFromOnboarding: false,
+                isFromOnboarding: widget.onConnected != null,
                 goNext: () {
                   Logger.debug('onConnected from FindDevicesPage');
+                  if (widget.onConnected != null) {
+                    widget.onConnected!();
+                    return;
+                  }
                   // Back to the Home already underneath, not a second Home on top of it.
                   HomeNavigation.returnHome(context);
                 },
-                includeSkip: false,
+                includeSkip: widget.onSkip != null,
+                onSkip: widget.onSkip,
               ),
             ],
           );
@@ -101,12 +114,18 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                OmiButton.tertiary(
+                OmiButton(
+                  variant: OmiButtonVariant.tertiary,
+                  labelStyle: OmiType.callout.copyWith(
+                      fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                   key: const Key('get_omi_device_button'),
                   label: context.l10n.getOmiDevice,
                   onPressed: openOmiStore,
                 ),
-                OmiButton.tertiary(
+                OmiButton(
+                  variant: OmiButtonVariant.tertiary,
+                  labelStyle: OmiType.callout.copyWith(
+                      fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                   key: const Key('connection_guide_button'),
                   label: context.l10n.connectionGuide,
                   icon: Icons.info_outline,

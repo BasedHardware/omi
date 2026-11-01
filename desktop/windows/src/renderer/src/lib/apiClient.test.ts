@@ -130,6 +130,7 @@ describe('applyPlatformHeaders — platform identity headers', () => {
     const config = { headers: {} } as unknown as HeaderConfig
     applyPlatformHeaders(config as never)
     expect(config.headers['X-App-Platform']).toBe('windows')
+    expect(config.headers['X-Omi-Plan-Identity']).toBe('1')
   })
 
   it('pins BOTH platform and version once the app version is known', () => {
@@ -137,6 +138,7 @@ describe('applyPlatformHeaders — platform identity headers', () => {
     const config = { headers: {} } as unknown as HeaderConfig
     applyPlatformHeaders(config as never)
     expect(config.headers['X-App-Platform']).toBe('windows')
+    expect(config.headers['X-Omi-Plan-Identity']).toBe('1')
     expect(config.headers['X-App-Version']).toBe('0.11.324')
   })
 
@@ -144,6 +146,7 @@ describe('applyPlatformHeaders — platform identity headers', () => {
     const config = { headers: {} } as unknown as HeaderConfig
     applyPlatformHeaders(config as never)
     expect(config.headers['X-App-Platform']).toBe('windows')
+    expect(config.headers['X-Omi-Plan-Identity']).toBe('1')
     expect('X-App-Version' in config.headers).toBe(false)
   })
 })

@@ -2,10 +2,22 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
+import 'package:flutter/rendering.dart'
+    show
+        RenderAbstractViewport,
+        RenderBox,
+        RenderObject,
+        RenderViewport,
+        ViewportOffset,
+        RenderSliverMultiBoxAdaptor,
+        ScrollDirection,
+        SliverMultiBoxAdaptorParentData;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
+
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/backend/preferences.dart';
@@ -17,6 +29,9 @@ import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/ui.dart';
+
+part 'transcript_playback_scroll.dart';
+part 'transcript_rows_viewport.dart';
 
 // Use speaker colors from person.dart for bubble colors
 final List<Color> _speakerColors = speakerColors;
@@ -49,10 +64,40 @@ class TranscriptWidget extends StatefulWidget {
   final List<String> leadingItemIds;
   final TranscriptSegmentBuilder? segmentBuilder;
 
+  /// Counts render objects inspected by scroll geometry reporting in tests.
+  @visibleForTesting
+  final VoidCallback? onScrollGeometryProbe;
+  @visibleForTesting
+  final VoidCallback? onScrollRevealProbe;
+
+  /// Playback sync: the line containing the playhead is highlighted, and while
+  /// [followCurrentSegment] the list keeps [followTargetSegmentId] near the top
+  /// third. [playbackFollowRequest] re-triggers the scroll even when the target
+  /// did not change (line tap, scrub, back-to-current).
+  final String? currentSegmentId;
+
+  /// When set, the current-line highlight follows this listenable and does not
+  /// require the list to rebuild. [currentSegmentId] is the fallback.
+  final ValueListenable<String?>? highlightedSegment;
+  final String? followTargetSegmentId;
+  final bool followCurrentSegment;
+  final int playbackFollowRequest;
+
+  /// The reader's gestures: fired once per drag on [onUserScroll], and with the
+  /// topmost partially-visible segment during drags and at ballistic end on
+  /// [onTopVisibleSegmentChanged]. Programmatic scrolls fire neither.
+  final VoidCallback? onUserScroll;
+  final ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged;
+
   /// "Yes" / "Not <name>" under the first line Omi named by voice. Both null hides the question
   /// and leaves only the Likely badge.
   final void Function(TranscriptSegment segment)? onConfirmSpeakerLabel;
   final void Function(TranscriptSegment segment)? onRejectSpeakerLabel;
+
+  /// Selection mode of a saved conversation's lines: non-null [selectedSegmentIds] shows a check on
+  /// every line, and a tap anywhere on a line toggles it instead of playing, naming or selecting text.
+  final Set<String>? selectedSegmentIds;
+  final ValueChanged<TranscriptSegment>? onToggleSegmentSelection;
 
   /// When the conversation started. A saved conversation's lines show their clock time
   /// ("12:40 PM") from it; without it they show the offset into the recording.
@@ -84,9 +129,20 @@ class TranscriptWidget extends StatefulWidget {
     this.leadingItems = const [],
     this.leadingItemIds = const [],
     this.segmentBuilder,
+    this.onScrollGeometryProbe,
+    this.onScrollRevealProbe,
     this.onConfirmSpeakerLabel,
     this.onRejectSpeakerLabel,
     this.startedAt,
+    this.currentSegmentId,
+    this.highlightedSegment,
+    this.followTargetSegmentId,
+    this.followCurrentSegment = false,
+    this.playbackFollowRequest = 0,
+    this.onUserScroll,
+    this.onTopVisibleSegmentChanged,
+    this.selectedSegmentIds,
+    this.onToggleSegmentSelection,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
   @override
@@ -101,6 +157,7 @@ class TranscriptScrollState {
   int anchorSegmentIndex = 0;
   double anchorViewportOffset = 0;
   String? layoutIdentity;
+  String? liveBoundarySegmentId;
 
   void update({
     required double offset,
@@ -146,6 +203,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   // ScrollController to enable proper scrolling
   late final ScrollController _scrollController;
 
+  // Playback-follow state: the last scrolled-to target and the last honoured
+  // follow request, plus the generation that cancels an in-flight locate when
+  // the reader takes the scroll back.
+  String? _lastFollowTargetId;
+  int _lastFollowRequest = -1;
+  int _locateGeneration = 0;
+  bool _userGestureNotified = false;
+  TranscriptSegment? _lastReportedTopSegment;
+
   // Auto-scroll state management
   bool _userHasScrolled = false;
   bool _isAutoScrolling = false;
@@ -167,6 +233,21 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // Search result tracking
   final Map<String, GlobalKey> _segmentKeys = {};
+  final Map<String, int> _segmentIndices = {};
+  final GlobalKey _listKey = GlobalKey();
+  final List<RenderSliverMultiBoxAdaptor> _cachedListSlivers = [];
+  final _liveCenterKey = const ValueKey('transcript_live_center');
+  String? _liveBoundaryId;
+
+  bool get _endAnchored => widget.followLatest && !widget.isConversationDetail;
+
+  // Keep the origin before the initially newest segment. Older rows grow upward;
+  // appends grow downward without moving a reader's existing scroll coordinates.
+  int get _liveBoundary {
+    final index = _segmentIndices[_liveBoundaryId] ?? widget.segments.length;
+    return widget.leadingItems.length + index + 1;
+  }
+
   final List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
@@ -208,6 +289,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   void initState() {
     super.initState();
+    _liveBoundaryId = widget.scrollState?.liveBoundarySegmentId ?? widget.segments.lastOrNull?.id;
+    widget.scrollState?.liveBoundarySegmentId = _liveBoundaryId;
     final savedState = widget.scrollState;
     final shouldRestorePosition = savedState?.hasPosition == true && !savedState!.isAtBottom;
     final canUseRawOffset = savedState?.layoutIdentity == null || savedState?.layoutIdentity == widget.layoutIdentity;
@@ -241,10 +324,19 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         }
       });
     }
+
+    if (widget.followCurrentSegment && widget.followTargetSegmentId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _followPlaybackTarget();
+      });
+    }
   }
 
   void _syncSegmentKeys() {
-    final currentIds = widget.segments.map((segment) => segment.id).toSet();
+    _segmentIndices
+      ..clear()
+      ..addEntries(widget.segments.indexed.map((entry) => MapEntry(entry.$2.id, entry.$1)));
+    final currentIds = _segmentIndices.keys.toSet();
     _segmentKeys.removeWhere((id, _) => !currentIds.contains(id));
     for (final segment in widget.segments) {
       _segmentKeys.putIfAbsent(segment.id, GlobalKey.new);
@@ -269,6 +361,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   void didUpdateWidget(TranscriptWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _liveBoundaryId ??= widget.segments.lastOrNull?.id;
+    widget.scrollState?.liveBoundarySegmentId = _liveBoundaryId;
 
     final contentChanged = widget.contentVersion != oldWidget.contentVersion ||
         widget.segments.length != oldWidget.segments.length ||
@@ -278,6 +372,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
     _syncSegmentKeys();
+
+    if (widget.followCurrentSegment &&
+        (widget.followTargetSegmentId != oldWidget.followTargetSegmentId ||
+            widget.playbackFollowRequest != oldWidget.playbackFollowRequest)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _followPlaybackTarget();
+      });
+    }
 
     if (widget.searchQuery != oldWidget.searchQuery) {
       _rebuildMatchKeys();
@@ -395,6 +497,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _userHasScrolled = true;
     _readerDragRecovered = true;
     _interruptAutoScroll();
+    _noteUserGesture();
     _driveReaderDrag(dy);
   }
 
@@ -402,6 +505,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
     _scrollController.jumpTo((_scrollController.offset - dy).clamp(position.minScrollExtent, position.maxScrollExtent));
+    _reportTopVisibleSegment();
   }
 
   void _endReaderDrag(int pointer) {
@@ -415,52 +519,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (recovered && _isUserScrolling && !_isAutoScrolling && !_isRestoringAnchor) {
       _captureCurrentPosition();
       _isUserScrolling = false;
+      _userGestureEnded();
     }
-  }
-
-  void _captureCurrentPosition({String? layoutIdentity}) {
-    if (!_scrollController.hasClients) return;
-
-    final currentScroll = _scrollController.offset;
-    final isAtBottom = _scrollController.position.maxScrollExtent - currentScroll <= 24;
-    _userHasScrolled = !isAtBottom;
-    if (isAtBottom && !_isUserScrolling) {
-      // Settled at the live edge: resume follow. Do not clear this during an
-      // active drag — a reader who has only moved a few pixels must still win.
-      _userInterruptedAutoScroll = false;
-    }
-    final scrollState = widget.scrollState;
-    if (scrollState != null) {
-      String? anchorId;
-      var anchorIndex = 0;
-      var anchorViewportOffset = 0.0;
-      if (!isAtBottom) {
-        var closestTop = double.infinity;
-        for (var index = 0; index < widget.segments.length; index++) {
-          final segment = widget.segments[index];
-          final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
-          if (renderObject is! RenderBox) continue;
-          final viewport = RenderAbstractViewport.of(renderObject);
-          final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
-          final bottom = top + renderObject.size.height;
-          if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
-            closestTop = top;
-            anchorId = segment.id;
-            anchorIndex = index;
-            anchorViewportOffset = top;
-          }
-        }
-      }
-      scrollState.update(
-        offset: currentScroll,
-        isAtBottom: isAtBottom,
-        anchorSegmentId: anchorId,
-        anchorSegmentIndex: anchorIndex,
-        anchorViewportOffset: anchorViewportOffset,
-        layoutIdentity: layoutIdentity ?? widget.layoutIdentity,
-      );
-    }
-    _setIsAtBottom(isAtBottom);
   }
 
   Future<void> _restoreAnchor() async {
@@ -492,8 +552,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         final anchorContext = _segmentKeys[anchorId]?.currentContext;
         final anchor = anchorContext?.findRenderObject();
         if (anchor is RenderBox) {
-          final viewport = RenderAbstractViewport.of(anchor);
-          final anchorViewportOffset = viewport.getOffsetToReveal(anchor, 0).offset - _scrollController.offset;
+          final anchorViewportOffset = _viewportTopOf(anchor);
           final correction = anchorViewportOffset - scrollState.anchorViewportOffset;
           if (correction.abs() <= 0.5) break;
           final target = (_scrollController.offset + correction).clamp(
@@ -508,7 +567,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         final itemIndex = widget.leadingItems.length + anchorIndex + 1;
         final itemCount = widget.leadingItems.length + widget.segments.length + 2;
         final fraction = itemIndex / max(1, itemCount - 1);
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent * fraction);
+        _scrollController.jumpTo(_scrollController.position.minScrollExtent +
+            (_scrollController.position.maxScrollExtent - _scrollController.position.minScrollExtent) * fraction);
         await WidgetsBinding.instance.endOfFrame;
       }
     } finally {
@@ -532,7 +592,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   void _setIsAtBottom(bool value) {
     if (_isAtBottom == value || !mounted) return;
-    setState(() => _isAtBottom = value);
+    // Saved transcripts have no jump-to-latest control. Updating their scroll
+    // bookkeeping must not rebuild the list and its whole-transcript resolver.
+    if (widget.followLatest) {
+      setState(() => _isAtBottom = value);
+    } else {
+      _isAtBottom = value;
+    }
   }
 
   Future<void> _runFollowToBottom({required bool animated}) async {
@@ -604,70 +670,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return trackedFollow;
   }
 
-  bool _onUserScroll(UserScrollNotification notification) {
-    if (notification.direction != ScrollDirection.idle) {
-      // User-directed motion (drag or fling momentum) outranks any follow or
-      // pending anchor restore.
-      _pendingAnchorRestore = false;
-      _isUserScrolling = true;
-      _userHasScrolled = true;
-      _readerDragTakenOverByNative = true;
-      _readerDragRecovered = false;
-      _interruptAutoScroll();
-      _captureCurrentPosition();
-    } else if (_isUserScrolling && !_isRestoringAnchor && !_pendingAnchorRestore && !_readerDragRecovered) {
-      _captureCurrentPosition();
-      _isUserScrolling = false;
-    }
-    return false;
-  }
-
-  bool _onScrollStart(ScrollStartNotification notification) {
-    if (notification.depth != 0 || notification.dragDetails == null) return false;
-
-    // Record intent on the first pixel of a pointer drag, before any live
-    // follow can re-grab the scrollable.
-    _pendingAnchorRestore = false;
-    _isUserScrolling = true;
-    _userHasScrolled = true;
-    _readerDragTakenOverByNative = true;
-    _readerDragRecovered = false;
-    _interruptAutoScroll();
-    return false;
-  }
-
-  bool _onScrollUpdate(ScrollUpdateNotification notification) {
-    if (notification.depth != 0 || notification.dragDetails == null) return false;
-
-    // A pointer drag always outranks follow and pending anchor restores.
-    _pendingAnchorRestore = false;
-    _isUserScrolling = true;
-    _userHasScrolled = true;
-    _readerDragTakenOverByNative = true;
-    _readerDragRecovered = false;
-    _interruptAutoScroll();
-    _captureCurrentPosition();
-    return false;
-  }
-
-  bool _onScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification) return _onScrollStart(notification);
-    if (notification is ScrollUpdateNotification) return _onScrollUpdate(notification);
-    if (notification is UserScrollNotification) return _onUserScroll(notification);
-    return false;
-  }
-
-  bool _onScrollMetrics(ScrollMetricsNotification notification) {
-    if (!widget.followLatest || _isAutoScrolling || _isUserScrolling || _userInterruptedAutoScroll) return false;
-    final shouldFollow = !_userHasScrolled;
-    if (shouldFollow && notification.metrics.extentAfter > 0.5) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToBottomGently(animated: false);
-      });
-    }
-    return false;
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -686,31 +688,38 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       return;
     }
 
+    if (_endAnchored) {
+      _interruptAutoScroll();
+      _userHasScrolled = true;
+    }
+
     final matchKey = _matchKeys[widget.currentResultIndex];
     final context = matchKey.currentContext;
 
     if (context != null) {
       _scrollToContext(context);
     } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final retryContext = matchKey.currentContext;
-        if (retryContext != null) {
-          _scrollToContext(retryContext);
-        } else {
-          _scrollToSearchResultFallback();
-        }
-      });
+      // A lazy match may be many viewports away. Start locating now: another
+      // post-frame callback alone does not schedule a frame on an idle list.
+      _scrollToSearchResultFallback();
     }
   }
 
   void _scrollToContext(BuildContext context) {
     _isAutoScrolling = true;
-    Scrollable.ensureVisible(
-      context,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-      alignment: 0.35,
-    ).then((_) {
+    final renderObject = context.findRenderObject();
+    final Future<void> scroll;
+    if (_endAnchored && renderObject is RenderBox) {
+      final position = _scrollController.position;
+      final target = (position.pixels + _viewportTopOf(renderObject) - position.viewportDimension * 0.35)
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      scroll = _scrollController.animateTo(target,
+          duration: const Duration(milliseconds: 400), curve: Curves.easeInOutCubic);
+    } else {
+      scroll = Scrollable.ensureVisible(context,
+          duration: const Duration(milliseconds: 400), curve: Curves.easeInOutCubic, alignment: 0.35);
+    }
+    scroll.then((_) {
       _isAutoScrolling = false;
     });
   }
@@ -731,28 +740,28 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       currentMatchIndex += matches.length;
     }
 
-    if (targetSegmentIndex >= 0 && targetSegmentIndex < _segmentKeys.length) {
-      final segmentKey = _segmentKeys[widget.segments[targetSegmentIndex].id];
-
-      final segmentContext = segmentKey?.currentContext;
+    if (targetSegmentIndex >= 0 && targetSegmentIndex < widget.segments.length) {
+      final segment = widget.segments[targetSegmentIndex];
+      final segmentContext = _segmentKeys[segment.id]?.currentContext;
       if (segmentContext != null) {
         _scrollToContext(segmentContext);
         return;
       }
 
-      const itemHeight = 80.0;
-      final headerHeight = widget.topMargin ? 32.0 : 0.0;
-      final targetOffset = headerHeight + (targetSegmentIndex * itemHeight);
-
-      _isAutoScrolling = true;
-      _scrollController
-          .animateTo(
-        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      )
-          .then((_) {
-        _isAutoScrolling = false;
+      // The match lives in an unbuilt row far away: locate it by paging, then
+      // ensure the matched span itself once the row exists. A reader gesture or
+      // a changed query cancels the follow-up reveal.
+      final query = widget.searchQuery;
+      final resultIndex = widget.currentResultIndex;
+      final future = _locateSegment(segment.id, alignment: 0.35);
+      final generation = _locateGeneration;
+      future.then((_) {
+        if (!mounted) return;
+        if (generation != _locateGeneration) return;
+        if (widget.searchQuery != query || widget.currentResultIndex != resultIndex) return;
+        if (resultIndex < 0 || resultIndex >= _matchKeys.length) return;
+        final matchContext = _matchKeys[resultIndex].currentContext;
+        if (matchContext != null && matchContext.mounted) _scrollToContext(matchContext);
       });
     }
   }
@@ -840,8 +849,43 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       people: people,
       l10n: context.l10n,
       unresolved: widget.unresolvedSpeakers,
+      deferShortVoices: widget.followLatest,
     );
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
+    Widget buildRow(BuildContext context, int idx) {
+      if (idx == 0) {
+        return SizedBox(
+            key: const ValueKey('transcript_header'),
+            height: (widget.topMargin ? 32 : 0) + (_endAnchored ? searchBarHeight : 0));
+      }
+
+      final leadingIndex = idx - 1;
+      if (leadingIndex < widget.leadingItems.length) {
+        return KeyedSubtree(
+          key: ValueKey('transcript-leading-${widget.leadingItemIds[leadingIndex]}'),
+          child: widget.leadingItems[leadingIndex],
+        );
+      }
+
+      final segmentIndex = idx - widget.leadingItems.length - 1;
+      if (segmentIndex == widget.segments.length) {
+        return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
+      }
+
+      final segment = widget.segments[segmentIndex];
+      final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
+      Widget child = customSegment == null
+          ? _buildSegmentItem(segmentIndex, people, names, askSegmentIds)
+          : Container(key: _segmentKeys[segment.id], child: customSegment);
+      // Padding, not a Column: a Column centers by default and hands its child loose
+      // width, so a line narrower than the list (a short reply without a name row)
+      // rendered centered instead of at the start like every other line.
+      if (widget.separator && segmentIndex > 0) {
+        child = Padding(padding: const EdgeInsets.only(top: 4), child: child);
+      }
+      return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
+    }
+
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onScrollMetrics,
       child: NotificationListener<ScrollNotification>(
@@ -858,40 +902,44 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 widget.onTapWhenSearchEmpty!();
               }
             },
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: EdgeInsets.only(top: searchBarHeight),
-              itemCount: widget.leadingItems.length + widget.segments.length + 2,
-              findChildIndexCallback: _findChildIndex,
-              itemBuilder: (context, idx) {
-                if (idx == 0) {
-                  return SizedBox(key: const ValueKey('transcript_header'), height: widget.topMargin ? 32 : 0);
-                }
-
-                final leadingIndex = idx - 1;
-                if (leadingIndex < widget.leadingItems.length) {
-                  return KeyedSubtree(
-                    key: ValueKey('transcript-leading-${widget.leadingItemIds[leadingIndex]}'),
-                    child: widget.leadingItems[leadingIndex],
-                  );
-                }
-
-                final segmentIndex = idx - widget.leadingItems.length - 1;
-                if (segmentIndex == widget.segments.length) {
-                  return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
-                }
-
-                final segment = widget.segments[segmentIndex];
-                final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
-                Widget child = customSegment == null
-                    ? _buildSegmentItem(segmentIndex, people, names, askSegmentIds)
-                    : Container(key: _segmentKeys[segment.id], child: customSegment);
-                if (widget.separator && segmentIndex > 0) {
-                  child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
-                }
-                return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
-              },
-            ),
+            child: _endAnchored
+                ? _LiveTranscriptScrollView(
+                    key: _listKey,
+                    controller: _scrollController,
+                    startAtLatest: !_userHasScrolled,
+                    center: _liveCenterKey,
+                    slivers: [
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => buildRow(context, _liveBoundary - 1 - index),
+                          childCount: _liveBoundary,
+                          findChildIndexCallback: (key) {
+                            final index = _findChildIndex(key);
+                            return index == null || index >= _liveBoundary ? null : _liveBoundary - 1 - index;
+                          },
+                        ),
+                      ),
+                      SliverList(
+                        key: _liveCenterKey,
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => buildRow(context, _liveBoundary + index),
+                          childCount: widget.leadingItems.length + widget.segments.length + 2 - _liveBoundary,
+                          findChildIndexCallback: (key) {
+                            final index = _findChildIndex(key);
+                            return index == null || index < _liveBoundary ? null : index - _liveBoundary;
+                          },
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.builder(
+                    key: _listKey,
+                    controller: _scrollController,
+                    padding: EdgeInsets.only(top: searchBarHeight),
+                    itemCount: widget.leadingItems.length + widget.segments.length + 2,
+                    findChildIndexCallback: _findChildIndex,
+                    itemBuilder: buildRow,
+                  ),
           ),
         ),
       ),
@@ -948,8 +996,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
     if (key.value.startsWith(segmentPrefix)) {
       final id = key.value.substring(segmentPrefix.length);
-      final index = widget.segments.indexWhere((segment) => segment.id == id);
-      return index < 0 ? null : widget.leadingItems.length + index + 1;
+      final index = _segmentIndices[id];
+      return index == null ? null : widget.leadingItems.length + index + 1;
     }
     return null;
   }
@@ -1023,54 +1071,61 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               child: Column(
                 crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  if (!isUser) ...[
+                  if (!isUser && data.sttProvider?.startsWith('on_device:') != true) ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          GestureDetector(
-                            // The avatar carries the "Identify speaker" semantics; the name is a
-                            // larger visual target for the same action.
-                            excludeFromSemantics: true,
-                            onTap: data.speakerId == omiSpeakerId
-                                ? null
-                                : () {
-                                    widget.editSegment?.call(data.id, data.speakerId);
-                                    PlatformManager.instance.analytics.tagSheetOpened();
-                                  },
-                            child: Text(
-                              names.forSegment(data, person: person),
-                              style: OmiType.footnote.copyWith(
-                                color: data.speakerId == omiSpeakerId || person != null
-                                    ? OmiColors.textPrimary
-                                    : OmiColors.textSecondary,
-                                fontWeight: FontWeight.w500,
+                          if (!widget.isConversationDetail &&
+                              startsTurn &&
+                              data.speakerId != omiSpeakerId &&
+                              widget.editSegment != null &&
+                              (SpeakerLabelSource.isConfirmed(data.speakerLabelSource) ||
+                                  data.speakerLabelSource == SpeakerLabelSource.auto))
+                            OmiButton.tertiary(
+                              key: ValueKey('edit_speaker_label_${data.id}'),
+                              label: names.forSegment(data, person: person),
+                              leading: startsTurn && person != null && !isTagging
+                                  ? SpeakerLabelBadge(source: data.speakerLabelSource)
+                                  : null,
+                              size: OmiButtonSize.compact,
+                              onPressed: () {
+                                widget.editSegment!(data.id, data.speakerId);
+                                PlatformManager.instance.analytics.tagSheetOpened();
+                              },
+                            )
+                          else ...[
+                            GestureDetector(
+                              // The avatar carries the "Identify speaker" semantics; the name is a
+                              // larger visual target for the same action.
+                              excludeFromSemantics: true,
+                              onTap: data.speakerId == omiSpeakerId
+                                  ? null
+                                  : () {
+                                      widget.editSegment?.call(data.id, data.speakerId);
+                                      PlatformManager.instance.analytics.tagSheetOpened();
+                                    },
+                              child: Text(
+                                names.forSegment(data, person: person),
+                                style: OmiType.footnote.copyWith(
+                                  color: data.speakerId == omiSpeakerId || person != null
+                                      ? OmiColors.textPrimary
+                                      : OmiColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
-                          ),
-                          if (startsTurn && person != null && !isTagging) ...[
-                            const SizedBox(width: 4),
-                            SpeakerLabelBadge(source: data.speakerLabelSource),
+                            if (startsTurn && person != null && !isTagging) ...[
+                              const SizedBox(width: 4),
+                              SpeakerLabelBadge(source: data.speakerLabelSource),
+                            ],
                           ],
-                          if (isTagging) ...[
-                            const SizedBox(width: 6),
-                            const OmiSpinner(size: OmiSpinnerSize.small),
-                          ],
+                          if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
                         ],
                       ),
                     ),
                   ],
-
-                  if (asksToConfirm)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: OmiSpacing.xxs),
-                      child: SpeakerLikelyConfirm(
-                        name: person.name,
-                        onYes: () => confirm(data),
-                        onNot: () => reject(data),
-                      ),
-                    ),
 
                   // Chat bubble
                   Row(
@@ -1146,6 +1201,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ),
                     ],
                   ),
+                  // Under the line it asks about.
+                  if (asksToConfirm)
+                    Padding(
+                      padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+                      child: SpeakerLikelyConfirm(
+                        name: person.name,
+                        onYes: () => confirm(data),
+                        onNot: () => reject(data),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1180,21 +1245,44 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   /// line plays the recording from there; double-tapping the words edits them.
   Widget _buildDetailLine(int segmentIdx, List<Person> people, SpeakerNames names, Set<String> askSegmentIds) {
     final data = widget.segments[segmentIdx];
+    return _SegmentHighlight(
+      segmentId: data.id,
+      highlighted: widget.highlightedSegment,
+      staticCurrent: data.id == widget.currentSegmentId,
+      builder: (context, isCurrent) => _buildHighlightedDetailLine(segmentIdx, people, names, askSegmentIds, isCurrent),
+    );
+  }
+
+  Widget _buildHighlightedDetailLine(
+    int segmentIdx,
+    List<Person> people,
+    SpeakerNames names,
+    Set<String> askSegmentIds,
+    bool isCurrent,
+  ) {
+    final data = widget.segments[segmentIdx];
     final Person? person = personById(people, data.personId);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
     final startsTurn = previous == null ||
-        previous.isUser ||
+        previous.isUser != data.isUser ||
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
-        previous.speakerLabelSource != data.speakerLabelSource;
+        (data.speakerId == omiSpeakerId && !data.isUser);
+    final selected = widget.selectedSegmentIds;
+    final toggle = widget.onToggleSegmentSelection;
+    final selecting = selected != null && toggle != null;
     final confirm = widget.onConfirmSpeakerLabel;
     final reject = widget.onRejectSpeakerLabel;
-    final asksToConfirm =
-        person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
+    final asksToConfirm = !selecting &&
+        person != null &&
+        confirm != null &&
+        reject != null &&
+        !isTagging &&
+        askSegmentIds.contains(data.id);
     final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
-    final unnamed = !data.isUser && !isOmi && person == null;
+    final unnamed = !data.isUser && !isOmi && (person == null || person.name.trim().isEmpty);
     final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
     final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
     final seek = widget.onSegmentTap;
@@ -1210,86 +1298,93 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             ? OmiDuration.offset(data.start)
             : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
 
-    final who = Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Flexible(
-          child: _speakerTarget(
-            data,
-            Text(
-              names.forSegment(data, person: person),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: label.copyWith(
-                decoration: unnamed ? TextDecoration.underline : null,
-                decorationStyle: TextDecorationStyle.dotted,
-                decorationColor: labelColor,
+    final who = !startsTurn
+        ? isTagging
+            ? const Row(children: [OmiSpinner(size: OmiSpinnerSize.small)])
+            : const SizedBox.shrink()
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: _speakerTarget(
+                  data,
+                  Text(
+                    names.forSegment(data, person: person),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: label.copyWith(
+                      decoration: unnamed ? TextDecoration.underline : null,
+                      decorationStyle: TextDecorationStyle.dotted,
+                      decorationColor: labelColor,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (startsTurn && person != null && !isTagging) ...[
+                const SizedBox(width: 4),
+                SpeakerLabelBadge(source: data.speakerLabelSource),
+              ],
+              if (time != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  time,
+                  style: label.copyWith(
+                    fontWeight: FontWeight.w400,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+              if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
+            ],
+          );
+
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildSegmentText(
+          data,
+          segmentIdx,
+          data.isUser,
+          style: OmiType.body.copyWith(
+            color: data.isUser || isCurrent ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
+            letterSpacing: 0.0,
+            height: 1.5,
           ),
         ),
-        if (startsTurn && person != null && !isTagging) ...[
-          const SizedBox(width: 4),
-          SpeakerLabelBadge(source: data.speakerLabelSource),
-        ],
-        if (time != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            time,
-            style: label.copyWith(fontWeight: FontWeight.w400, fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-        ],
-        if (isTagging) ...[
-          const SizedBox(width: 6),
-          const OmiSpinner(size: OmiSpinnerSize.small),
+        if (data.translations.isNotEmpty) ...[
+          for (final translation in data.translations)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                _getDecodedText(translation.text),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
+                textAlign: TextAlign.left,
+              ),
+            ),
+          const SizedBox(height: 4),
+          _buildTranslationNotice(),
         ],
       ],
     );
-
     // The tap lives inside the selection area too: its own tap recognizer would otherwise win a tap
     // on the words over the line's. A long press still selects.
-    final words = SelectionArea(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: seek == null ? null : play,
-        onDoubleTap: widget.onEditSegmentText == null
-            ? null
-            : () {
-                HapticFeedback.mediumImpact();
-                widget.onEditSegmentText!(segmentIdx);
-              },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildSegmentText(
-              data,
-              segmentIdx,
-              data.isUser,
-              style: OmiType.body.copyWith(
-                color: data.isUser ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
-                letterSpacing: 0.0,
-                height: 1.5,
-              ),
+    final words = selecting
+        ? text
+        : SelectionArea(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: seek == null ? null : play,
+              onDoubleTap: widget.onEditSegmentText == null
+                  ? null
+                  : () {
+                      HapticFeedback.mediumImpact();
+                      widget.onEditSegmentText!(segmentIdx);
+                    },
+              child: text,
             ),
-            if (data.translations.isNotEmpty) ...[
-              for (final translation in data.translations)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    _getDecodedText(translation.text),
-                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
-                    textAlign: TextAlign.left,
-                  ),
-                ),
-              const SizedBox(height: 4),
-              _buildTranslationNotice(),
-            ],
-          ],
-        ),
-      ),
-    );
+          );
 
     // 8 above and below, plus the list's 4 between segments: the design's 20 between lines.
     Widget line = Padding(
@@ -1297,18 +1392,46 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          who,
+          if (startsTurn || isTagging) ...[who, const SizedBox(height: 3)],
+          words,
           if (asksToConfirm)
             Padding(
               padding: const EdgeInsets.only(top: OmiSpacing.xxs),
               child: SpeakerLikelyConfirm(name: person.name, onYes: () => confirm(data), onNot: () => reject(data)),
             ),
-          const SizedBox(height: 3),
-          words,
         ],
       ),
     );
-    if (seek != null) {
+    if (selected != null && toggle != null) {
+      final isSelected = selected.contains(data.id);
+      // The line's own targets (the name, the words) stand down: a tap anywhere toggles the check.
+      line = Semantics(
+        button: true,
+        selected: isSelected,
+        child: GestureDetector(
+          key: ValueKey('transcript_select_${data.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            OmiHaptics.selection();
+            toggle(data);
+          },
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 8, right: OmiSpacing.sm),
+                child: Icon(
+                  isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 22,
+                  color: isSelected ? OmiColors.accent : OmiColors.textTertiary,
+                ),
+              ),
+              Expanded(child: IgnorePointer(child: line)),
+            ],
+          ),
+        ),
+      );
+    } else if (seek != null) {
       line = Semantics(
         hint: context.l10n.playFromHere,
         child: GestureDetector(
@@ -1316,6 +1439,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           behavior: HitTestBehavior.opaque,
           onTap: play,
           child: line,
+        ),
+      );
+    }
+    if (isCurrent) {
+      line = Semantics(
+        selected: true,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          child: KeyedSubtree(key: ValueKey('transcript_current_${data.id}'), child: line),
         ),
       );
     }

@@ -2,10 +2,11 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from google.cloud import firestore
-from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
+from google.cloud.firestore_v1 import FieldFilter, transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from ._client import db
 from database.document_ids import calendar_meeting_doc_id
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 T = TypeVar("T")
 
@@ -43,10 +44,24 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    meeting_id = calendar_meeting_doc_id(uid, meeting_data['calendar_source'], meeting_data['calendar_event_id'])
+    # The natural key needs both fields — meeting_data['x'] raises KeyError
+    # on a payload missing either, before the doc-path is even built.
+    try:
+        calendar_source = meeting_data['calendar_source']
+        calendar_event_id = meeting_data['calendar_event_id']
+    except KeyError as exc:
+        raise ValueError(f'meeting_data missing required field: {exc}') from exc
+    meeting_id = calendar_meeting_doc_id(uid, calendar_source, calendar_event_id)
     doc_ref = _get_meetings_collection(uid).document(meeting_id)
-    transaction = db.transaction()
-    _upsert_meeting_transaction(transaction, doc_ref, meeting_data, datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+
+    @firestore.transactional
+    def upsert(write_transaction):
+        _upsert_meeting_transaction(write_transaction, doc_ref, meeting_data, now)
+
+    # Concurrent calendar syncs for the same user contend on the transaction —
+    # a bare db.transaction() abandons on Aborted. Bounded equal-jitter retry.
+    run_with_transaction_contention_retry(db.transaction, upsert, operation_name='calendar_meeting_create')
     return meeting_id
 
 
@@ -83,8 +98,8 @@ def get_meeting_id_by_calendar_event(uid: str, calendar_event_id: str, calendar_
     """
     query = (
         _get_meetings_collection(uid)
-        .where('calendar_event_id', '==', calendar_event_id)
-        .where('calendar_source', '==', calendar_source)
+        .where(filter=FieldFilter('calendar_event_id', '==', calendar_event_id))
+        .where(filter=FieldFilter('calendar_source', '==', calendar_source))
         .limit(1)
     )
 
@@ -105,9 +120,9 @@ def list_meetings(
     """List calendar meetings, optionally filtered by date range, sorted by start_time descending."""
     query: Any = _get_meetings_collection(uid)
     if start_date:
-        query = query.where('start_time', '>=', _to_utc(start_date))
+        query = query.where(filter=FieldFilter('start_time', '>=', _to_utc(start_date)))
     if end_date:
-        query = query.where('start_time', '<=', _to_utc(end_date))
+        query = query.where(filter=FieldFilter('start_time', '<=', _to_utc(end_date)))
     query = query.order_by('start_time', direction=firestore.Query.DESCENDING).limit(limit)
 
     meetings: List[Dict[str, Any]] = []
@@ -127,7 +142,7 @@ def delete_meeting(uid: str, meeting_id: str) -> None:
 
 def delete_old_meetings(uid: str, before_date: datetime) -> int:
     """Delete meetings that ended before a certain date. Returns the number of meetings deleted."""
-    query = _get_meetings_collection(uid).where('end_time', '<', _to_utc(before_date))
+    query = _get_meetings_collection(uid).where(filter=FieldFilter('end_time', '<', _to_utc(before_date)))
 
     deleted_count = 0
     batch = db.batch()
@@ -152,8 +167,8 @@ def get_meetings_in_time_range(uid: str, start_time: datetime, end_time: datetim
     """Find meetings that overlap with the given time range, sorted by start_time ascending."""
     query = (
         _get_meetings_collection(uid)
-        .where('start_time', '<', _to_utc(end_time))
-        .where('end_time', '>', _to_utc(start_time))
+        .where(filter=FieldFilter('start_time', '<', _to_utc(end_time)))
+        .where(filter=FieldFilter('end_time', '>', _to_utc(start_time)))
         .order_by('start_time', direction=firestore.Query.ASCENDING)
         .limit(10)
     )

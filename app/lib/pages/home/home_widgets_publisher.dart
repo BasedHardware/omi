@@ -64,29 +64,32 @@ class HomeWidgetsPublisher with WidgetsBindingObserver {
   @visibleForTesting
   void publishNow() {
     _timer?.cancel();
-    unawaited(service.publish(
-      HomeWidgetsService.devicesKey,
-      HomeWidgetsPayload.devices(
-        saved: SharedPreferencesUtil().btDevices,
-        connected: devices.connectedDevice,
-        isConnected: devices.isConnected,
-        battery: devices.batteryLevel,
-        charging: devices.isCharging,
+    unawaited(
+      service.publish(
+        HomeWidgetsService.devicesKey,
+        HomeWidgetsPayload.devices(
+          saved: SharedPreferencesUtil().btDevices,
+          connected: devices.connectedDevice,
+          isConnected: devices.isConnected,
+          battery: devices.batteryLevel,
+          charging: devices.isCharging,
+        ),
       ),
-    ));
+    );
     if (tasks.hasLoaded) {
       final open = tasks.incompleteItems;
-      unawaited(service.publish(
-        HomeWidgetsService.upNextKey,
-        HomeWidgetsPayload.upNext(HomeWidgetsPayload.pickUpNext(tasks.todayPreviewTasks(), open), open: open.length),
-      ));
+      unawaited(
+        service.publish(
+          HomeWidgetsService.upNextKey,
+          HomeWidgetsPayload.upNext(HomeWidgetsPayload.pickUpNext(tasks.todayPreviewTasks(), open), open: open.length),
+        ),
+      );
     }
     final latest = HomeWidgetsPayload.latestOf(conversations.conversations);
     if (latest != null) {
-      unawaited(service.publish(
-        HomeWidgetsService.latestKey,
-        HomeWidgetsPayload.latest(latest, l10n(), dates: dates()),
-      ));
+      unawaited(
+        service.publish(HomeWidgetsService.latestKey, HomeWidgetsPayload.latest(latest, l10n(), dates: dates())),
+      );
     }
   }
 }

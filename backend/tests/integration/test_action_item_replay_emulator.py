@@ -38,7 +38,6 @@ def replay(monkeypatch):
     monkeypatch.setattr(action_items, '_schedule_action_item_reminder', effects['reminder'])
     monkeypatch.setattr(action_items, 'auto_sync_action_item', effects['sync'])
     monkeypatch.setattr(action_items, 'submit_with_context', lambda _pool, fn: fn())
-    monkeypatch.setattr(action_items, '_wake_task_changes', Mock())
     monkeypatch.setattr(action_items, 'record_product_event', Mock())
     app = FastAPI()
     app.include_router(action_items.router)

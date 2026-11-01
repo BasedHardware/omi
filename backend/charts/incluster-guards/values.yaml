@@ -1,0 +1,31 @@
+enabled: true
+# Ship enforced; this kill switch suppresses HPA spec writes, not evidence/state.
+dryRun: false
+namespace: prod-omi-backend
+hpaName: prod-omi-parakeet
+prometheusUrl: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090
+image: python:3.13.12-slim-bookworm@sha256:a58daefb915e1e03ad48f3ca4df8832065412c5c35cacb9d39f4229184de12b6
+# Production enables the approved dedicated identity; dev never installs a writer.
+batch:
+  # Installs the -batch guard objects; prod overlays keep this false until the
+  # deployer RBAC for those objects is approved (access change, David) and
+  # g2's producer exists.
+  enabled: true
+  monitoringRelease: prod-omi-kube-prometheus-stack
+  cloudRunRollbackEnabled: false
+  gcpServiceAccount: ""
+  safetyConfigMap: prod-omi-batch-ramp-safety
+# Time-of-day Parakeet floor: when enabled, the guard Job renders floors.json
+# into its script ConfigMap and patches the HPA minReplicas to hours[utc_hour]
+# on the first reading after each hour rollover (no new RBAC objects; the prod
+# deployer's name-scoped RBAC accepts it). Derived 2026-10-25 from the
+# 10-23..10-25 guard trace, decisive samples only: floor 10 degraded Sunday
+# 12:05-13:50Z (p95 34.5-55.5s measured, count >= 100) -> 12 at 12-13Z;
+# Saturday 22:30Z ran 8 replicas at 701 first texts/h with p95 12.4s -> 8
+# evening/overnight; Saturday 14-15Z held 10 replicas at 521-692/h with p95
+# 14-20s -> 10-11 midday. The safety guard still raises any hour to 12; a
+# guard rollback (latency metric present) defers the schedule until an
+# operator clears it. Disabled by default (no floors.json, no floor writes).
+floorSchedule:
+  enabled: false
+  hours: [10, 10, 10, 10, 10, 8, 8, 8, 8, 8, 10, 10, 12, 12, 11, 11, 11, 11, 10, 10, 9, 9, 8, 8]

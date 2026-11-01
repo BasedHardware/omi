@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import Sentry
 import Vision
 
 /// Represents a text block with its bounding box (in normalized coordinates 0-1)
@@ -348,12 +347,9 @@ actor RewindOCRService {
   func extractTextWithBounds(from cgImage: CGImage) async throws -> OCRResult {
     let modeName = "accurate"
 
-    // Log OCR mode once, then only on change; set Sentry tag for queryability
+    // Log OCR mode once, then only on change
     if modeName != lastLoggedOCRMode {
       log("RewindOCRService: OCR mode set to \(modeName)")
-      SentrySDK.configureScope { scope in
-        scope.setTag(value: modeName, key: "ocr_mode")
-      }
       lastLoggedOCRMode = modeName
     }
 

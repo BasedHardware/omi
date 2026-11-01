@@ -502,8 +502,6 @@ def _materialize_memory_item(
         ledger_schema_version=patch.ledger_schema_version,
         kind=patch.kind,
         subject_scope=patch.subject_scope,
-        half_life_days=patch.half_life_days,
-        belief_class=patch.belief_class,
         slot=patch.slot,
         body=patch.body,
         valid_from=patch.valid_from or now,
@@ -598,8 +596,6 @@ def _apply_update_memory_item(
         "ledger_schema_version",
         "kind",
         "subject_scope",
-        "half_life_days",
-        "belief_class",
         "slot",
         "body",
         "valid_from",
@@ -705,7 +701,6 @@ def apply_long_term_patch_transaction(
     control_state: MemoryControlState,
     operation: MemoryOperation,
     patch_payload: Dict[str, Any],
-    allow_trigger_feedback_arguments: bool = False,
 ) -> ApplyResult:
     """Pure transaction skeleton for Milestone 3.
 
@@ -722,10 +717,6 @@ def apply_long_term_patch_transaction(
     expected_content_hash = raw.pop("expected_content_hash", None)
     extra_item_updates: Dict[str, Any] = {}
     for optional_key in (
-        "corroboration_count",
-        "last_corroborated_at",
-        "half_life_days",
-        "belief_class",
         "captured_at",
         "updated_at",
         "expires_at",
@@ -739,7 +730,6 @@ def apply_long_term_patch_transaction(
         if optional_key in raw:
             extra_item_updates[optional_key] = raw.pop(optional_key)
     for timestamp_key in (
-        "last_corroborated_at",
         "captured_at",
         "updated_at",
         "expires_at",
@@ -980,12 +970,7 @@ def apply_long_term_patch_transaction(
                 )
             )
             explicit_short_term_demotion = patch.target_tier == MemoryTier.short_term and patch.clear_graph_assertion
-            if (
-                semantic_change
-                and not explicit_short_term_demotion
-                and not graph_enrichment
-                and not allow_trigger_feedback_arguments
-            ):
+            if semantic_change and not explicit_short_term_demotion and not graph_enrichment:
                 return ApplyResult(
                     status=ApplyStatus.invalid_patch,
                     control_state=control_state,
@@ -1188,8 +1173,40 @@ def apply_long_term_patch_transaction(
             )
             memory_items.append(superseded_item)
 
+    outbox_events = memory_item_outbox_events(memory_items, operation, control_state, next_control, commit_id)
+    committed_operation = operation.mark_committed(
+        commit_id,
+        committed_sequence=next_control.commit_sequence,
+        committed_memory_item_ids=[item.memory_id for item in memory_items],
+        committed_outbox_event_ids=[event.event_id for event in outbox_events],
+    )
+    return ApplyResult(
+        status=ApplyStatus.committed,
+        control_state=next_control,
+        operation=committed_operation,
+        memory_items=memory_items,
+        graph_assertions=graph_assertions,
+        outbox_events=outbox_events,
+    )
+
+
+__all__ = [
+    "ApplyResult",
+    "ApplyStatus",
+    "MemoryControlState",
+    "MemoryOutboxEvent",
+    "MemoryOutboxEventType",
+    "MemoryOutboxStatus",
+    "apply_long_term_patch_transaction",
+    "build_patch_mutation_identity",
+    "memory_content_hash",
+]
+
+
+def memory_item_outbox_events(items, operation, control_state, next_control, commit_id):
+    """Shared projection/vector intents for canonical applies and Review reversal."""
     outbox_events: List[MemoryOutboxEvent] = []
-    for changed_item in memory_items:
+    for changed_item in items:
         has_restricted_sensitivity = bool(
             set(changed_item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
         )
@@ -1233,30 +1250,4 @@ def apply_long_term_patch_transaction(
             )
             for event_type in [MemoryOutboxEventType.projection_sync, MemoryOutboxEventType.vector_sync]
         )
-    committed_operation = operation.mark_committed(
-        commit_id,
-        committed_sequence=next_control.commit_sequence,
-        committed_memory_item_ids=[item.memory_id for item in memory_items],
-        committed_outbox_event_ids=[event.event_id for event in outbox_events],
-    )
-    return ApplyResult(
-        status=ApplyStatus.committed,
-        control_state=next_control,
-        operation=committed_operation,
-        memory_items=memory_items,
-        graph_assertions=graph_assertions,
-        outbox_events=outbox_events,
-    )
-
-
-__all__ = [
-    "ApplyResult",
-    "ApplyStatus",
-    "MemoryControlState",
-    "MemoryOutboxEvent",
-    "MemoryOutboxEventType",
-    "MemoryOutboxStatus",
-    "apply_long_term_patch_transaction",
-    "build_patch_mutation_identity",
-    "memory_content_hash",
-]
+    return outbox_events

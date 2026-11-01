@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { testIdentity } from "./support/test-identity";
 
 /**
  * Query-capture coverage for every platform-aware PostHog route the platform
@@ -14,7 +15,7 @@ let releaseBoundaryTimestamp: string | null = null;
 let releasePosthogFailure = false;
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "test" })),
+  requireScope: vi.fn(async () => testIdentity(undefined, "test")),
 }));
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(async () => null),

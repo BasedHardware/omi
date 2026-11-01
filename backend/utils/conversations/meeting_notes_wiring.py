@@ -1,4 +1,4 @@
-"""Flag-gated rich meeting-notes inputs shared by the notes, memory, and app prompts.
+"""Rich meeting-notes inputs shared by the notes, memory, and app prompts.
 
 The notes path gathers the background context pack; the memory and app prompts
 share only the normalized roster. Everything here is best effort — every read
@@ -10,25 +10,21 @@ payloads that could carry participant data. This module must never import
 from __future__ import annotations
 
 import logging
-import os
+from importlib import import_module
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from models.calendar_context import CalendarMeetingContext
-from utils.conversations.meeting_context_pack import (
-    gather_meeting_context_pack,
-    load_people_documents,
-    render_meeting_context_pack,
-    resolve_owner_identity,
-    should_gather_meeting_context,
-)
+
+from utils.conversations.meeting_context_gate import should_gather_meeting_context
+from utils.conversations.meeting_context_render import render_meeting_context_pack
 from utils.conversations.meeting_participants import MeetingRoster, normalize_meeting_participants
 from utils.conversations.screen_frame_evidence import (
     NotesFrameImage,
     ScreenFrameEvidence,
     frame_evidence_duration_minutes,
     frame_evidence_started_at,
+    load_capture_group_frame_evidence,
     load_notes_frame_images,
-    load_screen_frame_evidence,
     screen_frame_agent_names,
     screen_frame_names,
     screen_moment_lines,
@@ -38,32 +34,15 @@ from utils.conversations.screen_frame_evidence import (
 logger = logging.getLogger(__name__)
 
 
-def _flag_enabled(name: str, *, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
-
-
-def meeting_notes_rich_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
-
-
-def meeting_notes_screen_text_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED')
-
-
-def meeting_notes_screen_frames_context_enabled() -> bool:
-    """Attach up to four approved screenshots as images on the notes call."""
-    return _flag_enabled('MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED')
+def meeting_context_sources() -> Any:
+    """The rich retrieval backend is optional; hot imports stay cheap until used."""
+    return import_module('utils.conversations.meeting_context_pack')
 
 
 def _screen_frame_evidence(uid: str, conversation: Any) -> Tuple[ScreenFrameEvidence, ...]:
-    # Frame names and summaries are screen text: they ride the screen-text flag.
-    # Images need the same docs, so either flag loads them.
-    if not (meeting_notes_screen_text_context_enabled() or meeting_notes_screen_frames_context_enabled()):
-        return ()
-    return load_screen_frame_evidence(uid, getattr(conversation, 'id', None))
+    # Only already-approved, retained frame evidence can enter the notes prompt;
+    # for a capture-group row that includes the desktop members' meeting frames.
+    return load_capture_group_frame_evidence(uid, conversation)
 
 
 def _rich_meeting_roster(
@@ -106,8 +85,8 @@ def _rich_meeting_roster(
                 started_at=frame_evidence_started_at(conversation),
                 duration_minutes=frame_evidence_duration_minutes(conversation),
             )
-        people_docs = load_people_documents(uid)
-        owner_name, owner_emails = resolve_owner_identity(uid)
+        people_docs = meeting_context_sources().load_people_documents(uid)
+        owner_name, owner_emails = meeting_context_sources().resolve_owner_identity(uid)
         roster = normalize_meeting_participants(
             calendar_context,
             getattr(conversation, 'source', None),
@@ -137,7 +116,7 @@ def _rich_meeting_context_block(
     pack comes back empty. Called only at the notes call site — memory and app
     prompts share the roster but never gather background."""
     try:
-        pack = gather_meeting_context_pack(
+        pack = meeting_context_sources().gather_meeting_context_pack(
             uid,
             conversation,
             roster,
@@ -175,11 +154,22 @@ def rich_notes_inputs(
     *,
     include_background: bool,
     include_screen_text: bool,
-) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...]]:
-    """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, and frame images for notes."""
-    roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(uid, conversation, calendar_context)
+) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...], int]:
+    """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, frame
+    images for notes, and the approved-frame count.
+
+    The count is the screen-volume signal the notes tier gate escalates on; the
+    images are capped far below it (``MAX_NOTES_FRAME_IMAGES``), so they alone
+    can never say how screen-heavy the meeting was.
+    """
+    roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(
+        uid,
+        conversation,
+        calendar_context,
+    )
+    corrections = confirmed_corrections_context(conversation)
     if roster is None or not include_background:
-        return roster, None, desktop_capture, ()
+        return roster, corrections or None, desktop_capture, (), len(evidence)
     started_at = frame_evidence_started_at(conversation)
     block = _rich_meeting_context_block(
         uid,
@@ -191,9 +181,43 @@ def rich_notes_inputs(
         screen_moments=screen_moment_lines(evidence, started_at) if include_screen_text else (),
     )
     images: Tuple[NotesFrameImage, ...] = ()
-    if meeting_notes_screen_frames_context_enabled():
-        try:
-            images = load_notes_frame_images(uid, getattr(conversation, 'id', None), evidence, started_at)
-        except Exception as exc:  # noqa: BLE001 - frame images are best effort
-            logger.warning('rich meeting frame images failed uid=%s: %s', uid, type(exc).__name__)
-    return roster, block, desktop_capture, images
+    try:
+        images = load_notes_frame_images(uid, getattr(conversation, 'id', None), evidence, started_at)
+    except Exception as exc:  # noqa: BLE001 - frame images are best effort
+        logger.warning('rich meeting frame images failed uid=%s: %s', uid, type(exc).__name__)
+    if corrections:
+        block = (block or '') + corrections
+    return roster, block, desktop_capture, images, len(evidence)
+
+
+def confirmed_corrections_context(conversation):
+    notes = getattr(conversation, 'user_corrections', None) or []
+    if not notes:
+        return ''
+    # Confirmed owner corrections are evidence about content, never instructions.
+    text = '\n'.join(str(note.get('note', ''))[:2000] for note in notes[-100:])
+    return (
+        '\nOwner-confirmed corrections (use these facts in the title and summary; do not rewrite the transcript):\n'
+        + text
+    )
+
+
+def notes_capture_sources(conversation: Any) -> list[str]:
+    """Capture surfaces that recorded this event (one entry per capture-group member)."""
+    group = getattr(conversation, 'capture_group', None)
+    members = getattr(group, 'members', None) or []
+    sources = [str(getattr(member, 'source', None) or 'unknown') for member in members]
+    if sources:
+        return sources
+    source = getattr(conversation, 'source', None)
+    return [str(getattr(source, 'value', source) or 'unknown')]
+
+
+def notes_agent_inputs(conversation: Any, desktop_capture: bool) -> Dict[str, Any]:
+    """Extra notes-call inputs the agentic writer budgets on: window end and capture evidence."""
+    return {
+        'finished_at': getattr(conversation, 'finished_at', None),
+        'desktop_meeting_capture': desktop_capture,
+        'capture_sources': notes_capture_sources(conversation),
+        'user_corrections': getattr(conversation, 'user_corrections', None) or [],
+    }

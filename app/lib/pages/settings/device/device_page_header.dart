@@ -9,22 +9,39 @@ import 'package:omi/widgets/device_widget.dart';
 
 /// Top of the device page: the device's name, a Connected / Disconnected pill and its picture.
 class DevicePageHeader extends StatelessWidget {
-  const DevicePageHeader({super.key, required this.pairedDevice, required this.connectedDevice});
+  const DevicePageHeader({
+    super.key,
+    required this.pairedDevice,
+    required this.connectedDevice,
+    this.listening = false,
+    this.paused = false,
+  });
 
   final BtDevice? pairedDevice;
   final BtDevice? connectedDevice;
+
+  /// The device is capturing right now ("Listening"), or capture is paused on it ("Paused").
+  final bool listening;
+  final bool paused;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final isConnected = connectedDevice != null;
-    final stateColor = isConnected ? OmiColors.success : OmiColors.textSecondary;
+    final stateColor = isConnected && !paused ? OmiColors.success : OmiColors.textSecondary;
+    final stateLabel = !isConnected
+        ? l10n.disconnected
+        : listening
+            ? '${l10n.listening} · ${l10n.connected}'
+            : paused
+                ? '${l10n.paused} · ${l10n.connected}'
+                : l10n.connected;
     return Column(
       children: [
         Semantics(
           header: true,
           child: Text(
-            pairedDevice?.name ?? l10n.unknownDevice,
+            _displayName(pairedDevice?.name, l10n.omiAppName),
             style: OmiType.title1,
             textAlign: TextAlign.center,
           ),
@@ -33,20 +50,24 @@ class DevicePageHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
           decoration: BoxDecoration(
-            color: isConnected ? OmiColors.successSurface : OmiColors.surface2,
+            color: isConnected && !paused ? OmiColors.successSurface : OmiColors.surface2,
             borderRadius: OmiRadius.pillAll,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(color: stateColor, shape: BoxShape.circle),
-              ),
+              if (listening)
+                const OmiLiveDot(size: 6)
+              else
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(color: stateColor, shape: BoxShape.circle),
+                ),
               const SizedBox(width: 6),
               Text(
-                isConnected ? l10n.connected : l10n.disconnected,
+                stateLabel,
+                key: const Key('device_status_label'),
                 style: OmiType.footnote.copyWith(color: stateColor, fontWeight: FontWeight.w500),
               ),
             ],
@@ -127,9 +148,7 @@ class DeviceDisconnectedCard extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-            child: Center(
-              child: FaIcon(FontAwesomeIcons.linkSlash, color: OmiColors.textTertiary, size: 24),
-            ),
+            child: Center(child: FaIcon(FontAwesomeIcons.linkSlash, color: OmiColors.textTertiary, size: 24)),
           ),
           const SizedBox(height: OmiSpacing.lg),
           Text(context.l10n.deviceNotConnected, style: OmiType.headline, textAlign: TextAlign.center),
@@ -169,3 +188,8 @@ class DeviceStreamingMetrics extends StatelessWidget {
     );
   }
 }
+
+/// The device's own name, or "Omi" while none is cached (BtDevice reports a missing name as the
+/// English word 'Unknown').
+String _displayName(String? name, String fallback) =>
+    name == null || name.trim().isEmpty || name == 'Unknown' ? fallback : name;

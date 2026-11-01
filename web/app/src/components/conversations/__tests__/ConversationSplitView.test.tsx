@@ -1,6 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { ConversationSplitView } from '@/components/conversations/ConversationSplitView';
+import type { GetConversationsParams } from '@/lib/api';
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
 
@@ -8,8 +18,11 @@ const harness = vi.hoisted(() => ({
   query: '',
   conversations: [] as Conversation[],
   conversationsLoading: false,
+  conversationOptions: null as GetConversationsParams | null,
   recaps: [] as DailySummary[],
   recapsLoading: false,
+  recapsError: null as string | null,
+  refreshRecaps: vi.fn(),
   searchResults: [] as Conversation[],
   searchLoading: false,
   getRecapDetail: vi.fn(),
@@ -41,14 +54,17 @@ vi.mock('@/hooks/useLocalStorage', () => ({
   useLocalStorage: () => [480, vi.fn()],
 }));
 vi.mock('@/hooks/useConversations', () => ({
-  useConversations: () => ({
-    conversations: harness.conversations,
-    loading: harness.conversationsLoading,
-    error: null,
-    hasMore: false,
-    loadMore: vi.fn(),
-    refresh: vi.fn(),
-  }),
+  useConversations: (options: GetConversationsParams) => {
+    harness.conversationOptions = options;
+    return {
+      conversations: harness.conversations,
+      loading: harness.conversationsLoading,
+      error: null,
+      hasMore: false,
+      loadMore: vi.fn(),
+      refresh: vi.fn(),
+    };
+  },
 }));
 vi.mock('@/hooks/useConversation', () => ({
   useConversation: (id: string | null) => ({
@@ -62,6 +78,8 @@ vi.mock('@/hooks/useRecaps', () => ({
   useRecaps: () => ({
     recaps: harness.recaps,
     loading: harness.recapsLoading,
+    error: harness.recapsError,
+    refresh: harness.refreshRecaps,
     hasMore: false,
     loadMore: vi.fn(),
     getRecapDetail: harness.getRecapDetail,
@@ -78,6 +96,7 @@ vi.mock('@/hooks/useSearchConversations', () => ({
 vi.mock('@/components/layout/PageToolbar', () => ({
   PageToolbar: ({
     search,
+    actions,
   }: {
     search: {
       value: string;
@@ -85,6 +104,7 @@ vi.mock('@/components/layout/PageToolbar', () => ({
       onSubmit: (value: string) => void;
       placeholder: string;
     };
+    actions?: React.ReactNode;
   }) => (
     <div>
       <input
@@ -95,6 +115,7 @@ vi.mock('@/components/layout/PageToolbar', () => ({
       <button type="button" onClick={() => search.onSubmit(search.value)}>
         Submit search
       </button>
+      {actions}
     </div>
   ),
 }));
@@ -119,6 +140,9 @@ vi.mock('@/components/conversations/ConversationDetailPanel', () => ({
     <div data-testid="conversation-detail">{conversationId}</div>
   ),
 }));
+vi.mock('@/components/recaps/GenerateRecapAction', () => ({
+  GenerateRecapAction: () => null,
+}));
 vi.mock('@/components/recaps/RecapDetailPanel', () => ({
   RecapDetailPanel: ({
     recapId,
@@ -134,7 +158,6 @@ vi.mock('@/components/conversations/FolderTabs', () => ({
   FolderTabs: () => null,
   FolderTabsSkeleton: () => null,
 }));
-vi.mock('@/components/conversations/DateFilter', () => ({ DateFilter: () => null }));
 vi.mock('@/components/conversations/MergeActionBar', () => ({
   MergeActionBar: () => null,
 }));
@@ -206,8 +229,11 @@ beforeEach(() => {
   harness.query = '';
   harness.conversations = [];
   harness.conversationsLoading = false;
+  harness.conversationOptions = null;
   harness.recaps = [];
   harness.recapsLoading = false;
+  harness.recapsError = null;
+  harness.refreshRecaps.mockReset();
   harness.searchResults = [];
   harness.searchLoading = false;
   harness.getRecapDetail.mockReset().mockResolvedValue(null);
@@ -215,9 +241,33 @@ beforeEach(() => {
   harness.clearSearch.mockReset();
   harness.setContext.mockReset();
   harness.getFolders.mockReset().mockResolvedValue([]);
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn().mockImplementation(() => ({
+      matches: false,
+      media: '(prefers-reduced-motion: reduce)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
 });
 
 describe('ConversationSplitView review regressions', () => {
+  it('shows recap read failures with a retry instead of an empty account', async () => {
+    harness.recapsError = 'API error: 500';
+    render(<ConversationSplitView />);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Daily Recaps couldn’t load. Try again.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry recaps' }));
+    expect(harness.refreshRecaps).toHaveBeenCalledOnce();
+    expect(screen.queryByText('No conversations yet')).not.toBeInTheDocument();
+  });
+
   it('clears a removed recap deep link without replacing it from the timeline', async () => {
     const listedRecap = recap('recap-a', '2026-08-11');
     harness.query = 'recap=recap-a';
@@ -365,5 +415,79 @@ describe('ConversationSplitView review regressions', () => {
       ),
     );
     expect(harness.clearSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the detail pane on entering selection mode instead of re-selecting the newest tile', async () => {
+    harness.conversations = [
+      conversation('older-conversation', '2026-08-10T12:00:00Z'),
+      conversation('newest-conversation', '2026-08-11T12:00:00Z'),
+    ];
+
+    render(<ConversationSplitView />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('conversation-detail')).toHaveTextContent(
+        'newest-conversation',
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.queryByTestId('conversation-detail')).not.toBeInTheDocument();
+    expect(screen.getByTestId('conversation-gallery')).toBeInTheDocument();
+  });
+});
+
+describe('ConversationSplitView date presets', () => {
+  // Pinned behind UTC so the bounds are checked as local days. CI runs in UTC,
+  // where a local day and a UTC day are the same.
+  const hostTimezone = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/Los_Angeles';
+  });
+  afterAll(() => {
+    if (hostTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = hostTimezone;
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // Monday 19 October 2026, 09:30 in Los Angeles (PDT, UTC-7).
+    vi.setSystemTime(new Date('2026-10-19T16:30:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function choosePreset(label: string) {
+    fireEvent.click(screen.getByRole('button', { name: /All dates/ }));
+    fireEvent.click(screen.getByRole('button', { name: label }));
+  }
+
+  it('lists all of Last 7 days, not only the day it starts on', () => {
+    render(<ConversationSplitView />);
+    choosePreset('Last 7 days');
+
+    // Tuesday 13 October 00:00 through Monday 19 October 23:59:59.999, local.
+    expect(harness.conversationOptions?.startDate?.toISOString()).toBe(
+      '2026-10-13T07:00:00.000Z',
+    );
+    expect(harness.conversationOptions?.endDate?.toISOString()).toBe(
+      '2026-10-20T06:59:59.999Z',
+    );
+    expect(screen.getByRole('button', { name: /Oct 13 – Oct 19/ })).toBeInTheDocument();
+  });
+
+  it('lists This week from Sunday through today', () => {
+    render(<ConversationSplitView />);
+    choosePreset('This week');
+
+    // Sunday 18 October 00:00 through Monday 19 October 23:59:59.999, local.
+    expect(harness.conversationOptions?.startDate?.toISOString()).toBe(
+      '2026-10-18T07:00:00.000Z',
+    );
+    expect(harness.conversationOptions?.endDate?.toISOString()).toBe(
+      '2026-10-20T06:59:59.999Z',
+    );
   });
 });

@@ -15,6 +15,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -48,6 +49,12 @@ class VoiceRecorderProvider extends ChangeNotifier {
   // look that matches modern voice-mode designs.
   final List<double> _audioLevels = List.generate(50, (_) => 0.05);
   Timer? _waveformTimer;
+
+  /// Ticks at ~60Hz while recording. Only the waveform listens to it; the
+  /// provider itself notifies on state changes, so the chat composer is not
+  /// rebuilt 60 times a second while the user dictates.
+  final ValueNotifier<int> _waveformTick = ValueNotifier<int>(0);
+  Listenable get waveformTick => _waveformTick;
 
   // Callbacks for UI integration
   Function(String transcript, bool autoSend)? _onTranscriptReady;
@@ -160,11 +167,12 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
     // Repaint at ~60Hz so the wave flows smoothly. Levels are shifted in
     // onByteReceived (audio callback rate, much faster than the UI), but the
-    // canvas only re-renders on notifyListeners — so a slower timer made the
-    // wave appear frozen / laggy.
+    // canvas only re-renders on a tick — so a slower timer made the wave
+    // appear frozen / laggy. Tick [waveformTick], not the whole provider.
+    // omi-perf-allow: fast-periodic-timer -- ticks only waveformTick, which only the waveform paints from
     _waveformTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (_state == VoiceRecorderState.recording) {
-        notifyListeners();
+        _waveformTick.value++;
       }
     });
 
@@ -323,8 +331,10 @@ class VoiceRecorderProvider extends ChangeNotifier {
           _onTranscriptReady?.call(transcript, autoSend);
           close();
         } else {
-          Logger.debug('Empty transcript received; preserving recording for retry');
-          _markTranscriptionFailed();
+          _markTranscriptionFailed(
+            const VoiceTranscriptionException(statusCode: 200, outcome: 'empty_transcript', retryable: false),
+            retry: false,
+          );
         }
       } finally {
         _cleanupChunkFiles(chunks);
@@ -332,7 +342,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
     } catch (e) {
       _wavConversion = null;
       if (generation != _recordingGeneration) return;
-      Logger.debug('Error processing recording: $e');
+      _logTranscriptionFailure(e, retry: false);
       // Only clean up PCM if WAV exists (conversion succeeded).
       // If WAV conversion failed, keep PCM as the only surviving copy.
       if (_wavFile != null && _wavFile!.existsSync()) {
@@ -341,7 +351,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
-      _showTranscriptionFailedSnackbar();
+      _showTranscriptionFailedSnackbar(e);
     }
   }
 
@@ -381,19 +391,21 @@ class VoiceRecorderProvider extends ChangeNotifier {
           _onTranscriptReady?.call(transcript, autoSend);
           close();
         } else {
-          Logger.debug('Empty transcript received on retry; preserving recording for retry');
-          _markTranscriptionFailed();
+          _markTranscriptionFailed(
+            const VoiceTranscriptionException(statusCode: 200, outcome: 'empty_transcript', retryable: false),
+            retry: true,
+          );
         }
       } finally {
         _cleanupChunkFiles(chunks);
       }
     } catch (e) {
       if (generation != _recordingGeneration) return;
-      Logger.debug('Error retrying transcription: $e');
+      _logTranscriptionFailure(e, retry: true);
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
-      _showTranscriptionFailedSnackbar();
+      _showTranscriptionFailedSnackbar(e);
     }
   }
 
@@ -537,17 +549,38 @@ class VoiceRecorderProvider extends ChangeNotifier {
     }
   }
 
-  void _markTranscriptionFailed() {
+  void _markTranscriptionFailed(Object error, {required bool retry}) {
+    _logTranscriptionFailure(error, retry: retry);
     _state = VoiceRecorderState.transcribeFailed;
     _isProcessing = false;
     notifyListeners();
-    _showTranscriptionFailedSnackbar();
+    _showTranscriptionFailedSnackbar(error);
   }
 
-  void _showTranscriptionFailedSnackbar() {
+  /// Records why transcription failed in the shareable debug log. Never logs
+  /// audio or transcript text — only the status, outcome and error type.
+  void _logTranscriptionFailure(Object error, {required bool retry}) {
+    final fields = <String, Object?>{'retry': retry};
+    if (error is VoiceTranscriptionException) {
+      fields['http_status'] = error.statusCode;
+      fields['outcome'] = error.outcome;
+      fields['retryable'] = error.retryable;
+      fields['server_side'] = error.isServerSide;
+      if (error.cause != null) fields['cause'] = error.cause;
+    } else {
+      fields['cause'] = error.runtimeType.toString();
+    }
+    Logger.debug('Voice message transcription failed: $fields');
+    DebugLogManager.logEvent('voice_transcription_failed', fields);
+  }
+
+  void _showTranscriptionFailedSnackbar(Object error) {
     final context = globalNavigatorKey.currentContext;
     if (context == null) return;
-    AppSnackbar.showSnackbarError(context.l10n.voiceFailedToTranscribe);
+    final serverSide = error is VoiceTranscriptionException && error.isServerSide;
+    AppSnackbar.showSnackbarError(
+      serverSide ? context.l10n.chatReplyServerError : context.l10n.voiceFailedToTranscribe,
+    );
   }
 
   void close() {
@@ -620,6 +653,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
   @override
   void dispose() {
     _waveformTimer?.cancel();
+    _waveformTick.dispose();
     _pcmSink?.close();
     if (_state == VoiceRecorderState.recording) {
       _mic.stop();

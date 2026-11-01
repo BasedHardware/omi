@@ -1,0 +1,10 @@
+#!/bin/sh
+# Read-only support CLI. Uses the support person's Omi login, not GCP.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$ROOT/backend"
+if [ ! -x .venv/bin/python ]; then
+  echo "Missing backend/.venv. Run make setup in this checkout first." >&2
+  exit 1
+fi
+exec .venv/bin/python -m scripts.support.cli "$@"

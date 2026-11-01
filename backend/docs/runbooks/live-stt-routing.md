@@ -1,4 +1,4 @@
-# Live STT routing and Soniox runway
+# Live STT routing
 
 ## Controls and evidence contract
 
@@ -28,6 +28,11 @@ connect cost/latency risk; inspect its reason counter and transcript/latency SLI
 and withdraw the endpoint manually if the aggregate shows an outage.
 Local VAD and other explicitly censored input/configuration failures also release
 circuit admission without accumulating provider failures.
+A Parakeet window whose own pump task listen cancelled (owner close, recovery
+switch, teardown) reports the censored reason `cancelled`, not `connection_lost`,
+so listen-side cancellation cannot bench Parakeet through the disruption gate.
+A pump that ends on its own, or a POST/transport error, still reports a provider
+reason (`connection_lost`, `provider_5xx`, `timeout`).
 
 `omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` is the
 expected observation count from that seam (`path=close|failover|connect`). Its
@@ -42,8 +47,32 @@ wrong classification, and neither proves Redis persistence. Redis drop counters 
 `omi_stt_cost_routing_votes_total{target,scope,result}` prove whether classified
 evidence reached shared state (`applied|user_cap|window_full|generation|stage`).
 
-State uses `omi:live-stt:cost-v7:<target>:<bounded-language>` and `all`. Do not
-reuse v5 evidence. At stage 100, one hashed user contributes at most three
+State uses `omi:live-stt:cost-v8:<stage>:<32-hex identity>:<target>:<bounded-language>`
+with recovery lease keys under the same cost prefix. Fleet keys split two
+`omi:live-stt:fleet-v2:<stage>:<32-hex identity>` scopes: selection bench,
+recovery probe and score keys digest the family, actual endpoint and
+credential, while the account bench key digests only family and credential, so
+the credential-wide quarantine spans every custom endpoint but survives an
+endpoint rotation that resets selection/score/probe and cost state. Registry
+targets with a custom `endpoint` write and read their own endpoint-scoped
+selection/score/probe partitions — a sibling endpoint's serve deaths, connect
+refusals and transcript outcomes never bench the configured default or other
+siblings, while the credential-wide account bench still protects all of them.
+With `STT_ROUTING_MODE=off` snapshots answer a neutral score and merge only
+family account deadlines, ignoring but not erasing selection state. The stage
+comes from `OMI_ENV_STAGE` (unrecognized values map to `unknown`, never prod;
+`PROVIDER_MODE=offline` still yields `offline`);
+a changed endpoint, credential or stage starts its scoped state
+with no migration or backfill of older namespaces, which are never read. Raw
+URLs and keys never appear in Redis paths, logs or metrics. A pod's in-memory
+health views reset when that identity changes. Process-local selection
+breakers differ: they retain connect/serve outage evidence across credential
+rotation for an unchanged endpoint — credential rotation clears
+account/quota state only, an endpoint change starts fresh selection state
+while the unchanged credential's account protection remains, and a stage
+change starts fresh scoped state. A custom endpoint's serve death opens
+that endpoint's local target breaker and does not bench the family default. Do not
+reuse older-namespace evidence. At stage 100, one hashed user contributes at most three
 success/failure outcomes in a five-minute Redis-time window. Windows hold at
 most 2,048 ordinary fingerprints (above 1,500 at 10x 1,800 sessions/hour),
 plus an eight-fingerprint outage reserve. At saturation, eight distinct new
@@ -55,18 +84,118 @@ not feed failure-only samples into CUSUM or refill existing user budgets. Any
 state keys expire after 900 idle seconds; benched/trial state persists to prevent
 expiry bypassing staged recovery and holds no healthy-window fingerprint list. Raw observation counts remain uncapped for
 reconciliation. Trials retain their separate user votes, generation fences,
-5→25→100 shares, and exponentially increasing cooldown. Redis CAS enforces all
-of this fleet-wide. Shared snapshots refresh off connect, normally every five
+5→25→100 shares, and exponentially increasing cooldown. Trial promotion needs
+30 admitted outcomes from at least 10 witnesses after 300 seconds for the 5%
+step, and 60 admitted outcomes from at least 20 witnesses after 600 seconds for
+the 25% step; a completed admitted window before the dwell holds at its stage.
+Recovery re-benching uses two tiers of **admitted, non-censored outcomes in
+the current trial window**. Ordinary rejection needs at least 100 outcomes,
+the same CUSUM burst evidence as stage 100, broad failure witnesses, and a
+user failure share above the gate. A fast path for a truly broken provider
+needs at least 20 outcomes, at least 25% attributable failures, and broad
+failure witnesses. One or two timeouts in a tiny trial do not qualify.
+The former 30/60-outcome rate-only rejection is removed. Promotion, dwell and
+bounded trial windows (120/240 outcomes) are unchanged; completing the clean
+5→25→100 ramp clears the consecutive failure history. The default-on
+`STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED` switch restores the former rules
+when explicitly set to `false`, `0`, or `off`.
+To retain the chronic-provider disruption budget with the larger recovery
+sample, a guarded re-bench advances two cooldown exponents (instead of one)
+and caps the wait at six hours. After a first full-traffic bench, successive
+failed recovery trials wait 20 minutes, 80 minutes, 320 minutes, then six hours.
+A single false bench still starts its first 5% recovery after five minutes.
+Stage-100 detection/cooldowns are unchanged. The deterministic 17,900-session,
+61%-failure daily replay retains its original bounds: fewer than 100 failed
+sessions including the initial detection allowance and fewer than 200 trials.
+Redis CAS enforces all
+of this fleet-wide. Bench writes are one atomic Lua update — an active account
+quarantine rejects a selection write, same-kind writes keep the longest
+deadline — and expired cleanup is a compare-delete that re-checks the observed
+value inside Redis before removing it, so a renewed bench survives a read/delete
+race. Shared snapshots refresh off connect, normally every five
 seconds, under a 75 ms deadline; local fallback retains known benches.
+Every refresh reads all registry targets across the closed supported-language
+vocabulary plus `all`, so a language bench is honored on its first request even
+without prior interest. Freshness is per `(target, language)`; an unread
+language raises `CostHealthUnavailable` instead of reporting stage 100, which
+the chain treats as a fail-open: non-canary sessions keep the filtered static
+order, while canary sessions keep their permitted registry target routes with
+the exception's conservative states demoting known restricted entries (a
+generic router error carries no snapshot and keeps configured order).
+Per-target language
+comparisons are counted in
+`omi_stt_cost_routing_language_state_total{target,comparison}` with
+`agree|language_restricted|global_restricted|unknown|stale`.
 
-The [architecture](../../utils/stt/ARCHITECTURE.md#serving-owned-health-evidence-cost-v7)
+Every dial — proposal candidates, last resorts and the static fallback in all
+modes — passes the same permission filter: actual engine match, capability for
+the requested and expected languages, sticky registry ramp (including the
+`parakeet-window` minimum of registry percent and window allocation), and
+active account quarantine. If filtering empties the chain the connect raises
+`ProviderChainUnavailable` with a bounded retry and counts
+`omi_stt_cost_routing_no_permitted_target_total`. An invalid registry cannot
+prove permissions, so a managed session gets the typed chain-unavailable and a
+`router_error` fail-open rather than a default that could reopen a withdrawn
+target.
+
+The [architecture](../../utils/stt/ARCHITECTURE.md#serving-owned-health-evidence-cost-v8)
 has the taxonomy, registry and second-endpoint example, exact gate, and
-reproducible calibration. The gate stays 8%. In cost-v7 simulation, every
+reproducible calibration. The gate stays 8%. In gate simulation, every
 realistic-floor row has zero false benches in 400k sessions; 40%/60%/100%
 provider errors bench at median 20/13/8 and p95 48/21/8 sessions. At 62 sessions
 per five minutes that is about four minutes at the 40% p95, plus settlement
 and cache delay. The rate must be representative admitted votes, not one
 client's repeated reconnects. These are synthetic bounds, not prod acceptance.
+
+## Audited operator cost-gate reset
+
+After a confirmed false bench, an authorized operator may reset **one registered
+target** using the deployed backend image and its existing runtime environment.
+Complete the rolling deployment first so old pods cannot reconcile pre-fix local
+fault evidence. This action writes cost-routing state, not user/account data.
+It does not change account quarantines, endpoint circuits, admission capacity,
+language capabilities, or allocation. No runtime config change is required;
+leave `STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED` unset or `true`.
+
+Run from `backend/` in that environment, first without `--apply`:
+
+```bash
+python scripts/reset_live_stt_cost_gate.py --target parakeet-window --environment prod --reason sttbench-20261027-06z
+python scripts/reset_live_stt_cost_gate.py --target parakeet-window --environment prod --reason sttbench-20261027-06z --apply
+```
+
+The explicit environment must match `OMI_ENV_STAGE`. Both commands print only
+the target, environment, change identifier, stages and generations by language.
+Apply uses one Redis WATCH/MULTI transaction for `all` and every supported
+language: clears evidence/strikes, sets stage 100 and advances each generation.
+Generations advance into a new Redis-time reset epoch to also supersede
+unreconciled pod-local fault generations. Every dial captures that epoch before
+awaiting the handshake; connect failures may follow ordinary gate changes but
+cannot cross an operator reset. A separate content-free generation floor
+persists under the target identity, so expiry of the normal 900-second healthy
+evidence key cannot re-admit a long-lived pre-reset session's votes. Refresh
+and cold writers seed missing evidence from that floor. The reset epoch carries
+no user/fairness data; the normal fairness-data TTL remains unchanged.
+A competing health update retries the entire reset, at most five times.
+The same transaction writes a content-free audit receipt under the target's
+endpoint/account namespace for 30 days; stdout and the warning log contain
+the receipt and its `audit_id`. Retain the output in the operator's train record.
+This is a one-time reset; subsequent real failures can immediately bench again.
+
+After the next shared refresh (normally five seconds), verify stage 100 on every
+fresh pod and check language state, timeout counters, transcript success and
+first-text latency. A transport interruption after submission can make the
+command's result uncertain: use the pre-submit log's `audit_id` to read that
+target's `operator-audit:<audit_id>` receipt through the same runtime namespace
+and inspect fresh stage telemetry before retrying. A repeated apply advances generations
+again, so do not run it as a recurring job.
+
+To reverse the release, use the same command with `--stage 0`, a new reason and
+`--apply`: it benches the target for five minutes and then resumes normal staged
+recovery. Removing the command or changing the guard switch does not undo a
+committed reset. A malformed scope aborts the entire transaction, preserving all
+existing state. Healthy state retains the normal 900-second idle TTL; a reversed
+bench persists until normal recovery advances it.
 
 ## Minimum shadow go/no-go (normally 60–120 minutes)
 
@@ -91,7 +220,8 @@ minutes plus the following positive coverage; elapsed time alone never passes:
    send it new primary traffic. Do not manufacture probe traffic to qualify it.
    A complete registry override must retain Parakeet and Soniox entries; after
    active selection their registered Modulate sibling cannot reappear as a
-   static tail. Router-error fail-open still uses the documented static chain.
+   static tail. Router-error fail-open keeps permitted registry targets for
+   canary sessions and the filtered static chain otherwise.
 5. Transcript-success, no-text share, first-text latency, window capacity and
    GPU pressure remain within the conditions below. Confirm the existing
    transcript-success alert is evaluated and routed to the live contact point.
@@ -159,30 +289,55 @@ reason vocabulary and boundary (`client_gone`/`owner_teardown`), preinitialized.
 Require Modulate provider-failure counts to match the managed serving cohort
 of selection plus live/terminal fallback emissions per reason before `on`.
 The paired counters alone can agree while both classify client churn wrongly.
-New `cost-v7` state discards v5/v6 post-client failures and strikes; it does not
-migrate or backfill those samples. The sequential gate and vote budgets stay intact.
+New `cost-v8`/`fleet-v2` state discards all earlier namespaces' post-client
+failures and strikes; it does not migrate or backfill those samples. The
+sequential 8% gate and healthy vote budgets stay unchanged; trial vote budgets
+are tightened to admitted outcomes only.
 
-Independent lifecycle oracle: the chain counts `opened` when handing off a
-connected managed leg (including same-provider replacement), transport release
-decrements `open`, and terminal settlement separately counts `settled`. Rejected
-connects that never hand off are excluded from all three. The per-pod/target
-difference must return to zero; allow the existing 30-second deferred hop
-settlement and scrape races, but **no nonzero gap persisting two minutes**. A
-missing settlement after transport release grows this gap even if acknowledgement
-errors stay zero. This detects lifecycle coverage, not wrong reason attribution;
-retain real-object tests and provider-reason/session-SLI inspection for that.
+Lifecycle accounting (2026-10-18 correction): `opened` counts handed-off
+managed legs, `open` counts transports not yet released, and `settled` counts
+terminal serving decisions. Transport release and settlement are independent.
+A settled-but-open leg contributes -1 to `opened-settled-open`; a released but
+unsettled leg contributes +1, and pooling can cancel them. The old absolute-gap
+abort is invalid as a serving-loss oracle. Run 5b and routing-on control both
+exhibited it; control included discrepancies already present for over eight hours.
+
+Retain the difference per pod/target as an **accounting HOLD/investigation**
+signal, recording both arms' carry-in baseline. It must not delete a canary or
+roll back the fleet by itself. Retain all real outcome, latency, readiness and
+telemetry-coverage safety gates. An unexplained accounting HOLD prevents automatic
+qualification and needs an explicit recorded operator decision, not a silent pass.
+The fleet rule with stable UID `omi-stt-leg-lifecycle-gap` now checks the valid
+exactly-once invariant `settled > opened`, with Grafana `for: 2m`; it no longer
+uses transport liveness to infer missing settlements. A separate warning,
+`omi-stt-leg-settlement-omission`, catches a positive per-instance/target
+`opened-settled-open` above its nonnegative carry-in one hour earlier,
+sustained for **15 minutes** of Grafana pending time. Live legs are subtracted;
+unchanged positive control carry-in and negative gaps do not trigger it. A
+new instance without hour-old samples uses a label-matched zero baseline;
+missing current components remain no data and require a coverage HOLD.
+The rolling baseline detects new debt and ages it out after an hour; retain
+the recorded discrepancy until investigated even after the warning resolves.
+This warning requests investigation and HOLD, never a serving abort by itself.
 
 ```promql
-sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
-- sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
-- sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
+# Accounting diagnostic only; never a serving abort or missing-settlement proof.
+sum by (pod, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
+- sum by (pod, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
+- sum by (pod, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
 
-min_over_time((abs(
-  sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
-  - sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
-  - sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
-))[2m:15s]) > 0
+# Duplicate-settlement invariant, evaluated per process/target (not fleet pooled).
+omi_stt_managed_legs_settled_total{job="backend-listen-metrics"}
+- omi_stt_managed_legs_opened_total{job="backend-listen-metrics"} > 0
 ```
+
+Complete omission detection needs direct low-cardinality released-AND-unsettled
+counts and oldest age, with claimed/pending ownership and the enforced
+recovery/teardown deadline plus scrape grace. The current counters cannot provide
+that state. Do not infer it from a longer gap subquery. A `[1m:15s]` subquery can
+contain only four samples spanning 45 seconds. Canary diagnostic timers must use
+actual elapsed time with complete scrapes, resetting on gaps, absent targets or
+counter resets; baseline old discrepancies separately from new incidents.
 
 Coverage, admitted votes and health evidence:
 
@@ -220,6 +375,8 @@ sum by (proposed_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-l
 sum(increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics",proposed_primary="unavailable"}[1h])) or vector(0)
 sum(increase(omi_stt_cost_routing_all_degraded_total{job="backend-listen-metrics"}[1h])) or vector(0)
 sum by (reason) (increase(omi_stt_cost_routing_fail_open_total{job="backend-listen-metrics"}[1h]))
+sum(increase(omi_stt_cost_routing_no_permitted_target_total{job="backend-listen-metrics"}[1h])) or vector(0)
+sum by (target, comparison) (increase(omi_stt_cost_routing_language_state_total{job="backend-listen-metrics"}[1h]))
 ```
 
 `static_primary` is the configured eligible nomination before local circuit and
@@ -244,7 +401,7 @@ completed sessions feed `omi-live-transcription-success-low` (existing <90%,
 >=50 counted sessions/5m, five-minute dwell page). Quiet unfinished streams do
 not establish a vendor fault and remain outside this automatic detector.
 
-## Recommended on ramp and abort
+## Historical router-on ramp and abort
 
 After the checklist passes, configure `on` at **5% for at least 60 minutes and
 100 classified canary sessions**, then **25% for at least 60 minutes and 300**,
@@ -259,10 +416,34 @@ sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-li
 sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[15m])) / clamp_min(sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[15m])), 1)
 ```
 
+The bounded companion `omi_stt_routing_cohort_outcomes_total` uses labels
+`routing_arm`, `signal`, `outcome`. Arms are `on` (sticky selected UID),
+`shadow` (static session admitted in shadow mode), and `off` (off mode or an
+unassigned UID in on mode). Capture precedes initialization and is pinned
+through child tasks, replay, provider switches and flag changes. Terminal
+attempt outcomes mirror `omi_live_stt_terminal_total`, including pre-audio
+failure; transcript outcomes mirror the headline session counter for this
+managed subset. Session-end `fallback_exhausted=yes|no` counts whether the
+shared helper emitted any exhausted event for `stt_selection|stt_live_session`;
+`terminal_after_text=yes|no` uses the existing recovery-gated predicate.
+These booleans count each completed socket once, including too-short sessions.
+Existing metrics and serving behavior are unchanged.
+
+`omi_stt_routing_cohort_paid_audio_seconds_total{routing_arm,provider}` emits
+accepted paid-adapter PCM seconds at the same session-end seam. Soniox,
+Modulate and Deepgram admission includes replay, pre-roll and accepted idle
+reopens; rejected sends and idle buffering are excluded until transport
+acceptance. This is an admission proxy, not confirmed wire delivery or vendor
+billing. All bounded children exist from process start. Compare uniform on/off
+configuration, continuous scrapes and matched completion windows; never infer
+cohort from pod track or pool shadow with off silently. The static-routing ramp below adds a companion window first-text histogram;
+other provider first-text latency remains uninstrumented.
+
 Extend dwell until the on arm reaches the exposure floor; do not substitute
 shadow proposals or window-allocation counts for actual router canary sessions.
 
-Abort to shadow/zero for a persistent lifecycle gap, any emission acknowledgement error or evidence exception; any
+HOLD for an unexplained lifecycle accounting diagnostic. Abort to shadow/zero for
+any emission acknowledgement error or evidence exception; any
 unavailable/all-degraded proposal; sustained Redis/write/cap errors; or a
 Parakeet/Soniox bench unexplained by actual provider failures. Abort for a >2
 percentage-point drop in transcript success from the pre-ramp baseline over
@@ -274,34 +455,146 @@ with the control arm and the pre-ramp baseline. At small sample sizes these are
 operational gates, not a statistical proof of non-inferiority.
 
 Kill switch: set `STT_ROUTING_ON_PERCENT=0` or `STT_ROUTING_MODE=shadow` (`off`
-also restores static selection). Apply through the coordinator's config PR and
+also restores static selection; snapshots go neutral and read only family
+account benches — a stale selection bench cannot shed the chain, and shared
+account quarantine stays enforced in
+every mode, so `off` never reopens a credential another pod withdrew). Apply
+through the coordinator's config PR and
 normal deployment; this is not an instant process-local env mutation.
 `PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws the window leg.
 Keep chart + prod overlay aligned, then regenerate `backend/deploy/runtime_env.yaml`
 with `python3 backend/deploy/compose_runtime_env.py`. Do not write routing state
 through dev: dev shares production Redis/Firestore.
 
-## Soniox runway
+## Static-routing cohort ramp (stage 1)
 
-`SONIOX_MONTHLY_CEILING_USD` sets the monthly alert ceiling; zero disables
-the poller. The production value is configured in the listen chart and
-runtime env. No automatic top-up or hard paid-traffic cutoff occurs. The
-hourly poller prefers Soniox's current-month `/v1/usage/summary` dollar cost.
-The existing backend-listen `SONIOX_API_KEY` needs the Soniox **Usage and
-limits** permission for this read. If the API read fails, the poller estimates
-from Omi-metered Soniox audio seconds times
-`SONIOX_ESTIMATED_USD_PER_HOUR`; that estimate can undercount if Redis was
-unavailable or if Soniox charges for audio outside this listen path. Check
-`omi_soniox_usage_source{source="vendor"}` and the sample timestamp before
-acting on the amount. The 70% and 90% Telegram alerts explicitly say **top
-up Soniox**. Compare the configured ceiling with the real Soniox account
-balance during an incident; the ceiling itself does not fund the account.
+This sequence supersedes the historical router-on expansion above. Production
+listen stage 1 uses `STT_ROUTING_MODE=on`, `STT_ROUTING_ON_PERCENT=90`: the
+complementary approximately 10% of managed accounts use static selection. Keep
+`PARAKEET_WINDOW_ALLOCATION_PERCENT=100`, `PARAKEET_WINDOW_MAX_SESSIONS=16`,
+`STT_FAILOVER_RECOVERY_ENABLED=true`, and `STT_NO_TEXT_RESCUE_ENABLED=true`.
+There is no provider, endpoint, GPU-pool, or admission-limit change. Custom STT,
+BYOK, and multi-channel sessions remain outside the managed cohort.
+
+Ship the instrumented binary with `STT_ROUTING_MODE=on` and
+`STT_ROUTING_ON_PERCENT=100` first. Let that image serve on/100 for at least
+**60 minutes** before the separate stage-1 allocation change. Pin `image_tag`
+to that same immutable instrumented image for stage 1 and both arms. A source
+rollback or a deployment workflow's overall completion time is not a flag-only
+serving boundary. Verify
+image convergence, Ready pods, public NEG exposure in every serving zone and
+complete scrapes. Hold for an unobserved Ready pod or missing telemetry.
+
+| Stage | `STT_ROUTING_ON_PERCENT` | Approximate static share | Minimum qualified observation |
+|---|---:|---:|---|
+| 1 | 90 | 10% | 2 hours, 150 classified static outcomes, 50 first-text observations per arm |
+| 2 | 75 | 25% | Same floors, measured again at this stage |
+| 3 | 50 | 50% | Full 24-hour cycle and the same sample floors |
+| 4 | 0 | 100% | 2 hours and the static sample floors; retain the qualified 50/50 control receipt as a historical reference |
+
+At the observed fleet pace, the 10% static cohort may need about 2.5 hours to
+reach 150 classified static outcomes. Extend dwell instead of waiving sample
+floors.
+Stages 1–3 use concurrent on control; stage 4 has no concurrent on cohort, so do
+not call its historical reference a concurrent comparison. The release operator
+owns each expansion after reviewing its receipt, starting with a review within
+24 hours of stage-1 activation. No automatic promotion. Each receipt records
+image, actual arm counts, dwell, counts/denominators, zone mix, scrape coverage
+and vendor usage. Missing data, stale vendor usage, unexplained accounting
+signals or unmet floors are HOLD.
+
+The added histogram is
+`omi_stt_routing_cohort_window_first_text_seconds{routing_arm="on|off|shadow"}`.
+`off` identifies the static cohort in mode-on; it does not prove global off.
+It uses the existing Parakeet-window measurement: first VAD speech through first
+emitted nonempty transcript, once per emitting window leg, including recovery
+legs. It is not fleet-wide end-to-end first text, and excludes unmanaged sockets.
+The arm is pinned when the window socket is constructed, before background
+callbacks; later context/flag changes cannot relabel it. Existing global and
+demand-cohort histograms keep their schemas and semantics. Only the closed arm
+label is added; no account, session, endpoint or language label is introduced.
 
 ```promql
-max(omi_soniox_month_spend_usd{job="backend-listen-metrics"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job="backend-listen-metrics"}), 1)
-max(omi_soniox_usage_source{job="backend-listen-metrics"}) by (source)
-time() - max(omi_soniox_usage_sample_timestamp_seconds{job="backend-listen-metrics"})
+# Per-arm window p95 and observation counts; extend the window to stage dwell.
+histogram_quantile(0.95, sum by (routing_arm, le) (rate(omi_stt_routing_cohort_window_first_text_seconds_bucket{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary"}[30m])))
+sum by (routing_arm) (increase(omi_stt_routing_cohort_window_first_text_seconds_count{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary"}[30m]))
+
+# Classified managed outcomes; exclude too_short from the success denominator.
+sum by (routing_arm, outcome) (increase(omi_stt_routing_cohort_outcomes_total{job="backend-listen-metrics",namespace="prod-omi-backend",signal="transcript",outcome=~"transcribed|no_transcript"}[30m]))
+
+# Session-end booleans: compare yes / (yes + no), not global accepts.
+sum by (routing_arm, signal, outcome) (increase(omi_stt_routing_cohort_outcomes_total{job="backend-listen-metrics",namespace="prod-omi-backend",signal=~"terminal_after_text|fallback_exhausted"}[30m]))
 ```
+
+Qualification requires static-arm transcript success **at least 95%**, with no
+**greater-than-2-percentage-point decline** versus control; apply the retained
+15-minute outcome guard at **at least 100 classified outcomes**. Window first-text
+p95 must be **below 30s and no more than control +5s**, with the per-arm sample
+floors above. Do not compute a passing p95 from absent or undersampled series.
+Investigate any terminal-after-text or exhaustion excess immediately; a sustained
+excess versus concurrent on control aborts the expansion. Keep booleans/counts
+separate from attempt outcomes and account for completion lag.
+
+Retain window POST p95 below 2s and the existing overflow guard (>1% sustained
+10 minutes). No new GPU queue timeouts, sustained live queue p95 at least 1s,
+admission-overflow rise, or restart/readiness regression may pass. Retain the
+existing real outcome and lifecycle guards; accounting gaps are investigation
+HOLDs, not automatic serving rollback. Watch the whole fleet and each serving
+zone as well as the two arms. LB 101 share has a broad 403/429-inclusive request
+denominator and is supporting evidence, not an exact session-open success SLI.
+
+Rollback for this **static expansion** is `STT_ROUTING_MODE=on` and
+`STT_ROUTING_ON_PERCENT=100`, with the same image, through the normal listen
+configuration workflow. Keep chart, prod overlay and generated runtime manifest
+aligned. This direction differs from aborting the historical router-on ramp.
+Do not set global mode off for a partial ramp: it ignores the on percentage and
+also suppresses shared health evidence. Keeping mode on preserves health
+collection even in the complementary static cohort; a later global evidence-off
+change needs its own evidence.
+
+No additional capacity is requested. Planning incremental vendor cost at 5% is
+about **$0.5–1/day** at the investigated volume, not a contracted bill. Measure
+fresh vendor usage, include Modulate and Soniox, and separate replay-inclusive
+paid-audio proxies from vendor invoices before expanding.
+
+## Historical production routing-off rollout (2026-10-18)
+
+The historical trial used `STT_ROUTING_MODE=off` (reverted by #22222);
+the current static expansion is defined above. Off was the independent canary's only
+routing override. Dev keeps its existing configuration. Static provider order,
+recovery, capacity rescue, account quarantine and the routing kill switch stay
+available; off does not disable fallback. No account cohort is added by this
+rollout. Manage private cohorts outside this repository.
+
+Rollback: **set `STT_ROUTING_MODE=on` in the prod listen values and prod runtime
+overlay, run `python3 backend/deploy/compose_runtime_env.py`, then deploy through
+the normal prod listen Helm workflow with the same image.** This rolls/drains
+WebSockets. Do not roll back an entire old Helm revision and undo unrelated
+capacity fixes. The routing-only config commit can also be reverted and deployed.
+
+Before deployment, pin the serving image/release SHA, exact main pod set and a
+30-minute pre-deploy baseline. After rollout, verify the reported release identity,
+`STT_ROUTING_MODE=off` on every main pod, Ready pods, public NEG membership and
+complete scrapes. Compare matched 15- and 30-minute windows with the baseline;
+record numerators, denominators, language/provider mix and histogram counts:
+
+| Watch | Baseline and post-deploy measure |
+|---|---|
+| Exhausted chains | `sum(increase(omi_stt_chain_exhausted_total[15m])) / sum(increase(omi_listen_accepted_total[15m]))` (repeat with `[30m]`) |
+| Terminal after text | `increase(omi_live_session_terminal_after_text_total)` / accepted sessions |
+| Transcript success | transcribed / (transcribed + no_transcript) from `omi_live_session_transcript_outcome_total`; exclude too_short |
+| First-text p95 | `histogram_quantile(0.95, sum by(le)(rate(omi_stt_window_first_text_seconds_bucket[15m])))` plus its count |
+
+Use `job="backend-listen-metrics"`, the prod namespace and exact escaped pod
+sets for all watches, as in `listen-stt-canary-queries.promql`. First-text timing
+covers Parakeet-window only; it does not measure Modulate/Soniox end-to-end
+latency. Missing metrics are HOLD, never zero. Outcome completion lags accepts;
+exhaustion and terminal events are not deduplicated session failure rates.
+Watch through at least 60 minutes and 150 classified post-rollout outcomes.
+Investigate any outcome-rate regression against the baseline immediately; use
+the retained sampled latency and outcome safety gates, and routing-on rollback
+for a sustained serving regression. Earlier single-run aborts remain historical;
+the lead accepted pooled same-image/config runs 4b+5b (173 classified outcomes).
 
 ## Operator reset
 
@@ -316,3 +609,82 @@ more than 1,000 matching keys and uses short Redis socket deadlines. It does
 not reset process-local circuits; those recover on their existing cooldown,
 or after an operator controlled listen restart. Never point the script at a
 different environment to clear a production alert.
+
+
+## Router-on readiness controls (default off)
+
+`STT_PAID_SPILLOVER_BUDGET_ENABLED=false` preserves existing selection. When
+true, router-on sessions encountering Parakeet capacity refusal must obtain a
+fleet admission before promoting a paid route. Redis TIME and one atomic Lua
+operation enforce a fixed UTC-minute budget across pods; all endpoints and credentials for
+the same provider share the budget; rotations do not reset it. Defaults are 30 promotions each
+for `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE`,
+`STT_PAID_SPILLOVER_MODULATE_PER_MINUTE`, and
+`STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` (range 0–10000). Zero refuses
+promotions. Malformed or out-of-range caps deny promotions before Redis access,
+log once per provider per process without the raw value, and report `unavailable`.
+Redis faults or budget denial restore the configured order and
+emit `omi_stt_paid_spillover_admissions_total{provider,outcome}` with outcomes
+`admitted`, `denied`, `unavailable`. This limits additional router promotions;
+the static chain may still require a paid dial. A minute boundary can admit
+two adjacent budgets in a short interval. Qualify paid concurrency, retry and
+billing headroom independently before enabling router traffic.
+
+`STT_NO_TEXT_RESCUE_ENABLED=false` preserves existing first-text handling.
+Enabling it also requires `STT_FAILOVER_RECOVERY_ENABLED=true`; the choice and
+`STT_NO_TEXT_RESCUE_SECONDS` are pinned when the managed session is created.
+The default 60-second lease (range 5–120) bounds paid audio admission by wall time and paid
+admitted audio, including replay and successor switches, for one ambiguous
+no-text interval per listen session. Capture-mapped successor text overlapping the stalled interval records
+evidence but does not renew the lease. Later or unmapped text is unproven. At expiry or audio-budget refusal, audio admission stops and the owner tries
+windowed Parakeet once, retaining unanswered capture and applying the normal
+replay/epoch fences. Transport cleanup uses the ordinary bounded abort; the admission deadline is
+not an exact provider billing or socket-close timestamp. This policy retirement
+never benches the paid provider.
+If cheap permission/capacity is unavailable, recovery terminates explicitly;
+it cannot quietly extend the paid lease. Returned cheap decoding suppresses
+further first-text/empty-streak rescues for the session. Normal transport
+failures still use the configured recovery path. Empty output does not establish
+that audio is noise. Before a lease is spent, the gated window deadline rearms
+after emitted text so later speech without progress can also trigger rescue.
+
+`omi_stt_no_text_rescue_audio_seconds_total{provider}` measures admitted paid
+rescue audio; `omi_stt_no_text_rescue_total{outcome}` counts starts and completed
+intervals, distinguishing `interval_text` from `unproven`. Overlap is evidence of some
+original-interval text, not a completeness or correctness claim. Starts from sessions
+that leave before lease completion remain censored; these metrics are not an
+invoice or a transcript-quality score. For a synthetic one-hour Soniox
+remainder, the declared $0.0754/audio-hour rate implies $0.0754 without a
+lease versus at most $0.001257 for 60 paid audio seconds, followed by cheap
+processing. Billing increments and costs of genuine later transport failures
+are separate. Existing production counters do not join deadline causes to
+successor duration; do not claim historical savings from them.
+
+The monitoring chart's `alerts/live-stt.json` and combined `alert-rules.json`
+contain independent terminal-after-text, mid-session terminal, paid-capacity,
+combined overflow/batch-pressure, POST-latency, replay-continuity, lifecycle,
+persistence, snapshot and stage-readiness rules. Any-text headline success
+remains its existing limited SLI. Deploy and test notification delivery through
+the monitoring release process before rollout; committing rules does not make
+them live. The live-STT import allowlist and coverage gate include these rules;
+the monitoring import must precede verification of their live coverage. Lifecycle/replay rules document their configured-chain/recovery
+prerequisites. The #20391 terminal-after-text emitter also requires the pinned
+recovery flag. Production recovery is now enabled across all listen traffic, so its
+dedicated alert scopes the volume floor, numerator and denominator to every
+`backend-listen-metrics` series, including stable and former-canary series. Both
+cohorts contribute to the 20-session floor and the terminal-after-text ratio. The
+independent mid-session terminal rule covers every path. Never pool lifecycle
+counters across instances or targets.
+
+Local limiter qualification (disposable Redis, no cloud data):
+
+```bash
+printf '%s\n' tests/integration/test_paid_spillover_redis.py > .local/redis-tests.txt
+OMI_OWNED_PID_FILE="$PWD/.local/owned-pids.txt" \
+BACKEND_PYTEST_MARK_EXPR=integration \
+BACKEND_UNIT_TEST_FILE_LIST="$PWD/.local/redis-tests.txt" bash backend/test.sh
+```
+
+Run from the repository root with `.local/` already created. The integration
+test records its Redis PID and terminates only that owned process. Fast router
+and receiver regressions remain in the normal hermetic unit suite.

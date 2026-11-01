@@ -53,11 +53,11 @@ def test_desktop_gates_exempt_only_the_probe_uid() -> None:
     assert "from utils.release_probe import is_release_probe_uid" in process_source
     assert "probe_uid = is_release_probe_uid(uid)" in process_source
     assert "'omi-release-probe'" not in process_source
-    # All three desktop deferral gates (trial paywall, S6 policy, legacy
+    # Both surviving desktop deferral gates (trial paywall and legacy
     # deferral) sit behind the exemption guard.
     guarded = process_source.count('and not probe_uid')
-    assert guarded == 3, f'expected 3 exempted desktop gates, found {guarded}'
-    # The discard verdict is a fourth desktop post-processing gate: the probe
+    assert guarded == 2, f'expected 2 exempted desktop gates, found {guarded}'
+    # The discard verdict is another desktop post-processing gate: the probe
     # lane's terminal contract completes only through a kept conversation, so
     # both of its verdicts (the LLM discard decision and the empty-title
     # fallback) must skip for the probe uid (run 35583992730).

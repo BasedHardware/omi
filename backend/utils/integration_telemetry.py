@@ -1,12 +1,13 @@
 """Low-cardinality telemetry and structured logs for provider integrations."""
 
-import importlib
 import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import httpx
+
+from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +20,6 @@ AUTH_REFRESH_FAILED = 'Integration Auth Refresh Failed'
 
 GOOGLE_CALENDAR = 'Google Calendar'
 X = 'X'
-
-# Generic event capture keeps the original key resolution
-# (POSTHOG_PROJECT_API_KEY, falling back to the legacy shared POSTHOG_API_KEY).
-# Hosted MCP events are the exception: utils/mcp_analytics owns a dedicated
-# capture client built from POSTHOG_EVENTS_API_KEY only, so the events key
-# never becomes the capture key for every emit_posthog_event caller. Rollout
-# decisions (utils/jit_rollout) build their own client from
-# POSTHOG_PROJECT_API_KEY and never read the events key.
-_posthog_client: Optional[Any] = None
-_posthog_disabled = False
 
 
 @dataclass(frozen=True)
@@ -117,16 +108,8 @@ def _emit(
 
 
 def emit_posthog_event(distinct_id: Optional[str], event: str, properties: Dict[str, Any]) -> None:
-    """Capture one server event through the shared fail-open PostHog client."""
-    if not distinct_id:
-        return
-
-    try:
-        client = _get_posthog_client()
-        if client is not None:
-            client.capture(distinct_id=distinct_id, event=event, properties=properties)
-    except Exception as exc:
-        logger.warning('integration telemetry posthog_emit_failed event=%s error=%s', event, type(exc).__name__)
+    """Route the integration's closed property dictionary through server capture."""
+    emit_product_event(uid=distinct_id or '', event=event, properties=properties)
 
 
 def _properties(
@@ -176,35 +159,6 @@ def _log_structured(event_name: str, uid: Optional[str], properties: Dict[str, A
         properties.get('app_version', 'unknown'),
         properties['environment'],
     )
-
-
-def _build_posthog_client(api_key: str) -> Any:
-    host = os.getenv('POSTHOG_HOST', 'https://app.posthog.com')
-    posthog_module = importlib.import_module('posthog')
-    posthog_client_cls = getattr(posthog_module, 'Posthog')
-    return posthog_client_cls(project_api_key=api_key, host=host)
-
-
-def _get_posthog_client() -> Optional[Any]:
-    """Client for event capture: project key first, legacy shared key as fallback."""
-    global _posthog_client, _posthog_disabled
-    if _posthog_disabled:
-        return None
-    if _posthog_client is not None:
-        return _posthog_client
-
-    api_key = os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY')
-    if not api_key:
-        _posthog_disabled = True
-        return None
-
-    try:
-        _posthog_client = _build_posthog_client(api_key)
-    except Exception as exc:
-        logger.warning('integration telemetry posthog_import_failed error=%s', type(exc).__name__)
-        _posthog_disabled = True
-        return None
-    return _posthog_client
 
 
 def _provider_status_code(error: Any, explicit_status_code: Any = None) -> Optional[int]:
@@ -270,9 +224,3 @@ def _bucket_count(value: int) -> str:
     if value <= 1000:
         return '101_1000'
     return '1000_plus'
-
-
-def set_posthog_client_for_tests(client: Optional[Any]) -> None:
-    global _posthog_client, _posthog_disabled
-    _posthog_client = client
-    _posthog_disabled = client is None

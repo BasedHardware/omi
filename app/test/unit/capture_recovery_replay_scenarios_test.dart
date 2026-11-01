@@ -90,6 +90,14 @@ void main() {
     return frames;
   }
 
+  Future<List<List<int>>> readStoredFramesFromWals(Iterable<Wal> wals) async {
+    final frames = <List<int>>[];
+    for (final wal in wals) {
+      frames.addAll(await readStoredWalFrames(wal));
+    }
+    return frames;
+  }
+
   List<List<int>> expectedFrames(int from, int to) =>
       List.generate(to - from, (i) => NativeEventVector.synthesizePcmFrame(from + i));
 
@@ -119,10 +127,11 @@ void main() {
     // can be uploaded yet.
     world.setConnected(true);
     await world.settle();
-    expect(world.uploads.attempts, isEmpty, reason: 'in-memory frames belong to the live session, not the drain');
+    expect(world.uploads.attempts.length, greaterThan(0),
+        reason: 'only already-checkpointed safety copies drain while the live tail stays in memory');
 
-    // The keepalive reconnects at its 15s cadence: one failed attempt while
-    // offline (rate-limited), then a successful one once the network is back.
+    // Restored connectivity kicks one immediate reconnect; the 15s keepalive
+    // remains the bounded fallback cadence.
     // Frames keep flowing throughout — a real mic does not pause for recovery.
     final createsAfterRestore = world.socketCreates;
     for (var s = 0; s < 16; s++) {
@@ -131,6 +140,7 @@ void main() {
     }
     expect(world.socketCreates - createsAfterRestore, lessThanOrEqualTo(2),
         reason: 'reconnect attempts are rate-limited to the 15s keepalive cadence');
+    await world.controller.pendingSourceSwitch; // WAL recovery finishes before native reports the fresh session.
     world.emitNativeState(PhoneMicCaptureState.running); // native engine is up on the fresh session
     await world.settle();
     expect(world.controller.recordingState, RecordingState.record,
@@ -143,9 +153,9 @@ void main() {
     await captureSeconds(5, sessionId: session2, frameCursor: 4100);
     final reconnectedSocket = world.socket!;
     expect(reconnectedSocket, isNot(same(onlineSocket)));
-    expect(reconnectedSocket.sentBinary.length, 600,
-        reason:
-            'post-reconnect frames stream on the new socket (the final restore-window second plus the recovered 5s)');
+    expect(reconnectedSocket.sentBinary.length, 2000,
+        reason: 'connectivity restore reconnects within a second, not at the next 15s keepalive tick: '
+            'the last 15 restore-window seconds plus the recovered 5s stream on the new socket');
 
     // Session ends: the whole capture (online + offline + recovered windows) lands on disk.
     await world.stopLiveCapture();
@@ -153,25 +163,31 @@ void main() {
     await world.elapse(const Duration(seconds: 20));
     expect(world.socketCreates, createsAtStop, reason: 'the keepalive dies with the session');
 
+    final allWals = await world.wal.syncs.phone.getAllWals();
+    expect(allWals.length, greaterThan(1), reason: 'live safety copies are checkpointed in bounded chunks');
+    final storedFrames = await readStoredFramesFromWals(allWals);
+    expect(storedFrames, unorderedEquals(expectedFrames(0, 4600)),
+        reason: 'recoverable audio identity: WAL chunks must contain every injected frame exactly once');
+
     final missing = await world.wal.syncs.phone.getMissingWals();
-    expect(missing, hasLength(1));
-    final wal = missing.single;
-    expect(wal.status, WalStatus.miss);
-    final storedFrames = await readStoredWalFrames(wal);
-    expect(storedFrames, expectedFrames(0, 4600),
-        reason: 'recoverable audio identity: stored bytes must equal the exact injected frame sequence');
-
-    // Recovery drain uploads the WAL exactly once; a second wake is a no-op.
+    expect(missing, isNotEmpty);
+    // Recovery drains every unconfirmed chunk exactly once; a second wake is a no-op.
+    final attemptsBeforeRecovery = world.uploads.attempts.length;
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
-    expect(world.uploads.attempts, hasLength(1));
-    final walPath = (await Wal.getFilePath(wal.filePath))!;
-    expect(world.uploads.attempts.single.totalBytes, File(walPath).lengthSync());
-    expect((await world.walCounts())[WalStatus.synced], 1);
+    expect(world.uploads.attempts, hasLength(attemptsBeforeRecovery + 1));
+    var missingBytes = 0;
+    for (final wal in missing) {
+      final walPath = (await Wal.getFilePath(wal.filePath))!;
+      missingBytes += File(walPath).lengthSync();
+    }
+    expect(world.uploads.attempts.last.totalBytes, missingBytes);
+    expect((await world.walCounts())[WalStatus.synced], allWals.length);
 
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
-    expect(world.uploads.attempts, hasLength(1), reason: 'synced WAL must never be re-uploaded locally');
+    expect(world.uploads.attempts, hasLength(attemptsBeforeRecovery + 1),
+        reason: 'synced WAL must never be re-uploaded locally');
   });
 
   test('stale native events carrying a retired session id are dropped, not applied', () async {
@@ -305,14 +321,13 @@ void main() {
     final sessionId = world.hostApi.lastStartSessionId!;
     world.emitNativeState(PhoneMicCaptureState.running);
 
-    // 5s online, then the network dies but capture keeps running; the chunk
-    // (75s) and flush (105s) timers materialize the unsynced audio on disk
-    // before the process is killed.
+    // 5s online, then the network dies but capture keeps running through
+    // multiple 10s phone safety checkpoints before the process is killed.
     await captureSeconds(5, sessionId: sessionId, frameCursor: 0);
     world.setConnected(false);
     world.socket!.emitClose();
     await world.settle();
-    await captureSeconds(105, sessionId: sessionId, frameCursor: 500);
+    await captureSeconds(25, sessionId: sessionId, frameCursor: 500);
 
     expect(File('${tempDir.path}/wals.json').existsSync(), isTrue, reason: 'WAL index must be on disk');
     final walIndexFiles = tempDir.listSync().whereType<File>().map((f) => f.path.split('/').last).toList();
@@ -322,18 +337,21 @@ void main() {
     await world.reconstructProcess();
 
     final wals = await world.wal.syncs.phone.getAllWals();
-    expect(wals, hasLength(1));
-    final restored = wals.single;
-    expect(restored.status, WalStatus.miss, reason: 'flushed-but-unuploaded WAL reloads as retryable');
-    expect(restored.storage, WalStorage.disk);
-    expect((await readStoredWalFrames(restored)).length, 6000,
-        reason:
-            'the 75s chunk stored a 60s WAL (6000 frames) and the 105s flush wrote it to disk; the in-memory tail dies with the process');
-    // Recovery after restart uploads the reconstructed artifact once.
+    expect(wals.length, greaterThan(1));
+    expect(wals.every((wal) => wal.storage == WalStorage.disk), isTrue);
+    expect(
+      await readStoredFramesFromWals(wals),
+      unorderedEquals(expectedFrames(0, 3000)),
+      reason: 'all acknowledged and pending chunks survive process restart exactly once',
+    );
+    final missing = await world.wal.syncs.phone.getMissingWals();
+    expect(missing, isNotEmpty);
+    // Recovery after restart uploads each still-pending chunk once.
+    final attemptsBeforeRecovery = world.uploads.attempts.length;
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
-    expect(world.uploads.attempts, hasLength(1));
-    expect((await world.walCounts())[WalStatus.synced], 1);
+    expect(world.uploads.attempts, hasLength(attemptsBeforeRecovery + 1));
+    expect((await world.walCounts())[WalStatus.synced], wals.length);
   });
 
   test('torn wals.json falls back to the backup file and keeps recoverable work', () async {
@@ -342,8 +360,8 @@ void main() {
     await world.dispose();
     world = await CaptureReplayWorld.boot(tempDir: tempDir, supportsBatch: false);
     // Two saved generations => wals.json has 2 WALs, wals_backup.json has 1.
-    await produceWalOnDisk(12, frameCursor: 0);
-    await produceWalOnDisk(12, frameCursor: 2000);
+    await produceWalOnDisk(2, frameCursor: 0);
+    await produceWalOnDisk(2, frameCursor: 2000);
     expect((await world.wal.syncs.phone.getAllWals()), hasLength(2));
 
     world.killProcess();
@@ -368,7 +386,7 @@ void main() {
   });
 
   test('WAL whose audio file was deleted is classified corrupted on recovery, not silently retried', () async {
-    await produceWalOnDisk(12);
+    await produceWalOnDisk(5);
     final wal = (await world.wal.syncs.phone.getMissingWals()).single;
     world.killProcess();
 
@@ -394,7 +412,7 @@ void main() {
   // ---------------------------------------------------------------------------
 
   test('failed upload stays retryable with bounded backoff and succeeds on the scheduled retry', () async {
-    await produceWalOnDisk(12);
+    await produceWalOnDisk(5);
 
     void eventQueuePressure() {
       for (var i = 0; i < 32; i++) {
@@ -436,7 +454,7 @@ void main() {
   });
 
   test('in-flight cooldown drain finishes before dispose so WAL index writes cannot race temp-dir teardown', () async {
-    await produceWalOnDisk(12);
+    await produceWalOnDisk(5);
     world.uploads.enqueueOutcome(() => throw StateError('server refused upload'));
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
@@ -455,7 +473,7 @@ void main() {
   });
 
   test('queued upload: persisted -> enqueued(jobId) -> server-acknowledged(synced) stay distinct', () async {
-    await produceWalOnDisk(12);
+    await produceWalOnDisk(5);
     world.uploads.enqueueOutcome(() => UploadFilesResult.queued('job-42'));
     // The server accepts the job and is still processing it.
     world.jobStatuses['job-42'] = SyncJobFetch(
@@ -473,11 +491,18 @@ void main() {
     expect(File(walPath).existsSync(), isTrue,
         reason: 'uploaded-but-unconfirmed audio is retained until server acknowledgement');
 
-    // Non-terminal status again on a later pass: still not acknowledged.
+    // Upload hints intentionally delay the first poll; event wakes cannot bypass them.
+    expect(world.jobPolls, isEmpty);
+    await world.coordinator.wake(WakeTrigger.userRetry);
+    await world.settle();
+    expect(world.jobPolls, isEmpty);
+    await world.elapse(const Duration(seconds: 20));
+    // Non-terminal status on the first eligible pass: still not acknowledged.
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
     wal = (await world.wal.syncs.phone.getAllWals()).single;
     expect(wal.status, WalStatus.uploaded, reason: 'non-terminal job status must not flip the WAL');
+    expect(world.jobPolls, hasLength(1));
 
     // Server completes the job -> acknowledged -> synced; no re-upload.
     world.jobStatuses['job-42'] = SyncJobFetch(
@@ -487,14 +512,19 @@ void main() {
     final uploadsBefore = world.uploads.attempts.length;
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
+    expect(world.jobPolls, hasLength(1), reason: 'same-time wakes cannot repoll a processing job');
+    await world.elapse(const Duration(seconds: 20));
+    await world.coordinator.wake(WakeTrigger.userRetry);
+    await world.settle();
     wal = (await world.wal.syncs.phone.getAllWals()).single;
     expect(wal.status, WalStatus.synced);
+    expect(world.jobPolls, hasLength(2));
     expect(world.uploads.attempts.length, uploadsBefore,
         reason: 'acknowledgement resolves by polling, never by re-uploading bytes');
   });
 
   test('a job the server refuses for an input reason stops re-uploading the same bytes', () async {
-    await produceWalOnDisk(12);
+    await produceWalOnDisk(5);
     // More queued outcomes than wakes: any re-upload is visible as an attempt
     // rather than being absorbed by the script running dry.
     for (var i = 0; i < 12; i++) {
@@ -521,6 +551,13 @@ void main() {
 
     final walPath = (await Wal.getFilePath((await world.wal.syncs.phone.getAllWals()).single.filePath))!;
     final bytesAfterVerdict = File(walPath).lengthSync();
+
+    // Advance the upload's poll deadline before earning the terminal input verdict.
+    expect(world.jobPolls, isEmpty);
+    await world.elapse(const Duration(seconds: 20));
+    await world.coordinator.wake(WakeTrigger.userRetry);
+    await world.settle();
+    expect(world.jobPolls, hasLength(1));
 
     // Every later wake reason the app has: foreground, connectivity, device,
     // cooldown, startup — plus the most permissive one, an explicit retry.
@@ -550,7 +587,8 @@ void main() {
     await world.settle();
     expect(world.uploads.attempts, hasLength(2), reason: 'a deliberate retry is honoured');
 
-    // That retry earns the same verdict, and the loop stays closed after it.
+    // That retry earns the same verdict after its poll hint, and the loop stays closed.
+    await world.elapse(const Duration(seconds: 20));
     await world.coordinator.wake(WakeTrigger.cooldownElapsed);
     await world.settle();
     expect(world.uploads.attempts, hasLength(2), reason: 'one deliberate tap buys exactly one upload');
@@ -561,7 +599,7 @@ void main() {
   });
 
   test('a transient job failure keeps its per-attempt retry budget', () async {
-    await produceWalOnDisk(12);
+    await produceWalOnDisk(5);
     for (var i = 0; i < 12; i++) {
       world.uploads.enqueueOutcome(() => UploadFilesResult.queued('job-flaky'));
     }
@@ -579,11 +617,23 @@ void main() {
 
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
+    expect(world.jobPolls, isEmpty, reason: 'upload admission does not immediately poll');
+    await world.elapse(const Duration(seconds: 20));
+    // Observe the first verdict before the coordinator drains the newly retryable WAL.
+    await world.wal.syncs.phone.reconcileUploadedWals();
+    await world.settle();
+    expect(world.jobPolls, hasLength(1));
+    expect(world.uploads.attempts, hasLength(1));
     expect((await world.wal.syncs.phone.getAllWals()).single.retryCount, 1,
         reason: 'an upstream failure costs one attempt, not the whole budget');
 
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
+    expect(world.jobPolls, hasLength(1), reason: 'the second upload also honors its first-poll delay');
+    await world.elapse(const Duration(seconds: 20));
+    await world.wal.syncs.phone.reconcileUploadedWals();
+    await world.settle();
+    expect(world.jobPolls, hasLength(2));
     final wal = (await world.wal.syncs.phone.getAllWals()).single;
     expect(world.uploads.attempts, hasLength(2), reason: 'transient failures keep retrying');
     expect(wal.retryCount, 2);
@@ -595,7 +645,7 @@ void main() {
   // ---------------------------------------------------------------------------
 
   test('sign-out during outstanding WAL work stops reconnects and uploads; re-sign-in completes them', () async {
-    await produceWalOnDisk(12); // leaves the network down and the WAL retryable
+    await produceWalOnDisk(5); // leaves the network down and the WAL retryable
 
     final walBefore = (await world.wal.syncs.phone.getMissingWals()).single;
     final bytesBefore = File((await Wal.getFilePath(walBefore.filePath))!).lengthSync();
@@ -655,6 +705,7 @@ void main() {
     // The keepalive reconnects within ~15s and the session resumes; a second
     // rejection inside the 30s window must not refresh again.
     await flowFor(16, 100);
+    await world.controller.pendingSourceSwitch;
     world.emitNativeState(PhoneMicCaptureState.running);
     await world.settle();
     expect(world.controller.recordingState, RecordingState.record);

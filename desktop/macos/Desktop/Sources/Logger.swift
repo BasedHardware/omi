@@ -1,6 +1,5 @@
 import Foundation
 import OSLog
-import Sentry
 
 enum OmiLogPathResolver {
   static func launchID(processID: Int32) -> String { "pid-\(processID)" }
@@ -27,19 +26,6 @@ enum OmiLogPathResolver {
 
 private let logBundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
 private let logProcessID = getpid()
-
-/// EXP-002: launch-scoped experiment context appended to every structured
-/// desktop log line once the arm resolves, so logs are sliceable by arm
-/// alongside PostHog events and Sentry tags. Written once per launch on the
-/// main actor before the main shell paints.
-private nonisolated(unsafe) var logExperimentContext: (experimentId: String, variant: String)?
-private let logExperimentContextLock = NSLock()
-
-func setLogExperimentContext(experimentId: String, variant: String) {
-  logExperimentContextLock.withLock {
-    logExperimentContext = (experimentId, variant)
-  }
-}
 
 private let logFile: String = OmiLogPathResolver.logPath(
   isNonProduction: AppBuild.isNonProduction,
@@ -112,13 +98,6 @@ private func reportLogFileWriteFailure(_ error: Error) {
   let nsError = error as NSError
   let diagnostic = "Local log write failed; dropped entry (domain=\(nsError.domain), code=\(nsError.code))"
   logFailureDiagnostics.error("\(diagnostic, privacy: .public)")
-
-  // A breadcrumb accompanies any later crash report without turning expected disk
-  // exhaustion into a high-volume Sentry error event.
-  guard !AppBuild.isNonProduction else { return }
-  let breadcrumb = Breadcrumb(level: .error, category: "file-logger")
-  breadcrumb.message = diagnostic
-  SentrySDK.addBreadcrumb(breadcrumb)
 }
 
 private let logFileFailureReporter = OmiLogFileFailureReporter(emit: reportLogFileWriteFailure)
@@ -208,11 +187,8 @@ private func ensureLogParentDirectories() -> Bool {
 }
 
 private func logLine(timestamp: String, category: String, message: String) -> String {
-  let experiment = logExperimentContextLock.withLock { logExperimentContext }
-  let experimentFields =
-    experiment.map { " [experiment_id=\($0.experimentId) variant=\($0.variant)]" } ?? ""
   return
-    "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)]\(experimentFields) \(message)"
+    "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
 }
 
 func writeToLogFile(
@@ -341,13 +317,10 @@ func logSync(_ message: String) {
   print(line)
   fflush(stdout)
 
-  // Free-form messages stay in the local log. Cloud incidents carry a bounded,
-  // redacted diagnostic attachment when an error is captured instead.
-
   appendToLogFileSync(line)
 }
 
-/// Write to log file, stdout, and Sentry breadcrumbs
+/// Write to log file and stdout
 func log(_ message: String) {
   guard !DesktopLogPrivacy.suppressContent else { return }
   if let sink = DesktopLogPrivacy.sink {
@@ -365,9 +338,7 @@ func log(_ message: String) {
   appendToLogFile(line)
 }
 
-// MARK: - Sentry Error Noise Control
-
-/// Network/IO error codes that are transient and not actionable as Sentry errors:
+/// Network/IO error codes that are transient and not actionable as error reports:
 /// offline, timeouts, dropped connections, cancellations. These dominate event
 /// volume (timeouts, "no internet", socket resets) without indicating an app bug.
 /// We still write them to the local log + breadcrumbs for debugging context.
@@ -379,7 +350,7 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   // Benign sign-out race: background loops (conversation/advice/goals refresh,
   // upload retries) pass an isSignedIn guard, then the token is cleared mid-cycle
   // and the awaited request throws AuthError.notSignedIn. Expected when the user
-  // signs out or runs signed-out — floods Sentry without indicating a bug.
+  // signs out or runs signed-out — expected, not an app bug.
   if case AuthError.notSignedIn = error { return true }
   // Transient AI backend-capacity errors (rate limit, quota, overload, 5xx) from
   // the Gemini proxy, surfaced by the proactive assistants (task/memory/advice/
@@ -392,9 +363,9 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   }
   // Embedding backfills/searches can hit expected backend/product states (trial
   // expired/BYOK required, rate limit, 5xx). Keep those local-only so screenshot
-  // backfill loops don't create high-volume Sentry issues.
+  // backfill loops stay local-only diagnostics.
   if let embeddingError = error as? EmbeddingService.EmbeddingError,
-    embeddingError.isNonActionableForSentry
+    embeddingError.isExpectedProductState || embeddingError.isTransient
   {
     return true
   }
@@ -424,7 +395,7 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   case NSCocoaErrorDomain:
     // Environmental file-write failures (disk full / read-only volume / no write
     // permission) surface here as "The file couldn't be saved". Not app bugs —
-    // keep them as local logs + breadcrumbs instead of Sentry error clusters.
+    // keep them as local logs instead of error-report clusters.
     let storageExhausted: Set<Int> = [
       NSFileWriteOutOfSpaceError,  // 640 — disk full
       NSFileWriteVolumeReadOnlyError,  // 642 — read-only volume
@@ -444,229 +415,7 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   }
 }
 
-/// Rate-limit identical Sentry error captures. High-frequency loops (per-frame
-/// ffmpeg writes, per-cycle assistant failures, repeated DB-constraint hits) can
-/// emit the same error thousands of times. We collapse them by a digit-normalized
-/// key so a single root cause produces ~one Sentry event per window, not thousands.
-private let sentryDedupLock = NSLock()
-private nonisolated(unsafe) var sentryLastCaptured: [String: Date] = [:]
-private let sentryDedupWindow: TimeInterval = 300  // 5 minutes per unique error
-
-private func shouldCaptureToSentry(_ message: String) -> Bool {
-  // Normalize: strip digits so "(3/5)", frame counts, IDs collapse to one key.
-  let key = String(message.prefix(160)).replacingOccurrences(
-    of: "[0-9]+", with: "#", options: .regularExpression)
-  let now = Date()
-  sentryDedupLock.lock()
-  defer { sentryDedupLock.unlock() }
-  if let last = sentryLastCaptured[key], now.timeIntervalSince(last) < sentryDedupWindow {
-    return false
-  }
-  sentryLastCaptured[key] = now
-  // Bound the map so it can't grow unbounded over a long session.
-  if sentryLastCaptured.count > 500 {
-    let cutoff = now.addingTimeInterval(-sentryDedupWindow)
-    sentryLastCaptured = sentryLastCaptured.filter { $0.value > cutoff }
-  }
-  return true
-}
-
-/// App-module Swift error used only to prove `typeFamily` tokens stay bounded.
-enum DesktopErrorTelemetryAppModuleProbe: Error {
-  case fixture
-}
-
-/// Privacy-safe, bounded ownership for the shared `logError` Sentry boundary.
-///
-/// `logError` has hundreds of callers, including failures without an underlying
-/// `Error`. Deriving the area from compile-time `#fileID` makes those failures
-/// attributable without sending the path, the free-form log message, or user
-/// content to Sentry.
-struct DesktopErrorTelemetryDescriptor: Equatable {
-  let area: String
-  let failureClass: String
-  let phase: String
-  let errorType: String
-  let errorDomain: String
-  let errorCode: String
-  let site: String
-
-  var eventTitle: String {
-    if area == "onboarding" {
-      return "Desktop error [\(area)/\(failureClass)/\(phase)/\(site)]"
-    }
-    return "Desktop error [\(area)/\(failureClass)/\(phase)]"
-  }
-
-  static func make(
-    error: Error?,
-    fileID: StaticString,
-    function: StaticString = #function
-  ) -> Self {
-    let area = area(for: String(describing: fileID))
-    let site = errorSite(fileID: String(describing: fileID), function: String(describing: function))
-    guard let error else {
-      return Self(
-        area: area,
-        failureClass: "missing_underlying_error",
-        phase: "runtime",
-        errorType: "none",
-        errorDomain: "none",
-        errorCode: "none",
-        site: site)
-    }
-
-    let nsError = error as NSError
-    let domain = domainFamily(nsError.domain)
-    return Self(
-      area: area,
-      failureClass: "underlying_error",
-      phase: "runtime",
-      errorType: typeFamily(error, domainFamily: domain),
-      errorDomain: domain,
-      errorCode: codeBucket(nsError.code, domainFamily: domain),
-      site: site)
-  }
-
-  private static func area(for fileID: String) -> String {
-    let value = fileID.lowercased()
-    if value.contains("auth") || value.contains("credential") || value.contains("keychain") {
-      return "auth"
-    }
-    if value.contains("automation") || value.contains("agent") {
-      return "automation"
-    }
-    if value.contains("audio") || value.contains("microphone") || value.contains("transcription") {
-      return "audio"
-    }
-    // Onboarding files such as `OnboardingChatView.swift` contain "chat"; match
-    // the more specific onboarding area first so those sites stay in the
-    // onboarding Sentry group instead of collapsing into chat.
-    if value.contains("onboarding") {
-      return "onboarding"
-    }
-    if value.contains("chat") || value.contains("conversation") {
-      return "chat"
-    }
-    if value.contains("database") || value.contains("storage") || value.contains("sync") {
-      return "data"
-    }
-    if value.contains("diagnostic") || value.contains("logger") || value.contains("resource") {
-      return "diagnostics"
-    }
-    if value.contains("focus") {
-      return "focus"
-    }
-    if value.contains("integration") || value.contains("connector") {
-      return "integration"
-    }
-    if value.contains("memory") || value.contains("rewind") {
-      return "memory"
-    }
-    if value.contains("recording") || value.contains("listen") {
-      return "recording"
-    }
-    if value.contains("realtime") || value.contains("voice") {
-      return "realtime"
-    }
-    if value.contains("settings") || value.contains("preference") {
-      return "settings"
-    }
-    if value.contains("appstate") || value.contains("omiapp") || value.contains("system") {
-      return "system"
-    }
-    if value.contains("view") || value.contains("page") || value.contains("window") {
-      return "ui"
-    }
-    return "other"
-  }
-
-  private static func domainFamily(_ domain: String) -> String {
-    switch domain {
-    case NSURLErrorDomain:
-      return "url"
-    case NSPOSIXErrorDomain:
-      return "posix"
-    case NSCocoaErrorDomain:
-      return "cocoa"
-    case NSOSStatusErrorDomain:
-      return "osstatus"
-    case NSMachErrorDomain:
-      return "mach"
-    default:
-      if domain.hasPrefix("com.omi.") || domain.hasPrefix("me.omi.") {
-        return "app"
-      }
-      return "other"
-    }
-  }
-
-  private static func typeFamily(_ error: Error, domainFamily: String) -> String {
-    if error is DecodingError { return "decoding" }
-    if error is URLError { return "url" }
-    if error is CocoaError { return "cocoa" }
-    if error is POSIXError { return "posix" }
-    if let appType = appModuleTypeToken(String(reflecting: type(of: error))) {
-      return appType
-    }
-    return domainFamily
-  }
-
-  /// Last path component + function, stripped to `[a-z0-9]` so Sentry never
-  /// receives a filesystem path, message, or user content.
-  private static func errorSite(fileID: String, function: String) -> String {
-    let fileToken = boundedToken(lastPathComponent(fileID).replacingOccurrences(of: ".swift", with: ""))
-    let functionToken = boundedToken(functionName(function))
-    switch (fileToken.isEmpty, functionToken.isEmpty) {
-    case (true, true):
-      return "unknown"
-    case (true, false):
-      return String(functionToken.prefix(48))
-    case (false, true):
-      return String(fileToken.prefix(48))
-    case (false, false):
-      return String("\(fileToken).\(functionToken)".prefix(64))
-    }
-  }
-
-  private static func lastPathComponent(_ fileID: String) -> String {
-    fileID.split(separator: "/").last.map(String.init) ?? fileID
-  }
-
-  private static func functionName(_ function: String) -> String {
-    let beforeParen = function.split(separator: "(", maxSplits: 1).first.map(String.init) ?? function
-    return beforeParen.split(separator: " ").last.map(String.init) ?? beforeParen
-  }
-
-  private static func boundedToken(_ raw: String) -> String {
-    String(raw.lowercased().filter { $0.isLetter || $0.isNumber }.prefix(40))
-  }
-
-  private static func appModuleTypeToken(_ reflected: String) -> String? {
-    guard reflected.hasPrefix("Omi_Computer.") else { return nil }
-    let short = reflected.split(separator: ".").last.map(String.init) ?? ""
-    let token = boundedToken(short)
-    if token.isEmpty || token == "nserror" || token == "error" {
-      return "app"
-    }
-    return token
-  }
-
-  private static func codeBucket(_ code: Int, domainFamily: String) -> String {
-    let allowed: Set<Int>
-    switch domainFamily {
-    case "url":
-      allowed = [-1200, -1020, -1011, -1009, -1005, -1004, -1003, -1001, -999]
-    case "posix":
-      allowed = [12, 24, 35, 49, 54, 57, 60, 61, 89]
-    default:
-      return "other"
-    }
-    return allowed.contains(code) ? String(code) : "other"
-  }
-}
-
-/// Bounded, non-PII fields that may accompany a shared `logError` Sentry event.
+/// Bounded, non-PII fields that may accompany a shared `logError` diagnostic.
 /// Callers must construct these from enums, booleans, and numeric measurements;
 /// paths, exception messages, identifiers, and user content do not belong here.
 /// `Sendable` because these are produced on whichever actor detected the
@@ -681,7 +430,7 @@ struct DesktopErrorDiagnosticContext: Sendable {
   }
 }
 
-/// Log an error and capture it in Sentry
+/// Log an error to stdout and the local log file (plus the beta diagnostics trail).
 func logError(
   _ message: String,
   error: Error? = nil,
@@ -701,10 +450,6 @@ func logError(
   print(line)
   fflush(stdout)
 
-  // Keep raw error messages local. Sentry receives a stable incident event below
-  // with a redacted local diagnostic attachment.
-
-  // Always persist locally; only the Sentry capture is filtered/rate-limited below.
   appendToLogFile(line)
 
   let enhancedBetaDiagnostics = BetaEnhancedDiagnosticsConfiguration.isEnabled
@@ -713,60 +458,4 @@ func logError(
     error: error,
     failureDiagnostics: context?.values,
     enabled: enhancedBetaDiagnostics)
-
-  // Transient network/IO errors (offline, timeouts, cancellations, socket resets)
-  // remain local-only. A beta trail entry can join a later authoritative incident,
-  // but a transient alone must not create a new Sentry event.
-  if isNonActionableTransient(error) { return }
-
-  guard !isDevBuild else { return }
-
-  // Collapse repeated identical errors so a single root cause doesn't flood Sentry.
-  guard shouldCaptureToSentry(fullMessage) else { return }
-
-  // Free-form error text stays local. Cloud capture is a stable title plus typed
-  // error metadata and a redacted diagnostic attachment.
-  let telemetry = DesktopErrorTelemetryDescriptor.make(
-    error: error,
-    fileID: fileID,
-    function: function)
-  let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
-    area: telemetry.area,
-    failureClass: telemetry.failureClass,
-    phase: telemetry.phase)
-  defer {
-    if let attachmentURL {
-      try? FileManager.default.removeItem(at: attachmentURL)
-    }
-  }
-  SentrySDK.capture(message: telemetry.eventTitle) { scope in
-    scope.setLevel(.error)
-    scope.setTag(value: telemetry.area, key: "diagnostic_area")
-    scope.setTag(value: telemetry.failureClass, key: "failure_class")
-    scope.setTag(value: telemetry.phase, key: "diagnostic_phase")
-    scope.setTag(value: telemetry.errorType, key: "error_type")
-    scope.setTag(value: telemetry.errorDomain, key: "error_domain")
-    scope.setTag(value: telemetry.errorCode, key: "error_code")
-    scope.setTag(value: telemetry.site, key: "error_site")
-    scope.setContext(
-      value: [
-        "area": telemetry.area,
-        "failure_class": telemetry.failureClass,
-        "phase": telemetry.phase,
-        "error_type": telemetry.errorType,
-        "error_domain": telemetry.errorDomain,
-        "error_code": telemetry.errorCode,
-        "error_site": telemetry.site,
-      ], key: "app_context")
-    if let context {
-      scope.setContext(value: context.values, key: "failure_diagnostics")
-    }
-    if let attachmentURL {
-      scope.addAttachment(
-        Attachment(
-          path: attachmentURL.path,
-          filename: "desktop-incident-diagnostics.json",
-          contentType: "application/json"))
-    }
-  }
 }

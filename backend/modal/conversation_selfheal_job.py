@@ -20,6 +20,7 @@ import os
 
 import firebase_admin
 
+from database.firestore_read_origin import read_origin
 from services.conversation_selfheal import run_selfheal_tick, selfheal_dry_run, selfheal_mode
 from utils.env_loader import firebase_admin_options
 
@@ -39,6 +40,7 @@ def _init_firebase() -> None:
         firebase_admin.initialize_app(options=firebase_admin_options())
 
 
+@read_origin('job:conversation_selfheal')
 def main() -> None:
     mode = selfheal_mode()
     logger.info("Starting conversation-selfheal-job mode=%s dry_run=%s", mode, selfheal_dry_run())

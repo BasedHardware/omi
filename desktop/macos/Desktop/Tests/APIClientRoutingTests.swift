@@ -231,66 +231,6 @@ final class APIClientRoutingTests: XCTestCase {
     )
   }
 
-  func testJITQATranscriptionBackendIsResolvedAtUseTime() {
-    let original = ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"]
-    defer {
-      if let original {
-        setenv("OMI_PYTHON_API_URL", original, 1)
-      } else {
-        unsetenv("OMI_PYTHON_API_URL")
-      }
-    }
-
-    setenv("OMI_PYTHON_API_URL", "http://127.0.0.1:18080", 1)
-    XCTAssertEqual(TranscriptionService.pythonBackendBaseURL, "http://127.0.0.1:18080/")
-
-    setenv("OMI_PYTHON_API_URL", "https://api.omiapi.com", 1)
-    XCTAssertEqual(TranscriptionService.pythonBackendBaseURL, "https://api.omiapi.com/")
-  }
-
-  func testJITQAExactTuplesResolveAcrossPythonDesktopAndAuthAuthorities() {
-    let bundleIdentifier = "com.omi.omi-jit-qa"
-    let tuples = [
-      (
-        python: "http://127.0.0.1:18080", desktop: "http://127.0.0.1:18081",
-        auth: "http://127.0.0.1:18080"
-      ),
-      (
-        python: "https://api.omiapi.com",
-        desktop: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
-        auth: "https://api.omiapi.com"
-      ),
-    ]
-
-    for tuple in tuples {
-      XCTAssertEqual(
-        DesktopBackendEnvironment.pythonBaseURL(
-          useDevelopmentBackends: true,
-          bundleIdentifier: bundleIdentifier,
-          environmentValue: tuple.python
-        ),
-        "\(tuple.python)/"
-      )
-      XCTAssertEqual(
-        DesktopBackendEnvironment.rustBackendURL(
-          useDevelopmentBackends: true,
-          bundleIdentifier: bundleIdentifier,
-          environmentValue: tuple.desktop,
-          launchEnvironmentValue: tuple.desktop
-        ),
-        "\(tuple.desktop)/"
-      )
-      XCTAssertEqual(
-        DesktopBackendEnvironment.authBaseURL(
-          useDevelopmentBackends: true,
-          bundleIdentifier: bundleIdentifier,
-          environmentValue: tuple.auth
-        ),
-        "\(tuple.auth)/"
-      )
-    }
-  }
-
   func testBundleEnvironmentDoesNotOverwriteExplicitLaunchBackendURLs() {
     let launchEnvironment = [
       "OMI_DESKTOP_API_URL": "http://127.0.0.1:10343",
@@ -907,6 +847,43 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/users/daily-summary-settings", method: "GET",
       label: "getDailySummarySettings")
+  }
+
+  func testUpdateDailySummaryDepthSendsAccountPreferenceAndAcceptsStatusResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data(#"{"status":"ok","depth":"deep"}"#.utf8))
+    let client = await makeTestClient()
+
+    try await client.updateDailySummarySettings(depth: .deep)
+
+    let request = try XCTUnwrap(URLCapture.capturedRequests.first)
+    XCTAssertEqual(request.method, "PATCH")
+    XCTAssertTrue(request.url.path.contains("v1/users/daily-summary-settings"))
+    let body = try XCTUnwrap(request.body)
+    let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(payload["depth"] as? String, "deep")
+  }
+
+  func testUpdateDailySummaryDepthRejectsUnconfirmedOldBackendResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data(#"{"status":"ok"}"#.utf8))
+    let client = await makeTestClient()
+
+    do {
+      try await client.updateDailySummarySettings(depth: .normal)
+      XCTFail("An older backend must not appear to save an ignored depth")
+    } catch DailySummaryDepthSaveError.notConfirmed {
+      // The picker can revert to its last saved value and tell the user.
+    }
+  }
+
+  func testDailySummarySettingsDefaultsMissingOrUnknownDepthToBrief() throws {
+    let legacy = try JSONDecoder().decode(
+      DailySummarySettings.self, from: Data(#"{"enabled":true,"hour":22}"#.utf8))
+    let unknown = try JSONDecoder().decode(
+      DailySummarySettings.self,
+      from: Data(#"{"enabled":true,"hour":22,"depth":"future-option"}"#.utf8))
+
+    XCTAssertEqual(legacy.depth, .brief)
+    XCTAssertEqual(unknown.depth, .brief)
   }
 
   // -- Subscription/payments (GET → Python, was explicit pythonBackendURL, now default) --

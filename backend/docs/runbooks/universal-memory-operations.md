@@ -3,30 +3,28 @@
 **Owner:** backend on-call
 
 **Scope:** the universal canonical writer, dual-format reader, historical
-compatibility adapter, and Short-term maintenance job.
+compatibility adapter, and the retired Short-term maintenance job's follow-up
+owners (inline required intake; Dream's sweep for retries).
 
 There is no product UID enrollment, dogfood activation, or general account
-backfill. The drain's dev-only operational allowlist is a safety fence, not
-product enrollment. Every authenticated user follows one memory/task authority. Existing
+backfill. Every authenticated user follows one memory/task authority. Existing
 historical documents are read in place and materialized only when that item is
-mutated.
+mutated. The retired JIT ledger drain and daily memory sweep no longer run;
+`memory-maintenance-job` was retired with them on 2026-10-26 (dev-only, never
+served production); their stored records remain available to export, deletion,
+and retention paths.
 
 ## Controls
 
 | Control | Owner | Meaning |
 | --- | --- | --- |
 | `MEMORY_ENABLED` | backend manifests | Canonical intake incident stop; unset fail-closes to off. Never a user selector. |
-| `MEMORY_CANONICAL_MAINTENANCE_ENABLED` | `memory-maintenance-job` only | Enables scheduled Short-term normalization, TTL audit, consolidation, and outbox drain. |
-| `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | maintenance job | Global L2 cost/incident switch. Required processing, TTL audit, and outbox ownership remain independent. |
-| consolidation batch/candidate caps | maintenance job | Bound one L2 call and one pass. |
-| `KNOWLEDGE_LEDGER_DRAIN_ENABLED` | `knowledge-ledger-drain-job` | Explicit operational gate; development and production manifests default off. A one-shot development execution may override the gate only after read-only preflight and direct-user ledger-write proof. |
-| `KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST` | `knowledge-ledger-drain-job` | Development retains one named QA owner for an explicit override; production is empty. It is a safety fence, not product enrollment, and the gate-off default prevents scheduled mutation. |
-| shared JIT admission + kill switch | `knowledge-ledger-drain-job` | Re-authorizes every account and row before migration; unavailable authority fails closed. |
-| ledger drain page cap/cursor | `knowledge-ledger-drain-job` | Global rollout scans at most 20 apply-control documents per hourly run and advances only after every account in the page completes without an error; the dev allowlist reads only its named controls and has no global cursor side effects. |
-| cursor secret/version/TTL | backend | Unused by the live route; removal requires confirming no separate consumer owns the binding. |
+| inline required-intake switch | lane memreq | Kill switch for inline per-write L2 normalization; see the feature-flag registry row once memreq lands. |
+| `MEMORY_CANONICAL_MAINTENANCE_ENABLED` / `MEMORY_MAINTENANCE_CAPTURED_AFTER` / `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` / `MEMORY_CANONICAL_MAINTENANCE_FLEX` | retired | Runtime-env validation rejects these from all Cloud Run jobs and canonical-memory service surfaces (Cloud Run and GKE). |
 
 `MEMORY_ENABLED_USERS` and code-owned product UID lists are retired. Runtime
-validation rejects a reintroduced per-user memory inventory.
+validation rejects a reintroduced per-user memory inventory and any
+reintroduction of the retired maintenance switch or deploy window.
 
 ## Deploy order
 
@@ -38,17 +36,12 @@ validation rejects a reintroduced per-user memory inventory.
 3. Verify identical logical IDs, ordering, lifecycle/device/visibility policy,
    duplicate suppression, and cross-UID isolation across REST, chat, MCP, tools,
    and developer surfaces.
-4. Verify the dedicated maintenance job and Scheduler identity/cadence. The job
-   must advance the bounded, content-free account-registry cursor without
-   scanning the users collection or repeating one fixed page.
-5. Verify `knowledge-ledger-drain-job` and `knowledge-ledger-drain-hourly` are
-   independent of maintenance and the scheduler principal has `run.invoker` on
-   the job, then confirm its content-free counters show bounded cursor progress
-   and compatibility-to-ledger cutovers.
-6. Exercise the global stop and restore path. Record revision, image digest,
+4. Verify inline required processing at write time and Dream's scheduled sweep
+   identity/cadence; the retired maintenance job no longer deploys.
+5. Exercise the global stop and restore path. Record revision, image digest,
    project/database identity, Scheduler/job result, and content-free counters.
-7. Deploy the same universal reader before enabling canonical intake or
-   maintenance in production. Do not add a canary UID or enrollment document.
+6. Deploy the same universal reader before enabling canonical intake in
+   production. Do not add a canary UID or enrollment document.
 
 ## Content-free observations
 
@@ -64,23 +57,22 @@ The universal repository exports these low-cardinality Prometheus counters:
 - `memory_historical_suppression_total{reason="canonical_identity|canonical_state"}`;
 - `memory_historical_materialization_total{outcome="not_needed|committed"}`.
 
-Maintenance receipts additionally report retryable outbox failures, dead
-letters, acknowledgement failures, processed accounts, and cursor progress.
 Alerting must aggregate those fields without UID, memory ID, or content labels.
 
 ## Incident actions
 
 1. Keep the universal dual-format reader deployed. Rolling back to a
    legacy-only reader can hide newly canonical data and is forbidden.
-2. Stop L2 cost or bad consolidation with
-   `MEMORY_CANONICAL_CONSOLIDATION_ENABLED=false`.
-3. Stop scheduled mutation with
-   `MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`; continue authoritative reads.
+2. Stop inline per-write L2 cost with the inline required-intake kill switch
+   (lane memreq; its registry row names the env). Pausing the Dream sweep stops
+   only retry/backlog cost, not new inline calls.
+3. Stop scheduled retry/backlog work by pausing the Dream sweep Scheduler
+   (`dream-agent-sweep-hourly`); continue authoritative reads.
 4. If new intake itself is unsafe, use the global memory incident mode owned by
    the deployment. Never route selected UIDs to a legacy writer.
 5. Preserve canonical items, historical rows, overrides, tombstones, journals,
    and outbox state. Physical deletion requires separate approval.
-6. After repair, restore globally, run one bounded maintenance execution with
+6. After repair, restore globally, run one bounded Dream sweep execution with
    `--wait`, then confirm a later Scheduler execution and provider lag recovery.
 
 ## Required rollback rehearsal

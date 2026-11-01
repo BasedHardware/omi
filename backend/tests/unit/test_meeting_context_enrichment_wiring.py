@@ -328,20 +328,63 @@ class TestDegradation:
         assert calls == []
         assert _stored_context(conversation) is None
 
-    def test_the_google_and_ocr_layers_stay_off_by_default(self):
+    def test_calendar_and_screen_context_are_read_without_rollout_flags(self):
         conversation = _desktop_conversation()
-        cleared = {'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED': '', 'CONVERSATION_OCR_CONTEXT_ENABLED': ''}
         with (
-            patch.dict(os.environ, cleared, clear=False),
             patch.object(pc.redis_db, 'get_conversation_meeting_id', return_value=None),
             patch.object(pc.calendar_db, 'get_meetings_in_time_range', return_value=[]),
             patch.object(pc, 'get_overlapping_calendar_event', MagicMock()) as calendar,
-            patch.object(pc.screen_activity_db, 'get_screen_activity', MagicMock()) as screen,
+            patch.object(pc.screen_activity_db, 'get_screen_activity', MagicMock(return_value=[])) as screen,
         ):
             pc._enrich_meeting_context('uid-meeting', conversation)
 
-        calendar.assert_not_called()
-        screen.assert_not_called()
+        calendar.assert_called_once()
+        screen.assert_called_once()
+
+    def test_member_context_persists_separately_and_separation_clears_it_on_reprocess(self):
+        conversation = _desktop_conversation()
+        own = CalendarMeetingContext(
+            calendar_event_id='own-event',
+            title='Own calendar identity',
+            participants=[MeetingParticipant(name='Own Participant')],
+            start_time=CONVERSATION_START,
+            duration_minutes=29,
+            calendar_source='system_calendar',
+        )
+        member = CalendarMeetingContext(
+            calendar_event_id='member-event',
+            title='Member calendar identity',
+            participants=[MeetingParticipant(name='Member Participant')],
+            start_time=CONVERSATION_START,
+            duration_minutes=29,
+            calendar_source='system_calendar',
+        )
+        conversation.external_data['calendar_meeting_context'] = own.model_dump(mode='json')
+        conversation.started_at = None
+        conversation.finished_at = None
+
+        with patch.object(pc, 'merged_member_contexts', return_value=member):
+            resolved = pc._enrich_meeting_context('uid-meeting', conversation)
+        assert resolved is not None
+        assert {person.name for person in resolved.participants} == {'Own Participant', 'Member Participant'}
+        assert _stored_context(conversation).calendar_event_id == 'own-event'
+        assert conversation._capture_group_member_context == member.model_dump(mode='json')
+        assert 'capture_group_member_context' not in conversation.dict()
+        payload = pc._normal_persist_payload(conversation, clear_terminal_marker=False)
+        assert payload['capture_group_member_context'] == member.model_dump(mode='json')
+        assert payload['external_data']['calendar_meeting_context']['calendar_event_id'] == 'own-event'
+
+        # The user separates the member and reprocesses this primary. The fresh
+        # resolver sees only its own context and writes an explicit clear for the
+        # server-only derived member field.
+        conversation.capture_group = None
+        with patch.object(pc, 'merged_member_contexts', return_value=None):
+            resolved_after_separation = pc._enrich_meeting_context('uid-meeting', conversation)
+        assert resolved_after_separation is not None
+        assert [person.name for person in resolved_after_separation.participants] == ['Own Participant']
+        cleared = pc._normal_persist_payload(conversation, clear_terminal_marker=False)
+        assert cleared['capture_group_member_context'] is None
+        assert cleared['external_data']['calendar_meeting_context']['calendar_event_id'] == 'own-event'
 
 
 class TestNeverMutatesTheUsersCalendar:
@@ -354,6 +397,5 @@ class TestNeverMutatesTheUsersCalendar:
             _enrich(
                 conversation,
                 meetings=[_meeting_record()],
-                env={'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED': 'true'},
             )
         write_back.assert_not_called()

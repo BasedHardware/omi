@@ -680,3 +680,147 @@ def test_a_call_asyncio_never_receives_is_still_blocking(scanner, tmp_path):
     )
 
     assert len(results["async_helpers_with_blocking"]) == 1
+
+
+@pytest.fixture
+def database_context_source(tmp_path):
+    database_dir = tmp_path / 'database'
+    database_dir.mkdir()
+    (database_dir / 'scopes.py').write_text(
+        textwrap.dedent('''\
+            from contextlib import contextmanager as cm
+            import contextlib as contexts
+            from database.users import get_user
+
+            @cm
+            def memo_scope(uid):
+                yield {}
+
+            @contexts.contextmanager
+            def other_scope(uid):
+                yield {}
+
+            def read_user(uid):
+                return get_user(uid)
+
+            @cm
+            def blocking_scope(uid):
+                yield read_user(uid)
+
+            @cm
+            def blocking_exit_scope(uid):
+                try:
+                    yield
+                finally:
+                    read_user(uid)
+
+            def not_a_context_manager(uid):
+                return object()
+            '''),
+        encoding='utf-8',
+    )
+
+
+@pytest.mark.parametrize('export', ['memo_scope', 'other_scope'])
+def test_database_context_manager_with_target_is_not_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export} as scope
+
+        async def helper(uid):
+            with scope(uid):
+                await checkpoint()
+        ''',
+    )
+    assert results['async_helpers_with_blocking'] == []
+    assert results['mixed_await_sync_db'] == []
+
+
+@pytest.mark.parametrize(
+    'export', ['memo_scope', 'not_a_context_manager', 'unknown_scope', 'blocking_scope', 'blocking_exit_scope']
+)
+def test_plain_database_call_remains_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export}
+
+        async def helper(uid):
+            await checkpoint()
+            return {export}(uid)
+        ''',
+    )
+    assert [call['call'] for finding in results['async_helpers_with_blocking'] for call in finding['db_calls']] == [
+        export
+    ]
+
+
+@pytest.mark.parametrize('export', ['not_a_context_manager', 'unknown_scope', 'blocking_scope', 'blocking_exit_scope'])
+def test_unproven_or_blocking_with_target_stays_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export}
+
+        async def helper(uid):
+            with {export}(uid):
+                await checkpoint()
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_missing_database_source_is_not_exempt(scanner, tmp_path):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.missing import scope
+
+        async def helper(uid):
+            with scope(uid):
+                await checkpoint()
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_context_exemption_does_not_hide_calls_in_arguments_or_body(scanner, tmp_path, database_context_source):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.scopes import memo_scope
+        from database.users import get_user
+
+        async def helper(uid):
+            with memo_scope(get_user(uid)):
+                await checkpoint()
+                memo_scope(uid)
+        ''',
+    )
+    calls = results['async_helpers_with_blocking'][0]['db_calls']
+    assert {call['call'] for call in calls} == {'get_user', 'memo_scope'}
+    assert len(calls) == 2
+
+
+def test_context_exemption_does_not_hide_blocking_calls_in_with_body(scanner, tmp_path, database_context_source):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.scopes import memo_scope
+        from database.users import get_user
+
+        @router.get('/user')
+        async def endpoint(uid):
+            with memo_scope(uid):
+                await checkpoint()
+                return get_user(uid)
+        ''',
+    )
+    assert [call['call'] for finding in results['mixed_await_sync_db'] for call in finding['db_calls']] == ['get_user']

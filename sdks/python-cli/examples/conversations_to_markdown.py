@@ -20,6 +20,18 @@ from typing import Any, Dict, List, Union
 DONE_WORDS = {"true", "yes", "1", "done", "completed"}
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    writing the rendered note raises UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the note export.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
+
+
 def is_completed(value: Any) -> bool:
     """Normalize completed status for loosely typed API / LLM exports.
 
@@ -88,20 +100,20 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         except Exception:
             date_str = started_at
 
-    category_tag = category.lower().replace(" ", "-")
+    category_tag = strip_surrogates(category).lower().replace(" ", "-")
 
     # Serialize YAML frontmatter scalars safely using json.dumps to prevent injection and Python 3.10/3.11 SyntaxError
     lines: List[str] = [
         "---",
-        f"id: {json.dumps(str(conv_id))}",
-        f"title: {json.dumps(str(title))}",
-        f"category: {json.dumps(str(category))}",
-        f"date: {json.dumps(str(started_at))}",
-        f"source: {json.dumps(str(source))}",
+        f"id: {json.dumps(strip_surrogates(str(conv_id)))}",
+        f"title: {json.dumps(strip_surrogates(str(title)))}",
+        f"category: {json.dumps(strip_surrogates(str(category)))}",
+        f"date: {json.dumps(strip_surrogates(str(started_at)))}",
+        f"source: {json.dumps(strip_surrogates(str(source)))}",
         "tags:",
         "  - omi",
         "  - conversation",
-        f"  - {json.dumps(category_tag)}",
+        f"  - {json.dumps(strip_surrogates(category_tag))}",
         "---",
         "",
         f"# {title}",
@@ -161,7 +173,7 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
             lines.pop()
         lines.append("")
 
-    return "\n".join(lines).rstrip() + "\n"
+    return strip_surrogates("\n".join(lines)).rstrip() + "\n"
 
 
 def export_conversations(
@@ -194,16 +206,34 @@ def export_conversations(
         base_name = f"{date_prefix}_{slug}_{short_id}"
         filepath = output_dir / f"{base_name}.md"
 
-        if not overwrite:
-            counter = 1
-            while filepath in used_paths or filepath.exists():
-                counter += 1
-                filepath = output_dir / f"{base_name}_{counter}.md"
-
-        used_paths.add(filepath)
-
         md_content = conversation_to_markdown(conv)
-        filepath.write_text(md_content, encoding="utf-8")
+
+        if overwrite:
+            used_paths.add(filepath)
+            filepath.write_text(md_content, encoding="utf-8")
+        else:
+            # Claim the path with an atomic exclusive create. Checking
+            # exists() first and writing afterwards leaves a window in which a
+            # concurrent export (or the user) can create that file, and the
+            # subsequent write_text() would then truncate it despite
+            # overwrite=False. Opening with "x" is atomic: if the path already
+            # exists we get FileExistsError and can pick a fresh name instead
+            # of destroying what is there.
+            counter = 1
+            while True:
+                try:
+                    with filepath.open("x", encoding="utf-8") as fh:
+                        fh.write(md_content)
+                    break
+                except FileExistsError:
+                    counter += 1
+                    filepath = output_dir / f"{base_name}_{counter}.md"
+                    # Never hand out a name we already used in this batch.
+                    while filepath in used_paths:
+                        counter += 1
+                        filepath = output_dir / f"{base_name}_{counter}.md"
+            used_paths.add(filepath)
+
         print(f"Exported: {filepath}")
         exported_paths.append(filepath)
 
@@ -258,9 +288,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Progress messages include filenames, which may contain non-ASCII text.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     # Read input with UTF-8 BOM protection
     if args.input == "-":
-        raw_data = sys.stdin.read().lstrip("\ufeff")
+        raw_data = sys.stdin.buffer.read().decode("utf-8-sig")
     else:
         raw_data = Path(args.input).read_text(encoding="utf-8-sig")
 

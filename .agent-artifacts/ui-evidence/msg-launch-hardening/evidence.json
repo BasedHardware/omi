@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-chat-apps-imessage-upgrade.png",
+      "platform": "mobile-ios",
+      "description": "iMessage requires Operator or Architect: Upgrade",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-chat-apps-imessage-full.png",
+      "platform": "mobile-ios",
+      "description": "iMessage at capacity: Join Waitlist",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-chat-apps-waitlist-joined.png",
+      "platform": "mobile-ios",
+      "description": "After joining the iMessage waitlist",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-chat-apps-waitlisted-dark.png",
+      "platform": "mobile-ios",
+      "description": "On the iMessage waitlist (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

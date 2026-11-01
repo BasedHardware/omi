@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-pocket-permissions.png",
+      "platform": "mobile-ios",
+      "description": "Pocket arm: permissions is the first step after consent (simulator, OMI_ONBOARDING_VARIANT=pocket)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-pocket-pairing.png",
+      "platform": "mobile-ios",
+      "description": "Pocket arm: pairing uses the Connect page's device list (saved Omi shown Offline, nearby Omis tappable, Not now); simulator with injected nearby devices",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-pocket-found-omi.png",
+      "platform": "mobile-ios",
+      "description": "Pocket arm: how did you find us after pairing",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-pocket-language.png",
+      "platform": "mobile-ios",
+      "description": "Pocket arm: language after how did you find us",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

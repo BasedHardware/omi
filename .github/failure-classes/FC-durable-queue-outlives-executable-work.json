@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-durable-queue-outlives-executable-work",
+  "violated_contract": "A durable per-owner pending registry must not serialize expired ephemeral jobs through full worker dispatches, preventing executable work from reaching the owner.",
+  "canonical_prevention": "Before dispatch, prove raw job-key absence under the per-job run lock, transactionally retire only exact unbound pending work and release its claim, and continue within a bounded retirement budget. Reconcile dispatching owners with the same fences; preserve flag-off behavior and measure retirement separately from transcription success.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_backfill_uid_sequencer.py",
+    "backend/tests/integration/test_sync_backfill_retirement_emulator.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/database/sync_backfill_sequencer.py", "backend/utils/sync/uid_sequencer.py"],
+  "status": "open"
+}

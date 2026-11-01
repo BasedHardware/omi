@@ -9,7 +9,7 @@ import 'package:omi/utils/logger.dart';
 
 /// Opens a deep-link route (`/conversation/abc`, `/apps/xyz`, `/settings/data-privacy`) inside the
 /// Home that is already on screen.
-typedef HomeRouteOpener = Future<void> Function(String route, {bool Function()? canOpen});
+typedef HomeRouteOpener = Future<bool> Function(String route, {bool Function()? canOpen});
 
 /// Navigation that must land in the one Home shell instead of stacking a second one
 /// (docs/ux-contract.md §1, nav #3).
@@ -68,7 +68,7 @@ abstract final class HomeNavigation {
       return false;
     }
     (navigator ?? globalNavigatorKey.currentState)?.popUntil((r) => r.isFirst);
-    await opener(route, canOpen: canOpen);
-    return canOpen == null || canOpen();
+    final opened = await opener(route, canOpen: canOpen);
+    return opened && (canOpen == null || canOpen());
   }
 }

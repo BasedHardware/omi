@@ -1,0 +1,10 @@
+apiVersion: v2
+name: listen-edge
+description: >-
+  listen-edge (plan D): the Rust websocket edge for backend-listen. D2 deploys
+  it as a shadow ingest only (/v1/shadow, decode + VAD agreement); no client
+  traffic reaches it until D3.
+type: application
+version: 0.1.0
+# backend/edge/Cargo.toml package version.
+appVersion: "0.1.0"

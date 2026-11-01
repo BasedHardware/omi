@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-provider-sanitizer-before-final-projection",
+  "violated_contract": "The final provider request must satisfy provider parameter constraints after all caller-to-provider mappings. A mapping performed after sanitization must not restore a rejected parameter combination.",
+  "canonical_prevention": "Apply the provider sanitizer after all request projection, then assert the actual outbound HTTP body across tool and non-tool requests, thinking controls and streaming modes.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_reserved_capacity_only.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/llm_gateway/gateway/executor.py",
+    "backend/tests/unit/test_reserved_capacity_only.py"
+  ],
+  "status": "open"
+}

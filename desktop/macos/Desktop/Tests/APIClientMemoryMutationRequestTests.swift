@@ -7,6 +7,13 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
   private nonisolated(unsafe) static var _request: URLRequest?
   private nonisolated(unsafe) static var _body: Data?
   private nonisolated(unsafe) static var _requests: [(method: String, path: String)] = []
+  private nonisolated(unsafe) static var failingRequests = Set<String>()
+
+  static func failNextRequests(method: String, path: String) {
+    lock.lock()
+    failingRequests.insert("\(method) \(path)")
+    lock.unlock()
+  }
 
   static var request: URLRequest? {
     lock.lock()
@@ -31,6 +38,7 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
     _request = nil
     _body = nil
     _requests = []
+    failingRequests = []
     lock.unlock()
   }
 
@@ -43,7 +51,14 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
     Self._request = request
     Self._body = body
     Self._requests.append((request.httpMethod ?? "GET", request.url?.path ?? ""))
+    let shouldFail = Self.failingRequests.contains(
+      "\(request.httpMethod ?? "GET") \(request.url?.path ?? "")")
     Self.lock.unlock()
+
+    if shouldFail {
+      client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+      return
+    }
 
     let response = HTTPURLResponse(
       url: request.url!,
@@ -167,18 +182,6 @@ final class APIClientMemoryMutationRequestTests: XCTestCase {
     XCTAssertNil(capture["lineage_id"])
   }
 
-  func testMemoryUseSendsActionAndStableFeedbackID() async throws {
-    let client = await makeClient()
-
-    try await client.recordMemoryUse(id: "memory-3", action: .suppress, feedbackId: "feedback-1")
-
-    let request = try XCTUnwrap(MemoryMutationURLCapture.request)
-    XCTAssertEqual(request.httpMethod, "POST")
-    XCTAssertEqual(request.url?.path, "/v3/memories/memory-3/use")
-    XCTAssertEqual(try requestJSON()["action"] as? String, "suppress")
-    XCTAssertEqual(try requestJSON()["feedback_id"] as? String, "feedback-1")
-  }
-
   func testEditMemorySendsValueInJSONBody() async throws {
     let client = await makeClient()
 
@@ -206,6 +209,25 @@ final class APIClientMemoryMutationRequestTests: XCTestCase {
   func testUpdateTranscriptionPreferencesReadsCanonicalStateAfterStatusResponse() async throws {
     let client = await makeClient()
 
+    let saved = try await client.updateTranscriptionPreferences(vocabulary: ["Omi", "Codex"])
+
+    XCTAssertEqual(saved.vocabulary, ["Omi", "Codex"])
+    XCTAssertEqual(
+      MemoryMutationURLCapture.requests.map { "\($0.method) \($0.path)" },
+      [
+        "PATCH /v1/users/transcription-preferences",
+        "GET /v1/users/transcription-preferences",
+      ]
+    )
+  }
+
+  func testUpdateTranscriptionPreferencesKeepsSaveWhenFollowUpReadFails() async throws {
+    let client = await makeClient()
+    MemoryMutationURLCapture.failNextRequests(
+      method: "GET", path: "/v1/users/transcription-preferences")
+
+    // The PATCH itself never fails here (only the follow-up GET does), so this must not throw
+    // and must not report the vocabulary change as unsaved.
     let saved = try await client.updateTranscriptionPreferences(vocabulary: ["Omi", "Codex"])
 
     XCTAssertEqual(saved.vocabulary, ["Omi", "Codex"])

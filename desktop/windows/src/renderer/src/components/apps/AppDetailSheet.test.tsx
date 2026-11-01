@@ -129,10 +129,71 @@ describe('AppDetailSheet layout', () => {
     await waitFor(() => expect(screen.getByText('Connect account')).toBeTruthy())
     expect(screen.getByText('Click to complete')).toBeTruthy()
     fireEvent.click(screen.getByText('Connect account'))
-    expect(
-      (window as unknown as { omi: { openExternalUrl: ReturnType<typeof vi.fn> } }).omi
-        .openExternalUrl
-    ).toHaveBeenCalledWith('https://ex.com/setup?uid=me')
+    await waitFor(() =>
+      expect(
+        (window as unknown as { omi: { openExternalUrl: ReturnType<typeof vi.fn> } }).omi
+          .openExternalUrl
+      ).toHaveBeenCalledWith('https://ex.com/setup?uid=me')
+    )
+  })
+
+  it('refetches setup grants on each click without corrupting a signed query', async () => {
+    let grant = 0
+    omiGet.mockImplementation((url: string) => {
+      if (url.endsWith('/reviews')) return Promise.resolve({ data: [] })
+      grant += 1
+      return Promise.resolve({
+        data: {
+          ...DETAIL,
+          external_integration: {
+            auth_steps: [
+              {
+                name: 'Connect account',
+                url: `https://ex.com/setup?uid=me&omi_token=signed.${grant}`
+              }
+            ]
+          }
+        }
+      })
+    })
+    renderSheet()
+    const step = await screen.findByText('Connect account')
+    fireEvent.click(step)
+    await waitFor(() =>
+      expect(openSpy()).toHaveBeenLastCalledWith('https://ex.com/setup?omi_token=signed.2&uid=me')
+    )
+    fireEvent.click(screen.getByText('Connect account'))
+    await waitFor(() =>
+      expect(openSpy()).toHaveBeenLastCalledWith('https://ex.com/setup?omi_token=signed.3&uid=me')
+    )
+  })
+
+  it('does not reuse the cached setup grant when refresh fails', async () => {
+    mockGets(DETAIL, [])
+    renderSheet()
+    const step = await screen.findByText('Connect account')
+    omiGet.mockRejectedValueOnce(new Error('offline'))
+    fireEvent.click(step)
+    await waitFor(() => expect(toastFn).toHaveBeenCalled())
+    expect(openSpy()).not.toHaveBeenCalled()
+  })
+
+  it('discards a launch if the account changes while details load', async () => {
+    mockGets(DETAIL, [])
+    renderSheet()
+    const step = await screen.findByText('Connect account')
+    let finish!: (value: { data: App }) => void
+    omiGet.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    fireEvent.click(step)
+    getCacheUidMock.mockReturnValue('another-account')
+    finish({ data: DETAIL })
+    await Promise.resolve()
+    expect(openSpy()).not.toHaveBeenCalled()
   })
 
   it('omits the Setup section when there are no auth steps', async () => {
@@ -234,7 +295,7 @@ describe('AppDetailSheet open installed (external integrations)', () => {
     renderSheet({ enabled: true })
     const btn = await screen.findByRole('button', { name: /^Open$/ })
     fireEvent.click(btn)
-    expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app')
+    await waitFor(() => expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app'))
     // Disable is still reachable via the trash affordance.
     expect(screen.getByLabelText('Disable app')).toBeTruthy()
   })
@@ -252,7 +313,31 @@ describe('AppDetailSheet open installed (external integrations)', () => {
     renderSheet({ enabled: true })
     const btn = await screen.findByRole('button', { name: /^Open$/ })
     fireEvent.click(btn)
-    expect(openSpy()).toHaveBeenCalledWith('https://ex.com/setup?uid=me')
+    await waitFor(() => expect(openSpy()).toHaveBeenCalledWith('https://ex.com/setup?uid=me'))
+  })
+
+  it('fetches a fresh launch grant on each Open instead of reusing the loaded one', async () => {
+    let grant = 0
+    omiGet.mockImplementation((url: string) => {
+      if (url.endsWith('/reviews')) return Promise.resolve({ data: [] })
+      grant += 1
+      return Promise.resolve({
+        data: {
+          ...DETAIL,
+          external_integration: { app_home_url: `https://home.example.com/app?grant=${grant}` }
+        }
+      })
+    })
+    renderSheet({ enabled: true })
+    const btn = await screen.findByRole('button', { name: /^Open$/ })
+    fireEvent.click(btn)
+    await waitFor(() =>
+      expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app?grant=2')
+    )
+    fireEvent.click(btn)
+    await waitFor(() =>
+      expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app?grant=3')
+    )
   })
 
   it('with no signed-in uid the auth-step fallback is guarded (no-op)', async () => {

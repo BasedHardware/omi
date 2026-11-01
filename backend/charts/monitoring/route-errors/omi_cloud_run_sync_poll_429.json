@@ -1,0 +1,10 @@
+{
+  "description": "Bounded canonical lowercase-UUID sync-job status GET 429 requests reaching any Cloud Run service. Fixed endpoint identity encoded by metric definition; excludes edge-denied requests and does not count total polls. No path/ID labels.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"based-hardware\" AND logName=\"projects/based-hardware/logs/run.googleapis.com%2Frequests\" AND httpRequest.requestMethod=\"GET\" AND httpRequest.status=429 AND httpRequest.requestUrl =~ \"^https?://[^/?#]+/v2/sync-local-files/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:[?][^#]*)?$\"",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": []
+  }
+}

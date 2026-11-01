@@ -888,3 +888,283 @@ def test_default_memory_vector_search_telemetry_includes_bounded_timeout_and_bud
         assert set(payload['labels']).issubset(
             {'component', 'consumer', 'surface', 'mode', 'status', 'reason', 'event_type'}
         )
+
+
+def test_hydration_deletes_missing_and_tombstoned_index_ids_and_skips_live_override_reads():
+    now = datetime.now(timezone.utc)
+    live = _memory_item('live', tier=MemoryTier.long_term, now=now)
+    tombstoned = _memory_item('tombstoned', tier=MemoryTier.long_term, now=now, status=MemoryItemStatus.tombstoned)
+    missing = _memory_item('missing', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{live.memory_id}': _stored_item(live),
+            f'users/u1/memory_items/{tombstoned.memory_id}': _stored_item(tombstoned),
+            f'users/u1/memory_historical_overrides/{live.memory_id}': {'status': 'tombstoned'},
+            f'users/u1/memory_historical_overrides/{tombstoned.memory_id}': {'status': 'tombstoned'},
+        }
+    )
+    deleted = []
+
+    def fake_delete(uid, memory_ids):
+        deleted.append((uid, list(memory_ids)))
+        return len(memory_ids)
+
+    response = fetch_default_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(
+            hits=[
+                _hit(missing, score=0.99),
+                _hit(tombstoned, score=0.90),
+                _hit(live, score=0.80),
+            ]
+        ),
+        stale_index_deleter=fake_delete,
+        limit=10,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert [item['memory_id'] for item in response['items']] == ['live']
+    assert response['decisions']['missing'] == 'missing_authoritative_item'
+    assert response['decisions']['tombstoned'] == 'access_denied'
+    assert response['decisions']['live'] == 'allowed'
+    assert deleted == [('u1', ['missing', 'tombstoned'])]
+    assert response['stale_index_deleted_count'] == 2
+    assert all('memory_historical_overrides' not in path for path in db_client.document_paths)
+    assert 'users/u1/memory_items/live' in db_client.document_paths
+    assert 'users/u1/memory_items/missing' in db_client.document_paths
+
+
+class _AllowGate:
+    def __enter__(self):
+        return 'token'
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch):
+    now = datetime.now(timezone.utc)
+    live = _memory_item('live', tier=MemoryTier.long_term, now=now)
+    tombstoned = _memory_item('tombstoned', tier=MemoryTier.long_term, now=now, status=MemoryItemStatus.tombstoned)
+    missing = _memory_item('missing', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{live.memory_id}': _stored_item(live),
+            f'users/u1/memory_items/{tombstoned.memory_id}': _stored_item(tombstoned),
+        }
+    )
+    deleted = []
+
+    def fake_canonical_delete(uid, observed):
+        deleted.append((uid, list(observed)))
+        return len(observed)
+
+    monkeypatch.setattr(
+        'utils.memory.vector_search_service.delete_canonical_memory_vectors_by_ids',
+        fake_canonical_delete,
+    )
+
+    response = fetch_default_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(
+            hits=[
+                _hit(missing, score=0.99),
+                _hit(missing, score=0.97, projection_commit_id='commit-residue', vector_id='legacy-missing'),
+                _hit(tombstoned, score=0.90),
+                _hit(live, score=0.80),
+            ]
+        ),
+        limit=10,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert deleted == [
+        (
+            'u1',
+            [
+                ('missing', missing.ledger_commit_id),
+                ('missing', 'commit-residue'),
+                ('tombstoned', tombstoned.ledger_commit_id),
+            ],
+        )
+    ]
+    assert response['stale_index_deleted_count'] == 3
+    assert [item['memory_id'] for item in response['items']] == ['live']
+
+
+def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
+    calls = []
+
+    class _Index:
+        def delete(self, *, ids=None, filter=None, namespace):
+            calls.append({'ids': ids, 'filter': filter, 'namespace': namespace})
+
+    monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', lambda *args, **kwargs: _AllowGate())
+    from database.vector_db import delete_canonical_memory_vectors_by_ids
+
+    deleted = delete_canonical_memory_vectors_by_ids(
+        'u1',
+        [
+            ('stale-a', 'commit-a'),
+            ('stale-b', 'commit-b'),
+            ('stale-a', 'commit-a'),
+            ('', 'commit-a'),
+            ('stale-a', 'commit-a-old'),
+        ],
+    )
+
+    assert deleted == 3
+    assert calls == [
+        {
+            'ids': None,
+            'filter': {
+                '$and': [
+                    {'uid': {'$eq': 'u1'}},
+                    {
+                        '$or': [
+                            {
+                                '$and': [
+                                    {'memory_id': {'$eq': 'stale-a'}},
+                                    {'projection_commit_id': {'$eq': 'commit-a'}},
+                                ]
+                            },
+                            {
+                                '$and': [
+                                    {'memory_id': {'$eq': 'stale-b'}},
+                                    {'projection_commit_id': {'$eq': 'commit-b'}},
+                                ]
+                            },
+                            {
+                                '$and': [
+                                    {'memory_id': {'$eq': 'stale-a'}},
+                                    {'projection_commit_id': {'$eq': 'commit-a-old'}},
+                                ]
+                            },
+                        ]
+                    },
+                ]
+            },
+            'namespace': 'ns2',
+        }
+    ]
+
+
+def test_canonical_delete_retries_gate_finish_when_exit_fails(monkeypatch):
+    finishes = []
+
+    class _Index:
+        def delete(self, *, ids=None, filter=None, namespace):
+            return None
+
+    class _ExitFails:
+        def __enter__(self):
+            return 'token-1'
+
+        def __exit__(self, exc_type, exc, tb):
+            if exc_type is None:
+                raise RuntimeError('finish failed')
+            return False
+
+    monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', lambda *args, **kwargs: _ExitFails())
+    monkeypatch.setattr(
+        'database.vector_db.finish_destructive_operation',
+        lambda uid, *, kind, token, outcome: finishes.append((uid, kind, token, outcome)),
+    )
+    from database.vector_db import delete_canonical_memory_vectors_by_ids
+
+    deleted = delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')])
+
+    assert deleted == 1
+    assert finishes == [('u1', 'stale_vector_index_cleanup', 'token-1', 'completed')]
+
+
+def test_hydration_skips_stale_delete_when_legal_hold_blocks_it(monkeypatch):
+    from database.legal_holds import LegalHoldActive
+
+    now = datetime.now(timezone.utc)
+    missing = _memory_item('missing', tier=MemoryTier.long_term, now=now)
+    deleted = []
+
+    class _Index:
+        def delete(self, **kwargs):
+            deleted.append(kwargs)
+
+    def blocked(uid, **kwargs):
+        raise LegalHoldActive('held')
+
+    monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', blocked)
+
+    response = fetch_default_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=_FirestoreFake({}),
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(hits=[_hit(missing, score=0.9)]),
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert deleted == []
+    assert response['stale_index_deleted_count'] == 0
+    assert response['items'] == []
+    assert response['decisions']['missing'] == 'missing_authoritative_item'
+
+
+def test_hydration_bounds_stale_index_deletes_and_ignores_deleter_failures():
+    now = datetime.now(timezone.utc)
+    missing_items = [_memory_item(f'missing-{index}', tier=MemoryTier.long_term, now=now) for index in range(51)]
+    live = _memory_item('live', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake({f'users/u1/memory_items/{live.memory_id}': _stored_item(live)})
+    deleted = []
+
+    response = fetch_default_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(
+            hits=[_hit(item, score=1 - index / 100) for index, item in enumerate(missing_items)]
+            + [_hit(live, score=0.1)]
+        ),
+        stale_index_deleter=lambda uid, memory_ids: deleted.append((uid, list(memory_ids))) or len(memory_ids),
+        limit=51,
+        max_candidates=60,
+        overfetch_factor=1,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert deleted[0][0] == 'u1'
+    assert deleted[0][1] == [item.memory_id for item in missing_items[:50]]
+    assert 'live' not in deleted[0][1]
+    assert response['stale_index_deleted_count'] == 50
+    assert [item['memory_id'] for item in response['items']] == ['live']
+
+    failed = fetch_default_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(
+            hits=[_hit(missing_items[0], score=0.5)]
+        ),
+        stale_index_deleter=lambda uid, memory_ids: (_ for _ in ()).throw(RuntimeError('pinecone down')),
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+    assert failed['items'] == []
+    assert failed['stale_index_deleted_count'] == 0
+    assert failed['decisions']['missing-0'] == 'missing_authoritative_item'

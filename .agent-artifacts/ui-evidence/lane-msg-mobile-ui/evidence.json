@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-integrations-entry-dark.png",
+      "platform": "mobile-android",
+      "description": "Integrations: Chat apps group (screen 1), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-integrations-entry-light.png",
+      "platform": "mobile-android",
+      "description": "Integrations: Chat apps group (screen 1), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-chat-apps-page-dark.png",
+      "platform": "mobile-android",
+      "description": "Chat apps page, Pro, nothing connected (screen 2), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-chat-apps-page-light.png",
+      "platform": "mobile-android",
+      "description": "Chat apps page, Pro, nothing connected (screen 2), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-telegram-sheet-dark.png",
+      "platform": "mobile-android",
+      "description": "Connect Telegram sheet (screen 3), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-android-telegram-sheet-light.png",
+      "platform": "mobile-android",
+      "description": "Connect Telegram sheet (screen 3), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-android-telegram-waiting-dark.png",
+      "platform": "mobile-android",
+      "description": "Telegram opened, waiting for Start (screen 3), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-android-telegram-waiting-light.png",
+      "platform": "mobile-android",
+      "description": "Telegram opened, waiting for Start (screen 3), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-android-telegram-connected-dark.png",
+      "platform": "mobile-android",
+      "description": "Telegram connected banner, Try asking, Open Telegram (screen 4), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-android-telegram-connected-light.png",
+      "platform": "mobile-android",
+      "description": "Telegram connected banner, Try asking, Open Telegram (screen 4), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-android-imessage-sheet-dark.png",
+      "platform": "mobile-android",
+      "description": "Connect iMessage: prefilled code (screen 5), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-android-imessage-sheet-light.png",
+      "platform": "mobile-android",
+      "description": "Connect iMessage: prefilled code (screen 5), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-android-imessage-waiting-dark.png",
+      "platform": "mobile-android",
+      "description": "Waiting for your text, code and countdown (screen 6), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-android-imessage-waiting-light.png",
+      "platform": "mobile-android",
+      "description": "Waiting for your text, code and countdown (screen 6), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-android-manage-telegram-dark.png",
+      "platform": "mobile-android",
+      "description": "Manage Telegram (screen 7), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-android-manage-telegram-light.png",
+      "platform": "mobile-android",
+      "description": "Manage Telegram (screen 7), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-android-manage-disconnect-confirm-dark.png",
+      "platform": "mobile-android",
+      "description": "Disconnect confirmation (screen 7), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-android-manage-disconnect-confirm-light.png",
+      "platform": "mobile-android",
+      "description": "Disconnect confirmation (screen 7), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-android-whatsapp-waitlist-dark.png",
+      "platform": "mobile-android",
+      "description": "WhatsApp waitlist sheet (screen 8), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-android-whatsapp-waitlist-light.png",
+      "platform": "mobile-android",
+      "description": "WhatsApp waitlist sheet (screen 8), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-android-free-plan-dark.png",
+      "platform": "mobile-android",
+      "description": "Free plan: locked rows and Pro card (screen 9), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-android-free-plan-light.png",
+      "platform": "mobile-android",
+      "description": "Free plan: locked rows and Pro card (screen 9), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-android-history-list-dark.png",
+      "platform": "mobile-android",
+      "description": "Telegram chats in the Omi app (screen 10), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "024-mobile-android-history-list-light.png",
+      "platform": "mobile-android",
+      "description": "Telegram chats in the Omi app (screen 10), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "025-mobile-android-history-transcript-dark.png",
+      "platform": "mobile-android",
+      "description": "Read-only Telegram chat (screen 10), dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "026-mobile-android-history-transcript-light.png",
+      "platform": "mobile-android",
+      "description": "Read-only Telegram chat (screen 10), light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "027-mobile-android-connected-state-dark.png",
+      "platform": "mobile-android",
+      "description": "Chat apps with Telegram connected, dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "028-mobile-android-connected-state-light.png",
+      "platform": "mobile-android",
+      "description": "Chat apps with Telegram connected, light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "029-mobile-android-offline-dark.png",
+      "platform": "mobile-android",
+      "description": "Offline notice, dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "030-mobile-android-offline-light.png",
+      "platform": "mobile-android",
+      "description": "Offline notice, light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

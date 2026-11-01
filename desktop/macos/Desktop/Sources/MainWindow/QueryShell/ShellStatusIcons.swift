@@ -257,10 +257,15 @@ enum ShellStatusTooltip {
   /// Meeting", or a named mic. `.armed` is the Only Meetings wait: switched on, nothing recorded
   /// until a call starts, so the sentence says that rather than "recording" or "off".
   static func audio(
-    state: HomeStatusState, mode: String, hasMicrophonePermission: Bool = true
+    state: HomeStatusState, mode: String, hasMicrophonePermission: Bool = true,
+    microphoneSignalMissing: Bool = false, systemAudioContinues: Bool = false
   ) -> String {
     switch state {
     case .blocked:
+      if microphoneSignalMissing {
+        let recording = systemAudioContinues ? "System audio is still recording. " : ""
+        return "Audio — no microphone signal. \(recording)Click to check your microphone in Audio Settings"
+      }
       return "Audio — transcription unavailable. Click to open Audio Settings"
     case .armed:
       // Without the grant no call can be recorded, so the sentence names what is missing instead
@@ -454,7 +459,9 @@ struct ShellStatusIcons: View {
       state: listeningState,
       mode: CaptureListeningLogic.listeningModeTitle(
         appState: appState, raw: audioRecordingModeRaw),
-      hasMicrophonePermission: appState.hasMicrophonePermission)
+      hasMicrophonePermission: appState.hasMicrophonePermission,
+      microphoneSignalMissing: appState.transcriptionServiceError == nil && appState.isMicrophoneSignalMissing,
+      systemAudioContinues: appState.isSystemAudioCaptureLive)
   }
 
   private var captureState: HomeStatusState {

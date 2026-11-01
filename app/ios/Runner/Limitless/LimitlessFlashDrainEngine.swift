@@ -65,7 +65,11 @@ final class LimitlessFlashDrainEngine {
                 peripheralUuid: peripheralUuid,
                 serviceUuid: config.serviceUuid,
                 characteristicUuid: config.characteristicUuid
-            )
+            ) { result in
+                if case .failure(let error) = result {
+                    NSLog("[LimitlessDrain] Subscription failed: \(error.localizedDescription)")
+                }
+            }
         }
         queue.async {
             if let config = self.loadConfig(), config.deviceId != peripheralUuid.lowercased() { return }

@@ -24,6 +24,7 @@ from typing import Set
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
+DREAM_SPEC_PATH = ROOT_DIR / 'backend' / 'docs' / 'api' / 'dream-openapi.json'
 FLUTTER_HTTP_ROOT = ROOT_DIR / 'app' / 'lib' / 'backend' / 'http'
 
 # Unlike the desktop inventories, every route this extractor finds is in scope:
@@ -43,7 +44,11 @@ BASE_URL_ROOTS = {'/v1/dev', '/v1/mcp'}
 
 # Known gaps already tracked with a follow-up owner. Add here ONLY with a note
 # naming the tracking PR/issue, exactly like the desktop inventories.
-KNOWN_MISSING_ROUTES: Set[str] = set()
+KNOWN_MISSING_ROUTES: Set[str] = {
+    # fdcdc5f6bd3 (pocket onboarding arm) calls this from app/lib/backend/http/api/conversations.dart,
+    # but no backend route exists yet. Owner: the pocket onboarding author; add the route or drop the call.
+    '/v1/onboarding/seed-conversation',
+}
 
 # Dart route literals: capture from `${Env.apiBaseUrl}` to the closing quote,
 # then cut at the first `?` (query strings and optional-query ternaries).
@@ -78,8 +83,12 @@ def _in_scope(routes: Set[str]) -> Set[str]:
 
 
 def _load_spec_paths() -> Set[str]:
-    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
-    return set(spec.get('paths', {}).keys())
+    # Dream's generated surface is intentionally separate from the large app-client schema.
+    return {
+        route
+        for path in (SPEC_PATH, DREAM_SPEC_PATH)
+        for route in json.loads(path.read_text(encoding='utf-8')).get('paths', {})
+    }
 
 
 def _covered_by_spec(route: str, spec_paths: Set[str]) -> bool:
@@ -125,3 +134,12 @@ def test_known_missing_routes_do_not_rot():
     spec_paths = _load_spec_paths()
     stale = sorted(r for r in KNOWN_MISSING_ROUTES if r not in routes or _covered_by_spec(r, spec_paths))
     assert not stale, f'KNOWN_MISSING_ROUTES entries no longer needed, remove them: {stale}'
+
+
+def test_dream_routes_have_modeled_success_responses_in_their_generated_surface():
+    spec = json.loads(DREAM_SPEC_PATH.read_text(encoding='utf-8'))
+    route = spec['paths']['/v1/dream/runs']
+    for method in ('get', 'post'):
+        response = route[method]['responses']['200']['content']['application/json']['schema']
+        assert response['$ref'].startswith('#/components/schemas/')
+        assert response['$ref'].split('/')[-1] in spec['components']['schemas']

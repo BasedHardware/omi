@@ -7,9 +7,9 @@ closed vocabulary — never uid, conversation id, device id, or free text.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 
+from utils.conversation_shape_fields import payload_field as _field, bucket_le, segment_count, speech_seconds
 from utils.metrics import (
     CONVERSATION_DURATION_BUCKETS,
     CONVERSATION_SEGMENT_BUCKETS,
@@ -26,12 +26,6 @@ SHAPE_SOURCES = frozenset(CONVERSATION_SHAPE_SOURCES)
 _INTEGRATION_SOURCES = frozenset({'workflow', 'external_integration'})
 _DURATION_LE = tuple(str(edge) for edge in CONVERSATION_DURATION_BUCKETS) + ('+Inf',)
 _SEGMENT_LE = tuple(str(edge) for edge in CONVERSATION_SEGMENT_BUCKETS) + ('+Inf',)
-
-
-def _field(payload: object, name: str) -> object:
-    if isinstance(payload, Mapping):
-        return payload.get(name)
-    return getattr(payload, name, None)
 
 
 def _source_token(raw: object) -> str:
@@ -59,14 +53,22 @@ def classify_conversation_source(payload: object) -> str:
 
 
 def _as_datetime(raw: object) -> datetime | None:
+    """Parse a stored timestamp, reading a naive value as UTC.
+
+    Payloads can mix naive and aware timestamps. Subtracting one from the other
+    raises TypeError, which drops the whole shape observation.
+    """
+    value: datetime | None = None
     if isinstance(raw, datetime):
-        return raw
-    if isinstance(raw, str) and raw:
+        value = raw
+    elif isinstance(raw, str) and raw:
         try:
-            return datetime.fromisoformat(raw.replace('Z', '+00:00'))
+            value = datetime.fromisoformat(raw.replace('Z', '+00:00'))
         except ValueError:
             return None
-    return None
+    if value is not None and value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def wall_clock_seconds(payload: object) -> float | None:
@@ -75,40 +77,6 @@ def wall_clock_seconds(payload: object) -> float | None:
     if started is None or finished is None:
         return None
     return max(0.0, (finished - started).total_seconds())
-
-
-def _segment_span(segment: object) -> float:
-    if isinstance(segment, Mapping):
-        start = segment.get('start')
-        end = segment.get('end')
-    else:
-        start = getattr(segment, 'start', None)
-        end = getattr(segment, 'end', None)
-    try:
-        start_s = float(start) if start is not None else 0.0
-        end_s = float(end) if end is not None else 0.0
-    except (TypeError, ValueError):
-        return 0.0
-    return end_s - start_s if end_s > start_s else 0.0
-
-
-def speech_seconds(payload: object) -> float:
-    segments = _field(payload, 'transcript_segments')
-    if not isinstance(segments, list):
-        return 0.0
-    return sum(_segment_span(segment) for segment in segments)
-
-
-def segment_count(payload: object) -> int:
-    segments = _field(payload, 'transcript_segments')
-    return len(segments) if isinstance(segments, list) else 0
-
-
-def bucket_le(value: float, edges: tuple[int, ...]) -> str:
-    for edge in edges:
-        if value <= edge:
-            return str(edge)
-    return '+Inf'
 
 
 def observe_completed_conversation_shape(uid: str, payload: object) -> None:

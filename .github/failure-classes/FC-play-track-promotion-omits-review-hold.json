@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "FC-play-track-promotion-omits-review-hold",
+  "violated_contract": "Every automated Google Play track promotion must commit exactly the way Play's current review-submission policy requires, as captured by the single shared constant mobile_store_promote.CHANGES_NOT_SENT_FOR_REVIEW: pass changesNotSentForReview=true only while Play refuses automated review submission, and omit the parameter entirely otherwise (Play rejects the parameter's presence; its requirement flipped on 2026-10-26 and off again on 2026-10-27, and each direction has broken publishing). Codemagic's internal-to-alpha promotion creates a separate Play edit commit, so the initial internal-publish setting does not cover it; a post-publish script must also distinguish this build from a duplicate run with the same version and code.",
+  "canonical_prevention": "Name the internal release with its statically available versioned Codemagic tag and build UUID, promote only that exact completed version/code/run through the Google Play API, preserve unrelated alpha releases, and commit with the shared changesNotSentForReview setting (present only while the constant is True, matching the codemagic.yaml changes_not_sent_for_review flags). Keep workflow and API regression tests, and inspect every Play edit commit path.",
+  "canonical_prevention_artifact": [
+    "codemagic.yaml",
+    "app/scripts/mobile_store_promote.py",
+    "app/scripts/mobile_store_promote_test.py",
+    "app/scripts/mobile_daily_train.py",
+    "app/scripts/mobile_rollout_brake.py",
+    "app/scripts/mobile_daily_train_test.py",
+    "backend/tests/unit/test_mobile_rollout_brake.py",
+    ".github/scripts/test_check_release_process_guards.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "codemagic.yaml",
+    "app/scripts/mobile_store_promote.py",
+    "app/scripts/mobile_store_promote_test.py",
+    "app/scripts/mobile_daily_train.py",
+    "app/scripts/mobile_rollout_brake.py",
+    "backend/tests/unit/test_mobile_rollout_brake.py"
+  ],
+  "status": "open"
+}

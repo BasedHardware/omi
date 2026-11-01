@@ -82,4 +82,16 @@ class BatteryHistoryRecorderTest {
         assertEquals(100L, history.getJSONObject(0).getLong("ts"))
     }
 
+    @Test fun `provenance is frozen at insertion including unknown firmware`() {
+        var stored = "[]"
+        val recorder = BatteryHistoryRecorder({ stored }, { _, value -> stored = value })
+        recorder.record("device", 80, 1, appBuild = "old+1", firmware = "fw1")
+        recorder.record("device", 79, 2, appBuild = "new+2")
+        recorder.backfillCharging("device", true, 3)
+        val history = JSONArray(stored)
+        assertEquals("old+1", history.getJSONObject(0).getString("app_build"))
+        assertEquals("fw1", history.getJSONObject(0).getString("firmware"))
+        assertEquals("new+2", history.getJSONObject(1).getString("app_build"))
+        assertTrue(history.getJSONObject(1).isNull("firmware"))
+    }
 }

@@ -2,15 +2,19 @@
 Tools for performing web searches using Perplexity AI.
 """
 
+from utils.generated_compute import require_current_generated_compute, generated_compute_configured
+
 import logging
 import re
 from typing import Any, cast
 
 import httpx
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
+from utils.executors import db_executor, run_blocking
 from utils.http_client import get_webhook_client
 from utils.llm.gateway_client import feature_auto_lane_id, get_llm_gateway_base_url, llm_gateway_headers
 from utils.log_sanitizer import sanitize
+from utils.model_text import UNTRUSTED_LEGEND, count_header, generated, truncation_note, untrusted_block
 
 logger = logging.getLogger(__name__)
 
@@ -139,11 +143,13 @@ async def _perplexity_gateway_search(query: str) -> str:
         logger.error("⚠️ perplexity_web_search_tool - Unexpected response format")
         return "Error: Unexpected response format from Perplexity API"
     except Exception as e:
-        logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}")
-        return f"Error: An unexpected error occurred while searching: {str(e)}"
+        logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}", exc_info=True)
+        return "Error: An unexpected error occurred while searching. Please try again later."
 
 
 async def _post_gateway_chat_completion(content: str) -> httpx.Response:
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_current_generated_compute, 'web_search', allow_byok=False)
     return await get_webhook_client().post(
         f'{get_llm_gateway_base_url()}/v1/chat/completions',
         json={
@@ -172,23 +178,44 @@ def _model_text(result: dict[str, Any]) -> str:
 def _format_perplexity_response(result: dict[str, Any]) -> str:
     if 'choices' in result and len(result['choices']) > 0:
         content: Any = result['choices'][0]['message']['content']
-        formatted_result = f"Web Search Results:\n\n{content}\n\n"
+        answer = untrusted_block('Perplexity answer', generated('Web search answer', str(content)))
+        formatted_result = f"Web Search Results:\n\n{answer}\n\n"
 
         citations = _extract_citations(result)
+        displayed_citations: list[str] = []
         if citations:
-            formatted_result += "\nSources:\n"
+            formatted_result += (
+                "\n"
+                + count_header(
+                    "Web citations",
+                    shown=min(len(citations), 10),
+                    total=len(citations),
+                    order="citation order",
+                )
+                + "\n"
+            )
             for i, citation in enumerate(citations[:10], 1):
                 if isinstance(citation, dict):
                     cit = cast(dict[str, Any], citation)
                     url = cit.get('url', cit.get('citation', ''))
                     title = cit.get('title', '')
+                    citation_text = f"{i}. {title}" if title else f"{i}. Web citation"
                     if url:
-                        formatted_result += f"{i}. {title}\n   {url}\n"
+                        citation_text += f"\n   {url}"
+                    displayed_citations.append(citation_text)
                 elif isinstance(citation, str):
-                    formatted_result += f"{i}. {citation}\n"
+                    displayed_citations.append(f"{i}. {citation}")
+            formatted_result += "\n".join(untrusted_block("web citation", citation) for citation in displayed_citations)
+            if len(citations) > 10:
+                formatted_result += "\n" + truncation_note(
+                    shown=10,
+                    total=len(citations),
+                    unit="web citations",
+                    how_to_get_more="Ask for a narrower search query to inspect additional citations.",
+                )
 
         logger.info("✅ perplexity_web_search_tool - Successfully retrieved search results")
-        return formatted_result.strip()
+        return f"{formatted_result.strip()}\n\n{UNTRUSTED_LEGEND}"
 
     logger.error(f"⚠️ perplexity_web_search_tool - Unexpected response format: {sanitize(str(result)[:200])}")
     return "Error: Unexpected response format from Perplexity API"

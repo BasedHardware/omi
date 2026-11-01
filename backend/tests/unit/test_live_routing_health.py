@@ -12,9 +12,15 @@ from types import SimpleNamespace
 import pytest
 from unittest.mock import AsyncMock, Mock
 
-from utils.stt import live_health, live_session, streaming as st
+from utils.stt import live_gate, live_health, live_session, streaming as st
+from utils.stt.live_metrics import FLEET_HEALTH_WRITE_DROPPED
 from config.live_stt_registry import DEFAULT_TARGETS, routing_on
 from utils.stt.live_router import connecting_target
+
+
+def _dropped_total(kind):
+    family = FLEET_HEALTH_WRITE_DROPPED.collect()[0]
+    return sum(sample.value for sample in family.samples if sample.labels.get('kind') == kind)
 
 
 class SlowRedis:
@@ -135,13 +141,14 @@ async def test_fleet_cache_refreshes_off_path_and_stale_data_uses_local_score(mo
 async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.1')
-    dropped = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get()
-    bench_dropped = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench')._value.get()
+    dropped = _dropped_total('result')
+    bench_dropped = _dropped_total('bench')
 
     class BlackholeRedis:
         def __init__(self):
             self.active = 0
             self.maximum = 0
+            self.eval_started = asyncio.Event()
 
         def pipeline(self, *, transaction):
             assert transaction is False
@@ -164,17 +171,21 @@ async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
         async def set(self, *_args, **_kwargs):
             await asyncio.sleep(1)
 
+        async def eval(self, *_args, **_kwargs):
+            self.eval_started.set()
+            await asyncio.Event().wait()
+
     redis = BlackholeRedis()
     health = live_health.FleetHealth(redis_client=redis)
     for _ in range(1000):
         health.record('soniox', 'en', 'no_text')
     assert health._writes_in_flight['result'] == live_health.WRITE_IN_FLIGHT_LIMITS['result']
-    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 992
+    assert _dropped_total('result') - dropped == 992
     for _ in range(100):
         health.quarantine('soniox', 'account', 60)
     assert health._writes_in_flight['bench'] == 1
     assert len(health._pending_benches) == 1
-    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench')._value.get() == bench_dropped
+    assert _dropped_total('bench') == bench_dropped
     # Outcome burst cannot starve the account-quarantine writer.
     await asyncio.sleep(0.01)
     assert redis.maximum <= live_health.WRITE_IN_FLIGHT_LIMITS['result']
@@ -182,8 +193,9 @@ async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
     while any(health._writes_in_flight.values()) and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.01)
     assert health._writes_in_flight == {'result': 0, 'bench': 0}
+    assert redis.eval_started.is_set()
     assert ('soniox', 'account') in health._pending_benches  # Redis timed out; deadline is retained.
-    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 1000
+    assert _dropped_total('result') - dropped == 1000
 
 
 @pytest.mark.asyncio
@@ -195,11 +207,13 @@ async def test_full_bench_slots_flush_longer_pending_deadline(monkeypatch):
         def __init__(self):
             self.writes = []
 
-        async def set(self, key, value, **_kwargs):
+        async def eval(self, _script, _numkeys, selection_key, account_key, kind, until):
+            key = account_key if kind == 'account' else selection_key
+            value = f'{kind}:{until}'
             self.writes.append((key, value))
             if len(self.writes) <= live_health.WRITE_IN_FLIGHT_LIMITS['bench']:
                 await gate.wait()
-            return True
+            return [value, '1']
 
     redis = SlotRedis()
     health = live_health.FleetHealth(redis_client=redis)
@@ -230,11 +244,11 @@ async def test_bench_write_retries_after_redis_backoff(monkeypatch):
         def __init__(self):
             self.writes = 0
 
-        async def set(self, *_args, **_kwargs):
+        async def eval(self, _script, _numkeys, _selection_key, _account_key, kind, until):
             self.writes += 1
             if self.writes == 1:
                 raise ConnectionError('Redis unavailable')
-            return True
+            return [f'{kind}:{until}', '1']
 
         async def mget(self, keys):
             return [None] * len(keys)
@@ -249,6 +263,8 @@ async def test_bench_write_retries_after_redis_backoff(monkeypatch):
     assert ('soniox', 'account') in health._pending_benches
     assert health._redis_retry_at > time.time()
     health._redis_retry_at = time.time() + 0.03  # Shorten the production backoff for the test.
+    # This fake covers bench writes; unrelated cost polling needs Redis time().
+    monkeypatch.setattr(health, 'refresh_cost_once', AsyncMock())
     refresh = asyncio.create_task(health.refresh_forever())
     try:
         deadline = asyncio.get_running_loop().time() + 1.0
@@ -565,6 +581,11 @@ async def test_cost_order_does_not_claim_a_per_pod_recovery_permit(monkeypatch, 
     )
     admit = Mock(return_value=False)
     monkeypatch.setattr(live_chain.health, 'try_admit_recovery_probe', admit)
+    monkeypatch.setattr(
+        live_chain.health,
+        'cost_snapshot',
+        lambda targets, _language: {target.id: live_gate.GateState(stage=100) for target in targets},
+    )
 
     class Circuit:
         def __init__(self, allowed):
@@ -700,7 +721,7 @@ def test_on_mode_waits_for_text_and_plain_no_text_releases_probe(monkeypatch):
     monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
     quarantines = []
     monkeypatch.setattr(live_session.health, 'quarantine', lambda *args: quarantines.append(args))
-    breaker = SimpleNamespace(record_serve_failure=lambda: None, serve_error_bench_seconds=180.0)
+    breaker = SimpleNamespace(record_serve_failure=lambda **_kwargs: None, serve_error_bench_seconds=180.0)
     monkeypatch.setattr(st, '_circuit_for_primary', lambda _service: breaker)
     success = []
     closed = []
@@ -713,3 +734,26 @@ def test_on_mode_waits_for_text_and_plain_no_text_releases_probe(monkeypatch):
     leg.finish()
     assert closed == [True]
     assert quarantines == []
+
+
+@pytest.mark.asyncio
+async def test_bounded_redis_preserves_cancellation_when_operation_finishes():
+    """A completed Redis operation must not swallow refresh-worker cancellation."""
+    health = live_health.FleetHealth(redis_client=DownRedis())
+    parent = None
+
+    async def operation():
+        parent.cancel()
+        return 'completed'
+
+    parent = asyncio.create_task(health._bounded(operation()))
+    with pytest.raises(asyncio.CancelledError):
+        await parent
+
+
+@pytest.mark.asyncio
+async def test_bounded_redis_still_enforces_deadline(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.01')
+    health = live_health.FleetHealth(redis_client=DownRedis())
+    with pytest.raises(TimeoutError):
+        await health._bounded(asyncio.Event().wait())

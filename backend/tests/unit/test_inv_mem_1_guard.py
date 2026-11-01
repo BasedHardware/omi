@@ -287,6 +287,32 @@ def _archive_default_read_offenders(path: Path, text: str) -> List[str]:
     archive_line_re = re.compile(r"Memory(?:Tier|Layer)\.archive\b")
     archive_exclusion_lines: Set[int] = set()
     tree = ast.parse(text)
+    # The authorized incident policy reclassifies only unresolved historical
+    # Review parking as Short-term. It is not general Archive admission. Match
+    # the complete fence and the sole Short-term result, never a whole function
+    # or an arbitrary comment marker.
+    review_projection_test = ast.parse(
+        "undecided_visible() and item.tier == MemoryLayer.archive "
+        "and (item.promotion or {}).get('route') == 'review'",
+        mode='eval',
+    ).body
+    if rel_path == 'models/product_memory.py':
+        for function in tree.body:
+            if not isinstance(function, ast.FunctionDef) or function.name != 'visible_memory_tier':
+                continue
+            for branch in function.body:
+                if not isinstance(branch, ast.If) or branch.orelse or len(branch.body) != 1:
+                    continue
+                result = branch.body[0]
+                if (
+                    ast.dump(branch.test) == ast.dump(review_projection_test)
+                    and isinstance(result, ast.Return)
+                    and isinstance(result.value, ast.Attribute)
+                    and isinstance(result.value.value, ast.Name)
+                    and result.value.value.id == 'MemoryLayer'
+                    and result.value.attr == 'short_term'
+                ):
+                    archive_exclusion_lines.update(range(branch.test.lineno, branch.test.end_lineno + 1))
     for node in ast.walk(tree):
         if not isinstance(node, ast.If) or len(node.body) != 1:
             continue
@@ -329,6 +355,29 @@ def _archive_default_read_offenders(path: Path, text: str) -> List[str]:
 
 class TestInvMem1DefaultAccessAndCanonicalCollection:
     """INV-MEM-1: three tiers, default access is short_term + long_term only."""
+
+    def test_only_unresolved_review_parking_projects_short_term_under_the_kill_switch(self, monkeypatch):
+        from models.product_memory import visible_memory_tier
+
+        policy = MemoryAccessPolicy.for_omi_chat()
+        for enabled in ('true', 'false'):
+            monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', enabled)
+            for route in (None, 'promote', 'archive', 'reject', 'review', 'unknown'):
+                item = _item('parked', tier=MemoryTier.archive)
+                item.promotion = {'route': route}
+                visible = enabled == 'true' and route == 'review'
+                assert is_default_access_eligible(item, policy).allowed is visible
+                assert visible_memory_tier(item) == (MemoryTier.short_term if visible else MemoryTier.archive)
+
+    def test_review_reclassification_does_not_authorize_a_wider_archive_guard_exception(self):
+        import inspect
+        from models.product_memory import visible_memory_tier
+
+        source = inspect.getsource(visible_memory_tier)
+        path = BACKEND_DIR / 'models/product_memory.py'
+        assert _archive_default_read_offenders(path, source) == []
+        widened = source.replace("== 'review'", "!= 'review'")
+        assert _archive_default_read_offenders(path, widened)
 
     def test_default_access_policy_allows_short_and_long_term_only(self):
         now = datetime.now(timezone.utc)

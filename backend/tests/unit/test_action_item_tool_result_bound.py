@@ -4,119 +4,11 @@ Asking the chat to "show me all my tasks" can pull a full 500-item page and rend
 several lines, which floods the chat model's context so it freezes or refuses ("that's quite a bit
 of information to process at once") -- the same failure already fixed for the conversations tool in
 #8503. get_action_items_tool now caps how many items (and how many characters) it returns and
-appends a note telling the model to summarize what it has and offer to narrow. These tests cover the
-two pure bounding helpers.
+appends a note that identifies omitted rows. These tests cover the two pure bounding helpers.
 """
 
-import importlib.util
-import os
-import sys
-import types
-from pathlib import Path
-from unittest.mock import MagicMock
-
-import pytest
-
-from tests.unit.memory_import_isolation import restore_sys_modules, snapshot_sys_modules
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-
-def _pkg(name):
-    mod = types.ModuleType(name)
-    mod.__path__ = []
-    sys.modules[name] = mod
-    if "." in name:
-        parent_name, attr_name = name.rsplit(".", 1)
-        parent = sys.modules.get(parent_name)
-        if parent is not None:
-            setattr(parent, attr_name, mod)
-    return mod
-
-
-def _mod(name):
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    return mod
-
-
-def _load(module_name, rel_path):
-    if module_name in sys.modules:
-        return sys.modules[module_name]
-    spec = importlib.util.spec_from_file_location(module_name, str(BACKEND_DIR / rel_path))
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# Stub the heavy leaves action_item_tools imports; langchain_core is used for real (the @tool
-# decorator needs it). None of these are exercised by the pure helpers under test.
-_SYS_MODULE_NAMES = [
-    "database",
-    "database.action_items",
-    "database.notifications",
-    "utils",
-    "utils.notifications",
-    "utils.conversations",
-    "utils.conversations.render",
-    "utils.retrieval",
-    "utils.retrieval.agentic",
-    "utils.retrieval.chat_scope",
-    "utils.retrieval.tools",
-    "utils.retrieval.tools.action_item_tools",
-]
-_SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
-
-for _p in [
-    "database",
-    "utils",
-    "utils.conversations",
-    "utils.retrieval",
-    "utils.retrieval.tools",
-]:
-    _pkg(_p)
-for _name, _attrs in {
-    "database.action_items": [],
-    "database.notifications": ["get_user_time_zone"],
-    "utils.notifications": [
-        "send_action_item_completed_notification",
-        "send_action_item_created_notification",
-        "send_action_item_data_message",
-        "sync_action_item_reminder",
-    ],
-    "utils.conversations.render": ["resolve_display_tz", "format_local_time"],
-    "utils.retrieval.agentic": ["agent_config_context"],
-}.items():
-    _m = _mod(_name)
-    for _a in _attrs:
-        setattr(_m, _a, MagicMock())
-
-
-def _apply_chat_scope_dates(scope, start_date, end_date):
-    return start_date, end_date, None
-
-
-def _chat_scope_from_config(configurable):
-    if not isinstance(configurable, dict):
-        return None
-    scope = configurable.get("chat_scope")
-    return scope if isinstance(scope, dict) and scope else None
-
-
-_chat_scope = _mod("utils.retrieval.chat_scope")
-_chat_scope.apply_chat_scope_dates = _apply_chat_scope_dates
-_chat_scope.chat_scope_from_config = _chat_scope_from_config
-
-ai = _load("utils.retrieval.tools.action_item_tools", "utils/retrieval/tools/action_item_tools.py")
-
-restore_sys_modules(_SYS_MODULES_SNAPSHOT)
-del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
+from utils.retrieval.tools import action_item_tools as ai
+from utils.retrieval.tools import result_bounds as rb
 
 
 class TestCapActionItemsForLlm:
@@ -125,7 +17,7 @@ class TestCapActionItemsForLlm:
         capped, truncated = ai._cap_action_items_for_llm(items)
         assert truncated is True
         assert len(capped) == ai.MAX_ACTION_ITEMS_FOR_LLM
-        assert capped == items[: ai.MAX_ACTION_ITEMS_FOR_LLM]  # first (most relevant) kept
+        assert capped == items[: ai.MAX_ACTION_ITEMS_FOR_LLM]  # first rows in database order kept
 
     def test_under_cap_is_untouched(self):
         items = list(range(50))
@@ -145,8 +37,8 @@ class TestCapActionItemsForLlm:
 class TestBoundedActionItemsResult:
     def test_truncated_appends_guidance_note_without_claiming_a_total(self):
         out = ai._bounded_action_items_result("1. [Pending] ship it\n   ID: a", truncated=True)
-        assert "more may exist" in out
-        assert "Summarize what is shown" in out
+        assert "more were omitted, not absent" in out
+        assert "Showing 1 action items" in out
         assert "narrower" in out
         # No definitive total is claimed: the page is limit-capped, not necessarily the full set.
         assert "total" not in out.lower()
@@ -159,9 +51,18 @@ class TestBoundedActionItemsResult:
         big = "1. [Pending] first\n" + ("x" * 30000) + "\n2. [Pending] second\n" + ("y" * 40000)
         out = ai._bounded_action_items_result(big, truncated=False)
         assert len(out) <= ai.MAX_RESULT_CHARS + 400  # budget plus the appended note
-        assert "Summarize what is shown" in out
+        assert "more were omitted, not absent" in out
         # Clipped back to a line boundary, so the final record before the note is not sliced
         # mid-field (the trailing 40k-character run is dropped whole, not cut partway).
-        note_idx = out.index("[Only the most relevant")
+        note_idx = out.index("[Showing")
         body = out[:note_idx].rstrip("\n")
         assert not body.endswith("y")
+
+    def test_shared_bound_note_does_not_claim_relevance_and_accepts_order(self):
+        generic = rb.bounded_result("one result line", truncated=True)
+        assert "more may exist" in generic
+        assert "most relevant" not in generic
+
+        ordered = rb.bounded_result("1. row", truncated=True, noun="events", order="newest first", shown=1)
+        assert "Rows are ordered newest first" in ordered
+        assert "Showing 1 events" in ordered

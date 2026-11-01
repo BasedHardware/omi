@@ -1294,6 +1294,36 @@ def test_sdk_read_surface_matches_the_installed_package():
     assert len(seen) == len(probe.SDK_READ_SURFACE)
 
 
+def test_memory_item_not_found_is_not_paired_with_an_override_miss():
+    """A missing memory_items lookup is one NOT_FOUND. It does not bill an override read."""
+
+    firestore_document = pytest.importorskip('google.cloud.firestore_v1.document')
+    document_reference = firestore_document.DocumentReference
+
+    def fake_get(self, *args, **kwargs):
+        return _Snapshot(exists=False)
+
+    original = document_reference.get
+    setattr(document_reference, 'get', fake_get)
+    try:
+        install_document_read_probe.__globals__['_installed'] = False
+        install_document_read_probe()
+        items_miss_before = _count('users/memory_items', 'miss')
+        items_not_found_before = _billed('users/memory_items', 'not_found')
+        overrides_miss_before = _count('users/memory_historical_overrides', 'miss')
+        overrides_not_found_before = _billed('users/memory_historical_overrides', 'not_found')
+        ref = document_reference.__new__(document_reference)
+        ref._path = ('users', 'u1', 'memory_items', 'gone')
+        document_reference.get(ref)
+        assert _count('users/memory_items', 'miss') == items_miss_before + 1
+        assert _billed('users/memory_items', 'not_found') == items_not_found_before + 1
+        assert _count('users/memory_historical_overrides', 'miss') == overrides_miss_before
+        assert _billed('users/memory_historical_overrides', 'not_found') == overrides_not_found_before
+    finally:
+        setattr(document_reference, 'get', original)
+        install_document_read_probe.__globals__['_installed'] = False
+
+
 def test_product_code_does_not_call_on_snapshot():
     import subprocess
 

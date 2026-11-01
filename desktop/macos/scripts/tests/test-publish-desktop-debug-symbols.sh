@@ -37,15 +37,7 @@ set -euo pipefail
 printf 'zip' > "${@: -1}"
 EOF
 
-cat > "$BIN_DIR/npx" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$*" > "$OMI_TEST_NPX_ARGS"
-if [[ "${OMI_TEST_NPX_FAIL:-0}" == "1" ]]; then
-  exit 1
-fi
-EOF
-chmod +x "$BIN_DIR/xcrun" "$BIN_DIR/ditto" "$BIN_DIR/npx"
+chmod +x "$BIN_DIR/xcrun" "$BIN_DIR/ditto"
 
 export PATH="$BIN_DIR:/usr/bin:/bin"
 DSYM="$TEST_ROOT/Omi.app.dSYM"
@@ -54,43 +46,30 @@ ARCHIVE="$TEST_ROOT/Omi.dSYM.zip"
 "$SCRIPT" generate --binary "$TEST_ROOT/Omi" --dsym "$DSYM" --archive "$ARCHIVE"
 [[ -s "$ARCHIVE" ]]
 
-export SENTRY_AUTH_TOKEN="test-token"
-export OMI_TEST_NPX_ARGS="$TEST_ROOT/npx-args"
-"$SCRIPT" upload --binary "$TEST_ROOT/Omi" --dsym "$DSYM"
-grep -Fq '@sentry/cli@2.52.0 debug-files upload --org omi-nk3 --project omi-desktop --wait' \
-  "$OMI_TEST_NPX_ARGS"
-
-OMI_TEST_NPX_FAIL=1 "$SCRIPT" upload-best-effort --binary "$TEST_ROOT/Omi" --dsym "$DSYM" \
-  >"$TEST_ROOT/best-effort.out" 2>&1
-grep -Fq 'continuing because the UUID-verified dSYM remains attached' "$TEST_ROOT/best-effort.out"
-
-if OMI_TEST_NPX_FAIL=1 "$SCRIPT" upload --binary "$TEST_ROOT/Omi" --dsym "$DSYM" \
-  >"$TEST_ROOT/strict-upload.out" 2>&1
+# The upload modes were removed with Sentry; they must now be rejected by usage.
+if "$SCRIPT" upload --binary "$TEST_ROOT/Omi" --dsym "$DSYM" \
+  >"$TEST_ROOT/upload-removed.out" 2>&1
 then
-  echo "ERROR: strict upload accepted a Sentry publication failure" >&2
+  echo "ERROR: upload mode still accepted after Sentry removal" >&2
   exit 1
 fi
+grep -Fq 'Usage:' "$TEST_ROOT/upload-removed.out"
 
-unset SENTRY_AUTH_TOKEN
-"$SCRIPT" upload-best-effort --binary "$TEST_ROOT/Omi" --dsym "$DSYM" \
-  >"$TEST_ROOT/missing-token.out" 2>&1
-grep -Fq 'SENTRY_AUTH_TOKEN is unavailable' "$TEST_ROOT/missing-token.out"
-export SENTRY_AUTH_TOKEN="test-token"
+if "$SCRIPT" upload-best-effort --binary "$TEST_ROOT/Omi" --dsym "$DSYM" \
+  >"$TEST_ROOT/best-effort-removed.out" 2>&1
+then
+  echo "ERROR: upload-best-effort mode still accepted after Sentry removal" >&2
+  exit 1
+fi
+grep -Fq 'Usage:' "$TEST_ROOT/best-effort-removed.out"
 
-if OMI_TEST_MISMATCH=1 "$SCRIPT" upload --binary "$TEST_ROOT/Omi" --dsym "$DSYM" \
+if OMI_TEST_MISMATCH=1 "$SCRIPT" generate --binary "$TEST_ROOT/Omi" \
+  --dsym "$TEST_ROOT/mismatch.dSYM" --archive "$TEST_ROOT/mismatch.zip" \
   >"$TEST_ROOT/mismatch.out" 2>&1
 then
   echo "ERROR: mismatched UUIDs were accepted" >&2
   exit 1
 fi
 grep -Fq 'dSYM UUIDs do not exactly match' "$TEST_ROOT/mismatch.out"
-
-if OMI_TEST_MISMATCH=1 "$SCRIPT" upload-best-effort --binary "$TEST_ROOT/Omi" --dsym "$DSYM" \
-  >"$TEST_ROOT/best-effort-mismatch.out" 2>&1
-then
-  echo "ERROR: best-effort upload accepted mismatched UUIDs" >&2
-  exit 1
-fi
-grep -Fq 'dSYM UUIDs do not exactly match' "$TEST_ROOT/best-effort-mismatch.out"
 
 echo "desktop debug-symbol publication tests passed"

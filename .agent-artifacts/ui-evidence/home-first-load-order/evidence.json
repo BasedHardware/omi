@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-home-first-load-loading.png",
+      "platform": "mobile-android",
+      "description": "Home cold start while conversations load: Daily Recaps on top, then Today with the pending row, then one headerless skeleton group",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-home-first-load-loaded.png",
+      "platform": "mobile-android",
+      "description": "The same Home after load: Today and the pending row stay where they were; today's conversations fill in below",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-home-pending-none-today.png",
+      "platform": "mobile-android",
+      "description": "Pending work but no conversation today: the pending row opens Today under the recaps; Yesterday follows as an ordinary day",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

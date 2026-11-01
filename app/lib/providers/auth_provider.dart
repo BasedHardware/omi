@@ -8,6 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/account_deletion.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/services/account_deletion_data.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/app_globals.dart';
@@ -46,6 +49,7 @@ class AuthenticationProvider extends BaseProvider {
   String? authToken;
   bool _loading = false;
   bool _requiresReauthentication = false;
+  AuthSessionExpirationReason? _sessionExpirationReason;
   int _sessionExpirationGeneration = 0;
   StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<User?>? _idTokenSubscription;
@@ -54,13 +58,51 @@ class AuthenticationProvider extends BaseProvider {
   @override
   bool get loading => _loading;
   bool get requiresReauthentication => _requiresReauthentication;
+
+  /// Why the current session expired, while [requiresReauthentication] is true.
+  AuthSessionExpirationReason? get sessionExpirationReason => _sessionExpirationReason;
   int get sessionExpirationGeneration => _sessionExpirationGeneration;
 
   AuthenticationProvider({bool initializeListeners = true}) {
     if (initializeListeners) _initializeAuthListeners();
   }
 
+  static const _pendingDeletionUidsKey = 'pendingDeletionOwnerUids';
+  String _startupUid = '';
+  String? _deletionStatusUid;
+  Future<ApiResult<AccountDeletionStatus>>? _deletionStatus;
+
+  Future<ApiResult<AccountDeletionStatus>> checkAccountDeletion({bool refresh = false}) {
+    final uid = _auth.currentUser?.uid;
+    if (refresh || uid != _deletionStatusUid || _deletionStatus == null) {
+      _deletionStatusUid = uid;
+      _deletionStatus = _readDeletionStatusForOwner(uid);
+    }
+    return _deletionStatus!;
+  }
+
+  Future<ApiResult<AccountDeletionStatus>> _readDeletionStatusForOwner(String? uid) async {
+    if (uid == null || uid.isEmpty) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+    final prefs = SharedPreferencesUtil();
+    final result = await readAccountDeletionForSignIn(
+      allowCachedOfflineAccount: canUseCachedAccountOffline(
+        uid: uid,
+        startupUid: _startupUid,
+        pendingUid: prefs.getStringList(_pendingDeletionUidsKey).contains(uid) ? uid : '',
+        onboardingCompleted: prefs.onboardingCompleted,
+      ),
+    );
+    if (_auth.currentUser?.uid != uid) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+    if (result case ApiSuccess<AccountDeletionStatus>(:final data)) {
+      final pending = prefs.getStringList(_pendingDeletionUidsKey).toSet();
+      final changed = data.pendingDeletion ? pending.add(uid) : pending.remove(uid);
+      if (changed) await prefs.saveStringList(_pendingDeletionUidsKey, pending.toList());
+    }
+    return result;
+  }
+
   void _initializeAuthListeners() {
+    _startupUid = SharedPreferencesUtil().uid;
     // DEBUG: Log initial state
     Logger.debug(
       'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}',
@@ -74,6 +116,10 @@ class AuthenticationProvider extends BaseProvider {
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
         );
         this.user = user;
+        if (user == null) {
+          _deletionStatus = null;
+          _deletionStatusUid = null;
+        }
         // Only update SharedPreferences if Firebase has a user
         // Don't clear cached credentials - allows fallback for dev builds
         if (user != null) {
@@ -119,6 +165,7 @@ class AuthenticationProvider extends BaseProvider {
       });
       _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) async {
         _requiresReauthentication = true;
+        _sessionExpirationReason = event.reason;
         _sessionExpirationGeneration++;
         user = null;
         authToken = null;
@@ -180,6 +227,7 @@ class AuthenticationProvider extends BaseProvider {
     final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
+      PlatformManager.instance.analytics.signInStarted('google');
       try {
         UserCredential? credential;
         if (PlatformService.isMobile && !useWebAuth) {
@@ -190,6 +238,7 @@ class AuthenticationProvider extends BaseProvider {
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'google');
         } else {
+          PlatformManager.instance.analytics.signInFailed('google', cancelled: true);
           AppSnackbar.showSnackbarError(
             globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
                 'Failed to sign in with Google, please try again.',
@@ -197,6 +246,7 @@ class AuthenticationProvider extends BaseProvider {
         }
       } catch (e) {
         Logger.debug('OAuth Google sign in error: $e');
+        PlatformManager.instance.analytics.signInFailed('google', error: e);
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
@@ -209,6 +259,7 @@ class AuthenticationProvider extends BaseProvider {
     final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
+      PlatformManager.instance.analytics.signInStarted('apple');
       try {
         UserCredential? credential;
         if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
@@ -219,6 +270,7 @@ class AuthenticationProvider extends BaseProvider {
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'apple');
         } else {
+          PlatformManager.instance.analytics.signInFailed('apple', cancelled: true);
           AppSnackbar.showSnackbarError(
             globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
                 'Failed to sign in with Apple, please try again.',
@@ -226,6 +278,7 @@ class AuthenticationProvider extends BaseProvider {
         }
       } catch (e) {
         Logger.debug('OAuth Apple sign in error: $e');
+        PlatformManager.instance.analytics.signInFailed('apple', error: e);
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
@@ -237,13 +290,6 @@ class AuthenticationProvider extends BaseProvider {
   Future<String?> _getIdToken() async {
     try {
       final token = await AuthService.instance.getIdToken();
-      NotificationService.instance.saveNotificationToken();
-      try {
-        final timeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
-        unawaited(syncUserTimeZoneServer(timeZone: timeZone));
-      } catch (e) {
-        Logger.debug('Failed to sync device timezone: $e');
-      }
 
       Logger.debug('Firebase token retrieved successfully');
       return token;
@@ -261,6 +307,9 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> _signIn(Function() onSignIn, {required UserCredential credential, required String authProvider}) async {
     final token = await _getIdToken();
 
+    if (token == null) {
+      PlatformManager.instance.analytics.signInFailed(authProvider, error: StateError('token'));
+    }
     if (token != null) {
       User currentUser;
       try {
@@ -285,6 +334,17 @@ class AuthenticationProvider extends BaseProvider {
       );
       if (credential.additionalUserInfo?.isNewUser == true) {
         PlatformManager.instance.analytics.accountCreated(authProvider: authProvider);
+      }
+      final deletion = await checkAccountDeletion(refresh: true);
+      if (_auth.currentUser?.uid != newUid) return;
+      if (deletion case ApiSuccess<AccountDeletionStatus>(data: final status) when !status.pendingDeletion) {
+        NotificationService.instance.saveNotificationToken();
+        try {
+          final timeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
+          unawaited(syncUserTimeZoneServer(timeZone: timeZone));
+        } catch (e) {
+          Logger.debug('Failed to sync device timezone: $e');
+        }
       }
       notifyListeners();
       onSignIn();

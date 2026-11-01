@@ -1,5 +1,4 @@
 import threading
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from cachetools import TTLCache
@@ -7,10 +6,7 @@ from cachetools import TTLCache
 from database._client import db as firestore_db
 from database.auth import get_user_name
 from models.knowledge_ledger_policy import (
-    PLAYBOOK_HANDLE_CHARACTER_LIMIT,
-    PLAYBOOK_INDEX_CHARACTER_BUDGET,
     PROFILE_CHARACTER_BUDGET,
-    normalize_playbook_handle,
     render_bounded_profile,
 )
 from models.memories import Memory, MemoryDB
@@ -18,7 +14,6 @@ from models.product_memory import MemoryKind, MemorySubjectScope
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
 from utils.memory.knowledge_ledger_migration import read_ledger_migration_completion
 from utils.memory.memory_service import MemoryService
-from utils.memory.belief_model import belief_model_enabled, record_passes_proactive_bar
 import logging
 
 logger = logging.getLogger(__name__)
@@ -97,20 +92,8 @@ def _render_legacy_prompt_context(
     return memories_str + '\n'
 
 
-def _bounded_lines(lines: List[str], budget: int) -> str:
-    rendered: List[str] = []
-    used = 0
-    for line in lines:
-        separator = 1 if rendered else 0
-        if used + separator + len(line) > budget:
-            continue
-        rendered.append(line)
-        used += separator + len(line)
-    return '\n'.join(rendered)
-
-
 def _render_ledger_prompt_context(user_name: Optional[str], rows: List[MemoryDB]) -> str:
-    """Render only current slotted self-facts and playbook handles."""
+    """Render current slotted self-facts."""
     facts = [
         row
         for row in rows
@@ -123,30 +106,7 @@ def _render_ledger_prompt_context(user_name: Optional[str], rows: List[MemoryDB]
         and row.content.strip()
     ]
     profile = render_bounded_profile(facts, character_budget=PROFILE_CHARACTER_BUDGET)
-    playbooks = [
-        row
-        for row in rows
-        if row.kind == MemoryKind.document
-        and row.subject_scope == MemorySubjectScope.primary_user
-        and row.user_review is not False
-        and row.invalid_at is None
-        and row.content.strip()
-    ]
-    playbooks.sort(key=lambda row: (-row.curation_weight, row.content, row.id))
-    playbook_index = _bounded_lines(
-        [
-            f"{row.id}: {normalize_playbook_handle(row.content)[:PLAYBOOK_HANDLE_CHARACTER_LIMIT]}"
-            for row in playbooks
-            if normalize_playbook_handle(row.content)
-        ],
-        PLAYBOOK_INDEX_CHARACTER_BUDGET,
-    )
-    sections = [f"Current profile for {user_name or 'the user'}:\n{profile or '(no current slotted facts)'}"]
-    if playbook_index:
-        sections.append(
-            "Available playbooks (call read_playbook for the body; do not infer it from the title):\n" + playbook_index
-        )
-    return '\n\n'.join(sections) + '\n'
+    return f"Current profile for {user_name or 'the user'}:\n{profile or '(no current slotted facts)'}\n"
 
 
 def safe_create_memory(memory_data: Dict[str, Any]) -> MemoryDB:
@@ -185,8 +145,6 @@ def _is_prompt_visible(memory: MemoryDB) -> bool:
     if memory.user_review is False:
         return False
     if memory.invalid_at is not None:
-        return False
-    if belief_model_enabled() and not record_passes_proactive_bar(memory, now=datetime.now(timezone.utc)):
         return False
     return True
 

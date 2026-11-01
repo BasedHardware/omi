@@ -17,6 +17,8 @@ from types import ModuleType
 import unittest
 from unittest.mock import MagicMock
 
+from google.api_core import retry as api_retry
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 MEMORY_PRODUCT_SOURCE_FILE = BACKEND_DIR / "routers" / "memory_product.py"
 
@@ -60,6 +62,7 @@ class MemoryProductErrorSanitizationTests(unittest.TestCase):
             if not hasattr(google_api_core_exceptions, exc_name):
                 setattr(google_api_core_exceptions, exc_name, type(exc_name, (Exception,), {}))
         google_api_core.exceptions = google_api_core_exceptions
+        google_api_core.retry = api_retry
 
         firebase_admin = sys.modules.get("firebase_admin") or ModuleType("firebase_admin")
         firebase_admin.__path__ = []

@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => testIdentity(undefined, "t")),
 }));
 vi.mock("@/lib/firebase/admin", () => ({ getDb: () => ({}) }));
 
 import { normalizePrompt } from "@/app/api/omi/desktop-prompts/route";
+import { testIdentity } from "./support/test-identity";
 
 describe("normalizePrompt", () => {
   it("builds the document the desktop delivery route expects", () => {
@@ -27,17 +28,17 @@ describe("normalizePrompt", () => {
 
   it("rejects unknown types, empty questions, and 1-option choices", () => {
     expect(normalizePrompt({ type: "modal", question: "x" }).error).toContain(
-      "type",
+      "type"
     );
     expect(normalizePrompt({ type: "stars", question: "  " }).error).toContain(
-      "question",
+      "question"
     );
     expect(
       normalizePrompt({
         type: "choice",
         question: "Pick",
         options: ["only one"],
-      }).error,
+      }).error
     ).toContain("options");
   });
 

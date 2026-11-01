@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from utils.conversations.summary_selection import render_sections_markdown, select_primary_summary
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -44,8 +46,15 @@ def test_section_renderer_omits_empty_sections_and_preserves_order():
     assert render_sections_markdown(sections) == '## First\n\nBody one\n\nBody two\n\n## Third\n\nBody three'
 
 
-def test_summary_share_email_uses_the_same_primary_selection(monkeypatch):
+@pytest.fixture
+def share_email_module():
     from utils.conversations import share_email
+
+    return share_email
+
+
+def test_summary_share_email_uses_the_same_primary_selection(monkeypatch, share_email_module):
+    share_email = share_email_module
 
     captured = {}
 

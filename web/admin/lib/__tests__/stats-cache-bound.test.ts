@@ -22,6 +22,7 @@ const setPayloadMock = vi.hoisted(() =>
 );
 
 import type * as PayloadCacheNs from "@/lib/payload-cache";
+import { testIdentity } from "./support/test-identity";
 type PayloadCacheModule = typeof PayloadCacheNs;
 vi.mock("@/lib/payload-cache", async (importOriginal) => {
   const actual = await importOriginal<PayloadCacheModule>();
@@ -32,10 +33,13 @@ vi.mock("@/lib/payload-cache", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => testIdentity(undefined, "t")),
 }));
 vi.mock("@/lib/posthog", () => ({ withRowLimit: (q: string) => q }));
-vi.mock("@/lib/stripe", () => ({ getOptionalStripe: () => null }));
+vi.mock("@/lib/stripe", () => ({
+  getOptionalStripe: () => null,
+  getOptionalStripeRead: () => null,
+}));
 vi.mock("@/lib/stripe-subscriptions", () => ({
   MRR_STATUSES: ["active"],
   fetchOmiSubscriptions: vi.fn(async () => ({ subscriptions: [] })),

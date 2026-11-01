@@ -26,7 +26,6 @@ def _clear_credential_env(monkeypatch):
         "FIREBASE_AUTH_CREDENTIALS_PATH",
         "FIRESTORE_EMULATOR_HOST",
         "FIRESTORE_DATABASE_ID",
-        "OMI_JIT_QA_AUTH_ONLY",
         "OMI_FIRESTORE_DATA_PLANE_PROJECT",
         "OMI_CUSTOMER_DATA_PROJECT",
         "FIREBASE_AUTH_PROJECT_ID",

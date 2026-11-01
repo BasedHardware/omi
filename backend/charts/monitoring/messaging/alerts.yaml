@@ -1,0 +1,40 @@
+# Optional GKE rules. Production Cloud Run uses backend/deploy/messaging/alert-policies.json.
+# PrometheusRule installation alone does not establish notification delivery.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: omi-messaging
+  labels:
+    release: prod-omi-kube-prometheus-stack
+spec:
+  groups:
+    - name: omi.messaging
+      rules:
+        - alert: OmiMessagingFailureRate
+          expr: sum by (channel) (rate(omi_messaging_failures_total[15m])) / clamp_min(sum by (channel) (rate(omi_messaging_turns_total[15m])) + sum by (channel) (rate(omi_messaging_failures_total[15m])), 0.001) > 0.1
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "Messaging failure rate above 10%"
+            description: "Check channel provider status and queue logs; do not replay running jobs."
+        - alert: OmiMessagingProviderRateLimit
+          expr: sum by (provider) (rate(omi_messaging_provider_http_total{status="429"}[15m])) / clamp_min(sum by (provider) (rate(omi_messaging_provider_http_total[15m])), 0.001) > 0.05
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "Messaging provider throttling exceeds 5%"
+            description: "Verify shared Redis pacing and set Telegram streaming to none under load."
+        - alert: OmiMessagingQueueDelay
+          expr: histogram_quantile(0.95, sum by (channel, le) (rate(omi_messaging_queue_age_seconds_bucket[15m]))) > 300
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "Messaging queue p95 age exceeds five minutes"
+            description: "Check worker availability and surface leases; stale takeover starts at 300 seconds."
+        - alert: OmiMessagingSlowTurn
+          expr: histogram_quantile(0.95, sum by (channel, le) (rate(omi_messaging_turn_seconds_bucket[15m]))) > 120
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Messaging turn p95 exceeds two minutes"
+            description: "Check model/provider latency and queue drain health."

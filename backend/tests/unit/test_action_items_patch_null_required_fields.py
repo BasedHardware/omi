@@ -8,108 +8,9 @@ for those fields instead of raising ValidationError, and database updates with p
 must drop explicit nulls on non-nullable fields to prevent Firestore database poisoning.
 """
 
-from datetime import datetime, timezone
-import importlib.util
-import os
-from pathlib import Path
-import sys
-import types
 import unittest
-from unittest.mock import MagicMock
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
-os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-
-def _pkg(name):
-    mod = sys.modules.get(name)
-    if mod is None or not hasattr(mod, "__path__"):
-        mod = types.ModuleType(name)
-        mod.__path__ = []
-        sys.modules[name] = mod
-    return mod
-
-
-def _mod(name):
-    mod = sys.modules.get(name)
-    if mod is None:
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
-    return mod
-
-
-def _load_action_items_db():
-    if "database.action_items" in sys.modules and hasattr(
-        sys.modules["database.action_items"], "_prepare_action_item_for_write"
-    ):
-        return sys.modules["database.action_items"]
-
-    for p in ("google", "google.cloud", "google.api_core"):
-        _pkg(p)
-
-    for m in (
-        "google.cloud.firestore",
-        "google.cloud.firestore_v1",
-        "google.cloud.firestore_v1.base_query",
-        "google.api_core.exceptions",
-        "firebase_admin",
-        "redis",
-        "prometheus_client",
-        "fastapi",
-        "utils.observability.fallback",
-        "utils.observability",
-        "utils.metrics",
-    ):
-        _mod(m)
-
-    prom_mod = sys.modules["prometheus_client"]
-    prom_mod.Counter = lambda *a, **kw: MagicMock()
-    prom_mod.Histogram = lambda *a, **kw: MagicMock()
-
-    sys.modules["utils.observability.fallback"].record_fallback = lambda *a, **kw: None
-    sys.modules["utils.metrics"].OMI_FALLBACK_TOTAL = MagicMock()
-
-    firestore_mod = sys.modules["google.cloud.firestore"]
-    firestore_mod.ArrayUnion = lambda *a: a
-    firestore_mod.ArrayRemove = lambda *a: a
-
-    firestore_v1_mod = sys.modules["google.cloud.firestore_v1"]
-    firestore_v1_mod.FieldFilter = object
-    firestore_v1_mod.BaseCompositeFilter = object
-
-    base_query_mod = sys.modules["google.cloud.firestore_v1.base_query"]
-    base_query_mod.BaseCompositeFilter = object
-    base_query_mod.FieldFilter = object
-
-    api_exceptions_mod = sys.modules["google.api_core.exceptions"]
-    for exc in (
-        "DeadlineExceeded",
-        "GoogleAPICallError",
-        "NotFound",
-        "InvalidArgument",
-    ):
-        setattr(api_exceptions_mod, exc, type(exc, (Exception,), {}))
-
-    redis_mod = sys.modules["redis"]
-    redis_mod.Redis = MagicMock()
-
-    spec = importlib.util.spec_from_file_location(
-        "database._action_items_null_patch_test",
-        str(BACKEND_DIR / "database" / "action_items.py"),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-action_items_db = _load_action_items_db()
+from database.action_item_codec import prepare_action_item_for_write
 from models.action_item import (
     ActionItemResponse,
     ActionItemUpdateRequest,
@@ -193,7 +94,7 @@ class ActionItemsPatchNullRequiredFieldsTest(unittest.TestCase):
             "due_at": None,
             "completed_at": None,
         }
-        sanitized = action_items_db._prepare_action_item_for_write(partial_data, partial=True)
+        sanitized = prepare_action_item_for_write(partial_data, partial=True)
         for field in (
             "description",
             "owner",

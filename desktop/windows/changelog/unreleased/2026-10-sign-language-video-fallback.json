@@ -1,0 +1,1 @@
+{ "changes": ["Fixed: the sign-language overlay plays the sign.mt video fallback instead of handing that clip to the pose viewer."] }

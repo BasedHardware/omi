@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-onboarding-speech-skip-to-setup.png",
+      "platform": "mobile-ios",
+      "description": "After Skip on the speech-profile step the flow lands on the Setting up your Omi page (rating flag forced on); no Knowledge Graph screen in between",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-onboarding-speech-profile-step.png",
+      "platform": "mobile-ios",
+      "description": "Speech-profile step, the last counted step before setup/complete",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

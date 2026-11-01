@@ -18,6 +18,11 @@ from utils.stt.live_metrics import CHAIN_EXHAUSTED, WINDOW_ADMISSION
 
 
 @pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
+@pytest.fixture(autouse=True)
 def serving(monkeypatch, runtime):
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
@@ -86,6 +91,9 @@ async def test_historical_open_window_and_soniox_exhaust_with_failed_modulate(re
     source = source.replace('fallback_reason_for_typed_death', 'fallback_metric_reason')
     namespace = {'__name__': f'historical_chain_{revision}'}
     exec(compile(source, f'{revision}/live_chain.py', 'exec'), namespace)
+    # Historical source predates the additive cohort label. Bind its counter
+    # to a child without changing the historical selection/recovery behavior.
+    namespace['CHAIN_EXHAUSTED'] = CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')
     st._parakeet_circuit.record_serve_failure()
     if not previous_soniox:
         st._soniox_circuit.record_serve_failure()
@@ -129,7 +137,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
         for actual in actuals:
             actual._stt_failed_providers.add('soniox')
             actual._stt_failed_reasons['soniox'] = 'connection_lost'
-    before = CHAIN_EXHAUSTED._value.get()
+    before = CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get()
     overflow_before = WINDOW_ADMISSION.labels(outcome='overflow')._value.get()
     try:
         tasks = [asyncio.create_task(actual._failover_stt_socket()) for actual in actuals]
@@ -140,7 +148,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
         assert len(replacements) == 35
         window_connect.assert_not_called()
         assert WINDOW_ADMISSION.labels(outcome='overflow')._value.get() - overflow_before == 35
-        assert CHAIN_EXHAUSTED._value.get() == before
+        assert CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get() == before
         for actual in actuals:
             assert actual.host.stt_service == st.STTService.soniox
             assert actual._stt_failed_providers == {'modulate'}
@@ -157,7 +165,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
 @pytest.mark.asyncio
 async def test_failed_rebuild_is_latched_across_35_send_monitor_races(monkeypatch):
     actual = dead_receiver()
-    actual._create_stt_socket = AsyncMock(side_effect=RuntimeError('Configured STT chain exhausted'))
+    actual._create_stt_socket = AsyncMock(side_effect=live_chain.LiveChainExhausted('Configured STT chain exhausted'))
     assert await asyncio.gather(*(actual._failover_stt_socket() for _ in range(35))) == [False] * 35
     actual._create_stt_socket.assert_awaited_once()
     assert actual._stt_failed_providers == {'modulate'}
@@ -238,13 +246,13 @@ async def test_unrecoverable_ring_pressure_terminates_once_without_rebuild_loop(
         st._soniox_circuit.record_account_failure(1800)
         ring = actual._window_ring()
         ring.ring_seconds = len(capture) / (2 * 16000)
-        before = CHAIN_EXHAUSTED._value.get()
+        before = CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get()
         await _flush_capture(actual, b'\x01\x00' * 640, len(capture) // 2)
         assert actual.host.state.stt_terminal_failure
-        assert actual._stt_recovery_exhausted
-        assert CHAIN_EXHAUSTED._value.get() - before == 1
+        assert actual.recovery.exhausted
+        assert CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get() - before == 1
         assert await asyncio.gather(*(actual._failover_stt_socket() for _ in range(35))) == [False] * 35
-        assert CHAIN_EXHAUSTED._value.get() - before == 1
+        assert CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get() - before == 1
         actual.host.request.websocket.close.assert_awaited_once()
     finally:
         await actual._drain_stt_sockets()
@@ -299,7 +307,7 @@ async def test_previously_used_soniox_transport_loss_gets_one_healthy_rescue(mon
     replacements[0].is_connection_dead = True
     replacements[0].typed_death_reason = 'connection_lost'
     assert not await actual._failover_stt_socket()
-    assert actual._stt_recovery_exhausted
+    assert actual.recovery.exhausted
     assert len(replacements) == 1
     assert not await actual._failover_stt_socket()
     assert actual._stt_rebuild_attempts == 2

@@ -296,6 +296,9 @@ void _stubPluginChannels() {
     'flutter.baseflow.com/permissions/methods',
     'dev.fluttercommunity.plus/device_info',
     'plugins.flutter.io/shared_preferences',
+    // Connectivity subscribes before its initial snapshot. Activation and
+    // cancellation must be hermetic even when this fixture's snapshot fails.
+    'dev.fluttercommunity.plus/connectivity_status',
   ];
   for (final name in channels) {
     messenger.setMockMethodCallHandler(MethodChannel(name), (call) async {

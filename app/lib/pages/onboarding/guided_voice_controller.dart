@@ -4,10 +4,26 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'goal_text_cleanup.dart';
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/streaming_error.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 
 class VoiceEnrollmentUnavailable implements Exception {}
+
+class GuidedVoiceFailure implements Exception {
+  const GuidedVoiceFailure(this.failureClass);
+  final String failureClass;
+}
+
+/// Optional experience boundary keeps existing recorder-only callers independent.
+abstract class GuidedVoiceExperienceIO {
+  Future<bool> preflight();
+  Future<String> ask(String question, List<String> savedAnswers);
+}
 
 enum IntroductionStage {
   ready,
@@ -15,11 +31,14 @@ enum IntroductionStage {
   recording,
   paused,
   transcribing,
+  confirmation,
+  typing,
+  payoff,
   review,
   savingVoice,
   voiceError,
   savingMemories,
-  done
+  done,
 }
 
 /// The boundary is deliberately transcription-only. Drafts must not enter the
@@ -45,22 +64,45 @@ class IntroductionAnswer {
   final String? originalText;
   int editRevision = 0;
   String? submittedGoal;
-  bool get locked => saved || submittedGoal != null;
+  String? submittedMemory;
+  bool get locked => saved || submittedGoal != null || submittedMemory != null;
   bool keep = true;
   bool saved = false;
 }
 
 class GuidedVoiceController extends ChangeNotifier {
   static const promptCount = 4;
-  GuidedVoiceController(this.io, {this.flowSource = 'first_run', this.flowVariant = 'guided_voice_v1'});
+  GuidedVoiceController(
+    this.io, {
+    this.flowSource = 'first_run',
+    this.flowVariant = 'guided_voice_v1',
+    this.accountUid,
+    this.preflightTimeout = const Duration(seconds: 4),
+    this.payoffTimeout = const Duration(seconds: 8),
+  });
   final GuidedVoiceIO io;
+  final Duration preflightTimeout;
+  final Duration payoffTimeout;
+  bool _preflightPassed = false;
+  String payoffAnswer = '';
+  String payoffSource = 'fallback';
+  bool payoffLoading = false;
+  bool _payoffStarted = false;
+  bool _payoffShown = false;
+  bool _payoffContinued = false;
+  DateTime? _payoffStartedAt;
+  String get transcriptionPath => io.livePreview ? 'on_device' : 'cloud';
+  List<IntroductionAnswer> get savedAnswers => answers.where((a) => a.saved).toList(growable: false);
+  bool get permissionBlocked => error == 'permission_denied' || error == 'permission_permanently_denied';
   final String flowSource;
   final String flowVariant;
+  final String? accountUid;
   IntroductionStage stage = IntroductionStage.ready;
   int promptIndex = 0;
   int alternative = 0;
   final answers = <IntroductionAnswer>[];
   final _frames = BytesBuilder(copy: true);
+  Uint8List _typedAudio = Uint8List(0);
   String transcript = '';
   String? error;
   String? voiceError;
@@ -68,6 +110,17 @@ class GuidedVoiceController extends ChangeNotifier {
   bool voiceSaved = false;
   double level = 0;
   double seconds = 0;
+
+  /// The most recent audio levels, oldest first, for the recording waveform. Capped at
+  /// [levelHistoryLength]; cleared for each prompt.
+  final levelHistory = <double>[];
+  static const levelHistoryLength = 32;
+
+  /// A frame at or above this level counts as hearing the speaker.
+  static const speechLevel = 0.04;
+
+  /// Seconds of audio since the microphone last heard speech, in this recording.
+  double _quietSeconds = 0;
   bool _disposed = false;
   int _generation = 0;
   Timer? _previewTimer;
@@ -116,16 +169,18 @@ class GuidedVoiceController extends ChangeNotifier {
 
   int _promptDurationMs() => _promptViewedAt == null ? 0 : DateTime.now().difference(_promptViewedAt!).inMilliseconds;
 
-  void _recordCompletedPrompt({required String result, required bool transcriptPresent}) {
-    PlatformManager.instance.analytics.guidedIntroPromptCompleted(
-      sessionId: _sessionId,
-      source: flowSource,
-      variant: flowVariant,
-      promptIndex: promptIndex,
-      result: result,
-      durationMs: _promptDurationMs(),
-      transcriptPresent: transcriptPresent,
-    );
+  void _recordCompletedPrompt({required String result, required bool transcriptPresent, String? failureClass}) {
+    PlatformManager.instance.analytics.track('Guided Intro Prompt Completed', properties: {
+      'session_id': _sessionId,
+      'source': flowSource,
+      'variant': flowVariant,
+      'prompt_index': promptIndex,
+      'result': result,
+      'duration_ms': _promptDurationMs(),
+      'transcript_present': transcriptPresent,
+      'transcription_path': transcriptionPath,
+      if (failureClass != null) 'failure_class': failureClass,
+    });
   }
 
   void _recordTerminal({required String completionMode}) {
@@ -140,7 +195,7 @@ class GuidedVoiceController extends ChangeNotifier {
       completionMode: completionMode,
       voiceResult: voiceSaved
           ? 'success'
-          : completionMode == 'saved'
+          : completionMode == 'saved' && _voiceAttempts > 0
               ? 'failed'
               : 'skipped',
       memorySaved: savedMemoryCount,
@@ -166,9 +221,13 @@ class GuidedVoiceController extends ChangeNotifier {
         IntroductionStage.starting,
         IntroductionStage.transcribing,
         IntroductionStage.savingVoice,
-        IntroductionStage.savingMemories
+        IntroductionStage.savingMemories,
       ].contains(stage);
   bool get active => stage == IntroductionStage.recording;
+
+  /// Recording, but the microphone has heard nothing for a couple of seconds: time for the
+  /// "speak toward your phone" hint. False while speech is coming through.
+  bool get quiet => active && _quietSeconds >= 2;
   bool get canFinish => _frames.length >= 16000; // Half a second, never a voice-quality claim.
   int get keptCount => answers.where((a) => a.keep && a.text.trim().isNotEmpty).length;
   bool get allMemoriesSaved => answers.where((a) => a.keep && a.text.trim().isNotEmpty).every((a) => a.saved);
@@ -180,35 +239,58 @@ class GuidedVoiceController extends ChangeNotifier {
   bool _current(int generation) => !_disposed && _generation == generation;
 
   Future<void> start() async {
-    if (busy || active || _disposed) return;
+    if (busy || active || _disposed || promptIndex >= promptCount) return;
+    if (error?.startsWith('transcribe_') == true) {
+      _frames.clear();
+      seconds = 0;
+      level = 0;
+      levelHistory.clear();
+      transcript = '';
+    }
     markStarted();
     _autoStart = true;
     final generation = ++_generation;
     stage = IntroductionStage.starting;
     error = null;
+    _quietSeconds = 0;
     _emit();
     try {
+      if (!_preflightPassed && io is GuidedVoiceExperienceIO) {
+        // A slow health check is inconclusive; the final transcription still
+        // has the same-clip retry and typed recovery paths.
+        final available =
+            await (io as GuidedVoiceExperienceIO).preflight().timeout(preflightTimeout, onTimeout: () => true);
+        if (!_current(generation)) return;
+        if (!available) throw const GuidedVoiceFailure('transcription_unavailable');
+        _preflightPassed = true;
+      }
       if (!_prepared) {
         await io.prepare();
         _prepared = true;
       }
       if (!_current(generation)) return;
-      await io.start((bytes) {
-        if (!_current(generation)) return;
-        _frames.add(bytes);
-        seconds = _frames.length / 32000;
-        final data = ByteData.sublistView(bytes);
-        double sum = 0;
-        for (var i = 0; i + 1 < bytes.length; i += 2) {
-          final sample = data.getInt16(i, Endian.little);
-          sum += sample * sample;
-        }
-        level = bytes.length < 2 ? 0 : (sqrt(sum / (bytes.length ~/ 2)) / 1800).clamp(0, 1);
-        _emit();
-        if (seconds >= 45 && active) unawaited(pause());
-      }, () {
-        if (_current(generation) && active) unawaited(pause());
-      });
+      await io.start(
+        (bytes) {
+          if (!_current(generation)) return;
+          _frames.add(bytes);
+          seconds = _frames.length / 32000;
+          final data = ByteData.sublistView(bytes);
+          double sum = 0;
+          for (var i = 0; i + 1 < bytes.length; i += 2) {
+            final sample = data.getInt16(i, Endian.little);
+            sum += sample * sample;
+          }
+          level = bytes.length < 2 ? 0 : (sqrt(sum / (bytes.length ~/ 2)) / 1800).clamp(0, 1);
+          _quietSeconds = level >= speechLevel ? 0 : _quietSeconds + bytes.length / 32000;
+          levelHistory.add(level);
+          if (levelHistory.length > levelHistoryLength) levelHistory.removeAt(0);
+          _emit();
+          if (seconds >= 45 && active) unawaited(pause());
+        },
+        () {
+          if (_current(generation) && active) unawaited(pause());
+        },
+      );
       if (!_current(generation)) {
         await io.stop();
         return;
@@ -223,17 +305,22 @@ class GuidedVoiceController extends ChangeNotifier {
         attempt: _recordingAttempts,
       );
       _previewTimer = Timer.periodic(const Duration(seconds: 3), (_) => _updatePreview(generation));
-    } catch (_) {
+    } catch (failure) {
       if (!_current(generation)) return;
       stage = IntroductionStage.paused;
-      error = 'microphone';
-      PlatformManager.instance.analytics.guidedIntroRecordingFailed(
-        sessionId: _sessionId,
-        source: flowSource,
-        variant: flowVariant,
-        promptIndex: promptIndex,
-        failureClass: 'microphone',
-      );
+      error = failure is GuidedVoiceFailure
+          ? failure.failureClass
+          : !_preflightPassed && io is GuidedVoiceExperienceIO
+              ? 'transcription_unavailable'
+              : 'engine_start_failed';
+      PlatformManager.instance.analytics.track('Guided Intro Recording Failed', properties: {
+        'session_id': _sessionId,
+        'source': flowSource,
+        'variant': flowVariant,
+        'prompt_index': promptIndex,
+        'failure_class': error!,
+        'transcription_path': transcriptionPath,
+      });
       await io.stop();
     }
     _emit();
@@ -279,24 +366,69 @@ class GuidedVoiceController extends ChangeNotifier {
         await _preview;
       } catch (_) {}
       if (!_current(generation)) return;
-      final audio = _frames.toBytes();
-      final text = (await io.transcribe(audio)).trim();
+      final text = (await io.transcribe(_frames.toBytes()).timeout(const Duration(seconds: 30))).trim();
       if (!_current(generation)) return;
-      if (text.isEmpty) throw StateError('No speech');
-      final answer = IntroductionAnswer(
-          isGoalPrompt ? cleanIntroductionGoal(text) : text, audio, 'intro-$_sessionId-${answers.length}',
-          isGoal: isGoalPrompt, originalText: isGoalPrompt ? text : null);
-      answer.keep = answer.text.isNotEmpty;
-      answers.add(answer);
-      _recordCompletedPrompt(result: 'answered', transcriptPresent: true);
-      await _advance();
-    } catch (_) {
+      if (text.isEmpty) throw const GuidedVoiceFailure('transcribe_empty');
+      transcript = text;
+      stage = IntroductionStage.confirmation;
+      _emit();
+    } catch (failure) {
       if (!_current(generation)) return;
       stage = IntroductionStage.paused;
-      error = 'transcription';
-      _recordCompletedPrompt(result: 'transcription_failed', transcriptPresent: false);
+      error = failure is GuidedVoiceFailure
+          ? failure.failureClass
+          : failure is TimeoutException
+              ? 'transcribe_timeout'
+              : 'transcribe_http_error';
+      _recordCompletedPrompt(result: 'transcription_failed', transcriptPresent: false, failureClass: error);
       _emit();
     }
+  }
+
+  Future<void> confirmAnswer() async {
+    if (stage != IntroductionStage.confirmation || _disposed) return;
+    await _acceptAnswer(transcript, _frames.toBytes());
+  }
+
+  Future<void> typeInstead() async {
+    if (busy || _disposed || promptIndex >= promptCount) return;
+    // Correcting a heard transcript changes the text, not the enrollment clip.
+    _typedAudio = stage == IntroductionStage.confirmation ? _frames.toBytes() : Uint8List(0);
+    ++_generation;
+    _autoStart = false;
+    _previewTimer?.cancel();
+    final generation = _generation;
+    stage = IntroductionStage.starting;
+    _emit();
+    await io.stop();
+    if (!_current(generation)) return;
+    stage = IntroductionStage.typing;
+    transcript = '';
+    _emit();
+  }
+
+  Future<void> submitTyped(String text) async {
+    if (stage != IntroductionStage.typing || busy || _disposed || text.trim().isEmpty) return;
+    markStarted();
+    await _acceptAnswer(text.trim(), _typedAudio);
+  }
+
+  Future<void> _acceptAnswer(String text, Uint8List audio) async {
+    final uid = accountUid?.isNotEmpty == true
+        ? accountUid
+        : (SharedPreferencesUtil().uid.isNotEmpty ? SharedPreferencesUtil().uid : null);
+    final answerId = isGoalPrompt ? 'intro-goal-${uid ?? _sessionId}' : 'intro-$_sessionId-${answers.length}';
+    final answer = IntroductionAnswer(
+      isGoalPrompt ? cleanIntroductionGoal(text) : text,
+      audio,
+      answerId,
+      isGoal: isGoalPrompt,
+      originalText: isGoalPrompt ? text : null,
+    );
+    answer.keep = answer.text.isNotEmpty;
+    answers.add(answer);
+    _recordCompletedPrompt(result: 'answered', transcriptPresent: true);
+    await _advance();
   }
 
   Future<void> skipPrompt() async {
@@ -314,9 +446,11 @@ class GuidedVoiceController extends ChangeNotifier {
   Future<void> _advance() async {
     ++_generation;
     _frames.clear();
+    _typedAudio = Uint8List(0);
     seconds = 0;
     transcript = '';
     level = 0;
+    levelHistory.clear();
     alternative = 0;
     error = null;
     promptIndex++;
@@ -364,7 +498,7 @@ class GuidedVoiceController extends ChangeNotifier {
   }
 
   Future<void> saveAll() async {
-    if (busy || _disposed || stage == IntroductionStage.done) return;
+    if (busy || _disposed || stage == IntroductionStage.done || stage == IntroductionStage.payoff) return;
     markStarted();
     _saveAttempts++;
     PlatformManager.instance.analytics.guidedIntroSaveSubmitted(
@@ -385,12 +519,14 @@ class GuidedVoiceController extends ChangeNotifier {
     _savingAll = true;
     error = null;
     try {
-      if (!voiceSaved) await _saveVoice();
+      if (!voiceSaved && answers.any((a) => a.audio.isNotEmpty)) await _saveVoice();
       if (_disposed) return;
       voiceError = voiceSaved ? null : error;
       await _saveMemories();
       if (_disposed) return;
-      stage = voiceSaved && allMemoriesSaved ? IntroductionStage.done : IntroductionStage.review;
+      stage = allMemoriesSaved && (voiceSaved || answers.every((a) => a.audio.isEmpty))
+          ? IntroductionStage.done
+          : IntroductionStage.review;
       if (stage == IntroductionStage.done) _recordTerminal(completionMode: 'saved');
     } finally {
       _savingAll = false;
@@ -528,9 +664,14 @@ class GuidedVoiceController extends ChangeNotifier {
         } else {
           memoryAttempted++;
         }
-        if (answer.isGoal) answer.submittedGoal ??= answer.text.trim();
-        final saved =
-            answer.isGoal ? await io.saveGoal(answer.submittedGoal!, answer.id) : await io.remember(answer.text.trim());
+        if (answer.isGoal) {
+          answer.submittedGoal ??= answer.text.trim();
+        } else {
+          answer.submittedMemory ??= answer.text.trim();
+        }
+        final saved = answer.isGoal
+            ? await io.saveGoal(answer.submittedGoal!, answer.id)
+            : await io.remember(answer.submittedMemory!);
         if (!_current(generation)) return;
         answer.saved = saved;
         if (answer.isGoal) {
@@ -569,6 +710,64 @@ class GuidedVoiceController extends ChangeNotifier {
       error = saveError ?? 'memories';
     }
     _emit();
+  }
+
+  Future<void> showPayoff(String question) async {
+    if (_disposed || _payoffStarted || savedAnswers.isEmpty) return;
+    _payoffStarted = true;
+    _payoffStartedAt = DateTime.now();
+    stage = IntroductionStage.payoff;
+    payoffAnswer = '';
+    payoffLoading = true;
+    _emit();
+    try {
+      if (io is! GuidedVoiceExperienceIO) throw StateError('Chat unavailable');
+      final text = await (io as GuidedVoiceExperienceIO)
+          .ask(question, savedAnswers.map((a) => a.text).toList(growable: false))
+          .timeout(payoffTimeout);
+      if (_disposed || _payoffContinued) return;
+      if (text.trim().isEmpty) throw StateError('Empty answer');
+      payoffAnswer = text.trim();
+      payoffSource = 'chat';
+    } catch (failure) {
+      final kind = classifyChatStreamFailure(failure).kind;
+      recordFallback(ApiFallbackEvent(
+        reason: kind == ChatStreamFailureClass.timeout
+            ? ApiFallbackReason.timeout
+            : kind == ChatStreamFailureClass.offline
+                ? ApiFallbackReason.offline
+                : ApiFallbackReason.error,
+        outcome: ApiFallbackOutcome.degraded,
+      ));
+      // Saved cards and a short acknowledgment need no network or repeated text.
+    } finally {
+      if (!_disposed && !_payoffContinued) {
+        payoffLoading = false;
+        _recordPayoffShown();
+        _emit();
+      }
+    }
+  }
+
+  void _recordPayoffShown() {
+    if (_payoffShown) return;
+    _payoffShown = true;
+    const TypedEvents().emit(GuidedIntroPayoffShown(
+      memoriesCount: savedAnswers.length,
+      answerSource: payoffSource == 'chat'
+          ? GuidedIntroPayoffShownAnswerSource.chat
+          : GuidedIntroPayoffShownAnswerSource.fallback,
+      latencyMs: _payoffStartedAt == null ? 0 : DateTime.now().difference(_payoffStartedAt!).inMilliseconds,
+    ));
+  }
+
+  void continuePayoff() {
+    if (_disposed || _payoffContinued || stage != IntroductionStage.payoff) return;
+    _payoffContinued = true;
+    _recordTerminal(completionMode: 'saved');
+    payoffLoading = false;
+    _recordPayoffShown();
+    const TypedEvents().emit(const GuidedIntroPayoffContinued());
   }
 
   void markSkipped() {

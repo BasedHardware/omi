@@ -55,10 +55,8 @@ void main() {
     final result = await exportUserDataToFile(
       filePath,
       onProgress: progress.add,
-      request: () async => _response(
-        _chunks([body.substring(0, splitAt), body.substring(splitAt)]),
-        contentLength: body.length,
-      ),
+      request: () async =>
+          _response(_chunks([body.substring(0, splitAt), body.substring(splitAt)]), contentLength: body.length),
     );
 
     expect(result, filePath);
@@ -79,10 +77,7 @@ void main() {
   test('returns null on a non-JSON content type', () async {
     final result = await exportUserDataToFile(
       filePath,
-      request: () async => _response(
-        _chunks(['{}$_suffix']),
-        headers: {'content-type': 'text/html'},
-      ),
+      request: () async => _response(_chunks(['{}$_suffix']), headers: {'content-type': 'text/html'}),
     );
 
     expect(result, isNull);
@@ -111,20 +106,14 @@ void main() {
   });
 
   test('returns null when the stream fails mid-body', () async {
-    final result = await exportUserDataToFile(
-      filePath,
-      request: () async => _response(_failingStream()),
-    );
+    final result = await exportUserDataToFile(filePath, request: () async => _response(_failingStream()));
 
     expect(result, isNull);
     await expectNoPartialFiles();
   });
 
   test('returns null on an empty body', () async {
-    final result = await exportUserDataToFile(
-      filePath,
-      request: () async => _response(_chunks([])),
-    );
+    final result = await exportUserDataToFile(filePath, request: () async => _response(_chunks([])));
 
     expect(result, isNull);
     await expectNoPartialFiles();
@@ -182,10 +171,7 @@ void main() {
     await File(filePath).writeAsString('previous export');
     const body = '{\n}$_suffix';
 
-    final result = await exportUserDataToFile(
-      filePath,
-      request: () async => _response(_chunks([body])),
-    );
+    final result = await exportUserDataToFile(filePath, request: () async => _response(_chunks([body])));
 
     expect(result, filePath);
     expect(await File(filePath).readAsString(), body);

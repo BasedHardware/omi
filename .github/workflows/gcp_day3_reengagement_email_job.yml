@@ -1,7 +1,6 @@
 name: Deploy Day 3 Re-engagement Email Job to Cloud RUN
 
-# Mirrors gcp_daily_memory_sweep_job.yml, minus the LLM-gateway serving gate and
-# VPC lane probe: this job composes a fixed template and calls Resend, so it
+# This job composes a fixed template and calls Resend, so it
 # makes no model call and has no gateway lane to prove.
 
 on:
@@ -25,6 +24,10 @@ on:
         default: ''
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: day3-reengagement-email-job
   SCHEDULER_JOB: day3-reengagement-email-daily
   SCHEDULER_SERVICE_ACCOUNT: memory-maintenance-scheduler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com

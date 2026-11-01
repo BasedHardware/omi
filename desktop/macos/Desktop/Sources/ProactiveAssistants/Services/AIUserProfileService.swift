@@ -37,33 +37,25 @@ extension AIUserProfileRecord: TableDocumented {
 /// All generated profiles are stored in the local database for history tracking.
 actor AIUserProfileService {
   static let shared = AIUserProfileService()
+  private let repository = RewindRepository(owner: "AIUserStorage")
 
   private let maxProfileLength = 10000
 
   /// Whether profile generation is currently in progress
   private var isGenerating = false
 
-  /// Cached database pool
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-
   /// Invalidate cached DB queue (called on user switch / sign-out)
-  func invalidateCache() {
-    _dbQueue = nil
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   // MARK: - Database Access
 
   private func ensureDB() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration { return db }
-    try await RewindDatabase.shared.initialize()
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw ProfileError.databaseNotAvailable
     }
-    _dbQueue = db
-    _dbGeneration = generation
-    return db
+    return databasePool
   }
 
   /// Insert a profile row and return it carrying its persisted rowid.

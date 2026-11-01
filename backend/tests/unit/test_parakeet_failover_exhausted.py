@@ -4,6 +4,7 @@ import asyncio
 import json
 
 import pytest
+from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 import routers.listen.receiver as receiver_module
 from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime, window
@@ -12,8 +13,14 @@ from utils.stt import provider_resilience, vad_gate
 from utils.stt.live_session import LiveLegSocket
 from utils.stt import live_session, live_chain, live_health, live_router
 from utils.stt.live_router import connecting_target
+from utils.stt.live_metrics import REPLAY_SKIPPED
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from tests.unit.test_live_cost_router import MemoryRedis
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 class Replacement:
@@ -121,6 +128,18 @@ async def test_every_replacement_late_rejects_once_then_terminates_when_chain_ex
     monkeypatch.setattr(window, 'connect_window', initial)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram is retired (2026-08-27); pin the policy and session seams so
+    # this window-replay regression keeps a third leg to hand off to, exactly
+    # the wiring a pre-retirement deployment had.
+    _real_provider_is_enabled = st.provider_is_enabled
+
+    def _admit_deepgram_streaming(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _real_provider_is_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_deepgram_streaming)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     legs['deepgram'] = []
 
@@ -199,11 +218,23 @@ async def test_open_modulate_circuit_skips_to_soniox_with_exact_window_replay(mo
 @pytest.mark.parametrize('first_service', ['modulate', 'soniox'])
 @pytest.mark.parametrize('timeline_v2', [False, True])
 async def test_empty_snapshot_handoff_tracks_new_speech_and_replays_it_on_next_failure(
-    monkeypatch, first_service, timeline_v2
+    monkeypatch, first_service, timeline_v2, virtual_clock
 ):
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if timeline_v2 else 'false')
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram is retired (2026-08-27); pin the policy and session seams so
+    # this window-replay regression keeps a third leg to hand off to, exactly
+    # the wiring a pre-retirement deployment had.
+    _real_provider_is_enabled = st.provider_is_enabled
+
+    def _admit_deepgram_streaming(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _real_provider_is_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_deepgram_streaming)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     legs['deepgram'] = []
 
@@ -245,19 +276,39 @@ async def test_empty_snapshot_handoff_tracks_new_speech_and_replays_it_on_next_f
         pcm = b'\x02\x00' * 16000
         for n in range(32):
             await _flush_capture(actual, pcm, 1920 + n * 16000)
+            # Real-time capture may exceed the ring's quiet retention horizon,
+            # but must not be an instantaneous burst past the 26s tail cap.
+            assert sum(map(len, second.sent)) == len(pcm) * (n + 1)
+            # The fixture suppresses the owner's 1s monitor; observe the same
+            # healthy dwell that releases a silent, connected production leg.
+            actual.recovery.note_healthy_connection(actual._candidate_token)
         assert ring.capture_bounds == (1920, 513920)
         assert ring.buffered_bytes == 32 * len(pcm)
         assert actual.stt_socket._tracks_window_replay
         assert actual.stt_socket.has_untranscribed_speech()
         assert actual.stt_socket.window_replay_pending_sample() == 1920
         assert b''.join(second.sent) == pcm * 32
+        # Place the fifth frame clearly beyond the 28s capture-age bound,
+        # while the sixth is still fresh; avoid floating-point boundaries.
+        fifth_born = actual._live_birth.lookup(1920 + 4 * 16000)
+        sixth_born = actual._live_birth.lookup(1920 + 5 * 16000)
+        assert fifth_born is not None and sixth_born is not None
+        handoff_time = fifth_born + 28.5
+        assert handoff_time >= virtual_clock.now
+        assert handoff_time - sixth_born < 28
+        virtual_clock.now = handoff_time
+        skipped = REPLAY_SKIPPED.labels(source=second_service, successor='deepgram')
+        skipped_before = skipped._value.get()
         second.is_connection_dead = True
         second.typed_death_reason = 'connection_lost'
         assert await actual._failover_stt_socket()
         assert actual.host.stt_service == st.STTService.deepgram
         assert len(legs['modulate']) == len(legs['soniox']) == len(legs['deepgram']) == 1
-        assert b''.join(legs['deepgram'][0].sent) == pcm * 32
-        assert ring.capture_bounds == (1920, 513920)
+        replayed_pcm = b''.join(legs['deepgram'][0].sent)
+        assert len(replayed_pcm) == len(pcm) * 27
+        assert replayed_pcm == pcm * 27
+        assert skipped._value.get() - skipped_before == 5
+        assert ring.capture_bounds == (81920, 513920)
         assert [s['text'] for s in base.emitted] == ['settled']
         assert not actual.host.state.stt_terminal_failure
     finally:
@@ -266,6 +317,7 @@ async def test_empty_snapshot_handoff_tracks_new_speech_and_replays_it_on_next_f
 
 @pytest.mark.asyncio
 async def test_partial_replay_acceptance_without_text_does_not_discard_prefix(monkeypatch):
+    monkeypatch.setattr("utils.stt.replay_delivery.REPLAY_PACKET_BYTES", 1280)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     connect = st.process_audio_modulate
 
@@ -358,6 +410,9 @@ async def test_five_minutes_on_replacement_trim_on_text_and_remain_bounded(monke
 
 @pytest.mark.asyncio
 async def test_stalled_replacement_keeps_bounded_pending_capture_then_replays(monkeypatch):
+    from utils.stt import recovery_state
+
+    monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 300.0)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     try:
         assert await actual._failover_stt_socket()
@@ -369,9 +424,13 @@ async def test_stalled_replacement_keeps_bounded_pending_capture_then_replays(mo
         await _flush_capture(actual, pcm, 1920 + 104 * 16000)
         assert actual.host.stt_service == st.STTService.soniox
         assert len(legs['soniox']) == 1
-        assert b''.join(legs['soniox'][0].sent) == capture + pcm * 105
-        assert actual._window_ring().ring_seconds == 120
-        assert actual._window_ring().buffered_bytes == len(capture) + 105 * len(pcm)
+        sent = b''.join(legs['soniox'][0].sent)
+        expected_tail = capture + pcm * 105
+        assert sent and expected_tail.endswith(sent)
+        assert len(sent) <= (20 + 26) * len(pcm) + len(pcm)
+        assert actual._window_ring().ring_seconds >= actual._window_ring()._base_ring_seconds
+        assert actual._window_ring().buffered_bytes < len(expected_tail)
+        assert actual._window_ring().capture_bounds[0] > 0
         assert not actual.host.state.stt_terminal_failure
     finally:
         await actual._drain_stt_sockets()
@@ -414,13 +473,16 @@ async def test_enabled_soniox_reconnect_uses_full_window_obligation_not_fifteen_
         assert b''.join(legs['soniox'][0].sent) == expected
         legs['soniox'][0].is_connection_dead = True
         legs['soniox'][0].typed_death_reason = 'provider_5xx'
+        ring_before = b''.join(data for _, data in actual._window_ring().snapshot())
         assert await actual._failover_stt_socket()
         assert len(legs['soniox']) == 2
-        assert b''.join(legs['soniox'][1].sent) == expected
-        assert actual._resilient_audio._replayed_samples == len(expected) // 2
+        sent = b''.join(legs['soniox'][1].sent)
+        assert sent and ring_before.endswith(sent)
+        assert actual._resilient_audio._replayed_samples == len(sent) // 2
         legs['soniox'][0].callback([{'text': 'retired tail', 'start': 0.0, 'end': 20.12}])
         assert base.emitted == []
-        assert actual._window_ring().capture_bounds == (0, 321920)
+        bounds = actual._window_ring().capture_bounds
+        assert bounds[0] > 0 and bounds[1] == 321920
     finally:
         await actual._drain_stt_sockets()
 
@@ -483,11 +545,41 @@ async def test_replay_tracking_survives_downstream_vad_fail_open(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('pending_output', [False, True])
+async def test_quiet_modulate_replacement_settles_instead_of_overflow_failover(monkeypatch, pending_output):
+    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    clock = [0.0]
+    monkeypatch.setattr(live_session, '_replay_clock', lambda: clock[0])
+    try:
+        assert await actual._failover_stt_socket()
+        replacement = actual.stt_socket
+        modulate = legs['modulate'][0]
+        modulate.has_pending_provider_output = lambda: pending_output
+        # The replayed window capture is VAD speech this leg never answered.
+        assert replacement._tracks_window_replay and replacement.has_untranscribed_speech()
+        monkeypatch.setattr(replacement.gate, '_run_vad', lambda _pcm: False)
+        pcm = b'\x00\x00' * 16000
+        for second in range(120):
+            clock[0] = float(second + 1)
+            await _flush_capture(actual, pcm, 1920 + second * 16000)
+        if pending_output:
+            # Output the provider still owes keeps today's replay obligation.
+            assert modulate.is_connection_dead and replacement.death_reason == 'replay_ring_overflow'
+            return
+        assert actual.host.stt_service == st.STTService.modulate and legs['soniox'] == []
+        assert not modulate.is_connection_dead and not replacement.has_untranscribed_speech()
+        first, end = actual._window_ring().capture_bounds
+        assert end == 1920 + 120 * 16000 and end - first <= 90 * 16000
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('account_failure', [False, True])
 async def test_mid_session_modulate_endpoint_failure_preserves_healthy_sibling(monkeypatch, account_failure):
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -511,6 +603,7 @@ async def test_mid_session_modulate_endpoint_failure_preserves_healthy_sibling(m
         ),
     )
     actual, _, previous, legs, capture = await setup_chain(monkeypatch)
+    await pod.refresh_cost_once()
     selected = []
 
     async def connect(callback, *args, **kwargs):

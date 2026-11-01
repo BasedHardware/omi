@@ -1,26 +1,53 @@
-'use client';
+"use client";
 
-import React, { useEffect, useRef } from 'react';
-import { useAuth } from '@/components/auth-provider';
-import { useRouter, usePathname } from 'next/navigation';
+import React, { useEffect, useRef } from "react";
+import { useAuth } from "@/components/auth-provider";
+import { useRouter, usePathname } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { DashboardHeader } from "@/components/dashboard/header";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
+import { SCOPE_LABELS, pageScope, pageWriteScope } from "@/lib/admin-access";
+
+/** Shown instead of a page whose scope the viewer's role does not include. */
+function NoAccess({ scope }: { scope: keyof typeof SCOPE_LABELS }) {
+  return (
+    <div className="mx-auto mt-16 max-w-md rounded-lg border p-6 text-center">
+      <h2 className="text-lg font-semibold">
+        Your role does not include this page
+      </h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        It needs <code>{scope}</code> ({SCOPE_LABELS[scope]}). Ask an owner or a
+        deputy to change your role on the Team page.
+      </p>
+    </div>
+  );
+}
+
+/** The page is readable, but its edit actions need a scope the role lacks. */
+function ReadOnlyNotice({ scope }: { scope: keyof typeof SCOPE_LABELS }) {
+  return (
+    <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+      Read-only for your role: changes here need <code>{scope}</code> (
+      {SCOPE_LABELS[scope]}) and will be refused.
+    </div>
+  );
+}
 
 // Simple loading component (Consider moving to a shared UI folder)
 const LoadingScreen = () => (
-  <div className="flex items-center justify-center min-h-screen">
+  <div className="flex min-h-screen items-center justify-center">
     <div>Loading...</div>
   </div>
 );
 
-const SCROLL_STORAGE_PREFIX = 'omi-admin-scroll:';
+const SCROLL_STORAGE_PREFIX = "omi-admin-scroll:";
 
 function useScrollRestoration(
   mainRef: React.RefObject<HTMLElement>,
-  enabled: boolean,
+  enabled: boolean
 ) {
   const pathname = usePathname();
-  const storageKey = `${SCROLL_STORAGE_PREFIX}${pathname ?? '/'}`;
+  const storageKey = `${SCROLL_STORAGE_PREFIX}${pathname ?? "/"}`;
 
   // Restore scroll position on mount / route change. We poll briefly
   // because the page content mounts and grows as SWR data arrives, so
@@ -72,8 +99,8 @@ function useScrollRestoration(
       });
     };
 
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
   }, [enabled, mainRef, storageKey]);
 }
 
@@ -85,7 +112,19 @@ export default function DashboardLayout({
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
   const mainRef = useRef<HTMLElement>(null);
+  const pathname = usePathname();
+  const { access } = useAdminAccess();
   const authenticated = !!(user && isAdmin && !loading);
+  const requiredScope = pageScope(pathname ?? "");
+  const blockedScope =
+    access && requiredScope && !access.scopes.includes(requiredScope)
+      ? requiredScope
+      : null;
+  const writeScope = pageWriteScope(pathname ?? "");
+  const readOnlyScope =
+    access && writeScope && !access.scopes.includes(writeScope)
+      ? writeScope
+      : null;
   useScrollRestoration(mainRef, authenticated);
 
   useEffect(() => {
@@ -94,7 +133,7 @@ export default function DashboardLayout({
     }
     if (!user || !isAdmin) {
       // Redirect non-admins or non-logged-in users to login
-      router.push('/login?error=unauthorized');
+      router.push("/login?error=unauthorized");
     }
   }, [user, isAdmin, loading, router]);
 
@@ -106,12 +145,21 @@ export default function DashboardLayout({
   // If user is authenticated and is an admin, render the dashboard layout
   if (user && isAdmin) {
     return (
-      <div className="min-h-screen flex bg-background">
+      <div className="flex min-h-screen bg-background">
         <DashboardSidebar />
-        <div className="flex-1 flex flex-col min-h-screen">
+        <div className="flex min-h-screen flex-1 flex-col">
           <DashboardHeader />
-          <main ref={mainRef} className="flex-1 p-4 md:p-6 overflow-y-auto">
-            {children}
+          <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6">
+            {blockedScope ? (
+              <NoAccess scope={blockedScope} />
+            ) : (
+              <>
+                {readOnlyScope ? (
+                  <ReadOnlyNotice scope={readOnlyScope} />
+                ) : null}
+                {children}
+              </>
+            )}
           </main>
         </div>
       </div>

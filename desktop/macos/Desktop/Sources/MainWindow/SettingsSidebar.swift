@@ -24,7 +24,7 @@ struct SettingsSearchItem: Identifiable {
       icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
-      name: "Interface Sounds", subtitle: "Sounds for important arrivals and completions",
+      name: "Interface Sounds", subtitle: "Sounds when an answer finishes or a card appears",
       keywords: ["sound", "sounds", "audio", "chime", "mute", "silence", "effects"],
       section: .general, icon: "speaker.wave.2", settingId: "general.interfacesounds"),
     SettingsSearchItem(
@@ -36,7 +36,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["resize", "window", "default size"], section: .general, icon: "macwindow",
       settingId: "general.window"),
     SettingsSearchItem(
-      name: "Transparency", subtitle: "How much of the desktop shows through the glass",
+      name: "Transparency", subtitle: "How see-through Omi's windows are",
       keywords: ["glass", "transparent", "opacity", "opaque", "blur", "see-through", "translucent"],
       section: .general, icon: "circle.lefthalf.filled", settingId: "general.transparency"),
 
@@ -119,7 +119,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily summary", "frequency", "alerts"], section: .notifications, icon: "bell",
       settingId: "notifications.settings"),
     SettingsSearchItem(
-      name: "Notification Frequency", subtitle: "How often to receive notifications",
+      name: "Notification Frequency", subtitle: "How many proactive suggestions Omi sends",
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
     SettingsSearchItem(
@@ -128,10 +128,6 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["task", "action item", "notify task", "interruption", "proactive"],
       section: .notifications, icon: "bell",
       settingId: "notifications.task"),
-    SettingsSearchItem(
-      name: "Insight Notifications", subtitle: "Show notification when an insight is generated",
-      keywords: ["insight", "insights", "notify insight"], section: .notifications, icon: "bell",
-      settingId: "notifications.insight"),
     SettingsSearchItem(
       name: "Memory Notifications", subtitle: "Show notification when a memory is extracted",
       keywords: ["memory", "facts", "notify memory"], section: .notifications, icon: "bell",
@@ -142,6 +138,15 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["integration", "suggestions", "connect", "gmail", "notion", "nudge"],
       section: .notifications, icon: "bell",
       settingId: "notifications.integrationsuggestions"),
+    SettingsSearchItem(
+      name: "Connect an Agent",
+      subtitle: "Setup prompts plus MCP and Developer API keys for Claude, ChatGPT, Codex, Cursor",
+      keywords: [
+        "agent", "mcp", "api key", "developer", "claude", "chatgpt", "codex", "cursor", "openclaw",
+        "hermes",
+      ],
+      section: .advanced, icon: "point.3.connected.trianglepath.dotted",
+      settingId: "advanced.connectagent"),
     SettingsSearchItem(
       name: "Reset Integration Suggestions",
       subtitle: "Clear every integration's suggestion history so Omi can offer them again",
@@ -169,7 +174,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["store", "save recordings", "audio storage"], section: .privacy,
       icon: "lock.shield", settingId: "privacy.storerecordings"),
     SettingsSearchItem(
-      name: "Private Cloud Sync", subtitle: "Sync your data securely to your private cloud storage",
+      name: "Private Cloud Sync", subtitle: "Upload your recordings to your own cloud storage",
       keywords: ["cloud", "sync", "private cloud"], section: .privacy, icon: "lock.shield",
       settingId: "privacy.storerecordings"),
     SettingsSearchItem(
@@ -177,7 +182,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["encrypt", "security", "end to end"], section: .privacy, icon: "lock.shield",
       settingId: "privacy.encryption"),
     SettingsSearchItem(
-      name: "What We Track", subtitle: "View analytics and telemetry data we collect",
+      name: "What We Track", subtitle: "See the usage data Omi collects",
       keywords: ["tracking", "analytics", "telemetry", "data collection"], section: .privacy,
       icon: "lock.shield", settingId: "privacy.tracking"),
 
@@ -193,20 +198,20 @@ struct SettingsSearchItem: Identifiable {
     // Plan and Usage
     SettingsSearchItem(
       name: "Plan and Usage", subtitle: "Subscription status and usage limits",
-      keywords: ["subscription", "billing", "plan", "usage", "stripe", "architect", "unlimited"],
+      keywords: ["subscription", "billing", "plan", "usage", "stripe", "omi pro", "pro"],
       section: .planUsage, icon: "creditcard", settingId: "planusage.overview"),
     SettingsSearchItem(
       name: "Current Plan", subtitle: "See your current subscription and renewal status",
       keywords: ["current plan", "renewal", "billing"], section: .planUsage, icon: "creditcard",
       settingId: "planusage.current"),
     SettingsSearchItem(
-      name: "Upgrade Plan", subtitle: "Buy Operator or Architect",
-      keywords: ["upgrade", "buy", "pricing", "checkout", "architect", "operator", "unlimited"], section: .planUsage,
+      name: "Upgrade Plan", subtitle: "Buy Omi Pro",
+      keywords: ["upgrade", "buy", "pricing", "checkout", "omi pro", "pro"], section: .planUsage,
       icon: "creditcard", settingId: "planusage.purchase"),
 
     // Referral
     SettingsSearchItem(
-      name: "Refer a Friend", subtitle: "Share one free month of Operator",
+      name: "Refer a Friend", subtitle: "Share one free month of Omi Pro",
       keywords: ["refer", "referral", "friend", "gift", "free month", "share link"],
       section: .referral, icon: "gift", settingId: "referral.link"),
 
@@ -333,7 +338,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3",
       settingId: "advanced.preferences.launchatlogin"),
     SettingsSearchItem(
-      name: "Report an Issue", subtitle: "Send app logs and report a problem",
+      name: "Report an Issue", subtitle: "Save a redacted report on this Mac to share manually",
       keywords: ["bug", "feedback", "logs", "report", "issue"], section: .advanced,
       icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
     SettingsSearchItem(

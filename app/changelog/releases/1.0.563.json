@@ -1,0 +1,52 @@
+{
+  "version": "1.0.563",
+  "date": "2026-10-16",
+  "changes": [
+    "Reopening the app during setup no longer covers the current step with a language picker",
+    "Retain found device row and display error feedback with How to Pair guidance when device connection fails.",
+    "In the Omi tutorial, reopening a step from the summary shows what you already did and brings you back to the summary",
+    "In the Omi tutorial, a question sent automatically after 15 seconds now gets its answer and lets you continue",
+    "Offline Sync shows each recording as one row instead of dozens of 1 to 3 minute pieces; tap it to see the pieces.",
+    "If a reply to an app review fails to send, the app now says so and keeps your text instead of showing a false success.",
+    "When Omi changes a task, memory, conversation or person from chat, it shows what changed with a one-tap Undo, and Omi links open straight in the app.",
+    "Omi no longer says it is fully charged the moment you put it on the charger.",
+    "Memories recover automatically from temporary loading failures, keeping your saved memories available while you try again.",
+    "On-device transcription times each transcript segment from the recording's real length, so 8 kHz recordings are no longer stamped at half their duration",
+    "Offline recordings sync more reliably without repeated uploads or misleading server-busy messages.",
+    "AI app generator suggestion strip scales dynamically with text size to prevent card overflows",
+    "Apps category sections scale row and header heights dynamically to prevent overflows at larger text sizes",
+    "Telegram and iMessage replies show clearer formatting and compact links to your Omi items.",
+    "An Omi link to several conversations, tasks and memories opens them as one list in the app.",
+    "Show your actual plan name in Settings and plan-change confirmation",
+    "Show the monthly allowance meter for metered paid plans, including Plus",
+    "Internet detection is more reliable on restricted networks, while offline recordings continue to save safely.",
+    "Settings search header maintains a stable height and alignment to prevent rows jumping on open and cancel",
+    "Smoother scrolling, transcripts, and chat typing across the app",
+    "Pendant recordings waiting in Offline Sync upload four times as much audio per request, so a large backlog clears faster.",
+    "Receive your actual subscription tier and keep older client plan decoding safe",
+    "Referral signup opens in your browser, and failed integration checks offer a retry instead of hanging or claiming a connection before authorization finishes.",
+    "A recording that is too short or empty now explains why it did not become a conversation.",
+    "Choose how you capture during setup and turn your first phone recording into a conversation.",
+    "Your introduction now shows what Omi heard, lets you type answers, and gives you a first answer based on what you saved.",
+    "Leaving the voice introduction and coming back, or reopening on the all-set screen, no longer restarts the introduction or saves the goal twice",
+    "No user-facing change yet: groundwork for testing paywall designs (the current plans sheet, a new soft paywall, and a web-rendered paywall) and a web-rendered onboarding, each switched on remotely.",
+    "Stop repeated sync polling when rate limited and allow clearing stuck uploaded recordings via Delete Pending.",
+    "A voice-intro answer that was already sent stays locked if the save is not acknowledged, so a retry does not store a second copy",
+    "Conversation tasks focus on your commitments and avoid repeated tasks after recording updates.",
+    "Settings now has Connect an Agent, which opens setup prompts and keys for Claude, ChatGPT, Codex, and other agents",
+    "Conversations use learned names more consistently and detect their spoken language more reliably.",
+    "See the surrounding conversation when answering spelling questions in Review.",
+    "App cards remain readable at larger text sizes",
+    "Offline Sync now shows progress in minutes of audio instead of file counts, with a Sync details sheet for troubleshooting",
+    "Clearer recording instructions, actionable pairing errors, and easier onboarding choices.",
+    "Your Omi shows as connected again when you reopen the app, instead of staying stuck on Disconnected while it's actually connected",
+    {
+      "change": "On iOS, phone-microphone batch capture uses less battery after you return to the app, by tightening timer precision only while it is actually needed",
+      "platforms": [
+        "ios"
+      ]
+    },
+    "Reverts an Android battery optimization before release: reconnect retries keep the proven steady cadence after your Omi leaves and returns to range",
+    "No user-facing change: internal test robustness fix for a date-sensitive widget test."
+  ]
+}

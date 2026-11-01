@@ -30,11 +30,15 @@ enum ConversationSummarySelection {
   }
 
   static func primarySummary(for conversation: ServerConversation) -> Primary {
+    let valid = Set(conversation.transcriptSegments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
+    func presentable(_ text: String) -> String {
+      NoteCitationContract.repair(text.trimmingCharacters(in: .whitespacesAndNewlines), valid: valid).text
+    }
     if let (resultIndex, result) = conversation.appsResults.enumerated().first(where: {
       !$0.element.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }) {
       return Primary(
-        content: result.content.trimmingCharacters(in: .whitespacesAndNewlines),
+        content: presentable(result.content),
         kind: .app,
         appId: result.appId,
         resultIndex: resultIndex
@@ -47,7 +51,7 @@ enum ConversationSummarySelection {
       return Primary(content: renderedSections, kind: .sections, appId: nil, resultIndex: nil)
     }
     if !overview.isEmpty {
-      return Primary(content: overview, kind: .overview, appId: nil, resultIndex: nil)
+      return Primary(content: presentable(overview), kind: .overview, appId: nil, resultIndex: nil)
     }
     if !renderedSections.isEmpty {
       return Primary(content: renderedSections, kind: .sections, appId: nil, resultIndex: nil)
@@ -86,73 +90,46 @@ enum ConversationSummarySelection {
 
   /// References are useful only when their source is in the loaded transcript.
   static func resolvableSourceIDs(_ ids: [String], segments: [TranscriptSegment]) -> [String] {
-    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 }.filter { !$0.isEmpty } })
     var seen = Set<String>()
     return ids.filter { valid.contains($0) && seen.insert($0).inserted }
   }
 
-  /// Read-time compatibility for older summaries that rendered evidence IDs as Markdown links.
-  /// Only citation-only syntax made entirely from known transcript IDs is removed. Ordinary prose
-  /// and unknown UUID-like text remain untouched, and the stored conversation is never rewritten.
+  /// Whole-unit read-time repair; no stored-document rewrite. Code and ordinary links survive.
   static func presentableSection(_ section: SummarySection, segments: [TranscriptSegment]) -> SummarySection {
     let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
-    guard !valid.isEmpty else { return section }
-
-    var body = section.bodyMarkdown
-    var recovered = section.sourceSegmentIDs
-    var didRecover = false
-    let removalMarker = "\u{E000}"
-    let parenthetical = try? NSRegularExpression(pattern: #"(?<!\])\(((?:[^()\n]|\([^()\n]*\))+?)\)"#)
-    let wholeRange = NSRange(body.startIndex..<body.endIndex, in: body)
-    let matches = parenthetical?.matches(in: body, range: wholeRange) ?? []
-    for match in matches.reversed() {
-      guard let groupRange = Range(match.range(at: 1), in: body),
-        let matchRange = Range(match.range(at: 0), in: body)
-      else { continue }
-      let tokens = body[groupRange].split(whereSeparator: { $0 == ";" || $0 == "," })
-      let ids = tokens.compactMap { citationTokenID(String($0), valid: valid) }
-      guard !tokens.isEmpty, ids.count == tokens.count else { continue }
-      recovered.append(contentsOf: ids)
-      body.replaceSubrange(matchRange, with: removalMarker)
-      didRecover = true
-    }
-
-    for sourceID in valid.sorted(by: { $0.count > $1.count }) {
-      let escaped = NSRegularExpression.escapedPattern(for: sourceID)
-      let pattern = #"\["# + escaped + #"\]\([^\n)]*\)"#
-      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-      let range = NSRange(body.startIndex..<body.endIndex, in: body)
-      if regex.firstMatch(in: body, range: range) != nil {
-        recovered.append(sourceID)
-        body = regex.stringByReplacingMatches(in: body, range: range, withTemplate: removalMarker)
-        didRecover = true
-      }
-    }
-
-    guard didRecover else { return section }
-    let escapedRemovalMarker = NSRegularExpression.escapedPattern(for: removalMarker)
-    body =
-      body
-      .replacingOccurrences(of: #"[ \t]+"# + escapedRemovalMarker + #"[ \t]+"#, with: " ", options: .regularExpression)
-      .replacingOccurrences(
-        of: #"[ \t]+"# + escapedRemovalMarker + #"(?=[,.;:]|\n|$)"#, with: "", options: .regularExpression
-      )
-      .replacingOccurrences(of: escapedRemovalMarker + #"[ \t]+"#, with: "", options: .regularExpression)
-      .replacingOccurrences(of: removalMarker, with: "")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    let sourceIDs = resolvableSourceIDs(recovered, segments: segments)
-    return SummarySection(heading: section.heading, bodyMarkdown: body, sourceSegmentIDs: sourceIDs)
+    let heading = NoteCitationContract.repair(section.heading, valid: valid)
+    let body = NoteCitationContract.repair(section.bodyMarkdown, valid: valid)
+    let sourceIDs = resolvableSourceIDs(
+      section.sourceSegmentIDs + heading.sourceIDs + body.sourceIDs, segments: segments)
+    return SummarySection(heading: heading.text, bodyMarkdown: body.text, sourceSegmentIDs: sourceIDs)
   }
 
-  private static func citationTokenID(_ token: String, valid: Set<String>) -> String? {
-    let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
-    if valid.contains(trimmed) { return trimmed }
-    guard let regex = try? NSRegularExpression(pattern: #"^\[([^\]]+)\]\([^\n)]*\)$"#),
-      let match = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
-      let labelRange = Range(match.range(at: 1), in: trimmed)
-    else { return nil }
-    let label = String(trimmed[labelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-    return valid.contains(label) ? label : nil
+  /// Read-time repair of a single-line note field (action item text). Generation already
+  /// sweeps these; this covers items stored before it did. Display only: task promotion keeps
+  /// comparing the stored description.
+  static func presentableText(_ text: String, segments: [TranscriptSegment]) -> String {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    // Titles render on every list row: skip the regex passes when nothing can match. Without a
+    // bracket, a speaker label or a known ID the repair returns the text unchanged.
+    let lowered = text.lowercased()
+    let mayCarryDebris =
+      text.contains(where: { "[(［【".contains($0) }) || lowered.contains("spk") || lowered.contains("speaker")
+      || valid.contains(where: { text.contains($0) })
+    guard mayCarryDebris else { return text }
+    return NoteCitationContract.repair(text, valid: valid).text
+  }
+
+  /// A conversation title for display: like `presentableText`, but ordinary bracketed words
+  /// ("Project [Q3]") are kept; see `NoteCitationContract.repairTitle`.
+  static func presentableTitle(_ title: String, segments: [TranscriptSegment]) -> String {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    let lowered = title.lowercased()
+    let mayCarryDebris =
+      title.contains(where: { "[(［【".contains($0) }) || lowered.contains("spk") || lowered.contains("speaker")
+      || valid.contains(where: { title.contains($0) })
+    guard mayCarryDebris else { return title }
+    return NoteCitationContract.repairTitle(title, valid: valid)
   }
 
   /// Suggested "Try with Apps" rows: memories-capable apps that have not

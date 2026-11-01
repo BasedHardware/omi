@@ -7,7 +7,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// "Device Information" and "Hardware": what the device reports about itself. Each known value
-/// copies on tap; unknown values show "Unknown" and do nothing.
+/// copies on tap. The name and hardware rows are hidden while their value is unknown (a
+/// disconnected device reports none of them); firmware and device id still say "Unknown".
 ///
 /// For Ray-Ban Meta glasses the firmware row is replaced by microphone and camera readiness
 /// ([rayBanCameraStatus] resolves to 'granted', 'unavailable' or another permission state).
@@ -28,6 +29,9 @@ class DeviceInfoGroups extends StatelessWidget {
     return value;
   }
 
+  /// BtDevice reports a missing GATT value as the English word 'Unknown'.
+  static bool _known(String? value) => value != null && value.isNotEmpty && value != 'Unknown';
+
   Widget _copyRow(
     BuildContext context, {
     required FaIconData icon,
@@ -36,14 +40,13 @@ class DeviceInfoGroups extends StatelessWidget {
     bool truncate = false,
   }) {
     final unknown = context.l10n.unknown;
-    // BtDevice reports a missing GATT value as the English word 'Unknown'.
-    final known = value != null && value.isNotEmpty && value != 'Unknown';
+    final known = _known(value);
     return OmiSettingsRow(
       leading: FaIcon(icon),
       title: title,
-      value: known ? (truncate ? _truncate(value) : value) : unknown,
+      value: known ? (truncate ? _truncate(value!) : value) : unknown,
       showChevron: false,
-      onTap: known ? () => OmiClipboard.copy(context, value, what: title) : null,
+      onTap: known ? () => OmiClipboard.copy(context, value!, what: title) : null,
     );
   }
 
@@ -59,6 +62,14 @@ class DeviceInfoGroups extends StatelessWidget {
     final showSerialNumber =
         serialNumber != null && serialNumber.isNotEmpty && serialNumber != normalizedId && serialNumber != deviceId;
     final isRayBan = device?.type == DeviceType.raybanMeta;
+    final hardwareRows = [
+      if (_known(device?.hardwareRevision))
+        _copyRow(context, icon: FontAwesomeIcons.gears, title: l10n.hardwareRevision, value: device?.hardwareRevision),
+      if (_known(device?.modelNumber))
+        _copyRow(context, icon: FontAwesomeIcons.hashtag, title: l10n.modelNumber, value: device?.modelNumber),
+      if (_known(device?.manufacturerName))
+        _copyRow(context, icon: FontAwesomeIcons.industry, title: l10n.manufacturer, value: device?.manufacturerName),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -66,7 +77,8 @@ class DeviceInfoGroups extends StatelessWidget {
         OmiSettingsGroup(
           header: l10n.deviceInfoSection,
           children: [
-            _copyRow(context, icon: FontAwesomeIcons.microchip, title: l10n.deviceName, value: device?.name),
+            if (_known(device?.name))
+              _copyRow(context, icon: FontAwesomeIcons.microchip, title: l10n.deviceName, value: device?.name),
             if (isRayBan) ...[
               OmiSettingsRow(
                 leading: const FaIcon(FontAwesomeIcons.microphone),
@@ -94,8 +106,13 @@ class DeviceInfoGroups extends StatelessWidget {
               ),
             ] else
               _copyRow(context, icon: FontAwesomeIcons.code, title: l10n.firmware, value: device?.firmwareRevision),
-            _copyRow(context,
-                icon: FontAwesomeIcons.fingerprint, title: l10n.deviceId, value: deviceId, truncate: true),
+            _copyRow(
+              context,
+              icon: FontAwesomeIcons.fingerprint,
+              title: l10n.deviceId,
+              value: deviceId,
+              truncate: true,
+            ),
             if (showSerialNumber)
               _copyRow(
                 context,
@@ -106,17 +123,10 @@ class DeviceInfoGroups extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: OmiSpacing.xxl),
-        OmiSettingsGroup(
-          header: l10n.hardwareSection,
-          children: [
-            _copyRow(context,
-                icon: FontAwesomeIcons.gears, title: l10n.hardwareRevision, value: device?.hardwareRevision),
-            _copyRow(context, icon: FontAwesomeIcons.hashtag, title: l10n.modelNumber, value: device?.modelNumber),
-            _copyRow(context,
-                icon: FontAwesomeIcons.industry, title: l10n.manufacturer, value: device?.manufacturerName),
-          ],
-        ),
+        if (hardwareRows.isNotEmpty) ...[
+          const SizedBox(height: OmiSpacing.xxl),
+          OmiSettingsGroup(header: l10n.hardwareSection, children: hardwareRows),
+        ],
       ],
     );
   }

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import threading
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,12 +12,12 @@ from tests.unit.test_live_cost_router import controls, MemoryRedis
 from tests.unit.test_live_health_reason_reconciliation import ServingSocket, observed
 from tests.unit.test_live_routing_health import SpeechGate
 from tests.unit.test_stt_session_failover import FakeSocket, _receiver_with_dead_socket
+from utils.async_tasks import WebSocketTaskSupervisor
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt import live_failure, live_chain, live_session, streaming as st
 from utils.stt.soniox import SafeSonioxSocket
 from config.live_stt_registry import assigned
 from utils.stt.live_gate import GateState
-from utils.stt.live_cost_health import PREFIX
 
 
 class ProviderWebSocket:
@@ -294,7 +295,8 @@ async def test_connect_death_counts_once_and_reaches_new_gate_generation(monkeyp
         state = live_chain.health._cost_local.get(('modulate-velma-2', language), GateState())
         expected = int(language not in changed or in_trial)
         assert state.n == state.failures == expected
-    assert leg.leg_outcome.generations is None  # No supplementary session writer exists.
+    # Connect failures follow normal gate changes, but retain a reset epoch.
+    assert leg.leg_outcome.generations is not None
 
 
 class _ClientFrames:
@@ -333,6 +335,7 @@ def _receiver_for_close(monkeypatch, *, raw, frames, language='ko', close_code=1
             'codec': 'pcm',
             'sample_rate': 16000,
             'source': 'omi',
+            'owner_persistence_blocked': threading.Event(),
         },
     )()
     receiver.host.state.active = True
@@ -351,6 +354,10 @@ def _receiver_for_close(monkeypatch, *, raw, frames, language='ko', close_code=1
     receiver.host.audio_bytes_send = None
     receiver.host.client_device_context.platform = 'ios'
     receiver.vad_gate = None
+    supervisor = WebSocketTaskSupervisor(uid='synthetic-health-witness', label='listen')
+    receiver.host.task_supervisor = supervisor
+    receiver.host.spawn = supervisor.create_task
+    receiver.host.state.shutdown_event = supervisor.shutdown_event
     receiver.stt_socket = managed_leg(receiver, raw, family='soniox', gate=None)
     receiver.capture_timeline = None
     receiver._emit_realtime_demand = lambda *_args: None

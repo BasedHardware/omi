@@ -1,0 +1,35 @@
+# Staging image build (contract (i)), submitted by deploy.sh on dev-operator; runs as staging-builder.
+# Builds from a `git archive` of the integration SHA, never a working tree. deploy.sh uploads that
+# archive to _SOURCE and submits with --no-source (the agent can write objects in the staging bucket
+# but cannot read bucket metadata, which `builds submit <dir>` requires).
+substitutions:
+  _REPO: us-central1-docker.pkg.dev/based-hardware-dev/staging
+  _SHA: ''
+  _SOURCE: ''
+  _BUILD_WORKER: 'false'
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: 3600s
+steps:
+  - id: source
+    name: gcr.io/cloud-builders/gcloud
+    entrypoint: bash
+    args: [-c, 'gcloud storage cp "${_SOURCE}" /workspace/src.tgz && tar -xzf /workspace/src.tgz -C /workspace && rm /workspace/src.tgz']
+  - id: backend
+    name: gcr.io/cloud-builders/docker
+    args: [build, -f, backend/Dockerfile, -t, '${_REPO}/backend:${_SHA}', .]
+  - id: push-backend
+    name: gcr.io/cloud-builders/docker
+    args: [push, '${_REPO}/backend:${_SHA}']
+  - id: batch-worker
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [[ "${_BUILD_WORKER}" == true ]]; then
+          docker build -f backend/diarizer/Dockerfile.batch-pipeline -t "${_REPO}/batch-pipeline-worker:${_SHA}" . &&
+          docker push "${_REPO}/batch-pipeline-worker:${_SHA}"
+        fi
+    waitFor: [source]

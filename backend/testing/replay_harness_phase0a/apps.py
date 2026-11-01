@@ -199,6 +199,7 @@ else:
 
 # ---- import the real backend ----
 from main import app  # noqa: E402
+from utils.stt import language_gate  # noqa: E402
 from fastapi import Header, HTTPException, Request  # noqa: E402
 from fastapi.responses import JSONResponse, Response  # noqa: E402
 
@@ -303,6 +304,12 @@ else:
         words = [{"timestamp": [0.0, 1.0], "speaker": "SPEAKER_00", "text": _TRANSCRIPT_TOKEN}]
         return (words, "en") if return_language else words
 
+    def _local_self_detect(_probe: bytes, *, surface: str) -> None:
+        """FEASIBILITY-ONLY: no language provider; real routing keeps its fallback."""
+        if _egress_sink:
+            _egress_sink({"event": "language_provider_unavailable", "surface": surface})
+        return None
+
     def _local_process_conversation(
         uid: str,
         language: str | None = None,
@@ -358,6 +365,7 @@ else:
     sync_pipeline.vad_is_empty = _local_vad
     sync_pipeline.get_prerecorded_service = lambda _language="en": ("parakeet", "en", "parakeet")
     sync_pipeline.prerecorded = _local_prerecorded
+    language_gate.self_detect = _local_self_detect
     sync_pipeline.process_conversation = _local_process_conversation
 
     # ---- DECLARED FAULT CONTROL: terminal_guard_bypassed (boundary perturbation) ----
@@ -438,7 +446,7 @@ else:
         if _egress_sink:
             _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "write_level_terminal_guard"})
 
-        async def _noop_delete_blobs(_paths: Any) -> None:
+        async def _noop_delete_blobs(_paths: Any, **_custody: Any) -> None:
             """FEASIBILITY-ONLY mutant: keep staged audio so a redelivery re-downloads."""
             if _egress_sink:
                 _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "staged_audio_cleanup"})

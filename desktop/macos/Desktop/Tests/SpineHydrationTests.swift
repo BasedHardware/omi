@@ -126,7 +126,7 @@ final class SpineEmptyCopyTests: XCTestCase {
     let resting = SpineEmptyCopy.resolve(
       isPreparing: false, request: request(), kind: .memories, foot: .nothing)
     XCTAssertEqual(resting.headline, "Nothing captured in this window yet.")
-    XCTAssertEqual(resting.detail, "Memories appear here as Omi learns things worth keeping.")
+    XCTAssertEqual(resting.detail, "Memories appear here as Omi learns about you from your conversations and screen.")
   }
 
   func testTheFirstReadOffersNoExplanationBecauseThereIsNothingToExplainYet() {

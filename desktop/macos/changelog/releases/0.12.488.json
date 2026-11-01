@@ -1,0 +1,7 @@
+{
+  "version": "0.12.488",
+  "date": "2026-10-15",
+  "changes": [
+    "Fixed memories that refused to disappear: memories deleted everywhere else (or on emptied accounts) no longer linger on the desktop, stuck unsynced local memories are cleared after 30 days, and a delayed server delete now retries in the background instead of popping back"
+  ]
+}

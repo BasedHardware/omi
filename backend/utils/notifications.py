@@ -5,8 +5,10 @@ import math
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from config.action_item_reminder_policy import should_schedule_action_item_reminder
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from database.redis_db import (
     set_credit_limit_notification_sent,
@@ -255,6 +257,13 @@ def _send_to_user(
     display_body: Optional[str] = None,
 ) -> int:
     """Send a message to all user's devices using batch send. Returns count of successful sends."""
+    try:
+        if account_deletion_blocks_user_work(user_id):
+            logger.info('notification suppressed reason=account_deletion')
+            return 0
+    except Exception as error:
+        logger.warning('notification suppressed reason=deletion_authority_unavailable type=%s', type(error).__name__)
+        return 0
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
@@ -308,6 +317,13 @@ async def _send_to_user_async(
     display_body: Optional[str] = None,
 ) -> int:
     """Async boundary for the synchronous token store and Firebase Admin SDK."""
+    try:
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, user_id):
+            logger.info('notification suppressed reason=account_deletion')
+            return 0
+    except Exception as error:
+        logger.warning('notification suppressed reason=deletion_authority_unavailable type=%s', type(error).__name__)
+        return 0
     if tokens is None:
         tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
     if not tokens:
@@ -621,11 +637,23 @@ def send_new_app_review_notification(
     send_notification(app_owner_uid, title, body, data)
 
 
-def send_action_item_data_message(user_id: str, action_item_id: str, description: str, due_at: str):
+def send_action_item_data_message(
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    due_at: str,
+    *,
+    completed: bool = False,
+    status: Optional[str] = None,
+    deleted: bool = False,
+):
     """
     Sends a data-only FCM message for action item reminder scheduling.
     The app receives this in the background and schedules a local notification.
     """
+    if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
+        send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
+        return
     logger.info(f'send_action_item_data_message to user {user_id}')
     data = {
         'type': 'action_item_reminder',
@@ -804,18 +832,24 @@ def sync_action_item_reminder(
     description: str,
     completed: bool,
     due_at: Optional[Union[datetime, str]],
+    *,
+    status: Optional[str] = None,
+    deleted: bool = False,
 ):
     """Reconcile the client-scheduled reminder after an action item is created or updated (#5085).
 
     The mobile client schedules a local reminder from the action-item update/data message and
     cancels it on the 'action_item_delete' message. The reminder must be cancelled when the task is
-    completed or no longer has a due date, and (re)scheduled only for an open task that still has a
-    due date. Reusing send_action_item_deletion_message is intentional: the client treats it as
+    completed, explicitly non-active, deleted, or undated; only an active (or legacy status-absent)
+    task with a due date is (re)scheduled. Reusing send_action_item_deletion_message is intentional: the client treats it as
     "cancel the scheduled local notification by id", not as a task deletion.
     """
-    if completed or not due_at:
+    if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
         send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
         return
+    # The shared admission predicate requires a due date; retain that narrowing
+    # for the datetime/string transport below without duplicating its policy.
+    assert due_at is not None
     due_iso: str = due_at.isoformat() if isinstance(due_at, datetime) else due_at
     send_action_item_update_message(
         user_id=user_id, action_item_id=action_item_id, description=description or '', due_at=due_iso

@@ -27,7 +27,7 @@ from google.cloud import firestore
 from fastapi import HTTPException
 
 from database.memory_apply_store import tombstone_memory_items_firestore
-from database.memory_collections import MemoryCollections
+from database.memory_collections import MemoryCollections, RELEASED_MEMORY_CHANGE_HEAD
 from database.legal_holds import destructive_operation_gate
 from models.memory_apply import MemoryControlState, WriterMode
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
@@ -102,6 +102,7 @@ def _cleanup(db_client: Any, collections: MemoryCollections) -> None:
     for collection_path in reversed(collections.all_collection_paths()):
         for snapshot in db_client.collection(collection_path).stream():
             snapshot.reference.delete()
+    db_client.document(f"{collections.memory_state}/{RELEASED_MEMORY_CHANGE_HEAD}").delete()
     db_client.document(collections.user_root).delete()
     leftovers = {
         path: sorted(_collection_snapshot(db_client, path))

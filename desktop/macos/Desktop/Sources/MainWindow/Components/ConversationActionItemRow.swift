@@ -54,6 +54,8 @@ enum ActionItemRowActionVisibility {
 /// section groups its rows in one card with separators.
 struct ConversationActionItemRow: View {
   let item: ActionItem
+  /// The description as displayed (citation debris repaired); `item.description` stays the stored text.
+  let displayDescription: String
   let taskState: ActionItemTaskState
   /// "Source" when the item cites transcript segments, otherwise "Transcript".
   let transcriptTitle: String
@@ -81,7 +83,7 @@ struct ConversationActionItemRow: View {
         .foregroundColor(item.completed ? Ink.listeningGreen : Ink.secondary)
         .frame(width: 16)
 
-      Text(item.description)
+      Text(displayDescription)
         .scaledFont(size: OmiType.body)
         .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
         .strikethrough(item.completed, color: Ink.secondary)
@@ -106,7 +108,7 @@ struct ConversationActionItemRow: View {
     // One element for VoiceOver: the item, its task state, and both controls as named actions,
     // so nothing depends on the pointer having revealed them.
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(item.description)
+    .accessibilityLabel(displayDescription)
     .accessibilityValue(accessibilityStatus)
     .accessibilityAction(named: Text(taskState.actionTitle)) {
       if taskState.isActionable { onTaskAction() }

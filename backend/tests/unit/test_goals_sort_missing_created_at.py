@@ -71,7 +71,22 @@ class _Doc:
 
 def _set_docs(goals, docs):
     chain = goals.db.collection.return_value.document.return_value.collection.return_value
-    chain.where.return_value.limit.return_value.stream.return_value = docs
+    query = chain.where.return_value
+    query.stream.return_value = docs
+    query.limit.return_value.stream.return_value = docs
+
+
+class _DocIdOrderedQuery:
+    """Fake Firestore query that streams in document-id order and honours .limit(n)."""
+
+    def __init__(self, docs):
+        self._docs = list(docs)
+
+    def limit(self, count):
+        return _DocIdOrderedQuery(self._docs[:count])
+
+    def stream(self):
+        return iter(self._docs)
 
 
 def test_get_user_goals_handles_goal_missing_created_at(goals):
@@ -107,3 +122,47 @@ def test_get_user_goals_handles_non_datetime_created_at(goals):
     ]
     _set_docs(goals, docs)
     assert [g['id'] for g in goals.get_user_goals('uid1')] == ['g_str', 'g_dt']
+
+
+def test_get_user_goals_does_not_drop_active_goals_behind_ended_first_page(goals):
+    docs = [
+        _Doc('g1_achieved', {'id': 'g1_achieved', 'status': 'achieved', 'is_active': True, 'created_at': BASE.replace(day=1)}),
+        _Doc('g2_abandoned', {'id': 'g2_abandoned', 'status': 'abandoned', 'is_active': True, 'created_at': BASE.replace(day=2)}),
+        _Doc('g3_achieved', {'id': 'g3_achieved', 'status': 'achieved', 'is_active': True, 'created_at': BASE.replace(day=3)}),
+        _Doc('g4_active', {'id': 'g4_active', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=4)}),
+        _Doc('g5_active', {'id': 'g5_active', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=5)}),
+        _Doc('g6_active', {'id': 'g6_active', 'status': 'paused', 'is_active': True, 'created_at': BASE.replace(day=6)}),
+    ]
+    chain = goals.db.collection.return_value.document.return_value.collection.return_value
+    saved_where = chain.where.return_value
+    try:
+        chain.where.side_effect = lambda **_kwargs: _DocIdOrderedQuery(docs)
+        result = goals.get_user_goals('uid1', limit=3)
+    finally:
+        chain.where.side_effect = None
+        chain.where.return_value = saved_where
+
+    assert [g['id'] for g in result] == ['g4_active', 'g5_active', 'g6_active']
+
+
+def test_get_user_goals_returns_oldest_active_goals_regardless_of_doc_id_order(goals):
+    docs = [
+        _Doc('goal_a', {'id': 'goal_a', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=6)}),
+        _Doc('goal_b', {'id': 'goal_b', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=5)}),
+        _Doc('goal_c', {'id': 'goal_c', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=4)}),
+        _Doc('goal_d', {'id': 'goal_d', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=1)}),
+        _Doc('goal_e', {'id': 'goal_e', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=2)}),
+        _Doc('goal_f', {'id': 'goal_f', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=3)}),
+    ]
+    chain = goals.db.collection.return_value.document.return_value.collection.return_value
+    saved_where = chain.where.return_value
+    try:
+        chain.where.side_effect = lambda **_kwargs: _DocIdOrderedQuery(docs)
+        result = goals.get_user_goals('uid1', limit=3)
+    finally:
+        chain.where.side_effect = None
+        chain.where.return_value = saved_where
+
+    assert [g['id'] for g in result] == ['goal_d', 'goal_e', 'goal_f']
+    assert goals.get_user_goals('uid1', limit=0) == []
+

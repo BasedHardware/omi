@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -137,9 +139,21 @@ def test_set_generic_cache_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
     assert redis_db.get_generic_cache("apps:marketplace") == {"ok": True}
 
 
-def test_set_generic_cache_without_ttl_omits_ex(fake_redis: _FakeRedis) -> None:
-    redis_db.set_generic_cache("apps:no-ttl", {"ok": True})
-    assert fake_redis.set_calls[0]['ex'] is None
+def test_set_generic_cache_requires_ttl(fake_redis: _FakeRedis, caplog) -> None:
+    # Hard contract: the immortal no-TTL branch was removed. The def must
+    # declare ttl as a required parameter (no default), an omitted-ttl call
+    # must not write, and the failure must be loud (the decorator logs the
+    # TypeError it converts to None — never silent success). The runtime symbol
+    # is the decorator wrapper, so the source contract is asserted on the file.
+    module_file = inspect.getsourcefile(redis_db)
+    assert module_file is not None
+    module_src = open(module_file).read()
+    assert 'def set_generic_cache(path: str, data: object, ttl: int) -> None:' in module_src
+    assert "r.set(f'cache:{key}', payload)" not in module_src  # immortal branch gone
+    with caplog.at_level(logging.ERROR):
+        assert redis_db.set_generic_cache("apps:no-ttl", {"ok": True}) is None
+    assert any('missing 1 required positional argument' in rec.getMessage() for rec in caplog.records)
+    assert fake_redis.set_calls == []
     assert fake_redis.expire_calls == []
 
 

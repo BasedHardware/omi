@@ -8,12 +8,9 @@ const mocks = vi.hoisted(() => ({
   reducedMotion: false,
   hasMore: false,
   truncated: false,
-  beliefEnabled: null as boolean | null,
-  memoryView: 'useful_now' as 'useful_now' | 'history' | 'all',
   activeCategories: [] as string[],
   loadMore: vi.fn<() => Promise<void>>(),
   refresh: vi.fn<() => Promise<void>>(),
-  setMemoryView: vi.fn(),
 }));
 
 vi.mock('framer-motion', async () => {
@@ -57,9 +54,6 @@ vi.mock('@/hooks/useMemories', () => ({
     error: null,
     hasMore: mocks.hasMore,
     truncated: mocks.truncated,
-    beliefEnabled: mocks.beliefEnabled,
-    memoryView: mocks.memoryView,
-    setMemoryView: mocks.setMemoryView,
     loadMore: mocks.loadMore,
     refresh: mocks.refresh,
     addMemory: vi.fn(),
@@ -109,12 +103,9 @@ describe('MemoriesPage list layout', () => {
     mocks.reducedMotion = false;
     mocks.hasMore = false;
     mocks.truncated = false;
-    mocks.beliefEnabled = null;
-    mocks.memoryView = 'useful_now';
     mocks.activeCategories = [];
     mocks.loadMore.mockReset();
     mocks.refresh.mockReset();
-    mocks.setMemoryView.mockReset();
   });
 
   it('gives the desktop list column the remaining height without changing mobile flow', () => {
@@ -181,20 +172,7 @@ describe('MemoriesPage list layout', () => {
     expect(mocks.loadMore).not.toHaveBeenCalled();
   });
 
-  it('exposes useful-now, history, and all only after the server advertises beta support', () => {
-    mocks.beliefEnabled = true;
-    render(<MemoriesPage />);
-
-    expect(screen.getByRole('button', { name: 'Useful now' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'All' })).toHaveLength(2);
-
-    fireEvent.click(screen.getByRole('button', { name: 'History' }));
-    expect(mocks.setMemoryView).toHaveBeenCalledWith('history');
-  });
-
   it('reports a bounded partial read instead of claiming the end of history', () => {
-    mocks.beliefEnabled = true;
     mocks.truncated = true;
     render(<MemoriesPage />);
 

@@ -6,7 +6,7 @@ final class OCREmbeddingLosslessTests: XCTestCase {
   func testFiveMinuteCompactionEmbedsOnlyLongestOCRText() async throws {
     let now = Date(timeIntervalSince1970: 2_000)
     let spy = LosslessEmbeddingSpy()
-    let service = makeService(now: now, spy: spy) { texts, _ in
+    let service = makeService(now: now, spy: spy) { texts, _, _ in
       await spy.recordTexts(texts)
       return texts.map { _ in [Float](repeating: 0, count: EmbeddingService.embeddingDimension) }
     }
@@ -39,10 +39,10 @@ final class OCREmbeddingLosslessTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 2_000)
     let ownerSnapshot = try XCTUnwrap(RewindCaptureOwnerSnapshot.capture())
     let embedders: [OCREmbeddingService.BatchEmbedder] = [
-      { _, _ in
+      { _, _, _ in
         throw EmbeddingService.EmbeddingError.serverError(statusCode: 402, body: "synthetic gate")
       },
-      { _, _ in throw SyntheticEmbeddingFailure.failed },
+      { _, _, _ in throw SyntheticEmbeddingFailure.failed },
     ]
 
     for (index, embedder) in embedders.enumerated() {
@@ -69,8 +69,9 @@ final class OCREmbeddingLosslessTests: XCTestCase {
     embedder: @escaping OCREmbeddingService.BatchEmbedder
   ) -> OCREmbeddingService {
     OCREmbeddingService(
+      ownerAuthorityForTesting: EmbeddingTestAuthorization().source,
       batchEmbedderForTesting: embedder,
-      embeddingWriterForTesting: { id, _ in await spy.recordID(id) },
+      embeddingWriterForTesting: { id, _ in await spy.recordID(id) }, missingEmbeddingIDsForTesting: { $0 },
       losslessSyncEnabledForTesting: { true },
       nowForTesting: { now })
   }

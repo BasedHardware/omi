@@ -230,12 +230,12 @@ def _run(conversation, *, rows=None, lookup_error=None, trigger=None):
         # The relevance neighbor lookup shares the finished-after query; this harness
         # pins that duplicate-capture detection never runs inside the content gate.
         patch.object(pc, 'adjacent_conversation', MagicMock(return_value=None)),
+        # This standalone content-gate fixture has no occasion context. Its
+        # AutoMock databases cannot supply independent retention evidence.
+        patch.object(pc, 'occasion_retention', MagicMock(return_value=None)),
         patch.object(pc, 'record_fallback', fallback),
-        patch.object(pc, 'get_transcript_structure', MagicMock(return_value=Structured(title='Summarized'))),
-        patch.object(pc, 'get_reprocess_transcript_structure', MagicMock(return_value=Structured(title='Reprocessed'))),
-        patch.object(pc, 'extract_action_items', MagicMock(return_value=[])),
-        patch.object(pc, '_fetch_dedup_candidates', MagicMock(return_value=[])),
-        patch.object(pc, '_primary_user_name', MagicMock(return_value=None)),
+        patch.object(pc, 'get_conversation_notes', MagicMock(return_value=Structured(title='Summarized'))),
+        patch.object(pc, '_fetch_dedup_candidates_for_query', MagicMock(return_value=[])),
     ):
         structured, discarded = pc._get_structured(
             'uid-3244',
@@ -260,7 +260,7 @@ def test_reprocessing_still_never_discards():
     conversation = _pendant_conversation()
     structured, discarded, lookup, _, _ = _run(conversation, trigger=pc.ProcessingTrigger.USER_REPROCESS)
     assert discarded is False
-    assert structured.title == 'Reprocessed'
+    assert structured.title == 'Summarized'
     lookup.assert_not_called()
 
 

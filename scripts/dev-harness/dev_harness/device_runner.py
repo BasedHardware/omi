@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -54,6 +55,24 @@ ANDROID_TOGGLE_PERMISSIONS = (
 
 class DeviceRunnerError(RuntimeError):
     """Refusal/blocked device-runner operation (exit code 2 at the CLI)."""
+
+
+# Diagnosis marker emitted by mobile_session._default_device_runner when an
+# xcrun timeout coincides with a pending Xcode first launch. Completing that
+# launch needs admin rights, so device_doctor must classify it as
+# operator-action-needed (MOBILE_SESSIONS.md "Doctor"), never agent-remediable.
+XCODE_FIRST_LAUNCH_PENDING_MARKER = "Xcode first launch is pending"
+# Diagnosis marker for the opposite case: first launch already complete, so an
+# install-Xcode remedy would be wrong; the doctor keeps agent-remediable but
+# points at the timeout-specific retry/restart step instead.
+XCODE_FIRST_LAUNCH_COMPLETE_MARKER = "Xcode first launch is complete"
+# Marker for the case where the first-launch status probe ITSELF times out:
+# xcodebuild ran and hung, which is Xcode tooling-stack evidence, so the
+# doctor's remedy must be retry/restart — never a fresh Xcode install.
+XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER = "Xcode first-launch status probe timed out"
+# Diagnosis marker for an adb timeout: adb is present and running, so the
+# doctor's remedy must be the adb-server/USB retry step, not a reinstall.
+ADB_TIMEOUT_MARKER = "adb timed out"
 
 
 @dataclass
@@ -152,6 +171,11 @@ class IosTooling:
             code, out = self._runner(["xcrun", "devicectl", *args])
         except OSError as exc:
             raise DeviceRunnerError(f"xcrun/devicectl not available: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            # Injected runners own their timeouts; surface a hang as tooling
+            # failure instead of a traceback (the CLI default runner already
+            # classifies its own timeouts, this covers custom runners).
+            raise DeviceRunnerError(f"devicectl {' '.join(args)} timed out: {exc}") from exc
         if code != 0:
             raise DeviceRunnerError(f"devicectl {' '.join(args)} failed (exit {code}): {out.strip()[:400]}")
         return out
@@ -239,12 +263,25 @@ def device_doctor(
         try:
             devices = android.connected()
         except DeviceRunnerError as exc:
-            check(
-                "android.tooling",
-                "agent-remediable",
-                str(exc),
-                "install Android SDK platform-tools and ensure adb is on PATH",
-            )
+            detail = str(exc)
+            if ADB_TIMEOUT_MARKER in detail:
+                # adb is present and running; the hang is server/USB state, so
+                # reinstalling platform-tools would be the wrong remedy.
+                check(
+                    "android.tooling",
+                    "agent-remediable",
+                    detail,
+                    "retry, and if it persists restart the adb server "
+                    "(`adb kill-server && adb start-server`), then check the USB "
+                    "connection and device authorization",
+                )
+            else:
+                check(
+                    "android.tooling",
+                    "agent-remediable",
+                    detail,
+                    "install Android SDK platform-tools and ensure adb is on PATH",
+                )
         else:
             if devices:
                 for device in devices:
@@ -274,12 +311,41 @@ def device_doctor(
         try:
             devices = ios.connected()
         except DeviceRunnerError as exc:
-            check(
-                "ios.tooling",
-                "agent-remediable",
-                str(exc),
-                "install Xcode and ensure `xcrun devicectl list devices` works",
-            )
+            detail = str(exc)
+            if XCODE_FIRST_LAUNCH_PENDING_MARKER in detail:
+                # Completing a pending Xcode first launch requires admin
+                # rights (sudo runFirstLaunch + license accept). That is an
+                # operator action per MOBILE_SESSIONS.md ("Doctor"); only the
+                # unprivileged parts (retry, daemon restart) are agent work.
+                check(
+                    "ios.tooling",
+                    "operator-action-needed",
+                    detail,
+                    "complete the pending Xcode first launch with admin rights once: "
+                    "`sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept` "
+                    "(or open Xcode.app and finish the prompt), then rerun `mobile-session device doctor`",
+                )
+            elif XCODE_FIRST_LAUNCH_COMPLETE_MARKER in detail or (
+                XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER in detail
+            ):
+                # Xcode tooling ran (probe completed or the probe itself hung):
+                # an install-Xcode remedy would be irrelevant. Keep it agent
+                # work but point at the timeout-specific retry/restart step.
+                check(
+                    "ios.tooling",
+                    "agent-remediable",
+                    detail,
+                    "retry, and if it persists restart the Xcode tooling daemons "
+                    "(`killall -9 remoted` or reboot the host), then rerun "
+                    "`mobile-session device doctor`",
+                )
+            else:
+                check(
+                    "ios.tooling",
+                    "agent-remediable",
+                    detail,
+                    "install Xcode and ensure `xcrun devicectl list devices` works",
+                )
         else:
             if devices:
                 for device in devices:

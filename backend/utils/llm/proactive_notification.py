@@ -1,15 +1,17 @@
+from utils.generated_compute import current_generated_compute_allowed
 import hashlib
 import os
-import re
-from typing import Any, Mapping, Optional, cast
+from typing import Any, Mapping, Optional, Sequence, cast
 
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
 
+from config.episodes import episode_output_language_pinned
 from utils.byok import has_byok_keys
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
+from utils.llm.output_language import normalize_language
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, bind_explicit_cache, has_cacheable_prefix
 from utils.llm.temporal import current_date_in_tz
 import logging
@@ -17,13 +19,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 Record = Mapping[str, object]
-
-# Kill switch for the gate's explicit prompt cache. Default on: the gate is the
-# single largest paid-tier OpenAI line and the whole point of the split prompt
-# below is that its prefix becomes readable. Set to a falsey value to fall back
-# to an unmarked (uncached, plain-input-rate) request without a deploy.
-MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV = 'MENTOR_GATE_PROMPT_CACHE_ENABLED'
-
 
 # ---------------------------------------------------------------------------
 # Step 1: Relevance Gate — is this conversation worth evaluating?
@@ -204,26 +199,29 @@ APPROVE only if ALL of these are true:
 - NOT seeing this notification could lead to a missed opportunity or avoidable mistake"""
 
 
-# Accept only clean BCP-47-style language/locale tokens (e.g. ja, pt-BR, zh-TW). The language comes
-# from a user-controlled preference and is interpolated into the prompts, so reject anything else
-# (newlines, punctuation, extra text) to prevent prompt injection.
-_BCP47_LANGUAGE_RE = re.compile(r'[A-Za-z]{2,8}(-[A-Za-z0-9]{2,8})*')
-
-
-def _language_instruction(output_language: str, *, for_critic: bool = False) -> str:
+# The shared normalizer accepts only supported BCP-47 language tokens before they reach a prompt.
+def language_instruction(output_language: str, *, for_critic: bool = False) -> str:
     """Instruction telling the model to write (or, for the critic, reject if not written in) the
     user's language (#5214).
 
-    Returns "" for English, an unset language, or any value that is not a clean BCP-47 token, so the
-    model defaults to English and a user-controlled preference cannot inject prompt text. English
-    family codes (en, en-US, ...) intentionally produce no instruction.
+    A missing, sentinel or malformed value falls back to English. Only a clean
+    BCP-47 token enters the prompt, so a user-controlled preference cannot inject
+    prompt text. English-family codes receive the same explicit pin as other
+    languages.
     """
-    lang = (output_language or 'en').strip()
-    if not lang or lang.lower().startswith('en') or not _BCP47_LANGUAGE_RE.fullmatch(lang):
-        return ""
+    lang = normalize_language(output_language)
+    if not episode_output_language_pinned():
+        # Preserve the pre-pin notification wording when the shared rollback is off.
+        if not lang or lang.startswith('en'):
+            return ''
+        if for_critic:
+            return f"\n- The notification is written in a language other than the user's (expected code: {lang})"
+        return f"\n- Write the notification entirely in the user's language (language/locale code: {lang})"
+    if not lang:
+        lang = 'en'
     if for_critic:
-        return f"\n- The notification is written in a language other than the user's (expected code: {lang})"
-    return f"\n- Write the notification entirely in the user's language (language/locale code: {lang})"
+        return f'\n- Reject the notification unless it is written entirely in {lang} (expected code: {lang})'
+    return f'\n- Write all output in {lang}. Keep names and quoted words verbatim.'
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +322,7 @@ def _str_value(value: object, default: str = "") -> str:
     return default
 
 
-def _format_goals(goals: list[Record]) -> str:
+def format_goals(goals: Sequence[Record]) -> str:
     if not goals:
         return "No active goals set."
     lines: list[str] = []
@@ -338,7 +336,7 @@ def _format_goals(goals: list[Record]) -> str:
     return "\n".join(lines)
 
 
-def _format_current_conversation(messages: list[Record], user_name: str) -> str:
+def format_current_conversation(messages: Sequence[Record], user_name: str) -> str:
     if not messages:
         return "No conversation in progress."
     lines: list[str] = []
@@ -348,7 +346,7 @@ def _format_current_conversation(messages: list[Record], user_name: str) -> str:
     return "\n".join(lines)
 
 
-def _format_recent_notifications(notifications: list[Record]) -> str:
+def format_recent_notifications(notifications: Sequence[Record]) -> str:
     if not notifications:
         return "No recent notifications sent."
     lines: list[str] = []
@@ -362,13 +360,6 @@ def _format_recent_notifications(notifications: list[Record]) -> str:
 # ---------------------------------------------------------------------------
 # Step 1: Gate
 # ---------------------------------------------------------------------------
-
-
-def _env_flag_enabled(name: str, *, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
 def gate_cache_supported() -> bool:
@@ -391,7 +382,7 @@ def gate_cache_supported() -> bool:
 
 
 def gate_cache_enabled() -> bool:
-    return gate_cache_supported() and _env_flag_enabled(MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV, default=True)
+    return gate_cache_supported()
 
 
 def gate_cache_key(uid: str) -> str:
@@ -429,9 +420,9 @@ def evaluate_relevance(
     uid: Optional[str] = None,
 ) -> RelevanceResult:
     """Cheap first pass: is this conversation worth generating a notification for?"""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     resolved_date = current_date or current_date_in_tz(None)
 
     stable = GATE_PROMPT_STABLE.format(
@@ -481,9 +472,9 @@ def generate_notification(
     current_date: Optional[str] = None,
 ) -> NotificationDraft:
     """Generate the actual notification text, only called when gate passes."""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     guidance = FREQUENCY_GUIDANCE.get(frequency, FREQUENCY_GUIDANCE[3])
 
     prompt = GENERATE_PROMPT.format(
@@ -497,7 +488,7 @@ def generate_notification(
         recent_notifications=notifications_text,
         frequency_guidance=guidance,
         gate_reasoning=gate_reasoning,
-        language_instruction=_language_instruction(output_language),
+        language_instruction=language_instruction(output_language),
         current_date=current_date or current_date_in_tz(None),
     )
 
@@ -521,8 +512,8 @@ def validate_notification(
     current_date: Optional[str] = None,
 ) -> ValidationResult:
     """Final human-perspective check: would you actually want this on your phone?"""
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    goals_text = _format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    goals_text = format_goals(goals)
 
     prompt = CRITIC_PROMPT.format(
         user_name=user_name,
@@ -530,7 +521,7 @@ def validate_notification(
         draft_reasoning=draft_reasoning,
         current_conversation=current_conversation,
         goals_text=goals_text,
-        language_instruction=_language_instruction(output_language, for_critic=True),
+        language_instruction=language_instruction(output_language, for_critic=True),
         current_date=current_date or current_date_in_tz(None),
     )
 
@@ -623,9 +614,11 @@ def evaluate_proactive_notification(
     current_date: Optional[str] = None,
 ) -> ProactiveNotificationResult:
     """Legacy single-call evaluation. Kept for eval tests."""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    if not current_generated_compute_allowed('proactive_notification'):
+        return ProactiveNotificationResult(has_advice=False, context_summary='')
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     guidance = FREQUENCY_GUIDANCE.get(frequency, FREQUENCY_GUIDANCE[3])
 
     prompt = PROACTIVE_PROMPT_TEMPLATE.format(

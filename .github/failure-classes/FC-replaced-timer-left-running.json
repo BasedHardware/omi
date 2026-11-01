@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-replaced-timer-left-running",
+  "violated_contract": "Replacing a timeout timer must cancel the timer it replaces. Assigning over the variable leaves the old timer running, and that timer can still abort a transfer that is receiving data.",
+  "canonical_prevention": "Arm every replacement through one helper that cancels the previous timer, and elapse fake time past the replaced timer to prove it does not fire.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/sdcard_timeout_timer_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/sdcard_wal_sync.dart"
+  ],
+  "status": "open"
+}

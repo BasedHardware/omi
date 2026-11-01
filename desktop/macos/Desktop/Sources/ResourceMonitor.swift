@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import Sentry
 
 private func boundedDiagnosticTag(_ value: Any?) -> String {
   switch value {
@@ -34,7 +33,7 @@ struct MemoryPressureDecision: Equatable, Sendable {
 /// Owns one memory-pressure episode independently from the sampling timer.
 ///
 /// The old monitor used only a five-minute timestamp cooldown. A process that
-/// remained above 800 MB consequently opened the same Sentry issue every five
+/// remained above 800 MB consequently repeated the same alert every five
 /// minutes forever, while a small dip around the threshold could start another
 /// apparent episode. Hysteresis gives recovery one authoritative owner, and a
 /// slower sustained reminder preserves visibility for pressure that never
@@ -133,12 +132,12 @@ struct MemoryPressureEpisodeTracker: Sendable {
   }
 }
 
-/// Monitors system resources (memory, CPU, disk) and reports to Sentry
+/// Monitors system resources (memory, CPU, disk) and logs threshold breaches
 @MainActor
 class ResourceMonitor {
   static let shared = ResourceMonitor()
 
-  /// Check if this is a non-production build (avoids Sentry calls in test apps)
+  /// Check if this is a non-production build (avoids telemetry in test apps)
   private let isDevBuild: Bool = AppBuild.isNonProduction
 
   // MARK: - Configuration
@@ -229,19 +228,9 @@ class ResourceMonitor {
     )
   }
 
-  /// Manually report current resources to Sentry (call before known heavy operations)
+  /// Log current resources (call before known heavy operations and at termination).
   func reportResourcesNow(context: String) {
     let snapshot = getCurrentResources()
-
-    // Add as breadcrumb (skip in dev builds)
-    if !isDevBuild {
-      let breadcrumb = Breadcrumb(level: .info, category: "resources")
-      breadcrumb.message =
-        "[\(context)] Memory: \(snapshot.memoryUsageMB)MB, Footprint: \(snapshot.memoryFootprintMB)MB, CPU: \(String(format: "%.1f", snapshot.cpuUsage))%"
-      breadcrumb.data = snapshot.asDictionary()
-      SentrySDK.addBreadcrumb(breadcrumb)
-    }
-
     log("ResourceMonitor: [\(context)] \(snapshot.summary)")
   }
 
@@ -255,10 +244,6 @@ class ResourceMonitor {
     if memorySamples.count > maxSamples {
       memorySamples.removeFirst()
     }
-
-    // Update Sentry context with current resources
-    updateSentryContext(snapshot)
-    await updateRuntimeActivityContext()
 
     // Check for issues
     await checkMemoryThresholds(snapshot)
@@ -325,60 +310,7 @@ class ResourceMonitor {
       separator: ", ")
     log("ResourceMonitor: COMPONENTS: \(componentSummary)")
 
-    // Add to Sentry context for crash diagnostics
-    if !isDevBuild {
-      SentrySDK.configureScope { scope in
-        scope.setContext(value: components, key: "memory_components")
-      }
-
-      // Add breadcrumb when memory is elevated
-      if snapshot.memoryFootprintMB >= memoryWarningThreshold {
-        let breadcrumb = Breadcrumb(level: .warning, category: "memory_diagnostics")
-        breadcrumb.message = "Component diagnostics at \(snapshot.memoryFootprintMB)MB"
-        breadcrumb.data = components
-        SentrySDK.addBreadcrumb(breadcrumb)
-      }
-    }
     return components
-  }
-
-  private func updateSentryContext(_ snapshot: ResourceSnapshot) {
-    // Set resource context that will be attached to all future events (skip in dev builds)
-    guard !isDevBuild else { return }
-    SentrySDK.configureScope { scope in
-      scope.setContext(value: snapshot.asDictionary(), key: "resources")
-    }
-  }
-
-  /// Keep bounded owner/phase context fresh for SDK-generated events such as
-  /// app hangs. Full component counters are logged less often, but a five-minute
-  /// old writer phase is not useful when classifying a three-second hang.
-  private func updateRuntimeActivityContext() async {
-    guard !isDevBuild else { return }
-
-    let encoder = await VideoChunkEncoder.shared.getBufferStatus()
-    let plugin = ProactiveAssistantsPlugin.shared
-    let activity: [String: Any] = [
-      "video_encoder_phase": encoder.lifecyclePhase,
-      "video_encoder_queue": encoder.queueBucket,
-      "video_encoder_finalization_waiters": encoder.finalizationWaiterBucket,
-      "video_encoder_initialized": encoder.isInitialized,
-      "video_encoder_staleness_timer": encoder.hasStalenessTimer,
-      "rewind_monitoring": plugin.isMonitoring,
-      "rewind_processing_frame": plugin.isProcessingRewindFrame,
-    ]
-
-    SentrySDK.configureScope { scope in
-      scope.setTag(value: encoder.lifecyclePhase, key: "video_encoder_phase")
-      scope.setTag(value: encoder.queueBucket, key: "video_encoder_queue")
-      scope.setTag(
-        value: encoder.finalizationWaiterBucket,
-        key: "video_encoder_finalization_waiters")
-      scope.setTag(
-        value: plugin.isMonitoring ? "true" : "false",
-        key: "rewind_monitoring")
-      scope.setContext(value: activity, key: "runtime_activity")
-    }
   }
 
   private func checkMemoryThresholds(_ snapshot: ResourceSnapshot) async {
@@ -398,16 +330,10 @@ class ResourceMonitor {
         "ResourceMonitor: EXTREME memory \(snapshot.memoryFootprintMB)MB — auto-restarting to prevent system degradation"
       )
 
-      SentrySDK.capture(message: "App Auto-Restarting Due to Extreme Memory") { scope in
-        scope.setLevel(.fatal)
-        scope.setTag(value: "auto_restart", key: "resource_alert")
-        scope.setContext(value: snapshot.asDictionary(), key: "resources")
-      }
-
-      // Give Sentry 3 seconds to flush, then relaunch and terminate.
-      // Only terminate if the relaunch succeeds — otherwise the user would be
-      // left with no running app and would need a full computer restart.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+      // Relaunch and terminate. Only terminate if the relaunch succeeds —
+      // otherwise the user would be left with no running app and would need a
+      // full computer restart.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
         let task = Process()
         task.launchPath = "/usr/bin/open"
         task.arguments = ["-n", Bundle.main.bundleURL.path]
@@ -427,10 +353,7 @@ class ResourceMonitor {
     // Critical threshold
     if decision.level == .critical {
       if decision.shouldReportCritical || decision.shouldRemediate {
-        // Collect before capture. Previously this ran in an unstructured Task
-        // racing the Sentry event, so the event that needed component ownership
-        // most often carried the previous sample's context (or none).
-        let components = await logComponentDiagnostics(snapshot: snapshot)
+        _ = await logComponentDiagnostics(snapshot: snapshot)
 
         if decision.shouldRemediate {
           triggerMemoryRemediation()
@@ -440,34 +363,6 @@ class ResourceMonitor {
           log(
             "ResourceMonitor: CRITICAL - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryCriticalThreshold)MB threshold"
           )
-
-          // Send Sentry event (skip in dev builds)
-          if !isDevBuild {
-            let threshold = self.memoryCriticalThreshold
-            SentrySDK.capture(message: "Critical Memory Usage") { scope in
-              scope.setLevel(.error)
-              scope.setFingerprint(["resource-monitor", "memory-critical"])
-              scope.setTag(value: "memory_critical", key: "resource_alert")
-              scope.setTag(value: decision.reportPhase, key: "memory_episode_phase")
-              scope.setTag(
-                value: boundedDiagnosticTag(components["videoEncoder_lifecyclePhase"]),
-                key: "video_encoder_phase")
-              scope.setTag(
-                value: boundedDiagnosticTag(components["videoEncoder_queueBucket"]),
-                key: "video_encoder_queue")
-              scope.setTag(
-                value: boundedDiagnosticTag(components["rewind_isMonitoring"]),
-                key: "rewind_monitoring")
-              scope.setContext(value: snapshot.asDictionary(), key: "resources")
-              scope.setContext(value: components, key: "memory_components")
-              scope.setContext(
-                value: [
-                  "threshold_mb": threshold,
-                  "current_mb": snapshot.memoryFootprintMB,
-                  "peak_mb": snapshot.peakMemoryMB,
-                ], key: "memory_details")
-            }
-          }
         }
       }
     }
@@ -480,13 +375,6 @@ class ResourceMonitor {
           "ResourceMonitor: WARNING - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryWarningThreshold)MB threshold"
         )
 
-        // Add warning breadcrumb (skip in dev builds)
-        if !isDevBuild {
-          let breadcrumb = Breadcrumb(level: .warning, category: "resources")
-          breadcrumb.message = "High memory usage: \(snapshot.memoryFootprintMB)MB"
-          breadcrumb.data = snapshot.asDictionary()
-          SentrySDK.addBreadcrumb(breadcrumb)
-        }
       }
     }
   }
@@ -510,20 +398,6 @@ class ResourceMonitor {
         "ResourceMonitor: WARNING - Memory growing at \(String(format: "%.1f", growthRateMBPerMin))MB/min (potential leak)"
       )
 
-      // Add breadcrumb (skip in dev builds)
-      if !isDevBuild {
-        let breadcrumb = Breadcrumb(level: .warning, category: "resources")
-        breadcrumb.message =
-          "Potential memory leak detected: \(String(format: "%.1f", growthRateMBPerMin))MB/min growth rate"
-        breadcrumb.data = [
-          "growth_rate_mb_per_min": growthRateMBPerMin,
-          "samples_analyzed": recentSamples.count,
-          "time_span_minutes": timeDiffMinutes,
-          "start_memory_mb": first.memoryMB,
-          "end_memory_mb": last.memoryMB,
-        ]
-        SentrySDK.addBreadcrumb(breadcrumb)
-      }
     }
   }
 
@@ -550,8 +424,7 @@ class ResourceMonitor {
 
     Task {
       // Flush VideoChunkEncoder and await completion; ResourceMonitor records
-      // reset counters in component diagnostics so hang/memory Sentry events can
-      // be correlated.
+      // reset counters in component diagnostics afterward.
       do {
         _ = try await RewindStorage.shared.flushCurrentVideoChunk()
       } catch {
@@ -570,15 +443,6 @@ class ResourceMonitor {
       log("ResourceMonitor: Memory remediation completed — \(memoryBefore)MB -> \(memoryAfter)MB")
     }
 
-    if !isDevBuild {
-      let breadcrumb = Breadcrumb(level: .warning, category: "memory_remediation")
-      breadcrumb.message = "Memory remediation triggered at critical threshold"
-      breadcrumb.data = [
-        "memory_footprint_mb": memoryBefore,
-        "threshold_mb": memoryCriticalThreshold,
-      ]
-      SentrySDK.addBreadcrumb(breadcrumb)
-    }
   }
 
   // MARK: - Resource Getters (macOS specific)

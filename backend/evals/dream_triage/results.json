@@ -1,0 +1,398 @@
+{
+  "fixture_sha256": "7f02efb0da0e4a43bec3896fd79377eafdefe2e8e869ba1dbd5906e4f758c30a",
+  "project": "based-hardware-dev",
+  "lane": "omi:auto:dream-triage",
+  "started_at": "2026-10-10T16:10:14.094624+00:00",
+  "repeats": 5,
+  "arms": {
+    "before": {
+      "instructions_sha256": "b302e3cb0db863697a21e0177be516a8e8cc4cf9dab4c0f60ddc1da288df1616",
+      "instructions_bytes": 159,
+      "summary": {
+        "defect_hits": 62,
+        "defect_trials": 75,
+        "clean_false_positives": 3,
+        "clean_trials": 50,
+        "canary_hits": 4,
+        "canary_trials": 5,
+        "errors": 0,
+        "targets_met": false,
+        "tokens": 29669,
+        "latency_ms_total": 153345,
+        "by_class": {
+          "spelling": {
+            "hits": 14,
+            "trials": 15
+          },
+          "duplicates": {
+            "hits": 15,
+            "trials": 15
+          },
+          "entity": {
+            "hits": 8,
+            "trials": 15
+          },
+          "tasks": {
+            "hits": 11,
+            "trials": 15
+          },
+          "quality": {
+            "hits": 14,
+            "trials": 15
+          }
+        }
+      },
+      "cases": {
+        "canary": {
+          "trials": 5,
+          "hits": 4,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_brand": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_completed": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 1,
+          "errors": 0
+        },
+        "clean_english": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_entity": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_memories": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_pending": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 2,
+          "errors": 0
+        },
+        "clean_people": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_speakers": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_tasks": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_vietnamese": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "duplicate_memory": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "duplicate_people": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "duplicate_tasks": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "entity_fact": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "entity_profession": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "entity_project": {
+          "trials": 5,
+          "hits": 3,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "proper_noun": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "quality_empty": {
+          "trials": 5,
+          "hits": 4,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "quality_garbled": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "quality_speaker": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "task_delivered": {
+          "trials": 5,
+          "hits": 3,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "task_done": {
+          "trials": 5,
+          "hits": 3,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "task_obsolete": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "vietnamese_brand": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        }
+      }
+    },
+    "after": {
+      "instructions_sha256": "193601158cfbf8787035dd945c35a17525146a18c31b1e28542a5c70afaa7b8e",
+      "instructions_bytes": 958,
+      "summary": {
+        "defect_hits": 70,
+        "defect_trials": 75,
+        "clean_false_positives": 1,
+        "clean_trials": 50,
+        "canary_hits": 5,
+        "canary_trials": 5,
+        "errors": 0,
+        "targets_met": true,
+        "tokens": 50865,
+        "latency_ms_total": 144152,
+        "by_class": {
+          "spelling": {
+            "hits": 15,
+            "trials": 15
+          },
+          "duplicates": {
+            "hits": 15,
+            "trials": 15
+          },
+          "entity": {
+            "hits": 10,
+            "trials": 15
+          },
+          "tasks": {
+            "hits": 15,
+            "trials": 15
+          },
+          "quality": {
+            "hits": 15,
+            "trials": 15
+          }
+        }
+      },
+      "cases": {
+        "canary": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_brand": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_completed": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 1,
+          "errors": 0
+        },
+        "clean_english": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_entity": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_memories": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_pending": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_people": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_speakers": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_tasks": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "clean_vietnamese": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "duplicate_memory": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "duplicate_people": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "duplicate_tasks": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "entity_fact": {
+          "trials": 5,
+          "hits": 0,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "entity_profession": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "entity_project": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "proper_noun": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "quality_empty": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "quality_garbled": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "quality_speaker": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "task_delivered": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "task_done": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "task_obsolete": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        },
+        "vietnamese_brand": {
+          "trials": 5,
+          "hits": 5,
+          "false_positives": 0,
+          "errors": 0
+        }
+      }
+    }
+  },
+  "gateway_image": "gcr.io/based-hardware-dev/llm-gateway:15c8d64",
+  "gateway_namespace": "dev-omi-backend",
+  "gateway_deployment": "dev-omi-llm-gateway",
+  "route": {
+    "provider": "openai",
+    "model": "gpt-6-luna",
+    "reasoning_effort": "none",
+    "fallbacks": []
+  }
+}

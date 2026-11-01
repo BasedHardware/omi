@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-chat-turn-projected-outside-its-server-thread",
+  "violated_contract": "A chat turn may be shown in the open thread only when the server writes it to that thread. The pendant voice endpoint (/v2/voice-messages) names no app and no chat session, so the backend always saves the question and its answer to the main Omi chat. Appending them to whichever thread is open (a chat app's thread such as Mentor, or a past chat) shows rows that the thread's next read drops and that the thread's next typed turn does not have as context.",
+  "canonical_prevention": "Decide where a turn is shown from the same target its request is written to. A turn whose request cannot name the open thread is shown only when the open thread is that turn's server target: for pendant voice, the main chat (no chat session, not a fresh chat, and no app selected, where the chat drawer's 'no_selected' means the main chat). Otherwise the reply still plays but never becomes a row. Exercise each thread kind through the production MessageProvider.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/message_provider_voice_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/message_provider.dart",
+    "app/lib/providers/chat_history_state.dart"
+  ],
+  "status": "open"
+}

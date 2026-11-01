@@ -15,10 +15,10 @@ void main() {
 
   group('planDisplayName', () {
     test('the free plan is always the localized Free Plan', () {
-      expect(planDisplayName(PlanType.basic, catalog, l10n), l10n.basicPlan);
+      expect(planDisplayName(PlanType.basic, catalog, l10n), l10n.free);
     });
 
-    test('uses the backend title for the tier', () {
+    test('uses the canonical name even with a stale backend title', () {
       expect(planDisplayName(PlanType.unlimited, catalog, l10n), 'Neo');
       expect(planDisplayName(PlanType.operator, catalog, l10n), 'Operator');
       // The legacy `pro` id is canonicalized to Architect.
@@ -28,7 +28,10 @@ void main() {
     test('falls back to the known product name when the backend does not list the tier', () {
       expect(planDisplayName(PlanType.plus, const [], l10n), 'Plus');
       expect(planDisplayName(PlanType.operator, const [], l10n), 'Operator');
-      expect(planDisplayName(PlanType.unlimitedV2, const [], l10n), l10n.unlimitedPlan);
+      expect(planDisplayName(PlanType.unlimitedV2, const [], l10n), 'Omi Pro');
+      expect(planDisplayName(PlanType.unlimitedV2, [SubscriptionPlan(id: 'unlimited_v2', title: 'Unlimited')], l10n),
+          'Omi Pro');
+      expect(planDisplayName(PlanType.unlimited, const [], l10n), 'Neo');
     });
 
     test('an unknown future plan shows its id readably, never "Free Plan"', () {
@@ -38,7 +41,7 @@ void main() {
     });
 
     test('a blank backend title is ignored', () {
-      expect(planTitleForTier('plus', [SubscriptionPlan(id: 'plus', title: '  ')]), isNull);
+      expect(planTitleForTier('plus', [SubscriptionPlan(id: 'plus', title: '  ')]), 'Plus');
       expect(planDisplayName(PlanType.plus, [SubscriptionPlan(id: 'plus', title: '')], l10n), 'Plus');
     });
   });

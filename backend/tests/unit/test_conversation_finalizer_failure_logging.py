@@ -33,10 +33,14 @@ TRANSCRIPT_EXCERPT = "he said the quiet part out loud"
 @pytest.fixture
 def finalizer_that_fails_on_geolocation(monkeypatch):
     """Let the finalizer reach its try block, then fail inside it with a telltale message."""
+    monkeypatch.setenv("BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "false")
 
     async def fake_run_blocking(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:
             return {"id": "conversation-1"}
+        if function is finalizer.reserve_recording:
+            # Run the actual default-off gate so the dark path remains I/O-free.
+            return function(*args, **kwargs)
         if function is finalizer.get_cached_user_geolocation:
             raise LookupError(TRANSCRIPT_EXCERPT)
         raise AssertionError(f"unexpected blocking call: {function!r}")

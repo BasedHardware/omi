@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
@@ -104,4 +105,70 @@ void main() {
       expectLines(3);
     });
   }
+
+  testWidgets('a legacy title shows repaired at rest but edits from the stored title', (tester) async {
+    final conversation = ServerConversation(
+      id: 'title-citations',
+      createdAt: DateTime(2026, 9, 28, 12),
+      structured: Structured('Kickoff [s01234]', ''),
+      transcriptSegments: [
+        TranscriptSegment(
+            id: 's01234', text: 'Hi', speaker: null, isUser: false, personId: null, start: 0, end: 1, translations: []),
+      ],
+    );
+    final detail = _TitlePersistenceSpy()
+      ..selectedDate = conversationLocalDayKey(conversation.createdAt)
+      ..setCachedConversation(conversation)
+      ..titleController = TextEditingController(text: conversation.structured.title)
+      ..titleFocusNode = FocusNode();
+    final folders = FolderProvider(foldersFetcher: () async => []);
+    addTearDown(detail.dispose);
+    addTearDown(folders.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
+          ChangeNotifierProvider<FolderProvider>.value(value: folders),
+        ],
+        child: MaterialApp(
+          theme: buildOmiTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: ConversationDetailHeader(onOpenRecordings: (_) {})),
+        ),
+      ),
+    );
+
+    final atRest = tester.widget<Text>(find.byKey(const Key('conversation_title_at_rest')));
+    expect(atRest.data, 'Kickoff');
+    await tester.tap(find.byType(ConversationTitleField));
+    await tester.pump();
+    expect(detail.titleController!.text, 'Kickoff [s01234]');
+    detail.titleFocusNode!.unfocus();
+    await tester.pump();
+    expect(detail.savedTitles, isEmpty, reason: 'an untouched title is never saved, repaired or not');
+    expect(conversation.structured.title, 'Kickoff [s01234]');
+  });
+
+  testWidgets('a title that was only debris reads as untitled at rest, never as the debris', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildOmiTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ConversationTitleField(
+            style: const TextStyle(fontSize: 20),
+            controller: TextEditingController(text: '[s01234]'),
+            focusNode: FocusNode(),
+            hintText: 'Recording at noon',
+            displayText: (stored) => '',
+          ),
+        ),
+      ),
+    );
+    final atRest = tester.widget<Text>(find.byKey(const Key('conversation_title_at_rest')));
+    expect(atRest.data, 'Recording at noon');
+  });
 }

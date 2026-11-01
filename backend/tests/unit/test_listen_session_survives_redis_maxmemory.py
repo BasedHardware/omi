@@ -51,28 +51,23 @@ from routers.listen.conversations import LiveConversationController
 
 
 class OutOfMemoryError(Exception):
-    """Shape-matched to redis.exceptions.OutOfMemoryError by class name.
-
-    Defined locally (not imported) so the name-match logic in
-    ``_cache_set_fail_open`` — which cannot import the type from redis-py
-    typings — is exercised exactly as it runs in production.
-    """
+    """Local stand-in for supervisor tests that raise outside the Redis matcher."""
 
 
 class _MaxMemorySocket:
-    """Redis socket at maxmemory: every write command raises OOM."""
+    """Redis socket at maxmemory: every write command raises redis-py OOM."""
 
     def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     def expire(self, key: str, ttl: int) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     def get(self, key: str) -> Optional[bytes]:
         return None
 
     def delete(self, key: str) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
 
 class _RecordingSocket:
@@ -682,7 +677,7 @@ def test_meeting_context_reader_survives_raising_redis():
 
     class _RaisingGetSocket(_MaxMemorySocket):
         def get(self, key: str) -> Optional[bytes]:
-            raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+            raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     conversation = Conversation(
         id='conv-1',

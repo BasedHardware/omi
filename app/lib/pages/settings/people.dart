@@ -47,6 +47,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
     final unsure = provider.cleanUpCandidates.length;
     showOmiRowMenu(
       context,
+      title: l10n.selectOption,
       actions: [
         OmiMenuAction(
           icon: Icons.check_circle_outline,
@@ -111,8 +112,9 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
         title: Text(selecting ? l10n.selectedCount(selected.length) : l10n.people),
         actions: [
           if (selecting)
-            OmiButton.toolbar(
+            OmiButton.tertiary(
               key: const Key('people_select_all'),
+              size: OmiButtonSize.compact,
               label: allSelected ? l10n.deselectAll : l10n.selectAll,
               onPressed: () {
                 OmiHaptics.selection();
@@ -121,8 +123,9 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
             )
           else ...[
             if (provider.people.isNotEmpty)
-              OmiButton.toolbar(
+              OmiButton.tertiary(
                 key: const Key('people_select'),
+                size: OmiButtonSize.compact,
                 label: l10n.selectOption,
                 onPressed: () => _showSelectMenu(provider),
               ),
@@ -151,11 +154,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
                         ? null
                         // Not awaited: the button should not spin behind the confirmation.
                         : () {
-                            confirmAndDeletePeople(
-                              context,
-                              provider,
-                              selected,
-                            );
+                            confirmAndDeletePeople(context, provider, selected);
                           },
                   ),
                 ),
@@ -185,10 +184,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
             ),
         ],
         trailing: [
-          if (!selecting) ...[
-            const SizedBox(height: OmiSpacing.lg),
-            const VoiceProfileSettingsSection(),
-          ],
+          if (!selecting) ...[const SizedBox(height: OmiSpacing.lg), const VoiceProfileSettingsSection()],
         ],
       ),
     );

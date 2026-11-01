@@ -107,3 +107,17 @@ def test_duration_never_decides():
     for seconds in (None, 0.1, 5.0, 3600.0):
         assert deterministic_relevance(['Call mom before five.'], seconds)[0] is None
         assert deterministic_relevance(['Mm-hmm.'], seconds)[0] == 'discard'
+
+
+@pytest.mark.parametrize('texts,seconds,expected', CASES)
+def test_tiebreak_preserves_measured_protections(texts, seconds, expected):
+    from utils.conversations.relevance_rules import deterministic_tiebreak
+
+    assert deterministic_tiebreak(texts) == (expected or 'keep')
+
+
+@pytest.mark.parametrize('text', ['明天下午三点开会。', 'はい、明日。', '회의는 내일입니다.'])
+def test_cjk_only_tiebreak_never_discards_unknown_content(text):
+    from utils.conversations.relevance_rules import deterministic_tiebreak
+
+    assert deterministic_tiebreak([text]) == 'keep'

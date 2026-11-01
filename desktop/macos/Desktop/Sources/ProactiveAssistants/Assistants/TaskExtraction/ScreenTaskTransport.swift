@@ -43,10 +43,9 @@ extension APIClient {
     try await ScreenTaskFeature.enforceQuota()
     let response: ScreenTaskGeminiResponse = try await screenTaskRequest(
       path: "v1/proxy/gemini/models/\(ScreenTaskPrompt.model):generateContent", body: body,
-      authorization: authorization, timeout: 120,
+      authorization: authorization, timeout: 120, lane: .taskExtraction, workload: .extraction,
       headers: [
-        "X-Omi-Workload": "extraction", "X-Omi-Screen-Task-Gate": gateOutcome,
-        "X-Omi-Screen-Task-Audit": auditSample ? "true" : "false",
+        "X-Omi-Screen-Task-Gate": gateOutcome, "X-Omi-Screen-Task-Audit": auditSample ? "true" : "false",
         "X-Omi-Screen-Task-Client-Bypass": clientBypass ? "true" : "false",
       ])
     return try response.text()
@@ -54,7 +53,8 @@ extension APIClient {
 
   private func screenTaskRequest<T: Decodable>(
     path: String, body: Data, authorization: RuntimeOwnerAuthorizationSnapshot,
-    timeout: TimeInterval, headers: [String: String] = [:]
+    timeout: TimeInterval, lane: GeminiLane? = nil, workload: GeminiWorkloadClass? = nil,
+    headers: [String: String] = [:]
   ) async throws -> T {
     var policy = RequestAuthPolicy.ownerBound(authorization)
     policy.allowsAuthRetry = false  // A logical frame never replays auth/quota failures.
@@ -67,6 +67,12 @@ extension APIClient {
     request.timeoutInterval = timeout
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: true, includeBYOK: false, expectedAuthOwnerId: authorization.ownerID)
+    if let lane, let workload {
+      guard let authorizationHeader = request.value(forHTTPHeaderField: "Authorization") else {
+        throw APIError.invalidResponse
+      }
+      request.applyGeminiProxyHeaders(lane: lane, workload: workload, authorization: authorizationHeader)
+    }
     for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
     try validateExpectedOwner(policy)
     let (data, urlResponse) = try await session.data(for: request)

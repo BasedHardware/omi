@@ -1,0 +1,54 @@
+{
+  "source": "Synthetic TTS soak hardcases-e653-002; no user data",
+  "cases": [
+    {
+      "case_id": "vi-clean_speech-6s-pcm16",
+      "language": "vi",
+      "intake_language": "und",
+      "expected": "Chiếc xe đạp màu xanh ở bên cạnh khu vườn. Ngày mai chúng ta sẽ đi bộ qua cầu và đếm bảy chiếc thuyền màu vàng.",
+      "parakeet_observed": "Chipsad Mao Sang O Bin Kai Khuvun, Nai Mai Chung Tasedi Bokwakovadim by Chi Twin Mao Vang."
+    },
+    {
+      "case_id": "th-clean_speech-6s-pcm16",
+      "language": "th",
+      "intake_language": "und",
+      "expected": "จักรยานสีน้ำเงินอยู่ข้างสวน พรุ่งนี้เราจะเดินข้ามสะพานและนับเรือสีเหลืองเจ็ดลำ",
+      "parakeet_observed": "Tak rayansi nam nunyukansuan, prom nierouta dun coman, letna bruce luntiholam."
+    },
+    {
+      "case_id": "ar-clean_speech-6s-pcm16",
+      "language": "ar",
+      "intake_language": "und",
+      "expected": "الدراجة الزرقاء بجانب الحديقة. غدا سنمشي عبر الجسر ونعد سبعة قوارب صفراء.",
+      "parakeet_observed": "Addarraj iz Zarqa' ibijani bil hadika, ghadan sen mashija habl al jisri wanwahiddu sabahati kawarib safra."
+    },
+    {
+      "case_id": "hi-clean_speech-6s-pcm16",
+      "language": "hi",
+      "intake_language": "und",
+      "expected": "नीली साइकिल बगीचे के पास है। कल हम पुल पार करेंगे और सात पीली नावें गिनेंगे।",
+      "parakeet_observed": "Nili cycle bhagiche kepas he. Kalham pulpar karenge or sat pili naved ginenenge."
+    },
+    {
+      "case_id": "ja-clean_speech-6s-pcm16",
+      "language": "ja",
+      "intake_language": "und",
+      "expected": "青い自転車は庭の隣にあります。明日は橋を渡って、七隻の黄色い船を数えます。",
+      "parakeet_observed": "Awijiten Shaba Nivano Tonari ni Arimas. Asuba hashio wata de nanaseki no kiro huneo kazoemas."
+    },
+    {
+      "case_id": "ko-clean_speech-6s-pcm16",
+      "language": "ko",
+      "intake_language": "und",
+      "expected": "파란 자전거는 정원 옆에 있습니다. 내일 우리는 다리를 건너 노란 배 일곱 척을 셀 것입니다.",
+      "parakeet_observed": "Parant Tatan Gonin Tangwan Yakesmida, the Udinan Karid Kanda Nuranke Iguktabersil Goshmida."
+    },
+    {
+      "case_id": "zh-clean_speech-6s-pcm16",
+      "language": "zh",
+      "intake_language": "und",
+      "expected": "蓝色的自行车在花园旁边。明天我们会走过桥，数一数七艘黄色的小船。",
+      "parakeet_observed": "Lan Sir the Zing Chu Zai Hua Yuan Pan, Mingian Woman Kui Zoo, Shui Shu Chi So Huang Sur the Xiao Chuan."
+    }
+  ]
+}

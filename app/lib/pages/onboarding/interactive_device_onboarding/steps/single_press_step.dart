@@ -1,13 +1,15 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
+
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/schema/message.dart';
+import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
-import 'package:omi/providers/message_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -33,54 +35,23 @@ class SinglePressStep extends StatefulWidget {
 class _SinglePressStepState extends State<SinglePressStep> with TickerProviderStateMixin {
   late AnimationController _animController;
   late AnimationController _bounceController;
-  late MessageProvider _messageProvider;
-  bool _showContinue = false;
-  bool _wasListening = false;
 
-  late int _messageCountAtStart;
-  String? _userQuestion;
-  String? _aiResponse;
+  bool _wasListening = false;
+  bool _showPressAgain = false;
+  Timer? _pressAgainTimer;
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
     _bounceController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
-    _messageProvider = context.read<MessageProvider>();
-    _messageCountAtStart = _messageProvider.messages.length;
-    _messageProvider.addListener(_onMessagesChanged);
-  }
-
-  void _onMessagesChanged() {
-    if (!mounted || _aiResponse != null) return;
-
-    final onboardingProvider = context.read<DeviceOnboardingProvider>();
-    if (!onboardingProvider.questionSent) return;
-
-    if (_messageProvider.messages.length <= _messageCountAtStart) return;
-    final newMessages = _messageProvider.messages.sublist(_messageCountAtStart);
-
-    for (final msg in newMessages) {
-      if (msg.sender == MessageSender.human && _userQuestion == null) {
-        _userQuestion = msg.text;
-      }
-    }
-
-    for (final msg in newMessages) {
-      if (msg.sender == MessageSender.ai && msg.text.isNotEmpty && msg.id != '0000' && !msg.fromIntegration) {
-        _aiResponse = msg.text;
-        onboardingProvider.onVoiceResponseReceived(msg.text);
-        setState(() => _showContinue = true);
-        return;
-      }
-    }
   }
 
   @override
   void dispose() {
+    _pressAgainTimer?.cancel();
     _animController.dispose();
     _bounceController.dispose();
-    _messageProvider.removeListener(_onMessagesChanged);
     super.dispose();
   }
 
@@ -91,15 +62,38 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
         if (provider.voiceSessionActive && !_wasListening) {
           _wasListening = true;
           _bounceController.stop();
+          // Give the user a few seconds to speak before nudging the second press.
+          _pressAgainTimer?.cancel();
+          _pressAgainTimer = Timer(const Duration(seconds: 3), () {
+            if (mounted) setState(() => _showPressAgain = true);
+          });
         } else if (!provider.voiceSessionActive && _wasListening) {
           _wasListening = false;
+          _pressAgainTimer?.cancel();
+          _showPressAgain = false;
         }
 
+        final listening = provider.voiceSessionActive;
+        final waiting = !listening && !provider.questionSent && provider.aiResponse == null;
+        final String title;
+        final String subtitle;
+        if (provider.aiResponse != null || provider.questionSent) {
+          title = context.l10n.deviceOnboardingAskQuestionTitle;
+          subtitle = '';
+        } else if (listening) {
+          title = context.l10n.deviceOnboardingAskNowTitle;
+          subtitle = context.l10n.deviceOnboardingAskNowSubtitle;
+        } else {
+          title = context.l10n.deviceOnboardingPressButtonTitle;
+          subtitle = context.l10n.deviceOnboardingPressButtonSubtitle;
+        }
+        assert(waiting || listening || provider.questionSent || provider.aiResponse != null);
+
         return OnboardingStepScaffold(
-          title: context.l10n.deviceOnboardingAskQuestionTitle,
-          subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
+          title: title,
+          subtitle: subtitle,
           content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
-          bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
+          bottomAction: provider.aiResponse != null ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
       },
     );
@@ -107,28 +101,28 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
 
   Widget _buildContent(DeviceOnboardingProvider provider) {
     // Response received
-    if (_aiResponse != null) {
+    if (provider.aiResponse != null) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
+            if (provider.userQuestion != null && provider.userQuestion!.isNotEmpty) ...[
               Text(
-                _userQuestion!,
-                style: TextStyle(color: Colors.black.withValues(alpha: 0.5), fontSize: 14, height: 1.3),
+                provider.userQuestion!,
+                style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, height: 1.3),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 12),
-              Divider(height: 1, color: Colors.black.withValues(alpha: 0.08)),
+              Divider(height: 1, color: OmiColors.border),
               const SizedBox(height: 12),
             ],
             Text(
-              _stripMarkdown(_aiResponse!),
-              style: const TextStyle(color: Colors.black, fontSize: 16, height: 1.5),
+              _stripMarkdown(provider.aiResponse!),
+              style: TextStyle(color: OmiColors.textPrimary, fontSize: 16, height: 1.5),
               maxLines: 10,
               overflow: TextOverflow.ellipsis,
             ),
@@ -141,7 +135,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     if (provider.questionSent) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
         child: Column(
           children: [
             AnimatedBuilder(
@@ -150,7 +144,11 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                 return ShaderMask(
                   shaderCallback: (bounds) {
                     return LinearGradient(
-                      colors: [Colors.white.withValues(alpha: 0.3), Colors.white, Colors.white.withValues(alpha: 0.3)],
+                      colors: [
+                        OmiColors.textPrimary.withValues(alpha: 0.3),
+                        OmiColors.textPrimary,
+                        OmiColors.textPrimary.withValues(alpha: 0.3),
+                      ],
                       stops: [
                         (_animController.value - 0.3).clamp(0.0, 1.0),
                         _animController.value,
@@ -162,16 +160,16 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                   },
                   child: Text(
                     context.l10n.deviceOnboardingProcessingQuestion,
-                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: OmiColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w500),
                   ),
                 );
               },
             ),
-            if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
+            if (provider.userQuestion != null && provider.userQuestion!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                '"$_userQuestion"',
-                style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14, fontStyle: FontStyle.italic),
+                provider.userQuestion!,
+                style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontStyle: FontStyle.italic),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -179,6 +177,26 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
             ],
           ],
         ),
+      );
+    }
+
+    // Dropped empty or came back with no speech detected — invite a retry
+    // instead of leaving the user stuck on "Processing" forever.
+    if (provider.questionFailed) {
+      return Column(
+        children: [
+          _buildOmiWithBounce(),
+          const SizedBox(height: 24),
+          Text(
+            switch (provider.questionFailure) {
+              VoiceQuestionFailure.noSpeech => context.l10n.voiceQuestionNoSpeech,
+              VoiceQuestionFailure.quota => context.l10n.chatLimitReachedUpgrade,
+              _ => context.l10n.chatReplyFailed,
+            },
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+            textAlign: TextAlign.center,
+          ),
+        ],
       );
     }
 
@@ -221,12 +239,42 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
               );
             },
           ),
+          const SizedBox(height: 20),
+          AnimatedOpacity(
+            opacity: _showPressAgain ? 1 : 0,
+            duration: const Duration(milliseconds: 300),
+            child: _buildPressPill(context.l10n.deviceOnboardingPressAgainHint),
+          ),
         ],
       );
     }
 
-    // Waiting — Omi with bounce click animation
-    return _buildOmiWithBounce();
+    // Waiting — Omi with bounce click animation and an explicit "press once" cue
+    return Column(
+      children: [
+        _buildOmiWithBounce(),
+        const SizedBox(height: 24),
+        _buildPressPill('1×'),
+      ],
+    );
+  }
+
+  Widget _buildPressPill(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: OmiRadius.pillAll),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.touch_app_rounded, color: OmiColors.surface0, size: 20),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: OmiType.subhead.copyWith(color: OmiColors.surface0, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildOmiWithPulse() {
@@ -268,7 +316,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: opacity), width: 1.5),
+        border: Border.all(color: OmiColors.textPrimary.withValues(alpha: opacity), width: 1.5),
       ),
     );
   }

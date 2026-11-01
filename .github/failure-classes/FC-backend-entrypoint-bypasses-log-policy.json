@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-backend-entrypoint-bypasses-log-policy",
+  "violated_contract": "Production backend processes must use one logging policy so INFO on stderr is not ingested as ERROR and tracebacks remain one structured record. The October 15 logging investigation and PR21677 showed divergent backend/GPU setup, with backend-listen reporting 96.2 percent ERROR entries in the recorded daily baseline.",
+  "canonical_prevention": "Discover backend Docker CMD/ENTRYPOINT and Helm application overrides, verify the actual copied source, require module-level omi_logging.configure_logging, and reject print/basicConfig or direct Uvicorn reconfiguration. The ordered migration baseline only shrinks; after adoption every entrypoint is enforced.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/check_logging_entrypoints.py",
+    "backend/tests/unit/test_logging_entrypoint_guard.py"
+  ],
+  "evidence_prs": [
+    21677,
+    21681
+  ],
+  "scope_hints": [
+    "backend/",
+    "backend/charts/"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-onboarding-connect-page.png",
+      "platform": "mobile-ios",
+      "description": "Pocket onboarding pairing step is Home's Connect page plus Not Now; real Omi found nearby (iOS app on Apple Silicon Mac, real Bluetooth)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-connected-walkthrough.png",
+      "platform": "mobile-ios",
+      "description": "After tapping the Omi: connected in about 6 s and the device walkthrough opened",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

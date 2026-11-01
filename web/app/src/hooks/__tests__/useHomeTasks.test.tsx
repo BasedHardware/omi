@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/api', () => ({
@@ -6,7 +6,7 @@ vi.mock('@/lib/api', () => ({
   toggleActionItemCompleted: vi.fn().mockResolvedValue(undefined),
 }));
 
-const { getActionItems } = await import('@/lib/api');
+const { getActionItems, toggleActionItemCompleted } = await import('@/lib/api');
 const { useHomeTasks } = await import('@/hooks/useHomeTasks');
 
 function item(id: string, completed: boolean | null | undefined) {
@@ -15,6 +15,7 @@ function item(id: string, completed: boolean | null | undefined) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 describe('useHomeTasks', () => {
@@ -43,5 +44,38 @@ describe('useHomeTasks', () => {
       'legacy-null',
       'legacy-missing',
     ]);
+  });
+
+  it('puts a task back and says why when completing it fails', async () => {
+    vi.mocked(getActionItems).mockResolvedValue({
+      items: [item('first', false), item('second', false)],
+      hasMore: false,
+    } as never);
+    vi.mocked(toggleActionItemCompleted).mockRejectedValueOnce(
+      new Error('API error: 500 Internal Server Error'),
+    );
+
+    const { result } = renderHook(() => useHomeTasks());
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+    expect(result.current.completeError).toBeNull();
+
+    await act(async () => {
+      await result.current.complete('first');
+    });
+
+    // The row comes back, so the hub has to say the tick did not save rather
+    // than let the task look done and then reappear.
+    expect(toggleActionItemCompleted).toHaveBeenCalledWith('first', true);
+    expect(result.current.items.map((task) => task.id)).toEqual(['first', 'second']);
+    expect(result.current.completeError).toBe('API error: 500 Internal Server Error');
+
+    // A later tick that saves clears the message along with its row.
+    await act(async () => {
+      await result.current.complete('second');
+    });
+
+    expect(result.current.items.map((task) => task.id)).toEqual(['first']);
+    expect(result.current.completeError).toBeNull();
   });
 });

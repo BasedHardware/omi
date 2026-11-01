@@ -6,7 +6,7 @@ import Foundation
 /// | Notice | Lifetime |
 /// |---|---|
 /// | Confirmation of something the user just did ("Sent", "Copied") | `OmiFeedbackTiming.confirmation` |
-/// | Informational card the user did not ask for | `OmiFeedbackTiming.informational`, paused while hovered (Interject: reading time, 4–14 s, also paused) |
+/// | Informational card the user did not ask for | `OmiFeedbackTiming.informational`, paused while hovered |
 /// | Trial / billing card, error card, any card sent `isPersistent` | until acted on or dismissed |
 enum FloatingBarNoticeLifetime: Equatable {
   /// Auto-dismisses after `seconds` of *unhovered* display: the countdown pauses while the
@@ -32,23 +32,19 @@ enum FloatingBarNoticePolicy {
     title: String,
     message: String,
     kind: ProactiveNotificationKind,
-    isPersistent: Bool,
-    interjectEnabled: Bool
+    isPersistent: Bool
   ) -> FloatingBarNoticeLifetime {
     guard !persists(kind: kind, requestedPersistent: isPersistent) else { return .untilDismissed }
-    return .timed(
-      seconds: InterjectDisplayDuration.timeout(
-        title: title, message: message, kind: kind, enabled: interjectEnabled))
+    return .timed(seconds: OmiFeedbackTiming.informational)
   }
 
   static func lifetime(
-    for notification: FloatingBarNotification, interjectEnabled: Bool
+    for notification: FloatingBarNotification
   ) -> FloatingBarNoticeLifetime {
     lifetime(
       title: notification.title,
       message: notification.message,
       kind: notification.kind,
-      isPersistent: notification.isPersistent,
-      interjectEnabled: interjectEnabled)
+      isPersistent: notification.isPersistent)
   }
 }

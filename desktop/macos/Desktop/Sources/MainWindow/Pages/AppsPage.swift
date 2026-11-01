@@ -140,6 +140,7 @@ struct AppsPage: View {
       .padding(.top, QueryShellLayout.surfaceTopInset)
     }
     .background(Color.clear)
+    .marketplaceSetupFixture { selectedCatalogEntry = $0 }
     // Esc leaves "See more", then clears the search, before the shell sees it.
     .onEscapeKey(priority: .content) {
       if viewAllSection != nil {
@@ -186,7 +187,7 @@ struct AppsPage: View {
       ExtensionDetailSheet(
         entry: entry, appProvider: appProvider, onDismiss: { selectedCatalogEntry = nil }
       )
-      .frame(width: 460, height: entry.install.needsInput ? 420 : 340)
+      .frame(width: 460, height: ExtensionDetailSheet.preferredHeight(for: entry.install))
     }
     .dismissableSheet(item: $editingSkill) { skill in
       SkillEditorSheet(appProvider: appProvider, editingSkill: skill, onDismiss: { editingSkill = nil })
@@ -1015,7 +1016,7 @@ struct ImportConnector: Identifiable {
       id: "apple-notes",
       title: "Apple Notes",
       subtitle: "Private notes",
-      description: "Import notes and private written context.",
+      description: "Import your notes.",
       brand: .appleNotes,
       statusText: "Not connected",
       metricText: nil,
@@ -1834,7 +1835,7 @@ struct ImportConnectorSheet: View {
       }
 
       if connector.id == "local-files" {
-        Text("Local files are indexed on-device and used to build your memory graph.")
+        Text("Omi reads files on this Mac to learn about your work. Nothing is uploaded.")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
       }
@@ -1936,7 +1937,7 @@ struct ImportConnectorSheet: View {
     case "calendar":
       startRun(
         title: "Connecting to Calendar",
-        detail: "Reading past events and upcoming commitments for memory extraction."
+        detail: "Reading your past and upcoming events."
       ) { progress in
         await ConnectorImportOperations.importCalendar(progress: progress)
       }
@@ -2780,6 +2781,7 @@ struct AppDetailSheet: View {
   @State private var showAddReview = false
   @State private var userReview: OmiAppReview?
   @State private var appDetails: OmiAppDetails?
+  @State private var isDetailVisible = true
   @State private var isSettingUp = false
   @State private var isSetupCompleted = false
   @State private var setupCheckTask: Task<Void, Never>?
@@ -2900,7 +2902,7 @@ struct AppDetailSheet: View {
                     switch primaryAction {
                     case .open:
                       // Open the external integration in browser
-                      openExternalApp()
+                      await openExternalApp()
                     case .install:
                       if app.worksExternally {
                         await handleInstall()
@@ -2965,11 +2967,7 @@ struct AppDetailSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               ForEach(Array(integration.authSteps.enumerated()), id: \.offset) { index, step in
                 Button(action: {
-                  if let uid = AuthState.shared.userId,
-                    let url = AppSetupURL.withUID(step.url, uid: uid)
-                  {
-                    NSWorkspace.shared.open(url)
-                  }
+                  Task { await navigateToSetup(stepIndex: index) }
                 }) {
                   HStack(spacing: OmiSpacing.md) {
                     // Step number / checkmark
@@ -3106,12 +3104,14 @@ struct AppDetailSheet: View {
     .frame(width: 500, height: 600)
     .background(Ink.surface)
     .task {
+      isDetailVisible = true
       await loadReviews()
       await loadAppDetails()
       // Resume polling if user completed setup in browser and returned to this sheet
       await resumeSetupPollingIfNeeded()
     }
     .onDisappear {
+      isDetailVisible = false
       setupCheckTask?.cancel()
     }
     .dismissableSheet(isPresented: $showAddReview) {
@@ -3184,9 +3184,12 @@ struct AppDetailSheet: View {
     startSetupPolling(completionUrl: completionUrl, uid: uid)
   }
 
-  private func openExternalApp() {
+  /// A transport-backed app's home URL carries a one-use, short-lived launch
+  /// grant, so details are fetched immediately before each open, never reused.
+  private func openExternalApp() async {
+    guard let details = await freshLaunchDetails() else { return }
     guard let uid = AuthState.shared.userId else { return }
-    let integration = appDetails?.externalIntegration
+    let integration = details.externalIntegration
     // Prefer appHomeUrl, then first auth step URL
     if let homeUrl = integration?.appHomeUrl, !homeUrl.isEmpty, let url = URL(string: homeUrl) {
       NSWorkspace.shared.open(url)
@@ -3205,18 +3208,27 @@ struct AppDetailSheet: View {
     if isEnabled { return }
 
     // Step 3: Enable failed — app requires setup first. Open browser and wait.
-    // Ensure app details are loaded before navigating to setup.
-    if appDetails == nil { await loadAppDetails() }
     await navigateToSetup()
   }
 
-  private func navigateToSetup() async {
+  private func freshLaunchDetails() async -> OmiAppDetails? {
+    let details = await AppSetupURL.freshDetails(
+      currentUID: { isDetailVisible ? AuthState.shared.userId : nil },
+      load: { try await APIClient.shared.getAppDetails(appId: app.id) }
+    )
+    if let details { appDetails = details }
+    return details
+  }
+
+  private func navigateToSetup(stepIndex: Int = 0) async {
+    guard let details = await freshLaunchDetails() else { return }
     guard let uid = AuthState.shared.userId else { return }
-    let integration = appDetails?.externalIntegration
+    let integration = details.externalIntegration
 
     // Open auth step or setup instructions URL in browser
     if let authSteps = integration?.authSteps, !authSteps.isEmpty {
-      if let url = AppSetupURL.withUID(authSteps[0].url, uid: uid) {
+      guard authSteps.indices.contains(stepIndex) else { return }
+      if let url = AppSetupURL.withUID(authSteps[stepIndex].url, uid: uid) {
         NSWorkspace.shared.open(url)
       }
     } else if let instructionsPath = integration?.setupInstructionsFilePath, !instructionsPath.isEmpty {

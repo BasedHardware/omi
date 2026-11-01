@@ -7,6 +7,7 @@ invocations that differ in transcript, timezone, or clock must share the same
 marked prefix bytes.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -48,12 +49,12 @@ def _breakpoint(message):
 
 def _notes_call(monkeypatch, *, transcript: str, started_at: datetime, tz: str, language: str = 'en'):
     from utils.llm import conversation_processing as conv_proc
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     captured: dict = {}
 
     class Model:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             captured['messages'] = messages
             return SimpleNamespace(
                 content=(
@@ -66,9 +67,14 @@ def _notes_call(monkeypatch, *, transcript: str, started_at: datetime, tz: str, 
         captured['kwargs'] = kwargs
         return Model()
 
+    @asynccontextmanager
+    async def isolated_fake(model):
+        yield model
+
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+    monkeypatch.setattr(conv_proc, 'isolated_notes_model', isolated_fake)
     monkeypatch.setattr(conv_proc, 'get_llm', fake_get_llm)
     monkeypatch.setattr(conv_proc, 'shared_conversation_cache_supported', lambda: True)
-    monkeypatch.setattr(conv_proc, 'explicit_cache_switch_enabled', lambda: True)
     prefix = build_conversation_prompt_prefix(
         conversation_id=f'conv-{transcript[:8]}',
         transcript=transcript,
@@ -109,10 +115,9 @@ def test_conv_structure_static_prefix_is_byte_identical_across_per_call_inputs(m
 
     assert first_prefix == second_prefix
     assert len(first_prefix) >= EXPLICIT_CACHE_MINIMUM_CHARACTERS
-    assert _breakpoint(first['messages'][0]) == EXPLICIT_CACHE_BREAKPOINT
+    assert _breakpoint(first['messages'][0]) is None
     assert _breakpoint(first['messages'][1]) is None
-    assert first['kwargs']['cache_key'] == conv_proc.CONVERSATION_NOTES_CACHE_KEY
-    assert first['kwargs']['cache_key'] == second['kwargs']['cache_key']
+    assert first['kwargs'].get('cache_key') is second['kwargs'].get('cache_key') is None
 
     volatile = _message_text(first['messages'][1])
     assert 'Alice and Bob planned the launch' in volatile
@@ -121,17 +126,19 @@ def test_conv_structure_static_prefix_is_byte_identical_across_per_call_inputs(m
     assert '2026-09-19' not in first_prefix
     assert 'America/New_York' in volatile
     assert 'America/New_York' not in first_prefix
-    assert 'Respond entirely in fr' in _message_text(second['messages'][1])
-    assert 'Respond entirely in fr' not in second_prefix
+    assert '"response_language": "fr"' in _message_text(second['messages'][1])
+    assert '"response_language": "fr"' not in second_prefix
 
 
 def test_memories_static_prefix_is_byte_identical_across_transcripts():
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
     from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 
     captured: list = []
 
     class Model:
+        model_name = 'gpt-6-luna'
+
         def invoke(self, messages):
             captured.append(messages)
             return SimpleNamespace(content='{"items": []}')
@@ -180,12 +187,14 @@ def test_memories_static_prefix_is_byte_identical_across_transcripts():
 
 def test_conv_apps_prefix_path_static_instructions_are_byte_identical_across_conversations(monkeypatch):
     from utils.llm import conversation_processing as conv_proc
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     recorded: list[dict] = []
     long_task = 'summarize the meeting and list every decision. ' * 120
 
     class RecordingModel:
+        model_name = 'gpt-6-luna'
+
         def invoke(self, messages):
             recorded.append({'messages': messages, 'kwargs': current['kwargs']})
             return SimpleNamespace(content='summary')
@@ -198,7 +207,6 @@ def test_conv_apps_prefix_path_static_instructions_are_byte_identical_across_con
 
     monkeypatch.setattr(conv_proc, 'get_llm', _get_llm)
     monkeypatch.setattr(conv_proc, 'shared_conversation_cache_supported', lambda: True)
-    monkeypatch.setattr(conv_proc, 'explicit_cache_switch_enabled', lambda: True)
 
     app = App(
         id='app-notes',

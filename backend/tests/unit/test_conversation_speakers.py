@@ -165,16 +165,23 @@ def test_voiceprint_never_overrides_a_manual_label():
     assert resolution.speaker_ids['s0'] not in resolution.voice_identities
 
 
-def test_short_segments_inherit_capture_label_then_nearest_voice():
+def test_short_segments_require_same_scoped_capture_label():
     plan = [0, 1] * 6
     segments, embeddings, _ = _fragmented(plan)
-    segments.append({'id': 'short-a', 'speaker_id': 2, 'start': 8.1, 'end': 8.5, 'is_user': False})
+    segments.append(
+        {'id': 'short-a', 'speaker_id': 2, 'speaker_id_scope': 'sync:0', 'start': 8.1, 'end': 8.5, 'is_user': False}
+    )
     segments.append({'id': 'short-b', 'speaker_id': 500, 'start': 41.0, 'end': 41.3, 'is_user': False})
+    segments.append(
+        {'id': 'short-c', 'speaker_id': 2, 'speaker_id_scope': 'sync:other', 'start': 8.1, 'end': 8.5, 'is_user': False}
+    )
 
     resolution = resolve_conversation_speakers(segments, embeddings)
 
     assert resolution.speaker_ids['short-a'] == resolution.speaker_ids['s2']
-    assert resolution.speaker_ids['short-b'] == resolution.speaker_ids['s10']
+    assert 'short-b' not in resolution.speaker_ids
+    assert 'short-c' not in resolution.speaker_ids
+    assert {'short-b', 'short-c'} <= resolution.contradicted_segment_ids
 
 
 def test_onboarding_sentinel_segments_are_left_alone():
@@ -279,7 +286,10 @@ def test_resolve_conversation_speakers_null_start_or_end_timestamps():
     resolution = resolve_conversation_speakers(segments, embeddings)
     assert resolution is not None
     assert 's0' in resolution.speaker_ids
-    assert 's1' in resolution.speaker_ids
+    # Missing end provides no usable duration or scoped long-clip vote. Even
+    # a supplied vector cannot authorize temporal borrowing from s0 or s2.
+    assert 's1' not in resolution.speaker_ids
+    assert 's1' in resolution.contradicted_segment_ids
     assert 's2' in resolution.speaker_ids
 
 

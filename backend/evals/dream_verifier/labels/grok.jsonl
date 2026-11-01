@@ -1,0 +1,832 @@
+{"id":"6946fa597ef372fdf8b2aa7babf6","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"16fe6936b775b7a60634c8b58276","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"06c2642b9768d5948774ab02e98a","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"4d2fc404f54ebb7d81f185667e49","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"37f48f1192cd7013c52c659b07b9","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"f76e0aebd0337c60d974165a0c01","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"88413b1bee2a18c5aca8865d8e53","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"3029c6a9292f63e245762813f206","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"f28a6815b258015e91f6b518f49f","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic retirement.","reviewer":"grok"}
+{"id":"ea3835bd7c8538d35c50559f6f29","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"e21b1e1936f03a70bd1ef127c6be","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"cf2583d90978fff9d8ee0ff091a2","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"fed8fd583cb13d32909f9d1aef32","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"c7b71eb0c484c9144af5d057a93f","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"da0b539248a7d421783bbed4bad7","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"989345d1b4c5853538a892acbebe","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"16715ab8a91e2ebf7a437453faab","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"70f2b7625da7293e2ee67ac02d46","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"0e3ecf76d3ee9d59ad98aac8865b","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"bb950331ddc94a2e9126fcd4c4d8","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"0456655699efe5417af429763d28","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"ce37c9cec6eff1f4344a377d4cbb","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"7e769f5548326c6714718afa9ec3","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"1fcc8e6ef1ff97d13d8a7cd5b33c","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"151d3fa2d5ab46f48e81b517b984","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"dd4362215a84c4a117b04d299243","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"e44e9d60da6f102123b1d79bb093","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"275f31cb3c4e373a7f43c94fcc91","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"e2824d4b2042fa6a830ad75d072b","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"fd1d580c3a5c9271d5a243cccc59","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"d3545ee0fa06147a15d0d050baae","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"af13318eb0b228bcd3841a1aa4ba","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"accb34844cc56b9bc62e196362f2","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"7802396cebd88aa3e3a20a539af7","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"4424f6c0cc4c7900def25a778049","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"4e09dc162cc2f57dc90263bcbacb","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"d9f8f3206a0a1e3175126389b215","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"348bda75ea2ea22a1bfcc0219a11","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"d45092f2551c4c3d9aff01359ca2","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"da90d87303dd1041eef2f6dd31a8","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"f1e2cee4e835ea1688fdb4795272","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"159fac7f313d9717b7fe669d5c1e","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"9b047905c5ed4c0e06d13141f17b","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"f72f740a0bef7988199abf565001","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"89e5a9593c7bf0f841349dab4b5e","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic retirement.","reviewer":"grok"}
+{"id":"c7da74a1e9cfaaea487b70208a3c","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"43f8305b56429f45fd1634107e50","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"60baed3f0f47177ce0b2f7cd95fb","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"c6bbcfc01e5924f35bea748d4cdb","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"767f49dcda18529a99be249bbee2","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"7be69d75b0139f16d0487540c260","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"13add24cb060f8ddab7791946a76","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"3b1b4dd2fed786cdd05b85bcc1dc","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"fba6415dc09a1b43a3f873f83e7f","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"256ff0a958b25ebd12de1316b422","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"da4f746fab7902c1a5ef7aad6eb4","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"b6333290741a87d81f434bdc5480","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"b78d0e58590abef3e669d6f111ab","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"13efa62f5aea93bcac798d94ea3b","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"9f0e2e50b81503b1f61f9dd1264f","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"6ef743b89749f994502ffba2ad6f","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"85a6beb06b4eea5b5f26a65d1438","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"99d8574a816f32a9fcb7583b70e8","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"f006da423635ac859c6d8a9cb84f","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"1807ca9784691fcb6e9e2075a491","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"e1ef83f729613a1a86edc319bf1d","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"578b7a8eb2616e33e6e292549025","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"4d538b47bf7a203aa17e3af08e31","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"ec6dd4d88325bcd63894678f74f3","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"731c14a3ff96de7ff6e2155b3a93","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"0b328507818ca83efcbfe5dd305f","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"2042aff51997783323373fce2b30","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"37784560b7b7e9ad85b885b77cd9","label":"reject","reason":"One of the tasks was created or edited by the user and is protected from an automatic merge.","reviewer":"grok"}
+{"id":"ba6294fe70161d1c9ffe56ffa09f","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"32f7435e1233787dde3073517a16","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"6c09eac9e6d721a8e4010dafe5d4","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"4063de4ef2d2bac61a2c5054cc6c","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"43a5bae4e2e31be710f69235255d","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"797a75d88c399c760b075dda2c47","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"caeccda8b6f4c5ee4279f9c96c8d","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"3d02eadb65340b58a13032ce06ae","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"d592f592db8b18a599079a8f7485","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"77a26c0831e7d2f8e21b152d39b0","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"fbf1e6aa524da346a5cec03167e8","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"af63107d1e6a6f94cf634040d275","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"23e9d4e4729fb6d32df80f41febb","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"d996d6f9fbf5c9b3a0cb3660ab37","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"c5b06f042f9c24cf69eb251c7d24","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"b6524cf2327fb3e0668e82acd8f1","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"2a0d9410e81465ef04a6e8aa43ee","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"d6b59c226ccace182092bab0aa4e","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"46338f0b0cbc60d13e4caf7ec8eb","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"2b26470a16f75057e9ed7583253f","label":"reject","reason":"One of the tasks was created or edited by the user and is protected from an automatic merge.","reviewer":"grok"}
+{"id":"19a6d5d89911f888c678d0f252fd","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"ce36a24ac60bf4bfc9f5445fc407","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"d85e8268ff2efecaea9ecd573600","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"fa324021c38c3f50ea74bebb214f","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"f8c8e39dc40a2b98fff130598510","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"04ff97bd06752e463a1f4b7115fe","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"402fa8be7aed6c4e41795f3c5736","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"e410f05cb6734f5a4f3160534cb6","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"6f7e97d750b53cd24322ea798947","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"21f02a4fbd0a64f54ec7777c9015","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"5e16a1787c9e8708d71a08244598","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"2d09f4cf30581638239d02c09565","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"70fb3461a5eac214213957ba18ed","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"d1cde3e51400346c35f37cb70a2e","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"dcd733d6ed5b4857958d9527d4c7","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"cedc708a3ff70b96e5c3a6ddbb3f","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"7cb47d2234bb3286aadaa10c8044","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"d2beabce1c092956152b6c45c3c3","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"2791c1069d98f355e55f7309571c","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"c59aabfd351a6c0fa0b87310064e","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"722f509f4609172e5ba831c8120d","label":"reject","reason":"The captures do not overlap in time.","reviewer":"grok"}
+{"id":"15508eb3c43620560b58a673d2e7","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"ad784f46082f02c2f1543a191cfc","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"0904c73e0a355df162e3861d3aab","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"9224f10447c42d42c4279c955c6c","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"086e57d814683a71b08befd3b5bd","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"50382bb64264085a4bf4907e3e68","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"c101fb07fce0ad02e126889c7b8c","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"1b7135f640536a52ddfd8ae6d47d","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"6f9a7331abda4d42e463ee0892a4","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic retirement.","reviewer":"grok"}
+{"id":"70b43882a867102d401759b2be7e","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"58ed1b618fc3c2f5a8dbb075b1b0","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"4f40783aa25153272414c8470826","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"7a1d9c6cb7687f8d525cab380ee3","label":"reject","reason":"The cited replacement is not newer than the fact it would supersede.","reviewer":"grok"}
+{"id":"da8ae0e6d9ea066efcd633840451","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"fb1a756376dfb1a3c8db355b93d1","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"03af23568540a6c32b348a7826a5","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"df060ec17f26b6db91afdefae72a","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"d9cc36a0e424369d7394396359fb","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"961bcaeaaba5aa5750f5f4348ef4","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"7a06ad9236af7f883f1c51b0b8e5","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"d93b4ac24281b5fcde70f021c09a","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"1ade6d66634fa64d69f7fc04a929","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"4c30c574642c32c4fd5563edc36d","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"8d1b005ad22172f5c8162af6ff18","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"0521c0395f096bb22620157e3c31","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"57ce45a5bc26bf0430567f8cee5b","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"ea184ce2dd77920e95d0f79a4d03","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"1bbfe58a9a9232a4fcc87a099a87","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"432a50bd504e1f68ce802c78754a","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"b37201b076fc8f625f846097da70","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"8dd82e86980d5e2867bda79f7096","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"18195cb3007bab8fb0cc4587fd0d","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"43b46da884f091ca6ff9bfe3a14a","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"0e7212ffb30042cdbcb0c1b8a28f","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"263b4dd9e867ec27be5560aaf698","label":"reject","reason":"One of the tasks was created or edited by the user and is protected from an automatic merge.","reviewer":"grok"}
+{"id":"aef5abac66ff636a93bed717d22a","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"903b5253870b9957fbf50fecb980","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"40d4d6c5acdd869529a4ad30ada8","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"4b891426249914af0eb8d586ea0f","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"ee526d6d746907dd4bfcc7e74b94","label":"reject","reason":"The cited replacement is not newer than the fact it would supersede.","reviewer":"grok"}
+{"id":"3ee7cca842ba601f9a78cd8507ff","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"00b3705ab7fe3a9ea16833553d9e","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"ad703326a916507e0776589050eb","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"a1c6629094b71e5ea5058414d4a5","label":"reject","reason":"The captures do not contain the same speech.","reviewer":"grok"}
+{"id":"1ab1e9ce5e23ad2f897186030646","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"b025efb33d88d7866b4f6732a5ec","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"6883bf853acf8e3a3da7dca18850","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"e54a7f01fa89bcf961dbe6c3158a","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"a4d289438267b17c7f8bfca944c4","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"7c5a8a534faa4789aedd1cc39964","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"868257379dff3843409cb7b20a95","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"73011d07e092e8e6f24b56b6b79a","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"162d64df3dbfb7ec8cac7a0725ef","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"7e1fb6e35e2c7e8f673cbaf796e2","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"4ed36ee4b6172e92e111625c3d80","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"e87d29cef72376004b82e2eaca8d","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"63b9ec8f61fdb65245d6f6118e82","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"4a05af7924c74c167f74f8183725","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"0b6eab27b0aeb198fccc7b34dca9","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"b25e0b4195f478724326045e99b6","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"fa24fa2c746446c2dd85a9fa1fa1","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"87d4011d05dbe5f2471d34c7ba6d","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"890009e18db906053d6f16db186d","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"f1c2b7f305e1465f97e38f9ceb80","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"edb19836069c26fd3375419246d6","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"7aa19329ead618f2ad94eb7be404","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"ec6695208b82648588ccccbf0944","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"dbe2ad79b49bb67a561a77fe60cc","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"0406ddd5aebd0af686951c58fe5c","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"efa88bc7116249ac810900037ba3","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"5f846c6c9c7f977bae5fc0230dfc","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"13a67e16cb0cdd06436923b9cd76","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"1396cd63c1e75065dc93cffd66ee","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"a30149c7c9aab2e480243378bc01","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"787915471d41b756d82b6e643eeb","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"7996fa083e1697f081a743d988ef","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"59bf8c75bbf236ecd6dd4d9f77f3","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"0e4601ba68b841022c9fc3d49fb2","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"c2ae6e7af63d053f6f3aa506c870","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"5c6c335ec43e9978280925491741","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"84b57be20e493a9769aec2e0e0e3","label":"reject","reason":"One of the tasks was created or edited by the user and is protected from an automatic merge.","reviewer":"grok"}
+{"id":"8135d0ed0de8a641e9f41a2d975f","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"1a8c0a72a545ea835ca65da0e1fa","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"b5969f7c6aa3a1af78a4f8904747","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"6b4506017710dfd79b4f873b64d8","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"13c853a85742cec5951eb545afa2","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"c8c82f339d2ee3d261297399d1f9","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"a7a30b13ab3b09bfe0a60b882ab7","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"700ccbff23b4b339233fd012bbc6","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic completion.","reviewer":"grok"}
+{"id":"7d912a11cb70e9890d769fa249b0","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"f5880791e8f94d407bd58c9a39f2","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"9fb31e0d6bb6f9eb8b64b90679a4","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"3879248066a6ee0517ec58a34e01","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"2b19ee0f40206218308e93b92d81","label":"reject","reason":"The captures do not contain the same speech.","reviewer":"grok"}
+{"id":"bcfd7abc2fbad544ea4e1e44726e","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"e845ebc6917d9962199ae7754b76","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"d74dd6adb2416c2c60a48dd9fcd9","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"cd39761c8d112ad46ecd4b207e9b","label":"reject","reason":"The owner rejects this name and says not to use it.","reviewer":"grok"}
+{"id":"7b10eee6640ae8c04090fb0a246a","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"df145cb7fdd5e41997e53eaf1176","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"f8b2f1c7d7de8c8716598efd2c45","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"5c6c5ed39d92543f38ddb997cbb0","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"30ea7b7c2027141af345ef7818f1","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"5e38d6faacfc44fae8cf63569037","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"4a1f097ad18b9cbbd1aa6f29e836","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"edf53e78451f03ded6587234e851","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"b7d7812af9eac252d1654113ae6f","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"4b3af71843fb0850e93aeecbedd0","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"5148561c1816041e3631f2a745ca","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"3ed2685bf01a6a00ecf9ccda2ba5","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"444afdea91c2c38dbdaa64dc7eaf","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"0f3b9de949d673e8a59f3b5410d5","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"a06a6e4aa64bf7f8041b55dcaaea","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"5b53b2042caf2f0ac8a94a84560d","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"c6a7a0a7525eb86be2faa94ebdff","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"fc0f1b27c2de9abce8dfe68a5bab","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"4d5900b10fa1f287f4c9a8e39854","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"2cc8026e7b1a2ce2ad2f88cccfc6","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"01a45acd6543ab64366a977321f4","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"3910dbfcc83d98837b75b1dcf8c7","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"a960b3e724b60907c3105092bd8b","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"53e7bbc78c8595391649d9001752","label":"reject","reason":"The cited replacement is not newer than the fact it would supersede.","reviewer":"grok"}
+{"id":"392c1c12e206e2c02801113df201","label":"reject","reason":"The owner rejects this name and says not to use it.","reviewer":"grok"}
+{"id":"6741274437a60f3985242921840a","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"cf626b47294fcc3a9c3337753b3e","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"2e92154b943c4122a6cef03d7475","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"41578edbdd68490f5384607ce060","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"30a243dac7579ea65f6f15f034c9","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"7110272ea7436508d2849349faa4","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"d92afca1fb6c9c613322ff6c09f5","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"e4f4ae1474bb3765b4fd20cb1f2a","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"983d05d618268347c461627942b5","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"18f8b65e3c28ca268608886d257b","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"88e00ec10961e9993444bff8cdaa","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"c3283d6508a38b767cc10025c4a6","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"4eb201c766590825b4cfe15a6925","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"74143de6d8b2ca96c701030c3a23","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"700f4d10057f323ac6873448ceb0","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"33da61263a728a538604416db4d6","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"6aa2a297498e6b1c5928c8303063","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"40a0ad36897f3ed00d75c8ff99e1","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"d7553b8a77a7594a18b1b3799a2f","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"0e76c49d68225d2dd63b039578f1","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic retirement.","reviewer":"grok"}
+{"id":"a521328554ea52c234b17c011509","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"d4b4ef70bc2ed30b396726eed918","label":"reject","reason":"The captures do not overlap in time.","reviewer":"grok"}
+{"id":"c7a6527bc8f40d6af43a601b40e7","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"600ebab29d25270f185b983987a9","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"0183eaab21eee025c353306a85f8","label":"reject","reason":"The captures do not overlap in time.","reviewer":"grok"}
+{"id":"38197faa21bb496e3c4518547f11","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"bfb2ee317e16aa43d2b7eb9c1b09","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"0f1d1f268307ed4cf28ddc54cd14","label":"reject","reason":"The owner rejects this name and says not to use it.","reviewer":"grok"}
+{"id":"ed2d26a7bcd40d3e681455d5eaab","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"f52e94362ee3d65b93953ae3aefb","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"20492b50998a59e2f1bc3fe43fa6","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"c7108a38272eb6d3f75162f4cc7a","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"36d80ff434d94b562707f8c41839","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"5dddfa5b83e9b8f8dbf0d65c706b","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"cef155167b0e92f1c36dd77a0545","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"8e30b25c1eac73d93f1f445eac05","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"5f58956d9e99220fa045403efbc5","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"6b46f137dc9b72679ddb768a6a00","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"691e24af354642b870e908ddba86","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"9762bdfffaaa4c0f421f21e45175","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"76620550762cb56149bea3e46b53","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"a0b5e9a5259fe01c577350b0b484","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"e2bcea005fd83055cdac1d3fcf9e","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"c5ed2f42034e5e425138261a9673","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"1c23e348b4229fc877d5a6815eb0","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"027407582ccdbd9b8fa7cfa53c11","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"e7ee8dd016737c60e7d00afe2ae6","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"5ee23a12e2fc3b8e2db0be6eab86","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"91a4000d2b0a6b12fd9c35c44af6","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"a850bba29dcac0bdcc1760bd0ec9","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"43f4b989431673eff63e60135f56","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"9f18c01bbf1a5d2d8e5f354171bf","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"9122cbb8373bfdb18506f42e7458","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"df7bedcd540aa8ac17c658cae2ce","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"82604406da7a3c60278d04318b34","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"20d5274bd6e068bf0f446aa601be","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"e1b44946bb3400d351acc3382c43","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"7835a80cdbb769dcdc0e8441d0f0","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"2a214a0ebf041ec3e23aec2efac1","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"023028998c2eedc4b96915f9f3da","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"3e70c41bb7838ce50223995a199d","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"0ffa1c1a608891f96bdc02afac3d","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"b668abdbe834e89d8fb3fff100ba","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"8271249dcf4310cb7d3becf54d5f","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"dfe1d1f6ebcca243738c298202f0","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"980ca3e25a14e625e4e0672c8ea6","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"d37f07688bc04b96a6c484138ea2","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"c4e3c49163aeb9784772629f8d13","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"aa7934877bcd4e8d33a8df92d320","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"f3c124c54c1eb6b643f70cccd6f9","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"d2867571fc5ce328bf1102aa10b7","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"e1c9fc954559784ca4afadd21623","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"23156eec6ee9bb95a7794415f519","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"9d6ebd4715f36a9c1d1e343b6898","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"da42834d83851457fb5ced566cf9","label":"reject","reason":"One of the tasks was created or edited by the user and is protected from an automatic merge.","reviewer":"grok"}
+{"id":"de1aeb896916a025f5f8b3bdd8b3","label":"reject","reason":"The owner rejects this name and says not to use it.","reviewer":"grok"}
+{"id":"05662766f954d95688eccd3b584c","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"d8dfad4cb677df6540447811cb90","label":"reject","reason":"The cited replacement is not newer than the fact it would supersede.","reviewer":"grok"}
+{"id":"1a1b5637d940fd6f30fa9de8d44a","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"7ee39b7c585c10a5e618b5dd8be2","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"d170c720f397338a14d89f686545","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"0c9f86a897aa81e13068f788c4ad","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"9bbe43f5ec877525aa1f421c63dc","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"9412ead3fabcf70a2b4b169d650f","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"2d75c4a4def1a4a4a84d45d27124","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"f8e3e4653ea6d962f7512e41853b","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"58556e0a71b6e4095ec2ba69bc29","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"3515db4557ab0e2924954a4b8483","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"ffcaae9edcbe8043f395cf05b20e","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"104b8968b6097e24a746085c8da6","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"4191290d746dd091f55022131dc0","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"d7e81065fecdde1e16b277500358","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"1dc6b7623ffbbcaf7a6d4a632f89","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"0f4c277721cc469c0dee7500438f","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"2997bfb5c789116d9effee30cad7","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"e858c27309ad586a35c4bd041218","label":"reject","reason":"The proposed term is not an attested project name in the cited speech.","reviewer":"grok"}
+{"id":"667729d199152e501c8527267706","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"d94af519b73212a2bd1ef24a9651","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"8f4cb1af37d5cf16fcd04bef02ca","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"6d880379422af23aa91f656ed5de","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic retirement.","reviewer":"grok"}
+{"id":"77247a255372f07ab906759156f6","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"2d5c65f541af94677eb0a2d2aea2","label":"reject","reason":"The captures do not overlap in time.","reviewer":"grok"}
+{"id":"29e12598ffa41f697e9d317e9b18","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"b161a19c3650e5a0256c9ebce537","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"b42d56a6ed1a4e2a82784c0b00f7","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"6e78abdf1fd3d0912efa70de96cb","label":"reject","reason":"One of the tasks was created or edited by the user and is protected from an automatic merge.","reviewer":"grok"}
+{"id":"87d64efa39f6acd21d2ffa4d6bca","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"92af96b1a4fc8e6cc386cddc95dd","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"ccca6e1268f2271a620901aa76f7","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"7c47466a0e069d6210632493eed9","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"777f07b82063ad39b1f6b9659256","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"3156da04919033891baa21907139","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"cc1baf1a6621867494762af98aa3","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"130257b2d495832dbabfa08e6679","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"85ac29edd9a64f4ccde954df63ce","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"56b51ce9e92788f4d887c76a2de1","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"7d08ae6492ef814572a7ca521c5f","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"c252091b39e9350975b0a6e0af8a","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"ce814cb02f4a73c02e283345e9de","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"a8c19765654fc3f934d2af8bc2a6","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"90fae79d4d55d0447ea6b76760fa","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"50b665e7295cffdb1575317037b7","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"11ca090abc8b19136b2317e6a97b","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"47435c2ef96835451717f872148a","label":"reject","reason":"The captures do not contain the same speech.","reviewer":"grok"}
+{"id":"e83f48dd5afd67fecfcb538c684b","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"23bf64cd804d8b715eaad8ff782d","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"47d8cea524b941baf4167e824dc9","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"091a82859f19203b84c2ec6b317c","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"f95abb86ffea51b3492a006f6b9b","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"da1001ff1263cb48a7870287735b","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"07e1949a39da909fd10271df47b9","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"1205d8d98bc321dcc575cd0ef86a","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"88f0802529083221efe95a5466ca","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"9de01f0f3ee17ce80f94aae1005c","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"61fdd8449534f62ee08d91ae2d26","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"9475facee2df01a78d5dff8846b5","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"e9ae8aec250596e729b39776ba2d","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"dfe87c797e8f071334106fdb4573","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"ecbf3d1bdabe734f9f78f4a283a4","label":"reject","reason":"The captures do not contain the same speech.","reviewer":"grok"}
+{"id":"86437a905dada28a4115f1896727","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"7cd45ac0fa81c103e5da757170fb","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic retirement.","reviewer":"grok"}
+{"id":"9e25d65d3c4db94aadce1c54f8ca","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"63a35a3fb2d915ee5b068b7e1c34","label":"reject","reason":"The owner rejects this name and says not to use it.","reviewer":"grok"}
+{"id":"7a8222253142ca13ef6be57cc6d5","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"bc377b7a11e8d19d17905e7fa234","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"27df86893b162f66c78dd8f46a38","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"dd4cf3bb705ec3af1e74c764992c","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"3b5ba22428c53b686002e3a0923b","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"7535a19d1efc6b3edc93df529391","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"a677cbb034c82beca97298269e04","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"5a8f6d5f0eff0f3aee49528593b7","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"4a8792d1ef22a1c3f26221b1b0fd","label":"reject","reason":"The cited records repeat the same fact, so there is nothing to supersede.","reviewer":"grok"}
+{"id":"43f908195f5ddd72ca673e7bfec6","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"3d98b37cf5338234f1bd387e25f4","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"0fc7986a8c1d8a30b0d5516296d5","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"e96203a8bc0b1f4875c98b78603a","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"6c670ccf4a78caeafb09e6a7c9d9","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"cf492db2872c074b2ca0a769cfd4","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic completion.","reviewer":"grok"}
+{"id":"b7964ad6e74b87a5bd1e016c0b19","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"b2c00bc6895edbe2c51b0b4092e9","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"423cb8c2472b4780e70d2066159a","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"ed0b6cb2f3ab84e206c5f5b383f2","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"b6fa76279a827c28728b35817605","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"487e58b96828fe64f2e750bd5985","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"db3017eef872e39b4996ac3e81b6","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"cd070110d0079edf533a8d26ba37","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"442bdcf3d2907c01db398454ccbd","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"e73255c50a6294fb9fbe44bb8f49","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"c1e5ad41c2271954f7f36367aeb7","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"d518ed9a1fd087aa7d5b4529704d","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"145507dfdb255247c919dc09e764","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"56f972d203b8fd9cfbbdee100a00","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"b44872f14845fc3a091df912e6f9","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"ae82d3849dd1675097723588fbf6","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"9c1eaf47fc7b11e7bfdefd6b7dee","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"b57c48ccc44f8c77df774e16a8ce","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"1cb137118cfaddd491203b2e92d3","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"a24e0d10c7dc55d8ff5da0ae7b86","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"b5b0b3350ace565151a3bace2f77","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"ce00dff07f6c0eb2a4cbc89e8d07","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"ae423a6409d0e7bf410381532528","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"bb4f57928c176b3d0a82125d74b2","label":"reject","reason":"The owner rejects this name and says not to use it.","reviewer":"grok"}
+{"id":"1fabc210060b0e97717d0bd4fac4","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"6b087b0499dfda0d12937d0866d4","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"c1f1735fe0af5a47f6347267dbab","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic retirement.","reviewer":"grok"}
+{"id":"3fce6d79b3a4d10fc2bc35e8526b","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"52638f14db4aadd52e76336445a7","label":"reject","reason":"The captures do not contain the same speech.","reviewer":"grok"}
+{"id":"84eedc01f1929032335bc13a4872","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"c74d21a1179e89aa595e679fae74","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"8e40cd7ece442e1b2d1c665c6917","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"5c4ce29f5c142dd055acab361ea5","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"28ddaac768d0435f22100d76c976","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"e4575ec3698c787b0b0a713533c1","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"9adae411c3fd666ccb199c9dba35","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"72e063454d80b0fea44a71a9a105","label":"reject","reason":"The cited records repeat the same fact, so there is nothing to supersede.","reviewer":"grok"}
+{"id":"b12b16bb5cc0e05000b0c2d97cdc","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"56b6a0bee617b47aa91649a97868","label":"reject","reason":"The cited replacement is not newer than the fact it would supersede.","reviewer":"grok"}
+{"id":"d5dcd52cb3a52e720db2fcf51723","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"0d12815b7698a310f731d41dca6e","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"b1c0018d492ccc39c1cdbe736dcf","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"a840f25d3ddad46cfb714b78ca9a","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"7af70630255f093c6188191f5adc","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"e81f1ccc232e4fcc7974d57a56a0","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"0f3e6507aaf650fc79f9ff22a9cb","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"82b474bc3dd58b677277b8c756c6","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"fe84e658a3306a2a8c1a784c42a9","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"4fa4e36bb701644991e7154b35c8","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"a9863bd59bd89d530f3823c39a7b","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"92fa77e83534e06154fc77311fb2","label":"reject","reason":"The cited records repeat the same fact, so there is nothing to supersede.","reviewer":"grok"}
+{"id":"c29f2e433c8f1010e71c5419a0b1","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"c05b4ab97f8b0a3663b08c42fcbd","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"438291edae562722fc5c18e1ab72","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"95c7f99c591c64b0cd5415af0e00","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"82d876d70de35db37bcc42aac872","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"99828fa85aafbd5852f3df00248c","label":"reject","reason":"The captures do not overlap in time.","reviewer":"grok"}
+{"id":"1c2d5c8eba10e594431c0d0105dd","label":"reject","reason":"The proposed term is not an attested project name in the cited speech.","reviewer":"grok"}
+{"id":"d97581af215032bce2cf4129a05d","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"277257ccc1da39c4419bdbbbab60","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"1db6b09e57cc374d2e227107bdc8","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"7cee2fc4a81c630d5ab9ec139fc2","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"410c05796e685df1012dce196f96","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"78e8047c72c21be7f71ddc050ec4","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"16a788a7fe92d88085735db829c8","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"bf1fa59c6f584621ffb04c08289e","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"8478391ee77968105734a76d0866","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"d4d29e67a87ed43d29b640b0f27d","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"484158c5ac6a2b1c00e942eab8d4","label":"reject","reason":"The proposed term is not an attested project name in the cited speech.","reviewer":"grok"}
+{"id":"69558bc1180ebb6747f53e481a23","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"194865acaf3cd4dc796781d945f4","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"c7ec5efc14c3fa1667025fbf25bf","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"ba07447f9f7f0d4a8729f6297172","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"de716be93a28d240341959c15810","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"64e7c7b8dff9c91befadb011a74c","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"c91d9d69b7baf6b2d1801bcd8fd5","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"484d9ebec9b0058acb715918b4f8","label":"reject","reason":"One of the tasks was created or edited by the user and is protected from an automatic merge.","reviewer":"grok"}
+{"id":"48180bca892b38dd44b302d7adfc","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"62a7f23185d41f7ed3a756a2bab1","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"9dcf54dc7e2901b141253b3c6e7a","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"86df3f25aec3f1a5af88f489de4c","label":"reject","reason":"The cited replacement is not newer than the fact it would supersede.","reviewer":"grok"}
+{"id":"ea914b54eaa9b1b61b1b0ccd6c54","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"3532f832101102647968af873e8b","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"51392cde392eb9d377d8cbb54a3e","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"17fa3c4e628fe29c6a9de0ead0f3","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic completion.","reviewer":"grok"}
+{"id":"a060a82b5b189e08822aa06e2615","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"6ceada288474296fafaf193d6bc3","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"c9669f6bf37126a4cb0cd975824a","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"d2c805a706d3ff0181925360a44a","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"27079c8344c0251c6b33eefe06f8","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"1fee0f2e20f942b7cfddf0cf7035","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"0386ad17ee397fc6da8a10687cf0","label":"reject","reason":"The owner rejects this name and says not to use it.","reviewer":"grok"}
+{"id":"9acd0013e0445ba6aa99f7e76998","label":"reject","reason":"The captures do not overlap in time.","reviewer":"grok"}
+{"id":"ff94f1e877aa65e8c62535a24815","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"87569d60be39c10ea84a62f62b2a","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"9a204404d89ce1e11a7e6ddb5942","label":"reject","reason":"The cited records repeat the same fact, so there is nothing to supersede.","reviewer":"grok"}
+{"id":"e9cb4d9022bf0cfe30dadb2e9767","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"9cbbf9227fe1e6e131a8ef989da1","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"9a39c3e2ea0ae0f55d3a55c176ae","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"59d2bc53c0c740f73280ce7a095c","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"bfb166c8169e5384cd35f7f2ca03","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"166e438dd5415434a3357f136286","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"ffa7e1f604f978a8586d9109b003","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"fcfefade296f0db74353e958735f","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"edc48ee0cd53a879c26488d6c8b1","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"67e3dff94713db9230475ce7588b","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic completion.","reviewer":"grok"}
+{"id":"0eb5bd44337025b88dd43de2800a","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"31aa2ebdffd91e1736c07173e9f7","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"46a6e39a132415fd8ec862bceff3","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"4ab310efeb9d21fe5c9631b690d7","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"8ad27be2e65fe218ce71af357bcb","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"ab4dc179c23c53fd5b1deb38835b","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"8684dc9965eaf986169895eae69c","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"54bbcf5507116b6f1119cd7953bf","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"1f3bacf388b4a9a07c52a401e49b","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"e676ae4779560882418ba9f39e83","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"3fa115ae0bc516ccd9b5a715b70e","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"b3e882c636a940af68a91a25ceec","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"6934db1703e6a78559092675c6f7","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"c8e142ebd989edc2302001a505eb","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"547637d0ce7b88b0b1b82854abbf","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"4fded42db356517bf8fded1e87b3","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"12b38c29da67464013e6f441155a","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"350f788641e1a512a13bdb9a57e3","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"7a5a4d8dd1d814e26cd3683ce120","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"50a836c817c145591b13c1a12028","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"b9538445f7eb4631bc966e6ae4ec","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"cc144d65a09ce2e87ab523dac0bf","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"3272e5de3574ded3d341abb45947","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"e271e907892f44100536f4ca13e0","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"b894705cc4938892931b4b7e7e86","label":"reject","reason":"The proposed term is not an attested project name in the cited speech.","reviewer":"grok"}
+{"id":"942622f3dff00d3462e90d91fce3","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"d6f571274fb94b179da26003cbca","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"98cc4523a2427c2fe695ecf7320f","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"9da01ada2add749bc3064146839d","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"afc99fbf54cf85ead6c4c67979a6","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"d3188b46066a942fa6af4ccee479","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"bac1b8ea7ea81b50b04eae605a29","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"e62cb6eb1363ad45bba322bbe532","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"913112f1232bcdb722d35314f844","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"0fbd4b7d73f8d77aab7d3b4404fa","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"5e11aad40ef3b0419456f13b8b64","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"079d9d9a2b8bec4915122a2e6868","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"4f332860ac61ec0bd972bc318167","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"a39f93fe942c898bcf443657c90c","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"2f0b368c65986fa04fa64c1d7544","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"abcbcffafbe78132303edc8bc046","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"75512a6647e67666a8478fec3d0e","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"954e10732b7d8a70f50ddb021fac","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"cc014456fe2cc4280c903d993817","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"51f99de6af0192df94a3448dbf1d","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"7c47d0efd45248f4e5f4218cf6f2","label":"reject","reason":"The captures do not contain the same speech.","reviewer":"grok"}
+{"id":"b8a8a78f66a21159427dc3382511","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"56bcd3c642a729852b0d16686d5a","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"d4af1820de360ad4a93ea8fa0d83","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"6a9cc82e6e68ecc9f312179b054e","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"14d4b25d73af1901c0d433ddb74b","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"c387ec760c78a730c9d88ec96dcb","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"718fbd5735154220cdd560cd8ad9","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"85a5c30ddb335ff850fd7fd49a41","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"914e4dde64bd48edaab51a918e48","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"379eaab86559c4691ed146ac20a3","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"7e3f9f34b922f21aa643dcd0ae73","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"19f5ee7cad91c148a78a4430b773","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"ac8003549f2d7fde0b5747328c15","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"04f565961faab4d589b965f51da8","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"2eaf3a5872641a92f851667a6ac9","label":"reject","reason":"The captures do not contain the same speech.","reviewer":"grok"}
+{"id":"ce4bd4817c3ed2cb5b6a89b2e64f","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"2fac442e57ebf4d063e4ec1db2bd","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"913477e14641ccb39826cfd426b9","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"f826abe1dca17a4c6c90496ba613","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"3aa95efa6d996b827c33784cb967","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"04d181f20ddc88abb8cd6cca03aa","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"c69cc01e86089f21dffbc8140b69","label":"reject","reason":"The cited records repeat the same fact, so there is nothing to supersede.","reviewer":"grok"}
+{"id":"d9811c399c8f3cf882d3f64d5155","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"b79ebca954b2efd0f808f691ff88","label":"reject","reason":"The captures do not overlap in time.","reviewer":"grok"}
+{"id":"064b018bfc5c65a721a581f2c6ce","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"dfde599c0f54bc3a4a3fd8a11ffe","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"69502d277b418d0692d1f0c07b72","label":"reject","reason":"The cited records repeat the same fact, so there is nothing to supersede.","reviewer":"grok"}
+{"id":"6e1dc79a579f2e66169472def697","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"bb09fdb31ab6231202cd4a9467f0","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"2b143e5eaffbc144c7076429f4cb","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"0ea6eca94b6268f705a44bb67064","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"e6693763361cb15797b979f79495","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"436ff97e20f4ab19a7070cf34aee","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"2403229e40fa48431e35269d39f6","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"ed6aa599b84b3de942d45ccf3c0b","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"121b86ee4d776b8710b6faea87a3","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"fa3499c67a96f243cc2cdfe4add9","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"818e554e377d347f81e99ee5359f","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"cd3b233b5e6a07e3f7b25ee523b2","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"d4435aadab90330e0b24b89b5719","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"27878f5a75ef6226c73a82b08bf8","label":"reject","reason":"The proposed term is not an attested project name in the cited speech.","reviewer":"grok"}
+{"id":"f446ed3fe8834c429eb7261680aa","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"86f07fb16af0c6ef0c9cc70e77a2","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"f66e5cfa1158a6d8e9649e58b6ee","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"cbeb9d4be834759e8bce31265734","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"ebb6aca6b9b5cd43959bdbdf97d9","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"8064bd5aed74881c0a66302ea568","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"6e3acb16230af7819feed903938c","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"cc554739bcb9ea98ad6ae95b9426","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"df05c1bbbbccd42176dab7755c87","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"87a1b9e84a38e7bf7794d5aef847","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"afb9dec160b904775465fbaafc60","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"4faaeb9665c40bcac3455ba54335","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"808b9bd092223c42eea180a498cd","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"42722f5ffa59e500bc2306d2d94d","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"f0355f8deef1f448ec5b049fdc3e","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"1c327d2e2de9682eaec309b6241c","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"dc394766d3245d055efa466a8168","label":"reject","reason":"The proposed term is not an attested project name in the cited speech.","reviewer":"grok"}
+{"id":"d7a2b066d097a5f21e2b5cf8a9c0","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"25e8269827d54e96ce0655879479","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"dcd8fd5cec77b9bbd4e0c9838535","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"05bf8c7d42f6db2dd754fe207612","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"8891da346a5960144bcbd6fb6749","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"93e682f02f6299f3c11ba369be2c","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"ea5f816b352964f7b1604a8fd53c","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"362fe89160b36db125fcca2bcc7b","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"4a1b17b9c7a7ef12646fbda2d31f","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"5ac23473b39faa2c2bb0c8517d87","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"9554470444c74cbfae620fe556e7","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"0d118a28431580326158df32ef6e","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"1e3274a783f54461e7e4c1e2d3cd","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"e0010cee84068cbb67bdabbf4096","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"12a1c5159955b7af1654e05df2e2","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"72001294f9e412a7c246fa70e92e","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"c394c42c60fc832c11a44e8330b1","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"62de91227b16285f0a3314a77ab5","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"d89fd0ac4d83d9b29292d3bfc01d","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic completion.","reviewer":"grok"}
+{"id":"2b430b9fc0ad6295abf7c4bc50e0","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"bddeb6965bd83a9951d0be3018c3","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"56274cea501574bab894bb99a12e","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"a6cecbc56bd5998a0f0188597961","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"7d8c03d3f9108f6c04c033436630","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"7ed47933fce5664ce4787341ae2d","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"943131ab45a04bfb75c6c8a859f8","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"f1db7b6dbd3262e765a6b6de07e1","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"f5f013eecfbeef7d296ee682fd4f","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"ff0e473e832c6253f31c60ca21e8","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"c6bc90dd5f16f12bf7ddaa8787ad","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"8688946f7d76db6a37360fb77ddc","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"c4b87d2e3e2357aa7236b9b9f863","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"3587f042d877d6e9d613efc80ab6","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"9e80558e10b958d507497b598fc2","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"37997a8987128695d920a0161678","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"5a319d7f50a192f29649731fe359","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"2b742f76b6909d71497bbda7be31","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"1a76c639b695fea4aa0201ac5ce4","label":"reject","reason":"The proposed term is not an attested project name in the cited speech.","reviewer":"grok"}
+{"id":"d4323e5eac0a74d1dc8027b85941","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"cfbca2ab400f8a4be12d45ccd73d","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"0227ef32bf96a00cf9fba2e896eb","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"47e9fd709432bd60ac55c39f2ffb","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"63dce86da7e23a20cc249a89a566","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"ac53ea365ffe1304a6edb7ec6035","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"2f170dfb958916affb35a1f6475d","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"5c08cce96a20ffa4fd9e5cb3bf52","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"d5ae0a9bf38fae2bfb2a56b48686","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"5a93880bd7a91b222ada30bae348","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"d61066db914ea58ee176ed9a6f4a","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"c60ef4b2bd9022434795b2385f9d","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"4955232c8ae98fedc35e6c57d2a7","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"6f1b3de1581ff45c908626a21d51","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"860068764a593280f6f66ace2852","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"e9bf2f414025fd6fa040d9c97831","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"15eab68b2219a88004156ad2a136","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"06306915c2931a741af78dbab21a","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"f707d8eb290e349b18085897e204","label":"reject","reason":"The owner rejects this name and says not to use it.","reviewer":"grok"}
+{"id":"91822c437c8bc17e3a5e29452103","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"2565ef35844b0dabf77a184f38ac","label":"reject","reason":"The cited records repeat the same fact, so there is nothing to supersede.","reviewer":"grok"}
+{"id":"c943697959aab9fa1f61a4a8b787","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"df8652540b30773dc53e4f878e44","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"4bffd9eb898266f7d7ec98285d6f","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"cfb05a1b12304a60ebd741531eb0","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"bb315e2eff90fa0659d38f66d4ef","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"e07605ee07258f6ea44e4f020cf1","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"f883412253db4689999065616b6d","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"a8ab4c89a46488f1d7a9fd8750a3","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"2ba7401d25c379a8884c9711dfdf","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"478c6c7d35db6512fa4896bc0770","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"31f45e125914e2849307e65ac04b","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"a149fe98c7e868dfab04eedcf4c8","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic completion.","reviewer":"grok"}
+{"id":"bd1231a714256cf2ea5b068a338d","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"b0806630921650dc50e44f3ba5c1","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"5f46b36dd0c13826a9f7019a4ae3","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"de78ed8ea405d4abf6da4f42b7c3","label":"reject","reason":"One of the tasks was created or edited by the user and is protected from an automatic merge.","reviewer":"grok"}
+{"id":"a70605afdfb95122253f04a632f6","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"4895fb21f33284a7a0abd5205010","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"551e993805daec89b0ce68e4d192","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"ccc4603519f27390b7fa1ba23425","label":"reject","reason":"The cited records repeat the same fact, so there is nothing to supersede.","reviewer":"grok"}
+{"id":"00178d302d6fb168ae53e7f960d1","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"e08ab07f542b5eed84da7e634229","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"444dccd426439a452e711c1e4b30","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"79b99f197bcd77dc87e1dc8c04a4","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"e338af81fc6c93ac0332cc084aea","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"384d7d92b4c70f90bee54028c676","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"d5b3ec6bd4d81a55cfa54e7efaae","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"b83371093ba625277170f905f0f5","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"de0a9b157ee0b917346e98205b7d","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"13ba447f1415de30035ea7228fbd","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"2005451c7696cfae4c40893a3a17","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"3626edafabffb77553d94121d537","label":"reject","reason":"The title states an event the transcript does not support.","reviewer":"grok"}
+{"id":"02081ec9e486cab3c0214dc5652f","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"d12dff2ac89532b7c8cd78388b0c","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"5c5ea02c00325836015f4c943caf","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"d6819184d3c48a0616a5ebaae827","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"016e3266d4a3d569281118ed01b7","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"9c80a48ba673f64eb43217d230cf","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"73f063f42d6572936ecd5018b93d","label":"reject","reason":"The owner says this shipment is still required or the reminder should be kept.","reviewer":"grok"}
+{"id":"06068e621057e0f92af83566bb32","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic completion.","reviewer":"grok"}
+{"id":"2aaa6c30cf4d76faadd50814d2ef","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"3d8b698902b40506f683765973c0","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"8e8c84a6620e36047de7290f2afa","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"cce683b06af108b667fea8fa6493","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"79a8f6c8b06d246ce46a5cfaefe0","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"75157e4cd934ed2b0a9ea2f5f92c","label":"reject","reason":"The cited replacement is not newer than the fact it would supersede.","reviewer":"grok"}
+{"id":"8939af1ff54c01097e7682e54176","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"5920ec8dcbfde2bba817902c83e3","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"6b4a35ba2110159eff03ca73e482","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"302f22c9a2281b855af1a6c2dba2","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"e0ccdf8e566eebfe43091be7658f","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"e86aff2dad3ec5edf2dd77aacddb","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"30e551a8dc782c6dcdbe41ea5052","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"b76930a8caad730f458c8bed933c","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"e205d677bee2165a65500e86ed1a","label":"reject","reason":"The captures do not contain the same speech.","reviewer":"grok"}
+{"id":"e535a227c4f29c34eb50baea9563","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"9efbada10b47253832bb88b0e6ff","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic completion.","reviewer":"grok"}
+{"id":"c3a63aea438582329f129bb48e9d","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"8563edb1d551cd18bb193883b1ad","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"19295784aa9abc9e4be879837fc8","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"829e9f0c05016eccfb5408b1d0b3","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"7e20c69661b1d2670bc60feb42c2","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"8148d8fc9fc7d7512dc76e4adc33","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"d8ffd88c8a73606da53dd30f53b6","label":"reject","reason":"The task was created or edited by the user, so it is protected from automatic retirement.","reviewer":"grok"}
+{"id":"6f27bf7ebda7e8d2d52ef4fe1f74","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"8be206aa2fd16ee3e31e038823bc","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"a9d9255b73531d41280b8a8fd616","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"ffb2abf2fd99a7af46e609521678","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"89669db33f2162ca5e75d96c2df5","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"46b00ac47f1dfdd5917b4cb29652","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"07cd64274deff89d4b54585b9ac5","label":"reject","reason":"The cited replacement is not newer than the fact it would supersede.","reviewer":"grok"}
+{"id":"f2b37c9e16421096fd90a3f7abed","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"c853e0392507d0408c20a2d474d9","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"4a1f26ee04e2fc4457d867cf8dd9","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"14f6191bd5d0a5cd3c0b9074e2d5","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"fa577f63c3128e4443f3b4b29189","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"826f92d7ce27af1f7e73d8b4eed9","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"502b6a7d397baa882c92c071cc6b","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"44bb82a7f0edf1e72fa8e6f15a21","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"22542a77d00aaa72d22eb1c3146d","label":"reject","reason":"The overview states an event the transcript does not support.","reviewer":"grok"}
+{"id":"84da42de07b2b1c436777fd519f9","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"86d615e640ac03a92b64084f0c89","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"2f6ee412644e3c1761b9b3cd0472","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"2170861915852e419c68da98c2fe","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"6a99040a40b8cfafc402439fc180","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"f5afe302321a5a16bb699c0d54c1","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"e4d6956c045cb17fd22aa893a6fb","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"99a48b61d60a8645eff99443ecd2","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"d10a2bdd96c2edae209da2ce218a","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"9806e680d5a31ff3d17e2b4fda63","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"e5c97c97120835138fb7d6b58ee0","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"b13fe257fdf3f45054a58e25b68d","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"241433b64c853280283b8d8381d3","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"ef33d539f8620afa952060904c7f","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"7c111fc9b955ae12c09f8aeea841","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"f7a90f522dd753dcc325c3bc2a6e","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"babc147ecbde687cf66649574b9f","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"2cd77c24e62e03719ea75f26deb5","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"bff1fe8cdc061fc3491d913b8888","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"eca0191acd993fb6951c53f1c79c","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"002f6a4532e7a444a9b8b787fc06","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"be3e3dfda7b7d1493f237b9cd25e","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"6911d6920e8e110cdc50272ab77f","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"599cc56cd82900c42bb554f7ad6a","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"28c7ff16dfcb977c39bf745aed92","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"4514efd4382f81bf050bfd9ddea3","label":"reject","reason":"The captures do not overlap in time.","reviewer":"grok"}
+{"id":"671339f3a998fefdb799a82c64a4","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"daec52679fc2a3d2ec020d061c18","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"9ea04f12500c5a77ed1821d40c9c","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"634f02b794ceb1903a7ce4c25a35","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"8b9fea1d2b9c2ce01ee34099823d","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"fbd74403cb2cabb11ef58f550619","label":"accept","reason":"The two reminders have the same obligation and due time, and the owner calls them duplicates.","reviewer":"grok"}
+{"id":"5429e457152cc5ac8a663fe7dabf","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"0fb4e86f6c6240ced9024d5eaab4","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"f12cba2d1614de7857cbcc8c2ef6","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"bfed58f1fc2e56fce1b0126ad356","label":"accept","reason":"A newer owner fact in the same slot is stated in the cited speech.","reviewer":"grok"}
+{"id":"326fcdec9750f5ab0b4177d1a71a","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"5e8252523795508509e213c15ae8","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"586319eaec8428adc41890fcc595","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"db7970af65c3eceb47a86ed9b853","label":"reject","reason":"The owner distinguishes these people rather than identifying them.","reviewer":"grok"}
+{"id":"d7efe8ed068f3cff701caaa6d1fa","label":"reject","reason":"The cited speech does not attest the proposed spelling.","reviewer":"grok"}
+{"id":"d493d1c83964916680cf8566ec18","label":"accept","reason":"The owner says these records refer to the same person.","reviewer":"grok"}
+{"id":"74f55cfe29f6fc464ca7cb168ac2","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"43985938b5c375d9ccc9242cf755","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"9ffddefe881ba43949fde255a1e8","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"71a1c8be3005bb6b1ee5308d913b","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"76b15440f187353108174025f332","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"c929976b476a481437ccfc4974c7","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"2cf97a5dd08e7c89147b4a04a3ae","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"dc461828c433176158c180791ef0","label":"reject","reason":"The proposed term is not an attested project name in the cited speech.","reviewer":"grok"}
+{"id":"7c2452c05275f193cda0c3ab16d0","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"a1fe93bb51c9eb5a47722219b439","label":"reject","reason":"The cited speech rejects this spelling change.","reviewer":"grok"}
+{"id":"b66f010f6417e3a1469b220034d3","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"c1de6f565bd649adb6a0f9a08638","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"a206b5ce14ce0b98395b814f1dd5","label":"reject","reason":"The owner says this shipment is not done.","reviewer":"grok"}
+{"id":"a556aadbf3b00c2949d462f50c20","label":"accept","reason":"The cited speech is in the proposed language.","reviewer":"grok"}
+{"id":"71c59a0e9246f02b3c1321c51a92","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"1871079ef0bd758c060736b10769","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"0180ec7a586674c86212d27de77a","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"66161037a4024e16c561923fe653","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"0d80d5c3fba7ed8dd7a25999a38c","label":"accept","reason":"The owner says this fact belongs to the other speaker and was extracted as their own.","reviewer":"grok"}
+{"id":"54075d0180eb083162b43cf5ad36","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"f9f2302b50e58a796f4d36d3f175","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"1989cd1d2844eafb73ddfc23de6f","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"e36ebc412587460c4136679edd28","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"d695e436a954935390767ad751b3","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"8ed38fdaa534531f0fa8af16b2e5","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"64c31d3c869465fba494c148a757","label":"accept","reason":"The owner says this exact shipment is fully done.","reviewer":"grok"}
+{"id":"493428b43a2efe77d8e85c09f92e","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"4a5b061f2db045e7b4f8c4938e18","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"64184c098e3e7123d680abf480e0","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"b0d5b036ebe844994dd9b7fcacb5","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"30b19a6a0c2ba671ebd158e06c0a","label":"reject","reason":"The newer record is not a fact about the same owner attribute.","reviewer":"grok"}
+{"id":"c9833f34ecbe5d3858384b8ec4e3","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"515aeb62343f667eaf524dd4abbc","label":"reject","reason":"The owner says these reminders are separate and both should be kept.","reviewer":"grok"}
+{"id":"61fa52119e4b1ff4fd755e9f7e3b","label":"uncertain","reason":"The topic list and Friday inspection match, but the overview says the named person reviewed them while the transcript says that person joined and the group discussed them.","reviewer":"grok"}
+{"id":"c19520ce3ac9a1de45224afe116e","label":"reject","reason":"The owner states this fact, and it is not extraction junk.","reviewer":"grok"}
+{"id":"301022c14b3de2916cb4fb5849ee","label":"accept","reason":"The speaker spells the proposed form and identifies the transcript spelling as the error.","reviewer":"grok"}
+{"id":"99b3910e4b101c7927f23afc57c7","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"79be3a53cdf8f628fc41866b280e","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"82d4539d04dfb076d90e3e7af434","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"3f934e686ebb166c35884e0debad","label":"reject","reason":"The transcript discusses a kiln schedule, packing tests, shipping labels, and a Friday inspection, not a shipping checklist.","reviewer":"grok"}
+{"id":"6682673668739d01ff4e354c610e","label":"accept","reason":"The memory is extraction junk and the cited speech has no intelligible content.","reviewer":"grok"}
+{"id":"076e8d4d8eca40a36c0d2424809a","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}
+{"id":"5ecc0c933985dad09e08f19f38bf","label":"accept","reason":"The captures overlap in time and contain the same speech.","reviewer":"grok"}
+{"id":"3e03787f3f9bac548dc9e6a3e95d","label":"accept","reason":"The owner states this exact string as the project name.","reviewer":"grok"}
+{"id":"17e64fd6b163781f7c8428c055fe","label":"accept","reason":"The owner says this exact shipment was cancelled permanently and the reminder should be retired.","reviewer":"grok"}
+{"id":"8c2431cfca91e472af4265c24fab","label":"reject","reason":"The conversation is English; a short quotation does not change its language.","reviewer":"grok"}

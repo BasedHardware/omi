@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-utc-marked-time-read-as-local",
+  "violated_contract": "A date-time whose source marks it as GMT/UTC must be read as UTC, not in the user's timezone. The transcript-file importer read every date-time in a file name in the uploader's timezone, so a Zoom cloud-recording name such as GMT20240508-213012_Recording.transcript.vtt was stored shifted by the user's UTC offset, often onto the wrong day.",
+  "canonical_prevention": "When a file-name or metadata parser reads a date-time, honour the zone the source states (Zoom's GMT prefix) before falling back to the user's timezone. A behavioural test imports a GMT-marked name under a non-UTC timezone and asserts the stored start is the stated UTC instant, beside a control name without the marker that is still read in the user's timezone.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_transcript_file_import.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/imports/"
+  ],
+  "status": "open"
+}

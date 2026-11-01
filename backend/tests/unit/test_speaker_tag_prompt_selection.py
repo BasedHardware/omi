@@ -22,7 +22,9 @@ def _conversation(cid='c1', hours_ago=2, segments=None, **extra):
     }
 
 
-def _select(conversations, *, owner_has_voice=True, named_allowed=True, answered=None, people=None, limit=4):
+def _select(
+    conversations, *, owner_has_voice=True, named_allowed=True, answered=None, people=None, limit=4, owner_evidence=None
+):
     return selection.select_prompts(
         conversations,
         now=NOW,
@@ -31,10 +33,11 @@ def _select(conversations, *, owner_has_voice=True, named_allowed=True, answered
         answered=answered or set(),
         people=people or {},
         limit=limit,
+        owner_evidence=owner_evidence,
     )
 
 
-def test_owner_missed_asks_is_this_you_on_loudest_unnamed_voice():
+def test_evidenced_unnamed_voice_can_ask_owner_question():
     conversation = _conversation(
         segments=[
             _segment('a', 0, 0, 6),
@@ -42,7 +45,7 @@ def test_owner_missed_asks_is_this_you_on_loudest_unnamed_voice():
             _segment('c', 0, 9, 14),
         ]
     )
-    prompts = _select([conversation])
+    prompts = _select([conversation], owner_evidence=lambda c, runs: (runs[0], 0.50) if runs else None)
     assert prompts[0].kind == SpeakerTagPromptKind.owner_check
     assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
     assert prompts[0].speaker_id == 0
@@ -57,7 +60,12 @@ def test_named_prompts_hidden_without_entitlement_but_owner_check_stays_free():
             _segment('c', 2, 16, 24, person_id='p1'),
         ]
     )
-    prompts = _select([conversation], named_allowed=False, people={'p1': 'Sam'})
+    prompts = _select(
+        [conversation],
+        owner_evidence=lambda c, runs: (runs[0], 0.50) if runs else None,
+        named_allowed=False,
+        people={'p1': 'Sam'},
+    )
     assert {p.kind for p in prompts} == {SpeakerTagPromptKind.owner_check}
     assert prompts[0].origin == SpeakerTagPromptOrigin.auto_user
 
@@ -356,7 +364,9 @@ def test_contended_owner_is_an_unnamed_free_owner_check_even_with_a_stale_projec
             _segment('b', 1, 8, 16, is_user=False, speaker_identity_status='ambiguous'),
         ]
     )
-    prompts = _select([conversation], named_allowed=False)
+    prompts = _select(
+        [conversation], owner_evidence=lambda c, runs: (runs[0], 0.50) if runs else None, named_allowed=False
+    )
     assert len(prompts) == 1
     assert prompts[0].kind == SpeakerTagPromptKind.owner_check
     assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-held-content-tap-bypasses-access-guard",
+  "violated_contract": "Held content with subscription UI enabled must not open a full-content destination through any row or preview tap. Obscuring the child and guarding only the action button does not guard an enclosing row recognizer.",
+  "canonical_prevention": "Route the preview action and enclosing row through the same access guard, give the preview a full-area guarded tap recognizer, and test off-button taps on every preview surface with subscription UI enabled and disabled. Preserve interactive row menus and the App Review read-only memory exception.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/waiting_memory_preview_test.dart",
+    "app/test/widgets/conversation_locked_preview_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/ui/components/omi_locked_preview.dart",
+    "app/lib/pages/memories/widgets/memory_item.dart",
+    "app/lib/pages/conversations/widgets/conversation_list_item.dart"
+  ],
+  "status": "open"
+}

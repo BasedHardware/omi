@@ -25,6 +25,11 @@ FRESH = NOW - timedelta(hours=1)
 ANCIENT = NOW - timedelta(hours=20)
 
 
+@pytest.fixture(autouse=True)
+def _allow_test_users_through_deletion_fence(monkeypatch):
+    monkeypatch.setattr(sweep, 'account_deletion_blocks_user_work', lambda _uid: False)
+
+
 def test_api_reconciler_runs_the_fenced_selfheal_primitive_in_heal_mode(monkeypatch):
     calls = []
     monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
@@ -34,18 +39,27 @@ def test_api_reconciler_runs_the_fenced_selfheal_primitive_in_heal_mode(monkeypa
         lambda **kwargs: calls.append(kwargs) or {'enqueued': 1, 'verified': 0, 'errors': 0},
     )
 
+    monkeypatch.setattr(
+        finalization_service.jobs_db,
+        'get_in_progress_content_sweep_cursor',
+        lambda **kw: {'updated_at': datetime.now(timezone.utc)},
+    )
     result = finalization_service.reconcile_stale_in_progress_conversations(firestore_client='db')
 
     assert result['enqueued'] == 1
-    assert calls == [
-        {
-            'firestore_client': 'db',
-            'mode': 'heal',
-            'dry_run': False,
-            'use_configured_uid_allowlist': False,
-            'wedge_runner': finalization_service._skip_capture_wedge,
-        }
-    ]
+    assert len(calls) == 1
+    fast_call = calls[0]
+    assert fast_call.pop('cursor_getter').keywords == {'quiet': True}
+    assert fast_call.pop('cursor_advancer').keywords == {'quiet': True}
+    assert fast_call == {
+        'firestore_client': 'db',
+        'mode': 'heal',
+        'dry_run': False,
+        'use_configured_uid_allowlist': False,
+        'wedge_runner': finalization_service._skip_capture_wedge,
+        'stale_after': timedelta(minutes=5),
+        'content_due_scan': True,
+    }
 
 
 def test_api_reconciler_is_inert_without_durable_dispatch(monkeypatch):
@@ -220,9 +234,20 @@ def test_heal_enqueues_and_records_pending_verification(capsys):
     assert call['recovery_cutoff'] == NOW - sweep.STALE_AFTER
     (advance,) = state['advances']
     assert advance['generation'] == 7
-    assert advance['pending'] == [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'job-c1'}]
+    assert advance['pending'] == [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'job-c1', 'admitted_at': NOW}]
     enqueued = [e for e in _stdout_events(capsys) if e.get('outcome') == 'enqueued']
     assert len(enqueued) == 1 and enqueued[0]['uid'] == 'u1'
+
+
+def test_pending_deletion_user_is_skipped_before_recovery_admission(monkeypatch):
+    monkeypatch.setattr(sweep, 'account_deletion_blocks_user_work', lambda _uid: True)
+    state, kwargs = _harness([_row('u1', 'c1', _eligible_data())], mode='heal')
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['enqueued'] == 0
+    assert counters['skipped'] == 1
+    assert state['finalization_calls'] == []
 
 
 def test_heal_caps_admissions_at_ten_per_tick():
@@ -329,7 +354,9 @@ def test_pending_verification_verifies_a_completed_job(capsys):
     job_id = 'job-1'
     transcript = 'blob'
     state, kwargs = _harness([], mode='detect')
-    state['cursor']['pending_verifications'] = [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id}]
+    state['cursor']['pending_verifications'] = [
+        {'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id, 'admitted_at': NOW}
+    ]
     state['jobs'][job_id] = {
         'status': 'completed',
         'selfheal_transcript_bytes': len(transcript.encode('utf-8')),
@@ -351,7 +378,9 @@ def test_pending_verification_verifies_a_completed_job(capsys):
 
 
 def _pending_completed_job(state, job_id='job-1', transcript=b'blob', audio_ids=None):
-    state['cursor']['pending_verifications'] = [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id}]
+    state['cursor']['pending_verifications'] = [
+        {'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id, 'admitted_at': NOW}
+    ]
     state['jobs'][job_id] = {
         'status': 'completed',
         'selfheal_transcript_bytes': len(transcript),
@@ -448,7 +477,7 @@ def test_pending_verification_stays_pending_until_conversation_completed(capsys)
     assert counters['verified'] == 0
     assert counters['refused'] == 0
     (advance,) = state['advances']
-    assert advance['pending'] == [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'job-1'}]
+    assert advance['pending'] == [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'job-1', 'admitted_at': NOW}]
 
 
 def test_pending_verification_refuses_deleted_and_unbound_rows(capsys):
@@ -485,7 +514,9 @@ def test_pending_verification_refuses_missing_audio_ids(capsys):
 def test_pending_verification_refuses_on_content_mismatch(capsys):
     job_id = 'job-1'
     state, kwargs = _harness([], mode='detect')
-    state['cursor']['pending_verifications'] = [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id}]
+    state['cursor']['pending_verifications'] = [
+        {'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id, 'admitted_at': NOW}
+    ]
     state['jobs'][job_id] = {
         'status': 'completed',
         'selfheal_transcript_bytes': 999,
@@ -509,20 +540,24 @@ def test_pending_verification_refuses_on_content_mismatch(capsys):
 def test_pending_verification_keeps_inflight_jobs():
     job_id = 'job-1'
     state, kwargs = _harness([], mode='detect')
-    state['cursor']['pending_verifications'] = [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id}]
+    state['cursor']['pending_verifications'] = [
+        {'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id, 'admitted_at': NOW}
+    ]
     state['jobs'][job_id] = {'status': 'queued'}
 
     counters = sweep.run_selfheal_tick(**kwargs)
 
     assert counters['verified'] == 0
     (advance,) = state['advances']
-    assert advance['pending'] == [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id}]
+    assert advance['pending'] == [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id, 'admitted_at': NOW}]
 
 
 def test_dead_lettered_attempt_is_dropped_without_readmission(capsys, caplog):
     job_id = 'job-1'
     state, kwargs = _harness([], mode='detect')
-    state['cursor']['pending_verifications'] = [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id}]
+    state['cursor']['pending_verifications'] = [
+        {'uid': 'u1', 'conversation_id': 'c1', 'job_id': job_id, 'admitted_at': NOW}
+    ]
     state['jobs'][job_id] = {'status': 'dead_letter'}
 
     counters = sweep.run_selfheal_tick(**kwargs)
@@ -593,7 +628,7 @@ def test_full_pending_verifications_skip_new_admissions(capsys):
     """At the pending cap, eligible rows are skipped, never admitted or dropped."""
     rows = [_row('u1', 'c-new', _eligible_data())]
     state, kwargs = _harness(rows, mode='heal')
-    full = [{'uid': f'u{i}', 'conversation_id': f'c{i}', 'job_id': f'j{i}'} for i in range(100)]
+    full = [{'uid': f'u{i}', 'conversation_id': f'c{i}', 'job_id': f'j{i}', 'admitted_at': NOW} for i in range(100)]
     state['cursor']['pending_verifications'] = full
     for entry in full:
         state['jobs'][entry['job_id']] = {'status': 'queued'}
@@ -672,3 +707,292 @@ def test_action_logs_carry_no_transcript_or_structured_fields(capsys):
     raw = capsys.readouterr().out
     assert secret not in raw
     assert 'secret overview' not in raw
+
+
+@pytest.mark.parametrize('lease', [NOW, NOW - timedelta(days=2), (NOW - timedelta(seconds=1)).replace(tzinfo=None)])
+def test_zombie_leased_entry_releases_verification_capacity(lease, capsys):
+    state, kwargs = _harness([], mode='heal')
+    entry = {'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1'}
+    state['cursor']['pending_verifications'] = [entry]
+    state['jobs']['j1'] = {'status': 'leased', 'lease_expires_at': lease}
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 1
+    assert counters['verified'] == 0
+    assert state['advances'][0]['pending'] == []
+    assert state['finalization_calls'] == []
+    assert any(e.get('reason') == 'expired_lease' for e in _stdout_events(capsys))
+
+
+def test_live_lease_is_preserved_even_when_verification_ttl_elapsed():
+    state, kwargs = _harness([], mode='heal')
+    entry = {'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1', 'admitted_at': ANCIENT}
+    state['cursor']['pending_verifications'] = [entry]
+    state['jobs']['j1'] = {'status': 'leased', 'lease_expires_at': NOW + timedelta(minutes=10)}
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 0
+    assert state['advances'][0]['pending'] == [entry]
+
+
+@pytest.mark.parametrize('status', ['queued', 'leased'])
+def test_pending_ttl_is_not_reset_by_job_updates(status):
+    state, kwargs = _harness([], mode='heal')
+    state['cursor']['pending_verifications'] = [
+        {'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1', 'admitted_at': NOW - sweep.PENDING_VERIFICATION_TTL}
+    ]
+    state['jobs']['j1'] = {'status': status, 'updated_at': NOW}
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 1
+    assert state['advances'][0]['pending'] == []
+
+
+def test_blocked_byok_is_released_without_replay(capsys):
+    state, kwargs = _harness([], mode='heal')
+    state['cursor']['pending_verifications'] = [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1'}]
+    state['jobs']['j1'] = {'status': 'blocked_byok'}
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 1
+    assert state['advances'][0]['pending'] == []
+    assert state['finalization_calls'] == []
+    assert any(e.get('reason') == 'blocked_byok' for e in _stdout_events(capsys))
+
+
+def test_byok_blocked_admission_never_occupies_verification_queue(capsys):
+    state, kwargs = _harness([_row('u1', 'c1', _eligible_data())], mode='heal')
+    kwargs['request_finalization_fn'] = lambda *a, **kw: {
+        'created': True,
+        'job_id': 'j1',
+        'status': 'blocked_byok',
+        'requires_byok': True,
+        'route': 'queued',
+    }
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['enqueued'] == 0
+    assert state['advances'][0]['pending'] == []
+    assert any(e.get('reason') == 'blocked_byok' for e in _stdout_events(capsys))
+
+
+def test_completed_job_processing_zombies_reclaim_full_queue_same_tick(capsys, caplog):
+    rows = [_row('new-user', f'new-{i}', _eligible_data()) for i in range(12)]
+    state, kwargs = _harness(rows, mode='heal')
+    full = [{'uid': f'u{i}', 'conversation_id': f'c{i}', 'job_id': f'j{i}'} for i in range(100)]
+    state['cursor']['pending_verifications'] = full
+    for entry in full:
+        state['jobs'][entry['job_id']] = {'status': 'completed', 'created_at': ANCIENT, 'updated_at': NOW}
+        state['conversations'][entry['conversation_id']] = {'status': 'processing'}
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 100
+    assert counters['enqueued'] == 10
+    assert counters['verified'] == 0
+    assert len(state['advances'][0]['pending']) == 10
+    events = _stdout_events(capsys)
+    assert not any(e.get('reason') == 'verification_capacity' for e in events)
+    criticals = [r for r in caplog.records if r.levelname == 'CRITICAL']
+    assert len(criticals) == 1 and '100 completed jobs' in criticals[0].getMessage()
+
+
+@pytest.mark.parametrize('status', ['queued', 'leased', 'blocked_byok'])
+def test_zombie_expiry_frees_full_queue_same_tick(status):
+    state, kwargs = _harness([_row('new', 'new', _eligible_data())], mode='heal')
+    full = [{'uid': f'u{i}', 'conversation_id': f'c{i}', 'job_id': f'j{i}', 'admitted_at': NOW} for i in range(100)]
+    state['cursor']['pending_verifications'] = full
+    for entry in full:
+        state['jobs'][entry['job_id']] = {'status': 'queued'}
+    full[0]['admitted_at'] = ANCIENT
+    state['jobs']['j0'] = {'status': status, 'lease_expires_at': NOW}
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 1 and counters['enqueued'] == 1
+    assert len(state['advances'][0]['pending']) == 100
+    assert state['advances'][0]['pending'][-1]['job_id'] == 'job-new'
+
+
+def test_timestamp_less_legacy_entry_gets_fixed_deadline():
+    state, kwargs = _harness([], mode='heal')
+    state['cursor']['pending_verifications'] = [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1'}]
+    state['jobs']['j1'] = {'status': 'queued'}
+    sweep.run_selfheal_tick(**kwargs)
+    state['cursor']['pending_verifications'] = state['advances'][-1]['pending']
+    assert state['cursor']['pending_verifications'][0]['admitted_at'] == NOW
+    kwargs['now'] = NOW + sweep.PENDING_VERIFICATION_TTL
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 1
+    assert state['advances'][-1]['pending'] == []
+
+
+def test_job_read_errors_cannot_hold_slot_forever():
+    state, kwargs = _harness([], mode='heal')
+    state['cursor']['pending_verifications'] = [
+        {'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1', 'admitted_at': ANCIENT}
+    ]
+
+    def unreadable(*args, **kwargs):
+        raise RuntimeError('unavailable')
+
+    kwargs['job_reader'] = unreadable
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['errors'] == 1 and counters['expired'] == 1
+    assert state['advances'][-1]['pending'] == []
+
+
+def test_old_completed_job_still_checks_content_and_pages(caplog):
+    state, kwargs = _harness([], mode='heal')
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['cursor']['pending_verifications'][0]['admitted_at'] = ANCIENT
+    state['conversations']['c1'] = _completed_conversation(audio_files=[])
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['refused'] == 1 and counters['expired'] == 0
+    assert any(r.levelname == 'CRITICAL' and 'verify_content_mismatch' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize('dry_run, advances', [(False, False), (True, True)])
+def test_timeout_alert_only_pages_after_successful_cursor_reclamation(dry_run, advances, caplog):
+    state, kwargs = _harness([], mode='heal', dry_run=dry_run)
+    _pending_completed_job(state)
+    state['cursor']['pending_verifications'][0]['admitted_at'] = ANCIENT
+    state['conversations']['c1'] = {'status': 'processing'}
+    kwargs['cursor_advancer'] = lambda *a, **kw: advances
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 1 and counters['verification_timeouts'] == 1
+    assert not any(r.levelname == 'CRITICAL' for r in caplog.records)
+
+
+@pytest.mark.parametrize('reason', ['verify_content_mismatch', 'verify_job_binding', 'dead_letter'])
+@pytest.mark.parametrize('advances', [False, True])
+def test_verification_refusal_pages_only_after_winning_cursor_cas(reason, advances, caplog):
+    state, kwargs = _harness([], mode='heal')
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['conversations']['c1'] = _completed_conversation()
+    if reason == 'verify_content_mismatch':
+        state['conversations']['c1']['audio_files'] = []
+    elif reason == 'verify_job_binding':
+        state['conversations']['c1']['finalization_job_id'] = 'other-job'
+    else:
+        state['jobs']['job-1']['status'] = 'dead_letter'
+    kwargs['cursor_advancer'] = lambda *a, **kw: advances
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['refused'] == 1
+    criticals = [r.getMessage() for r in caplog.records if r.levelname == 'CRITICAL']
+    assert len(criticals) == int(advances)
+    if advances:
+        assert f'reason={reason}' in criticals[0]
+    assert state['finalization_calls'] == []
+
+
+@pytest.mark.parametrize('reason', ['verify_content_mismatch', 'verify_job_binding', 'dead_letter'])
+def test_dry_run_pages_verification_refusals_without_mutating_cursor(reason, caplog):
+    state, kwargs = _harness([], mode='heal', dry_run=True)
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['conversations']['c1'] = _completed_conversation()
+    if reason == 'verify_content_mismatch':
+        state['conversations']['c1']['audio_files'] = []
+    elif reason == 'verify_job_binding':
+        state['conversations']['c1']['finalization_job_id'] = 'other-job'
+    else:
+        state['jobs']['job-1']['status'] = 'dead_letter'
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['refused'] == 1 and state['advances'] == []
+    criticals = [r.getMessage() for r in caplog.records if r.levelname == 'CRITICAL']
+    assert len(criticals) == 1 and f'reason={reason}' in criticals[0]
+
+
+def test_fast_recovery_selects_due_content_within_minutes():
+    rows = [_row('u1', 'c1', _eligible_data(finished_at=NOW - timedelta(minutes=6)))]
+    state, kwargs = _harness(rows, mode='heal')
+    counters = sweep.run_selfheal_tick(**kwargs, stale_after=timedelta(minutes=5), content_due_scan=True)
+    assert counters['enqueued'] == 1
+    assert state['scan_calls'][0]['content_due_before'] == NOW - timedelta(minutes=5)
+    assert state['finalization_calls'][0]['recovery_cutoff'] == NOW - timedelta(minutes=5)
+
+
+def test_kill_switch_restores_legacy_sweep_threshold(monkeypatch):
+    monkeypatch.setenv('LISTEN_QUIET_FINALIZATION_ENABLED', 'false')
+    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    calls = []
+    monkeypatch.setattr(finalization_service, 'run_selfheal_tick', lambda **kw: calls.append(kw) or {'enqueued': 0})
+    finalization_service.reconcile_stale_in_progress_conversations()
+    assert calls[0]['stale_after'] == timedelta(hours=2)
+    assert calls[0]['content_due_scan'] is False
+
+
+def test_fast_recovery_preserves_the_legacy_always_on_fallback(monkeypatch):
+    monkeypatch.setenv('LISTEN_QUIET_FINALIZATION_ENABLED', 'true')
+    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(finalization_service.jobs_db, 'get_in_progress_content_sweep_cursor', lambda **kw: {})
+    calls = []
+    monkeypatch.setattr(finalization_service, 'run_selfheal_tick', lambda **kw: calls.append(kw) or {'enqueued': 1})
+    observations = []
+    monkeypatch.setattr(finalization_service.CONVERSATION_ORPHANED_UNFINALIZED, 'inc', observations.append)
+    result = finalization_service.reconcile_stale_in_progress_conversations()
+    assert observations == [1, 1]
+    assert len(calls) == 2
+    assert calls[0]['content_due_scan'] is True
+    assert calls[1]['content_due_scan'] is False
+    assert calls[1]['stale_after'] == timedelta(hours=2)
+    assert result['enqueued'] == 2
+
+
+def test_fast_recovery_pages_past_a_refused_lease_prefix():
+    rows = [_row('u1', f'unknown-{i}', _eligible_data()) for i in range(sweep.MAX_ELIGIBLE_PER_TICK)]
+    rows.append(_row('u1', 'expired', _eligible_data()))
+    state, kwargs = _harness(rows, mode='heal')
+    admitted = kwargs['request_finalization_fn']
+
+    def scan_fn(**options):
+        path = options['resume_after_path']
+        start = next((i + 1 for i, row in enumerate(rows) if row['path'] == path), 0)
+        remaining = rows[start:]
+        return {'rows': remaining, 'scanned': len(remaining), 'exhausted': True, 'resume_after_path': None}
+
+    def advance(generation, path, *, pending_verifications, **_options):
+        state['cursor'].update(
+            generation=generation + 1, resume_after_path=path, pending_verifications=pending_verifications
+        )
+        return True
+
+    def request(uid, cid, **options):
+        assert options['require_expired_recording_lease'] is True
+        if cid != 'expired':
+            return {'created': False, 'reason': 'refused_recording_lease_unknown'}
+        return admitted(uid, cid, **options)
+
+    kwargs.update(scan_fn=scan_fn, cursor_advancer=advance, request_finalization_fn=request)
+    options = dict(stale_after=timedelta(minutes=5), content_due_scan=True)
+    first = sweep.run_selfheal_tick(**kwargs, **options)
+    assert first['enqueued'] == 0
+    assert state['cursor']['resume_after_path'] == rows[-2]['path']
+    second = sweep.run_selfheal_tick(**kwargs, **options)
+    assert second['enqueued'] == 1
+    assert [call['conversation_id'] for call in state['finalization_calls']] == ['expired']
+    assert state['cursor']['resume_after_path'] is None
+
+
+def test_scan_uses_the_same_cutoff_as_recovery_admission():
+    state, kwargs = _harness([_row('u1', 'c1', _eligible_data())], mode='heal')
+    sweep.run_selfheal_tick(**kwargs)
+    assert state['scan_calls'][0]['finished_before'] == NOW - sweep.STALE_AFTER
+    assert state['finalization_calls'][0]['recovery_cutoff'] == state['scan_calls'][0]['finished_before']

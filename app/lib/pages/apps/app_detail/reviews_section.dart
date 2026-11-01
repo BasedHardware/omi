@@ -62,11 +62,32 @@ class RatingDistributionWidget extends StatelessWidget {
   }
 }
 
+/// Sends the reader's review of an app; true when the server accepted it.
+typedef AppReviewSender = Future<bool> Function(String appId, AppReview review);
+
+/// Folds the reader's accepted [score] into [app]'s average and count, so the header and the
+/// ratings page show it at once instead of a stale average (or, after a first review, none at all)
+/// until the app is fetched again. [replacing] is the score of the review an edit replaces.
+void _foldOwnRating(App app, double score, {double? replacing}) {
+  final count = app.ratingCount;
+  final average = app.ratingAvg;
+  if (replacing == null) {
+    app.ratingAvg = average == null ? score : (average * count + score) / (count + 1);
+    app.ratingCount = count + 1;
+  } else if (average != null && count > 0) {
+    app.ratingAvg = (average * count - replacing + score) / count;
+  }
+}
+
 class RecentReviewsSection extends StatefulWidget {
   final List<AppReview> reviews;
   final AppReview? userReview;
   final App app;
   final VoidCallback? onReviewUpdated;
+
+  /// Injectable for tests; default to the add-review and edit-review endpoints.
+  final AppReviewSender? sendReview;
+  final AppReviewSender? sendReviewUpdate;
 
   const RecentReviewsSection({
     super.key,
@@ -74,6 +95,8 @@ class RecentReviewsSection extends StatefulWidget {
     required this.app,
     this.userReview,
     this.onReviewUpdated,
+    this.sendReview,
+    this.sendReviewUpdate,
   });
 
   @override
@@ -126,12 +149,15 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
       bool isSuccessful;
       if (widget.userReview == null) {
-        isSuccessful = await reviewApp(widget.app.id, rev);
+        isSuccessful = await (widget.sendReview ?? reviewApp)(widget.app.id, rev);
         if (isSuccessful) {
-          widget.app.ratingCount += 1;
+          _foldOwnRating(widget.app, editRating);
         }
       } else {
-        isSuccessful = await updateAppReview(widget.app.id, rev);
+        isSuccessful = await (widget.sendReviewUpdate ?? updateAppReview)(widget.app.id, rev);
+        if (isSuccessful) {
+          _foldOwnRating(widget.app, editRating, replacing: widget.userReview!.score);
+        }
       }
 
       if (isSuccessful) {

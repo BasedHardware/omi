@@ -1,0 +1,65 @@
+# In-cluster staging replay (swarm lane 4; swarm §8: load never runs from m5).
+# Render with envsubst, then `kubectl --context <dev ctx> -n staging apply -f -` on dev-operator:
+#   IMAGE      us-central1-docker.pkg.dev/based-hardware-dev/staging/backend:<integration sha>
+#   RUN_ID     population run id (also the Job name suffix)
+#   PLAN_URI   gs://based-hardware-dev-staging-mirror/plans/<run>.jsonl (uploaded by the operator)
+#   TARGET     https://backend-sync-staging-<hash>.a.run.app
+#   EXTRA_ARGS e.g. "--poll --seed-capture --time-scale 1" (a plan with fresh uploads needs --seed-capture;
+#              the run exits 1 when any admitted lane differs from the plan's lane_hint)
+# Identity: KSA staging-worker (Workload Identity -> staging-worker@). Secrets are read from Secret Manager
+# in-process (--admin-key-secret / --mirror-key-secret); the ENCRYPTION_SECRET env (seeding only) comes from
+# the k8s secret staging-batch-worker, which holds the same staging key. Add --cloud-run-id-token to
+# EXTRA_ARGS while staging enforces Cloud Run invoker IAM (prod does not).
+# The staging fence runs in-process before any capture seeding (--seed-capture).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loadgen-replay-${RUN_ID}
+  namespace: staging
+  labels: {app: loadgen-replay, omi-deployment: staging}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: loadgen-replay}
+    spec:
+      serviceAccountName: staging-worker
+      restartPolicy: Never
+      containers:
+        - name: replay
+          image: ${IMAGE}
+          workingDir: /app
+          command: ["/bin/sh", "-c"]
+          args:
+            - >-
+              python -c "from google.cloud import storage; import sys;
+              b, _, n = sys.argv[1][5:].partition('/');
+              storage.Client(project='based-hardware-dev').bucket(b).blob(n).download_to_filename('/tmp/plan.jsonl')" "${PLAN_URI}"
+              && python -m scripts.staging.replay run --plan /tmp/plan.jsonl --target "${TARGET}"
+              --out /tmp/out
+              --admin-key-secret projects/based-hardware-dev/secrets/staging-admin-key/versions/latest
+              --mirror-key-secret projects/based-hardware-dev/secrets/staging-encryption-secret/versions/latest
+              ${EXTRA_ARGS}
+              ; rc=$?; python -c "from google.cloud import storage; import pathlib;
+              b = storage.Client(project='based-hardware-dev').bucket('based-hardware-dev-staging-mirror');
+              [b.blob('replays/${RUN_ID}/' + p.name).upload_from_filename(str(p)) for p in pathlib.Path('/tmp/out').glob('*')]";
+              up=$?; [ $rc -ne 0 ] && exit $rc; exit $up
+          env:
+            - {name: OMI_DEPLOYMENT, value: staging}
+            - {name: OMI_ENV_STAGE, value: prod}
+            - {name: FIRESTORE_DATABASE_ID, value: staging}
+            - {name: BUCKET_PRIVATE_CLOUD_SYNC, value: based-hardware-dev-staging-sync}  # code default is the prod bucket; fence-required
+            - {name: MCP_AUTHORIZATION_SERVER_URL, value: 'https://staging.invalid'}  # replay serves no MCP; fence-required
+            - {name: LIFECYCLE_EMAIL_FROM_ADDRESS, value: staging-no-send@based-hardware-dev.invalid}
+            - {name: SHARE_EMAIL_FROM_ADDRESS, value: staging-no-send@based-hardware-dev.invalid}
+            - {name: GOOGLE_CLOUD_PROJECT, value: based-hardware-dev}
+            # Required by the staging fence (utils/staging_fence.py) before --seed-capture touches Firestore;
+            # same values as deploy/runtime_env/staging.overlay.yaml env_all.
+            - {name: OMI_CUSTOMER_DATA_PROJECT, value: based-hardware-dev}
+            - {name: FIREBASE_AUTH_PROJECT_ID, value: based-hardware-dev}
+            - name: ENCRYPTION_SECRET  # the staging runtime key; the seeder encodes conversations with it
+              valueFrom: {secretKeyRef: {name: staging-batch-worker, key: ENCRYPTION_SECRET}}
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "2", memory: 4Gi}

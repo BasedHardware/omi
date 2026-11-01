@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-summary-empty-state.png",
+      "platform": "mobile-ios",
+      "description": "Empty state with one-tap Summarize with Omi",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-summary-sheet-omi-and-template.png",
+      "platform": "mobile-ios",
+      "description": "Template sheet: built-in Omi row plus a saved template",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-summary-sheet-loading.png",
+      "platform": "mobile-ios",
+      "description": "Template sheet loading state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-summary-sheet-error.png",
+      "platform": "mobile-ios",
+      "description": "Template sheet error with retry",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-summary-sheet-empty.png",
+      "platform": "mobile-ios",
+      "description": "Template sheet with no saved templates",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-summary-generating.png",
+      "platform": "mobile-ios",
+      "description": "In-tab generating state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-summary-result-chips.png",
+      "platform": "mobile-ios",
+      "description": "Result with summary source chips",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-summary-failure-template.png",
+      "platform": "mobile-ios",
+      "description": "Inline failure: template returned no summary",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-summary-failure-busy.png",
+      "platform": "mobile-ios",
+      "description": "Inline failure: conversation still processing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-summary-failure-limit.png",
+      "platform": "mobile-ios",
+      "description": "Inline failure: rate limit reached",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-summary-empty-state-long-title.png",
+      "platform": "mobile-ios",
+      "description": "Empty state with a long title ellipsized",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

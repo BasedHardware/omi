@@ -176,12 +176,12 @@ void main() {
       );
     });
 
-    test('only failed is retryable', () {
+    test('only spent transient budgets allow explicit retry', () {
       for (final state in WalSyncDisplayState.values) {
         expect(
           isRetryableSyncState(state),
           state == WalSyncDisplayState.failed,
-          reason: '$state must not offer a retry that cannot succeed',
+          reason: '$state must distinguish a request refusal from a permanent audio verdict',
         );
       }
     });

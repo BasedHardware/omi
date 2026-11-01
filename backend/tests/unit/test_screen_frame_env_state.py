@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 import database.screen_frames as screen_frames_db
+from database.firestore_retry import FIRESTORE_NO_RETRY
 from database.screen_frames import LEGACY_SCREEN_FRAMES_BUCKET, frame_storage_bucket
 
 PROD = 'based-hardware-prod-screen-frames'
@@ -129,7 +130,7 @@ def test_dev_keeps_writing_its_legacy_fields(monkeypatch):
 def test_a_deadline_bounds_the_marker_read_to_one_attempt(monkeypatch):
     ref = _ref(monkeypatch)
     screen_frames_db.get_conversation_screen_frames_adjudicated_at('u', 'c', bucket=PROD, rpc_timeout=3.5)
-    assert ref.rpc_bounds == {'timeout': 3.5, 'retry': None}
+    assert ref.rpc_bounds == {'timeout': 3.5, 'retry': FIRESTORE_NO_RETRY}
     screen_frames_db.get_conversation_screen_frames_adjudicated_at('u', 'c', bucket=PROD)
     assert ref.rpc_bounds == {}
 
@@ -142,8 +143,41 @@ def test_the_marker_read_returns_stamp_and_fingerprint_for_this_bucket(monkeypat
 
     prod = screen_frames_db.get_conversation_screen_frames_marker('u', 'c', bucket=PROD, rpc_timeout=2.0)
     assert prod[1] == 'prod-fp' and prod[0] is not None
-    assert ref.rpc_bounds == {'timeout': 2.0, 'retry': None}
+    assert ref.rpc_bounds == {'timeout': 2.0, 'retry': FIRESTORE_NO_RETRY}
     assert screen_frames_db.get_conversation_screen_frames_marker('u', 'c', bucket=LEGACY_SCREEN_FRAMES_BUCKET) == (
         'dev-stamp',
         'dev-fp',
     )
+
+
+def _dropped(reason):
+    return screen_frames_db.SCREEN_FRAMES_FOREIGN_BUCKET_DROPPED_TOTAL.labels(reason=reason)._value.get()
+
+
+def test_own_frames_counts_and_logs_frames_left_in_another_bucket(caplog):
+    frames = [
+        {'id': 'mine', 'storage_bucket': PROD},
+        {'id': 'dev', 'storage_bucket': LEGACY_SCREEN_FRAMES_BUCKET},
+        {'id': 'legacy'},
+    ]
+    foreign, unstamped = _dropped('foreign_bucket'), _dropped('legacy_unstamped')
+    with caplog.at_level('WARNING', logger='database.screen_frames'):
+        kept = screen_frames_db.own_frames(frames, PROD)
+    assert [frame['id'] for frame in kept] == ['mine']
+    assert _dropped('foreign_bucket') == foreign + 1
+    assert _dropped('legacy_unstamped') == unstamped + 1
+    (record,) = [r for r in caplog.records if 'foreign-bucket frames skipped' in r.getMessage()]
+    message = record.getMessage()
+    assert f'host_bucket={PROD}' in message and 'kept=1 dropped=2 unstamped=1' in message
+    assert f'{LEGACY_SCREEN_FRAMES_BUCKET}:2' in message
+
+
+def test_own_frames_is_silent_when_nothing_is_dropped(caplog):
+    foreign = _dropped('foreign_bucket')
+    with caplog.at_level('WARNING', logger='database.screen_frames'):
+        assert screen_frames_db.own_frames([{'id': 'a', 'storage_bucket': PROD}], PROD) == [
+            {'id': 'a', 'storage_bucket': PROD}
+        ]
+        assert screen_frames_db.own_frames([{'id': 'a'}], None) == []
+    assert _dropped('foreign_bucket') == foreign
+    assert not [r for r in caplog.records if 'foreign-bucket' in r.getMessage()]

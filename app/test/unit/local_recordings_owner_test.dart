@@ -1,99 +1,123 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/wals/native_recording_intake.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import '../support/custody_test_helpers.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  const recording = 'audio_omibatchphone_opus_fs320_16000_1_fs320_1720000001.bin';
   late Directory dir;
-
   setUp(() async {
-    dir = await Directory.systemTemp.createTemp('local_recordings_owner');
-    await File('${dir.path}/$recording').writeAsBytes([4, 0, 0, 0, 1, 2, 3, 4]);
-    SharedPreferences.setMockInitialValues({});
-    await SharedPreferencesUtil.init();
-    await SharedPreferencesUtil().saveString('batchAudioDir', dir.path);
+    dir = await custodyDirectory();
   });
-
   tearDown(() async {
-    if (await dir.exists()) await dir.delete(recursive: true);
+    await dir.delete(recursive: true);
+  });
+  const name = 'audio_omibatchphone_opus_16000_1_fs320_1720000000.bin';
+  Future<void> audio(String name) => File('${dir.path}/$name').writeAsBytes([1, 0, 0, 0, 5]);
+
+  test('intake stamps the signed-in owner once and survives an account switch', () async {
+    await audio(name);
+    final ledger = await custodyLedger();
+    final intake = NativeRecordingIntake(ledger);
+    await Future.wait([intake.scan(), intake.scan()]);
+    expect((await ledger.getAllWals()).single.ownerUid, 'owner');
+    SharedPreferencesUtil().uid = 'other';
+    final other = await custodyLedger();
+    await NativeRecordingIntake(other).scan();
+    expect(await other.getAllWals(), isEmpty);
+    expect(other.testForeignWals.single.ownerUid, 'owner');
+    expect(await File('${dir.path}/$name').exists(), isTrue);
   });
 
-  Future<List<String>> listFor(String uid) async {
-    SharedPreferencesUtil().uid = uid;
-    final provider = LocalRecordingsProvider();
-    await provider.refresh();
-    final names = provider.recordings.map((r) => r.fileName).toList();
-    provider.dispose();
-    return names;
-  }
-
-  test('a recording made by one account is not listed for the next account', () async {
-    expect(await listFor('user-a'), [recording]);
-
-    expect(await listFor('user-b'), isEmpty);
-    expect(File('${dir.path}/$recording').existsSync(), isTrue);
-
-    expect(await listFor('user-a'), [recording]);
+  test('legacy owners migrate into parked ledger custody without reassignment', () async {
+    await audio(name);
+    await File('${dir.path}/omibatch_owners.json').writeAsString(jsonEncode({name: 'other'}));
+    final ledger = await custodyLedger();
+    await NativeRecordingIntake(ledger).scan();
+    expect(await ledger.getAllWals(), isEmpty);
+    expect(ledger.testForeignWals.single.ownerUid, 'other');
+    expect(await File('${dir.path}/omibatch_owners.json').exists(), isFalse);
   });
 
-  test('corrupt ownership metadata is not treated as unowned recordings', () async {
-    expect(await listFor('user-a'), [recording]);
+  test('signed-out and corrupt legacy ownership both defer intake', () async {
+    await audio(name);
+    final ledger = await custodyLedger();
+    SharedPreferencesUtil().uid = '';
+    await NativeRecordingIntake(ledger).scan();
+    expect(await ledger.getAllWals(), isEmpty);
+    SharedPreferencesUtil().uid = 'owner';
+    await File('${dir.path}/omibatch_owners.json').writeAsString('{broken');
+    await NativeRecordingIntake(ledger).scan();
+    expect(await ledger.getAllWals(), isEmpty);
+  });
+
+  test('corrupt legacy ownership defers old files repeatedly but admits new files including overflow', () async {
+    await audio(name);
     final owners = File('${dir.path}/omibatch_owners.json');
-    final intact = await owners.readAsString();
-    await owners.writeAsString(intact.substring(0, intact.length - 3));
-
-    expect(await listFor('user-b'), isEmpty);
-    expect(File('${dir.path}/$recording').existsSync(), isTrue);
-    expect(await owners.readAsString(), isNot(contains('user-b')));
+    await owners.writeAsString('{broken');
+    final boundary = DateTime.now().subtract(const Duration(minutes: 1));
+    await owners.setLastModified(boundary);
+    final newer = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final newName = 'audio_omibatchphone_opus_16000_1_fs320_$newer.bin';
+    final overflow = 'audio_omibatchoverflow_opus_16000_1_fs320_$newer.bin';
+    await audio(newName);
+    await audio(overflow);
+    final ledger = await custodyLedger();
+    await ledger.intakeNativeRecordings();
+    await ledger.intakeNativeRecordings();
+    expect(ledger.nativeWalForFileName(name), isNull);
+    expect(await File('${dir.path}/$name').exists(), isTrue);
+    expect(ledger.nativeWalForFileName(newName)!.ownerUid, 'owner');
+    expect(ledger.nativeWalForFileName(overflow)!.onDeviceOnly, isTrue);
+    expect(await owners.readAsString(), '{broken');
   });
 
-  test('a non-string owner value fails closed instead of rebinding the file', () async {
-    await File('${dir.path}/omibatch_owners.json').writeAsString('{"$recording": 7}');
-
-    expect(await listFor('user-b'), isEmpty);
-    expect(File('${dir.path}/$recording').existsSync(), isTrue);
-    expect(await File('${dir.path}/omibatch_owners.json').readAsString(), '{"$recording": 7}');
+  test('Watch takes only its committed receipt owner; missing receipts stay untouched', () async {
+    const session = '0123456789abcdef0123456789abcdef';
+    const watch = 'audio_omibatchwatch${session}s0_pcm16_16000_1_fs160_1720000000.bin';
+    await audio(watch);
+    final ledger = await custodyLedger();
+    await NativeRecordingIntake(ledger).scan();
+    expect(await ledger.getAllWals(), isEmpty);
+    await Directory('${dir.path}/.watch-receipts').create();
+    await File('${dir.path}/.watch-receipts/$watch').writeAsString(jsonEncode({
+      'metadata': {'version': 1, 'sessionID': session, 'segment': 0, 'startedAt': 1720000000, 'ownerUID': 'other'},
+      'digest': 'a' * 64,
+    }));
+    await NativeRecordingIntake(ledger).scan();
+    expect(await ledger.getAllWals(), isEmpty);
+    expect(ledger.testForeignWals.single.ownerUid, 'other');
+    expect(await File('${dir.path}/$watch').exists(), isTrue);
   });
-
-  test('a queued job for another account is not polled', () async {
-    expect(await listFor('user-a'), [recording]);
-    SharedPreferences.setMockInitialValues({
-      'uid': 'user-b',
-      'localRecordingJobs': jsonEncode({recording: 'job-a'}),
-      'batchAudioDir': dir.path,
-    });
-    await SharedPreferencesUtil.init();
-
-    final polled = <String>[];
-    final provider = LocalRecordingsProvider();
-    provider.jobStatusFetcherOverride = (jobId) async {
-      polled.add(jobId);
-      throw StateError('another account\'s job must not be polled');
-    };
-    await provider.refresh();
-    await provider.reconcileForTesting();
-
-    expect(polled, isEmpty);
-    expect(File('${dir.path}/$recording').existsSync(), isTrue);
-    provider.dispose();
+  test('overflow ownership reaches phone-only custody before migration removes the owners file', () async {
+    const overflow = 'audio_omibatchoverflow_opus_16000_1_fs320_1720000000.bin';
+    await audio(overflow);
+    await audio(name);
+    await File('${dir.path}/omibatch_owners.json').writeAsString(jsonEncode({overflow: 'other', name: 'owner'}));
+    final ledger = await custodyLedger();
+    await ledger.intakeNativeRecordings();
+    expect((await ledger.getAllWals()).single.filePath, name);
+    final held = ledger.testForeignWals.single;
+    expect(held.filePath, overflow);
+    expect(held.onDeviceOnly, isTrue);
+    expect(held.ownerUid, 'other');
+    expect(isAutoUploadEligible(held), isFalse);
+    expect(await File('${dir.path}/omibatch_owners.json').exists(), isFalse);
+    await ledger.intakeNativeRecordings();
+    expect(ledger.testForeignWals.length, 1);
   });
-
-  test('clearing user data drops the listed recordings', () async {
-    SharedPreferencesUtil().uid = 'user-a';
-    final provider = LocalRecordingsProvider();
-    await provider.refresh();
-    expect(provider.recordings, hasLength(1));
-
-    provider.clearUserData();
-
-    expect(provider.recordings, isEmpty);
-    provider.dispose();
+  test('deferred legacy migration does not hide rows already owned by the ledger', () async {
+    await audio(name);
+    final ledger = await custodyLedger();
+    await ledger.intakeNativeRecordings();
+    await File('${dir.path}/omibatch_owners.json').writeAsString('{broken');
+    final view = LocalRecordingsProvider(ledger: ledger, initialize: false);
+    await view.refresh();
+    expect(view.recordings.single.fileName, name);
+    expect(view.isLoading, isFalse);
+    view.dispose();
   });
 }

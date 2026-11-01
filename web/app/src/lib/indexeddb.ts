@@ -8,7 +8,6 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Memory } from '@/types/conversation';
-import type { MemoryView } from './api';
 import { memoryCacheScopeKey, type MemoryCacheScope } from './cache';
 
 interface CachedMemory extends Memory {
@@ -16,7 +15,6 @@ interface CachedMemory extends Memory {
   ownerId: string;
   backendScope: string;
   cachedAt: number;
-  memoryView: MemoryView;
 }
 
 interface MemoryDB extends DBSchema {
@@ -63,10 +61,9 @@ function belongsToScope(memory: CachedMemory, scope: MemoryCacheScope): boolean 
   return memory.ownerId === scope.ownerId && memory.backendScope === scope.backendScope;
 }
 
-/** Cache a page for one owner/backend/view scope. */
+/** Cache a page for one owner/backend scope. */
 export async function cacheMemories(
   memories: Memory[],
-  memoryView: MemoryView = 'useful_now',
   scope: MemoryCacheScope,
 ): Promise<void> {
   try {
@@ -75,7 +72,7 @@ export async function cacheMemories(
     const memoryStore = tx.objectStore('memories');
     const existing = await memoryStore.getAll();
     const now = Date.now();
-    const scopePrefix = `${memoryCacheScopeKey(scope)}:${memoryView}:`;
+    const scopePrefix = `${memoryCacheScopeKey(scope)}:useful_now:`;
 
     for (const memory of existing) {
       if (memory.cacheKey.startsWith(scopePrefix)) {
@@ -89,7 +86,6 @@ export async function cacheMemories(
         ownerId: scope.ownerId,
         backendScope: scope.backendScope,
         cachedAt: now,
-        memoryView,
       });
     }
     await tx.objectStore('metadata').put(now, metadataKey(scope));
@@ -99,9 +95,8 @@ export async function cacheMemories(
   }
 }
 
-/** Get a fresh page from one owner/backend/view scope. */
+/** Get a fresh page from one owner/backend scope. */
 export async function getCachedMemories(
-  memoryView: MemoryView = 'useful_now',
   scope: MemoryCacheScope,
 ): Promise<Memory[] | null> {
   try {
@@ -113,8 +108,7 @@ export async function getCachedMemories(
     const scoped = cached.filter(
       (memory) =>
         belongsToScope(memory, scope) &&
-        memory.memoryView === memoryView &&
-        memory.cacheKey.startsWith(`${memoryCacheScopeKey(scope)}:${memoryView}:`),
+        memory.cacheKey.startsWith(`${memoryCacheScopeKey(scope)}:useful_now:`),
     );
     if (scoped.length === 0) return null;
 
@@ -124,7 +118,6 @@ export async function getCachedMemories(
         ownerId: _ownerId,
         backendScope: _backendScope,
         cachedAt: _cachedAt,
-        memoryView: _memoryView,
         ...memory
       }) => memory,
     );

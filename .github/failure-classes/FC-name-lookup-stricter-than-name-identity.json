@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-name-lookup-stricter-than-name-identity",
+  "violated_contract": "A get-or-create keyed on a person's display name must find the existing person under the same name equality the rest of the system uses: renames dedupe aliases by casefolded, whitespace-collapsed names, and the live owner check casefolds too. find_person_by_name ran only an exact Firestore name == query, which is case-sensitive, so a person saved as \"alice\" or \"Mcdonald\" was never found from \"Alice\" or \"McDonald\". POST /v1/users/people, speaker tag-card names and live explicit introductions then created a duplicate person, and copula introductions and sync text naming left the speaker unresolved.",
+  "canonical_prevention": "Keep the exact indexed query as the fast path and, only on a miss, compare normalized_person_alias(name).casefold() against the owner's active people, an owner-scoped collection read that needs no new index. Pin case variants with a fake whose == filter compares exactly, as Firestore does.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_person_name_lookup.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/person_aliases.py"
+  ],
+  "status": "open"
+}

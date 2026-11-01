@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-dispose-drops-debounced-user-write",
+  "violated_contract": "A change the user has made and the page already shows as under way, held behind a debounce timer, must still be sent when the page is disposed. Custom Vocabulary queued word removals behind a one-second debounce and dispose() only cancelled that timer, so tapping a word's remove button and going back within the second never removed the word, and nothing said so.",
+  "canonical_prevention": "dispose() still cancels the debounce timer (FC-timer-after-dispose), then starts the queued write instead of dropping it: in a microtask, because the write notifies listeners and must not rebuild widgets while the tree is torn down, with the providers it needs read while the page was mounted, and touching page state only while mounted. ActionItemsProvider.dispose flushes its sort and indent debounces the same way. The guard test queues the change, leaves through the page's back button before the debounce elapses, and asserts the write and its follow-up still ran.",
+  "canonical_prevention_artifact": [
+    "app/test/pages/settings/custom_vocabulary_deletion_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/",
+    "app/test/pages/"
+  ],
+  "status": "open"
+}

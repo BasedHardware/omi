@@ -33,6 +33,8 @@ from db import (
 from models import ChatToolResponse
 from notion_content import encode_payload, plan_content_requests, title_items
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 
@@ -112,13 +114,13 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         elif method == "POST":
-            response = requests.post(url, headers=headers, data=encode_payload(json_data or {}))
+            response = requests.post(url, headers=headers, data=encode_payload(json_data or {}), timeout=REQUEST_TIMEOUT)
         elif method == "PATCH":
-            response = requests.patch(url, headers=headers, data=encode_payload(json_data))
+            response = requests.patch(url, headers=headers, data=encode_payload(json_data), timeout=REQUEST_TIMEOUT)
         elif method == "DELETE":
-            response = requests.delete(url, headers=headers)
+            response = requests.delete(url, headers=headers, timeout=REQUEST_TIMEOUT)
         else:
             return None
 
@@ -1233,7 +1235,8 @@ async def notion_callback(
                 "grant_type": "authorization_code",
                 "code": code,
                 "redirect_uri": NOTION_REDIRECT_URI
-            }
+            },
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code != 200:

@@ -269,7 +269,12 @@ def trigger_matches(pattern: str, path: str) -> bool:
         return True
     if pattern.endswith("/**") and path.startswith(pattern[:-3].rstrip("/") + "/"):
         return True
-    if fnmatch.fnmatchcase(path, pattern) or PurePath(path).match(pattern):
+    if fnmatch.fnmatchcase(path, pattern):
+        return True
+    # Path.match treats a slash-free pattern as a final-component glob, so a
+    # trigger written as `package.json` also selects `web/frontend/package.json`.
+    # A literal trigger names one repo path. Glob patterns still use Path.match.
+    if ("/" in pattern or glob.has_magic(pattern)) and PurePath(path).match(pattern):
         return True
     if "/**/" in pattern and fnmatch.fnmatchcase(path, pattern.replace("/**/", "/")):
         return True
@@ -433,9 +438,20 @@ def command_for_host(
     platform_name: str | None = None,
     python_executable: str | None = None,
 ) -> list[str]:
-    """Resolve manifest interpreter aliases through the active Windows toolchain."""
+    """Resolve manifest interpreter aliases through the active toolchain.
+
+    On Windows, `python3`/`bash` must route through Git's toolchain. On POSIX
+    hosts the manifest's `python3` alias also honors an explicit
+    `python_executable`, so a host whose PATH `python3` is Xcode CLT 3.9 runs
+    manifest checks under the >= 3.10 interpreter the dev harness selected
+    instead of crashing on PEP 604 unions at module scope.
+    """
     platform = platform_name or os.name
-    if platform != "nt" or not command:
+    if not command:
+        return command
+    if platform != "nt":
+        if command[0] == "python3" and python_executable:
+            return [python_executable, *command[1:]]
         return command
     if command[0] == "bash":
         return [bash_executable(platform_name=platform), *command[1:]]
@@ -469,7 +485,7 @@ def execute_checks(
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
         )
-        command = command_for_host(command)
+        command = command_for_host(command, python_executable=sys.executable)
         returncode = subprocess.run(command, cwd=root, check=False).returncode
         status = "PASS" if returncode == 0 else "FAIL"
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)
@@ -502,6 +518,12 @@ def parse_args() -> argparse.Namespace:
         "--metadata-only",
         action="store_true",
         help="Run only selected checks that consume PR metadata and report all their failures.",
+    )
+    parser.add_argument(
+        "--keep-going",
+        action="store_true",
+        help="Run every selected check before exiting and report all failures (nightly full runs); "
+        "fail-fast remains the default for PR and local lanes.",
     )
     parser.add_argument(
         "--check-id",
@@ -639,7 +661,7 @@ def main() -> int:
             head=args.head,
             pr_body_file=body_path,
             skip_changelog=args.skip_changelog,
-            keep_going=args.metadata_only,
+            keep_going=args.keep_going or args.metadata_only,
         )
 
 

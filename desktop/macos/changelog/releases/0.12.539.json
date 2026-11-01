@@ -1,0 +1,7 @@
+{
+  "version": "0.12.539",
+  "date": "2026-10-26",
+  "changes": [
+    "Keep individual utterance timestamps when uploading local transcripts instead of collapsing one speaker's recording into a single long segment."
+  ]
+}

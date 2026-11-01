@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-dark-today-open.png",
+      "platform": "mobile-ios",
+      "description": "Dark, top: summary line, Today open with its totals, older days below",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-dark-all-folded.png",
+      "platform": "mobile-ios",
+      "description": "Dark: every day folded to its totals; needs attention in warning colour; Sync details last",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-dark-day-pinned-header.png",
+      "platform": "mobile-ios",
+      "description": "Dark: Yesterday open and scrolled, its header pinned under the app bar; a refused row with its reason and chevron",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-dark-large-text.png",
+      "platform": "mobile-ios",
+      "description": "Dark at textScaler 1.6: summary and Today header wrap, header grows to fit",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-dark-large-text-folded.png",
+      "platform": "mobile-ios",
+      "description": "Dark at textScaler 1.6, all days folded: every header sizes to its content",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-light-today-open.png",
+      "platform": "mobile-ios",
+      "description": "Light, top: summary line, Today open",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

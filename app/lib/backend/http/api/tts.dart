@@ -47,19 +47,21 @@ class TtsSynthesisRequest {
 /// Starts `POST /v2/tts/synthesize` without materializing the response body.
 ///
 /// Defaults mirror the desktop client and backend so both platforms stay in
-/// sync. The abort trigger is shared with package:http's request and response,
-/// which makes stop/new-query/background cancellation close the socket even if
-/// the server has not sent headers yet.
+/// sync. When [voiceId] is omitted the backend resolves the shared assistant
+/// voice preference; an explicit id is for previews. The abort trigger is
+/// shared with package:http's request and response, which makes
+/// stop/new-query/background cancellation close the socket even if the server
+/// has not sent headers yet.
 TtsSynthesisRequest synthesizeSpeechStream({
   required String text,
-  String voiceId = 'BAMYoBHLZM7lJgJAmFz0', // Sloane
+  String? voiceId, // null uses the shared preference — the old Sloane default retired
   String modelId = 'eleven_turbo_v2_5',
   String outputFormat = 'mp3_44100_128',
   Map<String, dynamic>? voiceSettings,
 }) {
   final body = <String, dynamic>{
     'text': text,
-    'voice_id': voiceId,
+    if (voiceId != null) 'voice_id': voiceId,
     'model_id': modelId,
     'output_format': outputFormat,
     if (voiceSettings != null) 'voice_settings': voiceSettings,

@@ -40,3 +40,32 @@ def test_search_conversations_non_transient_error_still_raises():
             search_conversations(uid='uid-1', query='meeting notes')
         assert str(exc_info.value) == 'Failed to search conversations'
         assert 'bad query shape' not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    'value, expected', [(None, 5), ('9', 9), ('1', 1), ('30', 30), ('0', 5), ('31', 5), ('oops', 5), ('2.5', 5)]
+)
+def test_typesense_timeout_is_lazily_bounded(monkeypatch, value, expected):
+    import utils.conversations.search as search
+    from unittest.mock import MagicMock
+
+    monkeypatch.delenv('TYPESENSE_CONNECTION_TIMEOUT_SECONDS', raising=False)
+    if value is not None:
+        monkeypatch.setenv('TYPESENSE_CONNECTION_TIMEOUT_SECONDS', value)
+    monkeypatch.setattr(search, '_typesense_client', None)
+    constructor = MagicMock()
+    monkeypatch.setattr(search.typesense, 'Client', constructor)
+    search._get_typesense_client()
+    assert constructor.call_args.args[0]['connection_timeout_seconds'] == expected
+
+
+def test_keyword_helper_can_surface_degradation(monkeypatch):
+    import utils.conversations.search as search
+
+    def unavailable(**kwargs):
+        raise TimeoutError('keyword index offline')
+
+    monkeypatch.setattr(search, 'search_conversations', unavailable)
+    assert search.keyword_search_conversation_ids('uid', 'topic') == []
+    with pytest.raises(ConversationSearchUnavailableError):
+        search.keyword_search_conversation_ids('uid', 'topic', raise_on_error=True)

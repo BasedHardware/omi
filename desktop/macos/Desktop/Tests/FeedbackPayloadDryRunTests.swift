@@ -7,13 +7,13 @@ import XCTest
   // notification regression step must compile the bundle without them.
 
   /// SET-02: the feedback dry-run bridge action must let a harness inspect the exact
-  /// payload `FeedbackView.submitFeedback()` would attach — WITHOUT firing a Sentry
-  /// event — so the diagnostics JSON can be scanned for secrets.
+  /// payload `FeedbackView.submitFeedback()` would record — WITHOUT any cloud
+  /// submission — so the diagnostics JSON can be scanned for secrets.
   ///
   /// The redaction guarantee of the diagnostics attachment itself is already covered
   /// by `DesktopDiagnosticsManagerTests`. These tests instead pin the *dry-run seam*:
   /// that the action is registered, derives its payload from the same builders the
-  /// real submit uses (so it can't silently drift), and never touches Sentry.
+  /// real submit uses (so it can't silently drift), and never submits anywhere.
   final class FeedbackPayloadDryRunTests: XCTestCase {
     private let actionName = "dump_feedback_payload_dryrun"
 
@@ -37,7 +37,7 @@ import XCTest
 
     func testDryRunUsesTheSameBuildersAsTheRealSubmit() throws {
       let block = try dryRunActionBlock()
-      // Same diagnostics builder the real Sentry attachment uses — the dry-run
+      // Same diagnostics builder the real submit records — the dry-run
       // returns the identical JSON, not a parallel reimplementation.
       XCTAssertTrue(
         block.contains("DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment("),
@@ -51,14 +51,14 @@ import XCTest
         "dry-run must report the shared diagnostics attachment filename")
     }
 
-    func testDryRunNeverSubmitsToSentry() throws {
+    func testDryRunNeverSubmitsAnywhere() throws {
       let block = try dryRunActionBlock()
       XCTAssertFalse(
         block.contains("SentrySDK"),
-        "dry-run must not invoke Sentry — that is the whole point of a dry run")
+        "dry-run must not invoke any cloud SDK — that is the whole point of a dry run")
       XCTAssertTrue(
-        block.contains("\"sentry_capture_invoked\": \"false\""),
-        "dry-run must declare that no Sentry capture happened")
+        block.contains("\"cloud_submission_invoked\": \"false\""),
+        "dry-run must declare that no cloud submission happened")
     }
 
     func testDryRunReturnsRedactedDiagnosticsInsteadOfRawLogMetadata() throws {
@@ -76,11 +76,11 @@ import XCTest
       // longer reflect what actually ships — pin that both sides share them.
       let source = try feedbackViewSource()
       XCTAssertTrue(
-        source.contains("let sentryMessage = feedbackReportTitle(for: message)"),
-        "submitFeedback must build its Sentry title via the shared builder")
+        source.contains("let reportTitle = feedbackReportTitle(for: message)"),
+        "submitFeedback must build its title via the shared builder")
       XCTAssertTrue(
-        source.contains("filename: feedbackDiagnosticsAttachmentFilename"),
-        "submitFeedback must attach the diagnostics JSON under the shared filename")
+        source.contains("feedbackReportTitle(for:"),
+        "submitFeedback must share the title builder with the dry-run")
     }
 
     // MARK: - Behavioral: shared title builder + payload shape
@@ -96,8 +96,8 @@ import XCTest
       let flow = try String(contentsOf: feedbackPayloadFlowURL(), encoding: .utf8)
       let expectedTitle = feedbackReportTitle(for: "[[MARKER:set02-dryrun]]")
       XCTAssertTrue(
-        flow.contains("result.detail.sentry_message: \"\(expectedTitle)\""),
-        "Tier-2 must expect the shared privacy-safe Sentry title")
+        flow.contains("result.detail.report_title: \"\(expectedTitle)\""),
+        "Tier-2 must expect the shared privacy-safe report title")
       XCTAssertFalse(flow.contains("User Report: [[MARKER:set02-dryrun]]"))
       XCTAssertFalse(flow.contains("User Report (logs only)"))
     }

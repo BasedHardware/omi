@@ -7,7 +7,7 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
+from config.prerecorded_stt import required_env_for_model_config, required_env_for_held_recovery  # noqa: E402
 from config.stt_provider_policy import STTServingSurface, canonical_model_config, model_is_enabled  # noqa: E402
 from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
@@ -16,11 +16,10 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
 from scripts.runtime_env_capability_contracts import (
     validate_conversation_finalization_capabilities,
-    validate_free_tier_deploy_contract,
     validate_speaker_embedding_hosts,
+    validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
-from scripts.runtime_env_jev_contract import validate_jev_uid_allowlist  # noqa: E402
 from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
@@ -31,7 +30,6 @@ from scripts.runtime_env_validation.common import (
     ROOT,
     ConfigDict,
     ValidationError,
-    _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS,
     _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV,
     _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS,
     _SYNC_LEDGER_FENCE_MODES,
@@ -51,26 +49,11 @@ from scripts.runtime_env_validation.common import (
     _validate_env_entries,
     _validate_forbidden_env_entries,
     data_plane_project,
+    validate_mentor_pipeline,
+    validate_proactivity_v2_posthog_token,
 )
 
-_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
-    'OMI_LLM_GATEWAY_URL',
-    'OMI_LLM_GATEWAY_FEATURE_MODE',
-    'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION',
-}
-_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS = {'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
 from scripts.runtime_env_validation.workflows import _validate_cloud_run_workflows
-
-_MISSING_CUSTOMER_DATA_IDENTITY = (
-    'missing customer-data identity: secret SERVICE_ACCOUNT_JSON or env OMI_CUSTOMER_DATA_PROJECT'
-)
-
-
-def _has_customer_data_identity(env_map: object, secrets_map: object) -> bool:
-    """A job reaches customer data through the legacy JSON key or a keyless runtime identity pin."""
-    if isinstance(secrets_map, dict) and 'SERVICE_ACCOUNT_JSON' in secrets_map:
-        return True
-    return bool((_manifest_literal_env_value(env_map, 'OMI_CUSTOMER_DATA_PROJECT') or '').strip())
 
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
@@ -89,16 +72,6 @@ def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, Config
         if 'MEMORY_ENABLED' in env_map:
             surfaces.append((f'cloud_run/{service}', env_map))
     return surfaces
-
-
-def _memory_product_state(env_map: ConfigDict) -> str:
-    """Return on / off from the manifest's literal ``MEMORY_ENABLED``."""
-    enabled = (_manifest_literal_env_value(env_map, 'MEMORY_ENABLED') or '').strip().lower()
-    if enabled in {'on', 'true', '1'}:
-        return 'on'
-    if enabled:
-        return 'off'
-    return ''
 
 
 def _manifest_env_binding_is_configured(env_map: ConfigDict, secrets_map: ConfigDict, key: str) -> bool:
@@ -137,6 +110,14 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
         values_file = ROOT / service_config['values_file']
         values = _load_yaml(values_file)
         actual_env = _env_entries_by_name(values.get('env', []))
+        # GKE ports are declared in Helm values, while the host may come from
+        # the manifest's shared ConfigMap. Validate the effective pair.
+        if 'REDIS_DB_HOST' in (service_config.get('env') or {}):
+            port = actual_env.get('REDIS_DB_PORT') or {}
+            if not port.get('value') and not port.get('valueFrom'):
+                errors.append(
+                    ValidationError(f'gke/{service}', 'Redis requires an explicit non-empty REDIS_DB_PORT binding')
+                )
         errors.extend(
             _validate_env_entries(
                 scope=f'gke/{service}',
@@ -173,6 +154,7 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
     errors = validate_retired_memory_manifest(env, env_config)
+    errors.extend(_validate_redis_ports(env_config, env))
     errors.extend(
         ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
     )
@@ -210,331 +192,116 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
     return errors
 
 
-def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require memory-maintenance-job to track the global memory safety mode.
+def _validate_redis_ports(env_config: ConfigDict, env: str) -> list[ValidationError]:
+    """A Redis host must not silently fall back to the application's 6379 default.
 
-    ``off`` pauses product writes. ``write`` is default-on intake for every UID
-    (no allowlist, ST→LT cron not required). ``read`` still requires the
-    dedicated maintenance job so Gate 3 cannot forget ST→LT hosting.
+    The four managed Cloud Run services also carry Redis host secret bindings
+    from existing deployments. Require their ports even without a host entry
+    in the manifest, so removing a port cannot evade this check.
+    """
+    required_services = {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    targets: list[tuple[str, ConfigDict, bool]] = []
+    for group in ('services', 'jobs'):
+        for name, raw in (_as_config_dict(cloud_run.get(group)) or {}).items():
+            scope = f'{env}/cloud_run/{name}' if group == 'services' else f'{env}/cloud_run/jobs/{name}'
+            targets.append((scope, _as_config_dict(raw) or {}, group == 'services' and name in required_services))
+    desktop = _as_config_dict(env_config.get('desktop_backend'))
+    if desktop is not None:
+        targets.append((f'{env}/desktop_backend', desktop, False))
+    errors: list[ValidationError] = []
+    for scope, target, required in targets:
+        bindings = _as_config_dict(target.get('env')) or {}
+        secrets = _as_config_dict(target.get('secrets')) or {}
+        if not required and 'REDIS_DB_HOST' not in bindings and 'REDIS_DB_HOST' not in secrets:
+            continue
+        if not _manifest_env_binding_is_configured(bindings, secrets, 'REDIS_DB_PORT'):
+            errors.append(ValidationError(scope, 'Redis requires an explicit non-empty REDIS_DB_PORT binding'))
+            continue
+        port = _as_config_dict(bindings.get('REDIS_DB_PORT')) or {}
+        if 'value' in port:
+            value = str(port['value'])
+            if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 65535:
+                errors.append(ValidationError(scope, 'REDIS_DB_PORT must be a TCP port from 1 to 65535'))
+        if port.get('provisional'):
+            errors.append(ValidationError(scope, 'REDIS_DB_PORT must not be provisional for a Redis host'))
+    return errors
 
-    Also rejects:
-    - canonical maintenance env/secrets on notifications-job (its workflow
-      removes only those retired live bindings);
-    - request-path / other-job hosts keeping MEMORY_CANONICAL_MAINTENANCE_ENABLED=true
-      (ST→LT cron must run only on memory-maintenance-job).
+
+def _validate_memory_job_retirement(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Keep the retired memory-maintenance bindings out of every runtime surface.
+
+    memory-maintenance-job never served production and was retired on
+    2026-10-26: required intake runs inline at write time with Dream's sweep
+    as retry owner. The manifest must not re-introduce the job, its retired
+    maintenance or consolidation switches, or its deploy window, and
+    notifications-job keeps none of the memory-plane bindings. The scheduled
+    X-extraction Flex contract stays.
     """
     errors: list[ValidationError] = []
-    scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     jobs = _as_config_dict(cloud_run.get('jobs')) or {}
+
     notifications_job = _as_config_dict(jobs.get('notifications-job')) or {}
     notifications_env = _as_config_dict(notifications_job.get('env')) or {}
     notifications_secrets = _as_config_dict(notifications_job.get('secrets')) or {}
     notifications_scope = f'{env}/cloud_run/jobs/notifications-job'
     for forbidden_env in sorted(_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV.intersection(notifications_env)):
-        errors.append(
-            ValidationError(
-                notifications_scope,
-                f'env {forbidden_env} belongs only on memory-maintenance-job',
-            )
-        )
+        errors.append(ValidationError(notifications_scope, f'env {forbidden_env} belongs to the retired memory job'))
     for forbidden_secret in sorted(_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS.intersection(notifications_secrets)):
         errors.append(
-            ValidationError(
-                notifications_scope,
-                f'secret {forbidden_secret} belongs only on memory-maintenance-job',
-            )
+            ValidationError(notifications_scope, f'secret {forbidden_secret} belongs to the retired memory job')
         )
-    notifications_flex_capable = (
-        (_manifest_literal_env_value(notifications_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower()
-    )
-    if notifications_flex_capable != 'true':
+
+    x_sync_scope = f'{env}/cloud_run/jobs/x-connector-sync-job'
+    x_sync_job = _as_config_dict(jobs.get('x-connector-sync-job')) or {}
+    x_sync_env = _as_config_dict(x_sync_job.get('env')) or {}
+    x_sync_secrets = _as_config_dict(x_sync_job.get('secrets')) or {}
+    x_sync_flex_capable = (_manifest_literal_env_value(x_sync_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower()
+    if x_sync_flex_capable != 'true':
         errors.append(
             ValidationError(
-                notifications_scope,
+                x_sync_scope,
                 'OMI_BACKGROUND_FLEX_CAPABLE must be true so the shared live flag covers scheduled X extraction',
             )
         )
-    notifications_gateway_url = _as_config_dict(notifications_env.get('OMI_LLM_GATEWAY_URL'))
-    if notifications_gateway_url is None or notifications_gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
+    x_sync_gateway_url = _as_config_dict(x_sync_env.get('OMI_LLM_GATEWAY_URL'))
+    if x_sync_gateway_url is None or x_sync_gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
         errors.append(
             ValidationError(
-                notifications_scope,
+                x_sync_scope,
                 'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint for scheduled X Flex',
             )
         )
-    if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in notifications_secrets:
+    if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in x_sync_secrets:
         errors.append(
             ValidationError(
-                notifications_scope,
+                x_sync_scope,
                 'missing secret OMI_LLM_GATEWAY_SERVICE_TOKEN for scheduled X Flex',
             )
         )
 
-    job = _as_config_dict(jobs.get('memory-maintenance-job'))
-    if job is None:
-        errors.append(ValidationError(scope, 'missing cloud_run.jobs.memory-maintenance-job'))
-        return errors
-
-    job_env = _as_config_dict(job.get('env')) or {}
-    job_secrets = _as_config_dict(job.get('secrets')) or {}
-    daily_sweep_env_names = {
-        'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH',
-        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME',
-        'MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES',
-        'MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD',
-        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME',
-        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
-        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
-        'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
-    }
-    for forbidden_name in sorted(daily_sweep_env_names.intersection(job_env)):
+    if 'memory-maintenance-job' in jobs:
         errors.append(
-            ValidationError(
-                scope,
-                f'env {forbidden_name} belongs only on daily-memory-sweep-job',
-            )
+            ValidationError(f'{env}/cloud_run/jobs', 'memory-maintenance-job is retired; remove its manifest block')
         )
-    for forbidden_name in ('POSTHOG_HOST',):
-        if forbidden_name in job_env:
-            errors.append(ValidationError(scope, f'env {forbidden_name} belongs only on daily-memory-sweep-job'))
-    if 'POSTHOG_PROJECT_API_KEY' not in job_secrets:
-        errors.append(
-            ValidationError(
-                scope,
-                'missing secret POSTHOG_PROJECT_API_KEY; ledger drain evaluates jit-processing-v1',
-            )
-        )
-    if env == 'dev':
-        job_flags = _as_config_dict(job.get('flags')) or {}
-        for flag_name, expected_value in _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS.items():
-            actual_entry = job_flags.get(flag_name)
-            if actual_entry is None:
-                errors.append(ValidationError(scope, f'missing required dev Cloud Run flag {flag_name}'))
-                continue
-            if _expected_flag_value(actual_entry) != expected_value:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'dev Cloud Run flag {flag_name} must be {expected_value!r}',
-                    )
-                )
-    if 'MEMORY_ENABLED' not in job_env:
-        errors.append(ValidationError(scope, 'missing env MEMORY_ENABLED'))
-    for required_env in (
+    retired_env = (
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
-        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
+        'MEMORY_MAINTENANCE_CAPTURED_AFTER',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
-        'OMI_BACKGROUND_FLEX_CAPABLE',
-        'PINECONE_INDEX_NAME',
-        'TYPESENSE_HOST_PORT',
-    ):
-        if required_env not in job_env:
-            errors.append(ValidationError(scope, f'missing env {required_env}'))
-    if not _has_customer_data_identity(job_env, job_secrets):
-        errors.append(ValidationError(scope, _MISSING_CUSTOMER_DATA_IDENTITY))
-    for required_secret in (
-        'ENCRYPTION_SECRET',
-        'OPENAI_API_KEY',
-        'PINECONE_API_KEY',
-        'TYPESENSE_HOST',
-        'TYPESENSE_API_KEY',
-    ):
-        if required_secret not in job_secrets:
-            errors.append(ValidationError(scope, f'missing secret {required_secret}'))
-
-    job_state = _memory_product_state(job_env)
-    job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
-
-    if job_cron == 'true':
-        for required_env in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV):
-            if required_env not in job_env:
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
+    )
+    for job_name, raw_job in jobs.items():
+        other_env = _as_config_dict(_as_config_dict(raw_job).get('env')) or {}
+        for name in retired_env:
+            if name in other_env:
                 errors.append(
-                    ValidationError(scope, f'missing gateway env {required_env} while canonical maintenance is enabled')
+                    ValidationError(f'{env}/cloud_run/jobs/{job_name}', f'retired memory env {name} must be absent')
                 )
-        for required_secret in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS):
-            if required_secret not in job_secrets:
-                errors.append(
-                    ValidationError(
-                        scope, f'missing gateway secret {required_secret} while canonical maintenance is enabled'
-                    )
-                )
-        gateway_url = _as_config_dict(job_env.get('OMI_LLM_GATEWAY_URL'))
-        if gateway_url is not None and gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
-            errors.append(
-                ValidationError(
-                    scope, 'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly'
-                )
-            )
-        gateway_mode = (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_FEATURE_MODE') or '').strip().lower()
-        if gateway_mode != 'gateway':
-            errors.append(
-                ValidationError(
-                    scope, 'OMI_LLM_GATEWAY_FEATURE_MODE must be gateway while canonical maintenance is enabled'
-                )
-            )
-        direct_exception = (
-            (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION') or '').strip().lower()
-        )
-        if direct_exception != 'false':
-            errors.append(
-                ValidationError(
-                    scope,
-                    'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION must be false for canonical memory L2 maintenance',
-                )
-            )
-        if env == 'prod':
-            prod_allow = (
-                (_manifest_literal_env_value(job_env, 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE') or '').strip().lower()
-            )
-            if prod_allow != 'true':
-                errors.append(
-                    ValidationError(
-                        scope,
-                        'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
-                    )
-                )
-        job_flex = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_FLEX') or '').strip().lower()
-        if job_flex != 'true':
-            errors.append(
-                ValidationError(
-                    scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled',
-                )
-            )
-
-    # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
-    for other_job_name, raw_other_job in jobs.items():
-        if other_job_name == 'memory-maintenance-job':
-            continue
-        other_job = _as_config_dict(raw_other_job) or {}
-        other_env = _as_config_dict(other_job.get('env')) or {}
-        other_cron = (
-            (_manifest_literal_env_value(other_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
-        )
-        if other_cron == 'true':
-            errors.append(
-                ValidationError(
-                    f'{env}/cloud_run/jobs/{other_job_name}',
-                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false; '
-                    'ST→LT cron is hosted only by memory-maintenance-job',
-                )
-            )
-
-    enabled_surfaces = []
     for surface_scope, surface_env in _canonical_memory_surfaces(env_config):
-        surface_state = _memory_product_state(surface_env)
-        surface_cron = (
-            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
-        )
-        if surface_cron == 'true':
-            errors.append(
-                ValidationError(
-                    surface_scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false on request-path surfaces; '
-                    'ST→LT cron is hosted only by memory-maintenance-job',
-                )
-            )
-        if surface_state and surface_state != 'off':
-            enabled_surfaces.append((surface_scope, surface_env, surface_state))
-
-    if job_state in ('', 'off'):
-        if job_cron == 'true':
-            errors.append(
-                ValidationError(
-                    scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false while MEMORY_ENABLED is off',
-                )
-            )
-        for surface_scope, _surface_env, _surface_state in enabled_surfaces:
-            errors.append(
-                ValidationError(
-                    scope,
-                    f'{surface_scope} MEMORY_ENABLED=on requires memory-maintenance-job MEMORY_ENABLED=on',
-                )
-            )
-        return errors
-
-    if job_state == 'on':
-        # Product on = intake + list. ST→LT cron remains a separate job-only
-        # switch; both overlays pin it on with Flex.
-        for surface_scope, _surface_env, surface_state in enabled_surfaces:
-            if surface_state != 'on':
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'{surface_scope} memory product state {surface_state!r} must match '
-                        'memory-maintenance-job MEMORY_ENABLED=on',
-                    )
-                )
-        return errors
-
-    errors.append(ValidationError(scope, f'MEMORY_ENABLED must be on or off (got {job_state!r})'))
-    return errors
-
-
-def _validate_jit_admission_surface_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Listen and maintenance must see PostHog; GKE listen must pin the data plane."""
-    errors: list[ValidationError] = []
-    expected_data_plane = data_plane_project(env_config)
-    gke = _as_config_dict(env_config.get('gke')) or {}
-    listen = _as_config_dict(gke.get('backend-listen')) or {}
-    listen_env = _as_config_dict(listen.get('env')) or {}
-    listen_scope = f'{env}/gke/backend-listen'
-    posthog = _as_config_dict(listen_env.get('POSTHOG_PROJECT_API_KEY'))
-    posthog_secret = _as_config_dict(posthog.get('secret')) if posthog is not None else None
-    if posthog_secret is None or posthog_secret.get('key') != 'POSTHOG_PROJECT_API_KEY':
-        errors.append(
-            ValidationError(
-                listen_scope,
-                'missing secret POSTHOG_PROJECT_API_KEY; live finalization evaluates jit-processing-v1',
-            )
-        )
-    actual_data_plane = _manifest_literal_env_value(listen_env, 'OMI_FIRESTORE_DATA_PLANE_PROJECT')
-    if actual_data_plane != expected_data_plane:
-        errors.append(
-            ValidationError(
-                listen_scope,
-                f'OMI_FIRESTORE_DATA_PLANE_PROJECT must be {expected_data_plane!r}',
-            )
-        )
-    return errors
-
-
-def _validate_daily_memory_sweep_job_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Keep the replacement sweep deployable after legacy-job retirement."""
-
-    scope = f'{env}/cloud_run/jobs/daily-memory-sweep-job'
-    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
-    jobs = _as_config_dict(cloud_run.get('jobs')) or {}
-    job = _as_config_dict(jobs.get('daily-memory-sweep-job'))
-    if job is None:
-        return [ValidationError(scope, 'missing cloud_run.jobs.daily-memory-sweep-job')]
-    errors: list[ValidationError] = []
-    env_map = _as_config_dict(job.get('env')) or {}
-    secrets = _as_config_dict(job.get('secrets')) or {}
-    if 'MEMORY_CANONICAL_MAINTENANCE_ENABLED' in env_map:
-        errors.append(ValidationError(scope, 'daily sweep must not depend on MEMORY_CANONICAL_MAINTENANCE_ENABLED'))
-    for required_env in (
-        'MEMORY_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH',
-        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
-        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
-        'GOOGLE_CLOUD_PROJECT',
-    ):
-        if required_env not in env_map:
-            errors.append(ValidationError(scope, f'missing env {required_env}'))
-    if not _has_customer_data_identity(env_map, secrets):
-        errors.append(ValidationError(scope, _MISSING_CUSTOMER_DATA_IDENTITY))
-    for required_secret in ('ENCRYPTION_SECRET', 'OPENAI_API_KEY', 'POSTHOG_PROJECT_API_KEY'):
-        if required_secret not in secrets:
-            errors.append(ValidationError(scope, f'missing secret {required_secret}'))
+        for name in retired_env:
+            if name in surface_env:
+                errors.append(ValidationError(surface_scope, f'retired memory env {name} must be absent'))
     return errors
 
 
@@ -546,13 +313,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
     gke = _as_config_dict(env_config.get('gke')) or {}
     for service, raw_service in gke.items():
         service_config = _as_config_dict(raw_service) or {}
-        surfaces.append(
-            (
-                f'{env}/gke/{service}',
-                _as_config_dict(service_config.get('env')) or {},
-                {},
-            )
-        )
+        surfaces.append((f'{env}/gke/{service}', _as_config_dict(service_config.get('env')) or {}, {}))
 
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
@@ -580,6 +341,19 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
         )
 
     for scope, env_map, secrets_map in surfaces:
+        # This audience identifies the CPU recovery host, not general STT/GPU
+        # workers. Default-on independent recovery needs the same pure contract
+        # checked by the runtime before it claims its sole paid attempt.
+        independent = _manifest_literal_env_value(env_map, 'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+        if (
+            _manifest_env_binding_is_configured(env_map, secrets_map, 'BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE')
+            and (independent or '').strip().lower() != 'false'
+        ):
+            for required_env in required_env_for_held_recovery():
+                if not _manifest_env_binding_is_configured(env_map, secrets_map, required_env):
+                    errors.append(
+                        ValidationError(scope, f'independent held recovery requires non-empty {required_env}')
+                    )
         model_is_bound = 'STT_PRERECORDED_MODEL' in env_map or 'STT_PRERECORDED_MODEL' in secrets_map
         is_required_cloud_run = scope in required_cloud_run_scopes
         if not model_is_bound and not is_required_cloud_run:
@@ -608,7 +382,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
 
 
 def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require deployable model values to match the code-owned serving policy."""
+    """Require deployed STT lists to follow the code-owned serving policy."""
     errors: list[ValidationError] = []
     model_policy = {
         'STT_PRERECORDED_MODEL': canonical_model_config(STTServingSurface.PRERECORDED),
@@ -629,14 +403,17 @@ def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list
 
     for scope, env_map in surfaces:
         for env_name, expected_value in model_policy.items():
-            if (
-                scope == f'{env}/gke/backend-listen'
-                and env_name == 'STT_SERVICE_MODELS'
-                and _manifest_literal_env_value(env_map, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
-            ):
-                models = (_manifest_literal_env_value(env_map, env_name) or '').split(',')
-                if models and all(model_is_enabled(model.strip(), STTServingSurface.STREAMING) for model in models):
-                    continue
+            if env_name == 'STT_SERVICE_MODELS':
+                models = [model.strip() for model in (_manifest_literal_env_value(env_map, env_name) or '').split(',')]
+                if scope == f'{env}/gke/backend-listen':
+                    # The live listener may also use reviewed route aliases such as parakeet-window.
+                    if models and all(model_is_enabled(model, STTServingSurface.STREAMING) for model in models):
+                        continue
+                else:
+                    # Other services may omit providers while retaining canonical policy order.
+                    ordered_subset = [model for model in expected_value.split(',') if model in models]
+                    if models and models == ordered_subset:
+                        continue
             if env_name not in env_map:
                 continue
             actual_value = _manifest_literal_env_value(env_map, env_name)
@@ -720,6 +497,42 @@ def _validate_desktop_backend_vertex_pt_contract(env: str, env_config: ConfigDic
     return errors
 
 
+def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Every feed/mentor host and gateway admission executor needs the dedicated token."""
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    hosts = [(f'gke/{name}', gke.get(name)) for name in ('backend-listen', 'pusher')]
+    hosts.extend((f'cloud_run/{name}', host) for name, host in services.items())
+    hosts.extend((name, env_config.get(name)) for name in ('llm_gateway', 'desktop_backend'))
+    errors: list[ValidationError] = []
+    for name, host in hosts:
+        env_map = _as_config_dict((_as_config_dict(host) or {}).get('env')) or {}
+        # A host serving proactivity_v2 from the Omi flag store no longer needs the PostHog token.
+        source = (_as_config_dict(env_map.get('OMI_FLAGS_SOURCE')) or {}).get('value')
+        errors.extend(
+            validate_proactivity_v2_posthog_token(scope=f'{env}/{name}', env_entries=env_map, required=source != 'omi')
+        )
+
+    # Gateway has its own manifest section, outside _validate_gke's service loop.
+    gateway = _as_config_dict(env_config.get('llm_gateway')) or {}
+    gateway_env = _as_config_dict(gateway.get('env')) or {}
+    values = _load_yaml(ROOT / f'backend/charts/llm-gateway/{env}_omi_llm_gateway_values.yaml')
+    errors.extend(
+        _validate_env_entries(
+            scope=f'{env}/llm_gateway',
+            expected={
+                name: gateway_env[name]
+                for name in ('PROACTIVITY_V2_POSTHOG_TOKEN', 'PROACTIVITY_V2_POSTHOG_HOST')
+                if name in gateway_env
+            },
+            actual=_env_entries_by_name(values.get('env', [])),
+            strict_provisional=True,
+        )
+    )
+    return errors
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -733,29 +546,20 @@ def validate_runtime_env(
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
     errors = _validate_manifest_shape(env_config, env)
-    errors.extend(validate_jev_uid_allowlist(stage=env, scope=env, config=env_config))
+    errors.extend(validate_mentor_pipeline(scope=env, config=env_config))
     if errors:
         return errors
 
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
+    errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
-    for service, service_config in (_as_config_dict(env_config.get('gke')) or {}).items():
-        values_file = (_as_config_dict(service_config) or {}).get('values_file')
-        if values_file:
-            errors.extend(
-                validate_jev_uid_allowlist(
-                    stage=env, scope=f'{env}/gke/{service}', config=_load_yaml(ROOT / values_file)
-                )
-            )
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
-    errors.extend(validate_free_tier_deploy_contract(env, env_config))
+    errors.extend(validate_voice_transcription_storage(env, env_config))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
-    errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
-    errors.extend(_validate_jit_admission_surface_contract(env, env_config))
-    errors.extend(_validate_daily_memory_sweep_job_contract(env, env_config))
+    errors.extend(_validate_memory_job_retirement(env, env_config))
     errors.extend(_validate_account_deletion_dispatch_contract(env, env_config))
     errors.extend(_validate_listen_finalization_dispatch_contract(env, env_config))
     if check_workflows:
@@ -777,7 +581,6 @@ def validate_runtime_env(
         cloud_run_state = _fetch_live_cloud_run_state(env_config)
 
     if cloud_run_state is not None:
-        errors.extend(validate_jev_uid_allowlist(stage=env, scope=f'{env}/cloud_run', config=cloud_run_state))
         errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
         errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
     return errors

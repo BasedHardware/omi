@@ -2260,6 +2260,17 @@ class TasksViewModel: ObservableObject {
     recomputeVersion += 1
     let version = recomputeVersion
 
+    // Search rows are a SQLite snapshot from when the query ran. Rebuilding from
+    // it after a store change would put a task that was just completed, deleted,
+    // restored or edited back in its old state, so re-run the query instead.
+    if !normalizedSearchQuery.isEmpty && !suppressDatabaseRequery {
+      Task { [weak self] in
+        guard let self, self.recomputeVersion == version else { return }
+        await self.refreshSearchResults(recomputeVersion: version)
+      }
+      return
+    }
+
     // If non-status filters (including date) are active, re-query SQLite to pick up changes
     // (e.g. a task was just toggled completed and should no longer appear).
     // Otherwise just recompute from the in-memory store arrays.
@@ -2428,6 +2439,29 @@ class TasksViewModel: ObservableObject {
     isSearching = false
     recomputeDisplayCaches()
     SearchAnalytics.queryEntered(surface: .tasks, query: query, resultsCount: searchResults.count)
+  }
+
+  /// Re-reads the active query after the store changed. This is not a new query:
+  /// it records no search analytics, shows no loading state, and keeps the
+  /// visible rows if the read fails. A query that is still loading is skipped
+  /// because it is about to publish its own fresh rows.
+  private func refreshSearchResults(recomputeVersion version: Int) async {
+    let query = normalizedSearchQuery
+    let generation = searchRequestGeneration
+    guard !query.isEmpty, completedSearchRequestGeneration == generation else { return }
+    let includeDeleted = selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)
+
+    let results: [TaskActionItem]
+    do {
+      results = try await searchLoader(query, includeDeleted)
+    } catch {
+      logError("TasksViewModel: Search refresh failed", error: error)
+      return
+    }
+    guard recomputeVersion == version, generation == searchRequestGeneration, normalizedSearchQuery == query
+    else { return }
+    searchResults = results
+    recomputeDisplayCaches()
   }
 
   /// Whether we're currently in search mode (the only filtered mode left —

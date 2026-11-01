@@ -101,11 +101,13 @@ def _install_dependency_stubs():
         def __init__(self, **values):
             annotations = {}
             defaults = {}
+            fields_meta = {}
             for cls in reversed(type(self).__mro__):
                 annotations.update(getattr(cls, "__annotations__", {}))
                 for name, member in getattr(cls, "__dict__", {}).items():
                     if isinstance(member, _FieldInfo):
                         defaults[name] = member.default
+                        fields_meta[name] = member.metadata
 
             resolved = {}
             for name in annotations:
@@ -127,11 +129,16 @@ def _install_dependency_stubs():
                                 resolved[field] = getattr(type(self), name)(resolved[field])
 
             for name, value in resolved.items():
+                meta = fields_meta.get(name, {})
+                if isinstance(value, int) and not isinstance(value, bool):
+                    if "ge" in meta and value < meta["ge"]:
+                        raise ValueError(f"{name} must be >= {meta['ge']}")
+                    if "le" in meta and value > meta["le"]:
+                        raise ValueError(f"{name} must be <= {meta['le']}")
                 setattr(self, name, value)
 
         def model_dump(self):
             return self.__dict__.copy()
-
     pydantic.BaseModel = BaseModel
     pydantic.Field = Field
     pydantic.field_validator = field_validator
@@ -193,6 +200,68 @@ class PublicHolidayRequestTests(unittest.TestCase):
             main.HolidayRequest(country_code=7, year=2026)
 
 
+class HolidayInputCoercionTests(unittest.IsolatedAsyncioTestCase):
+    def test_null_year_defaults_to_current_utc_year(self):
+        from datetime import datetime, timezone
+        expected = datetime.now(timezone.utc).year
+        req = main.HolidayRequest(country_code="US", year=None, limit=None)
+        self.assertEqual(req.year, expected)
+        self.assertEqual(req.limit, main.MAX_ITEMS)
+
+        lw = main.LongWeekendRequest(country_code="DE", year=None)
+        self.assertEqual(lw.year, expected)
+
+    def test_omitted_year_defaults_to_current_utc_year(self):
+        from datetime import datetime, timezone
+        expected = datetime.now(timezone.utc).year
+        req = main.HolidayRequest(country_code="US")
+        self.assertEqual(req.year, expected)
+        lw = main.LongWeekendRequest(country_code="US")
+        self.assertEqual(lw.year, expected)
+
+    def test_string_numeric_values_are_coerced(self):
+        req = main.HolidayRequest(country_code="US", year="2026", limit="10")
+        self.assertEqual(req.year, 2026)
+        self.assertEqual(req.limit, 10)
+
+        nh = main.NextHolidayRequest(country_code="US", limit="5")
+        self.assertEqual(nh.limit, 5)
+
+    def test_boolean_values_are_rejected_for_numeric_fields(self):
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year=True)
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year=2026, limit=True)
+        with self.assertRaises(ValueError):
+            main.NextHolidayRequest(country_code="US", limit=False)
+        with self.assertRaises(ValueError):
+            main.LongWeekendRequest(country_code="US", year=False)
+
+    def test_year_out_of_range_still_rejected_after_coercion(self):
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year="1969")
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year="2101")
+
+    async def test_list_supported_countries_skips_non_dict_and_null_entries(self):
+        payload = [
+            {"countryCode": "US", "name": "United States"},
+            "malformed",
+            None,
+            {"countryCode": None, "name": "NullCode"},
+            {"countryCode": "DE", "name": None},
+            {"countryCode": "  ", "name": "Whitespace"},
+            {"countryCode": "JP", "name": "Japan"},
+        ]
+        with patch.object(main, "_request_json", new=AsyncMock(return_value=payload)):
+            response = await main.list_supported_countries()
+        self.assertIsNone(response.error)
+        self.assertIn("US: United States", response.result)
+        self.assertIn("JP: Japan", response.result)
+        self.assertNotIn("None", response.result)
+        self.assertNotIn("malformed", response.result)
+
+
 class PublicHolidayFormattingTests(unittest.TestCase):
     def test_format_holiday_handles_unexpected_types(self):
         self.assertEqual(main._format_holiday(None), "- Unknown holiday")
@@ -235,6 +304,11 @@ class PublicHolidayHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RequestJsonTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Tests below swap in a fake app.state; restore the real one so later tests never inherit it.
+        original_state = main.app.state
+        self.addCleanup(setattr, main.app, "state", original_state)
+
     async def test_request_json_initializes_missing_client(self):
         main.app.state = types.SimpleNamespace()
         _RecordingClient.instances = []
@@ -253,6 +327,91 @@ class RequestJsonTests(unittest.IsolatedAsyncioTestCase):
             await main._request_json("/NextPublicHolidays/US")
         self.assertEqual(len(_RecordingClient.instances), 2)
         self.assertIs(main.app.state.http_client, _RecordingClient.instances[-1])
+
+
+class _StatusResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+        self.content = b'{"title":"Unknown country code","status":404}'
+
+    def raise_for_status(self):
+        raise AssertionError("400/404 must be handled before raise_for_status")
+
+    def json(self):
+        return {"title": "Unknown country code", "status": self.status_code}
+
+
+class _StatusClient:
+    def __init__(self, status_code):
+        self.is_closed = False
+        self.status_code = status_code
+
+    async def get(self, url):
+        return _StatusResponse(self.status_code)
+
+
+class NextHolidayDefaultLimitTests(unittest.TestCase):
+    def test_omitted_or_null_limit_uses_advertised_default_of_eight(self):
+        self.assertEqual(main.NextHolidayRequest(country_code="US").limit, main.NEXT_HOLIDAY_DEFAULT_LIMIT)
+        self.assertEqual(main.NextHolidayRequest(country_code="US", limit=None).limit, main.NEXT_HOLIDAY_DEFAULT_LIMIT)
+        self.assertEqual(main.NextHolidayRequest(country_code="US", limit=" ").limit, main.NEXT_HOLIDAY_DEFAULT_LIMIT)
+        self.assertEqual(main.NEXT_HOLIDAY_DEFAULT_LIMIT, 8)
+
+    def test_other_tools_keep_max_items_default(self):
+        self.assertEqual(main.HolidayRequest(country_code="US", year=2026).limit, main.MAX_ITEMS)
+        self.assertEqual(main.LongWeekendRequest(country_code="US", year=2026).limit, main.MAX_ITEMS)
+
+    def test_explicit_limit_still_wins(self):
+        self.assertEqual(main.NextHolidayRequest(country_code="US", limit=3).limit, 3)
+
+
+class ManifestContractTests(unittest.IsolatedAsyncioTestCase):
+    async def test_manifest_matches_request_model_defaults(self):
+        manifest = await main.omi_tools()
+        tools = {tool["name"]: tool for tool in manifest["tools"]}
+        for name in ("get_public_holidays", "get_long_weekends"):
+            with self.subTest(tool=name):
+                params = tools[name]["parameters"]
+                # year defaults to the current UTC year, so the model must not be forced to send it
+                self.assertEqual(params["required"], ["country_code"])
+                self.assertIn("year", params["properties"])
+        next_limit = tools["get_next_public_holidays"]["parameters"]["properties"]["limit"]
+        self.assertEqual(next_limit["default"], main.NextHolidayRequest(country_code="US").limit)
+
+
+class UpstreamRejectionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Tests below swap in a fake app.state; restore the real one so later tests never inherit it.
+        original_state = main.app.state
+        self.addCleanup(setattr, main.app, "state", original_state)
+
+    async def test_request_json_raises_rejection_for_404_and_400(self):
+        for status in (404, 400):
+            with self.subTest(status=status):
+                main.app.state = types.SimpleNamespace(http_client=_StatusClient(status))
+                with self.assertRaises(main.UpstreamRejectedRequest) as caught:
+                    await main._request_json("/PublicHolidays/2026/XX")
+                self.assertEqual(caught.exception.status_code, status)
+
+    async def test_unknown_country_returns_actionable_error(self):
+        cases = (
+            (main.get_public_holidays, main.HolidayRequest(country_code="XX", year=2026)),
+            (main.get_next_public_holidays, main.NextHolidayRequest(country_code="XX")),
+            (main.get_long_weekends, main.LongWeekendRequest(country_code="XX", year=2026)),
+        )
+        for handler, request in cases:
+            with self.subTest(handler=handler.__name__):
+                main.app.state = types.SimpleNamespace(http_client=_StatusClient(404))
+                response = await handler(request)
+                self.assertIsNone(response.result)
+                self.assertEqual(response.error, "unknown country code XX; call list_supported_countries for valid codes")
+                self.assertNotIn("http", response.error)
+
+    async def test_unsupported_year_returns_actionable_error(self):
+        main.app.state = types.SimpleNamespace(http_client=_StatusClient(400))
+        response = await main.get_public_holidays(main.HolidayRequest(country_code="US", year=1975))
+        self.assertIsNone(response.result)
+        self.assertEqual(response.error, "the public holidays API does not support year 1975 for US")
 
 
 if __name__ == "__main__":

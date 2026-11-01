@@ -13,10 +13,16 @@ from google.api_core.exceptions import (
 )
 
 from utils.other import storage
+from utils.other.raw_audio_read import select_raw_pcm
 
 MAX_SPEAKER_DOWNLOADS = 32
 MAX_SPEAKER_BYTES = 64 * 1024 * 1024
 MAX_SPEAKER_READ_SECONDS = 30.0
+# Widened sessions hold decoded PCM across embedding, so they share one pool per process.
+MAX_SPEAKER_PCM_POOL_BYTES = 512 * 1024 * 1024
+# Reentrant: a collected session's __del__ can run on a thread already holding this lock.
+_pcm_pool_lock = threading.RLock()
+_pcm_pool_bytes = 0
 
 
 class AudioChunkReadSession:
@@ -30,9 +36,17 @@ class AudioChunkReadSession:
         self.reason = 'missing_blob'
         self.downloads = 0
         self.bytes = 0
+        self.pcm_bytes = 0
+        # Callers that keep a window-level proof may widen the object count; decoded
+        # PCM stays cached for the session, so that caller also caps its memory.
+        self.max_downloads: Optional[int] = None
+        self.max_pcm_bytes: Optional[int] = None
         self.deadline = time.monotonic() + MAX_SPEAKER_READ_SECONDS
         self.lock = threading.Lock()
         self.limit_hit = False
+        # Populated by the conversation reader only after decoded coverage and
+        # non-overlap are proven for each window. None retains legacy readers.
+        self.verified_segment_ids: Optional[set[str]] = None
 
     def in_budget(self):
         if self.limit_hit or time.monotonic() >= self.deadline:
@@ -50,13 +64,17 @@ class AudioChunkReadSession:
                 return []
             remaining = self.deadline - time.monotonic()
             try:
-                self._chunks = storage.list_audio_chunks(
+                listed = storage.list_audio_chunks(
                     self.uid,
                     self.conversation_id,
                     timeout=min(1.0, remaining),
                     retry=DEFAULT_RETRY.with_timeout(min(1.0, remaining)),
                     deadline=self.deadline,
                 )
+                self._chunks = [
+                    {**chunk, 'span': dict(chunk['span'])} if isinstance(chunk.get('span'), dict) else dict(chunk)
+                    for chunk in listed
+                ]
             except (
                 TimeoutError,
                 RetryError,
@@ -105,7 +123,8 @@ class AudioChunkReadSession:
                         maximum = MAX_SPEAKER_BYTES - session.bytes
                         if (
                             not session.in_budget()
-                            or session.downloads >= MAX_SPEAKER_DOWNLOADS
+                            or session.downloads
+                            >= (MAX_SPEAKER_DOWNLOADS if session.max_downloads is None else session.max_downloads)
                             or maximum <= 0
                             or (size is not None and size > maximum)
                         ):
@@ -117,11 +136,15 @@ class AudioChunkReadSession:
                         # range to detect budget truncation, never decode it.
                         allowance = size if size is not None else maximum
                         session.bytes += allowance
-                        data = bucket.blob(path).download_as_bytes(
-                            timeout=max(0.001, session.deadline - time.monotonic()),
-                            retry=None,
-                            end=allowance - 1,
-                        )
+                        download_kwargs: Dict[str, Any] = {
+                            'timeout': max(0.001, session.deadline - time.monotonic()),
+                            'retry': None,
+                            'end': allowance - 1,
+                        }
+                        generation = chunk.get('generation')
+                        if generation is not None:
+                            download_kwargs['if_generation_match'] = generation
+                        data = bucket.blob(path).download_as_bytes(**download_kwargs)
                         if size is None and len(data) >= allowance:
                             session.reason, session.limit_hit = 'download_limit', True
                             raise TimeoutError('unknown object exceeds speaker byte allowance')
@@ -148,6 +171,8 @@ class AudioChunkReadSession:
                     self.sample_rate,
                     on_failure=self._failure,
                 )
+                if self.max_pcm_bytes is not None and not self._reserve_pcm(len(pcm or b'')):
+                    self.reason, self.limit_hit = 'download_limit', True
                 if not self.in_budget():
                     return None
                 self.cache[path] = (pcm, self.reason)
@@ -168,6 +193,30 @@ class AudioChunkReadSession:
 
     def _failure(self, reason: str):
         self.reason = reason
+
+    def _reserve_pcm(self, size: int) -> bool:
+        global _pcm_pool_bytes
+        if self.max_pcm_bytes is not None and self.pcm_bytes + size > self.max_pcm_bytes:
+            return False
+        with _pcm_pool_lock:
+            if _pcm_pool_bytes + size > MAX_SPEAKER_PCM_POOL_BYTES:
+                return False
+            _pcm_pool_bytes += size
+        self.pcm_bytes += size
+        return True
+
+    def release_pcm(self) -> None:
+        """Return this session's decoded PCM to the pool; its cached proofs are gone after this."""
+        global _pcm_pool_bytes
+        with self.lock:
+            size, self.pcm_bytes = self.pcm_bytes, 0
+            self.cache.clear()
+        with _pcm_pool_lock:
+            _pcm_pool_bytes -= size
+
+    def __del__(self):
+        if getattr(self, 'pcm_bytes', 0):
+            self.release_pcm()
 
 
 def chunk_start(chunk) -> float:
@@ -231,4 +280,6 @@ def iter_audio_chunk_pcm(
             with storage.get_storage_chunk_semaphore():
                 pcm = storage.download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
         if pcm:
+            if chunk['path'].startswith(f'raw-live/{uid}/'):
+                pcm = select_raw_pcm(pcm, chunk, sample_rate)
             yield chunk_start(chunk), pcm

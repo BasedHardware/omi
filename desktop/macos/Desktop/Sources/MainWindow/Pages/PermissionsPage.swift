@@ -678,7 +678,7 @@ struct ScreenRecordingPermissionSection: View {
       PermissionGrantedRow(
         icon: "rectangle.inset.filled.and.person.filled",
         title: "Screen Recording",
-        subtitle: "Required for proactive monitoring and context awareness")
+        subtitle: "Lets Omi see your screen so it can pick up tasks and answer questions about what you're working on")
     } else {
       PermissionActionCard(
         symbol: appState.isScreenRecordingStale
@@ -690,7 +690,7 @@ struct ScreenRecordingPermissionSection: View {
         title: "Screen Recording",
         description: appState.isScreenRecordingStale
           ? "Permission needs re-enabling after app update"
-          : "Required for proactive monitoring and context awareness",
+          : "Lets Omi see your screen so it can pick up tasks and answer questions about what you're working on",
         descriptionColor: appState.isScreenRecordingStale ? Ink.errorRed : Ink.secondary,
         borderColor: appState.isScreenRecordingStale
           ? Ink.errorRed.opacity(0.5) : Ink.hairline,
@@ -1444,7 +1444,7 @@ struct AutomationPermissionSection: View {
       granted: appState.hasAutomationPermission,
       icon: "gearshape.2",
       title: "Automation",
-      subtitle: "Lets Omi ask System Events about the app you are in",
+      subtitle: "Lets Omi see which app you're using",
       steps: [
         "Click \"Open Settings\" below",
         "Find \"\(AppBuild.displayName)\" in the Automation list",

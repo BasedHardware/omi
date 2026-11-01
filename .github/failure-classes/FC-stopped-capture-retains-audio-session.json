@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-stopped-capture-retains-audio-session",
+  "violated_contract": "Ending capture, cancelling its pending permission request or failing its startup must release the native audio session as well as the engine. A stopped timer is not evidence that microphone-session ownership ended; activating audio before validating a delayed permission answer can resurrect ownership after Stop.",
+  "canonical_prevention": "Keep permission checking side-effect free, validate the original start generation before activating audio, and route Stop and failed-start cleanup through the same resource-release method. Stop the tap/engine before deactivating AVAudioSession. A native SDK probe runs the actual WatchAudioRecorderViewModel with injected permission and audio-session I/O and verifies late/cancelled/ABA permission answers, failed activation, terminal Stop and repeated Stop. Physical microphone behavior remains a separate acceptance lane.",
+  "canonical_prevention_artifact": [
+    "app/ios/test/watch_recording_controls_probe.rb",
+    "app/ios/test/fixtures/watch_recording_controls_app.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/ios/omiWatchApp/**"
+  ],
+  "status": "open"
+}

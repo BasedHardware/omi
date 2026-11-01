@@ -80,6 +80,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: OMI_ENV_STAGE
+    value: dev
+  - name: GOOGLE_CLOUD_PROJECT
+    value: based-hardware-dev
   - name: HUGGINGFACE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -191,3 +195,8 @@ strategy:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: dev-omi-internal-gateway

@@ -8,6 +8,8 @@ turn and carries nothing on a failed one, because a chip on a failed turn asks
 the user to go one hop further into an answer they never got.
 """
 
+import sys
+
 import pytest
 
 from tests.unit.test_chat_stream_error_fallback import _cleanup, _decode_done_frame, _make_client
@@ -144,9 +146,9 @@ def _grounded_stream(answer: str, question: str):
 
 
 def test_persisted_message_carries_the_followup_block():
-    client, router_module, _chat_utils, chat_db, saved = _make_client()
+    client, _router_module, chat_utils, chat_db, saved = _make_client()
     try:
-        router_module.execute_chat_stream = _grounded_stream(
+        sys.modules['utils.chat_turn'].execute_chat_stream = _grounded_stream(
             'You and Priya settled on shipping Thursday.', 'Who else was in that call?'
         )
 

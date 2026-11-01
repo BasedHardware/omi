@@ -87,6 +87,10 @@ def test_candidates_are_gated_before_nonowner_reads(monkeypatch, surface, paid):
 
 
 def test_live_plan_changes_are_observed_on_rotation_once(monkeypatch):
+    # Rotation loads owner profiles even when capture had no speech profile.
+    # This entitlement test must not enter Firestore/recovery SDK retries.
+    monkeypatch.setattr(users, 'get_user_speaker_embedding', lambda uid: None)
+    monkeypatch.setattr(speakers, 'load_owner_embedding', lambda *_a, **_kw: None)
     permission = Mock(side_effect=[True, False, True])
     monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', permission)
     monkeypatch.setattr(users, 'get_people', lambda uid: [])
@@ -240,7 +244,10 @@ def test_person_publication_rechecks_source_in_transaction(monkeypatch, mutation
     if mutation in {'unchanged', 'legacy', 'other_voice_edit'}:
         assert result == []
         assert store.rows[PERSON]['speaker_embedding'] == [1, 0]
-        assert store.rows[PERSON]['speech_sample_source'] == {'conversation_id': 'c', 'segment_ids': ['s']}
+        provenance = store.rows[PERSON]['speech_sample_source']
+        assert provenance['conversation_id'] == 'c' and provenance['segment_ids'] == ['s']
+        assert provenance['generation'] == (0 if mutation == 'legacy' else 1)
+        assert provenance['stored_at'] is not None
     else:
         assert result is None
         assert not store.rows[PERSON].get('speaker_embedding')

@@ -1,0 +1,8 @@
+{
+  "version": "0.12.512",
+  "date": "2026-10-20",
+  "changes": [
+    "Attach videos in chat: Omi reads the key frames and what was said, without uploading the whole clip",
+    "Restored the standard desktop experience for everyone by retiring the identity experiment"
+  ]
+}

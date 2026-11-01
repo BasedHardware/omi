@@ -17,6 +17,20 @@ PROVIDER_AUTH_REJECTED = 'provider_auth_rejected'
 PROVIDER_RATE_LIMITED = 'provider_rate_limited'
 ACCOUNT_REJECTION_REASONS = frozenset({PROVIDER_BUDGET_EXHAUSTED, PROVIDER_AUTH_REJECTED})
 
+# Velma's budget refusals are free text (in-stream error frames, batch error
+# bodies, refused-upgrade reason phrases). Both the live paths (streaming.py)
+# and the batch path (pre_recorded.py) match these markers and map any hit to
+# PROVIDER_BUDGET_EXHAUSTED — the token the budget page alerts on. "insufficient
+# credits" is the 429 Velma-2 answers when the account is out of credits
+# (2026-10-22: it flowed as an untyped provider error for ~1h because no path
+# matched it). Matched, never logged or labeled.
+MODULATE_BUDGET_MARKERS = (
+    'monthly usage limit',
+    'usage limit reached',
+    'quota exceeded',
+    'insufficient credits',
+)
+
 STT_STREAM_CLOSE_PROVIDERS = frozenset({'soniox', 'modulate', 'deepgram', 'parakeet'})
 STT_STREAM_CLOSE_REASONS = frozenset(
     {
@@ -47,6 +61,22 @@ def bounded_stream_close_provider(provider: str) -> str:
 def bounded_stream_close_reason(reason: Optional[str]) -> str:
     label = (reason or '').strip().lower()
     return label if label in STT_STREAM_CLOSE_REASONS else 'connection_lost'
+
+
+def initialize_stt_stream_close_children() -> None:
+    """Publish every bounded provider/reason child at zero. Never raises.
+
+    Prometheus needs a scraped zero before the first close to observe its
+    increase. Include the provider fallback bucket, but never vendor strings.
+    Repeated initialization only touches children; it never resets counts.
+    """
+
+    try:
+        for provider in sorted(STT_STREAM_CLOSE_PROVIDERS | {'unknown'}):
+            for reason in sorted(STT_STREAM_CLOSE_REASONS):
+                OMI_STT_STREAM_CLOSE_TOTAL.labels(provider=provider, reason=reason)
+    except Exception:
+        pass
 
 
 def record_stt_stream_close(*, provider: str, reason: Optional[str]) -> None:
@@ -91,4 +121,6 @@ def publish_stt_provider_retired(env: Optional[Mapping[str, str]] = None) -> Non
         pass
 
 
+# Direct Soniox users also import this module, even without streaming.py.
+initialize_stt_stream_close_children()
 publish_stt_provider_retired()

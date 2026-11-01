@@ -8,8 +8,10 @@ only, ``nudge`` adds the wedge pushes, ``heal`` also admits at most
 logging the action preview each row would have produced, and never advances
 the persisted sweep cursor.
 
-The scan is a fixed ``status == 'in_progress'`` collection-group window of at
-most ``MAX_SCAN`` rows rotating on a Firestore CAS cursor. Every reported
+The optional job uses a ``status == 'in_progress'`` collection-group window;
+the candidate-query lever pushes its admission cutoff into that scan. The
+always-on fast reconciler retains the indexed content-bearing due window.
+Both scan at most ``MAX_SCAN`` rows rotating on a Firestore CAS cursor. Every reported
 count describes that scanned window, never the whole fleet.
 """
 
@@ -24,12 +26,14 @@ from typing import Any, Callable, Mapping
 
 import database.conversation_finalization_jobs as jobs_db
 import database.conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from services.capture_wedge import run_capture_wedge_check
 from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.recovery import (
     raw_transcript_bytes,
     recovery_audio_file_ids,
+    recovery_terminal_minimum_output,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -43,6 +47,7 @@ PAGE_SIZE = 100
 MAX_SCAN = 2000
 MAX_ELIGIBLE_PER_TICK = 25
 MAX_HEAL_ADMISSIONS_PER_TICK = 10
+PENDING_VERIFICATION_TTL = timedelta(hours=1)
 _ENQUEUED_ROUTES = frozenset({'cloud_tasks', 'queued'})
 _ADMISSION_REFUSAL_REASONS = frozenset(
     {
@@ -69,6 +74,10 @@ _ADMISSION_REFUSAL_REASONS = frozenset(
         'refused_has_job',
         'refused_no_finished_at',
         'refused_not_stale',
+        'refused_not_quiet',
+        'refused_active_recording_session',
+        'refused_account_deleting',
+        'refused_recording_lease_unknown',
         'refused_no_content',
         'refused_oversized_audio_files',
     }
@@ -115,6 +124,8 @@ def _verify_pending_attempts(
     conversation_reader: Callable[[str, str], dict[str, Any] | None],
     job_reader: Callable[..., dict[str, Any] | None] = jobs_db.get_finalization_job,
     counters: dict[str, Any],
+    now: datetime,
+    verification_refusals: list[tuple[dict[str, Any], str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Re-check prior-tick admissions; return the still-in-flight entries.
 
@@ -124,18 +135,31 @@ def _verify_pending_attempts(
     growth (appended segments, extra audio ids) passes. Any deviation is a
     refused verification — logged critical for paging — and the entry is
     dropped with no re-admission; a conversation that has not reached
-    ``completed`` stays pending for the next tick.
+    ``completed`` stays pending only within the verification TTL. Expiry
+    releases verification capacity, never clears job ownership or creates a
+    second recovery generation. Durable job reconciliation owns replay.
     """
     remaining: list[dict[str, Any]] = []
     for entry in pending:
+        entry = dict(entry)
         uid = entry['uid']
         conversation_id = entry['conversation_id']
         job_id = entry['job_id']
         try:
-            job = job_reader(job_id, firestore_client=firestore_client)
+            if account_deletion_blocks_user_work(uid):
+                remaining.append(entry)
+                counters['skipped'] += 1
+                continue
         except Exception as error:
             counters['errors'] += 1
             remaining.append(entry)
+            logger.error('selfheal deletion fence failed type=%s', type(error).__name__)
+            continue
+        try:
+            job = job_reader(job_id, firestore_client=firestore_client)
+        except Exception as error:
+            counters['errors'] += 1
+            _keep_or_expire_pending(entry, None, now, remaining, counters, 'verify_job_read_timeout')
             logger.error('selfheal verify job read failed type=%s', type(error).__name__)
             continue
         if job is None:
@@ -143,17 +167,30 @@ def _verify_pending_attempts(
             counters['skipped'] += 1
             continue
         status = str(job.get('status') or '')
-        if status in {'queued', 'leased', 'blocked_byok'}:
-            remaining.append(entry)
+        if status == 'blocked_byok':
+            _expire_pending(entry, 'blocked_byok', counters)
+            continue
+        if status == 'leased':
+            lease_expires_at = _utc_datetime(job.get('lease_expires_at'))
+            if lease_expires_at is not None:
+                if lease_expires_at <= now:
+                    _expire_pending(entry, 'expired_lease', counters)
+                else:
+                    remaining.append(entry)
+            else:
+                _keep_or_expire_pending(entry, job, now, remaining, counters, 'verify_lease_timeout')
+            continue
+        if status == 'queued':
+            _keep_or_expire_pending(entry, job, now, remaining, counters, 'verify_queued_timeout')
             continue
         if status != 'completed':
-            _refuse_verification(entry, 'dead_letter', counters)
+            _refuse_verification(entry, 'dead_letter', counters, verification_refusals)
             continue
         try:
             conversation = conversation_reader(uid, conversation_id)
         except Exception as error:
             counters['errors'] += 1
-            remaining.append(entry)
+            _keep_or_expire_pending(entry, job, now, remaining, counters, 'verify_conversation_read_timeout')
             logger.error('selfheal verify conversation read failed type=%s', type(error).__name__)
             continue
         if conversation is None:
@@ -161,16 +198,18 @@ def _verify_pending_attempts(
             counters['skipped'] += 1
             continue
         if conversation.get('deleted'):
-            _refuse_verification(entry, 'verify_deleted', counters)
+            _refuse_verification(entry, 'verify_deleted', counters, verification_refusals)
             continue
         conv_status = getattr(conversation.get('status'), 'value', conversation.get('status'))
         if conv_status != 'completed':
-            remaining.append(entry)
-            _log_action('skipped', reason='verify_not_completed', uid=uid, conversation_id=conversation_id)
-            counters['skipped'] += 1
+            if _keep_or_expire_pending(entry, job, now, remaining, counters, 'verify_not_completed_timeout'):
+                _log_action('skipped', reason='verify_not_completed', uid=uid, conversation_id=conversation_id)
+                counters['skipped'] += 1
+            else:
+                counters['verification_timeouts'] += 1
             continue
         if str(conversation.get('finalization_job_id') or '') != job_id:
-            _refuse_verification(entry, 'verify_job_binding', counters)
+            _refuse_verification(entry, 'verify_job_binding', counters, verification_refusals)
             continue
         recorded_ids = {str(value) for value in job.get('selfheal_audio_file_ids') or []}
         current_ids = set(recovery_audio_file_ids(conversation) or [])
@@ -178,20 +217,74 @@ def _verify_pending_attempts(
             raw_transcript_bytes(conversation) >= int(job.get('selfheal_transcript_bytes') or 0)
             and recorded_ids <= current_ids
         )
-        valid_output = structured_is_rich(conversation.get('structured')) or verified_recovery_discard(
-            conversation.get('discarded'), conversation.get('relevance_decision')
+        terminal_minimum = recovery_terminal_minimum_output(conversation)
+        valid_output = (
+            structured_is_rich(conversation.get('structured'))
+            or verified_recovery_discard(conversation.get('discarded'), conversation.get('relevance_decision'))
+            or terminal_minimum
         )
         if preserved and valid_output:
-            _log_action('verified', reason='ok', uid=uid, conversation_id=conversation_id)
+            _log_action(
+                'verified',
+                reason='kept_minimum' if terminal_minimum else 'ok',
+                uid=uid,
+                conversation_id=conversation_id,
+            )
             counters['verified'] += 1
         else:
-            _refuse_verification(entry, 'verify_content_mismatch' if not preserved else 'verify_not_rich', counters)
+            _refuse_verification(
+                entry,
+                'verify_content_mismatch' if not preserved else 'verify_not_rich',
+                counters,
+                verification_refusals,
+            )
     return remaining
 
 
-def _refuse_verification(entry: dict[str, Any], reason: str, counters: dict[str, Any]) -> None:
+def _utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def _expire_pending(entry: dict[str, Any], reason: str, counters: dict[str, Any]) -> None:
+    _log_action('expired', reason=reason, uid=entry['uid'], conversation_id=entry['conversation_id'])
+    counters['expired'] += 1
+
+
+def _keep_or_expire_pending(
+    entry: dict[str, Any],
+    job: Mapping[str, Any] | None,
+    now: datetime,
+    remaining: list[dict[str, Any]],
+    counters: dict[str, Any],
+    reason: str,
+) -> bool:
+    # Never use updated_at: replay/lease renewals must not reset the TTL.
+    admitted_at = _utc_datetime(entry.get('admitted_at')) or _utc_datetime((job or {}).get('created_at')) or now
+    entry['admitted_at'] = admitted_at
+    if admitted_at <= now - PENDING_VERIFICATION_TTL:
+        _expire_pending(entry, reason, counters)
+        return False
+    remaining.append(entry)
+    return True
+
+
+def _refuse_verification(
+    entry: dict[str, Any],
+    reason: str,
+    counters: dict[str, Any],
+    verification_refusals: list[tuple[dict[str, Any], str]] | None = None,
+) -> None:
     _log_action('refused', reason=reason, uid=entry['uid'], conversation_id=entry['conversation_id'])
     counters['refused'] += 1
+    if verification_refusals is not None:
+        verification_refusals.append((entry, reason))
+    else:
+        _page_verification_refusal(entry, reason)
+
+
+def _page_verification_refusal(entry: dict[str, Any], reason: str) -> None:
     logger.critical(
         'selfheal verification failed uid=%s conversation=%s reason=%s',
         entry['uid'],
@@ -220,18 +313,17 @@ def _evaluate_row(
     data = row['data']
     finished_at = data.get('finished_at')
     if isinstance(finished_at, datetime):
-        if finished_at.tzinfo is None:
-            finished_at = finished_at.replace(tzinfo=timezone.utc)
-    stale = isinstance(finished_at, datetime) and finished_at <= stale_cutoff
+        finished_at = finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)
+    s_cut = stale_cutoff if stale_cutoff.tzinfo else stale_cutoff.replace(tzinfo=timezone.utc)
+    stale = isinstance(finished_at, datetime) and finished_at <= s_cut
     has_content = False
     if stale:
         has_content = _row_has_content(uid, data)
         if has_content:
             counters['content_holding'] += 1
-            counters['oldest_age_seconds'] = max(
-                counters['oldest_age_seconds'], max(0.0, (now - finished_at).total_seconds())
-            )
-            if finished_at <= page_cutoff:
+            now_dt = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
+            counters['oldest_age_seconds'] = max(counters['oldest_age_seconds'], (now_dt - finished_at).total_seconds())
+            if finished_at <= (page_cutoff if page_cutoff.tzinfo else page_cutoff.replace(tzinfo=timezone.utc)):
                 counters['content_holding_over_12h'] += 1
     refusal = jobs_db.recovery_admission_refusal(uid, data, stale_cutoff)
     if refusal is None:
@@ -250,6 +342,8 @@ def run_selfheal_tick(
     dry_run: bool | None = None,
     uid_allowlist: frozenset[str] | None = None,
     use_configured_uid_allowlist: bool = True,
+    stale_after: timedelta = STALE_AFTER,
+    content_due_scan: bool = False,
     scan_fn: Callable[..., dict[str, Any]] = jobs_db.scan_in_progress_conversations,
     cursor_getter: Callable[..., dict[str, Any]] = jobs_db.get_in_progress_content_sweep_cursor,
     cursor_advancer: Callable[..., bool] = jobs_db.advance_in_progress_content_sweep_cursor,
@@ -259,7 +353,7 @@ def run_selfheal_tick(
     wedge_runner: Callable[..., dict[str, int]] | None = None,
 ) -> dict[str, Any]:
     """Run one bounded sweep plus the wedge check; return the emitted counters."""
-    now = now or datetime.now(timezone.utc)
+    now = now if now and now.tzinfo else (now.replace(tzinfo=timezone.utc) if now else datetime.now(timezone.utc))
     mode = mode if mode is not None else selfheal_mode()
     dry_run = selfheal_dry_run() if dry_run is None else dry_run
     allowlist = selfheal_uid_allowlist() if uid_allowlist is None and use_configured_uid_allowlist else uid_allowlist
@@ -279,37 +373,60 @@ def run_selfheal_tick(
         'errors': 0,
         'nudged': 0,
         'undeliverable': 0,
+        'expired': 0,
+        'verification_timeouts': 0,
     }
     exhausted = False
 
     if mode != 'off':
-        stale_cutoff = now - STALE_AFTER
+        stale_cutoff = now - stale_after
         page_cutoff = now - PAGE_AGE
         try:
             cursor = cursor_getter(firestore_client=firestore_client)
+            verification_refusals: list[tuple[dict[str, Any], str]] = []
             pending = _verify_pending_attempts(
                 list(cursor.get('pending_verifications') or []),
                 firestore_client=firestore_client,
                 conversation_reader=reader,
                 job_reader=job_reader,
                 counters=counters,
+                now=now,
+                verification_refusals=verification_refusals,
             )
             scan = scan_fn(
                 page_size=PAGE_SIZE,
                 max_scan=MAX_SCAN,
+                finished_before=stale_cutoff,
                 resume_after_path=cursor.get('resume_after_path'),
                 firestore_client=firestore_client,
+                **({'content_due_before': stale_cutoff} if content_due_scan else {}),
             )
             counters['scanned'] = int(scan.get('scanned') or 0)
             exhausted = bool(scan.get('exhausted'))
+            resume_after_path = scan.get('resume_after_path')
             eligible: list[Mapping[str, Any]] = []
             for row in scan.get('rows') or []:
+                try:
+                    if account_deletion_blocks_user_work(row['uid']):
+                        counters['skipped'] += 1
+                        continue
+                except Exception as error:
+                    counters['errors'] += 1
+                    logger.error('selfheal deletion fence failed type=%s', type(error).__name__)
+                    continue
                 if (
                     _evaluate_row(row, now=now, stale_cutoff=stale_cutoff, page_cutoff=page_cutoff, counters=counters)
                     is None
                 ):
                     if len(eligible) < MAX_ELIGIBLE_PER_TICK:
                         eligible.append(row)
+                    elif content_due_scan:
+                        # A refused lease prefix stays in this query. Resume
+                        # after the considered window instead of the scan tail
+                        # so those rows cannot starve a due row behind the cap.
+                        resume_after_path = eligible[-1]['path']
+                        exhausted = False
+                        break
             pending_before = len(pending)
             pending = _act_on_eligible(
                 eligible,
@@ -318,15 +435,21 @@ def run_selfheal_tick(
                 dry_run=dry_run,
                 uid_allowlist=allowlist,
                 stale_cutoff=stale_cutoff,
+                require_expired_recording_lease=content_due_scan,
                 request_finalization_fn=request_finalization_fn,
                 firestore_client=firestore_client,
                 counters=counters,
+                now=now,
             )
-            if not dry_run:
+            if dry_run:
+                # A read-only preview must still page a real safety violation.
+                for entry, reason in verification_refusals:
+                    _page_verification_refusal(entry, reason)
+            else:
                 try:
                     advanced = cursor_advancer(
                         int(cursor.get('generation') or 0),
-                        scan.get('resume_after_path'),
+                        resume_after_path,
                         pending_verifications=pending,
                         firestore_client=firestore_client,
                     )
@@ -342,6 +465,19 @@ def run_selfheal_tick(
                             )
                         else:
                             logger.warning('selfheal sweep cursor CAS lost; another tick advanced it')
+                    else:
+                        # Only the CAS winner removed these entries. Page every
+                        # refusal once, rather than once per observing replica.
+                        for entry, reason in verification_refusals:
+                            _page_verification_refusal(entry, reason)
+                    if advanced and counters['verification_timeouts']:
+                        # Only the writer that actually released the slots pages;
+                        # startup ticks on other replicas can read the same backlog.
+                        logger.critical(
+                            'selfheal verification timed out for %d completed jobs with non-completed conversations; '
+                            'verification slots released, job ownership preserved; audit selfheal_action timeout events',
+                            counters['verification_timeouts'],
+                        )
                 except Exception as error:
                     counters['errors'] += 1
                     logger.error('selfheal sweep cursor advance failed type=%s', type(error).__name__)
@@ -380,6 +516,7 @@ def run_selfheal_tick(
         mode=mode,
         exhausted=exhausted,
         dry_run=dry_run,
+        expired=counters['expired'],
     )
     counters['mode'] = mode
     counters['exhausted'] = exhausted
@@ -395,9 +532,11 @@ def _act_on_eligible(
     dry_run: bool,
     uid_allowlist: frozenset[str] | None,
     stale_cutoff: datetime,
+    require_expired_recording_lease: bool = False,
     request_finalization_fn: Callable[..., dict[str, Any]],
     firestore_client: Any,
     counters: dict[str, Any],
+    now: datetime,
 ) -> list[dict[str, Any]]:
     """Admit eligible rows in heal mode; preview or skip them otherwise.
 
@@ -411,6 +550,20 @@ def _act_on_eligible(
 
     admitted = 0
     for row in eligible:
+        try:
+            if account_deletion_blocks_user_work(row['uid']):
+                _log_action(
+                    'skipped', reason='account_deleting', uid=row['uid'], conversation_id=row['conversation_id']
+                )
+                counters['skipped'] += 1
+                continue
+        except Exception as error:
+            counters['errors'] += 1
+            _log_action(
+                'skipped', reason='deletion_fence_unavailable', uid=row['uid'], conversation_id=row['conversation_id']
+            )
+            logger.error('selfheal deletion fence failed type=%s', type(error).__name__)
+            continue
         if admitted >= MAX_HEAL_ADMISSIONS_PER_TICK:
             _log_action(
                 'skipped',
@@ -450,6 +603,7 @@ def _act_on_eligible(
                 require_cloud_tasks=True,
                 recovery_cutoff=stale_cutoff,
                 firestore_client=firestore_client,
+                **({'require_expired_recording_lease': True} if require_expired_recording_lease else {}),
             )
         except lifecycle.FinalizationDispatchUnavailable:
             _log_action(
@@ -477,11 +631,23 @@ def _act_on_eligible(
             continue
         route = str(result.get('route') or '')
         status = str(result.get('status') or '')
+        if result.get('created') and result.get('job_id') and (status == 'blocked_byok' or result.get('requires_byok')):
+            admitted += 1
+            _log_action('skipped', reason='blocked_byok', uid=row['uid'], conversation_id=row['conversation_id'])
+            counters['skipped'] += 1
+            continue
         if result.get('created') and result.get('job_id') and route in _ENQUEUED_ROUTES:
             admitted += 1
             counters['enqueued'] += 1
             _log_action('enqueued', reason='ok', uid=row['uid'], conversation_id=row['conversation_id'])
-            pending.append({'uid': row['uid'], 'conversation_id': row['conversation_id'], 'job_id': result['job_id']})
+            pending.append(
+                {
+                    'uid': row['uid'],
+                    'conversation_id': row['conversation_id'],
+                    'job_id': result['job_id'],
+                    'admitted_at': now,
+                }
+            )
         elif route == 'noop':
             reason = status if status in _ADMISSION_REFUSAL_REASONS else 'unknown'
             _log_action('refused', reason=reason, uid=row['uid'], conversation_id=row['conversation_id'])

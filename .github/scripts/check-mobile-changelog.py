@@ -16,6 +16,10 @@ UNRELEASED_CHANGELOG_PREFIX = "app/changelog/unreleased/"
 NONE_KIND = "none"
 EXEMPT_APP_PATHS = {
     "app/AGENTS.md",
+    "app/scripts/mobile_daily_train.py",
+    "app/scripts/mobile_capture_health.py",
+    "app/scripts/mobile_capture_health_test.py",
+    "app/scripts/mobile_daily_train_test.py",
     "app/scripts/mobile_play_build_number.py",
     "app/scripts/mobile_play_build_number_test.py",
     "app/scripts/mobile_release_identity.py",
@@ -24,6 +28,7 @@ EXEMPT_APP_PATHS = {
     "app/scripts/mobile_store_promote_test.py",
     "app/scripts/mobile_store_version.py",
     "app/scripts/mobile_store_version_test.py",
+    "app/scripts/store_promotion_request.json",
 }
 
 
@@ -32,12 +37,12 @@ def run_git(args: list[str]) -> str:
 
 
 def changed_files(base_ref: str, head_ref: str) -> list[str]:
-    output = run_git(["diff", "--name-only", "--diff-filter=ACM", f"{base_ref}...{head_ref}"])
+    output = run_git(["diff", "--name-only", "--no-renames", "--diff-filter=ACM", f"{base_ref}...{head_ref}"])
     return [line for line in output.splitlines() if line]
 
 
 def added_files(base_ref: str, head_ref: str) -> list[str]:
-    output = run_git(["diff", "--name-status", "--diff-filter=A", f"{base_ref}...{head_ref}"])
+    output = run_git(["diff", "--name-status", "--no-renames", "--diff-filter=A", f"{base_ref}...{head_ref}"])
     return [line.split("\t", 1)[1] for line in output.splitlines() if line.startswith("A\t")]
 
 

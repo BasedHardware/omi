@@ -91,7 +91,7 @@ def test_schedule_cancellation_checks_none_subscription():
 
     # Must have the None guard before setting cancel_at_period_end
     none_check_pos = cancel_section.index('if not new_subscription:')
-    cancel_attr_pos = cancel_section.index('cancel_at_period_end = True')
+    cancel_attr_pos = cancel_section.index('decision = schedule_transition(')
     assert none_check_pos < cancel_attr_pos, "None check must appear before cancel_at_period_end assignment"
 
 
@@ -122,7 +122,7 @@ def test_webhook_returns_success():
     """Webhook must always return {"status": "success"} at the end (Stripe expects 2xx)."""
     source = _read_source()
     # Find the stripe_webhook function
-    func_start = source.index("async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):")
+    func_start = source.index("async def stripe_webhook(")
     # Get to the return at the end of the function
     func_section = source[func_start:]
     # The function should end with return {"status": "success"}

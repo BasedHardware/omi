@@ -7,6 +7,11 @@ work you should not need to run anything here. Verify the hook is live:
 test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK
 ```
 
+In a merge commit the hook skips files staged exactly as the incoming side has them, so
+merging `main` does not reformat main's files; resolved conflicts are still formatted.
+Dart formatting needs `app/.dart_tool/package_config.json` (run `flutter pub get` in
+`app/`): without it `dart format` ignores the package language version and the hook refuses.
+
 Run a formatter by hand only when the hook is unavailable (some CI and sandbox
 environments) or when you are formatting files you have not staged.
 

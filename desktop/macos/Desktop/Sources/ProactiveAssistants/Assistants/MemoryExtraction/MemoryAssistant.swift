@@ -76,7 +76,7 @@ actor MemoryAssistant: ProactiveAssistant {
     // Flash-Lite: vision-capable, off the Vertex PT reservation, and measurably more
     // prompt-compliant than Flash on this lane (see ModelQoS.Gemini.lightweight).
     self.geminiClient = try GeminiClient(
-      apiKey: apiKey, model: ModelQoS.Gemini.lightweight, workload: .extraction)
+      apiKey: apiKey, model: ModelQoS.Gemini.lightweight, lane: .memory, workload: .extraction)
     self.extractionOverride = nil
     self.durabilityPipeline = MemoryAssistantDurabilityPipeline(
       runner: MemoryAssistantProductionDurability(operations: MemoryAssistantLiveDurabilityOperations())

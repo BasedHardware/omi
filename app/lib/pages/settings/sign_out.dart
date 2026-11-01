@@ -10,6 +10,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/services/wals/deleted_account_uids.dart';
 
 /// Local preferences that belong to this phone and its paired device, not to the account, so they
 /// survive Sign Out (chat-apps-settings #9). Everything else — tokens, the user id, profile,
@@ -31,6 +32,8 @@ const Set<String> kPreferencesKeptOnSignOut = {
   'companionAssociationPrompted',
   'autoSyncOfflineRecordings',
   // Display and phone behaviour
+  SharedPreferencesUtil.appearanceDefaultMigrationKey,
+  SharedPreferencesUtil.appearanceModeKey,
   'showShortConversations',
   'showDiscardedMemories',
   'voiceResponseMode',
@@ -38,6 +41,8 @@ const Set<String> kPreferencesKeptOnSignOut = {
   // So announcements already seen on this phone do not come back
   'lastKnownAppVersion',
   'lastAnnouncementCheckTime',
+  // Audio of accounts deleted from this phone is purged by the WAL index on load
+  deletedAccountUidsKey,
 };
 
 /// Clears the preferences store except [kPreferencesKeptOnSignOut] (see there).
@@ -59,8 +64,8 @@ Future<void> clearPreferencesForSignOut() async {
       await prefs.setInt(entry.key, value);
     } else if (value is double) {
       await prefs.setDouble(entry.key, value);
-    } else if (value is List<String>) {
-      await prefs.setStringList(entry.key, value);
+    } else if (value is List && value.every((e) => e is String)) {
+      await prefs.setStringList(entry.key, List<String>.from(value)); // untyped after a cold start
     }
   }
 }

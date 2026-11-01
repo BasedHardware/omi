@@ -74,18 +74,23 @@ final class FloatingBarNotchCardSizingTests: XCTestCase {
       window.makeKeyAndOrderFront(nil)
 
       window.showNotification(card(), animated: false)
-      let mounted = window.frame
-      XCTAssertGreaterThan(mounted.width, 0)
+      XCTAssertGreaterThan(window.frame.width, 0)
+      let mountedSurface = window.closedSurfaceSize(usesNotchIsland: true)
 
       // Listening and thinking are the two states Interject runs *while* the
       // card is still on screen. Neither may shrink the panel under it.
+      //
+      // Compare surface sizes, not a surface size against the window frame.
+      // AppKit snaps a frame to whole points: on a display whose notch inset is
+      // fractional (37.5pt on a notched MacBook) the card's 197.5pt request lands as a 198pt
+      // frame, while the exact PTT size plus outsets stays 197.5pt.
       for expanded in [true, false] {
         let ptt = window.pushToTalkSurfaceSize(expanded: expanded)
         XCTAssertGreaterThanOrEqual(
-          ptt.width + FloatingControlBarWindow.notchGlowOutsetX * 2, mounted.width,
+          ptt.width, mountedSurface.width,
           "PTT (expanded=\(expanded)) must not narrow the panel under a mounted card")
         XCTAssertGreaterThanOrEqual(
-          ptt.height + FloatingControlBarWindow.notchGlowOutsetBottom, mounted.height,
+          ptt.height, mountedSurface.height,
           "PTT (expanded=\(expanded)) must not clip the card body")
       }
     }

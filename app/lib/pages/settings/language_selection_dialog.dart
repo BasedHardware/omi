@@ -12,33 +12,25 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// Asks for the primary language (the one language setting; docs/ux-contract.md §12).
 ///
-/// A searchable list in the shared sheet. When the language is required (none set yet) the sheet
-/// cannot be swiped or tapped away and has no close button.
+/// A searchable list in the shared sheet. It always closes (X, swipe, scrim tap): a user with no
+/// saved language keeps the default and is asked again next session, never held on a sheet whose
+/// save may not succeed (a backend fence, no network).
 class LanguageSelectionDialog {
   static Future<void> show(
     BuildContext context, {
-    bool isRequired = false,
     bool forceShow = false,
     bool showSingleLanguageWarning = false,
   }) async {
     final homeProvider = Provider.of<HomeProvider>(context, listen: false);
 
-    // If the user has already set a primary language and it's not required or forced, don't show the dialog
-    if (homeProvider.hasSetPrimaryLanguage && !isRequired && !forceShow) {
+    // A language is already set; only an explicit request reopens the picker.
+    if (homeProvider.hasSetPrimaryLanguage && !forceShow) {
       return;
-    }
-
-    // If the user's primary language is empty, they haven't set one yet
-    if (homeProvider.userPrimaryLanguage.isEmpty) {
-      isRequired = true; // Make the dialog required if no language is set
     }
 
     await showOmiSheet<void>(
       context: context,
       title: context.l10n.tellUsPrimaryLanguage,
-      showCloseButton: !isRequired,
-      isDismissible: !isRequired,
-      enableDrag: !isRequired,
       builder: (sheetContext) => _PrimaryLanguagePicker(
         homeProvider: homeProvider,
         showSingleLanguageWarning: showSingleLanguageWarning,

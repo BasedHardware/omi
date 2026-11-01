@@ -45,6 +45,13 @@ def _fake_requests_module() -> types.ModuleType:
             self.response = response
 
     class Response:
+        """Annotation target for server.py's _response_json signature.
+
+        Python evaluates that annotation at import time before 3.14's deferred
+        evaluation, so the stub has to carry every attribute server.py names at
+        module scope, not just the ones tests call.
+        """
+
         status_code = 200
 
         def json(self):

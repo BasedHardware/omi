@@ -1,0 +1,135 @@
+{
+  "date": "2026-10-16",
+  "scope": "isolated dev L4 source overlay; public fixture; local HTTP delivery; no production deployment or Firestore writes",
+  "fixture_sha256": "1fb553adb5a6389eef5b7ebdbf9ed2a6082518a646ce9bf872bf33b964eedc14",
+  "base_image_digest": "gcr.io/based-hardware-dev/parakeet@sha256:09a340a0dea50005bfd2035471253a12e98ae505c74daddba8cb5d20f08983ff",
+  "waves": 40,
+  "live_seconds": 24,
+  "backfill_seconds": 120,
+  "steps": [
+    {
+      "packing": false,
+      "concurrency": 2,
+      "delivery": {
+        "n": 80,
+        "p95": 2.059141108766198,
+        "max": 2.9354671663604677
+      },
+      "live_delivery": {
+        "n": 40,
+        "p95": 0.4407667531631887,
+        "max": 1.3783368431031704
+      },
+      "statuses": {
+        "200": 80
+      },
+      "empty_successes": 0,
+      "dcgm_nonzero": true,
+      "passes": true,
+      "final_dcgm_util_max_percent": 88.0
+    },
+    {
+      "packing": true,
+      "concurrency": 2,
+      "delivery": {
+        "n": 80,
+        "p95": 2.0591038782149553,
+        "max": 2.9233810328878462
+      },
+      "live_delivery": {
+        "n": 40,
+        "p95": 0.4429180878214538,
+        "max": 1.3182115079835057
+      },
+      "statuses": {
+        "200": 80
+      },
+      "empty_successes": 0,
+      "dcgm_nonzero": true,
+      "passes": true,
+      "final_dcgm_util_max_percent": 85.0
+    },
+    {
+      "packing": true,
+      "concurrency": 3,
+      "delivery": {
+        "n": 120,
+        "p95": 2.45295831002295,
+        "max": 3.252349373884499
+      },
+      "live_delivery": {
+        "n": 80,
+        "p95": 0.8588165142573416,
+        "max": 1.7046059966087341
+      },
+      "statuses": {
+        "200": 120
+      },
+      "empty_successes": 0,
+      "dcgm_nonzero": true,
+      "passes": true,
+      "final_dcgm_util_max_percent": 63.0
+    }
+  ],
+  "decoder_graph_allowed": false,
+  "long_probe": {
+    "historical": {
+      "lane": "backfill",
+      "seconds": 6.5029713357798755,
+      "status": 200,
+      "nonempty": true
+    },
+    "live": [
+      {
+        "lane": "live",
+        "seconds": 0.435715195722878,
+        "status": 200,
+        "nonempty": true
+      },
+      {
+        "lane": "live",
+        "seconds": 2.138559783808887,
+        "status": 200,
+        "nonempty": true
+      },
+      {
+        "lane": "live",
+        "seconds": 1.7769749658182263,
+        "status": 200,
+        "nonempty": true
+      },
+      {
+        "lane": "live",
+        "seconds": 1.7994802691973746,
+        "status": 200,
+        "nonempty": true
+      },
+      {
+        "lane": "live",
+        "seconds": 0.41287296591326594,
+        "status": 200,
+        "nonempty": true
+      },
+      {
+        "lane": "live",
+        "seconds": 0.3989085596986115,
+        "status": 200,
+        "nonempty": true
+      }
+    ],
+    "live_delivery": {
+      "n": 6,
+      "p95": 2.138559783808887,
+      "max": 2.138559783808887
+    },
+    "v2_status": 200,
+    "v2_nonempty": true,
+    "v2_latest_segment_end": 359.84000000000003
+  },
+  "limits": [
+    "not an immutable production image qualification",
+    "not per-language or long-input hypothesis/speaker parity",
+    "not fleet peak or Cloud Run/VPC transport qualification",
+    "higher density requires a separate config canary"
+  ]
+}

@@ -43,11 +43,22 @@ def create_subscription_checkout_session(
     idempotency_key: Optional[str] = None,
     customer_id: Optional[str] = None,
     promotion_code_id: Optional[str] = None,
+    trial_period_days: Optional[int] = None,
 ):
-    """Create a Stripe Checkout session for a subscription."""
+    """Create a Stripe Checkout session for a subscription.
+
+    `trial_period_days` starts the subscription with a free trial; Checkout still collects the
+    card, and Stripe charges the first period when the trial ends unless the subscriber cancels.
+    """
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime
         cancel_url = urljoin(base_url, 'v1/payments/cancel')  # type: ignore[reportArgumentType]  # base_url validated at runtime
+
+        # Pin the selected price's original currency as well as disabling FX.
+        # Multi-currency Prices can otherwise select a presentment currency by IP.
+        # Existing non-USD management/reactivation stays outside new Checkout.
+        price = stripe.Price.retrieve(price_id)
+        currency = price.currency.lower()
 
         # session creation parameters
         session_params: Dict[str, Any] = {
@@ -60,6 +71,9 @@ def create_subscription_checkout_session(
                 },
             ],
             'mode': 'subscription',
+            'currency': currency,
+            # Language only; this does not choose or convert the currency.
+            'locale': 'auto',
             'success_url': success_url,
             'cancel_url': cancel_url,
             'metadata': {
@@ -72,7 +86,21 @@ def create_subscription_checkout_session(
                     'sub_type': 'unlimited',
                 }
             },
+            # Charge in the price's own currency, the one every paywall shows. With the
+            # account's Adaptive Pricing on, a non-US buyer who saw a USD price card was
+            # charged a converted local-currency amount; Google Play rejected Android
+            # release 1504 for that mismatch. It also keeps a promotion code's
+            # minimum_amount evaluated against the USD-authored price (issue #23299).
+            'adaptive_pricing': {'enabled': False},
         }
+
+        if currency == 'usd':
+            # Stripe owns its currency glyphs. Keep USD explicit even where its
+            # hosted template uses a dollar glyph rather than the app's US$.
+            session_params['custom_text'] = {'submit': {'message': 'All amounts are in USD (US dollars).'}}
+
+        if trial_period_days:
+            session_params['subscription_data']['trial_period_days'] = trial_period_days
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]
@@ -114,18 +142,69 @@ def cancel_subscription(subscription_id: str):
 TERMINAL_SUBSCRIPTION_STATUSES = frozenset({'canceled', 'incomplete_expired'})
 
 
+def cancel_subscription_for_account_deletion(subscription_id: str) -> None:
+    """Cancel now for erasure; absent/terminal subscriptions already satisfy it.
+
+    Unlike period-end cancellation, transport/rate-limit/server errors propagate
+    so the deletion task can retry without mistaking an outage for success.
+    """
+    try:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        if subscription.get('status') in TERMINAL_SUBSCRIPTION_STATUSES:
+            return
+        canceled = subscription.delete()
+        if canceled.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
+            raise RuntimeError('Stripe immediate cancellation did not reach a terminal status')
+    except stripe.InvalidRequestError as error:
+        if error.code == 'resource_missing' or 'no such subscription' in str(error).lower():
+            return
+        # A concurrent cancellation can win between retrieve and delete. Verify
+        # the goal state rather than accepting an arbitrary Stripe 400.
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+        except stripe.InvalidRequestError as read_error:
+            if read_error.code == 'resource_missing' or 'no such subscription' in str(read_error).lower():
+                return
+            raise
+        if subscription.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
+            raise error
+
+
 def is_subscription_terminal(subscription_id: str) -> bool:
     """Whether Stripe currently reports the subscription in a terminal, non-billing state.
 
     Fails closed: an unreadable subscription or any non-terminal status returns False, so a
-    caller never mistakes a transport error for a subscription that is already canceled.
+    caller never mistakes a transport error for a subscription that is already canceled. A
+    subscription that does not exist at all (Stripe ``resource_missing``) is terminal: nothing
+    can bill through an id Stripe does not know.
     """
     try:
         subscription = stripe.Subscription.retrieve(subscription_id)
+    except stripe.InvalidRequestError as e:
+        if getattr(e, 'code', None) == 'resource_missing' or getattr(e, 'http_status', None) == 404:
+            # A subscription id Stripe has never heard of (a stale or synthetic id stored on the
+            # user) cannot bill anyone, so the billing goal state is already met. Treating it as a
+            # failure left account-deletion wipes retrying forever behind the auth fence.
+            logger.warning(f"Subscription {subscription_id} does not exist in Stripe; treating as terminal")
+            return True
+        logger.error(f"Error retrieving subscription: {e}")
+        return False
     except Exception as e:
         logger.error(f"Error retrieving subscription: {e}")
         return False
     return subscription.get('status') in TERMINAL_SUBSCRIPTION_STATUSES
+
+
+def find_billable_app_subscription_ids(uid: str) -> list[str]:
+    if not stripe.api_key:
+        return []
+    subscriptions = stripe.Subscription.search(query=f"metadata['uid']:'{uid}'")
+    return [
+        subscription.id
+        for subscription in subscriptions.auto_paging_iter()
+        if subscription.get('metadata', {}).get('app_id')
+        and subscription.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES
+    ]
 
 
 def find_app_subscription_by_customer_id(

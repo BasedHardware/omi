@@ -681,7 +681,7 @@ done < <(cut -f1 "$suite_map" | sort -u)
 # LocalEmbeddingIndexer.indexFinalizedSession captures and revalidates the
 # effective owner, which reads the production-standard auth defaults domain.
 # Keep its caller suites out of parallel cfprefsd traffic on hosted macOS.
-auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)|LocalEmbeddingIndexer\.shared\.indexFinalizedSession'
+auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)|LocalEmbeddingIndexer\.shared\.indexFinalizedSession|UserDefaults\.standard\.(set|removeObject).*forKey: \.authUserId'
 declare -a auth_domain_files=()
 while IFS= read -r auth_domain_file; do
   auth_domain_files+=("$auth_domain_file")
@@ -1011,7 +1011,10 @@ if ls "$suite_log_dir"/*.seconds >/dev/null 2>&1; then
   echo "Slowest executed Swift suites this run (wall seconds):"
   for seconds_path in "$suite_log_dir"/*.seconds; do
     printf '%s %s\n' "$(cat "$seconds_path")" "$(basename "${seconds_path%.seconds}")"
-  done | sort -rn | head -25 | while read -r seconds suite; do
+  # Drain the sorted stream even after the first 25 rows. `head` closes early
+  # and BSD sort then exits 2 with Broken pipe under pipefail, reddening an
+  # otherwise successful large suite run (PR #21300, run 38230944415).
+  done | sort -rn | sed -n '1,25p' | while read -r seconds suite; do
     printf '  %8ss  %s\n' "$seconds" "$suite"
   done
 fi

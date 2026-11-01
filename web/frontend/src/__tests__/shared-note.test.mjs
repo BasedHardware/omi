@@ -272,8 +272,10 @@ describe('share note page wiring', () => {
   });
 
   it('derives metadata from the first section bullet before the overview fallback', () => {
-    assert.match(pageSource, /firstSectionBulletPlainText/);
-    assert.match(pageSource, /markdownToPlainText\(memory\?\.structured\?\.overview\)/);
+    assert.match(pageSource, /firstSectionBulletPlainText\(structured\?\.sections\)/);
+    assert.match(pageSource, /markdownToPlainText\(structured\?\.overview\)/);
+    // Both read the citation-repaired note, never raw fields.
+    assert.match(pageSource, /presentableNoteStructured\(\s*memory\?\.structured,/);
   });
 
   it('renders structured sections on the Summary tab with the overview fallback intact', () => {

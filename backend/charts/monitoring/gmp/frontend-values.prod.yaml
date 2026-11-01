@@ -1,0 +1,138 @@
+# Production overlay: layer AFTER kube-prometheus-stack/prod_omi_monitoring_values.yaml
+# with pinned chart 75.15.1 through the explicit prod metrics-egress workflow.
+# Business alerts, dashboards and HPA stay on their existing sources.
+grafana:
+  # Helm replaces lists: render-check against the full base values before apply.
+  # Current base has no additionalDataSources; built-in Prometheus is
+  # independently rendered and preserved; AM provisioning is disabled by the base. Never set prune/deleteDatasources.
+  additionalDataSources:
+    - name: GMP Cloud Run (shadow)
+      uid: gmp-cloud-run
+      orgId: 1
+      type: prometheus
+      access: proxy
+      url: http://prod-omi-gmp-query-frontend.prod-omi-monitoring.svc:9090
+      isDefault: false
+      editable: false
+      version: 1
+      jsonData:
+        httpMethod: GET
+        prometheusType: Prometheus
+        prometheusVersion: 2.40.0
+        timeInterval: 30s
+        timeout: 120
+        queryTimeout: 2m
+        manageAlerts: false
+
+# Map merge preserves the base's prometheusWarmupService. Do not change this to
+# a list: that would replace the staged Service pin and interrupt query routing.
+extraManifests:
+  gmpQueryFrontendDeployment:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: prod-omi-gmp-query-frontend
+      namespace: prod-omi-monitoring
+      labels: &frontendLabels
+        app.kubernetes.io/name: gmp-query-frontend
+        app.kubernetes.io/instance: prod-omi-gmp-query-frontend
+    spec:
+      replicas: 2
+      revisionHistoryLimit: 2
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 0
+          maxUnavailable: 1
+      selector:
+        matchLabels: *frontendLabels
+      template:
+        metadata:
+          labels: *frontendLabels
+        spec:
+          serviceAccountName: prod-omi-prometheus-stackdriver-exporter
+          automountServiceAccountToken: true
+          terminationGracePeriodSeconds: 30
+          nodeSelector:
+            service: monitoring
+            env: prod
+            iam.gke.io/gke-metadata-server-enabled: "true"
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels: *frontendLabels
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    topologyKey: topology.kubernetes.io/zone
+                    labelSelector:
+                      matchLabels: *frontendLabels
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: frontend
+              # Official v0.17.2 example uses v0.15.3-gke.0. Public registry
+              # multi-arch index digest checked read-only on 2026-10-15.
+              image: gke.gcr.io/prometheus-engine/frontend:v0.15.3-gke.0@sha256:615ba6fcb89717b7346de2746e18fd6d31979cf89eb7b3583c7cea05be827664
+              imagePullPolicy: IfNotPresent
+              args:
+                - --web.listen-address=:9090
+                - --query.project-id=based-hardware
+              ports:
+                - name: web
+                  containerPort: 9090
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              readinessProbe:
+                httpGet:
+                  path: /-/ready
+                  port: web
+                timeoutSeconds: 2
+                periodSeconds: 10
+              livenessProbe:
+                httpGet:
+                  path: /-/healthy
+                  port: web
+                timeoutSeconds: 2
+                periodSeconds: 10
+                failureThreshold: 6
+  gmpQueryFrontendService:
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: prod-omi-gmp-query-frontend
+      namespace: prod-omi-monitoring
+      labels: *frontendLabels
+    spec:
+      type: ClusterIP
+      selector: *frontendLabels
+      ports:
+        - name: web
+          port: 9090
+          targetPort: web
+  gmpQueryFrontendPDB:
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata:
+      name: prod-omi-gmp-query-frontend
+      namespace: prod-omi-monitoring
+    spec:
+      minAvailable: 1
+      selector:
+        matchLabels: *frontendLabels

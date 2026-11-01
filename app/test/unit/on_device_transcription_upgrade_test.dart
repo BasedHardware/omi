@@ -92,7 +92,8 @@ void main() {
 
       final result = await provider.transcribe(_silentPcmWav());
 
-      expect(result, isNull);
+      expect(result!.isEmpty, isTrue);
+      expect(result.audioEndSeconds, closeTo(0.1, 0.001));
     } finally {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
         pathProviderChannel,

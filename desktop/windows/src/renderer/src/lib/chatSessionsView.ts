@@ -3,6 +3,7 @@
 // in the node env and the popover just renders their output.
 
 import type { ChatSession } from '../../../shared/chatSessions'
+import { startOfDayOffset, startOfLocalDay } from './localDay'
 
 /** Normalize a wire timestamp (epoch-ms number OR ISO-8601 string) to epoch ms.
  *  Returns 0 for unparseable input so a bad row sorts to the bottom, never NaN. */
@@ -39,12 +40,6 @@ export interface SessionGroup {
 
 const DAY_MS = 86_400_000
 
-function startOfLocalDay(ms: number): number {
-  const d = new Date(ms)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
-}
-
 /**
  * Group sessions into the four macOS buckets, VERBATIM from
  * `ChatProvider.computeGroupedSessions()`: **Today** (same calendar day),
@@ -59,7 +54,9 @@ export function groupSessionsByDate(
   now: number = Date.now()
 ): SessionGroup[] {
   const todayStart = startOfLocalDay(now)
-  const yesterdayStart = todayStart - DAY_MS
+  // One calendar day back, not `todayStart - DAY_MS`: a day with a DST change
+  // lasts 23 h or 25 h, so the day after one a fixed 24 h step misses its midnight.
+  const yesterdayStart = startOfDayOffset(now, -1)
   const weekAgo = now - 7 * DAY_MS
 
   const today: ChatSession[] = []

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-failure-records-drop-cause",
+  "violated_contract": "Every persisted ERROR record for a failed sync operation must preserve the failure cause: the exception text and the original stack trace. A record whose extra payload identifies only the affected device (or other context) without the error itself is unauditable and hides recurring failure classes from support and telemetry.",
+  "canonical_prevention": "At every catch site that persists a sync-failure record, capture the original stack (catch (e, st)) and include a serialized cause (e.toString()) plus the failing phase in the record payload; keep catch-and-continue behavior unchanged.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/ring_custody_download_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/ring_storage_sync.dart",
+    "app/test/unit/ring_custody_download_test.dart"
+  ],
+  "status": "open"
+}

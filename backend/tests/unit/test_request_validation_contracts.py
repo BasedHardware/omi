@@ -69,6 +69,12 @@ def test_parse_sync_filename_timestamp_accepts_fractional_vad_segment_names():
     assert parse_sync_filename_timestamp('/tmp/vad/1704067200.5.wav') == 1_704_067_200.5
 
 
+def test_parse_sync_filename_timestamp_accepts_fractional_and_collision_bin_names():
+    stem = 'audio_pendant1_opus_16000_1_fs100_1735689600.6'
+    assert parse_sync_filename_timestamp(f'{stem}.bin') == 1_735_689_600.6
+    assert parse_sync_filename_timestamp(f'audio_pendant1_opus_16000_1_fs100_u0_1735689600.6.bin') == 1_735_689_600.6
+
+
 @pytest.mark.parametrize(
     'filename',
     [
@@ -87,6 +93,24 @@ def test_parse_sync_filename_timestamp_rejects_future_values():
 
     with pytest.raises(ValueError):
         parse_sync_filename_timestamp(f'audio_{future}.bin')
+
+
+def test_parse_sync_filename_timestamp_accepts_future_values_within_shared_skew_tolerance(monkeypatch):
+    monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
+    within_tolerance = int(datetime.now(timezone.utc).timestamp()) + 170
+
+    assert parse_sync_filename_timestamp(f'audio_{within_tolerance}.bin') == within_tolerance
+
+
+def test_parse_sync_filename_timestamp_tolerance_follows_the_shared_setting(monkeypatch):
+    ahead = int(datetime.now(timezone.utc).timestamp()) + 170
+
+    monkeypatch.setenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '60')
+    with pytest.raises(ValueError):
+        parse_sync_filename_timestamp(f'audio_{ahead}.bin')
+
+    monkeypatch.setenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')
+    assert parse_sync_filename_timestamp(f'audio_{ahead}.bin') == ahead
 
 
 @pytest.mark.parametrize(

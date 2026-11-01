@@ -207,3 +207,50 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+def test_goal_create_rejects_blank_title(authed_profile, respx_mock, cli_runner, blank) -> None:
+    route = respx_mock.post("/v1/dev/user/goals").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "create", blank])
+    assert result.exit_code == 1
+    assert not route.called
+
+
+def test_goal_create_rejects_oversized_title(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/goals").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "create", "x" * 501])
+    assert result.exit_code == 1
+    assert "Invalid goal title" in result.output
+    assert not route.called
+
+
+def test_goal_create_accepts_500_char_title(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/goals").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "create", "x" * 500])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body["title"] == "x" * 500
+
+
+def test_goal_create_strips_surrounding_whitespace(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/goals").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "create", "  drink water  "])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body["title"] == "drink water"
+
+
+def test_goal_update_rejects_blank_title(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/goals/g1").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "update", "g1", "--title", "   "])
+    assert result.exit_code == 1
+    assert not route.called
+
+
+def test_goal_update_rejects_oversized_title(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/goals/g1").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "update", "g1", "--title", "x" * 501])
+    assert result.exit_code == 1
+    assert "Invalid goal title" in result.output
+    assert not route.called

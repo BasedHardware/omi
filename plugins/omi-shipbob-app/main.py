@@ -43,6 +43,8 @@ from models import (
 )
 from shipbob_tools_auth import require_shipbob_tools_auth
 
+REQUEST_TIMEOUT = (5, 30)
+
 
 def log(msg: str):
     """Print and flush immediately for Railway logging."""
@@ -178,6 +180,7 @@ def refresh_token_if_needed(uid: str) -> bool:
                 "client_id": SHIPBOB_CLIENT_ID,
                 "client_secret": SHIPBOB_CLIENT_SECRET,
             },
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code == 200:
@@ -214,13 +217,13 @@ def make_shipbob_request(
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         elif method == "POST":
-            response = requests.post(url, headers=headers, json=data)
+            response = requests.post(url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
         elif method == "PUT":
-            response = requests.put(url, headers=headers, json=data)
+            response = requests.put(url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
         elif method == "DELETE":
-            response = requests.delete(url, headers=headers)
+            response = requests.delete(url, headers=headers, timeout=REQUEST_TIMEOUT)
         else:
             return None
 
@@ -533,6 +536,7 @@ async def handle_shipbob_callback(
                 "client_id": SHIPBOB_CLIENT_ID,
                 "client_secret": SHIPBOB_CLIENT_SECRET,
             },
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code != 200:

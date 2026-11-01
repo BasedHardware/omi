@@ -149,6 +149,11 @@ def audit_record(
         'expire_at': merged_at + timedelta(days=RETENTION_DAYS),
         'stretch_count': stretch,
     }
+    if 'flattened_ancestor_count' in marker:
+        flattened = marker['flattened_ancestor_count']
+        if isinstance(flattened, bool) or not isinstance(flattened, int) or not 0 <= flattened <= 11:
+            raise ValueError('audit flattened_ancestor_count is out of bounds')
+        record['flattened_ancestor_count'] = flattened
     record.update({name: _number(decision.get(name)) for name in _DECISION_FLOATS})
     record.update(_DECISION_ENUMS)
     return record

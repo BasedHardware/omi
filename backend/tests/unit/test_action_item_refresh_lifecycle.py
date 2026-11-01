@@ -17,7 +17,6 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 def test_silence_split_merge_late_sync_and_repeated_refresh(monkeypatch):
     world = merge.World(monkeypatch)
     monkeypatch.setenv('ACTION_ITEM_REFRESH_PRESERVE_ENABLED', 'true')
-    monkeypatch.delenv(merge.config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     world.add('p', 0, 10)
     world.add('n', 15, 10)  # silence split: two completed live rows from one device
     tasks = ('users', merge.UID, 'action_items')

@@ -254,7 +254,12 @@ def test_cutover_workflow_keeps_protected_candidate_gate_and_no_failure_resume_c
         Path(__file__).resolve().parents[3] / ".github" / "workflows" / "sync_ledger_fence_cutover.yml"
     ).read_text(encoding="utf-8")
 
-    assert "group: deploy-backend-stack-${{ github.event.inputs.environment }}" in workflow
+    # B5 (M3 review): prod serializes on the shared prod-train lock; break-glass and development keep the
+    # backend stack lock, so the cutover still shares the Cloud Run/queue mutation domain with backend deploys.
+    assert (
+        "group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' "
+        "&& 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
+    ) in workflow
     assert "candidate_image must be an immutable @sha256 digest" in workflow
     assert 'uses: ./.github/actions/transcription-release-candidate-probe' in workflow
     assert 'candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}' in workflow
@@ -496,3 +501,26 @@ def test_state_parser_rejects_candidate_image_mismatch_without_cloud_call(tmp_pa
         _orchestrator(active_config, runner, mode="active").activate_prepare(probe_tag="ledger-123-1")
 
     assert runner.commands == []
+
+
+def test_production_cutover_pauses_the_fresh_queues_that_now_carry_dispatch(tmp_path: Path) -> None:
+    """Prod dispatches on sync-jobs-fresh / sync-backfill-fresh since the 10-18 and 10-19 stalls;
+    a barrier that paused only the legacy queues would let both protocols overlap."""
+
+    import dataclasses
+
+    runner = FakeCloudRunner(
+        queue_states={
+            "sync-jobs": "RUNNING",
+            "sync-backfill": "PAUSED",
+            "sync-jobs-fresh": "RUNNING",
+            "sync-backfill-fresh": "RUNNING",
+        }
+    )
+    config = dataclasses.replace(_config(tmp_path), project="based-hardware")
+
+    state = _orchestrator(config, runner, mode="standby").stage()
+
+    assert set(state["queues"]) == set(cutover.PRODUCTION_QUEUES)
+    assert runner.queues == {queue: "PAUSED" for queue in cutover.PRODUCTION_QUEUES}
+    assert cutover.queues_for("based-hardware-dev") == cutover.QUEUES

@@ -13,6 +13,7 @@ extension AppState {
     guard isTranscribing, !silentMicFallbackInProgress else { return }
     recordSilentMicDiagnostic(detection: detection, phase: "initial", result: "watchdog_trip")
     silentMicFallbackInProgress = true
+    defer { silentMicFallbackInProgress = false }
 
     guard let builtInID = AudioCaptureService.findBuiltInMicDeviceID() else {
       log("Transcription: silent-mic detected but no built-in microphone available — leaving capture as-is")
@@ -27,23 +28,18 @@ extension AppState {
       from: "bluetooth",
       to: "built_in",
       reason: "local_heal",
-      outcome: .recovered,
+      outcome: .degraded,
       extra: ["user_visible": false])
 
-    // Tear down the dead Bluetooth capture and spin a new one pinned to the built-in mic.
-    // Silent healing — no user-facing UI, the recording just keeps working.
-    audioCaptureService?.stopCapture()
-    audioCaptureService = AudioCaptureService(overrideDeviceID: builtInID)
     // Hold the healed route for the rest of the session so the next rebuild does not
     // re-resolve back to the silent default and undo this.
     silentMicHealedDeviceID = builtInID
     recordingInputDeviceName =
-      AudioCaptureService.getCurrentMicrophoneName() ?? "Built-in Microphone"
-
-    Task { @MainActor in
-      await self.startMicrophoneAudioCapture()
-      self.silentMicFallbackInProgress = false
-    }
+      AudioCaptureService.deviceName(for: builtInID) ?? "Built-in Microphone"
+    // Use the same serialized, physical-teardown boundary as other microphone
+    // recovery. A queued Bluetooth callback must not swap services under a gate
+    // that is already recovering or rotating the recording.
+    await rebuildCoreAudioCaptureStack(reason: detection.reason, scope: .microphone)
   }
 
   /// Re-pin live mic capture onto a reappeared preferred device **without** ending the
@@ -104,46 +100,60 @@ extension AppState {
     return true
   }
 
-  func rebuildCoreAudioCaptureStack(reason: String) async {
-    guard isTranscribing, audioCaptureService != nil else { return }
+  @discardableResult
+  func rebuildCoreAudioCaptureStack(
+    reason: String, scope: CoreAudioCaptureRecoveryRequest.Scope = .allSources,
+    effects: CoreAudioCaptureRecoveryEffects = .live
+  ) async -> Bool {
+    guard isTranscribing, let previous = audioCaptureService else { return false }
 
     if captureGateInFlight {
-      pendingCoreAudioCaptureRecoveryReason = reason
-      return
-    }
-
-    log("Transcription: rebuilding CoreAudio capture stack — \(reason)")
-    captureReconcilePending = false
-    silentMicFallbackInProgress = false
-
-    if #available(macOS 14.4, *) {
-      if let systemService = systemAudioCaptureService as? SystemAudioCaptureService {
-        systemService.stopCapture()
+      // Rotation / actual stack failure needs both sources re-bound. A later
+      // microphone trip cannot downgrade that already-owed reconciliation.
+      if pendingCoreAudioCaptureRecovery?.scope != .allSources {
+        pendingCoreAudioCaptureRecovery = CoreAudioCaptureRecoveryRequest(reason: reason, scope: scope)
       }
-      systemAudioCaptureService = nil
-      AudioLevelMonitor.shared.updateSystemLevel(0)
+      return false
     }
 
-    audioCaptureService?.stopCapture()
+    log("Transcription: rebuilding CoreAudio capture scope=\(scope) — \(reason)")
+    captureReconcilePending = false
+    captureGateInFlight = true
+
+    previous.stopCapture()
+    // Releasing an IOProc is asynchronous. Never open the replacement before
+    // its predecessor has physically released the device. Stop/owner changes
+    // while waiting revoke this recovery; they must not resurrect capture.
+    await previous.waitForPhysicalStop()
+    guard isTranscribing, audioCaptureService === previous else { return false }
+    if scope == .allSources {
+      if #available(macOS 14.4, *) {
+        (systemAudioCaptureService as? SystemAudioCaptureService)?.stopCapture()
+        systemAudioCaptureService = nil
+        AudioLevelMonitor.shared.updateSystemLevel(0)
+      }
+      if !sttSession.useLocalSTT {
+        audioMixer?.stop()
+        audioMixer = AudioMixer()
+      }
+    }
     // Rebuilding must not silently move the user back onto a route already proven dead.
     // The choice is `SilentMicRoutePolicy`'s so the contract has one tested home; a nil
     // result means "follow the system default", which is what the plain initialiser does.
-    if let deviceID = SilentMicRoutePolicy.captureDeviceID(
-      healed: silentMicHealedDeviceID, systemDefault: nil)
-    {
-      audioCaptureService = AudioCaptureService(overrideDeviceID: deviceID)
-    } else {
-      audioCaptureService = AudioCaptureService()
-    }
+    audioCaptureService = effects.makeMicrophone(
+      SilentMicRoutePolicy.captureDeviceID(healed: silentMicHealedDeviceID, systemDefault: nil))
     AudioLevelMonitor.shared.updateMicrophoneLevel(0)
 
-    if !sttSession.useLocalSTT {
-      audioMixer?.stop()
-      audioMixer = AudioMixer()
-    }
+    // The tap, mixer clock/buffers, STT and conversation are independent owners.
+    // Replacing them for a microphone-only failure drops valid system audio.
 
-    recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName() ?? recordingInputDeviceName
-    await startMicrophoneAudioCapture()
+    let routeName =
+      silentMicHealedDeviceID.flatMap { AudioCaptureService.deviceName(for: $0) }
+      ?? AudioCaptureService.getCurrentMicrophoneName()
+    recordingInputDeviceName = routeName ?? recordingInputDeviceName
+    captureGateInFlight = false
+    await effects.armCapture(self)
+    return isTranscribing
   }
 
   /// A fresh `AudioCaptureService` resets its own watchdog cap. Keep the terminal policy at
@@ -162,20 +172,33 @@ extension AppState {
         result: "watchdog_trip")
     }
 
-    switch SharedCaptureSilentMicRecoveryPolicy.action(for: silentMicRecoveryAttempts) {
+    switch SharedCaptureSilentMicRecoveryPolicy.action(
+      for: silentMicRecoveryAttempts,
+      systemAudioLive: !armedMicrophoneRecovery.isProbing && isSystemAudioCaptureLive)
+    {
     case .rebuild:
-      log("Transcription: silent microphone detected — rebuilding CoreAudio capture stack")
+      log("Transcription: silent microphone detected — rebuilding microphone capture only")
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "silent_mic",
         from: "stalled_route",
-        to: "rebuilt_capture",
+        to: "rebuilt_microphone",
         reason: "local_heal",
         outcome: .degraded,
         extra: ["recovery_attempts": silentMicRecoveryAttempts, "user_visible": false])
-      await rebuildCoreAudioCaptureStack(reason: detection.reason)
-      if isTranscribing {
+      let restarted = await rebuildCoreAudioCaptureStack(reason: detection.reason, scope: .microphone)
+      if restarted {
         recordSilentMicDiagnostic(detection: nil, phase: "rebuild", result: "capture_restarted")
       }
+    case .continueSystemAudio:
+      isMicrophoneSignalMissing = true
+      // Do not finalize, re-arm, release STT, or close the tap. The current mic
+      // remains open and its live-signal callback can clear this warning.
+      log("Transcription: microphone recovery exhausted — continuing live system audio")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "silent_mic", from: "stalled_route", to: "system_audio_only",
+        reason: "policy", outcome: .degraded,
+        extra: ["recovery_attempts": silentMicRecoveryAttempts, "user_visible": true])
+      recordSilentMicDiagnostic(detection: detection, phase: "rebuild", result: "system_audio_continues")
     case .stopAndSurfaceError:
       log("Transcription: stopping after repeated silent microphone recovery failures")
       let shouldArm =
@@ -223,5 +246,23 @@ extension AppState {
         log("Transcription: silent capture exhausted on an authorized mic — stopping without modal")
       }
     }
+  }
+
+  var isSystemAudioCaptureLive: Bool {
+    if #available(macOS 14.4, *),
+      let systemService = systemAudioCaptureService as? SystemAudioCaptureService
+    {
+      return systemService.hasRecentAudioFrames
+    }
+    return false
+  }
+
+  func handleSharedMicrophoneSignalRecovered(from service: AudioCaptureService) {
+    guard isTranscribing, audioCaptureService === service, service.capturing, isMicrophoneSignalMissing else { return }
+    isMicrophoneSignalMissing = false
+    recordSilentMicDiagnostic(detection: nil, phase: "rebuild", result: "live_signal")
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "silent_mic", from: "system_audio_only", to: "microphone_and_system",
+      reason: "local_heal", outcome: .recovered)
   }
 }

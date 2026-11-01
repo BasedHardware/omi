@@ -98,7 +98,7 @@ def test_oversized_limit_and_offset_are_capped(monkeypatch):
 
     mcp_router.get_conversations(_response(), limit=10_000_000, offset=10_000_000, uid=UID)
 
-    assert captured['limit'] == 1000
+    assert captured['limit'] == 1001  # one visible lookahead row for continuation
     assert captured['offset'] == 100000
 
 
@@ -114,5 +114,5 @@ def test_normal_pagination_passes_through_unchanged(monkeypatch):
 
     mcp_router.get_conversations(_response(), limit=25, offset=10, uid=UID)
 
-    assert captured['limit'] == 25
+    assert captured['limit'] == 26  # page plus lookahead
     assert captured['offset'] == 10

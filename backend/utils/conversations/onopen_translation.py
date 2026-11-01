@@ -72,7 +72,7 @@ def translate_open_page(
 ) -> tuple[dict[str, Any], str, str | None]:
     """Return the same detail shape, a status, and an optional signed cursor."""
     config = resolve_ondemand_config()
-    if not config.onopen_enabled or not config.admits(uid):
+    if not config.onopen_enabled:
         return conversation, 'unavailable', None
     if conversation.get('deleted') or conversation.get('is_locked'):
         return conversation, 'unavailable', None
@@ -93,7 +93,7 @@ def translate_open_page(
     scan_cap = max(config.max_segments * 8, 400)
     revision = _revision(segments[:scan_cap])
     materialization_revision = _materialization_revision(conversation, segments[:scan_cap])
-    policy = 'viewed_v1' if config.gemini_enabled else 'legacy'
+    policy = 'viewed_v1'
     start = 0
     stale_cursor = False
     if cursor:
