@@ -85,6 +85,11 @@ def route_capable(route: str, language: str | None) -> bool:
 
     Vendors identify the language themselves (Modulate auto-detect, Soniox unified model), so
     vendor capability is surface admission only; tables narrow it per language class.
+
+    Soniox is not admitted on ``prerecorded`` today (only ``streaming`` and ``held_recovery``), so
+    it is never capable here and failover has no Soniox candidate until slice D adds that
+    admission to ``config.stt_provider_policy`` alongside its prerecorded adapter. That
+    reviewed policy change, not a table edit, is what enables Soniox failover.
     """
     if route == GPU:
         return parakeet_supports_language(STTServingSurface.PRERECORDED, normalized_language(language))
@@ -214,7 +219,7 @@ class RouteTable:
     @classmethod
     def from_dict(cls, raw: Any) -> 'RouteTable':
         raw = _exact_keys(raw, cls.KEYS, 'route table')
-        if raw['schema_version'] != SCHEMA_VERSION or isinstance(raw['schema_version'], bool):
+        if type(raw['schema_version']) is not int or raw['schema_version'] != SCHEMA_VERSION:
             raise RouteTableInvalid('unsupported schema version')
         if not isinstance(raw['table_version'], str) or not _TOKEN.fullmatch(raw['table_version']):
             raise RouteTableInvalid('bounded table version token required')
@@ -351,10 +356,12 @@ class AlwaysHealthy:
 # Paid-once per vendor: at most one billable attempt per service and two billable attempts per
 # unit (first vendor + one failover vendor). Unbilled refusals (the vendor declined before
 # processing) do not spend the service, but every attempt is a record and records are bounded.
+# SILENCE is unbilled only when our VAD skipped the request (``audio_seconds == 0``); audio that
+# was sent is billable whatever came back.
 MAX_BILLABLE_ATTEMPTS: Final = 2
 MAX_ATTEMPT_RECORDS: Final = 4
 UNBILLED_OUTCOMES: Final[frozenset[VendorAttemptOutcome]] = frozenset(
-    {VendorAttemptOutcome.RATE_LIMITED, VendorAttemptOutcome.CREDIT_REFUSAL, VendorAttemptOutcome.SILENCE}
+    {VendorAttemptOutcome.RATE_LIMITED, VendorAttemptOutcome.CREDIT_REFUSAL}
 )
 SUCCESS_OUTCOMES: Final[frozenset[VendorAttemptOutcome]] = frozenset(
     {VendorAttemptOutcome.OK, VendorAttemptOutcome.SILENCE}
@@ -398,6 +405,8 @@ class VendorAttempt:
 
     @property
     def billable(self) -> bool:
+        if self.outcome is VendorAttemptOutcome.SILENCE:
+            return self.audio_seconds > 0
         return self.outcome not in UNBILLED_OUTCOMES
 
     def to_dict(self) -> dict:
@@ -482,9 +491,11 @@ def check_new_attempt(attempts: list[VendorAttempt], service: str) -> int:
 #   any ``waiting_for`` service is allowed again, and at ``redrive_at`` regardless.
 # * Guards: excluded from T3 wedge, the uncommitted-age proxy and the 2h no-terminal backstop
 #   exactly like ``allowance_exhausted`` (``is_vendor_policy_hold``); never failed_held (T5),
-#   never lost speech (T2), never our 5xx (T6). T1 custody applies unchanged. A hold whose
-#   redrive is overdue by more than the stale grace stops being excluded, so a dead redrive
-#   sweep surfaces as a wedge instead of hiding behind the exclusion.
+#   never lost speech (T2), never our 5xx (T6). T1 custody applies unchanged. The exclusion
+#   holds only while the hold is consistent and live: no running attempt, a redrive no further
+#   out than the configured redrive interval, and not overdue by more than the stale grace.
+#   Anything else (a dead redrive sweep, a far-future deadline, a held unit with a live intent)
+#   surfaces as a wedge instead of hiding behind the exclusion.
 VENDOR_HELD: Final = 'vendor_held'
 HOLD_FIELD: Final = 'vendor_hold'
 
@@ -527,18 +538,31 @@ class VendorHold:
         return hold
 
 
-def is_vendor_policy_hold(job: Mapping[str, Any], now: float, stale_grace_seconds: float) -> bool:
-    """True for a live ``vendor_held`` unit: guards exclude it like an allowance hold.
+def is_vendor_policy_hold(
+    job: Mapping[str, Any], now: float, *, redrive_seconds: float, stale_grace_seconds: float
+) -> bool:
+    """True for a live, consistent ``vendor_held`` unit: guards exclude it like an allowance hold.
 
-    Malformed hold data is not a policy hold (the guard measures it).
+    ``redrive_seconds`` and ``stale_grace_seconds`` are the runtime values of
+    ``BATCH_VENDOR_HELD_REDRIVE_SECONDS`` and ``BATCH_VENDOR_HELD_STALE_GRACE_SECONDS``.
+    Malformed hold or attempt data is not a policy hold (the guard measures it).
     """
     if job.get('state') != VENDOR_HELD:
         return False
+    raw_attempts = job.get(ATTEMPTS_FIELD, [])
+    if not isinstance(raw_attempts, list):
+        return False
     try:
         hold = VendorHold.from_dict(job[HOLD_FIELD])
+        attempts = [VendorAttempt.from_dict(raw) for raw in raw_attempts]
     except (KeyError, TypeError, ValueError):
         return False
-    return now <= hold.redrive_at + stale_grace_seconds
+    # A live intent or a unit that already has a result is not waiting on a vendor.
+    if any(
+        attempt.outcome is VendorAttemptOutcome.RUNNING or attempt.outcome in SUCCESS_OUTCOMES for attempt in attempts
+    ):
+        return False
+    return hold.redrive_at - now <= redrive_seconds and now <= hold.redrive_at + stale_grace_seconds
 
 
 # --- rollout names (each slice fills only its own registry rows) ----------------------------------
