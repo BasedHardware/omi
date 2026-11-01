@@ -13,7 +13,7 @@ from utils import funded_processing, processing_backlog_worker
 from config.stt_cap_dispatch import execution_admission_configured, recovery_cohort_admits
 from config.plan_catalog import PAID_PLAN_TYPES
 from utils.observability.held_content import publish_fleet
-from utils.sync import cap_work_budget, live_cap_staging
+from utils.sync import live_cap_staging
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +25,6 @@ OWNER_ITEMS_CEILING = 10
 FLEET_SNAPSHOT_MAX_AGE_SECONDS = 300.0
 FLEET_SNAPSHOT_INTERVAL_SECONDS = 120.0
 FLEET_SNAPSHOT_WAIT_CEILING = 300.0
-# Leave transport/serialization headroom below the 300-second request target.
-# The work deadline includes discovery, custody maintenance and snapshot wait.
-SWEEP_WORK_BUDGET_SECONDS = 240.0
-SWEEP_REQUEST_WAIT_SECONDS = 270.0
-
-# Retain an in-flight pass across scheduler requests. An already-dispatched
-# provider leaf must checkpoint before its leases/reservations can be released.
-_sweep_task: asyncio.Task[dict] | None = None
-_sweep_counts: dict[str, int] = {}
 
 
 class _SnapshotGate(TypedDict):
@@ -168,14 +159,12 @@ def _schedule_fleet_snapshot() -> asyncio.Task[Any] | None:
     return start_background_task(_run_fleet_snapshot(), name='cap_hold_fleet_snapshot')
 
 
-async def _settle_fleet_snapshot(task: asyncio.Task[Any] | None, *, deadline: float) -> None:
+async def _settle_fleet_snapshot(task: asyncio.Task[Any] | None) -> None:
     """Publish before the sweep returns when the aggregation fits its wait."""
     if task is None:
         return
     try:
-        await asyncio.wait_for(
-            asyncio.shield(task), timeout=min(fleet_snapshot_wait(), max(0.0, deadline - time.monotonic()))
-        )
+        await asyncio.wait_for(asyncio.shield(task), timeout=fleet_snapshot_wait())
     except asyncio.TimeoutError:
         # The shielded aggregation keeps running under its own RPC budget; the
         # in-flight gate stops a second one piling up behind it.
@@ -183,39 +172,13 @@ async def _settle_fleet_snapshot(task: asyncio.Task[Any] | None, *, deadline: fl
 
 
 async def sweep() -> dict:
-    global _sweep_task, _sweep_counts
     if not enabled():
         return {'disabled': True}
-    if _sweep_task is None or _sweep_task.done():
-        _sweep_counts = {'sealed': 0, 'visited': 0}
-        _sweep_task = start_background_task(
-            _sweep(time.monotonic() + SWEEP_WORK_BUDGET_SECONDS, _sweep_counts), name='cap_hold_sweep_pass'
-        )
-    task, counts = _sweep_task, _sweep_counts
-    # Do not cancel a paid call or release its fencing on request expiry.
-    # The next tick joins this pass; a process loss resumes from persisted
-    # choice/reservation/piece receipts after the existing lease expiry.
-    done, _ = await asyncio.wait({task}, timeout=SWEEP_REQUEST_WAIT_SECONDS)
-    if not done:
-        logger.info('event=cap_hold_redrive outcome=request_budget_deferred')
-        return {**counts, 'deferred': True}
-    return await task
-
-
-async def _sweep(deadline: float, counts: dict[str, int]) -> dict:
-    # A worker's own admission/lease reads cannot restart this pass's clock.
-    # Nested visits inherit the earlier deadline through every executor leaf.
-    with cap_work_budget.visit(max(0.0, deadline - time.monotonic())):
-        return await _sweep_pass(deadline, counts)
-
-
-async def _sweep_pass(deadline: float, counts: dict[str, int]) -> dict:
     sweep_started = time.monotonic()
     snapshot_task = _schedule_fleet_snapshot()
+    counts = {'sealed': 0, 'visited': 0}
     staging = await run_blocking(db_executor, store.discover, 'staging')
     for snap in staging:
-        if time.monotonic() >= deadline:
-            break
         uid = owner(snap, 'stt_cap_holds')
         if uid is None:
             continue
@@ -226,10 +189,8 @@ async def _sweep_pass(deadline: float, counts: dict[str, int]) -> dict:
                 counts['sealed'] += 1
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=seal_deferred exception_type=%s', type(error).__name__)
-    cleanup = await run_blocking(db_executor, store.discover, 'cleanup') if time.monotonic() < deadline else []
+    cleanup = await run_blocking(db_executor, store.discover, 'cleanup')
     for snap in cleanup:
-        if time.monotonic() >= deadline:
-            break
         uid = owner(snap, 'stt_cap_holds')
         if uid is None:
             continue
@@ -240,7 +201,7 @@ async def _sweep_pass(deadline: float, counts: dict[str, int]) -> dict:
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=cleanup_deferred exception_type=%s', type(error).__name__)
     if not execution_admission_configured():
-        await _settle_fleet_snapshot(snapshot_task, deadline=deadline)
+        await _settle_fleet_snapshot(snapshot_task)
         logger.info(
             'event=cap_hold_redrive outcome=complete visited=0 sealed=%s duration_seconds=%.3f',
             counts['sealed'],
@@ -248,6 +209,7 @@ async def _sweep_pass(deadline: float, counts: dict[str, int]) -> dict:
         )
         return counts
 
+    started = time.monotonic()
     visited = set()
     items_per_turn = owner_items()
 
@@ -260,9 +222,6 @@ async def _sweep_pass(deadline: float, counts: dict[str, int]) -> dict:
             or not funded_processing.enabled(uid)
         ):
             return None
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return None
         try:
             # One bounded candidate batch per owner per round. A fast owner
             # cannot drain its candidates before its peers get a turn.
@@ -270,10 +229,9 @@ async def _sweep_pass(deadline: float, counts: dict[str, int]) -> dict:
                 uid,
                 continuation=turn > 0,
                 max_items=items_per_turn,
-                time_budget=remaining,
+                time_budget=max(0, 900 - (time.monotonic() - started)),
             )
             visited.add(uid)
-            counts['visited'] = len(visited)
             return snap if more else None
         except Exception as error:
             logger.warning(
@@ -284,19 +242,15 @@ async def _sweep_pass(deadline: float, counts: dict[str, int]) -> dict:
             )
             return None
 
-    choices = (
-        await run_blocking(db_executor, store.discover, 'choices', limit=choices_page())
-        if time.monotonic() < deadline
-        else []
-    )
-    choices = await _paid_first(choices) if time.monotonic() < deadline else []
+    choices = await run_blocking(db_executor, store.discover, 'choices', limit=choices_page())
+    choices = await _paid_first(choices)
     for turn in range(100):
-        if not choices or time.monotonic() >= deadline:
+        if not choices or time.monotonic() - started >= 900:
             break
         results = await asyncio.gather(*(visit(snap, turn) for snap in choices))
         choices = [snap for snap in results if snap is not None]
     counts['visited'] = len(visited)
-    await _settle_fleet_snapshot(snapshot_task, deadline=deadline)
+    await _settle_fleet_snapshot(snapshot_task)
     logger.info(
         'event=cap_hold_redrive outcome=complete visited=%s sealed=%s duration_seconds=%.3f choices_page=%s owner_items=%s',
         counts['visited'],

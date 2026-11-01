@@ -86,17 +86,15 @@ calls choose, creates upgrade intent, extends cutoff or adopts a new month. It
 visits existing `state=processing` summaries, then awaits the existing worker
 with up to eight owners concurrently on existing executors. Each owner may
 consider up to ten candidates per round for at most 100 rounds (1,000
-candidates), in ten-row audio/text pages, sharing the remaining portion of a
-240-second pass budget with discovery, custody maintenance and fleet-snapshot
-wait. The worker checks its remaining budget before each next candidate and
-frozen audio piece. A reserved item
+candidates), in ten-row audio/text pages, with a monotonic 900-second budget
+checked before each next candidate and frozen audio piece. A reserved item
 resumes first and also obeys the piece budget. No new compute pool is added.
 Current reservations are retried before a new page;
 the existing UID worker lease and per-hold/per-text leases deduplicate concurrent
 sweeps/client paths. The month, chosen estimate, reservation, cursors, allowance
 and abuse checks remain authoritative. A busy or killed worker's 30-minute lease
-must expire before another owner may run. There is no self-respawn. A productive
-bounded visit leaves its choice processing. Pre-cutoff staging/sealing
+must expire before another owner may run. There is no 60-second timer or
+fire-and-forget self-respawn. A productive bounded visit leaves its choice processing. Pre-cutoff staging/sealing
 sources are visible in the same bounded audio query and keep the choice open
 without advancing past that source. Sealing preserves the original creation and
 listing times; it does not move authorized audio beyond the cutoff. A source
@@ -126,35 +124,30 @@ serializes regular executions of the same job: a later scheduled execution waits
 for the current one to finish. This is bounded fair recovery, not a per-user
 two-minute SLA. The per-owner candidate budget is up to 1,000 per sweep instead
 of 100; an exact 1,000-item boundary can require a later no-op finish visit.
-Slow calls constrain this. Each request waits at most 270 seconds, below the
-five-minute target. Expiry returns `deferred: true`; it does not cancel a paid
-call, clear a reservation, mark a choice complete or drop audio. A process-local
-tracked pass retains the active workers through their current checkpoint. The
-next scheduler tick joins that same pass instead of starting an overlapping
-one. Discovery and rotation stop starting work after the pass deadline; workers
-stop between candidates and pieces. A pass which has already returned may
-therefore finish its current item after the HTTP response. No new compute pool
-or continuation task is enqueued. On process loss, the durable choice,
-reservation and piece receipts remain the restart authority after lease expiry
-and the next discovery rotation.
-
-The existing global recovery token bucket remains the capacity authority:
-60 audio-seconds per wall second and 12,000 provider intents per hour by
-default. Fan-out and per-owner budgets do not raise that sustained rate or
-promise a two-minute recovery SLA. Modulate has a 300-second read timeout
-(Parakeet 120), plus other IO phases; the request wait bounds the coordinator,
-not an already-dispatched billable leaf. Existing executor queues can add
-latency. The endpoint stays on backend-sync; the scheduler's 1740-second
-transport deadline remains an outer guard.
-
+Slow calls constrain this:
+900 seconds permits about three 300-second provider calls before the next-piece
+check stops the visit. The existing global recovery token bucket remains the
+capacity authority: 60 audio-seconds per wall second and 12,000 provider intents
+per hour by default. Fan-out and per-owner budgets do not raise that sustained
+rate or promise that every open hold, including owners without a processing
+choice, drains within a fixed wall-clock SLA. Modulate has a 300-second read timeout (Parakeet 120),
+plus connect/write/pool timeouts; these are per-phase IO limits, not an absolute
+wall deadline for a trickling response. A call started just before budget expiry
+may still add its adapter timeouts plus URL download/codec/ingest/finalization IO. Concurrent owner visits
+avoid multiplying this provider tail by five; the 1710-second endpoint and
+1740-second scheduler deadlines remain outer guards, not guaranteed completion
+for arbitrary slow storage/LLM service. Existing executor queues can add latency;
+no throughput or two-minute SLA is claimed under saturation. Budget expiry does
+not cancel a billable call mid-flight or clear a reservation. A killed owner can
+still wait for its 30-minute lease plus a discovery rotation. Endpoints await work;
+failed requests may be retried and never acknowledge memory-only work as done.
 Each completed sweep logs `duration_seconds`, `visited`, `choices_page`, and
 `owner_items`; compare that duration with the two-minute schedule to identify
 when Scheduler serialization is delaying the next run.
 
 The fleet gauge aggregation runs beside the sweep, never ahead of its discovery
 or owner work: the sweep schedules it, does its own work, then waits at most
-`CAP_HOLD_FLEET_SNAPSHOT_WAIT_SECONDS` (default 90), further bounded by the
-remaining pass budget, to publish before returning;
+`CAP_HOLD_FLEET_SNAPSHOT_WAIT_SECONDS` (default 90) to publish before returning;
 a slower aggregation keeps running under its own budget and publishes late. At
 most one aggregation runs per process at a time and no more often than
 `CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS` (default 120 seconds). The

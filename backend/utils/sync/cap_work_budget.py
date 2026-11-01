@@ -14,11 +14,7 @@ def exhausted() -> bool:
 
 @contextmanager
 def visit(seconds: float | None):
-    deadline = None if seconds is None else time.monotonic() + max(0, seconds)
-    inherited = _DEADLINE.get()
-    if inherited is not None:
-        deadline = inherited if deadline is None else min(inherited, deadline)
-    token = _DEADLINE.set(deadline)
+    token = _DEADLINE.set(None if seconds is None else time.monotonic() + max(0, seconds))
     try:
         yield
     finally:
