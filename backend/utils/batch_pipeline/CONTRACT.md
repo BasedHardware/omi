@@ -65,8 +65,9 @@ record. Live transcription is a preview; the batch result is the record.
   `operation=batch_claim|batch_pull shard=scheduler_NN`, never worker/user IDs.
   One claimed shard transaction leases up to the pull's remaining batch,
   continuing the same DRR walk (each new head re-checks privacy, policy and
-  pool; `MAX_VISITS` still bounds the whole walk and a later lease starts only
-  below 300 buffered writes; one token per lease).
+  pool; `MAX_VISITS` still bounds the whole walk, which also stops at 300
+  buffered writes and commits its rotations for the next pull without a shard
+  backoff; one token per lease).
   `BATCH_PULL_MULTI_LEASE_ENABLED=false` restores one lease per transaction
   (Helm: `worker.pullMultiLeaseEnabled=false`).
   The existing Sync Cloud Tasks batch emulator gate runs the three-puller

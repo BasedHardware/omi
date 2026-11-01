@@ -57,6 +57,7 @@ class SnapshotStore(MemoryStore):
             self.counts['transactions'] += 1
             tx = SnapshotTransaction(self.rows, self.counts)
             result = body(tx)
+            self.counts['max_writes'] = max(self.counts['max_writes'], len(tx.writes))
             if len(tx.writes) > 450:
                 raise RuntimeError('batch transaction write budget exceeded')  # FirestoreTransaction.flush
             rows = deepcopy(self.rows)
@@ -270,6 +271,29 @@ def test_long_heads_never_push_one_transaction_past_the_write_budget(monkeypatch
     assert len(leases) == 16 and {v.item.duration_seconds for v in leases} == {30}
     if headroom is not None:
         assert store.counts['transactions'] == 4  # 128 visits reach 4 short heads.
+
+
+@pytest.mark.parametrize('multi_lease', [False, True])
+def test_write_stop_before_any_lease_commits_progress_without_parking_the_shard(monkeypatch, multi_lease):
+    # Writes can pile up before the first lease too (rotations, policy parts,
+    # head splices). The walk stops at the headroom, commits what it rotated,
+    # and the same pull resumes; the stop is not evidence for a 30s backoff.
+    from utils.batch_pipeline import scheduler
+    from utils.batch_pipeline.control import field
+
+    monkeypatch.setenv('BATCH_PULL_MULTI_LEASE_ENABLED', str(multi_lease).lower())
+    monkeypatch.setattr(scheduler, 'PULL_WRITE_HEADROOM', 12)
+    store = SnapshotStore()
+    queue = Scheduler(store, worker_id='w')
+    owners = owners_in_shard(40)
+    items = [item(f'{owner}-0', owner=owner, duration=30 if n == 39 else 7200) for n, owner in enumerate(owners)]
+    MemoryStore.run(store, lambda tx: [Scheduler.enqueue_in_transaction(tx, v, 0) for v in items])
+    store.counts.clear()
+    assert [v.item.segment_id for v in queue.pull(1, 8)] == [f'{owners[39]}-0']
+    assert store.counts['transactions'] > 2
+    assert store.counts['max_writes'] <= 12 + 8  # headroom plus one visit's and one lease's writes
+    control = store.rows['control', scheduler_control_key(owner_key(owners[0]))]
+    assert control[field(int(Priority.DEEP), 'batch_available_at')] <= 1
 
 
 def test_kill_switch_restores_one_lease_per_transaction(monkeypatch):

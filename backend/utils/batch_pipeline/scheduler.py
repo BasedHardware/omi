@@ -34,7 +34,8 @@ LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
-# A later lease starts only below this many buffered writes (flush refuses 450).
+# The walk visits another queue only below this many buffered writes (flush
+# refuses 450); a stop commits the rotations so far and the next pull resumes.
 PULL_WRITE_HEADROOM = 300
 HEAD_OWNER_BUDGET = 64
 CONTENTION_BACKOFF_CAP_SECONDS = 30.0
@@ -463,14 +464,13 @@ class Scheduler:
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))
             head_budget = [HEAD_OWNER_BUDGET]
-            visits = 0
+            visits, write_stop = 0, False
             # MAX_VISITS still bounds the whole walk, and with it the queue
             # writes; later leases spend what the first left, from cached reads.
-            while (
-                visits < MAX_VISITS
-                and len(receipts) < max_leases
-                and (not receipts or tx.buffered_writes() < PULL_WRITE_HEADROOM)
-            ):
+            while visits < MAX_VISITS and len(receipts) < max_leases:
+                if tx.buffered_writes() >= PULL_WRITE_HEADROOM:
+                    write_stop = True
+                    break
                 visits += 1
                 if not ring:
                     break
@@ -589,10 +589,11 @@ class Scheduler:
                 owner_count = max(1, len(ring))
             # Ring rotations after the last lease commit with their deficits.
             control[field(int(priority), 'active')] = bool(ring)
-            if not receipts and not eligible_queues:
+            if not receipts and not eligible_queues and not write_stop:
                 control[field(int(priority), self.pool + '_available_at')] = now + 30
             tx.put('control', shard, control)
-            return receipts or None, bool(receipts or eligible_queues), observations
+            # A write stop proved nothing about the unvisited queues: no backoff.
+            return receipts or None, bool(receipts or eligible_queues or write_stop), observations
 
         with pull_operation('pull', shard):
             receipts, eligible, observations = self.store.run(commit)
