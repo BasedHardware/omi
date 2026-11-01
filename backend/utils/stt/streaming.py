@@ -64,7 +64,7 @@ from utils.stt.live_reason import (
     LOCAL_DELIVERY_REPLAY_SEND_STALLED,
     LOCAL_DELIVERY_SEND_QUEUE_FULL,
 )
-from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
+from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriteStalled, RecoveryWriterPace, paced_send
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import MeteredSyncTransport, create_wire_meter, telemetry_call
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
@@ -1864,8 +1864,7 @@ class SafeModulateSocket(STTSocket):
                     # Docs: send empty text frame ("") to signal end of audio stream
                     pace = self._writer_pace
                     if pace is not None:
-                        async with asyncio.timeout(pace.write_bound()):
-                            await self._ws.send('')
+                        await paced_send(lambda: self._ws.send(''), pace)
                     else:
                         await self._ws.send('')
                     break
@@ -1877,13 +1876,7 @@ class SafeModulateSocket(STTSocket):
                         await pace.throttle(len(data), deadline=deadline)
                         pace.note_write(len(data))
                     if pace is not None:
-                        try:
-                            async with asyncio.timeout(pace.write_bound(deadline)):
-                                await self._ws.send(data)
-                        except TimeoutError:
-                            if deadline is not None and deadline <= clock():
-                                raise AudioDeliveryExpired('live audio delivery expired')
-                            raise
+                        await paced_send(lambda: self._ws.send(data), pace, deadline)
                     else:
                         await self._ws.send(data)
                     self._note_wire_audio(data)
@@ -1896,6 +1889,8 @@ class SafeModulateSocket(STTSocket):
                         self._send_queue.discard(data)
         except AudioDeliveryExpired:
             self._mark_dead('live audio delivery expired', typed_reason=LOCAL_DELIVERY_EXPIRED)
+        except RecoveryWriteStalled:
+            self._mark_dead('recovery write stalled', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}', cause=connection_loss_cause(e))
             self.stream_end.record(self._ws, error=e)
