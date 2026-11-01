@@ -438,6 +438,81 @@ class TestOutcomeEgressBinding:
         # Self-consistent: the only violations, if any, must NOT be the outcome binding.
         assert not any("feasible" in v.lower() for v in violations)
 
+    def test_denied_egress_violation_names_the_denied_endpoints(self):
+        """The outcome-binding violation must name each denied endpoint.
+
+        On main-push runs the workflow's failure diagnostics only tail the
+        attestation artifact, and with sort_keys JSON the raw_evidence array sorts
+        before the trailing topology contract — so the denied destinations never
+        fit the printed tail. Without them inline in the violation, a BLOCKED run
+        is unattributable from CI evidence (92 such main-push failures in the
+        10-18..11-01 window, every one counted 1/2/1 denied per scenario).
+        """
+        record = _valid_attestation()
+        record["raw_evidence"].append(
+            {
+                "event": "egress_attempt",
+                "role": "worker",
+                "host": "10.0.0.1",
+                "port": 443,
+                "loopback": False,
+                "decision": "deny",
+            }
+        )
+        record["egress"]["denied"] = record["egress"].get("denied", 0) + 1
+        record["egress"]["attempts_observed"] = record["egress"].get("attempts_observed", 0) + 1
+        record["invariants"]["no_denied_egress"] = False
+        record["invariants"]["no_undeclared_loopback_peer"] = False
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        binding = next(v for v in violations if "requires zero denied egress" in v)
+        assert "host='10.0.0.1'" in binding
+        assert "port=443" in binding
+        assert "role=worker" in binding
+        assert "egress_attempt" in binding
+
+    def test_denied_dns_attempt_names_host_without_port(self):
+        record = _valid_attestation()
+        record["raw_evidence"].append(
+            {
+                "event": "dns_attempt",
+                "role": "worker",
+                "host": "metadata.google.internal",
+                "loopback": False,
+                "decision": "deny",
+            }
+        )
+        record["egress"]["denied"] = record["egress"].get("denied", 0) + 1
+        record["egress"]["attempts_observed"] = record["egress"].get("attempts_observed", 0) + 1
+        record["invariants"]["no_denied_egress"] = False
+        record["invariants"]["no_undeclared_loopback_peer"] = False
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        binding = next(v for v in violations if "requires zero denied egress" in v)
+        assert "dns_attempt" in binding
+        assert "metadata.google.internal" in binding
+
+    def test_denied_endpoint_detail_is_bounded_but_count_is_exact(self):
+        record = _valid_attestation()
+        for _ in range(6):
+            record["raw_evidence"].append(
+                {
+                    "event": "egress_attempt",
+                    "role": "worker",
+                    "host": "10.0.0.9",
+                    "port": 443,
+                    "loopback": False,
+                    "decision": "deny",
+                }
+            )
+        record["egress"]["denied"] = record["egress"].get("denied", 0) + 6
+        record["egress"]["attempts_observed"] = record["egress"].get("attempts_observed", 0) + 6
+        record["invariants"]["no_denied_egress"] = False
+        record["invariants"]["no_undeclared_loopback_peer"] = False
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        binding = next(v for v in violations if "requires zero denied egress" in v)
+        assert "6 denied attempt(s)" in binding
+        assert binding.count("10.0.0.9") == 4
+        assert "(+2 more)" in binding
+
 
 # --------------------------------------------------------------------------- #
 # Final-review 2 — undeclared loopback aliases rejected at the attestation layer
