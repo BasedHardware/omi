@@ -202,3 +202,11 @@ def test_existing_dispatch_does_not_scan_load_or_emit_exclusion(monkeypatch, exi
         assert not result.batch_allowlisted and not result.live_stt_retired
         assert original.batch_enabled
     read.assert_not_called()
+
+
+def test_intake_outcome_is_the_bounded_three_state_admission_token():
+    assert ramp.intake_outcome(True, True) == 'batch'
+    assert ramp.intake_outcome(True, False) == 'legacy_excluded'
+    assert ramp.intake_outcome(False, False) == 'not_cohort'
+    # A narrowed filter can never widen a non-cohort owner back to batch.
+    assert ramp.intake_outcome(False, True) == 'not_cohort'

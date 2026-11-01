@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from config.summary_guarantee import repair_enabled as summary_repair_enabled
 from services import summary_debt_repair
 from config.policy import resolve_batch_policy
-from config.policy.ramp import audio_span
+from config.policy.ramp import audio_span, intake_outcome
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.account_deletion_marker import account_deletion_blocks_user_work
@@ -875,6 +875,11 @@ async def sync_local_files_v2(
             incoming_audio_seconds=audio_span(
                 {'audio_start_seconds': audio_start_seconds, 'audio_end_seconds': audio_end_seconds}
             ),
+        )
+        logger.info(
+            'event=batch_ramp_intake outcome=%s percent=%s',
+            intake_outcome(candidate_policy.batch_enabled, batch_policy.batch_enabled),
+            batch_policy.batch_percent,
         )
         record_response = await registered_record_response(
             uid=uid,

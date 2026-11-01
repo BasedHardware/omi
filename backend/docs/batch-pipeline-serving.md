@@ -48,7 +48,11 @@ plus one active-owner metadata document. A
 saturated read, unknown waiting duration or read error keeps new work on legacy
 and emits `omi_batch_ramp_heavy_owner_excluded_total{reason}`; fixed reasons are
 `open_backlog`, `recording_hours`, `load_unavailable`. The counter counts decisions,
-not distinct owners. It has no account label. Existing batch content receipts
+not distinct owners. It has no account label. Every sync upload admission also
+logs `event=batch_ramp_intake outcome=batch|legacy_excluded|not_cohort percent=<served>`
+after the cohort and owner-load decision (Cloud Run serving has no Prometheus
+scrape, so this line is the per-upload batch/legacy split; `not_cohort` also
+covers a served percent of 0). Existing batch content receipts
 and native recording owners keep their original dispatcher and continue draining;
 the exclusion must never start a legacy twin. Full rollout (`percent=100`) and
 percent-zero explicit qualification retain their existing semantics.
