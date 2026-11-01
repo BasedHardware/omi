@@ -522,6 +522,17 @@ def test_shard_spread_ships_on_with_helm_kill_switch(arguments, expected):
     assert env['BATCH_SHARD_SPREAD_ENABLED'] == expected
 
 
+@pytest.mark.parametrize(
+    'arguments,expected', [((), 'true'), (('--set', 'worker.pullMultiLeaseEnabled=false'), 'false')]
+)
+def test_pull_multi_lease_ships_on_with_helm_kill_switch(arguments, expected):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PULL_MULTI_LEASE_ENABLED'] == expected
+
+
 @pytest.mark.parametrize('arguments,expected', [((), '2'), (('--set', 'worker.pipelineDepth=1'), '1')])
 def test_worker_pipeline_depth_ships_on_with_serial_kill_switch(arguments, expected):
     result = render(*enabled_arguments(), *arguments)

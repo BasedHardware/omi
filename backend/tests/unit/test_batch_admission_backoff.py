@@ -44,7 +44,9 @@ def test_repeated_refusal_backs_off_without_attempt_charge_and_completion_resets
 @pytest.mark.parametrize(
     'delay,expected',
     [
+        (60, 60),
         (600, 600),
+        (1800, 1800),
         (3600, 3600),
         (86400, 86400),
         (100000, 86400),
@@ -62,6 +64,23 @@ def test_policy_delay_preserved_and_invalid_delay_never_grants_compute(delay, ex
     assert job['available_at'] == expected and job['attempt'] == 0
     assert job['compute_decision']['reason'] == 'allowance_exhausted'
     assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'admission_policy_deferred'}) == 1
+
+
+def test_allowance_hold_window_survives_the_escalation_ladder():
+    """The exhausted-allowance hold keeps its 1800 s window at every refusal streak.
+
+    The ladder is a floor, not a cap: only a delay below it escalates. A held
+    unit must not drift back toward the 300 s steady state.
+    """
+    store, queue, _ = setup()
+    lease = queue.pull(0)[0]
+    now = 0
+    for _ in range(6):  # streaks 1..5 then the capped repeat
+        assert queue.defer('held', lease.token, now, 1800, held_reason='allowance_exhausted', admission_refused=True)
+        assert store.rows['jobs', 'held']['available_at'] == now + 1800
+        now += 1800
+        queue.recover(now)
+        lease = queue.pull(now)[0]
 
 
 def test_stale_token_and_refunds_do_not_increment_refusal_or_emit_metric():

@@ -255,11 +255,11 @@ def _empty_stream():
 def test_soniox_serves_streaming_only_and_backs_velma_there():
     """Soniox is the streaming failover hop directly behind Velma.
 
-    The batch path still has no Soniox client, so it must stay absent from the
-    non-streaming surfaces however the streaming chain is ordered.
+    The batch path admits Soniox on the prerecorded surface only as provider-STT failover capacity
+    (slice D): it stays out of every non-streaming default model order and PTT.
     """
     assert provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.STREAMING)
-    assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PRERECORDED)
+    assert provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PRERECORDED)  # batch failover only
     assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PTT)
 
     streaming = default_models_for_surface(STTServingSurface.STREAMING)

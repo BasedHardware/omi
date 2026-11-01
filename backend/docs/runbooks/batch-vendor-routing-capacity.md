@@ -143,13 +143,20 @@ rate, Job timeouts) before scheduling it.
 
 ## Failover drills
 
-**Staging/sim (step 0, before any prod percent).** These cases do not exist
-yet. Today the pipeline sim has only a generic provider-failure scenario.
-Slice D (vroute-d) owns adding them as vendor-down conformance scenarios
-beside `test_batch_provider_stt.py`, on the breaker (slice C) and
-`vendor_held` (frozen in `vendor_route_contracts.py`, slice A). Until those
-land, step 0 cannot pass. Each case must show zero 5xx, zero custody events,
-zero paid-intent violations and no `failed_held` with a vendor cause:
+**Hermetic drills (step 0, before any prod percent).**
+`tests/unit/test_batch_vendor_outage_drills.py` runs every case below on the
+real admission, slice C health, provider stage, GPU scheduler and merge, with
+fake vendor HTTP and fake GPU workers (`testing/vendor_drill.py`). Each drill
+checks custody, owner order, privacy before every POST, paid-once per vendor,
+no double write and the breaker gauge. Two known gaps remain pinned there,
+not hidden: under paid-once, a unit every permitted vendor has billed a
+failure ends `failed_held` (the outage's first few units before the trip, and
+the unit each failed half-open probe carries, about one per 30 s per vendor);
+and turning `BATCH_VENDOR_ROUTING_ENABLED` off during an outage returns new
+units to today's terminal failure. The breaker opens on 3 funds refusals, on
+the volume rate, or on 5 failures with no success in 5 minutes at any volume.
+The target for each case was zero 5xx, zero custody events, zero
+paid-intent violations and no `failed_held` with a vendor cause:
 
 | Case | Expect |
 | --- | --- |
