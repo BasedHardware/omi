@@ -1125,6 +1125,25 @@ async def test_flex_first_skipped_for_byok_and_attempt_budgets(monkeypatch):
     assert not executor._flex_first_applies(resolved, route, other_provider, credentials, None)
 
 
+@pytest.mark.parametrize(
+    'extra',
+    [
+        {'tools': [{'type': 'function', 'function': {'name': 'lookup', 'parameters': {'type': 'object'}}}]},
+        {'service_tier': 'flex'},
+    ],
+)
+@pytest.mark.asyncio
+async def test_flex_first_skipped_for_tool_turns_and_caller_service_tier(monkeypatch, extra):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    request = resolved.validated_request
+    resolved = replace(
+        resolved, validated_request=replace(request, forwarded_params={**request.forwarded_params, **extra})
+    )
+    route = resolved.active_route
+    assert not executor._flex_first_applies(resolved, route, route.primary, omi_credentials(), None)
+
+
 def valid_request(**overrides):
     request = {
         'model': LANE_ID,

@@ -515,6 +515,9 @@ def _flex_first_applies(
         and credential_context.mode != CredentialMode.BYOK
         and max_provider_attempts is None
         and 'service_tier' not in resolved_route.validated_request.forwarded_params
+        # Tool turns belong to wall-clock-bounded agents (notes agent force-submits
+        # at 75s); slower Flex turns would change what they produce.
+        and not resolved_route.validated_request.forwarded_params.get('tools')
     )
 
 
