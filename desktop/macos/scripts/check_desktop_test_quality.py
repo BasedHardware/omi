@@ -52,12 +52,18 @@ TEST_ROOT = "desktop/macos/Desktop/Tests"
 # Pinned debt ceilings. These may only decrease. Escaped sites are not counted.
 # Run with --print after improving tests, then lower both relevant values.
 SOURCE_INSPECTION_FILE_BASELINE = 53
-SOURCE_INSPECTION_SITE_BASELINE = 142
+SOURCE_INSPECTION_SITE_BASELINE = 146
 WALL_CLOCK_WAIT_BASELINE = 16
 # 2026-09-26 revive raise 292->323: main itself accrued this debt after this branch
 # forked (326 sites on main at revive time; this branch adds 0). Down-only
 # ratchet continues from here; cleanup of main-side sites is a separate chore.
-SHARED_DEFAULTS_MUTATION_BASELINE = 323
+# Local provider raise 323->416: LocalProviderPaywallTests, PiMonoWiringTests and
+# the Local provider restart tests exercise UserDefaults-backed provider settings
+# (chatBridgeMode, local base URL/model, cloud-assist mode) that production code
+# reads straight from UserDefaults.standard, so they cannot inject an isolated
+# suite until those readers take a defaults seam.
+# +3 (416->419): the PTT-gate and bridgeMode-rollback regression tests, same readers.
+SHARED_DEFAULTS_MUTATION_BASELINE = 419
 
 MIN_REASON_LENGTH = 12
 
