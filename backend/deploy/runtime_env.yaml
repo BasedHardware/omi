@@ -2285,7 +2285,7 @@ environments:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
-            value: http://172.16.160.20/diarizer
+            value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
           LISTEN_QUIET_FINALIZATION_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2344,7 +2344,7 @@ environments:
               key: MCP_OAUTH_CHATGPT_CLIENT_ID
           HOSTED_TRANSLATION_API_URL:
             category: service_discovery
-            value: http://172.16.160.20/nllb
+            value: http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080
           RAPID_API_HOST:
             config_map:
               name: prod-omi-backend-config
@@ -2594,7 +2594,7 @@ environments:
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
-            value: http://172.16.160.20/diarizer
+            value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}

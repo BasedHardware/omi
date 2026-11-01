@@ -2927,7 +2927,46 @@ def test_speaker_embedding_cluster_local_url_rejected_on_cloud_run():
     errors = validator.validate_speaker_embedding_hosts('prod', env_config)
     messages = [error.message for error in errors]
     assert any('not cluster-local DNS' in message for message in messages)
-    assert any('must match gke/backend-listen' in message for message in messages)
+    assert any('approved internal-ALB route' in message for message in messages)
+
+
+def test_speaker_embedding_cloud_run_must_use_approved_ilb_route():
+    validator = load_validator()
+    wrong = 'http://172.16.160.20/other'
+    env_config = {
+        'cloud_run': {
+            'services': {
+                'backend': {'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': wrong}}},
+                'backend-sync': {'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': wrong}}},
+            }
+        }
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+
+    assert errors
+    assert all('approved internal-ALB route' in error.message for error in errors)
+    assert all('http://172.16.160.20/diarizer' in error.message for error in errors)
+
+
+def test_speaker_embedding_disagreement_inside_one_topology_fails():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://a.example/diarizer'}},
+            },
+            'pusher': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://b.example/diarizer'}},
+            },
+        }
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+
+    assert len(errors) == 1
+    assert errors[0].scope == 'prod/speaker-embedding'
+    assert 'disagrees across hosts' in errors[0].message
 
 
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])
