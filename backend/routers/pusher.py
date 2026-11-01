@@ -34,6 +34,7 @@ from utils.pusher_protocol import (
     json_object,
     pusher_session_outcome,
 )
+from utils.listen_pusher_session import PUSHER_KEEPALIVE_TIMEOUT_REASON
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
     trigger_realtime_integrations,
@@ -144,6 +145,12 @@ PUSHER_TEARDOWN_CANCEL_GRACE_SECONDS = 30.0
 # real close frame ~a minute earlier than the platform cut, and the
 # teardown-cancel boundary becomes the backstop rather than the mechanism.
 PUSHER_DRAIN_WIND_DOWN_SECONDS = 25.0
+
+# The sentence starlette's WebSocket lifecycle guards raise
+# (starlette/websockets.py) when a send/receive touches a transport whose ASGI
+# disconnect event already arrived. On this handler it means the peer is gone;
+# the catch-all must not book it as an application fault.
+PUSHER_NOT_CONNECTED_SENTINEL = 'WebSocket is not connected'
 
 
 def _teardown_cancel_observed() -> bool:
@@ -262,6 +269,10 @@ async def _websocket_util_trigger(
     shutdown_event = asyncio.Event()
     websocket_close_code = 1000
     application_failed = False
+    # Set when the receive loop's disconnect carries the peer's keepalive
+    # sentence: the classification the terminal outcome needs (the session
+    # ended as keepalive churn, not an application fault).
+    peer_keepalive_timeout = False
     # Set by the wind-down watcher when the pod drain ends this session
     # itself; guards the close-code and crash classification below.
     drain_winddown_triggered = False
@@ -709,6 +720,7 @@ async def _websocket_util_trigger(
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal application_failed
+        nonlocal peer_keepalive_timeout
         nonlocal speaker_sample_queue
         nonlocal transcript_queue
         nonlocal audio_bytes_queue
@@ -1087,11 +1099,34 @@ async def _websocket_util_trigger(
             logger.warning(f'Invalid pusher frame: {type(exc).__name__} {uid}')
         except WebSocketDisconnect as exc:
             websocket_close_code = exc.code or 1006
+            # uvicorn forwards the received close frame's reason on the ASGI
+            # websocket.disconnect event, so the peer's keepalive sentence
+            # arrives here verbatim. Record it for the terminal outcome: the
+            # session ended as keepalive churn (the peer missed its own pong
+            # deadline and the library failed the transport), not as an
+            # application fault — the same classification
+            # utils/listen_pusher_session.py gives this close on the client
+            # side of the lane.
+            if PUSHER_KEEPALIVE_TIMEOUT_REASON in (exc.reason or ''):
+                peer_keepalive_timeout = True
             logger.info("WebSocket disconnected")
         except Exception as e:
-            logger.error(f'Could not process audio: error {e}')
-            websocket_close_code = 1011
-            application_failed = True
+            if isinstance(e, RuntimeError) and PUSHER_NOT_CONNECTED_SENTINEL in str(e):
+                # Starlette raises this exact RuntimeError from its lifecycle
+                # guards when the loop (or the finally flushes) touches a
+                # transport whose ASGI disconnect event already arrived: the
+                # peer is gone, nothing about the application failed.
+                # Classify it as the disconnect it is — the finally block
+                # below flushes and queues what survived — instead of the
+                # 1011 application fault this catch-all used to book (prod:
+                # the dominant single-line ERROR on this handler, ~142 lines
+                # in two hours, 2026-11-01).
+                websocket_close_code = 1006
+                logger.info(f'Peer transport already ended before a final frame: {type(e).__name__} {uid}')
+            else:
+                logger.error(f'Could not process audio: error {e}')
+                websocket_close_code = 1011
+                application_failed = True
         finally:
             # Flush any remaining private cloud sync buffer before shutdown
             if len(private_cloud_sync_buffer) > 0:
@@ -1182,7 +1217,13 @@ async def _websocket_util_trigger(
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
 
-        journey_attempt.finish(pusher_session_outcome(websocket_close_code, application_failed=application_failed))
+        journey_attempt.finish(
+            pusher_session_outcome(
+                websocket_close_code,
+                application_failed=application_failed,
+                peer_keepalive_timeout=peer_keepalive_timeout,
+            )
+        )
 
         if not drain_winddown_triggered:
             ReadinessGate.remove_drain_wait_event(drain_started_event)

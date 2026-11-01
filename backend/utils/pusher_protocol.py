@@ -107,10 +107,28 @@ def json_object(data: bytes) -> Dict[str, Any]:
     return value
 
 
-def pusher_session_outcome(close_code: int, *, application_failed: bool = False) -> JourneyOutcome:
-    """Classify accepted sessions without counting normal disconnects as failures."""
-    if application_failed or close_code == 1011:
+def pusher_session_outcome(
+    close_code: int,
+    *,
+    application_failed: bool = False,
+    peer_keepalive_timeout: bool = False,
+) -> JourneyOutcome:
+    """Classify accepted sessions without counting normal disconnects as failures.
+
+    A disconnect whose close frame carried the peer's keepalive sentence
+    (``1011 "keepalive ping timeout"`` — uvicorn forwards the received close
+    reason on the ASGI ``websocket.disconnect`` event, and starlette raises it
+    back as ``WebSocketDisconnect.reason``) is the keepalive churn classified
+    in ``utils/listen_pusher_session.py``: the peer missed its own pong
+    deadline — a dozing phone or a throttled sibling pod — and the session
+    self-heals by reconnect on the listen side. It keeps the
+    interrupted-session meaning (``cancelled``), never the application-fault
+    meaning; a real application failure still wins over it.
+    """
+    if application_failed:
         return 'failure'
+    if close_code == 1011:
+        return 'cancelled' if peer_keepalive_timeout else 'failure'
     if close_code in {1000, 1001}:
         return 'success'
     return 'cancelled'

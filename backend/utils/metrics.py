@@ -103,10 +103,11 @@ PUSHER_SESSION_DEGRADED = Gauge(
 
 PUSHER_CLOSE_EVENTS_TOTAL = Counter(
     'pusher_close_events_total',
-    'Pusher socket close observations by class (restart, no_frame, abnormal, clean) '
-    'and whether a reconnect was already armed (deduped=true means a sibling task '
-    'logged this close). Counted per observation, not per close — the burst shape '
-    'is the signal that a single socket death is re-observed by multiple tasks.',
+    'Pusher socket close observations by class (restart, no_frame, keepalive_timeout, '
+    'abnormal, clean) and whether a reconnect was already armed (deduped=true means a '
+    'sibling task logged this close). Counted per observation, not per close — the '
+    'burst shape is the signal that a single socket death is re-observed by multiple '
+    'tasks.',
     ['close_class', 'deduped'],
 )
 

@@ -2501,6 +2501,59 @@ heartbeat and speaker-sample request follow the same identity rule as the
 flush and receive paths) and never tears down the freshly installed
 connection.
 
+The keepalive's own death is its own class
+(`keepalive_timeout`; FC-keepalive-close-logged-as-application-error).
+When one side's ping goes unanswered past its own `ping_timeout`, the
+websockets library fails the connection with `1011 "keepalive ping
+timeout"`; the peer's tasks observe `received 1011 (internal error)
+keepalive ping timeout; then sent ...`. That sentence names the mechanism —
+the peer missed pongs — and on this lane the peer is a sibling pod or a
+dozing phone: CPU throttle, radio doze, or one GC pause explain the
+overwhelming majority of observations, the session reconnects through the
+existing loop, and buffered work replays. The fleet ran 380-1227 of these
+closes per hour on 2026-11-01, spread evenly over pods with no deploy
+correlation, and every one of them healed without operator action — while
+the per-task ERROR lines they produced drowned the abnormal closes that
+share the `1011` code. The class logs at WARNING on a session's first
+observation (an availability statement, glance-level, not a fault) and INFO
+on later in-flight observations under the same one-death-one-line dedupe
+rule; recovery is untouched (`_mark_disconnected` and the reconnect loop
+behave identically for every class), and generic `1011` closes — the ones
+without the keepalive sentence — keep their ERROR meaning.
+
+Keepalive budgets on this lane are declared once, in
+`config/listen_pusher_keepalive.py` (FC-single-sided-keepalive-budget-kills-slow-but-alive-peer).
+Both ends are ours — backend-listen's `websockets.connect` imports the
+constants and the pusher container command is rendered from them by
+`scripts/generate_pusher_keepalive_flags.py`
+(`test_pusher_keepalive_timeout_close_parity.py` fails the unit suite if the Dockerfile
+CMD drifts). History: the client declared ping 30s / pong budget 60s while
+the pusher pod ran uvicorn `--ws-ping-interval 20 --ws-ping-timeout 20`, so
+the server's clock killed a peer that was merely slow — a pong arriving
+between 20s and 60s was a live pod answering late — producing the
+`keepalive_timeout` volume above. The server now runs the client's
+30/60 budget; keep `interval + timeout` under the
+`terminationGracePeriodSeconds` bound that governs deploy cuts (it is: 90s
+of keepalive tolerance vs 120s of pod teardown), and change both ends
+through the config module only.
+
+The pusher side of the same cut classifies with the same sentence. The
+receive loop's `WebSocketDisconnect` carries the peer's close reason
+(uvicorn forwards it on the ASGI `websocket.disconnect` event), and the
+terminal session outcome
+(`pusher_session_outcome` in `utils/pusher_protocol.py`) demotes exactly the
+keepalive-verdict disconnect to `cancelled` — the interrupted-session
+meaning every other transport churn keeps — while a generic `1011` and any
+real application failure stay `failure`. Starlette's
+`WebSocket is not connected` lifecycle RuntimeError — what the loop or the
+final flushes raise when they touch a transport whose disconnect already
+arrived — classifies as the peer-gone event it is (close 1006, one INFO
+line) instead of the `Could not process audio` application fault the
+catch-all booked for it (pusher 2026-11-01: that single-line ERROR family
+ran ~142 lines in two hours). Nothing about recovery changes: buffered
+audio, transcripts and pending finalization requests still replay through
+the client's reconnect loop.
+
 The same lifecycle rule now covers the pusher side of the cut. Two changes,
 one root cause: sessions used to sit idle until uvicorn's graceful-shutdown
 budget (`--timeout-graceful-shutdown 60`, inside the chart's

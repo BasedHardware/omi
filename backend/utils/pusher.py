@@ -7,6 +7,10 @@ from enum import Enum
 from typing import Any, Callable, List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from config.listen_pusher_keepalive import (
+    LISTEN_PUSHER_PING_INTERVAL_SECONDS,
+    LISTEN_PUSHER_PING_TIMEOUT_SECONDS,
+)
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_STATE
 from utils.other.backoff import calculate_backoff_with_jitter
 
@@ -213,10 +217,14 @@ async def _connect_to_trigger_pusher(
                 '',
             )
         )
+        # Keepalive budget comes from the shared lane config
+        # (config/listen_pusher_keepalive.py): the pusher container command is
+        # generated from the same constants, so one side can no longer declare
+        # a stricter death clock than the other.
         socket = await websockets.connect(
             ws_url,
-            ping_interval=30,
-            ping_timeout=60,
+            ping_interval=LISTEN_PUSHER_PING_INTERVAL_SECONDS,
+            ping_timeout=LISTEN_PUSHER_PING_TIMEOUT_SECONDS,
             close_timeout=3,
         )
         logger.info(f"Connected to Pusher transcripts trigger WebSocket. {uid}")

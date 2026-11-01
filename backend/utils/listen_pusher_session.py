@@ -78,9 +78,53 @@ PUSHER_CLOSE_CLASS_NO_FRAME = 'no_frame'
 PUSHER_CLOSE_CLASS_ABNORMAL = 'abnormal'
 PUSHER_CLOSE_CLASS_CLEAN = 'clean'
 
+# The websockets keepalive's own death statement. When one side's ping goes
+# unanswered past ``ping_timeout`` it fails the connection with
+# ``1011 "keepalive ping timeout"`` (websockets legacy/protocol.py
+# ``fail_connection(CloseCode.INTERNAL_ERROR, "keepalive ping timeout")``) and
+# the peer observes ``received 1011 (internal error) keepalive ping timeout;
+# then sent ...``. That sentence names the mechanism, and the mechanism is
+# routine churn on this lane: the peer is a sibling pod or a dozing phone that
+# missed pongs — CPU throttle, radio doze, one GC pause — the session
+# reconnects through the existing loop, and buffered work replays. In
+# production this shape is the dominant close the keepalive produces
+# (backend-listen 2026-11-01: ``Pusher audio_bytes Connection closed:
+# received 1011 ... keepalive ping timeout`` alone ran 380-1227/hour across
+# the fleet, spread evenly over pods with no deploy correlation, versus the
+# generic-1011 shape's single digits per hour). It is classified separately
+# from the generic abnormal bucket so the log line keeps ERROR only for closes
+# nothing expected; the counter label keeps the burst measurable.
+PUSHER_CLOSE_CLASS_KEEPALIVE = 'keepalive_timeout'
+
+# The reason sentence every keepalive death carries on the wire. Matched by
+# substring on the received close frame's reason: the library has spelled the
+# sentence identically since the legacy protocol through the current asyncio
+# implementation, and the received reason is the only part of the close that
+# names it (the code alone is the generic 1011 every other internal failure
+# also uses).
+PUSHER_KEEPALIVE_TIMEOUT_REASON = 'keepalive ping timeout'
+
+
+def is_keepalive_ping_timeout_close(e: ConnectionClosed) -> bool:
+    """Recognize the keepalive's own death by the reason the peer declared.
+
+    Only the RECEIVED close frame counts: ``rcvd`` is the peer's statement
+    about why the connection died from its side, and the keepalive sentence is
+    that statement. A socket that merely sent a keepalive close (or carried
+    no received frame at all) tells us nothing about the peer's keepalive and
+    stays in its existing class.
+    """
+    received = getattr(e, 'rcvd', None)
+    if received is None:
+        return False
+    reason = getattr(received, 'reason', None) or ''
+    return PUSHER_KEEPALIVE_TIMEOUT_REASON in reason
+
 
 def classify_pusher_close(e: ConnectionClosed) -> str:
     """Bucket one pusher WebSocket close by the statement its code carries."""
+    if is_keepalive_ping_timeout_close(e):
+        return PUSHER_CLOSE_CLASS_KEEPALIVE
     code = e.rcvd.code if e.rcvd is not None else None
     if code is None:
         return PUSHER_CLOSE_CLASS_NO_FRAME
@@ -109,6 +153,15 @@ def log_pusher_connection_closed(
     audio-bytes line alone during the 2026-10-09 wave) and buried the genuine
     abnormal closes that share the message shape.
 
+    The keepalive's own death ("received 1011 ... keepalive ping timeout",
+    ``PUSHER_CLOSE_CLASS_KEEPALIVE``) logs at WARNING on a session's first
+    observation and INFO while a reconnect is already armed: the sentence
+    names the mechanism — this side's ping went unanswered past its own
+    ``ping_timeout`` and the library failed the connection — which on this
+    lane is routine self-healing churn (the fleet ran 380-1227/hour of it on
+    2026-11-01 with zero operator action taken or needed), not a fault.
+    Generic 1011s and every other abnormal code keep ERROR.
+
     A close whose code is absent ("no close frame received or sent" — the
     websockets-synthesized 1006 shape, an abrupt TCP end or a protocol
     run-in) keeps ERROR on the first observation but is not per-task noise:
@@ -124,7 +177,14 @@ def log_pusher_connection_closed(
     """
     close_class = classify_pusher_close(e)
     dedupe = session is not None and session.has_armed_reconnect()
-    if close_class == PUSHER_CLOSE_CLASS_RESTART or dedupe:
+    if close_class == PUSHER_CLOSE_CLASS_KEEPALIVE:
+        # The keepalive's own churn: WARNING on the first observation — it is
+        # an availability statement worth having in the log stream at glance
+        # level, not a fault demanding action — and INFO on every later
+        # in-flight observation while the session's reconnect is already
+        # armed, same one-death-one-line rule as the no-frame class below.
+        level = logging.WARNING if not dedupe else logging.INFO
+    elif close_class == PUSHER_CLOSE_CLASS_RESTART or dedupe:
         level = logging.INFO
     else:
         level = logging.ERROR
