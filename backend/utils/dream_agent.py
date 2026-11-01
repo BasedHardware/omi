@@ -1147,6 +1147,7 @@ async def run_session(
             report.update(
                 status='complete',
                 notes=session.finish.notes if session.finish else '',
+                notes_voice_free=True,
                 summary=session.finish.summary if session.finish else '',
             )
     except Exception as exc:

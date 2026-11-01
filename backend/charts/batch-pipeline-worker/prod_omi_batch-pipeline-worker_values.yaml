@@ -52,7 +52,7 @@ tolerations:
 # untouched. All three pools are on-demand g2-standard-8 + L4 with only the
 # nvidia.com/gpu taint. Kill switch: enabled false (removes -borrow and its HPA).
 borrowedNodePools:
-  enabled: true
+  enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
   # Preserve the measured profiling-on state across the scaler Helm upgrade.

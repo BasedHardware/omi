@@ -10,7 +10,11 @@ from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import Priority, known_unsupported_batch_language, language_inheritance_enabled, priority_for
 from config.batch_language_recovery import inherited_language
-from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
+from config.batch_pipeline_language import (
+    admission_language_exclusion_enabled,
+    admission_language_sample_enabled,
+    batch_admission_language,
+)
 from config.batch_pipeline_vendor_overflow import legacy_capacity_fallback_enabled, overflow_enabled
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
@@ -410,13 +414,22 @@ async def accept_upload(
                 evidence=evidence,
             )
         admission_language = None
+        sampled = False
         if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
             admission_language, exclusion_reason = batch_admission_language(user, target)
             # Exclusion is safe only while this owner still has legacy. Once its
             # legacy is draining/dark the upload is admitted (C8's provider route
             # serves it) instead of being refused by both lanes; a supported
             # conversation keeps its pinned input language in every mode.
-            if exclusion_reason and mode is LegacySyncMode.ON:
+            if (
+                exclusion_reason == 'unknown_multilingual_conversation'
+                and mode is LegacySyncMode.ON
+                and admission_language_sample_enabled()
+            ):
+                # Decide on audio, not the declaration: the first unit's LID runs below,
+                # before any staging, and an unsafe answer keeps the upload on legacy.
+                sampled = True
+            elif exclusion_reason and mode is LegacySyncMode.ON:
                 record_admission_exclusion(
                     target.get('language') or user.get('language'),
                     exclusion_reason,
@@ -483,6 +496,10 @@ async def accept_upload(
             language = input_language = 'multi'
         if admission_language is not None:
             language = input_language = admission_language
+        if sampled:
+            # The user's declared language is not capability proof without single-language mode.
+            inherited = None
+            language = input_language = 'multi'
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':
             # Main's prerecorded language guard; with legacy draining or dark the C8
             # provider-STT route below serves unsupported speech instead of legacy.
@@ -605,6 +622,19 @@ async def accept_upload(
             )
             # Refusal preserves the caller's source; never acknowledge or admit it.
             probe_guard.raise_if_denied()
+            if sampled and not items and not language_decision.parakeet_safe:
+                # Nothing is staged yet. An unsafe sample, or a cap-skipped probe
+                # (which resolves 'und'), keeps today's legacy route for the whole upload.
+                record_admission_exclusion(
+                    target.get('language') or user.get('language'),
+                    'unknown_multilingual_conversation',
+                    legacy_available=True,
+                )
+                if evidence is not None:
+                    evidence.language_excluded = True
+                return None
+            if sampled and not items:
+                record_route('intake', language_decision.language, 'parakeet')
             frozen_language = (
                 language_decision.language
                 if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'

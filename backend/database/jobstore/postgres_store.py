@@ -141,6 +141,11 @@ class PostgresTransaction:
         self.store.require_table(table)
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
+    def defer_set(self, ref: Any, value: dict) -> None:
+        # A joining Firestore document (the provider-STT outbox row) commits only inside a Firestore
+        # admission transaction; this backend has none to make it atomic with.
+        raise NotImplementedError('joining Firestore documents need the Firestore transaction')
+
     def first_pending(self, owner_key: str) -> dict | None:
         row = self.store.first_pending_in(self.conn, owner_key)
         return self._locked_query_row(*row) if row else None

@@ -5037,7 +5037,11 @@ the cohort kill switch) selects sessions by
 `cohort_bucket(uid, 'soniox-idle-close', bits=64)`, and in-cohort sessions read
 `SONIOX_IDLE_COHORT_CLOSE_SECONDS`, `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR`
 and `SONIOX_IDLE_COHORT_REARM_SECONDS` when set, each falling back to the
-global knob when unset. Out-of-cohort sessions always keep the global values,
+global knob when unset. The cohort is also the speech gate: its overrides may
+go below the global floors (close down to 5 s, one second past the VAD
+hangover; re-arm down to 1 s; cap up to 240 closes per hour), so the treatment
+arm connects Soniox only around speech while the arm metrics price it against
+today's policy. The global knobs keep their floors. Out-of-cohort sessions always keep the global values,
 and `SONIOX_IDLE_CLOSE_SECONDS=0` disables the idle wrapper for everyone
 either way. The receiver-owned budget resolves the arm once per logical session,
 consulting the listen request's uid only while the cohort is armed (percent > 0
@@ -5097,7 +5101,11 @@ The `omi_soniox_idle_*` close/reopen/failure counters (including
 `omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"pre_speech"|"no_frames"}`,
 `omi_soniox_idle_drains_total{outcome="drained"|"timeout"}` and
 `omi_soniox_idle_close_refusals_total{reason="rearm"|"cap"}`, counted once per
-idle episode the re-arm floor or hourly cap kept on keepalives), reopen latency
+idle episode the re-arm floor or hourly cap kept on keepalives), the
+`omi_soniox_idle_silence_gap_seconds` histogram (active-VAD silence from the
+first silent frame to the next speech, the clock the close threshold reads,
+whether the gap stayed open or was idle-closed; it prices any threshold before a
+cohort runs), reopen latency
 histogram and estimated connected-seconds avoided counter register only for
 flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort,origin}`
 counts the wall time every Soniox websocket is actually open, flag on or off,
@@ -6651,6 +6659,12 @@ audio, with no legacy bypass (lead ruling 6a783e). Before legacy drain, the lead
 must qualify multilingual/unsupported batch provider routing through Soniox.
 Explicit false restores the former admission and LID input selection. This needs
 a lead-owned backend-sync Cloud Run release; existing units are never rewritten.
+
+With legacy ON, the `unknown_multilingual_conversation` branch is decided on audio
+(`BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED`, default on). Input is forced to `multi`;
+the first unit's LID runs before any staging, and only a Parakeet-safe answer admits
+the upload. An unsafe, low-confidence, skipped or refused sample keeps it on legacy.
+Known-unsupported languages are never sampled. False restores the full exclusion.
 
 Batch self-LID evidence is bound to the authenticated item's owner, segment and
 versioned intake context. The worker requires nonempty job, content and source

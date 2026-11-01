@@ -7,6 +7,7 @@ import time
 from models.agent_tools import VerificationBatch
 from models.agent_refs import base_ref, cited_value
 from utils.agent_capabilities import verifiers
+from utils.agent_capabilities.evidence import model_view
 from utils.agent_capabilities.session import serialized_bytes
 from utils.llm.shaped_agent import Budget, Mount, run_loop
 
@@ -29,31 +30,6 @@ INSTRUCTIONS = (
 )
 
 
-PERSON_EVIDENCE_FIELDS = (
-    'id',
-    'entity_id',
-    'type',
-    'name',
-    'aliases',
-    'is_dismissed',
-    'user_confirmed',
-    'is_user_created',
-    'pinned',
-    'pinned_at',
-    'label_evidence',
-    'labels_to_confirm',
-    'last_labeled_at',
-    'conversation_count',
-    'auto_conversation_count',
-    'last_heard_at',
-    'talk_seconds',
-    'confidence_reasons',
-    'created_at',
-    'updated_at',
-)
-VOICE_MARKERS = ('speaker_embedding', 'speech_samples', 'person_voice_base', 'person_voice_confirmations')
-
-
 def compact_json(value):
     return json.dumps(value, ensure_ascii=False, default=str, separators=(',', ':'))
 
@@ -68,15 +44,6 @@ def evidence(item):
     return {**payload, 'evidence': rows}
 
 
-def person_evidence(row):
-    # An allowlist: a voice field added to person rows later cannot reach a verifier by default.
-    # Staging has already judged protection from the full row.
-    kept = {key: row[key] for key in PERSON_EVIDENCE_FIELDS if key in row}
-    if any(row.get(key) for key in VOICE_MARKERS):
-        kept['has_voice_profile'] = True
-    return kept
-
-
 def minimal_context(ref, records):
     row = records.get(base_ref(ref))
     if row is None:
@@ -84,8 +51,7 @@ def minimal_context(ref, records):
     if not ref.startswith('conversations/'):
         # A memory/task/person is already a small cited record. Its provenance,
         # subject, dates and protection metadata are relevant to verification.
-        value = cited_value(ref, records)
-        return person_evidence(value) if ref.startswith('people/') and isinstance(value, dict) else value
+        return model_view(ref, cited_value(ref, records))
     fields = ('id', 'status', 'created_at', 'started_at', 'finished_at', 'language', 'structured')
     context = {key: row[key] for key in fields if key in row}
     segments = row.get('transcript_segments') or []
