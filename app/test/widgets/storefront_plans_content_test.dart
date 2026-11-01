@@ -170,15 +170,15 @@ void main() {
     await pumpSheet(tester, data: data, select: (_, price) async => selectedId = price.id);
     expect(find.text('Plans'), findsOneWidget);
     expect(find.text('Choose your plan'), findsOneWidget);
-    expect(find.text(r"You're on Plus · $19.99/mo · renews Nov 1"), findsOneWidget);
+    expect(find.text(r"You're on Plus · US$19.99/mo · renews Nov 1"), findsOneWidget);
     expect(find.text('Yearly · 2 months free'), findsOneWidget);
     expect(find.text('Recommended'), findsOneWidget);
     expect(find.text('Your plan'), findsOneWidget);
-    expect(find.text(r'$49.99/month'), findsOneWidget);
-    expect(find.text(r'$19.99/month'), findsWidgets);
-    expect(find.text(r'$16.66/month'), findsNothing);
-    expect(find.text(r'$199.90 billed yearly · 2 months free'), findsOneWidget);
-    expect(find.text(r'Switch to yearly · save $39.98'), findsOneWidget);
+    expect(find.text(r'US$49.99/month'), findsOneWidget);
+    expect(find.text(r'US$199.90/year'), findsWidgets);
+    expect(find.text(r'US$16.66/month'), findsNothing);
+    expect(find.text(r'12 months / US$199.90'), findsOneWidget);
+    expect(find.text(r'Switch to yearly · save US$39.98'), findsOneWidget);
     expect(find.text('Upgrade to Pro'), findsOneWidget);
     expect(find.text('Renews monthly until you cancel. Cancel anytime in settings.'), findsOneWidget);
     expect(find.text('About 280 hours of recording a month, enough to wear it all day'), findsOneWidget);
@@ -189,12 +189,12 @@ void main() {
     expect(find.text('Refresh'), findsNothing);
     await tester.tap(find.byKey(const Key('storefront_year')));
     await tester.pumpAndSettle();
-    expect(find.text(r'$41.66/month'), findsOneWidget);
-    expect(find.text(r'$499.90 billed yearly · 2 months free'), findsOneWidget);
+    expect(find.text(r'US$499.90/year'), findsOneWidget);
+    expect(find.text(r'12 months / US$499.90'), findsOneWidget);
     expect(find.text('Renews yearly until you cancel. Cancel anytime in settings.'), findsWidgets);
-    expect(find.text(r'Switch to yearly · save $39.98'), findsOneWidget);
+    expect(find.text(r'Switch to yearly · save US$39.98'), findsOneWidget);
     expect(
-      find.descendant(of: find.byKey(const Key('storefront_tier_plus')), matching: find.text(r'$19.99/month')),
+      find.descendant(of: find.byKey(const Key('storefront_tier_plus')), matching: find.text(r'US$199.90/year')),
       findsOneWidget,
     );
     await tester.ensureVisible(find.byKey(const Key('storefront_buy_operator')));
@@ -268,7 +268,7 @@ void main() {
       final data = PlanStorefront.fromJson(fixture(name));
       await pumpSheet(tester, data: data);
       expect(find.text('Your plan'), findsWidgets);
-      expect(find.text(data.current!.line), findsOneWidget);
+      expect(find.text(data.current!.displayLine), findsOneWidget);
       expect(find.text("We don't sell this plan anymore, but yours stays exactly as it is."), findsOneWidget);
       expect(find.text('Manage billing'), findsOneWidget);
       expect(find.byKey(const Key('storefront_restore')), findsNothing);
@@ -305,7 +305,7 @@ void main() {
       final data = PlanStorefront.fromJson(fixture(entry.key));
       await pumpSheet(tester, data: data);
       expect(find.text(data.header), findsOneWidget);
-      expect(find.text(data.current!.line), findsOneWidget);
+      expect(find.text(data.current!.displayLine), findsOneWidget);
       expect(data.tiers.where((tier) => tier.isCurrent).every((tier) => tier.bullets.isEmpty), isTrue);
       if (data.current?.legacy != true) {
         for (final tier in data.tiers.where((tier) => tier.isCurrent)) {
@@ -330,7 +330,7 @@ void main() {
       }
       if (entry.key == 'cancel_scheduled_plus') {
         expect(find.text('Upgrade to Pro'), findsNothing);
-        expect(find.text(r'Switch to yearly · save $39.98'), findsNothing);
+        expect(find.text(r'Switch to yearly · save US$39.98'), findsNothing);
         expect(find.text('Recommended'), findsNothing);
         expect(find.text('Resubscribe'), findsOneWidget);
         expect(find.text('Resubscribe first to change plans'), findsWidgets);
@@ -340,7 +340,7 @@ void main() {
         expect(find.byKey(const Key('storefront_blocked_basic')), findsOneWidget);
         expect(find.descendant(of: find.byKey(const Key('storefront_tier_basic')), matching: find.textContaining('•')),
             findsNothing);
-        expect(find.text(r'$0'), findsOneWidget);
+        expect(find.text(r'US$0.00'), findsOneWidget);
         expect(find.byKey(const Key('storefront_month')), findsNothing);
         expect(find.byKey(const Key('storefront_year')), findsNothing);
         expect(data.yearlyToggleLabel, isNull);
@@ -382,7 +382,7 @@ void main() {
       }
       if (entry.key == 'free_settings') {
         expect(find.text('Get Plus'), findsOneWidget);
-        expect(find.text(r'$0'), findsOneWidget);
+        expect(find.text(r'US$0.00'), findsOneWidget);
         expect(find.descendant(of: find.byKey(const Key('storefront_tier_basic')), matching: find.textContaining('•')),
             findsNothing);
       }
@@ -540,7 +540,7 @@ void main() {
   testWidgets('cancel scheduled offers only Resubscribe and tells other tiers to resubscribe first', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('cancel_scheduled_plus')));
     expect(find.text('Your Plus plan ends Nov 1'), findsOneWidget);
-    expect(find.text(r"You're on Plus · $19.99/mo"), findsOneWidget);
+    expect(find.text(r"You're on Plus · US$19.99/mo"), findsOneWidget);
     expect(find.text('Upgrade to Pro'), findsNothing);
     expect(find.text('Upgrade to Architect'), findsNothing);
     expect(find.text('Recommended'), findsNothing);
@@ -589,11 +589,11 @@ void main() {
         'Get Plus';
     await pumpSheet(tester, data: PlanStorefront.fromJson(json));
     expect(find.text('Get Plus'), findsNothing);
-    expect(find.text(r'Switch to yearly · save $39.98'), findsOneWidget);
+    expect(find.text(r'Switch to yearly · save US$39.98'), findsOneWidget);
     expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
     await tester.tap(find.byKey(const Key('storefront_year')));
     await tester.pumpAndSettle();
-    expect(find.text(r'Switch to yearly · save $39.98'), findsOneWidget);
+    expect(find.text(r'Switch to yearly · save US$39.98'), findsOneWidget);
     expect(find.text('Get Plus'), findsNothing);
     expect(find.text('Your plan'), findsOneWidget);
     final current = find.byKey(const Key('storefront_tier_plus'));
@@ -605,14 +605,14 @@ void main() {
   testWidgets('compact and current cards render no bullets', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('free_settings')));
     final free = find.byKey(const Key('storefront_tier_basic'));
-    expect(find.descendant(of: free, matching: find.text(r'$0')), findsOneWidget);
+    expect(find.descendant(of: free, matching: find.text(r'US$0.00')), findsOneWidget);
     expect(find.descendant(of: free, matching: find.textContaining('•')), findsNothing);
     expect(find.descendant(of: free, matching: find.byType(OmiButton)), findsNothing);
 
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()));
     final plus = find.byKey(const Key('storefront_tier_plus'));
     expect(find.descendant(of: plus, matching: find.text('Your plan')), findsOneWidget);
-    expect(find.descendant(of: plus, matching: find.text(r'$19.99/month')), findsOneWidget);
+    expect(find.descendant(of: plus, matching: find.text(r'US$199.90/year')), findsOneWidget);
     expect(find.descendant(of: plus, matching: find.textContaining('•')), findsNothing);
     expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
     expect(tester.takeException(), isNull);

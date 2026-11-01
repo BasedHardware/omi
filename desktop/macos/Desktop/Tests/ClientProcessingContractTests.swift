@@ -43,12 +43,7 @@ final class ClientProcessingContractTests: XCTestCase {
     let projection = ClientProcessingContract.assemble(
       draft: draft,
       transcriptSha256: emptyDigest,
-      provenance: OmiAPI.ProjectionProvenance(
-        deviceClass: "macos",
-        generatedAt: "2024-01-01T20:14:00Z",
-        modelId: "local-server",
-        runtime: "local"
-      ),
+      provenance: testProvenance,
       fallbackTitle: "Recording"
     )
     XCTAssertEqual(projection.schemaVersion, 1)
@@ -56,6 +51,58 @@ final class ClientProcessingContractTests: XCTestCase {
     XCTAssertEqual(projection.structure.title, "Ship S10")
     XCTAssertEqual(projection.provenance.runtime, "local")
     XCTAssertEqual(projection.transcriptSha256.count, 64)
+  }
+
+  func testAssembleOmitsTheEmojiKeyWhenTheDraftHasNone() throws {
+    let draft = LocalSummaryDraft(title: "Ship S10", overview: "Chunk then reduce.")
+    let projection = ClientProcessingContract.assemble(
+      draft: draft,
+      transcriptSha256: emptyDigest,
+      provenance: testProvenance,
+      fallbackTitle: "Recording"
+    )
+    XCTAssertNil(projection.structure.emoji)
+    XCTAssertFalse(try encodedStructure(projection).keys.contains("emoji"))
+  }
+
+  func testAssembleOmitsBlankEmojiInsteadOfSendingAPlaceholder() throws {
+    let draft = LocalSummaryDraft(title: "Ship S10", overview: "Chunk then reduce.", emoji: "   ")
+    let projection = ClientProcessingContract.assemble(
+      draft: draft,
+      transcriptSha256: emptyDigest,
+      provenance: testProvenance,
+      fallbackTitle: "Recording"
+    )
+    XCTAssertNil(projection.structure.emoji)
+    XCTAssertFalse(try encodedStructure(projection).keys.contains("emoji"))
+  }
+
+  func testAssembleKeepsAChosenEmoji() throws {
+    let draft = LocalSummaryDraft(title: "Ship S10", overview: "Chunk then reduce.", emoji: "📌")
+    let projection = ClientProcessingContract.assemble(
+      draft: draft,
+      transcriptSha256: emptyDigest,
+      provenance: testProvenance,
+      fallbackTitle: "Recording"
+    )
+    XCTAssertEqual(projection.structure.emoji, "📌")
+  }
+
+  func testAssembleMinimumOmitsTheEmojiKey() throws {
+    let minimum = DeterministicConversationMinimum(
+      title: "Recording",
+      overview: DeterministicConversationMinimum.emptyOverview,
+      category: DeterministicConversationMinimum.requiredCategory,
+      processingState: DeterministicConversationMinimum.terminalProcessingState
+    )
+    let projection = ClientProcessingContract.assembleMinimum(
+      minimum,
+      transcriptSha256: emptyDigest,
+      generatedAt: Date(timeIntervalSince1970: 1_704_140_040),
+      deviceClass: "macos"
+    )
+    XCTAssertNil(projection.structure.emoji)
+    XCTAssertFalse(try encodedStructure(projection).keys.contains("emoji"))
   }
 
   func testNumericDatetimeIsNotEmittedForProvenance() {
@@ -66,6 +113,22 @@ final class ClientProcessingContractTests: XCTestCase {
 
   private var emptyDigest: String {
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+
+  private var testProvenance: OmiAPI.ProjectionProvenance {
+    OmiAPI.ProjectionProvenance(
+      deviceClass: "macos",
+      generatedAt: "2024-01-01T20:14:00Z",
+      modelId: "local-server",
+      runtime: "local"
+    )
+  }
+
+  /// The encoded `structure` object: asserts on the wire key, not just the in-memory optional.
+  private func encodedStructure(_ projection: OmiAPI.ClientProcessing) throws -> [String: Any] {
+    let data = try ClientProcessingContract.encode(projection)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    return try XCTUnwrap(object["structure"] as? [String: Any])
   }
 
   private func decodeGolden() throws -> OmiAPI.ClientProcessing {

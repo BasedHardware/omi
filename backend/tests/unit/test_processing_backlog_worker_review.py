@@ -816,6 +816,143 @@ async def test_worker_selects_original_encrypted_audio_lane(monkeypatch, origin,
     assert await worker._selected('owner', {'kind': 'audio', 'id': 'held'}) is selected
 
 
+def test_cursor_problem_accepts_only_shapes_start_after_can_seed():
+    usable = [
+        None,
+        {'at': 1, 'id': 'hold'},
+        {'at': 1000.5, 'id': 'hold'},
+        {'at': DatetimeWithNanoseconds(2026, 10, 1, nanosecond=123456000, tzinfo=timezone.utc), 'id': 'hold'},
+        {'at': datetime(2026, 10, 1, tzinfo=timezone.utc), 'id': 'hold'},
+    ]
+    for cursor in usable:
+        assert worker._cursor_problem(cursor) is None, cursor
+    # A null at orders below every number (the queue looks drained forever), a
+    # bool at hides all dated rows, NaN/inf never match, and an empty id makes
+    # the SDK build a document name with a trailing slash that the server
+    # rejects with InvalidArgument on every visit.
+    rejected = {
+        'empty map': ({}, 'at_type'),
+        'empty list': ([], 'not_a_map'),
+        'empty string': ('', 'not_a_map'),
+        'zero': (0, 'not_a_map'),
+        'null at': ({'at': None, 'id': 'hold'}, 'at_type'),
+        'bool at': ({'at': True, 'id': 'hold'}, 'at_type'),
+        'nan at': ({'at': float('nan'), 'id': 'hold'}, 'at_type'),
+        'inf at': ({'at': float('inf'), 'id': 'hold'}, 'at_type'),
+        'string at': ({'at': '1000', 'id': 'hold'}, 'at_type'),
+        'missing at': ({'id': 'hold'}, 'at_type'),
+        'map at': ({'at': {'seconds': 1000}, 'id': 'hold'}, 'at_type'),
+        'empty id': ({'at': 1, 'id': ''}, 'id_shape'),
+        'missing id': ({'at': 1}, 'id_shape'),
+        'slash id': ({'at': 1, 'id': 'users/x/stt_cap_holds/hold'}, 'id_shape'),
+        'numeric id': ({'at': 1, 'id': 5}, 'id_shape'),
+        'not a map': ([1, 'hold'], 'not_a_map'),
+    }
+    for label, (cursor, reason) in rejected.items():
+        assert worker._cursor_problem(cursor) == reason, label
+
+
+@pytest.mark.parametrize(
+    'poisoned,reason',
+    [
+        ({}, 'at_type'),
+        ([], 'not_a_map'),
+        ('', 'not_a_map'),
+        (0, 'not_a_map'),
+        ({'at': None, 'id': ''}, 'at_type'),
+        ({'at': 1, 'id': ''}, 'id_shape'),
+        ('legacy-cursor', 'not_a_map'),
+    ],
+)
+def test_poisoned_stored_cursor_rewinds_instead_of_rebuilding_a_rejected_query(
+    monkeypatch, query_protocol, caplog, poisoned, reason
+):
+    client, documents, requests = query_protocol
+    collection = client.collection('users').document('synthetic').collection('audio')
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: collection)
+    for index in range(worker.PAGE + 2):
+        documents[collection.document(f'hold-{index:02d}')._document_path] = {
+            'listed_at': 1000 - index,
+            'state': 'held',
+        }
+
+    rows = worker._page('synthetic', 'audio', dict(poisoned) if isinstance(poisoned, dict) else poisoned)
+    assert [snap.id for _, snap in rows] == [f'hold-{index:02d}' for index in range(worker.PAGE)]
+    assert f'outcome=cursor_invalid uid=synthetic kind=audio reason={reason}' in caplog.text
+    # The repaired page is the cursorless shape: nothing reaches RunQuery that
+    # the server would reject again on the next visit.
+    assert not requests[-1].structured_query.start_at.values
+
+
+def test_absent_cursor_does_not_emit_cursor_invalid(monkeypatch, query_protocol, caplog):
+    client, documents, requests = query_protocol
+    collection = client.collection('users').document('synthetic').collection('audio')
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: collection)
+    documents[collection.document('first-hold')._document_path] = {'listed_at': 1000, 'state': 'held'}
+
+    rows = worker._page('synthetic', 'audio', None)
+
+    assert [snap.id for _, snap in rows] == ['first-hold']
+    assert 'outcome=cursor_invalid' not in caplog.text
+    assert not requests[-1].structured_query.start_at.values
+
+
+async def test_owner_with_poisoned_cursors_still_drains_and_self_heals(
+    monkeypatch, query_protocol, job_harness, caplog
+):
+    client, documents, requests = query_protocol
+    harness = job_harness
+    harness.job['remaining'] = 10000
+    harness.job['cursor_audio'] = {'at': None, 'id': ''}
+    harness.job['cursor_text'] = 'legacy-cursor'
+    collections = {
+        kind: client.collection('users').document('synthetic').collection(kind) for kind in ('audio', 'text')
+    }
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: collections['audio'])
+    monkeypatch.setattr(worker.store, 'items', lambda uid: collections['text'])
+    monkeypatch.setattr(worker, '_page', harness.real_page)
+    # Candidate order is (listed_at/started_at desc, id desc): newest capture
+    # first, and for equal timestamps the text sibling outranks the audio one.
+    expected = []
+    for index in range(3):
+        for kind in ('text', 'audio'):
+            identity = f'capture-{index:02d}-{kind}'
+            field = 'listed_at' if kind == 'audio' else 'started_at'
+            documents[collections[kind].document(identity)._document_path] = {
+                field: 1000 - index,
+                'state': 'held',
+                'created_at': 50,
+                'queued_at': 50,
+                'units': 1,
+                'seconds': 1,
+            }
+            expected.append((kind, identity))
+    for _ in range(10):
+        await worker.run('synthetic', continuation=True)
+        if harness.job['state'] == 'waiting_choice':
+            break
+    else:
+        pytest.fail('Poisoned cursors stalled the owner instead of draining')
+    assert [(item['kind'], item['id']) for item in harness.processed] == expected
+    assert harness.job['reserved'] == {} and harness.job['remaining'] == pytest.approx(
+        10000 - sum(item['units'] for item in harness.processed)
+    )
+    # The rewound run leaves valid cursors behind: later pages stop rewinding.
+    assert worker._cursor_problem(harness.job['cursor_audio']) is None
+    assert worker._cursor_problem(harness.job['cursor_text']) is None
+    assert 'outcome=cursor_invalid uid=synthetic kind=audio reason=at_type' in caplog.text
+    assert 'outcome=cursor_invalid uid=synthetic kind=text reason=not_a_map' in caplog.text
+
+
+async def test_deferral_logs_traceback_and_owner_so_the_next_one_is_typable(monkeypatch, job_harness, caplog):
+    harness = job_harness
+    monkeypatch.setattr(worker, '_page', Mock(side_effect=RuntimeError('Synthetic query rejection')))
+    await worker.run('synthetic')
+    assert 'outcome=deferred uid=synthetic exception_type=RuntimeError' in caplog.text
+    assert any(record.exc_info and record.exc_info[0] is RuntimeError for record in caplog.records)
+    assert harness.job['state'] == 'waiting_choice'
+
+
 async def test_post_cutoff_excluded_lane_does_not_stall_chosen_work(job_harness, monkeypatch):
     job = job_harness.job
     row = snapshot('later-sync', listed_at=200, created_at=200, state='held', seconds=30)

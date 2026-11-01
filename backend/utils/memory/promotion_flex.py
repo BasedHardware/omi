@@ -18,8 +18,6 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
-from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
-
 logger = logging.getLogger(__name__)
 
 BACKGROUND_FLEX_CAPABLE_ENV = "OMI_BACKGROUND_FLEX_CAPABLE"
@@ -41,6 +39,8 @@ _TRANSIENT_FLEX_EXCEPTION_NAMES = frozenset(
 
 
 def _get_gateway_flex_llm(feature: str, *, request_timeout: float) -> Any:
+    from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
+
     return get_or_create_omi_gateway_llm(
         feature_auto_lane_id(feature),
         options={"request_timeout": request_timeout, "max_retries": 0},

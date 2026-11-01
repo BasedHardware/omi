@@ -55,7 +55,12 @@ def test_segment_models_use_transcript_even_with_integration_provenance(
 ):
     now = datetime(2026, 10, 1, tzinfo=timezone.utc)
     segment = stack.segments.TranscriptSegment(
-        id='segment-1', text='Synthetic transcript', speaker='SPEAKER_00', is_user=False, start=0, end=10
+        id='segment-1',
+        text='Synthetic transcript with enough workshop planning details to reach the real notes model',
+        speaker='SPEAKER_00',
+        is_user=False,
+        start=0,
+        end=10,
     )
     fields = dict(started_at=now, finished_at=now, source=source, transcript_segments=[segment])
     if model_name == 'Conversation':
@@ -258,3 +263,9 @@ def test_completed_boundary_finalizes_salience(stack, processing, monkeypatch, m
     result = processing._get_conversation_obj('synthetic-account', note, capture, relevance_discarded=False)
     assert result.structured.salience == ('highlight' if output_kind == 'notes' else 'background')
     assert result.discarded is False
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

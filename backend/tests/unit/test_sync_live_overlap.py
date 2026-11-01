@@ -10,6 +10,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations
 from utils.sync.assignment import assign_in_transaction
 from utils.sync.live_overlap import choose_live_overlap, live_overlap_enabled
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -50,7 +51,7 @@ def seeded(row=None):
     return store
 
 
-@pytest.mark.parametrize('status', ['completed', 'in_progress'])
+@pytest.mark.parametrize('status', ['completed', 'in_progress', 'processing'])
 def test_overlap_keeps_live_identity_words_and_lifecycle(status):
     store = seeded(live_row(status))
     incoming = dict(chunk('wal', 1000), data_protection_level='standard')
@@ -63,6 +64,31 @@ def test_overlap_keeps_live_identity_words_and_lifecycle(status):
     assert not created and not survivors and len(again['transcript_segments']) == 1
 
 
+def test_discovered_tombstoned_live_row_is_not_adopted_without_batch_validator():
+    store = seeded()
+    store.rows[('users', 'u', 'deleted_conversations', 'live')] = {'deleted': True}
+    before = deepcopy(store.rows[('users', 'u', 'conversations', 'live')])
+    row, created, survivors = assign(store, chunk('wal', 1000, text='New retained speech.'))
+    assert created and row['id'] == 'wal' and survivors
+    assert row['sync_merged_from'] == []
+    assert store.rows[('users', 'u', 'conversations', 'live')] == before
+
+
+def test_redirect_to_tombstoned_live_survivor_cannot_receive_speech():
+    store = seeded()
+    store.rows[('users', 'u', 'deleted_conversations', 'live')] = {'deleted': True}
+    store.rows[('users', 'u', 'conversations', 'donor')] = {
+        'id': 'donor',
+        'deleted': True,
+        'sync_merged_into': 'live',
+        'smart_merge': {'role': 'donor'},
+    }
+    before = deepcopy(store.rows)
+    with pytest.raises(SyncAssignmentSuperseded):
+        assign(store, chunk('wal', 1000), target_id='donor')
+    assert store.rows == before
+
+
 @pytest.mark.parametrize('start', [900, 1009.5, 1120])
 def test_non_overlap_and_touching_boundary_create_normal_sync(start):
     store = seeded()
@@ -70,6 +96,19 @@ def test_non_overlap_and_touching_boundary_create_normal_sync(start):
     row, created, _ = assign(store, dict(chunk('wal', start), data_protection_level='standard'))
     assert created and row['id'] == 'wal'
     assert store.rows[('users', 'u', 'conversations', 'live')] == original[('users', 'u', 'conversations', 'live')]
+
+
+def test_live_wall_envelope_cannot_authorize_nonoverlapping_recorded_speech():
+    live = live_row('in_progress')
+    live['finished_at'] = live['started_at'] + timedelta(seconds=600)
+    store = seeded(live)
+    original = deepcopy(live)
+    incoming = dict(chunk('wal', 1100), data_protection_level='standard')
+
+    row, created, _ = assign(store, incoming)
+
+    assert created and row['id'] == 'wal'
+    assert store.rows[('users', 'u', 'conversations', 'live')] == original
 
 
 @pytest.mark.parametrize('start', [995, 1005])
@@ -93,7 +132,7 @@ def test_partial_overlap_keeps_all_new_speech_and_live_origin(start, timeline, e
     assert sorted(s['start'] for s in row['transcript_segments']) == sorted([0, start - 1000])
 
 
-@pytest.mark.parametrize('status', ['completed', 'in_progress'])
+@pytest.mark.parametrize('status', ['completed', 'in_progress', 'processing'])
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_adoption_outside_lineage_allowlist_keeps_cached_origin_and_fences_late_live(monkeypatch, status, level):
     from config.sync_lineage import sync_lineage_resolve_active_for
@@ -154,7 +193,7 @@ def test_adoption_outside_lineage_allowlist_keeps_cached_origin_and_fences_late_
         ('is_locked', True),
         ('deleted', True),
         ('has_content', False),
-        ('status', 'processing'),
+        ('status', 'failed'),
     ],
 )
 def test_incompatible_deleted_and_empty_stubs_are_not_adopted(field, value):
@@ -179,7 +218,9 @@ def test_merge_size_failure_publishes_immediately_without_hidden_pending_row(mon
     from utils.sync import assignment
 
     store = seeded()
-    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 1)
+    # Keep room for a new encoded row; only the existing live row is full.
+    store.rows[('users', 'u', 'conversations', 'live')]['structured'] = {'overview': 'x' * 8192}
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 4096)
     incoming = dict(
         chunk('wal', 1005, text='Speech that is not already in the live conversation.'),
         data_protection_level='standard',
@@ -217,7 +258,12 @@ def test_kill_switch_restores_old_assignment(monkeypatch):
 
 def test_maximum_overlap_wins_without_merging_live_identities():
     first = live_row()
-    longer = dict(live_row(), id='longer', finished_at=first['finished_at'] + timedelta(seconds=10))
+    longer = dict(
+        live_row(),
+        id='longer',
+        finished_at=first['finished_at'] + timedelta(seconds=10),
+        transcript_segments=[dict(first['transcript_segments'][0], end=19.5)],
+    )
     assert choose_live_overlap([first, longer], chunk('wal', 1005)) == 'longer'
 
 
@@ -272,9 +318,10 @@ def test_discovery_excludes_other_partitions_and_off_lifecycle_rows():
 
     assert discoverable_live_overlap(stub, chunk('wal', 1002))
     assert not discoverable_live_overlap(dict(stub, deleted=True), chunk('wal', 1002))
-    assert not discoverable_live_overlap(dict(stub, status='processing'), chunk('wal', 1002))
+    assert not discoverable_live_overlap(dict(stub, status='failed'), chunk('wal', 1002))
     assert not discoverable_live_overlap(dict(stub, client_device_id='other'), chunk('wal', 1002))
-    assert not discoverable_live_overlap(dict(stub, finished_at=stub['started_at']), chunk('wal', 1002))
+    # An obsolete processing end cannot erase placed recording evidence.
+    assert discoverable_live_overlap(dict(stub, finished_at=stub['started_at']), chunk('wal', 1002))
 
 
 @pytest.mark.parametrize('fleet,lineage', [('off', 'on'), ('on', 'on'), ('off', 'off')])

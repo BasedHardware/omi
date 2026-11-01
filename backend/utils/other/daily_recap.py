@@ -8,8 +8,10 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from config.refactor_modes import cohort_configured, serving_for, shadow_or_serve
+from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.conversations as conversations_db
 from utils.conversations.calls_metrics import observe
+from utils.daily_summary_validation import require_daily_summary
 from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
 
 FLAG = 'CALLS_RECAP_MODE'
@@ -85,6 +87,9 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
     # Imports stay lazy; tests can inject dependencies at the producer seam.
     from utils.other import notifications as n
 
+    if account_deletion_blocks_user_work(uid):
+        return None, False, 'account_pending_deletion'
+
     if not serving_for(FLAG, uid):
         return legacy(uid, date_str, start_date_utc, end_date_utc, prepare_delivery=prepare_delivery)
     compute_allowed = n.generated_compute_allowed(uid, 'daily_summary')
@@ -152,6 +157,9 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
             end_date_utc,
             memories_learned=n.memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
         )
+        # Pending/failed state rows remain retryable; malformed generated content
+        # must never replace them (or a previous valid recap) in the store.
+        require_daily_summary(payload, uid=uid, operation='v4_generation_candidate')
         payload.update(status='generated', generated_at=datetime.now(timezone.utc), **{FINGERPRINT_FIELD: fingerprint})
         payload = _persist(n, uid, date_str, pending, payload)
         observe('recap_generated', 'agree')

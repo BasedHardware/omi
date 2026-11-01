@@ -47,6 +47,8 @@ def _load(name, source, monkeypatch, namespace=None):
     source = source.replace('from utils.conversation_continuity import', 'from models.conversation_continuity import')
     module.sync_assignment_recovery_enabled = lambda: True
     module.capture_evidence_dark_write_enabled = lambda: True
+    # Historical snapshot only: its retired timer is not a production seam.
+    module.schedule_syncing_temporal_file_deletion = lambda _path: None
     exec(compile(source, name, 'exec', flags=0x1000000), module.__dict__)
     return module
 
@@ -57,7 +59,12 @@ def _normalize(value):
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, dict):
-        return {str(key): _normalize(item) for key, item in value.items()}
+        # Phase A globally adds timing metadata even while lineage features are off.
+        # Its values and placement are asserted by test_recorded_span; compare the
+        # retained lineage payload here against the immutable pre-span snapshot.
+        from utils.conversations.recorded_time import SPAN_FIELDS
+
+        return {str(key): _normalize(item) for key, item in value.items() if key not in SPAN_FIELDS}
     if isinstance(value, (list, tuple)):
         return [_normalize(item) for item in value]
     if isinstance(value, (set, frozenset)):
@@ -76,7 +83,7 @@ def _rows(store):
 
 
 def _intake(module, store, incoming, *, candidate_id=None, target_id=None):
-    return module.assign_in_transaction(
+    result = module.assign_in_transaction(
         store.transaction(),
         store.collection('users').document('u'),
         incoming,
@@ -86,6 +93,11 @@ def _intake(module, store, incoming, *, candidate_id=None, target_id=None):
         encode=deepcopy,
         invalidate=lambda payload: None,
     )
+    # Match lifecycle intake: consume the transient observation before the
+    # returned conversation reaches enrichment or behavioral parity checks.
+    result[0].pop('_sync_projected_size_bucket', None)
+    result[0].pop('_sync_published_observations', None)
+    return result
 
 
 def _drive(module, patch, store, texts, assignment_module, capture_enabled):
@@ -93,7 +105,6 @@ def _drive(module, patch, store, texts, assignment_module, capture_enabled):
     from utils.conversations import lifecycle
 
     patch.setattr(module, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
-    patch.setattr(module, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     patch.setattr(module, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     patch.setattr(module, 'prerecorded', lambda *args, **kwargs: (['w'], 'en'))
     patch.setattr(
@@ -152,6 +163,10 @@ def _drive(module, patch, store, texts, assignment_module, capture_enabled):
 
 @pytest.fixture(autouse=True, params=['off', 'disabled-typo'])
 def off(monkeypatch, request):
+    # This immutable pre-hold snapshot specifies the rollback/eager behavior.
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+    monkeypatch.setenv('LATE_AUDIO_SYNC_INTAKE_ENABLED', 'false')
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     for flag in FLAGS:
         monkeypatch.setenv(flag, request.param)
 
@@ -320,10 +335,19 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
                         'finish': calls,
                         # Shadow comparison telemetry is new; serving events,
                         # persisted rows and results must retain their old bytes.
+                        # The episodes intake attach (with its capability-marker
+                        # read) is likewise new additive telemetry, not a sync
+                        # serving change.
                         'logs': [
                             record.getMessage()
                             for record in caplog.records
-                            if not record.getMessage().startswith('event=refactor_shadow ')
+                            if not record.getMessage().startswith(
+                                (
+                                    'event=refactor_shadow ',
+                                    'event=episodes_client_seen_',
+                                    'event=episode_sync_intake_attach',
+                                )
+                            )
                         ],
                     }
                 )
@@ -375,3 +399,23 @@ def test_excluded_cohort_stays_main_even_with_both_flags_on(frozen, monkeypatch)
         outputs.append(_bytes({'result': result, 'rows': _rows(store)}))
     assert outputs[0] == outputs[1]
     assert recording_lineage.lineage_resolution_requested('u', ORIGIN, 1500, 1510) is False
+
+
+@pytest.fixture(autouse=True)
+def stable_recording_arrival(monkeypatch):
+    from datetime import datetime, timezone
+    from database import conversation_recorded_time
+
+    class ArrivalType(type):
+        def __instancecheck__(cls, value):
+            return isinstance(value, datetime)
+
+    class FixedArrival(datetime, metaclass=ArrivalType):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 20, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(conversation_recorded_time, 'datetime', FixedArrival)
+    from database import conversations
+
+    monkeypatch.setattr(conversations, 'datetime', FixedArrival)

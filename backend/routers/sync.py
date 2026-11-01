@@ -1,4 +1,7 @@
 from utils.sync import playback_build
+from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
+from database.legal_holds import DestructiveOperationInProgress
+from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 import logging
 import os
@@ -16,6 +19,7 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
     get_durable_job_status,
@@ -99,6 +103,7 @@ from utils.sync.repeat_work_metrics import (
     PLAYBACK_WRITES,
     PLAYBACK_BUILD_SECONDS,
     PLAYBACK_BUILDS,
+    record_demand_playback_outcome,
     record_playback_ready,
 )
 from utils.product_metrics import record_product_event, sanitize_app_build
@@ -123,6 +128,14 @@ from utils.sync.legacy_segment_core import (
     _retrieve_file_paths_v2,
 )
 from utils.stt.outcomes import TranscriptionOutcome
+from utils.sync.empty_upload import EmptySyncUpload, prepare_sync_uploads, nonempty_manifest_claims
+from utils.sync.job_retry_policy import terminal_repeat_failure_kwargs
+from utils.sync.capture_clock import (
+    INVALID_CAPTURE_TIME_CODE,
+    INVALID_CAPTURE_TIME_DETAIL,
+    SyncCaptureTimeRejected,
+    capture_clock_offset,
+)
 from utils.sync.rate_limit import (
     FAIR_USE_RATE_LIMIT_CODE,
     bounded_fair_use_retry_after,
@@ -152,10 +165,18 @@ from utils.sync import cap_hold_redrive
 
 logger = logging.getLogger(__name__)
 
+
 # Audio constants
 AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
+
+# How far past the newest admitted filename start a claimed session end may
+# run: one live-capture chunk of trailing audio, mirroring the trailing
+# allowance recording-session binding itself grants (recording_session_target).
+# Decode has not run at the staging seam, so the last file's duration is the
+# one admitted-audio fact this slack stands in for.
+SESSION_CLAIM_TRAILING_SLACK_SECONDS = 60.0
 
 
 async def _offer_shadow_upload(**kwargs) -> None:
@@ -502,6 +523,13 @@ async def sync_local_files_v2(
     Legacy-owned content is answered by its durable fence; new legacy jobs are retired.
     The app polls GET /v2/sync-local-files/{job_id}.
     """
+    # Empty/torn-header clips contain no audio frames. Acknowledge them before
+    # clock/age admission; a bogus date on zero audio has nothing to recover.
+    upload_filenames = [f.filename or '' for f in files]
+    try:
+        files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
+    except EmptySyncUpload:
+        return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
     else:
@@ -536,8 +564,9 @@ async def sync_local_files_v2(
         uid,
         client_device_context.client_device_id,
         conversation_id,
-        filenames,
+        upload_filenames,
     )
+    manifest_claims = nonempty_manifest_claims(manifest_claims, filenames)
     record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
@@ -662,7 +691,44 @@ async def sync_local_files_v2(
         # --- Fast path: save raw files only (< 2s typical) ---
         # Use sync_executor, NOT storage_executor — storage is saturated with
         # background pipeline cleanup/GCS work and would queue the 202 response.
-        paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
+        try:
+            paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
+        except SyncCaptureTimeRejected:
+            logger.info('sync_upload_refused uid=%s status=400 reason=invalid_capture_time', uid)
+            # Typed 400 for implausible capture times (beyond the shared
+            # future-skew tolerance or before 2024). Released clients only see
+            # the status + detail; new clients can act on the code.
+            return JSONResponse(
+                status_code=400,
+                content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
+            )
+
+        # One server-clock offset per request shifts the client's
+        # recording-session audio bounds onto the server clock before any
+        # temporal comparison (recording-session binding compares them against
+        # server-clock conversation rows). Admitted data only: at this staging
+        # seam decode has not run, so the basis is the staged filename starts
+        # alone — the pipeline recomputes the offset from decoded durations
+        # after VAD — and a claimed end past the admitted span plus one
+        # live-capture chunk of slack (the same trailing allowance session
+        # binding grants) is clipped to it, so an inflated client claim can
+        # neither widen the claimed span nor move the session matching
+        # interval. Files keep their raw capture-clock names and keys.
+        if isinstance(audio_start_seconds, (int, float)) and isinstance(audio_end_seconds, (int, float)):
+            admitted_file_starts = []
+            for filename in filenames:
+                try:
+                    admitted_file_starts.append(float(get_timestamp_from_path(filename)))
+                except (IndexError, ValueError):
+                    continue  # Admission above rejects unparseable names with the typed 400.
+            if admitted_file_starts:
+                admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
+                audio_start_seconds = float(audio_start_seconds)
+                audio_end_seconds = min(float(audio_end_seconds), admitted_end)
+                session_clock_offset = capture_clock_offset(max(admitted_file_starts))
+                if session_clock_offset > 0:
+                    audio_start_seconds -= session_clock_offset
+                    audio_end_seconds -= session_clock_offset
 
         if manifest_claims is not None and not await run_blocking(
             sync_executor, manifest_claims_match_paths, manifest_claims, paths
@@ -790,7 +856,11 @@ async def sync_local_files_v2(
             legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)
             or legacy_dark.admission_refused_response()
         )
-    except HTTPException:
+    except HTTPException as error:
+        if error.status_code == 400:
+            reason = error.detail.get('code', 'server_refused') if isinstance(error.detail, dict) else 'server_refused'
+            logger.info('sync_upload_refused uid=%s status=400 reason=%s', uid, reason)
+            return JSONResponse(status_code=400, content={'code': reason, 'detail': 'Invalid sync file format'})
         if backfill_slot_acquired:
             try:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
@@ -815,21 +885,6 @@ async def sync_local_files_v2(
         )
     finally:
         _cleanup_files(paths)
-
-
-def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
-    """Carry a terminal job's strike through racing poll/task claim cleanup."""
-    if job.get('status') not in {'failed', 'partial_failure'}:
-        return {}
-    if job.get('status') == 'failed' and job.get('reason_code') == 'sync_invalid_audio':
-        return {'failure_key': 'invalid_audio'}
-    result = job.get('result')
-    if isinstance(result, dict) and result.get('repeat_failure_key') == 'persistent_persistence':
-        return {
-            'failure_key': 'persistent_persistence',
-            'failure_fingerprint': result.get('repeat_failure_fingerprint'),
-        }
-    return {}
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
@@ -951,7 +1006,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         # the ledger stale window and looks permanently stuck to the client.
         try:
             release_sync_content_claim_after_job_retired(
-                uid, job['content_id'], job_id, **_terminal_repeat_failure_kwargs(job)
+                uid, job['content_id'], job_id, **terminal_repeat_failure_kwargs(job)
             )
         except Exception as error:
             logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
@@ -1024,6 +1079,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
 
 
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
+@sync_snapshot_resolve_job
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Enrichment tasks only: legacy transcription was deleted in legacy-retire C11.
 
@@ -1054,6 +1110,41 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
 AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX = 6
 
 
+async def _refuse_changed_playback_source(payload: dict, *, fingerprint: str | None = None):
+    """A replaced source cannot be repaired by retrying its old immutable key."""
+    from database.legal_holds import DestructiveOperationInProgress
+
+    try:
+        if fingerprint is None:
+            await run_blocking(
+                storage_executor,
+                mark_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                payload['audio_file_id'],
+                'source_changed',
+            )
+        else:
+            await run_blocking(
+                storage_executor,
+                mark_conversation_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                fingerprint,
+                'source_changed',
+            )
+    except DestructiveOperationInProgress:
+        deferred = await _defer_merge_for_destructive_operation(payload)
+        if deferred is not None:
+            return deferred
+        return JSONResponse(status_code=503, content={'status': 'retry'})
+    PLAYBACK_WRITES.labels('skipped').inc()
+    logger.warning(
+        'audio_merge: refused reason=source_manifest_changed kind=%s', 'file' if fingerprint is None else 'conversation'
+    )
+    return JSONResponse(status_code=200, content={'status': 'unavailable', 'reason': 'source_manifest_changed'})
+
+
 async def _defer_merge_for_destructive_operation(payload: dict):
     """Return a 200 'deferred' response after re-enqueueing, or None to keep the
     caller's existing retry and final-attempt handling (deferrals exhausted, or
@@ -1077,6 +1168,24 @@ async def _defer_merge_for_destructive_operation(payload: dict):
 # codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_audio_merge_cloud_tasks_oidc)):
+    try:
+        response = await _handle_audio_merge_job(request, task_retry_count)
+    except Exception:
+        await _record_demand_playback_outcome(request, None)
+        raise
+    await _record_demand_playback_outcome(request, response)
+    return response
+
+
+async def _record_demand_playback_outcome(request: Request, response) -> None:
+    try:
+        payload = await request.json()
+    except Exception:
+        return
+    record_demand_playback_outcome(payload, None if response is None else response.body)
+
+
+async def _handle_audio_merge_job(request: Request, task_retry_count: int):
     from database.legal_holds import (
         DestructiveOperationInProgress,
     )  # deferred: sync.py imported with database stubbed in test isolation
@@ -1099,6 +1208,11 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     except Exception as e:
         logger.error(f'audio_merge handler: invalid payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    task_uid = payload.get('uid')
+    if isinstance(task_uid, str) and await run_blocking(db_executor, account_deletion_blocks_user_work, task_uid):
+        # Cloud Tasks retains the task; a restore can resume processing.
+        return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
 
     # The v2 conversation-merge dispatch runs OUTSIDE the payload-parse guard so its
     # transient GCS/Firestore failures (during the doc read, artifact upload, or doc
@@ -1167,6 +1281,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                         else {}
                     ),
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload)
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
             # Persist the verdict or /urls reports pending forever and clients
@@ -1254,9 +1370,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
         if playback_on_demand():
-            PLAYBACK_BUILDS.labels('file', 'built').inc()
             record_playback_ready(payload, 'file')
-        logger.info(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
+        logger.debug(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
         await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
@@ -1285,6 +1400,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
     lock_key = f'audio:{conversation_id}:conversation'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
     if not lock_token:
+        if await run_blocking(db_executor, playback_build.superseded_while_locked, payload):
+            return JSONResponse(status_code=200, content={'status': 'superseded'})
         return JSONResponse(status_code=409, content={'status': 'locked'})
 
     try:
@@ -1297,14 +1414,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
-        if demand:
-            fingerprint = compute_audio_files_fingerprint(
-                audio_files,
-                origin=conversation.get('started_at') or conversation.get('created_at'),
-                source_identity=True,
-            )
-        else:
-            fingerprint = compute_audio_files_fingerprint(audio_files)
+        fingerprint = sync_playback.conversation_merge_fingerprint(conversation, demand=demand)
         if payload_fingerprint and payload_fingerprint != fingerprint:
             PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
@@ -1334,10 +1444,19 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 
         started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
         if started_at_ts is None:
-            chunk_starts = [
-                min(af['chunk_timestamps']) for af in audio_files if isinstance(af, dict) and af.get('chunk_timestamps')
+            # No stored origin: anchor the wall clock on each part's own basis
+            # (normalized playback start when persisted, else raw chunk keys)
+            # so skewed parts keep non-negative, truthful offsets.
+            part_bases = [
+                (
+                    af['playback_start']
+                    if isinstance(af.get('playback_start'), (int, float))
+                    else (min(af['chunk_timestamps']) if af.get('chunk_timestamps') else None)
+                )
+                for af in audio_files
+                if isinstance(af, dict)
             ]
-            started_at_ts = min(chunk_starts) if chunk_starts else 0.0
+            started_at_ts = min((base for base in part_bases if base is not None), default=0.0)
 
         try:
             with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if demand else nullcontext():
@@ -1351,6 +1470,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     artifact_fingerprint,
                     strict_sources=demand,
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
             try:

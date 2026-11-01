@@ -199,40 +199,16 @@ class ProjectionFollowups:
 
     async def finish_part(self, item, binding, receipt, index):
         policy = await run_blocking(db_executor, self.projector.store.policy, item.segment_id)
-        if receipt['state'] == 'ready':
+        if receipt['state'] in {'ready', 'quarantined'}:
             return
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
 
-            canonical = receipt['conversation_id']
-            if not binding.record_origin:
-                canonical = await self.step(
-                    policy,
-                    'bridge',
-                    postprocess_executor,
-                    finish_sync_bridges,
-                    binding.owner_id,
-                    canonical,
-                    **({'silent': True} if receipt.get('silent_redrive') else {}),
-                )
-            if receipt.get('audio_required') and not binding.native_record:
-                if self.projector.playback is not None:
-                    await self.step(policy, 'playback', postprocess_executor, self.projector.playback, item, canonical)
-                else:
-                    await self.step(
-                        policy,
-                        'playback',
-                        postprocess_executor,
-                        self.projector.persist_playback,
-                        item,
-                        binding,
-                        canonical,
-                        receipt,
-                    )
+            outputs = receipt.get('size_rollover_outputs') or [{'conversation_id': receipt['conversation_id']}]
+            canonicals = []
+            for output in outputs:
+                canonical = output['conversation_id']
                 if not binding.record_origin:
-                    # A later assignment can bridge this target while audio is
-                    # being stored. Follow its redirect and recopy late donor
-                    # audio even if an earlier bridge already checkpointed it.
                     canonical = await self.step(
                         policy,
                         'bridge',
@@ -240,9 +216,40 @@ class ProjectionFollowups:
                         finish_sync_bridges,
                         binding.owner_id,
                         canonical,
-                        audio_source_id=canonical,
                         **({'silent': True} if receipt.get('silent_redrive') else {}),
                     )
+                if receipt.get('audio_required') and not binding.native_record:
+                    if self.projector.playback is not None:
+                        await self.step(
+                            policy, 'playback', postprocess_executor, self.projector.playback, item, canonical
+                        )
+                    else:
+                        await self.step(
+                            policy,
+                            'playback',
+                            postprocess_executor,
+                            self.projector.persist_playback,
+                            item,
+                            binding,
+                            canonical,
+                            receipt,
+                        )
+                    if not binding.record_origin:
+                        # A later assignment can bridge this target while audio is
+                        # being stored. Follow its redirect and recopy late donor
+                        # audio even if an earlier bridge already checkpointed it.
+                        canonical = await self.step(
+                            policy,
+                            'bridge',
+                            postprocess_executor,
+                            finish_sync_bridges,
+                            binding.owner_id,
+                            canonical,
+                            audio_source_id=canonical,
+                            **({'silent': True} if receipt.get('silent_redrive') else {}),
+                        )
+                canonicals.append(canonical)
+            canonical = canonicals[0]
             if receipt['enrichment_required']:
                 await self.step(
                     policy,

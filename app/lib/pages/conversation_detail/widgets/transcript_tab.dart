@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/edit_segment_sheet.dart';
@@ -531,34 +532,13 @@ class _TranscriptHeading extends StatelessWidget {
 
   /// Missing or uncountable resolution omits the count, matching the header chip's uncounted
   /// "others" rule.
-  static int? _speakerCount(ServerConversation conversation) {
+  static int? _speakerCount(ServerConversation conversation, List<Person> people, String you) {
     if (conversation.transcriptSegments.any((s) => s.sttProvider?.startsWith('on_device:') == true)) return null;
-    final resolution = conversation.speakerResolution;
-    if (resolution == null || !resolution.countable) return null;
-    final segments = conversation.transcriptSegments;
-    final ownerIds = {
-      for (final segment in segments)
-        if (segment.isUser) segment.speakerId,
-    };
-    final personIdsBySpeaker = <int, Set<String>>{};
-    for (final segment in segments) {
-      if (segment.isUser || segment.speakerId == omiSpeakerId) continue;
-      final personId = segment.personId;
-      if (personId != null && personId.trim().isNotEmpty) {
-        personIdsBySpeaker.putIfAbsent(segment.speakerId, () => {}).add(personId);
-      }
-    }
-    final voices = <String>{};
-    for (final rawId in resolution.participantSpeakerIds.toSet()) {
-      if (ownerIds.contains(rawId) || rawId == omiSpeakerId) continue;
-      final personIds = personIdsBySpeaker[rawId];
-      if (personIds == null || personIds.isEmpty) {
-        voices.add('speaker-$rawId');
-      } else {
-        voices.addAll(personIds.map((id) => 'person-$id'));
-      }
-    }
-    return voices.length + (ownerIds.isEmpty ? 0 : 1);
+    final participants = ConversationDetailMeta.participants(conversation.transcriptSegments,
+        you: you, personName: (id) => personById(people, id)?.name, speakers: conversation.speakerResolution);
+    if (participants.uncounted) return null;
+    final count = participants.named.length + participants.unnamed;
+    return count == 0 ? null : count;
   }
 
   static bool _hasUnnamedVoice(ServerConversation conversation, List<Person> people) {
@@ -574,7 +554,7 @@ class _TranscriptHeading extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-    final count = _speakerCount(conversation);
+    final count = _speakerCount(conversation, people, l10n.you);
     final label = [l10n.transcript, if (count != null) l10n.transcriptSpeakerCount(count)].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 18),

@@ -56,13 +56,14 @@ fi
 PY="${REPO_ROOT}/backend/.venv/bin/python"
 DEPLOY_LOG="${OMI_STAGING_DEPLOY_LOG:-$HOME/workspace/omi/data/run-2026-10-19-legacy-retire/lane02/deploys.log}"
 
-# Prod-shaped runtime per service (prod live Cloud Run, read 2026-10-19 on ro-prod). Replica counts
-# are staging-sized by the overlay; these mirror concurrency, CPU, memory and timeout.
+# Prod-shaped runtime per service (prod live Cloud Run, read 2026-10-19 on ro-prod; sync memory
+# follows the 2026-10-24 costcut to 6Gi, backfill the right-size to 4Gi). Replica counts are staging-sized
+# by the overlay; these mirror concurrency, CPU, memory and timeout.
 shape_flags() {
   case "$1" in
     backend) echo "--concurrency=20 --cpu=2 --memory=8Gi --timeout=3600 --ingress=all" ;;
-    backend-sync) echo "--concurrency=20 --cpu=2 --memory=8Gi --timeout=3600 --ingress=all" ;;
-    backend-sync-backfill) echo "--concurrency=6 --cpu=2 --memory=8Gi --timeout=1500 --ingress=all" ;;
+    backend-sync) echo "--concurrency=20 --cpu=2 --memory=6Gi --timeout=3600 --ingress=all" ;;
+    backend-sync-backfill) echo "--concurrency=6 --cpu=2 --memory=4Gi --timeout=1500 --ingress=all" ;;
     backend-integration) echo "--concurrency=40 --cpu=2 --memory=2Gi --ingress=all" ;;
     *) return 1 ;;
   esac

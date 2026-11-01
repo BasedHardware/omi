@@ -65,6 +65,8 @@ class OmiDateFormat {
   }
 
   /// A date standing alone: "Sep 23, 2026".
+  String weekdayDate(DateTime value) => DateFormat.MMMEd(localeName).format(value);
+
   String date(DateTime value) => DateFormat.yMMMd(localeName).format(value);
 
   /// An absolute moment: "Sep 23, 2026 10:43 AM" (locale order and separators).

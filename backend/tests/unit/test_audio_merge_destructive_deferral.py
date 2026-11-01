@@ -49,7 +49,7 @@ def _common_patches(stack_build, mock_enqueue, mock_unavailable, mock_unavailabl
         patch.object(routers_sync.conversations_db, 'get_conversation', return_value=_conversation()),
         patch.object(routers_sync, 'get_playback_artifact_signed_url', return_value=None),
         patch.object(routers_sync, 'get_conversation_playback_signed_url', return_value=None),
-        patch.object(routers_sync, 'compute_audio_files_fingerprint', return_value='fp-1'),
+        patch.object(routers_sync.sync_playback, 'conversation_merge_fingerprint', return_value='fp-1'),
         patch.object(routers_sync.playback_build, 'get_conversation_playback_manifest', return_value=None),
         patch.object(routers_sync, 'enqueue_audio_merge_job_deferred', mock_enqueue),
         patch.object(routers_sync, 'mark_playback_unavailable', mock_unavailable),

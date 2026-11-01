@@ -201,10 +201,13 @@ _soniox_circuit = soniox_circuit_from_env()
 _family_circuits_identity: dict[str, str] = {}
 _family_circuits_lock = threading.Lock()
 
-# Pre-create the always-emitted connect and stream-close series so absence of a
-# provider's failures is queryable (and a dead emitter visible) from process start.
+# Zero baselines make provider failures and dead emitters queryable from process start.
 initialize_stt_provider_connect_children()
 initialize_stt_stream_close_children()
+
+
+def parakeet_family_circuit_state() -> str:
+    return _parakeet_circuit.state
 
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
@@ -228,13 +231,10 @@ def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
         if seen is None:
             _family_circuits_identity[family] = selection
         elif seen != selection:
-            # A replaced endpoint or stage change for THIS family invalidates
-            # its selection evidence (the same boundary the Redis views reset
-            # for in FleetHealth._check_identity). An unchanged credential
-            # keeps its account bench; a rotated credential clears only
-            # account state inside sync_account_identity. Sibling families
-            # keep their evidence; registry targets are keyed separately in
-            # live_router._target_circuits.
+            # A family's endpoint/stage replacement clears selection evidence,
+            # matching FleetHealth._check_identity. Credential rotation clears
+            # only account state in sync_account_identity; siblings and registry
+            # targets keep their own evidence (live_router._target_circuits).
             circuit.reset_selection()
             _family_circuits_identity[family] = selection
         circuit.sync_account_identity(account)

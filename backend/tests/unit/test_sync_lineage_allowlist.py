@@ -1,13 +1,29 @@
-"""Retained shared and recovery-core cases after legacy coordinator retirement."""
+"""Staged rollout of sync lineage binding: ``SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST``.
 
+Lineage binding is gated by uid. A uid outside a non-empty allowlist must match
+the kill switch being off at that site. Adopted live targets always pin their
+origin and fence late speech, and open-live enrichment is always deferred.
+Each site test compares the non-admitted outcome against the OFF outcome itself,
+not merely against "not the new behavior". All ids are
+synthetic; ``u`` and ``uid`` are the owners the shared harnesses write under.
+"""
+
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import logging
+import os
+import threading
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
+
 import pytest
 import yaml
+
 import tests.unit.test_listen_reconnect_continuity as continuity
 from config import sync_lineage
+from utils import rollout_cohorts
+from utils.sync import assignment
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import intake
 from tests.unit.test_sync_recording_lineage import (
@@ -20,9 +36,12 @@ from tests.unit.test_sync_recording_lineage import (
     generation,
     seeded_store,
     sync_chunk,
+    upload_straddling_next_two,
 )
 from utils.sync import recording_lineage
 from utils.sync.recording_lineage import OUTCOMES, lineage_resolution_requested
+
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 S1_CLAIMS = {
     'f.opus': {
@@ -36,18 +55,14 @@ S1_CLAIMS = {
     }
 }
 
-
+# (kill switch value, allowlist template); ``{uid}`` is the owner under test.
 OFF = ('off', '')
-
-
 ACTIVE = {
     'unset_allowlist': ('', ''),
     'blank_allowlist': ('', ' , ,'),
     'allowlisted': ('', 'OTHER-A, {uid} ,OTHER-B'),
     'allowlisted_explicit_on': ('true', '{uid}'),
 }
-
-
 INACTIVE = {
     'kill_switch_off': OFF,
     'not_allowlisted': ('', 'OTHER-A,OTHER-B'),
@@ -61,6 +76,30 @@ def configure(monkeypatch, config, uid):
     flag, allowlist = config
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, allowlist.format(uid=uid))
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+
+    monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
+
+
+@pytest.fixture(autouse=True)
+def no_real_firestore_client(monkeypatch):
+    import database._client
+    import database.conversations
+    import firebase_admin.firestore
+    from google.cloud import firestore
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError('real Firestore client construction is forbidden in this suite')
+
+    monkeypatch.setattr(database._client, 'get_firestore_client', forbidden)
+    monkeypatch.setattr(database.conversations, 'get_firestore_client', forbidden)
+    monkeypatch.setattr(firestore, 'Client', forbidden)
+    monkeypatch.setattr(firebase_admin.firestore, 'client', forbidden)
 
 
 def test_real_firestore_client_paths_fail_closed_without_io():
@@ -77,6 +116,9 @@ def test_real_firestore_client_paths_fail_closed_without_io():
         firestore.Client()
     with pytest.raises(AssertionError):
         firebase_admin.firestore.client()
+
+
+# --- Parsing ------------------------------------------------------------------
 
 
 @pytest.mark.parametrize('name', sorted(ACTIVE))
@@ -104,6 +146,9 @@ def test_empty_allowlist_admits_everyone_and_the_kill_switch_still_wins(monkeypa
         assert sync_lineage.sync_lineage_resolve_uid_allowed('ANY-UID')
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, 'false')
     assert not sync_lineage.sync_lineage_resolve_active_for('ANY-UID')
+
+
+# --- Site 1: per-segment binding request (backend-sync, backend REST) ------------
 
 
 def _decision(monkeypatch, caplog, config, uid='u', s1=False):
@@ -177,7 +222,12 @@ def test_metric_help_names_every_bounded_outcome():
     assert tuple(documented) == OUTCOMES
 
 
+# --- Site 2: pinned live origin on a sync append (assign_in_transaction) -------
+
+
 def _pinned_append(monkeypatch, config, store=None):
+    # Content parity comparisons must use one scheduling instant.
+    monkeypatch.setattr(assignment.time, 'time', lambda: 1760000000.0)
     configure(monkeypatch, config, 'u')
     store = store or seeded_store([generation(L, audio_timeline={'version': 2})])
     origin = gen_start(L)
@@ -229,6 +279,9 @@ def test_row_pinned_while_admitted_follows_the_new_config_without_moving_speech(
     assert absolute(store.rows) == after
 
 
+# --- Site 3: live revision fence (backend-listen update_conversation_segments) -
+
+
 def _live_write(monkeypatch, config):
     from database import conversations as db
 
@@ -263,6 +316,9 @@ def test_live_target_fence_is_independent_of_lineage_rollout(monkeypatch, name):
     off = _live_write(monkeypatch, OFF)
     assert off['sync_content_revision'] == 2
     assert _live_write(monkeypatch, INACTIVE[name]) == off
+
+
+# --- Site 4: open-live enrichment deferral (_reprocess_conversation_after_update)
 
 
 def _reprocess(pipeline, monkeypatch, config, *, language='en', row_status='in_progress'):
@@ -325,6 +381,9 @@ def test_admitted_refresh_debt_survives_both_receipt_stores_and_excludes_fenced_
     assert 'lineage_enrichment_pending' not in recording_lineage.lineage_partial_result(retry, False)
 
 
+# --- Metadata-only origin stamp stays on the kill switch alone -----------------
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(('config', 'stamped'), [(('', 'OTHER-A'), True), (('off', '{uid}'), False)])
 async def test_live_origin_stamp_ignores_the_allowlist(monkeypatch, config, stamped):
@@ -336,6 +395,10 @@ async def test_live_origin_stamp_ignores_the_allowlist(monkeypatch, config, stam
     assert origin == ('fresh' if stamped else None)
 
 
+# --- Deployment wiring ------------------------------------------------------------
+
+# Every service that runs a gated site. A service without the variable admits
+# everyone, so the staged value must be identical on all of them.
 GATED_SERVICES = (
     ('cloud_run', 'backend'),  # inline BYOK sync (routers/sync.py)
     ('cloud_run', 'backend-sync'),
@@ -368,24 +431,20 @@ def test_all_gated_services_resolve_private_cohorts_without_manifest_allowlists(
 
 
 @pytest.fixture(autouse=True)
-def clean_env(monkeypatch):
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+def stable_recording_arrival(monkeypatch):
+    from datetime import datetime, timezone
+    from database import conversation_recorded_time
 
-    monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
+    class ArrivalType(type):
+        def __instancecheck__(cls, value):
+            return isinstance(value, datetime)
 
+    class FixedArrival(datetime, metaclass=ArrivalType):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 20, tzinfo=timezone.utc).astimezone(tz)
 
-@pytest.fixture(autouse=True)
-def no_real_firestore_client(monkeypatch):
-    import database._client
-    import database.conversations
-    import firebase_admin.firestore
-    from google.cloud import firestore
+    monkeypatch.setattr(conversation_recorded_time, 'datetime', FixedArrival)
+    from database import conversations
 
-    def forbidden(*_args, **_kwargs):
-        raise AssertionError('real Firestore client construction is forbidden in this suite')
-
-    monkeypatch.setattr(database._client, 'get_firestore_client', forbidden)
-    monkeypatch.setattr(database.conversations, 'get_firestore_client', forbidden)
-    monkeypatch.setattr(firestore, 'Client', forbidden)
-    monkeypatch.setattr(firebase_admin.firestore, 'client', forbidden)
+    monkeypatch.setattr(conversations, 'datetime', FixedArrival)

@@ -23,6 +23,7 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
+from database import record_audio as record_audio_db
 import utils.pusher_protocol as pusher_protocol
 from utils.metrics import OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL
 from utils.pusher_protocol import AUDIO_TIMELINE_PROTOCOL, audio_timeline_ack_frame
@@ -108,6 +109,9 @@ RATE = 16000
 
 @pytest.fixture
 def env(monkeypatch):
+    # Preserve timeline v2's historical emergency-rollback contract. The
+    # default durable path is exercised by test_audio_durable_outbox.py.
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     uploads = []
 
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
@@ -117,6 +121,9 @@ def env(monkeypatch):
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', MagicMock(return_value=True))
 
     def upload(chunks, uid, cid, level=None, **_kwargs):
         uploads.extend((cid, chunk) for chunk in chunks)
@@ -240,6 +247,230 @@ async def test_conversation_switch_flushes_and_rebinds(env):
     conversations = [cid for cid, _chunk in env]
     assert conversations == ['c1', 'c2']
     assert env[0][1]['timestamp'] == 500.0 and env[1][1]['timestamp'] == 500.5
+
+
+async def test_all_zero_run_is_skipped_and_real_runs_are_not(env):
+    """GCS-4: an interior all-zero run never lands as a standalone sub-1 KB object.
+
+    Readers zero-fill gaps between objects with the same bytes, so skipping a
+    run bounded by stored objects on both sides is audio-identical to storing
+    it; a run carrying any real sample is still stored in full.
+    """
+    from utils.metrics import PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL
+
+    before = PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get()
+    silent = bytes(RATE * 2 // 100)  # 20 ms of zeros, one keepalive frame
+    real = b'\x08\x00' * (RATE // 2)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(580.0, real),
+            _audio(600.0, silent),
+            # 20 s gap: the silent run closes on its own and must not upload.
+            _audio(620.0, real),
+        ]
+    )
+
+    await _run(ws)
+
+    assert [chunk['timestamp'] for _cid, chunk in env] == [580.0, 620.0]
+    assert env[1][1]['data'] == real
+    assert PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get() == before + 1
+
+
+async def test_leading_silent_run_is_stored_before_real_audio(env):
+    """A leading all-zero run anchors the recording's start (review r2).
+
+    Zero-fill covers the gap between two stored objects; with no earlier
+    object there is no gap to fill, so skipping a leading silent run would
+    shift playback's start to the first real object and drop the leading
+    interval. The first run of a conversation is always stored, even when
+    all-zero.
+    """
+    from utils.metrics import PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL
+
+    before = PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get()
+    silent = bytes(RATE * 2 // 100)  # 20 ms of zeros, one keepalive frame
+    real = b'\x09\x01' * (RATE // 2)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(600.0, silent),
+            # 20 s gap: real audio only after a leading silent run.
+            _audio(620.0, real),
+        ]
+    )
+
+    await _run(ws)
+
+    assert [chunk['timestamp'] for _cid, chunk in env] == [600.0, 620.0]
+    assert env[0][1]['data'] == silent, 'the leading silent run must anchor the start'
+    assert PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get() == before
+
+
+async def test_zero_bytes_inside_a_contiguous_run_are_kept(env):
+    """No frame is dropped: zeros contiguous with real audio upload verbatim."""
+    head = b'\x09\x00' * (RATE // 4)
+    zeros = bytes(RATE)  # 0.5 s of zeros mid-run (16000 samples * 2 bytes)
+    tail = b'\x0a\x00' * (RATE // 4)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(700.0, head),
+            _audio(700.25, zeros),
+            _audio(700.75, tail),
+        ]
+    )
+
+    await _run(ws)
+
+    assert len(env) == 1
+    assert env[0][1]['data'] == head + zeros + tail
+
+
+async def test_reconcile_listing_skips_after_clean_upload(env, monkeypatch):
+    """GCS-3b: the per-flush replay-reconcile listing skips once the session
+    has committed a clean span upload for the conversation.
+
+    Two runs, one discontinuity, socket close: the shutdown drain uploads the
+    discontinuity-closed run first (first upload this session: reconciles),
+    then the tail — strictly sequential awaits, so the tail's decision sees
+    the first upload's clean ledger without racing the process loop.
+    """
+    from utils.metrics import PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL
+
+    seen = []
+    patched = pusher.upload_audio_chunks_batch
+    before_skip = PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get()
+
+    def capture(chunks, uid, cid, level=None, **kwargs):
+        seen.append((cid, kwargs.get('reconcile_prefix')))
+        return patched(chunks, uid, cid, level, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', capture)
+
+    pcm = b'\x0b\x00' * (RATE // 2)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(800.0, pcm),
+            _audio(810.0, pcm),  # 10 s gap closes run A; B flushes at shutdown
+        ]
+    )
+
+    await _run(ws)
+
+    assert seen == [('c1', True), ('c1', False)], 'first upload reconciles, the clean-ledger tail skips'
+    assert PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get() == before_skip + 1
+
+
+async def test_reconcile_listing_stays_on_after_replay_evidence(env, monkeypatch):
+    """Any replay evidence keeps the reconcile listing on for the session.
+
+    The overlapping frame is ignored at receive time (exact replay of an
+    accepted range) but latches the conversation: every upload afterwards
+    reconciles, including ones whose own bytes never overlapped anything.
+    """
+    from utils.metrics import PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL
+
+    seen = []
+    patched = pusher.upload_audio_chunks_batch
+    before_skip = PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get()
+
+    def capture(chunks, uid, cid, level=None, **kwargs):
+        seen.append((cid, kwargs.get('reconcile_prefix')))
+        return patched(chunks, uid, cid, level, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', capture)
+
+    pcm = b'\x0c\x00' * (RATE // 2)
+    replayed_prefix = b'\x0c\x00' * (RATE // 4)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(900.0, pcm),
+            _audio(900.0, replayed_prefix),  # exact replay: ignored, latches replay evidence
+            _audio(910.0, pcm),  # new run after the gap; both flush in the shutdown drain
+        ]
+    )
+
+    await _run(ws)
+
+    assert seen and all(flag is True for _cid, flag in seen), 'a latched replay keeps every upload reconciling'
+    assert PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get() == before_skip
+
+
+async def test_trailing_silent_run_is_stored_at_shutdown(env):
+    """Only a provably-interior all-zero run may be skipped (review r1).
+
+    The discontinuity flush may drop an all-zero run: audio for the same
+    conversation has arrived beyond the gap, so a later object is guaranteed.
+    The recording's last run flushes at shutdown with nothing after it —
+    storing it is the only thing that keeps the recording ending where the
+    client ended it, because a skipped trailing run leaves no gap for the
+    readers to zero-fill.
+    """
+    from utils.metrics import PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL
+
+    before = PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get()
+    real = b'\x0c\x00' * (RATE // 2)
+    keepalive = bytes(RATE * 2 // 100)  # 20 ms of zeros, one keepalive frame
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(600.0, real),
+            _audio(620.0, keepalive),  # 20 s gap closes this run: interior, skippable
+            _audio(640.0, keepalive),  # last run of the recording: stored at shutdown
+        ]
+    )
+
+    await _run(ws)
+
+    assert [chunk['timestamp'] for _cid, chunk in env] == [600.0, 640.0]
+    assert env[1][1]['data'] == keepalive, 'the trailing silent run must be stored, not skipped'
+    assert PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get() == before + 1
+
+
+async def test_conversation_switch_reenables_reconcile_listing(env, monkeypatch):
+    """A rebind retires the old conversation's clean-span exemption (review r1).
+
+    The conversation-id frame resets audio_timeline_last_end, so replay
+    detection for previously committed runs is blind after a rebind; the
+    exemption was proven under that continuity window and must not survive
+    it. The rebound conversation's next upload reconciles again.
+    """
+    from utils.metrics import PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL
+
+    seen = []
+    patched = pusher.upload_audio_chunks_batch
+    before_skip = PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get()
+
+    def capture(chunks, uid, cid, level=None, **kwargs):
+        seen.append((cid, kwargs.get('reconcile_prefix')))
+        return patched(chunks, uid, cid, level, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', capture)
+
+    pcm = b'\x0d\x00' * (RATE // 2)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(700.0, pcm),
+            _conversation('c2'),
+            _audio(710.0, pcm),
+            _conversation('c1'),
+            _audio(720.0, pcm),
+        ]
+    )
+
+    await _run(ws)
+
+    assert seen == [
+        ('c1', True),  # first upload of the session reconciles
+        ('c2', True),  # c2's first upload reconciles
+        ('c1', True),  # rebind to c1: the switch retired its exemption
+    ], 'a conversation rebound after a switch must reconcile again'
+    assert PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get() == before_skip
 
 
 @pytest.mark.parametrize('audio_timeline', [None, AUDIO_TIMELINE_PROTOCOL])
@@ -549,9 +780,9 @@ async def test_record_upload_close_receipt_follows_successful_tail_flush(env, mo
     def seal(uid, conversation):
         assert env and env[-1][0] == conversation
         sealed.append(conversation)
-        return True
+        return None
 
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', seal)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
     await _run(ws)
     assert sealed == ['record']
@@ -560,11 +791,14 @@ async def test_record_upload_close_receipt_follows_successful_tail_flush(env, mo
 async def test_dark_unowned_close_adds_no_seal_and_failed_upload_never_seals(env, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     sealed = []
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda *args: sealed.append(args))
+    # Close now resolves persisted ownership transactionally even when dark.
+    # The database helper refuses unowned rows without writing a seal.
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda *args: 'not_batch_owner')
     ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
     await _run(ws)
     assert sealed == []
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda *args: sealed.append(args))
 
     def failed(*args, **kwargs):
         raise ValueError('synthetic storage failure')
@@ -580,7 +814,7 @@ async def test_owned_close_drains_when_dark_using_existing_audio_metadata_snapsh
     _observe_record_owner(monkeypatch)
     monkeypatch.setattr(pusher.conversations_db, 'get_conversation', lambda *_: pytest.fail('extra ownership read'))
     sealed = []
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid) or True)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid))
     await _run(FakeWebSocket([_conversation('owned'), _audio(100, b'\x01\x00' * RATE)]))
     assert sealed == ['owned']
 
@@ -597,7 +831,7 @@ async def test_failed_record_upload_does_not_block_another_durable_record(env, m
 
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
     sealed = []
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid) or True)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid))
     pcm = b'\x01\x00' * RATE
     await _run(
         FakeWebSocket(

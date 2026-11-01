@@ -124,6 +124,8 @@ DEFAULT_FLAGS = {
     'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED': 'true',
     'BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED': 'false',
     'STT_CAP_DISPATCH_ENFORCEMENT': 'false',
+    # Synthetic owners have no subscription ledger; never consult real funding.
+    'STT_CAP_OFFLINE_ENFORCEMENT': 'false',
 }
 
 BACKFILL_SPEECH_SECONDS_PER_UID_DAY = 4 * 3600  # backend/AGENTS.md: four processed speech hours per UID/day
@@ -418,6 +420,9 @@ class Simulation:
             (recovery_module, 'enqueue_named_task', self._enqueue_named_task),
             (recovery_module, 'named_task_exists', self._named_task_exists),
             (recovery_module, 'cancel_fenced_recovery', self._cancel_fenced_recovery),
+            # Only Modulate is modeled here. Refuse the unmodeled Soniox leg
+            # before touching its real client, even if the host has a key.
+            (recovery_module, 'independent_ready', lambda: False),
         ]
         originals = [(module, name, getattr(module, name)) for module, name, _ in patches]
         try:
@@ -893,7 +898,7 @@ class Simulation:
         for index in range(self.config.gpu_pumps):
             worker = SimWorker(self, index)
             pump = Pump(
-                Scheduler(self.store, pool='batch'),
+                Scheduler(self.store, pool='batch', worker_id=f'worker-{index}'),
                 worker,
                 batch_size=self.config.pump_batch_size,
                 capacity=lambda: PoolCapacity(

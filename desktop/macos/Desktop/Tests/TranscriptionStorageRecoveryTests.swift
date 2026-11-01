@@ -34,6 +34,92 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     try await super.tearDown()
   }
 
+  func testResumeExpiryPersistsOriginalOffEdgeInsteadOfExpiryTime() async throws {
+    let id = try await TranscriptionStorage.shared.startSession(source: "desktop", conversationRole: .meeting)
+    let start = try await ageSession(id)
+    try await appendEvidence(id, start: 0, end: 10)
+    let offEdge = start.addingTimeInterval(18)
+    try await TranscriptionStorage.shared.finishSession(id: id, reason: .meetingEnded, finishedAt: offEdge)
+    let session = try await TranscriptionStorage.shared.getSession(id: id)
+    XCTAssertEqual(session?.finishedAt, offEdge)
+    XCTAssertEqual(session?.finalizationReason, .meetingEnded)
+    XCTAssertEqual(session?.status, .pendingUpload)
+  }
+
+  @MainActor
+  func testCrashRelaunchStartsMeetingSessionWithoutAnAmbientConfirmationFragment() async throws {
+    let old = try await TranscriptionStorage.shared.startSession(source: "desktop", conversationRole: .meeting)
+    let now = Date()
+    let started = now.addingTimeInterval(-600)
+    let pool = try await TranscriptionStorage.shared.ensureInitialized()
+    try await pool.write { database in
+      try database.execute(
+        sql: "UPDATE transcription_sessions SET startedAt = ?, createdAt = ? WHERE id = ?",
+        arguments: [started, started, old])
+    }
+    try await TranscriptionStorage.shared.appendSegment(
+      sessionId: old, speaker: 0, text: "Before crash", startTime: 0, endTime: 580)
+    let beforeRecovery = try await TranscriptionStorage.shared.interruptedMeetingEnd(before: now, now: now)
+    XCTAssertEqual(
+      beforeRecovery?.timeIntervalSince1970 ?? 0, started.addingTimeInterval(580).timeIntervalSince1970,
+      accuracy: 0.001)
+    try await TranscriptionStorage.shared.finishSession(id: old, reason: .crashRecovery)
+    let end = try await TranscriptionStorage.shared.interruptedMeetingEnd(before: now, now: now)
+    XCTAssertEqual(end, beforeRecovery, "startup must work before and after crash finalization wins the race")
+    let role = MeetingSessionResumePolicy.relaunchRole(
+      hasInterruptedMeeting: end != nil, activeCalendarEventIDs: ["ongoing-event"], callDetected: true)
+    XCTAssertEqual(role, .meeting)
+    let fresh = try await TranscriptionStorage.shared.startSession(source: "desktop", conversationRole: role)
+    var rotations: [MeetingConversationBoundaryPolicy.Transition] = []
+    var clock = now
+    let detector = MeetingDetector(
+      now: { clock }, onChange: { _ in },
+      onConfirmedChange: { active in
+        if let transition = MeetingConversationBoundaryPolicy.transition(previousRole: role, meetingActive: active) {
+          rotations.append(transition)
+        }
+      }, onConfirmedEvidence: { _ in })
+    detector.applyDetected(true, callIDs: ["app:com.hnc.discord"])
+    clock += 10
+    detector.applyDetected(true, callIDs: ["app:com.hnc.discord"])
+    try await TranscriptionStorage.shared.appendSegment(
+      sessionId: fresh, speaker: 0, text: "Resumed call", startTime: 0, endTime: 10)
+    let newSession = try await TranscriptionStorage.shared.getSessionWithSegments(id: fresh)
+    XCTAssertEqual(newSession?.session.conversationRole, .meeting)
+    XCTAssertEqual(newSession?.segments.count, 1)
+    XCTAssertTrue(rotations.isEmpty, "confirmation continues the meeting session instead of finalizing an ambient row")
+    XCTAssertEqual(
+      MeetingSessionResumePolicy.relaunchRole(
+        hasInterruptedMeeting: true, activeCalendarEventIDs: [], callDetected: true), .ambient)
+    XCTAssertEqual(
+      MeetingSessionResumePolicy.relaunchRole(
+        hasInterruptedMeeting: true, activeCalendarEventIDs: ["ongoing-event"], callDetected: false), .ambient)
+    let laterRelaunch = try await TranscriptionStorage.shared.interruptedMeetingEnd(
+      before: now, now: now.addingTimeInterval(300))
+    XCTAssertEqual(
+      laterRelaunch, end, "an active calendar event, rather than an arbitrary relaunch delay, gates recovery")
+  }
+
+  func testRelaunchDoesNotAdoptAnExplicitlyStoppedOrAmbientSession() async throws {
+    let old = try await TranscriptionStorage.shared.startSession(source: "desktop", conversationRole: .meeting)
+    let now = Date()
+    let start = now.addingTimeInterval(-60)
+    let pool = try await TranscriptionStorage.shared.ensureInitialized()
+    try await pool.write { database in
+      try database.execute(
+        sql: "UPDATE transcription_sessions SET startedAt = ?, createdAt = ? WHERE id = ?",
+        arguments: [start, start, old])
+    }
+    try await appendEvidence(old, start: 0, end: 50)
+    try await TranscriptionStorage.shared.finishSession(id: old, reason: .recordingDisabled)
+    let stopped = try await TranscriptionStorage.shared.interruptedMeetingEnd(before: Date(), now: Date())
+    XCTAssertNil(stopped)
+    let ambient = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    try await appendEvidence(ambient, start: 0, end: 1)
+    let unrelated = try await TranscriptionStorage.shared.interruptedMeetingEnd(before: Date(), now: Date())
+    XCTAssertNil(unrelated)
+  }
+
   func testDeleteMatchesExactDerivedUnsyncedIdentityAndLeavesOtherSessions() async throws {
     let target = try await TranscriptionStorage.shared.startSession(source: "desktop")
     let other = try await TranscriptionStorage.shared.startSession(source: "desktop")

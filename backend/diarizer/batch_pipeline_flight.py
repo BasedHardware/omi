@@ -52,6 +52,7 @@ fix_reproducibility: Any = getattr(_reproducibility, 'fix_reproducibility', None
 
 from diarizer.batch_pipeline import SAMPLE_RATE, crop_model_vad_spans, is_fatal_cuda_error
 from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
+from utils.batch_pipeline import leaf_timings
 
 logger = logging.getLogger(__name__)
 
@@ -341,6 +342,11 @@ class FlightPyannote:
             yield waveform, np.stack(used)
 
     def embed_group(self, files, binarized_list, *, exclude_overlap=None):
+        return leaf_timings.call(
+            'flight_embedding', self._embed_group, files, binarized_list, exclude_overlap=exclude_overlap
+        )
+
+    def _embed_group(self, files, binarized_list, *, exclude_overlap=None):
         embedding = self.diarizer._embedding
         model = embedding.model_
         if exclude_overlap is None:

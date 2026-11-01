@@ -433,9 +433,12 @@ export function Apps(): React.JSX.Element {
   // Stop every in-flight setup poll on unmount so a resolved check can't call
   // setState after the page is gone (and no orphaned 3s webhook loop survives a
   // navigation away from Apps).
+  const mounted = useRef(true)
   useEffect(() => {
     const cancels = pollCancels.current
+    mounted.current = true
     return () => {
+      mounted.current = false
       for (const cancel of cancels.values()) cancel()
       cancels.clear()
     }
@@ -447,9 +450,26 @@ export function Apps(): React.JSX.Element {
   // card "Setting up…", and poll `setup_completed_url` every 3s (≤100 ticks / 5 min).
   // On completion, enable again; on timeout, silently revert to Install (macOS does
   // the same — no error). Stable identity (empty deps): reads only setters/refs.
-  const beginSetupFlow = useCallback((a: AppCatalogItem): void => {
+  // The catalog item is undecorated: setup and completion URLs carry one-use,
+  // account-bound grants, so each attempt fetches this account's fresh details first
+  // and never launches, polls or enables after a failed read, an account change or
+  // an unmount.
+  const beginSetupFlow = useCallback(async (a: AppCatalogItem): Promise<void> => {
     const uid = getCacheUid() ?? ''
-    const integration = a.external_integration ?? null
+    const current = (): boolean => mounted.current && (getCacheUid() ?? '') === uid
+    let integration: AppEntry['external_integration'] = null
+    try {
+      integration =
+        (await omiApi.get<AppEntry>(`/v1/apps/${a.id}`)).data.external_integration ?? null
+    } catch {
+      if (current())
+        toast(`Couldn’t start setting up ${a.name}`, {
+          tone: 'error',
+          body: 'Try installing again.'
+        })
+      return
+    }
+    if (!current()) return
     const url = setupUrl(integration, uid)
     if (url) void window.omi.openExternalUrl(url)
     const completedUrl = integration?.setup_completed_url
@@ -471,6 +491,7 @@ export function Apps(): React.JSX.Element {
       check: isSetupCompleted,
       onSuccess: () => {
         finish()
+        if (!current()) return
         void (async () => {
           try {
             await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
@@ -529,7 +550,7 @@ export function Apps(): React.JSX.Element {
         setEnabled((s) => new Set(s).add(a.id))
       } catch (e) {
         if (worksExternally(a)) {
-          beginSetupFlow(a)
+          await beginSetupFlow(a)
         } else if (a.is_paid) {
           // Paid app the user hasn't bought → the backend gates enable with a 403
           // (identical message to the private-app 403, so we can't branch on the body).

@@ -41,10 +41,20 @@ At graceful finish, two independent verifier calls see only each staged edit,
 its cited evidence and minimal context, never planner history, seed notes or each
 other's response or the proposer's reason. The two mounts use distinct audit/falsification framing. Batches use server proposal IDs; duplicate/missing IDs fail
 verification. Staging budgets reserve verification capacity, so turn/tool/read
-exhaustion can still verify accepted proposals.
+exhaustion can still verify accepted proposals. `DREAM_VERIFY_HOLD_MODE`
+(default serve) also holds the two verifier calls' token reserve, sized from the
+staged evidence, out of the main loop's budget, so a pass that stops on its token
+budget still verifies what it staged; `off` restores the old split. Each item
+left without two votes is counted in `verify_reasons` on the `dream_pass` record:
+`oversized`, `ids_invalid`, `call_failed`, `single_vote`, `budget_tokens` or
+`budget_deadline`.
 
 Both agree plus auto eligibility plus no Undo-rate demotion permits journaled
-apply. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review. Eligible proposals are ranked by value then verifier support.
+apply. A kind is demoted for an owner when more than `DREAM_AGENT_UNDO_RATE`
+(0.2) of its last-30-day changes were undone with at least
+`DREAM_AGENT_UNDO_MIN_SAMPLES` (10), or when `DREAM_AGENT_UNDO_RECENT_COUNT` (3)
+of its changes applied in the last `DREAM_AGENT_UNDO_RECENT_DAYS` (7) were
+undone, so low-volume owners are protected too. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review, except under `DREAM_LIBERAL_VERIFIER_MODE=serve` (default shadow, which only counts `would_apply`): an auto-eligible `dismiss_person`, `spelling`, `title`, `overview`, `set_language` or `vocabulary` item unverified by budget, deadline or a failed call, where at least one verifier agreed and none disagreed, applies with the usual journal and Undo. Oversized evidence and invalid verifier ids never apply. Eligible proposals are ranked by value then verifier support.
 Values 1–2 are never offered; proposal/answer attention shares three UTC-day
 slots. User-authored facts (`direct_user_statement`, `explicit_remember`,
 `onboarding`) require explicit Review acceptance even when both verifiers agree.
@@ -112,8 +122,11 @@ the prod overlay ships true with `DREAM_AGENT_ELIGIBILITY=all`. Eligibility also
 supports `paid` and `allowlist`; invalid settings deny admission. Release-channel
 metadata is informational and cannot exclude Store users.
 
-An hourly sweep drains a durable `dream_due` queue ordered by due time, which
-combines backlog and staleness. Product writes enqueue immediately. Independent
+A sweep at :00 and :30 (the :30 tick has the kill switch
+`DREAM_HALF_HOUR_SWEEP_ENABLED`) drains a durable `dream_due` queue. Payoff ordering
+ranks the oldest 1,000 due rows by new material, last yield and heavy size, and owners
+more than 30 days overdue go first. Hunts back off after dry hunts when
+`DREAM_HUNT_BACKOFF_MODE` serves the owner. Product writes enqueue immediately. Independent
 discovery scans 20 pages of 499 owners (9,980/hour), committing each page in
 100-owner transactions so a fully eligible page stays inside the 3 s RPC
 deadlines, without overwriting dirty work or waiting for model sessions. Each
@@ -230,7 +243,8 @@ check that switch before suspecting a missing writer.
 
 A pass that starts late in a sweep receives only the drain's remaining budget
 (minus `FINISH_MARGIN_SECONDS`), so it ends through its own deadline rather than
-being cancelled; below `MIN_PASS_SECONDS` the owner stays due for the next sweep.
+being cancelled; below `MIN_PASS_SECONDS` (600 s: on 10-29, 116 passes started with less than
+5 minutes left made 20 edits) the owner stays due for the next half-hour sweep.
 
 The evidence line is on the gateway; the caller intentionally remains
 `inconclusive` because it does not infer PT from HTTP success. The next check
@@ -263,16 +277,19 @@ The maintenance-host Dream drain is removed. Consolidation tuning reads,
 `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and
 `MEMORY_CANONICAL_MAINTENANCE_FLEX` bindings/registry entries are removed.
 
-The mixed maintenance host remains for TTL, explicit required intake and committed
-outboxes/recurrence delivery. DB claim/settlement and model normalization borrow
-separate executor steps; outbox ticks do not hold a worker across a whole drain.
-Ledger accounts retain daily-sweep lifecycle authority and still drain outboxes.
-The daily sweep retains new-fact formation, local-day/onboarding receipts, standing
-triggers, summaries and filing. Stranded finalization, ingest-time prevention,
-speaker teaching, task refresh, frame retention, X ingestion and compliance stay
-with their owning pipelines. No Scheduler entry or `.github` workflow becomes
-dead; the dev maintenance schedule still owns required work. Workflow files are
-not edited. See [cleanup inventory](dream-cleanup-fold.md).
+The mixed maintenance host (`memory-maintenance-job`), its dev hourly schedule and
+its deploy workflows are retired (2026-10-26); the job never served production.
+Required intake runs inline when a memory is extracted, with Dream's scheduled
+sweep as the retry/backlog owner (inline wiring merged with #23710). The host's
+other orphaned duties are tracked in anx (memretire-orphaned-duties). The retired
+host's residual duties — deterministic
+TTL transitions, committed canonical outbox drains and already-enqueued recurrence
+delivery — have no live owner in dev or prod; the
+dev `daily-memory-sweep` and `knowledge-ledger-drain` schedulers/jobs that kept
+running old code are paused pending cloud retirement. Stranded finalization,
+ingest-time prevention, speaker teaching, task refresh, frame retention, X ingestion
+and compliance stay with their owning pipelines. See
+[cleanup inventory](dream-cleanup-fold.md).
 
 ## Operations and evidence
 
@@ -282,6 +299,50 @@ Internal OIDC routes are `POST /v2/dream-agent/sweep` and
 Count metrics cover outcomes, size buckets, turns, tools, rejection reasons,
 successful resubmits, verifier outcomes, applied/undone kinds, cache usage and
 stale reclaim. Metric labels never contain owner IDs, refs or content.
+Owner decisions on Dream edits emit one `dream_outcome` JSON log record each
+(`kind`, `decision` undo/redo/accept/dismiss, applied-age bucket): Undo/Redo of a
+Dream-journaled change and Review answers to Dream edit/vocabulary proposals.
+Answers to Review questions (same-person, spelling) are not yet counted. Every
+`dream_pass` record carries `verifier_by_kind`, so Undo, accept and verifier
+rates are aggregable per kind from logs alone.
+
+The value judge (`DREAM_VALUE_JUDGE_MODE`, default shadow) asks whether the owner
+is better off for each sampled applied edit: every rare high-stakes kind, and
+`DREAM_JUDGE_COMMON_PERCENT` (2) of common cleanup kinds by salted edit key. It
+sees the owner-visible change view (kind, before/after, cited speech, record
+labels and speaker-marked cited speech), never the proposer's reason or verifier
+votes. It runs only after scheduled owner passes (never canary, dry-run or manual),
+once per pass on reserved capacity only (never on-demand), within
+`DREAM_JUDGE_TOKENS_PER_PASS` (60000) and at most `DREAM_JUDGE_MAX_CALLS_PER_SWEEP`
+(4) calls per sweep, and emits only content-free `dream_judge` records (kind,
+stratum, verdict, three 0-2 scores).
+Calibration: `backend/scripts/dream-label-export.py --uid <authorized-owner>` runs
+in an isolated operator pod only for an owner listed (as a uid sha256 digest) in
+`DREAM_LABEL_EXPORT_UID_SHA256S`, i.e. who agreed to label their own changes,
+judges the same projection of their journaled changes, and prints decision-mill
+proposal items to operator stdout (labels directories are never in git). Judge
+scores gate nothing until their agreement with owner labels reaches 0.7.
+
+The state pass (`DREAM_STATE_PASS_MODE`, default off; serve runs as shadow) is a
+weekly whole-corpus review per owner, run after a scheduled pass's effects and
+judge (`DREAM_STATE_PASS_WEEK_DAYS`, stamped as `last_state_pass_at` at finish).
+One planning call sees a byte-stable projection: unprotected people (no voice
+fields), generated tasks, canonical memory facts, and 14 days of conversation
+titles, with slow-moving sections first so the prompt prefix caches across
+weeks. Its people/task cleanup proposals go through ordinary staging and the two
+verifiers and are never applied or offered; at most 2 person merges per pass,
+each citing evidence beyond the name; staging and verification read the full
+records the plan cites, exactly as the loop would. It maintains a ref-grounded profile v2 in
+`users/{uid}.ai_user_profile_v2` (line 1 is always the user-doc name; people
+lines must cite an owner-side record; every new or changed line must pass a
+verifier check that its cited records support it as a fact about the owner),
+plus the planner's notes for next week, that nothing reads yet. A run that does
+not complete leaves the weekly cadence due. It runs on
+reserved capacity only, within `DREAM_STATE_PASS_TOKENS_PER_PASS` (120000),
+`DREAM_STATE_PASS_SECONDS` (480) and `DREAM_STATE_PASS_MAX_PER_SWEEP` (4), and
+reports `levers.state_pass` on `dream_pass` (recall of the loop's applied edits,
+extra verified proposals, tokens, profile counts); sampled shadow proposals are
+judged with stratum `shadow`.
 
 The canary stages a fixed synthetic correction through real tools, calls the
 reserved verifier lane, and checks admission, execution, journal, Undo and report.
@@ -321,20 +382,118 @@ Do not change `allowlist` to `all` as an outage workaround.
 
 ## Memory intake is independent of Dream cleanup
 
+Required manual/API/integration submissions commit as pending Short-term rows.
+`canonical_memory_adapter.write_canonical_extraction_memory` then calls
+`required_intake.after_capture`: one `memory_l2_flex` normalization attempt, no
+Standard fallback, with a 12-second inline model deadline shared across a batch.
+The original capture survives every failure. Success attaches the existing
+required-processing receipt and becomes immediately readable as Short-term;
+normalization itself does not bypass canonical Long-term/graph admission.
+The revision-scoped 600-second lease, quality retry/backoff/quarantine and
+source/account/privacy fences are unchanged. Late model results cannot commit.
+`MEMORY_REQUIRED_INTAKE_ENABLED` defaults on; false/0/off/no stops both new
+inline attempts and scheduled required retries, leaving capture pending.
+
+The **existing** `/v2/dream-agent/sweep` retries required items at least ten
+minutes old, before Dream reasoning capacity waits. This phase does not depend
+on Dream eligibility, paid plans, global Dream cleanup enablement or reserved
+model availability. It uses the same Flex lane and receipts. A separate cursor
+under `dream_scheduler/required_intake` rotates through at most 4,990 projected
+owner rows per sweep, advancing only over the completed prefix. Four workers
+share a 120-second retry-phase budget; each owner scans at most 100 pending rows
+and attempts at most five. No new job, scheduler or IAM is required. The retired
+`memory-maintenance-job` and its maintenance capture window are deleted
+(2026-10-26); there is nothing to deploy.
+
+That phase also completes up to five already-receipted required submissions per
+owner through the existing canonical consolidation/graph admission function,
+with no second model call. A required-only processed query prevents ordinary
+observations from consuming this recovery page. This owns the crash window
+between successful normalization and durable admission as well as the former
+maintenance host's completion duty. Non-admitted writer modes are withheld
+before paid work; the retry path never changes writer-mode authority.
+Both per-owner phases rotate their bounded 100-row scans; withheld/corrupt rows
+cannot pin later submissions or receipts. Cursor advancement uses account,
+generation and compare-and-set fences. Completion checks rejection, dismissal
+and locks before planning and inside the canonical transaction.
+
+For async DB callers, post-commit normalization is awaited after the DB worker
+returns: claim and settlement use DB leaves, while Flex waits use the LLM pool.
+The returned single/batch memory view and prompt cache reflect successful
+normalization. A raw synchronous DB-pool submission without an async boundary
+defers to Dream rather than holding a shared DB worker. No task is detached.
+Durable account-deletion/destructive-operation fences precede provider calls,
+including explicit text and retrospective embeddings.
+
+Historical rows captured before **2026-10-26 07:55Z** are excluded from forward
+retries and stay hidden until Dream's retrospective pass resolves them. Enable
+`DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED=true` plus the independent
+`DREAM_REQUIRED_INTAKE_BACKLOG_COHORT` (`uid:<owner>`, `pct:5`, or `all`; empty or
+malformed denies). The default-off switch is intentional for the historical
+behavior change. Per admitted Dream pass, at most three candidates and their
+fully read canonical semantic/lexical neighbors enter the existing planner and
+independent verifier chain. An incomplete search or split vote leaves the
+candidate pending, without offering hidden backlog in owner Review. A verified
+unique submission uses the same required normalizer; a verified full duplicate
+retains the original source/content as a superseded canonical audit row and
+does not rewrite its survivor. Every material detail and subject must match.
+The survivor must already be Long-term; a covering Short-term neighbor leaves
+the submission pending until the neighbor receives its normal disposition.
+The canonical head captured for dedupe is fenced through commit; another write
+defers remaining candidates for a later pass rather than admitting against
+stale neighbors. Normal Dream pass/admission/token budgets still apply.
+Top-k or paginated search never proves uniqueness. A unique admission requires
+an exhaustive canonical inventory within 100 raw rows and the pass read-byte
+budget. A larger or inaccessible inventory permits only a verified positive
+duplicate disposition; possible unique submissions remain pending. The lead
+must measure this coverage tail and choose a bounded recovery plan before
+expanding the backlog cohort; do not label it cleared from a top-k search.
+The shared edit contract permits up to 101 citations only for this bounded
+required-intake capability; other edit kinds retain their ten-ref limit.
+
+For the speaker-evidence serving cohort, automatically conversation-derived
+required items must bind every quote to a confident owner segment before paid
+normalization or backlog neighbor search. Explicit text retains its separate
+authority. The shared positive provenance rule from #23669 applies; bare legacy
+`is_user`, carried labels and missing provenance do not qualify. Original audio,
+transcript and pending memory remain intact. Source document revisions are
+re-read inside the canonical apply transaction, so a concurrent identity,
+media/keep or source edit defers the result without spending a quality retry.
+Admission attempts reuse `owner_memory_source`/`owner_memory_segments` counters;
+they are attempt counts, not speaker accuracy measurements.
+
+The lead owns the ramp: David-only first, then 5%, 25%, 100% by **2026-10-28**,
+after each full scheduled lookback has zero known duplicate admissions, lost
+details, or source/privacy/owner fence violations, decreasing pending counts and
+oldest age, and observed Flex plus Dream spend within the forecast. An unexpanded
+flag past that date is a blocker for the lead. Normalize spend is approximately
+470 × $0.000245 = **$0.115/day** (~$3.45 per 30 days). The reported 20,681-item
+backlog is **$5.07** of normalization if every row is unique; existing Dream
+search/planning/verification and Firestore reads are additional metered costs,
+not included in that estimate. Measure vendor usage before declaring total cost.
+Rollback either switch to stop its new effects; preserve committed receipts and
+duplicate dispositions. Both switches are checked inside canonical apply,
+including in-flight backlog work. Source merge is not deployed recovery: verify the
+serving release SHA and payload-free `required_intake_inline` /
+`required_intake_retry` log counts, then authorized metadata-only pending-age and
+duplicate/admission receipts after release.
+
 Ordinary compatibility-mode observations receive a bounded canonical intake
-route after extraction commits, for free and paid owners alike. The maintenance
-worker rotates through pending observations to retry failures, including rows
-past their former TTL. Explicit submissions retain their required-processing
-receipt path. Ledger-mode accounts retain the daily sweep as their formation
-owner. Intake uses the existing memory L2 gateway lane (Flex on maintenance),
-not the Dream reasoning/capacity/paid-cohort budget.
+route after extraction commits, for free and paid owners alike. With the
+maintenance host retired, Dream's scheduled sweep becomes the retry owner for
+pending observations (wiring lands with lane memreq's PR), including rows past
+their former TTL. Explicit submissions run the required-processing path inline
+at write time once memreq lands, with the same receipts; until then pending
+submissions wait exactly as production always has. Intake uses the existing
+memory L2 gateway lane (background Flex), not the Dream
+reasoning/capacity/paid-cohort budget.
 `MEMORY_OBSERVATION_INTAKE_ENABLED` defaults on; false stops both observation
 entrypoints before DB/model work, leaving capture and required intake intact. Dream still owns verified
 retrospective cleanup. A promotion admission receipt binds the canonical
 content, evidence and graph plan; it is not a Dream session receipt.
 
 `MEMORY_UNDECIDED_VISIBLE` defaults on. Undecided and Review observations remain
-Short-term and TTL maintenance cannot reject them for age alone. Historical
+Short-term and are not rejected for age alone. Historical
 active Review archives project as Short-term in default lists without rewriting
 their audit records. Explicit owner rejection, source/privacy tombstones,
 processing blocks, sensitivity policy and third-party grants still apply. Set

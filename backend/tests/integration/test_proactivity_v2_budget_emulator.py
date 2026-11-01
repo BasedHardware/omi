@@ -14,6 +14,7 @@ import pytest
 from config.proactivity_v2 import AttemptEnvelope, ProactivityDenied
 from database import proactivity as ledger
 from database.proactivity_budget import BudgetAuthority
+from tests.support.synthetic_proactivity_producers import install_synthetic_producers
 
 
 class Lease:
@@ -25,7 +26,8 @@ class Lease:
         return 1
 
 
-def test_concurrent_instances_cannot_exceed_shared_daily_cap():
+def test_concurrent_instances_cannot_exceed_shared_daily_cap(monkeypatch):
+    install_synthetic_producers(monkeypatch)
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if urlparse(f'//{host}').hostname not in {'127.0.0.1', 'localhost', '::1'}:
         pytest.fail('A loopback FIRESTORE_EMULATOR_HOST is required')
@@ -89,6 +91,7 @@ def test_concurrent_instances_cannot_exceed_shared_daily_cap():
 
 
 def test_feed_pagination_and_source_purge(monkeypatch):
+    install_synthetic_producers(monkeypatch)
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if urlparse(f'//{host}').hostname not in {'127.0.0.1', 'localhost', '::1'}:
         pytest.fail('A loopback FIRESTORE_EMULATOR_HOST is required')

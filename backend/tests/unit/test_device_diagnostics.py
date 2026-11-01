@@ -1,5 +1,6 @@
 import base64
 import json
+import pytest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -34,6 +35,41 @@ def test_upload_size_and_schema(monkeypatch):
     assert client.post('/v1/mobile/device-diagnostics', json={'bundle_base64': '%%%'}).status_code == 400
     old = base64.b64encode(b'{"schema_version":1}').decode()
     assert client.post('/v1/mobile/device-diagnostics', json={'bundle_base64': old}).status_code == 400
+
+
+@pytest.mark.parametrize('schema_version', [2, 3])
+def test_supported_bundle_versions_round_trip_without_projecting_optional_fields(monkeypatch, schema_version):
+    bundles = {}
+    bundle = {
+        'schema_version': schema_version,
+        'battery_history': [{'ts': 1, 'level': 42, 'charging': None}],
+        'capture_health': {} if schema_version == 2 else None,
+        'capture_health_history': [] if schema_version == 2 else None,
+    }
+    if schema_version == 3:
+        bundle.update(
+            process_exit_collection={'outcome': 'empty', 'records': []},
+            firmware_diagnostics_read={'outcome': 'skipped', 'skip_reason': 'no_link'},
+            future_optional_field={'value': 'synthetic'},
+        )
+    wire = json.dumps(bundle).encode()
+
+    def save_bundle(uid, body):
+        assert uid == 'test-user'
+        assert body == wire
+        bundles['ABCDEF123456'] = json.loads(body)
+        return 'ABCDEF123456'
+
+    monkeypatch.setattr(route.device_diagnostics_storage, 'save_bundle', save_bundle)
+    monkeypatch.setattr(route.device_diagnostics_storage, 'read_bundle', bundles.get)
+    monkeypatch.setenv('ADMIN_KEY', 'private-key')
+    client = _client('test-user')
+    response = client.post('/v1/mobile/device-diagnostics', json={'bundle_base64': base64.b64encode(wire).decode()})
+    assert response.status_code == 201
+    ticket = response.json()['ticket']
+    response = client.get(f'/v1/admin/device-diagnostics/{ticket}', headers={'X-Admin-Key': 'private-key'})
+    assert response.status_code == 200
+    assert response.json() == {'bundle': bundle}
 
 
 def test_upload_rejects_oversized_stream_before_json_validation():

@@ -187,8 +187,8 @@ class TestRender:
         result = conversations_to_string([conv], use_transcript=True)
 
         assert 'owner identity is UNTRUSTED' in result
-        assert 'Speaker 0: I will send the draft.' in result
-        assert 'Speaker 1: I will approve it.' in result
+        assert 'Speaker A: I will send the draft.' in result
+        assert 'Speaker B: I will approve it.' in result
         assert 'User: I will' not in result
 
     def test_apps_results_override_overview(self):

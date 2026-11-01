@@ -5,6 +5,7 @@ name: referral-program
 description: Settings → Referral Program → system browser signup → return to Omi
 covers:
   - app/lib/pages/referral/referral_page.dart
+  - app/lib/pages/apps/widgets/omi_external_browser_page.dart
   - app/lib/pages/settings/settings_drawer.dart
 prerequisites:
   - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.

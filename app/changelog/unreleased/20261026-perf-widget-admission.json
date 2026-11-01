@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Host performance runner admission classifies DEV widgets separately from the main app; no production UI or app behavior change."
+}

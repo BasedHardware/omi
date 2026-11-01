@@ -1,5 +1,5 @@
 ---
-title: "Publish Your App"
+title: "Publish your app"
 icon: "paper-plane"
 description: "Submit your app to the Omi app store. Learn the review process, guidelines, and best practices for a successful submission."
 ---
@@ -17,37 +17,35 @@ flowchart LR
 ```
 
 <CardGroup cols={2}>
-  <Card title="Quick Review" icon="clock">
-    Most apps are reviewed within 24 hours
-  </Card>
-  <Card title="Free to Publish" icon="gift">
+  <Card title="Free to publish" icon="gift">
     No fees to submit or list your app
+  </Card>
+  <Card title="Reviewed by the team" icon="clock">
+    Every submission goes through the review below
   </Card>
 </CardGroup>
 
----
-
-## Before You Submit
+## Before you submit
 
 <Steps>
-  <Step title="Test Your App" icon="flask">
+  <Step title="Test your app" icon="flask">
     Thoroughly test all functionality in Developer Mode:
     - Verify webhooks receive data correctly
     - Test with real conversations
     - Check error handling
     - Confirm notifications work (if applicable)
   </Step>
-  <Step title="Prepare Your Listing" icon="pen">
+  <Step title="Prepare your listing" icon="pen">
     Create compelling app store content:
     - **App Name**: Clear, descriptive (max 30 characters)
     - **Description**: Explain what your app does and why it's useful
     - **Category**: Choose the most relevant category
     - **Icon**: Upload a distinctive app icon
   </Step>
-  <Step title="Review Guidelines" icon="book">
+  <Step title="Review guidelines" icon="book">
     Ensure your app follows all community guidelines (see below)
   </Step>
-  <Step title="Verify Endpoints" icon="server">
+  <Step title="Verify endpoints" icon="server">
     For integration apps, confirm your server is:
     - Using HTTPS
     - Responding quickly (< 5 seconds)
@@ -55,8 +53,6 @@ flowchart LR
     - Available 24/7
   </Step>
 </Steps>
-
----
 
 ## How to Submit
 
@@ -67,14 +63,14 @@ flowchart LR
   <Step title="Navigate to Your App" icon="compass">
     Go to **Explore** → Find your app in **My Apps** or create a new one
   </Step>
-  <Step title="Complete App Details" icon="file-lines">
+  <Step title="Complete app details" icon="file-lines">
     Fill in all required fields:
     - Name and description
     - Category selection
     - Capabilities and permissions
     - Webhook URLs (for integration apps)
   </Step>
-  <Step title="Set Visibility to Public" icon="eye">
+  <Step title="Set visibility to public" icon="eye">
     Change your app's visibility from **Private** to **Public**
   </Step>
   <Step title="Submit for Review" icon="paper-plane">
@@ -86,9 +82,7 @@ flowchart LR
 You can continue to update and test your app while it's under review. Changes won't affect the review process.
 </Info>
 
----
-
-## Community Guidelines
+## Community guidelines
 
 <Warning>
 Apps that violate these guidelines will be rejected or removed from the store.
@@ -98,16 +92,16 @@ Apps that violate these guidelines will be rejected or removed from the store.
   <Card title="Respect for All" icon="heart">
     No content promoting hate, discrimination, or harassment of any kind
   </Card>
-  <Card title="All Ages Welcome" icon="users">
-    Consider a general audience - avoid explicit or adult content
+  <Card title="All ages welcome" icon="users">
+    Consider a general audience. Avoid explicit or adult content.
   </Card>
-  <Card title="Accuracy Matters" icon="check-circle">
+  <Card title="Accuracy matters" icon="check-circle">
     If providing facts or advice, strive for correctness and clarity
   </Card>
-  <Card title="Privacy First" icon="shield">
+  <Card title="Privacy first" icon="shield">
     Respect user data, obtain clear consent, and follow data protection best practices
   </Card>
-  <Card title="Keep it Legal" icon="scale-balanced">
+  <Card title="Keep it legal" icon="scale-balanced">
     No facilitating illegal activities or violating terms of service
   </Card>
   <Card title="Transparency" icon="eye">
@@ -115,12 +109,10 @@ Apps that violate these guidelines will be rejected or removed from the store.
   </Card>
 </CardGroup>
 
----
-
-## Review Process
+## Review process
 
 <AccordionGroup>
-  <Accordion title="What We Check" icon="magnifying-glass">
+  <Accordion title="What we check" icon="magnifying-glass">
     During review, we verify:
 
     | Check | Description |
@@ -131,14 +123,10 @@ Apps that violate these guidelines will be rejected or removed from the store.
     | **Endpoints** | Webhooks respond correctly (integration apps) |
     | **Content** | Description is accurate and appropriate |
   </Accordion>
-  <Accordion title="Review Timeline" icon="clock">
-    - **Most apps**: Reviewed within 24 hours
-    - **Complex integrations**: May take 2-3 days
-    - **Weekends/holidays**: May experience delays
-
-    You'll receive a notification when your app is approved or if changes are needed.
+  <Accordion title="Review outcome" icon="clock">
+    You'll receive a notification when your app is approved or if changes are needed. Complex integrations may take longer than simple apps.
   </Accordion>
-  <Accordion title="Common Rejection Reasons" icon="circle-xmark">
+  <Accordion title="Common rejection reasons" icon="circle-xmark">
     Avoid these common issues:
 
     1. **Broken webhooks** - Endpoint returns errors or times out
@@ -147,7 +135,7 @@ Apps that violate these guidelines will be rejected or removed from the store.
     4. **Guideline violations** - Content issues
     5. **Poor user experience** - Confusing or broken functionality
   </Accordion>
-  <Accordion title="After Rejection" icon="rotate">
+  <Accordion title="After rejection" icon="rotate">
     If your app is rejected:
 
     1. Review the feedback provided
@@ -155,34 +143,32 @@ Apps that violate these guidelines will be rejected or removed from the store.
     3. Test thoroughly
     4. Resubmit for review
 
-    There's no limit on resubmissions - we want to help you succeed!
+    There's no limit on resubmissions. We want to help you succeed.
   </Accordion>
 </AccordionGroup>
 
----
-
-## Best Practices for Success
+## Best practices for success
 
 <CardGroup cols={2}>
-  <Card title="Write a Great Description" icon="pen-fancy">
+  <Card title="Write a great description" icon="pen-fancy">
     - Start with what the app does
     - Explain the value to users
     - Include usage examples
     - List any requirements
   </Card>
-  <Card title="Choose the Right Category" icon="folder">
+  <Card title="Choose the right category" icon="folder">
     - Productivity: Task management, notes, workflows
     - Health: Fitness, wellness, medical
     - Social: Communication, sharing
     - Entertainment: Fun, games, creativity
   </Card>
-  <Card title="Design a Memorable Icon" icon="image">
+  <Card title="Design a memorable icon" icon="image">
     - Use simple, recognizable imagery
     - Ensure visibility at small sizes
     - Match your app's purpose
     - Avoid text-heavy designs
   </Card>
-  <Card title="Plan for Maintenance" icon="wrench">
+  <Card title="Plan for maintenance" icon="wrench">
     - Monitor your webhook uptime
     - Respond to user feedback
     - Update for new Omi features
@@ -190,18 +176,16 @@ Apps that violate these guidelines will be rejected or removed from the store.
   </Card>
 </CardGroup>
 
----
-
-## After Publishing
+## After publishing
 
 <Steps>
-  <Step title="Monitor Performance" icon="chart-line">
+  <Step title="Monitor performance" icon="chart-line">
     Track your app's install count and user engagement in the Omi app
   </Step>
   <Step title="Respond to Feedback" icon="comments">
     Users may reach out with questions or suggestions - be responsive!
   </Step>
-  <Step title="Update Regularly" icon="arrows-rotate">
+  <Step title="Update regularly" icon="arrows-rotate">
     Keep your app current with new features and improvements
   </Step>
   <Step title="Join the Community" icon="discord">
@@ -210,24 +194,22 @@ Apps that violate these guidelines will be rejected or removed from the store.
 </Steps>
 
 <Tip>
-Successful apps are ones that solve real problems for users. Focus on delivering value, and the installs will follow!
+Successful apps solve real problems for users. Focus on delivering value, and installs will follow.
 </Tip>
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Prompt-Based Apps" icon="wand-magic-sparkles" href="/doc/developer/apps/PromptBased">
+  <Card title="Prompt-based apps" icon="wand-magic-sparkles" href="/doc/developer/apps/PromptBased">
     Create apps without a server
   </Card>
-  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+  <Card title="Integration apps" icon="plug" href="/doc/developer/apps/Integrations">
     Build webhook-based integrations
   </Card>
-  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+  <Card title="Chat tools" icon="wrench" href="/doc/developer/apps/ChatTools">
     Add custom tools to Omi chat
   </Card>
-  <Card title="Apps Introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+  <Card title="Apps introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
     Overview of all app types
   </Card>
 </CardGroup>

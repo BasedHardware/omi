@@ -20,7 +20,11 @@ install_google_adc_guard()
 # routine lines as ERROR) and the textPayload that log metrics match, until each
 # service's consumers are admitted for JSON (docs/runbooks/structured-logging-rollout.md);
 # OMI_LOG_FORMAT=json opts a service in.
-configure_logging(os.getenv('K_SERVICE') or 'backend', default_format='text')
+# 'platform' is already the effective access policy on Cloud Run; it also stops
+# the per-request uvicorn access records on this entrypoint's only GKE
+# deployment (backend-listen), where they reached ~21M INFO lines/day
+# (~23 GiB/day billed) and duplicate the fronting LB's request records.
+configure_logging(os.getenv('K_SERVICE') or 'backend', default_format='text', access_policy='platform')
 logger = logging.getLogger(__name__)
 
 import firebase_admin

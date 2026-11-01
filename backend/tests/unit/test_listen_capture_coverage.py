@@ -11,6 +11,7 @@ from routers.listen.runtime import ListenSessionRuntime
 from models.transcript_segment import TranscriptSegment
 from utils.committed_capture import PROOF_KIND
 from utils.manual_speaker_assignments import merge_live_segments
+from utils.other.live_audio_archive import LiveAudioArchive
 
 
 def snapshot():
@@ -32,7 +33,10 @@ def snapshot():
 @pytest.mark.parametrize('durable', [False, True])
 @pytest.mark.parametrize('lifecycle_mode', ['shadow', 'serve'])
 @pytest.mark.parametrize('capture_mode', ['shadow', 'serve'])
-async def test_ack_only_after_successful_durable_segment_write(monkeypatch, durable, lifecycle_mode, capture_mode):
+@pytest.mark.parametrize('archive_state', ['none', 'pending', 'disabled'])
+async def test_ack_only_after_successful_durable_segment_write(
+    monkeypatch, durable, lifecycle_mode, capture_mode, archive_state
+):
     monkeypatch.setenv('LIFECYCLE_V2_MODE', lifecycle_mode)
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', capture_mode)
     order = []
@@ -62,17 +66,34 @@ async def test_ack_only_after_successful_durable_segment_write(monkeypatch, dura
         send_event=lambda e: order.append('event'),
         speakers=SimpleNamespace(segment_assignments={}, speaker_to_person={}, segment_identity_status={}),
     )
+    pending = []
+
+    async def defer(key, callback):
+        pending.append(callback)
+
+    if archive_state == 'pending':
+        host.private_cloud_sync_enabled = True
+        host.receiver = SimpleNamespace(raw_archive=SimpleNamespace(durable=True, defer_ack=defer))
+    elif archive_state == 'disabled':
+        monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+        host.private_cloud_sync_enabled = False
+        host.receiver = SimpleNamespace(raw_archive=LiveAudioArchive(host))
     processor = object.__new__(transcripts.TranscriptProcessor)
     processor.host = host
     processor.cache = transcripts.ConversationCache(None)
     current = SimpleNamespace(id='conversation-test', transcript_segments=[])
-    await processor._update_live_conversation(current, [segment], [], datetime.now(timezone.utc), None)
-    expected = ['durable', 'ledger'] if durable else ['durable']
-    if durable and capture_mode == 'serve':
+    result = await processor._update_live_conversation(current, [segment], [], datetime.now(timezone.utc), None)
+    assert bool(result) is durable
+    expected = ['durable', 'ledger'] if durable and archive_state != 'pending' else ['durable']
+    if durable and archive_state != 'pending' and capture_mode == 'serve':
         expected.append('event')
     if durable and lifecycle_mode == 'shadow':
         expected.append('legacy_timestamp')
     assert order == expected
+    if durable and archive_state == 'pending':
+        assert len(pending) == 1
+        await pending[0]()
+        assert order[-1] == ('event' if capture_mode == 'serve' else 'ledger')
 
 
 def test_unknown_receipt_and_off_mode_never_claim_coverage(monkeypatch):

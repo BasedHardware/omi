@@ -84,16 +84,18 @@ the deterministic disposition primitive used by TTL and explicit required intake
 not an autonomous semantic planner. Required promotion keeps the server-authored
 receipt defined by INV-MEM-4 and never considers existing facts as candidates.
 
-Scheduled maintenance runs:
+Scheduled maintenance was retired on 2026-10-26 (`memory-maintenance-job` and
+`canonical_short_term_maintenance_cron.py` are deleted; the job never served
+production). The retired call tree, kept here as the contract its orphaned
+duties held:
 
 ```text
-backend/modal/memory_maintenance_job.py
-  canonical_short_term_maintenance_cron.py (async coordinator)
+canonical_short_term_maintenance_cron.py (async coordinator; RETIRED)
     bounded expiry + rotating registry inventory
     short_term_promotion.py
       memory_outbox_worker.py: deliver prior commits first
       canonical_required_processing.py: DB claim -> LLM normalize -> DB settle
-      TTL audit (compatibility accounts; daily sweep owns ledger lifecycle)
+      TTL audit (compatibility accounts; the retired daily sweep owned ledger lifecycle)
       canonical_consolidation.py: complete receipted required intake only
       memory_outbox_worker.py: deliver newly committed intents
     drain previously committed recurrence inbox receipts

@@ -11,9 +11,23 @@ String _keyDigits(int index) {
   return String.fromCharCodes(codes);
 }
 
+/// Keep the transcript iterable lazy until a bracket/link needs exact membership.
+/// Plain titles only materialize IDs actually present in the text for the bare-ID
+/// removal pass; they do not allocate and sort the entire transcript's ID set.
+class _KnownIDs {
+  _KnownIDs(this.source);
+
+  final Iterable<String> source;
+  Set<String>? _materialized;
+
+  bool contains(String id) => (_materialized ??= source.where((id) => id.isNotEmpty).toSet()).contains(id);
+
+  List<String> matching(String text) =>
+      text.isEmpty ? [] : (_materialized ?? source).where((id) => id.isNotEmpty && text.contains(id)).toList();
+}
+
 /// Read-time note repair. Never writes a conversation; numeric chat citations remain separate.
-({String text, List<String> sourceIDs}) _repairPass(String input, Iterable<String> knownIDs) {
-  final valid = knownIDs.toSet();
+({String text, List<String> sourceIDs}) _repairPass(String input, _KnownIDs valid) {
   final protected = <String, String>{};
   var prefix = '\uE000';
   while (input.contains(prefix)) {
@@ -82,7 +96,7 @@ String _keyDigits(int index) {
     if (mixedIDs.isNotEmpty) {
       recovered.addAll(mixedIDs);
       return cleanSeparators(
-          content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]) ? '' : match[0]!));
+          content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]!) ? '' : match[0]!));
     }
     if (tokens.isEmpty ||
         _titleSpeaker.hasMatch(content) ||
@@ -95,7 +109,7 @@ String _keyDigits(int index) {
   text = text.replaceAllMapped(
       RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|(?<!\])\(((?:[^()\n]|\([^()\n]*\))+)\)|[\[［【][^\[\]［］【】\n]*[\]］】]'),
       (match) => unit(match[0]!));
-  final sorted = valid.toList()..sort((a, b) => b.length.compareTo(a.length));
+  final sorted = valid.matching(text)..sort((a, b) => b.length.compareTo(a.length));
   for (final id in sorted) {
     // Home rows normally contain none of their transcript's hundreds/thousands
     // of IDs. Do not compile Unicode boundary patterns for absent literals:
@@ -141,7 +155,10 @@ String _keyDigits(int index) {
   // An id-less segment reaches here as '' (TranscriptSegment.fromGenerated); as a pattern it would
   // match between every two non-word characters and the cleanup would then eat the whitespace
   // around each match. Web and macOS drop empty ids before calling their repair; do the same.
-  final ids = knownIDs.where((id) => id.isNotEmpty).toList();
+  return _repairNoteCitations(input, _KnownIDs(knownIDs));
+}
+
+({String text, List<String> sourceIDs}) _repairNoteCitations(String input, _KnownIDs ids) {
   final recovered = <String>[];
   var text = input;
   while (true) {
@@ -197,13 +214,13 @@ List<_TitleGroup> _titleBracketGroups(String input) {
   return groups..sort((a, b) => a.start.compareTo(b.start));
 }
 
-bool _isTitleCitation(String content, Set<String> known) {
+bool _isTitleCitation(String content, _KnownIDs known) {
   final bare = content.replaceAll(RegExp('[​‌‍⁠﻿]'), '').trim();
   if (_titleSpeaker.hasMatch(bare)) return true;
   return bare
       .split(RegExp(r'[\s,;]+'))
       .where((token) => token.isNotEmpty)
-      .every((token) => known.contains(token) || _titleCitationToken.hasMatch(token));
+      .every((token) => _titleCitationToken.hasMatch(token) || known.contains(token));
 }
 
 String _slotDigits(int index) {
@@ -220,7 +237,7 @@ String _slotDigits(int index) {
 /// speaker label are debris, and a nested group ("[Project [s01234]]") is kept whole. Everything else
 /// the note repair does applies as for any note text.
 String presentableNoteTitle(String text, Iterable<String> knownIDs) {
-  final known = knownIDs.where((id) => id.isNotEmpty).toSet();
+  final known = _KnownIDs(knownIDs);
   var mask = '';
   while (text.contains(mask)) {
     mask += '';
@@ -238,7 +255,7 @@ String presentableNoteTitle(String text, Iterable<String> knownIDs) {
     last = group.end;
   }
   masked.write(text.substring(last));
-  return repairNoteCitations(masked.toString(), known).text.replaceAllMapped(
+  return _repairNoteCitations(masked.toString(), known).text.replaceAllMapped(
     RegExp('${RegExp.escape(mask)}([-]+)'),
     (match) {
       var index = 0;

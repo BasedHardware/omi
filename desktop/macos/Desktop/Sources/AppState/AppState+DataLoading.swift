@@ -9,7 +9,8 @@ extension AppState {
     ConversationListQuery(
       starredOnly: showStarredOnly,
       date: selectedDateFilter,
-      folderId: selectedFolderId
+      folderId: selectedFolderId,
+      includeDiscarded: showDiscardedConversations
     )
   }
 
@@ -62,9 +63,24 @@ extension AppState {
   /// Clear all filters and reload conversations
   func clearFilters() async {
     showStarredOnly = false
+    showDiscardedConversations = false
     selectedDateFilter = nil
     selectedFolderId = nil
     await loadConversations()
+  }
+
+  func toggleDiscardedConversations() async {
+    showDiscardedConversations.toggle()
+    cancelConversationSearch()
+    await loadConversations()
+  }
+
+  func restoreConversation(_ id: String) async throws -> ServerConversation {
+    let generation = ownerScopeGeneration
+    let restored = try await conversationRepository.restore(id: id)
+    guard generation == ownerScopeGeneration else { throw CancellationError() }
+    conversationRestored.send(restored)
+    return restored
   }
 
   /// Set folder filter and reload conversations
@@ -202,7 +218,7 @@ extension AppState {
   }
 
   func searchConversations(_ query: String) async throws -> [ServerConversation] {
-    try await conversationRepository.search(text: query)
+    try await conversationRepository.search(text: query, includeDiscarded: showDiscardedConversations)
   }
 
   func cancelConversationSearch() {

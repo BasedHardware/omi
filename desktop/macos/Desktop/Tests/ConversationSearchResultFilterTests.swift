@@ -4,6 +4,22 @@ import XCTest
 @testable import Omi_Computer
 
 final class ConversationSearchResultFilterTests: XCTestCase {
+  func testDiscardedSearchScopeIncludesHiddenOnlyWhenRequested() throws {
+    let rows = try [
+      decodeConversation(
+        id: "visible", createdAt: "2026-06-25T10:00:00Z", startedAt: nil, starred: false, folderId: nil),
+      decodeConversation(
+        id: "hidden", createdAt: "2026-06-25T10:00:00Z", startedAt: nil, starred: false, folderId: nil, discarded: true),
+    ]
+    XCTAssertEqual(
+      ConversationSearchResultFilter.apply(rows, starredOnly: false, date: nil, folderId: nil).map(\.id),
+      ["visible"])
+    XCTAssertEqual(
+      ConversationSearchResultFilter.apply(rows, starredOnly: false, date: nil, folderId: nil, includeDiscarded: true)
+        .map(\.id),
+      ["visible", "hidden"])
+  }
+
   func testApplyUsesTheSameAndPredicateAsTheListQuery() throws {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
@@ -85,7 +101,8 @@ final class ConversationSearchResultFilterTests: XCTestCase {
     createdAt: String,
     startedAt: String?,
     starred: Bool,
-    folderId: String?
+    folderId: String?,
+    discarded: Bool = false
   ) throws -> ServerConversation {
     let startedAtJSON = startedAt.map { "\"\($0)\"" } ?? "null"
     let folderIdJSON = folderId.map { "\"\($0)\"" } ?? "null"
@@ -105,7 +122,7 @@ final class ConversationSearchResultFilterTests: XCTestCase {
         },
         "status": "completed",
         "source": "desktop",
-        "discarded": false,
+        "discarded": \(discarded),
         "deleted": false,
         "starred": \(starred),
         "folder_id": \(folderIdJSON),

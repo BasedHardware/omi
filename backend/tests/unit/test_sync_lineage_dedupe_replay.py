@@ -29,7 +29,10 @@ from tests.unit.test_sync_cross_job_assignment import intake
 from utils.firestore_document_size import estimate_firestore_document_bytes
 from utils.sync import assignment
 
-T0 = 1_800_000_000.0
+# 2025-10-09, deliberately in the past: these fixtures verify timeless
+# dedupe/lineage/parity behavior, and a future T0 would collide with the
+# capture-time skew policy that clamps stored conversation times to now.
+T0 = 1_760_000_000.0
 LIVE_ID = 'LIVE-ROW'
 ORIGIN = 'REC-1'
 
@@ -210,6 +213,8 @@ def load_dependencies():
 
 @pytest.fixture(autouse=True)
 def default_flags(monkeypatch):
+    # These legacy intake/eager-processing cases are independent of durable hold scheduling.
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
     monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
@@ -475,7 +480,8 @@ def test_receipt_only_upload_appends_and_consolidates_an_overlapping_donor():
     assert assigned['id'] == LIVE_ID and '_sync_lineage_repeat_only' not in assigned
     donor = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
     assert donor['sync_merged_into'] == LIVE_ID and donor['deleted'] is True
-    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + texts)
+    # Novel donor words survive even when their timing collides with live.
+    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + texts + texts_of(store, 'DONOR-1'))
 
 
 def test_receipt_only_append_past_an_oversized_donor_rolls_over_safely(monkeypatch, caplog):
@@ -485,10 +491,11 @@ def test_receipt_only_append_past_an_oversized_donor_rolls_over_safely(monkeypat
     prove(chunk, row)
     store = seeded_store_with_donor([row])
     donor_stored = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
-    donor_stored['structured'] = {'title': '', 'overview': 'x' * 8192}
+    donor_stored['structured'] = {'title': '', 'overview': 'x' * 16000}
     donor_before = deepcopy(donor_stored)
-    live_size = estimate_firestore_document_bytes(store.rows[('users', 'u', 'conversations', LIVE_ID)], None)
-    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', live_size + 64)
+    # Both existing rows are full; a fresh receipt-bearing input still fits.
+    store.rows[('users', 'u', 'conversations', LIVE_ID)]['structured'] = {'overview': 'x' * 16000}
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 12000)
     with caplog.at_level(logging.WARNING):
         assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
     assert created is True and [s['text'] for s in survivors] == texts
@@ -589,7 +596,6 @@ def _drive_process_segment(
     from utils.conversations import lifecycle
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', signed_url_impl or (lambda _path: 'file://x'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     monkeypatch.setattr(pipeline, 'prerecorded', prerecorded_impl or (lambda *args, **kwargs: (['w'], 'en')))
     monkeypatch.setattr(pipeline, 'postprocess_words', lambda *args, **kwargs: _segments(texts))

@@ -87,10 +87,11 @@ void main() {
       expect(PlanType.basic.hasUnlimitedTranscription, isFalse);
     });
 
-    test('only operator and architect grant desktop (mirrors backend)', () {
+    test('operator, architect and Omi Pro grant desktop (mirrors backend)', () {
       expect(PlanType.operator.grantsDesktop, isTrue);
       expect(PlanType.architect.grantsDesktop, isTrue);
-      for (final plan in [PlanType.basic, PlanType.unlimited, PlanType.plus, PlanType.unlimitedV2]) {
+      expect(PlanType.unlimitedV2.grantsDesktop, isTrue);
+      for (final plan in [PlanType.basic, PlanType.unlimited, PlanType.plus]) {
         expect(plan.grantsDesktop, isFalse, reason: '${plan.name} must not grant desktop');
       }
     });

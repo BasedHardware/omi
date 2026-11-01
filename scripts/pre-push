@@ -583,8 +583,6 @@ check_backend_unit_tests_if_needed() {
     '.github/workflows/desktop_promote_beta.yml' \
     '.github/workflows/desktop_promote_prod.yml' \
     '.github/workflows/gcp_backend*.yml' \
-    '.github/workflows/gcp_memory_maintenance_job.yml' \
-    '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml' \
     '.github/workflows/gcp_notifications_job.yml' \
     'scripts/changed-files' \
     'scripts/install-git-hooks.sh' \
@@ -669,7 +667,6 @@ check_runtime_image_source_closure_if_needed() {
     '.github/workflows/gcp_models.yml' \
     '.github/workflows/gcp_parakeet.yml' \
     '.github/workflows/gcp_nllb_translation.yml' \
-    '.github/workflows/gcp_memory_maintenance_job*.yml' \
     '.github/workflows/gcp_notifications_job.yml' \
     '.github/workflows/gcp_plugins.yml' \
     'plugins/*.py' \

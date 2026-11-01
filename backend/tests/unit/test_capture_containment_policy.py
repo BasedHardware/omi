@@ -76,6 +76,9 @@ def row(id, source, start=0, end=600, segments=None, **extra):
         'discarded': False,
         'started_at': T0 + timedelta(seconds=start),
         'finished_at': T0 + timedelta(seconds=end),
+        # The capture receipt proves the full recording, including silent tails.
+        'recorded_start': T0 + timedelta(seconds=start),
+        'recorded_end': T0 + timedelta(seconds=end),
         'created_at': T0,
         'structured': {},
         'transcript_segments': segments if segments is not None else [],

@@ -114,14 +114,34 @@ class WalSyncs implements IWalSync {
     return wals;
   }
 
+  List<Wal>? _cachedPhoneWals;
+  List<Wal> _cachedDeviceWals = const [];
+  List<Wal>? _cachedAllWals;
+
   Future<List<Wal>> getAllWals() async {
-    List<Wal> wals = [];
-    wals.addAll(await _ringSync.getMissingWals());
-    wals.addAll(await _storageSync.getMissingWals());
-    wals.addAll(await _sdcardSync.getMissingWals());
-    wals.addAll(await _phoneSync.getAllWals());
-    wals.addAll(await _flashPageSync.getMissingWals());
-    return wals;
+    final devices = <Wal>[
+      ...await _ringSync.getMissingWals(),
+      ...await _storageSync.getMissingWals(),
+      ...await _sdcardSync.getMissingWals(),
+    ];
+    final phone = await _phoneSync.getAllWals();
+    final flash = await _flashPageSync.getMissingWals();
+    final allDevices = [...devices, ...flash];
+    var unchanged = identical(phone, _cachedPhoneWals) && allDevices.length == _cachedDeviceWals.length;
+    if (unchanged) {
+      for (var i = 0; i < allDevices.length; i++) {
+        if (!identical(allDevices[i], _cachedDeviceWals[i])) {
+          unchanged = false;
+          break;
+        }
+      }
+    }
+    if (_cachedAllWals == null || !unchanged) {
+      _cachedPhoneWals = phone;
+      _cachedDeviceWals = allDevices;
+      _cachedAllWals = List.unmodifiable([...devices, ...phone, ...flash]);
+    }
+    return _cachedAllWals!;
   }
 
   /// Enumerate offline recordings from the connected device WITHOUT downloading

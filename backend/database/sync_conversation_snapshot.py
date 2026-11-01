@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from config import sync_operation_snapshot
 from database.conversation_revisions import firestore_revision_datetime
+from database.sync_snapshot_resolve_cache import memoize_resolve
 
 
 @dataclass(frozen=True)
@@ -22,13 +23,15 @@ class SyncConversationSnapshot:
         return data
 
 
+@memoize_resolve
 def resolve_snapshot(
     uid: str, conversation_id: str, *, client_factory: Callable[[], Any], max_hops: int = 16
 ) -> SyncConversationSnapshot | None:
     """Check every deletion marker and owner/path before returning the survivor.
 
-    A new invocation always reads fresh documents. Nothing is shared with a
-    transaction, a later callback, or another operation.
+    A new sync-job invocation always reads fresh documents. With the read
+    lever enabled, discovery results may repeat within that job only. Mutation
+    transactions and later deliveries must still establish fresh authority.
     """
     user = None
     seen: set[str] = set()

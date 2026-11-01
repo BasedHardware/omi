@@ -3,11 +3,17 @@
 import asyncio
 import hashlib
 import uuid
+from collections.abc import Awaitable, Callable
 
 from config.audio_archive import admitted
-from utils.executors import run_blocking, storage_executor
+from config.audio_outbox import enabled as audio_outbox_enabled
+from database.server_batch_audio import note_server_batch_audio, note_server_batch_audio_received
+from models.message_event import AudioCustodyEvent
+from utils.executors import db_executor, run_blocking, storage_executor
 from utils.other.raw_audio import CapturePack
 from utils.other.storage import archive_capture_bytes
+from utils.other.audio_outbox import commit_capture
+from utils.other.audio_outbox_metrics import BACKPRESSURE, record_failure, record_would_drop
 from utils.observability.fallback import record_fallback
 
 
@@ -18,12 +24,23 @@ class LiveAudioArchive:
         self.failed = False
         self.inflight: set[asyncio.Task] = set()
         self.capture_session_id = uuid.uuid4().hex
+        self.durable = audio_outbox_enabled()
+        self.lock = asyncio.Lock()
+        self.uncommitted: dict[int, tuple[CapturePack, int]] = {}
+        self.running: set[int] = set()
+        self.frames: dict[int, list[dict]] = {}
+        self.sequence: dict[int, int] = {}
+        # Coalesced transcript coverage, never audio bytes. Each snapshot is
+        # cumulative for its conversation and waits for the accepted-frame
+        # checkpoint, including earlier failed/out-of-order commits.
+        self.pending_acks: dict[str, list[tuple[dict[int, int], Callable[[], Awaitable[None]]]]] = {}
         # Session-stable admission: this per-packet path must not re-query the
         # TTL cache. An expiry window would schedule a refresh but miss until
         # it completes, silently dropping archive packets once per TTL. Listen
         # warms membership at connection start, so the first append snapshots
         # the resolved decision for the connection lifetime.
         self._admitted_snapshot: dict[str, bool] = {}
+        self._server_audio_marked: set[str] = set()
 
     def _admitted(self, uid: str, phase: str) -> bool:
         if phase not in self._admitted_snapshot:
@@ -38,37 +55,79 @@ class LiveAudioArchive:
         samples: int,
         channel: int = 0,
         decoded: bytes | None = None,
+        source_frame: dict | None = None,
     ) -> None:
+        async with self.lock:
+            await self._append(raw, conversation_id, timestamp, samples, channel, decoded, source_frame)
+
+    async def _append(self, raw, conversation_id, timestamp, samples, channel, decoded, source_frame):
         request = self.host.request
         # Consent is read before admission: with LIVE default-on, a host that
         # does not carry the consent attribute (older hosts, test doubles)
         # must never crash the receive loop on its way to a no-op archive.
         if (
-            self.failed
+            (self.failed and not self.durable)
             or not getattr(self.host, 'private_cloud_sync_enabled', False)
-            or not self._admitted(request.uid, 'LIVE')
+            or (not self.durable and not self._admitted(request.uid, 'LIVE'))
         ):
             return
+        if self.durable and (self.failed or any(key not in self.running for key in self.uncommitted)):
+            await self._retry_pending()
         pack = self.packs.get(channel)
-        if pack is not None and pack.boundary(conversation_id, timestamp, len(raw)):
-            self.flush(channel)
+        if pack is not None and (
+            pack.boundary(conversation_id, timestamp, len(raw))
+            or (self.durable and len(self.frames.get(id(pack), [])) >= 4096)
+        ):
+            await self.flush(channel)
             pack = None
         if pack is None:
             pack = CapturePack(request.codec, request.sample_rate, 1)
             self.packs[channel] = pack
+        previous_end = pack.end
+        offset = len(pack.data)
         pack.append(raw, conversation_id, timestamp, samples, decoded)
+        if self.durable:
+            sequence = self.sequence.get(channel, 0)
+            self.sequence[channel] = sequence + 1
+            self.frames.setdefault(id(pack), []).append(
+                {
+                    'sequence': sequence,
+                    'byte_offset': offset,
+                    'bytes': len(pack.data) - offset,
+                    'start': timestamp,
+                    'samples': samples,
+                    'gap_before': previous_end is not None and abs(timestamp - previous_end) > 0.002,
+                    'sha256': hashlib.sha256(raw).hexdigest(),
+                    'source': source_frame,
+                }
+            )
+        if (
+            getattr(self.host, 'server_batch_only', False) is True
+            and conversation_id
+            and conversation_id not in self._server_audio_marked
+        ):
+            # The bytes are already retained in the active pack if this write fails;
+            # teardown can still commit them. Only a proven never-received row may
+            # be reclaimed by an expired recording lease.
+            if not await run_blocking(db_executor, note_server_batch_audio_received, request.uid, conversation_id):
+                raise RuntimeError('server batch capture owner unavailable before first audio')
+            self._server_audio_marked.add(conversation_id)
         # Queue bounded commits ahead of pusher's batched upload without
         # stalling capture/STT clocks. Uncommitted data never retires PCM.
         if (
-            self._admitted(request.uid, 'STOP_PCM')
-            and self._admitted(request.uid, 'READ')
+            (self.durable or (self._admitted(request.uid, 'STOP_PCM') and self._admitted(request.uid, 'READ')))
             and pack.start is not None
             and pack.end is not None
             and pack.end - pack.start >= 60 - 0.0001
         ):
-            self.flush(channel)
+            await self.flush(channel)
 
     def _disable(self, reason: str):
+        if self.durable:
+            self.failed = True
+            record_would_drop('raw_pack')
+            record_failure('raw_commit')
+            return
         if not self.failed:
             self.failed = True
             self.packs.clear()
@@ -80,27 +139,115 @@ class LiveAudioArchive:
                 outcome='degraded',
             )
 
-    def flush(self, channel: int):
-        pack = self.packs.pop(channel, None)
+    async def flush(self, channel: int):
+        pack = self.packs.get(channel)
         if pack is None or not pack.data:
             return
         if len(self.inflight) >= 4:
-            self._disable('capacity_exhausted')
-            return
-        task = self.host.spawn(self._commit(pack, channel), name='raw_capture_commit')
+            if not self.durable:
+                self.packs.pop(channel, None)
+                self._disable('capacity_exhausted')
+                return
+            BACKPRESSURE.labels(stage='raw_capacity').inc()
+            record_would_drop('raw_capacity')
+            done, _ = await asyncio.wait(tuple(self.inflight), return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                task.result()  # Refusal propagates before removing the active pack.
+        self.packs.pop(channel, None)
+        if self.durable:
+            self.uncommitted[id(pack)] = (pack, channel)
+        self._start(pack, channel)
+
+    def _start(self, pack, channel):
+        self.running.add(id(pack))
+        commit = self._commit(pack, channel)
+        try:
+            task = self.host.spawn(commit, name='raw_capture_commit')
+        except BaseException:
+            commit.close()
+            self.running.discard(id(pack))
+            self._disable('enqueue_failed')
+            raise
         self.inflight.add(task)
-        task.add_done_callback(self.inflight.discard)
+
+        def finished(task):
+            self.inflight.discard(task)
+            self.running.discard(id(pack))
+            if task.cancelled():
+                self.failed = True
+            else:
+                task.exception()  # Kept in uncommitted and retried at the next barrier.
+
+        task.add_done_callback(finished)
+
+    async def _retry_pending(self):
+        for key, (pack, channel) in list(self.uncommitted.items()):
+            # Another pack can commit while an earlier retry awaits storage.
+            if key in self.uncommitted and key not in self.running:
+                # Retry one at a time, retaining the original bytes/identity.
+                await self._commit(pack, channel)
+        if self.inflight:
+            done, _ = await asyncio.wait(tuple(self.inflight))
+            for task in done:
+                task.result()
+        self.failed = False
 
     async def _commit(self, pack: CapturePack, channel: int):
         try:
             await self._write(pack, channel)
+            self.uncommitted.pop(id(pack), None)
+            self.frames.pop(id(pack), None)
         except Exception:
             self._disable('upload_failed')
+            if self.durable:
+                raise
+        finally:
+            self.running.discard(id(pack))
+        await self._publish_ready_acks()
+
+    def _checkpoint_pending(self, checkpoint: dict[int, int]) -> bool:
+        for pack, channel in [*((pack, channel) for channel, pack in self.packs.items()), *self.uncommitted.values()]:
+            frames = self.frames.get(id(pack), [])
+            if frames and frames[0]['sequence'] < checkpoint.get(channel, 0):
+                return True
+        return False
+
+    async def defer_ack(self, key: str, publish: Callable[[], Awaitable[None]]) -> None:
+        """Release cumulative coverage only after its original audio commits.
+
+        Keep at most two snapshots for each of 32 conversations. Refusal
+        withholds the optional ACK (the client's WAL remains authoritative),
+        never a captured frame.
+        """
+        if not getattr(self.host, 'private_cloud_sync_enabled', False) or not self.sequence:
+            # No archive obligation is created without storage consent. An
+            # empty checkpoint is not a receipt and must not release WAL via
+            # the coverage ledger (including later HTTP coverage queries).
+            raise RuntimeError('audio custody unavailable; producer remains unacknowledged')
+        if key not in self.pending_acks and len(self.pending_acks) >= 32:
+            raise RuntimeError('audio custody coverage queue full; producer remains unacknowledged')
+        pending = self.pending_acks.setdefault(key, [])
+        entry = (dict(self.sequence), publish)
+        if len(pending) == 2:
+            # Freeze the oldest checkpoint so continuous incoming transcripts
+            # cannot move its goalposts forever. Coalesce only the successor.
+            pending[-1] = entry
+        else:
+            pending.append(entry)
+        await self._publish_ready_acks()
+
+    async def _publish_ready_acks(self) -> None:
+        for key, pending in list(self.pending_acks.items()):
+            while self.pending_acks.get(key) is pending and pending and not self._checkpoint_pending(pending[0][0]):
+                _, publish = pending.pop(0)
+                if not pending:
+                    self.pending_acks.pop(key)
+                await publish()
 
     async def _write(self, pack: CapturePack, channel: int):
         request = self.host.request
         context = request.client_device_context
-        raw, metadata = await run_blocking(storage_executor, pack.encoded)
+        raw, metadata = await run_blocking(storage_executor, pack.encoded, preserve_pcm=self.durable)
         headers = getattr(request.websocket, 'headers', {})
         metadata.update(
             firmware=headers.get('x-omi-firmware-version'),
@@ -124,6 +271,50 @@ class LiveAudioArchive:
         if pack.start is None:
             raise ValueError('capture has no start clock')
         hour = int(pack.start // 3600)
+        if self.durable:
+            frames = self.frames.get(id(pack), [])
+            first = frames[0]['sequence'] if frames else 0
+            receipt = await run_blocking(
+                storage_executor,
+                commit_capture,
+                request.uid,
+                raw,
+                f'{owner}/{hour}/{channel}/{self.capture_session_id}/{first}',
+                metadata,
+                frames,
+            )
+            if getattr(self.host, 'server_batch_only', False) is True and pack.conversation_id:
+                # Zero-sample originals are retained above, but their arrival
+                # clocks cannot expand or shrink the decoded-audio obligation.
+                spans = [
+                    (frame['start'], frame['start'] + frame['samples'] / request.sample_rate)
+                    for frame in frames
+                    if frame['samples'] > 0
+                ]
+                if spans:
+                    if not await run_blocking(
+                        db_executor,
+                        note_server_batch_audio,
+                        request.uid,
+                        pack.conversation_id,
+                        min(start for start, _ in spans),
+                        max(end for _, end in spans),
+                    ):
+                        raise RuntimeError('desktop batch capture owner unavailable')
+            # A failed/disconnected delivery leaves the producer unacknowledged;
+            # receipt loss is safe because the immutable media remains indexed.
+            query = getattr(request.websocket, 'query_params', {})
+            if query.get('audio_custody') == '1' and hasattr(self.host, 'send_event'):
+                self.host.send_event(
+                    AudioCustodyEvent(
+                        event_type='audio_custody',
+                        receipt=receipt.to_dict(),
+                        capture_root=self.capture_session_id,
+                        channel=str(channel),
+                        frames=frames,
+                    )
+                )
+            return
         await run_blocking(
             storage_executor,
             archive_capture_bytes,
@@ -134,12 +325,33 @@ class LiveAudioArchive:
             metadata,
         )
 
+    async def ensure_durable(self):
+        """Await already scheduled window commits without flushing active packs.
+
+        Relay sends can retire their PCM copy because the original remains in
+        the archive. Only a complete window receipt releases client custody.
+        """
+        async with self.lock:
+            if self.durable and (self.failed or any(key not in self.running for key in self.uncommitted)):
+                await self._retry_pending()
+            if self.inflight:
+                done, pending = await asyncio.wait(tuple(self.inflight), timeout=15)
+                if self.durable:
+                    for task in done:
+                        task.result()
+                    if pending:
+                        record_would_drop('raw_timeout')
+                        raise TimeoutError('audio custody not committed; producer remains unacknowledged')
+                elif pending:
+                    self._disable('timeout')
+                    for task in pending:
+                        task.cancel()
+            if self.durable and self.uncommitted:
+                raise RuntimeError('audio custody still pending; producer remains unacknowledged')
+
     async def close(self):
-        for channel in list(self.packs):
-            self.flush(channel)
-        if self.inflight:
-            _, pending = await asyncio.wait(tuple(self.inflight), timeout=15)
-            if pending:
-                self._disable('timeout')
-                for task in pending:
-                    task.cancel()
+        # A real disconnect boundary commits the silence/partial-window tail.
+        async with self.lock:
+            for channel in list(self.packs):
+                await self.flush(channel)
+        await self.ensure_durable()

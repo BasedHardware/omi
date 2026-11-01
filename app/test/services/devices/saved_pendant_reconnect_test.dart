@@ -6,6 +6,32 @@ import 'package:omi/services/devices/saved_pendant_reconnect.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('an already connected saved target arms native intent without another connect', () {
+    fakeAsync((async) {
+      var connects = 0;
+      final configured = <bool>[];
+      final retry = SavedPendantReconnect(
+        target: () => 'saved',
+        blocked: (_) => false,
+        connected: (_) => true,
+        connect: (_, __) async {
+          connects++;
+        },
+        configure: (_, enabled) async => configured.add(enabled),
+        retire: (_) async {},
+        observeTarget: (_) => () {},
+        killed: () => false,
+        record: (_, __, ___, ____) {},
+      );
+      retry.start();
+      retry.ensure('launch');
+      async.flushMicrotasks();
+      expect(configured, [true]);
+      expect(connects, 0);
+      retry.stop();
+    });
+  });
+
   for (final refresh in ['throws', 'hangs', 'false']) {
     test('cached default ON connects immediately when refresh $refresh', () {
       fakeAsync((async) {

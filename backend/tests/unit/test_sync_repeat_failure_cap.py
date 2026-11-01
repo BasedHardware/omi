@@ -6,7 +6,7 @@ import pytest
 from google.cloud import firestore
 from database import sync_ledger, sync_jobs
 from database.firestore_transaction_retry import FirestoreContentionExhausted
-from routers.sync import _terminal_repeat_failure_kwargs
+from utils.sync.job_retry_policy import terminal_repeat_failure_kwargs
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.sync.legacy_segment_core import _persistence_failure_fingerprint
 
@@ -173,12 +173,12 @@ def test_polling_release_records_strike_once_for_the_terminal_owner():
     ref = _Ref()
     now = datetime(2026, 9, 27, tzinfo=timezone.utc)
     assert _claim(ref, 'job', now)['outcome'] == 'owned'
-    kwargs = _terminal_repeat_failure_kwargs({'status': 'failed', 'reason_code': 'sync_invalid_audio'})
+    kwargs = terminal_repeat_failure_kwargs({'status': 'failed', 'reason_code': 'sync_invalid_audio'})
     release = sync_ledger._release_claim_after_job_retired_transaction.to_wrap
     assert release(_Transaction(), ref, 'job', now, **kwargs)
     assert not release(_Transaction(), ref, 'job', now, **kwargs)
     assert ref.data['repeat_failure_count'] == 1
-    assert _terminal_repeat_failure_kwargs(
+    assert terminal_repeat_failure_kwargs(
         {
             'status': 'failed',
             'result': {
@@ -187,8 +187,8 @@ def test_polling_release_records_strike_once_for_the_terminal_owner():
             },
         }
     ) == {'failure_key': 'persistent_persistence', 'failure_fingerprint': 'persistence:ValueError'}
-    assert _terminal_repeat_failure_kwargs({'status': 'failed', 'reason_code': 'stt_invalid_input'}) == {}
-    assert _terminal_repeat_failure_kwargs({'status': 'partial_failure', 'reason_code': 'sync_invalid_audio'}) == {}
+    assert terminal_repeat_failure_kwargs({'status': 'failed', 'reason_code': 'stt_invalid_input'}) == {}
+    assert terminal_repeat_failure_kwargs({'status': 'partial_failure', 'reason_code': 'sync_invalid_audio'}) == {}
 
 
 def test_only_known_data_shape_persistence_errors_receive_fingerprints():

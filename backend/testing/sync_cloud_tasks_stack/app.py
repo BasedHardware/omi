@@ -8,6 +8,7 @@ isolated Redis, Firestore, and filesystem-backed staged blobs.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +23,7 @@ from .isolation import LOOPBACK_HOSTS as _LOOPBACK_HOSTS, install_no_egress_guar
 install_no_egress_guard()
 
 from .events import write_event  # noqa: E402
-from .storage import configure_storage_dir, patch_google_storage  # noqa: E402
+from .storage import configure_storage_dir, patch_google_storage, read_signed_url  # noqa: E402
 
 _ROLES = frozenset({'admission', 'batch-serving'})
 
@@ -106,9 +107,15 @@ if ROLE == 'batch-serving':
 from main import app  # noqa: E402
 
 if ROLE == 'admission' and os.getenv('OMI_BATCH_STACK_POLICY_FILE'):
+    from functools import partial
     import json
     from config.policy import BatchUnitPolicy
     from routers import sync as _policy_sync_router
+    from utils.batch_pipeline import intake as _batch_intake
+
+    # These isolated synthetic processes keep private logs separately from the
+    # sanitized evidence. Retain the actual intake failure for local/CI triage.
+    _batch_intake.logger.error = partial(_batch_intake.logger.error, exc_info=True)
 
     _recorded_policy = BatchUnitPolicy.from_dict(
         json.loads(Path(os.environ['OMI_BATCH_STACK_POLICY_FILE']).read_text())

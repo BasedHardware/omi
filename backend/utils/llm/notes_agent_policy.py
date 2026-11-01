@@ -10,6 +10,8 @@ Controls (read per call, never at import):
   returns every conversation to the one-shot path.
 - ``CONVERSATION_NOTES_AGENT_PERCENT``: stable conversation-hash cohort, default 100.
 - ``CONVERSATION_NOTES_AGENT_UID_ALLOWLIST``: comma-separated UIDs always in the cohort.
+- ``CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED``: default on. Off restores
+  legacy lookup charging, tool schema, prompt, packet and investigation floor.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from typing import Optional
 
 FLAG = 'CONVERSATION_NOTES_AGENT_ENABLED'
 PERCENT = 'CONVERSATION_NOTES_AGENT_PERCENT'
+LOOKUP_EFFICIENCY = 'CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED'
 UID_ALLOWLIST = 'CONVERSATION_NOTES_AGENT_UID_ALLOWLIST'
 
 # A conversation this long is worth an agent on words alone.
@@ -65,6 +68,10 @@ class NotesAgentDecision:
 
 def enabled() -> bool:
     return os.getenv(FLAG, 'true').strip().lower() not in {'false', 'off', '0', 'no'}
+
+
+def lookup_efficiency_enabled() -> bool:
+    return os.getenv(LOOKUP_EFFICIENCY, 'true').strip().lower() not in {'false', 'off', '0', 'no'}
 
 
 def _percent() -> int:

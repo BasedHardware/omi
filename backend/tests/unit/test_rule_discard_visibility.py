@@ -25,6 +25,13 @@ from tests.unit.test_sync_donor_tombstone_visibility import (
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
 
 
+@pytest.fixture(autouse=True)
+def legacy_independent_discard_rollback(monkeypatch):
+    # These fixtures pin the retired intake verdict and historical read contract.
+    # Forward occasion-aware intake is covered by test_occasion_relevance.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
+
+
 def _visible_row(when: datetime, row_id: str = 'visible') -> dict:
     return {
         'id': row_id,
@@ -239,9 +246,9 @@ def test_default_list_sends_limit_then_offset_and_refill_stays_capped(monkeypatc
     first_limit = next(i for i, c in enumerate(calls) if c[0] == 'limit')
     assert calls[first_limit] == ('limit', 2)
     assert calls[first_limit + 1] == ('offset', 0)
-    # the refill read is bounded: 70 skips at window 2 = 35 batches, capped
+    # Refill windows request only missing slots; total raw refill reads are capped.
     refill_streams = [c for c in calls if c[0] == 'stream' and c[3] is not None]
-    assert len(refill_streams) <= 36
+    assert sum(c[2] for c in refill_streams) <= 64
     # the cap stopped the scan: the page is short, never wrong
     assert ids == ['visible']
     # sanity: without the cap the deep row would exist in this listing
@@ -704,3 +711,20 @@ def test_detail_http_omitted_param_hides_a_rule_discard_and_keeps_a_stored_disca
     kept = client.get('/v1/conversations/archived')
     assert kept.status_code == 200 and kept.json()['id'] == 'archived'
     assert stored['discarded'] is False
+
+
+def test_occasion_policy_delegates_rule_review_to_aggregate_finalization(pipeline, monkeypatch):
+    module, conversations_db, calls = pipeline
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'true')
+    row = _incident(relevance_decision=None)
+    store = StrictFirestore({('users', 'u', 'conversations', 'incident'): deepcopy(row)})
+    _wire_store(monkeypatch, module, conversations_db, store)
+    _stub_read(monkeypatch, conversations_db, row)
+    processed = SimpleNamespace(discarded=False, structured=SimpleNamespace(overview=''))
+    module.process_conversation.return_value = processed
+    monkeypatch.setattr(module, 'schedule_after_finalization', MagicMock())
+    assert module._reprocess_conversation_after_update('u', 'incident', 'en') is processed
+    assert calls == []
+    module.process_conversation.assert_called_once()
+    module.schedule_after_finalization.assert_called_once()
+    assert not store.rows[('users', 'u', 'conversations', 'incident')]['discarded']

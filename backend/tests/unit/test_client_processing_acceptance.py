@@ -479,6 +479,17 @@ def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, default=str)
 
 
+def test_canonical_ingest_binding_also_refuses_mixed_unnamed_scopes(monkeypatch, stack):
+    pc, dev = stack
+    _enable_flag(monkeypatch, pc)
+    segments = [
+        TranscriptSegment(text='approved', speaker_id=0, speaker_id_scope='first', is_user=False, start=0, end=1),
+        TranscriptSegment(text='declined', speaker_id=0, speaker_id_scope='second', is_user=False, start=1, end=2),
+    ]
+    projection = _projection(transcript_sha256(segments))
+    assert dev._bind_projection_to_segments(projection, segments, projection, stored=False) is None
+
+
 def _stored_minimum(conversation_id: str) -> dict[str, Any]:
     return {
         'id': conversation_id,

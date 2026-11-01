@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-episode-processing-light.png",
+      "platform": "mobile-ios",
+      "description": "Home: one episode processing row, light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-episode-complete-light.png",
+      "platform": "mobile-ios",
+      "description": "Home: same episode after processing completes, light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-live-transcript-light.png",
+      "platform": "mobile-ios",
+      "description": "Home: latest streaming transcript snippet, light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

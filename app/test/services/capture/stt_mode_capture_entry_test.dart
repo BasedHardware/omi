@@ -27,6 +27,7 @@ class _RecordingSocketCapture extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     openCalls++;
     lastConfig = customSttConfig;

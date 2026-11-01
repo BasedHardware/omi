@@ -46,14 +46,6 @@
   "backend/modal/main.py::docker:backend/modal/Dockerfile:main": {
     "missing_setup": 1
   },
-  "backend/modal/memory_maintenance_job.py::docker:backend/modal/Dockerfile.memory_maintenance_job:memory_maintenance_job": {
-    "basicConfig": 1,
-    "missing_setup": 1
-  },
-  "backend/modal/memory_maintenance_job.py::docker:backend/modal/Dockerfile.memory_maintenance_job:memory_maintenance_job.py": {
-    "basicConfig": 1,
-    "missing_setup": 1
-  },
   "backend/modal/x_connector_sync_job.py::docker:backend/modal/Dockerfile.x_connector_sync_job:x_connector_sync_job": {
     "basicConfig": 1,
     "missing_setup": 1

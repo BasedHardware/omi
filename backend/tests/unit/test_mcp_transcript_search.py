@@ -202,6 +202,18 @@ def test_merge_typesense_page_prefers_transcript_on_page_one():
     ) == ["tr1", "ts1", "ts2"]
 
 
+def test_merge_typesense_page_keeps_every_page_one_typesense_hit():
+    from utils.conversations.mcp_transcript_search import merge_typesense_page_with_transcript_hits
+
+    # Spoken-word hits alone would fill the cap. Page 2 starts after s2, so s1 and s2 must stay.
+    assert merge_typesense_page_with_transcript_hits(
+        ["s1", "s2"],
+        ["t1", "t2", "s2", "t3", "t4"],
+        page=1,
+        per_page=4,
+    ) == ["t1", "t2", "s2", "s1"]
+
+
 def test_merge_typesense_page_keeps_typesense_order_after_page_one():
     from utils.conversations.mcp_transcript_search import merge_typesense_page_with_transcript_hits
 

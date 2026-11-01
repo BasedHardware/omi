@@ -1,0 +1,108 @@
+{{- if and .Values.enabled (or .Values.recordSealSweeper.enabled .Values.recordSealRepair.enabled) (eq .Values.stage "prod") }}
+{{- if ne .Release.Namespace "prod-omi-backend" }}
+{{- fail "record seal sweeper requires prod-omi-backend; dev verification uses hermetic fixtures" }}
+{{- end }}
+{{- if and .Values.recordSealSweeper.enabled (not (has .Values.recordSealSweeper.mode (list "plan" "apply"))) }}
+{{- fail "recordSealSweeper.mode must be plan or apply" }}
+{{- end }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: record-seal-sweeper
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: record-seal-sweeper
+subjects:
+  - kind: ServiceAccount
+    name: {{ required "existing worker KSA required" .Values.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: record-seal-sweeper
+---
+{{- if .Values.recordSealSweeper.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: record-seal-sweeper
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      # Runtime cancels IO after 150s (maximum 180s), leaving import/startup
+      # headroom while staying below the five-minute producer-proof window.
+      activeDeadlineSeconds: 240
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: record-seal-sweeper
+        spec:
+          serviceAccountName: {{ required "existing worker KSA required" .Values.serviceAccountName }}
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile: {type: RuntimeDefault}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - {key: cloud.google.com/gke-accelerator, operator: DoesNotExist}
+                      - key: cloud.google.com/gke-nodepool
+                        operator: NotIn
+                        values: [batch-pipeline-pool, batch-pipeline-pool-spot, parakeet-pool]
+          containers:
+            - name: sweeper
+              image: "{{ required "image.repository required" .Values.image.repository }}@{{ required "image.digest required" .Values.image.digest }}"
+              command: [python, scripts/record_seal_sweep.py]
+              env:
+                - {name: RECORD_SEAL_SWEEPER_ENABLED, value: {{ .Values.recordSealSweeper.runtimeEnabled | quote }}}
+                - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
+                - {name: RECORD_SEAL_SWEEPER_MODE, value: {{ .Values.recordSealSweeper.mode | quote }}}
+                - {name: RECORD_SEAL_SWEEPER_BUDGET_SECONDS, value: "150"}
+                - {name: RECORD_SEAL_SWEEPER_DISCOVERY_LIMIT, value: "32"}
+                - {name: RECORD_SEAL_SWEEPER_SEAL_LIMIT, value: "4"}
+                - {name: OMI_ENV_STAGE, value: prod}
+                - {name: OMI_LOG_FORMAT, value: json}
+                - {name: OMI_FIRESTORE_DATA_PLANE_PROJECT, value: {{ .Values.dataPlaneProject | quote }}}
+                - {name: BUCKET_BATCH_PIPELINE, value: {{ .Values.bucket | quote }}}
+                - {name: BATCH_PIPELINE_ENABLED, value: "false"}
+                - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "false"}
+                - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+                - {name: HOME, value: /tmp}
+                - name: ENCRYPTION_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ required "worker secretName required" .Values.secretName }}
+                      key: ENCRYPTION_SECRET
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir: {sizeLimit: 64Mi}
+{{- end }}
+{{- end }}

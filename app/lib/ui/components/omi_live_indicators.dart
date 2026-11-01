@@ -1,8 +1,41 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
+
+/// Announces [message] to the screen reader when it changes, instead of marking the whole
+/// [child] subtree `liveRegion: true`. A live region re-announces on every semantics change, so
+/// wrapping a per-second elapsed-time label in one re-announces the whole row every tick. Here
+/// [message] carries only the capture-state transition (e.g. "Live" to "Paused"), not the ticking
+/// elapsed text, so it only fires on a real state change; [child] keeps its own default semantics
+/// so the current elapsed time still reads out when a screen reader user navigates to it.
+class CaptureStateAnnouncement extends StatefulWidget {
+  const CaptureStateAnnouncement({super.key, required this.message, required this.child});
+
+  final String message;
+  final Widget child;
+
+  @override
+  State<CaptureStateAnnouncement> createState() => _CaptureStateAnnouncementState();
+}
+
+class _CaptureStateAnnouncementState extends State<CaptureStateAnnouncement> {
+  late String _lastAnnounced = widget.message;
+
+  @override
+  void didUpdateWidget(CaptureStateAnnouncement oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.message != _lastAnnounced) {
+      _lastAnnounced = widget.message;
+      SemanticsService.sendAnnouncement(View.of(context), widget.message, Directionality.of(context));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
 
 /// A thin arc that circles [child] while background work runs (offline sync, processing). Quiet
 /// by design: no text, no colour, just motion around a glyph that already has a label. The arc
@@ -208,19 +241,9 @@ class _OmiBreathingDotState extends State<OmiBreathingDot> with SingleTickerProv
           if (animate)
             ExcludeSemantics(
               child: RepaintBoundary(
-                child: AnimatedBuilder(
-                  animation: _breath,
-                  builder: (context, _) {
-                    final t = Curves.easeOut.transform(_breath.value);
-                    return Opacity(
-                      opacity: (1 - t) * 0.6,
-                      child: Container(
-                        width: widget.size * (1 + 1.6 * t),
-                        height: widget.size * (1 + 1.6 * t),
-                        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: color, width: 1)),
-                      ),
-                    );
-                  },
+                child: CustomPaint(
+                  size: Size.square(extent),
+                  painter: _BreathingRingPainter(_breath, color, widget.size),
                 ),
               ),
             ),
@@ -229,4 +252,29 @@ class _OmiBreathingDotState extends State<OmiBreathingDot> with SingleTickerProv
       ),
     );
   }
+}
+
+/// The ring changes only its paint, not widget size/layout or opacity layers.
+class _BreathingRingPainter extends CustomPainter {
+  _BreathingRingPainter(this.turns, this.color, this.dotSize) : super(repaint: turns);
+
+  final Animation<double> turns;
+  final Color color;
+  final double dotSize;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = Curves.easeOut.transform(turns.value);
+    final paint = Paint()
+      ..color = color.withValues(alpha: color.a * (1 - t) * 0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    // BoxDecoration's circular border was drawn inside the animated diameter.
+    final radius = math.max(0.0, (dotSize * (1 + 1.6 * t) - 1) / 2);
+    canvas.drawCircle(size.center(Offset.zero), radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(_BreathingRingPainter oldDelegate) =>
+      oldDelegate.turns != turns || oldDelegate.color != color || oldDelegate.dotSize != dotSize;
 }

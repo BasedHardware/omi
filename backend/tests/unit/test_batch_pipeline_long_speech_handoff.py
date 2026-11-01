@@ -25,8 +25,11 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 @pytest.fixture(autouse=True)
 def _recovery_route(monkeypatch):
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     # Rollback must still retain unsafe admitted audio before a model call.
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'false')
+    # This suite pins the legacy GPU route; batch language eligibility is covered in its own suite.
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
@@ -98,6 +101,7 @@ def test_retry_still_runs_otherwise(monkeypatch, language, speech_seconds, env):
 
 
 def test_no_recovery_route_keeps_the_retry(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     # Without the RecoveryWork handoff the retry is the only remaining attempt.
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false')
@@ -139,11 +143,22 @@ def test_staged_audio_reads_the_intake_language():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('user_language,expected', [('vi', 'vi'), ('pt-BR', 'pt'), (None, '')])
-async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_language, expected):
+@pytest.mark.parametrize(
+    'inherit,user_language,expected',
+    [
+        (True, 'vi', 'vi'),
+        (True, 'pt-BR', 'pt'),
+        (True, None, 'multi'),
+        (False, 'vi', 'vi'),
+        (False, 'pt-BR', 'pt'),
+        (False, None, ''),
+    ],
+)
+async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, user_language, expected):
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.batch_pipeline.audio import read_context
 
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true' if inherit else 'false')
     store = MemoryStore()
     frozen = []
 

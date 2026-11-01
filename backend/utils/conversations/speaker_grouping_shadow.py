@@ -38,6 +38,7 @@ from utils.stt.conversation_speakers import (
 )
 from utils.stt.speaker_match import SPEAKER_MATCH_MIN_EVIDENCE_SECONDS, select_speaker_match
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+from utils.speakers.provider_partition import provider_key
 
 logger = logging.getLogger(__name__)
 MAX_SEGMENTS = 256
@@ -89,24 +90,6 @@ def count(variant: str, outcome: str, amount: int = 1) -> None:
     if variant not in VARIANTS or outcome not in OUTCOMES:
         raise ValueError('unbounded grouping label')
     SHADOW_TOTAL.labels(variant=variant, outcome=outcome).inc(amount)
-
-
-def provider_key(segment: TranscriptSegment) -> tuple[str, int] | None:
-    original = segment.provider_speaker
-    if original is not None:
-        if original.get('id', -1) < 0 or not original.get('scope'):
-            return None
-        return (f"{original.get('provider') or 'unknown'}\0{original['scope']}", original['id'])
-    scope = segment.speaker_id_scope
-    if (
-        not scope
-        or scope.startswith(('conversation:', 'legacy-conversation:'))
-        or segment.speaker_id == OMI_SPEAKER_ID_SENTINEL
-        or segment.speaker_id is None
-        or segment._speaker_id_synthesized  # pyright: ignore[reportPrivateUsage]
-    ):
-        return None
-    return (f'{segment.stt_provider or "unknown"}\0{scope}', segment.speaker_id)
 
 
 def decisions_for(

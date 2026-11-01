@@ -13,6 +13,8 @@ import re
 from difflib import SequenceMatcher
 from statistics import median
 
+from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+
 _MERGE_TEXT_DUP_SLOP_SECONDS = 10 * 60
 _MERGE_TEXT_DUP_DURATION_RATIO = 0.25
 # Short backchannels are common twice in one conversation; never text-dedupe them.
@@ -84,13 +86,50 @@ def _same_known_speaker(left: dict, right: dict) -> bool:
     return left.get('is_user') is True and right.get('is_user') is True
 
 
+def _both_unidentified_speaker(left: dict, right: dict) -> bool:
+    return (
+        not left.get('person_id')
+        and not right.get('person_id')
+        and left.get('is_user') is not True
+        and right.get('is_user') is not True
+    )
+
+
+def _compatible_speaker(left: dict, right: dict) -> bool:
+    return _same_known_speaker(left, right) or _both_unidentified_speaker(left, right)
+
+
+def _same_live_voice(left: dict, right: dict) -> bool:
+    if _same_known_speaker(left, right):
+        return True
+    # Unknown is an absence of identity, not evidence two live voices agree.
+    return (
+        _both_unidentified_speaker(left, right)
+        and type(left.get('speaker_id')) is int
+        and left['speaker_id'] != OMI_SPEAKER_ID_SENTINEL
+        and left['speaker_id'] == right.get('speaker_id')
+        and left.get('speaker_id_scope') == right.get('speaker_id_scope')
+    )
+
+
+def _duration_compatible(left: dict, right: dict) -> bool:
+    if not _both_unidentified_speaker(left, right):
+        return True
+    try:
+        duration = float(left['end']) - float(left['start'])
+        other = float(right['duration'])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return duration > 0 and other > 0 and abs(duration - other) / max(duration, other) <= _MERGE_TEXT_DUP_DURATION_RATIO
+
+
 def _live_windows(existing: list[dict]) -> list[dict]:
     ordered = sorted(existing, key=lambda item: item['abs_start'])
     windows = list(ordered)
     for index, first in enumerate(ordered):
         text, end, members = first['text'], first['abs_start'] + first['duration'], first['members']
         for following in ordered[index + 1 : index + 3]:
-            if following['abs_start'] - end > 15 or not _same_known_speaker(first, following):
+            if following['abs_start'] - end > 15 or not _same_live_voice(first, following):
                 break
             text += ' ' + following['text']
             end = max(end, following['abs_start'] + following['duration'])
@@ -110,7 +149,8 @@ def _fuzzy_survivors(existing: list[dict], incoming: list, slop: float, offset: 
                 item
                 for item in existing
                 if abs(float(segment['timestamp']) - item['abs_start']) <= 90
-                and _same_known_speaker(segment, item)
+                and _compatible_speaker(segment, item)
+                and _duration_compatible(segment, item)
                 and tuple(_tokens(item['text'])) == text
                 and not used_members.intersection(item['members'])
             ]
@@ -133,9 +173,14 @@ def _fuzzy_survivors(existing: list[dict], incoming: list, slop: float, offset: 
             for item in existing
             if not consumed.intersection(item['members'])
             and abs(float(segment['timestamp']) + offset - item['abs_start']) <= tolerance
-            and _same_known_speaker(segment, item)
+            and _compatible_speaker(segment, item)
+            and _duration_compatible(segment, item)
             and fuzzy_live_match(segment.get('text', ''), item['text'])
         ]
+        if candidates and _both_unidentified_speaker(segment, candidates[0]):
+            # Multiple repeated live occurrences are not a unique replay proof.
+            if len({item['members'] for item in candidates}) != 1:
+                candidates = []
         if not candidates:
             survivors.append(segment)
             continue
@@ -185,6 +230,8 @@ def dedupe_segments_for_merge(
                     'duration': max(0.0, abs_end - abs_start),
                     'person_id': segment.get('person_id'),
                     'is_user': segment.get('is_user'),
+                    'speaker_id': segment.get('speaker_id'),
+                    'speaker_id_scope': segment.get('speaker_id_scope'),
                     'members': (index,),
                 }
             )

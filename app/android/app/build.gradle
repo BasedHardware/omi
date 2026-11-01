@@ -26,6 +26,16 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
+// The synthetic heavy harness never initializes Firebase in Dart. Remove its
+// native eager initializer too, without changing ordinary dev/prod builds.
+def dartTarget = project.findProperty('target')?.toString()
+def dartTargetFile = dartTarget == null ? null : new File(dartTarget)
+if (dartTargetFile != null && !dartTargetFile.isAbsolute()) {
+    dartTargetFile = rootProject.file("../${dartTarget}")
+}
+def isHeavyPerfTarget = dartTargetFile != null && dartTargetFile.canonicalFile ==
+        rootProject.file('../integration_test/perf/heavy_profile_main.dart').canonicalFile
+
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
@@ -81,6 +91,9 @@ android {
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
+        if (isHeavyPerfTarget) {
+            maybeCreate('devProfile').manifest.srcFile 'src/heavyPerf/AndroidManifest.xml'
+        }
     }
 
     externalNativeBuild {

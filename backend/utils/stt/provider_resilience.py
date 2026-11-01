@@ -29,6 +29,8 @@ _CIRCUIT_TRIP_CLASSES: Final = (
     'capacity_full',
     'config_incomplete',
     'connection_lost',
+    'empty_streak',
+    'first_text_deadline',
     'modulate_serve_error',
     'provider_429',
     'provider_5xx',
@@ -40,6 +42,28 @@ _CIRCUIT_TRIP_CLASSES: Final = (
     'timeout',
     'untyped',
 )
+
+
+def circuit_trip_reason(error_class: str) -> str:
+    """Normalize known causes without guessing that capacity is an outage.
+
+    Keep the detailed error_class for existing queries. The reason dimension
+    groups auth/quota, server faults, latency, empty output and connection
+    failures; capacity and unknown remain explicit rather than misclassified.
+    """
+    if error_class in {'auth', 'provider_auth_rejected'}:
+        return 'auth'
+    if error_class in {'quota', 'provider_budget_exhausted', 'provider_rate_limited', 'provider_429'}:
+        return 'quota'
+    if error_class in {'provider_5xx', 'modulate_serve_error'}:
+        return '5xx'
+    if error_class == 'timeout':
+        return 'latency'
+    if error_class in {'first_text_deadline', 'empty_streak', 'no_text'}:
+        return 'no_text'
+    if error_class in {'connection_lost', 'send_failed'}:
+        return 'connect'
+    return 'capacity' if error_class == 'capacity_full' else 'unknown'
 
 
 def initialize_stt_circuit_trip_children() -> None:
@@ -54,7 +78,9 @@ def initialize_stt_circuit_trip_children() -> None:
         for provider in _CIRCUIT_TRIP_PROVIDERS:
             for kind in ('selection', 'account'):
                 for error_class in _CIRCUIT_TRIP_CLASSES:
-                    OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL.labels(provider=provider, kind=kind, error_class=error_class)
+                    OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL.labels(
+                        provider=provider, kind=kind, error_class=error_class, reason=circuit_trip_reason(error_class)
+                    )
     except Exception:
         pass
 
@@ -342,12 +368,14 @@ class ProviderCircuitBreaker:
         if self._provider_label is None or was_open:
             return
         try:
+            bounded_class = (
+                error_class if isinstance(error_class, str) and error_class in LIVE_STT_REASONS else 'untyped'
+            )
             OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL.labels(
                 provider=self._provider_label,
                 kind=kind,
-                error_class=(
-                    error_class if isinstance(error_class, str) and error_class in LIVE_STT_REASONS else 'untyped'
-                ),
+                error_class=bounded_class,
+                reason=circuit_trip_reason(bounded_class),
             ).inc()
         except Exception:
             pass
@@ -631,19 +659,19 @@ class ProviderCircuitBreaker:
 
         return settle, settle
 
-    def refresh_gauge_if_account_bench_elapsed(self) -> None:
-        """Publish the gauges when this breaker's account bench has elapsed.
+    def refresh_gauge_if_bench_elapsed(self) -> None:
+        """Publish the gauges when this breaker's active bench has elapsed.
 
-        Read-only observation of the clock: only an open, account-armed bench
+        Read-only observation of the clock: only an open bench
         whose cooldown has expired republishes (as 0 for both kinds — the next
         ``allow_request`` would admit a probe). Breaker state is never mutated,
         so the periodic refresh below cannot change admit/reject behavior.
         """
 
         with self._lock:
-            if self._account_cooldown is None or self._state != 'open':
+            if self._state != 'open':
                 return
-            if self._clock() - self._opened_at < self._account_cooldown:
+            if self._clock() - self._opened_at < self._active_cooldown():
                 return
         self._publish_state()
 
@@ -699,17 +727,16 @@ def _gauge_refresh_iteration() -> None:
 
 
 def refresh_published_circuit_gauges() -> None:
-    """Re-publish gauges whose account bench has elapsed on the clock alone.
+    """Re-publish gauges whose selection/account bench elapsed on the clock.
 
-    Only elapsed account benches are refreshed: every other state already
-    published the same value at its transition, so re-publishing it cannot
-    change anything. Never raises, and never mutates breaker state — this is
+    An idle, benched target may receive no next dial to refresh either kind.
+    Never raises, and never mutates breaker state — this is
     the read side observing the clock, not a dial.
     """
 
     for breaker in list(_published_breakers):
         try:
-            breaker.refresh_gauge_if_account_bench_elapsed()
+            breaker.refresh_gauge_if_bench_elapsed()
         except Exception:
             continue
 

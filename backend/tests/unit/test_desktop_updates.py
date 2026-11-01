@@ -258,6 +258,16 @@ class TestGenerateAppcastXml:
         assert xml.count("<item>") == 2
         assert "<sparkle:channel>beta</sparkle:channel>" in xml
 
+    def test_none_fields_normalized(self):
+        item = self._make_item()
+        item["date"] = None
+        item["edSignature"] = None
+        item["changes"] = [{"type": None, "message": None}]
+        xml = _generate_appcast_xml([item], "macos")
+        ET.fromstring(xml)
+        assert "<pubDate></pubDate>" in xml
+        assert "sparkle:edSignature=" not in xml
+
 
 # --- Asset URL helpers ---
 
@@ -750,6 +760,22 @@ class TestAppcastEndpoint:
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/appcast.xml")
         assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_appcast_handles_null_release_and_metadata_fields(self):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "release": {"published_at": None, "body": None, "assets": [_zip_asset()]},
+                "version_info": {"version": "1.0.0+100", "build": "100"},
+                "metadata": {"mandatory": None, "edSignature": None, "changelog": None},
+            }
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml")
+        assert resp.status_code == 200
+        ET.fromstring(resp.text)
 
     @pytest.mark.asyncio
     async def test_deduplicates_by_channel(self):

@@ -206,6 +206,7 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         (_SCHEMA_MODULE, '*'),
         ('models/conversation.py', '<module>'),
         ('models/conversation.py', 'Conversation'),
+        ('models/conversation.py', 'ProcessConversationRequest'),
         ('routers/developer.py', '<module>'),
         ('routers/developer_segments_models.py', 'CreateConversationFromTranscriptRequest'),
         ('routers/developer.py', '_accepted_client_projection'),
@@ -265,8 +266,8 @@ class Reference(NamedTuple):
 # display-only trust boundary and added here. Schema-module hits collapse to one
 # wildcard so the Pydantic field list can evolve without a pin churn.
 #
-# Reviewed production hits: schema + Conversation field + developer request
-# field + process_conversation storage/coordinator seams + locked-integration
+# Reviewed production hits: schema + Conversation field + request fields
+# + process_conversation storage/coordinator seams + locked-integration
 # redaction + transcript-edit genuine clear + live-capture overlap clear.
 # ``_get_structured``, ``extract_memories``, ``save_structured_vector``,
 # and RAG are absent. ``conversation_to_dict`` is a dump without a named read.
@@ -291,7 +292,7 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('routers/developer_segments.py', 'continuation', 'client_processing'),
         Reference('routers/developer_segments.py', 'stage_chunk', 'client_processing'),
         Reference('routers/conversations.py', '<module>', 'ClientProcessing'),
-        Reference('routers/conversations.py', 'ProcessConversationRequest', 'client_processing'),
+        Reference('models/conversation.py', 'ProcessConversationRequest', 'client_processing'),
         Reference('routers/conversations.py', '_accepted_client_projection', 'ClientProcessing'),
         Reference('routers/conversations.py', 'finalize_conversation', 'client_processing'),
         Reference('routers/conversations.py', 'finalize_conversation', 'client_projection'),
@@ -502,7 +503,15 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/webhooks.py', '_build_conversation_webhook_payload_sync', 'conversation_to_dict'),
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
         DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
+        # Blank-session retry identity only: the request dump has an explicit
+        # field allowlist and feeds a hash, never a client or intelligence view.
+        DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
+        # Blank-session retry identity hashes only fixed recording facts;
+        # client_processing and other display projections are excluded. This
+        # serialization derives the digest only; it is not persisted or sent
+        # to an intelligence consumer.
+        DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
@@ -528,6 +537,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/conversations/process_conversation.py', '_store_budget_waiting', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
         DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
+        # CalendarMeetingContext only; derived member context is
+        # persisted separately from Conversation.external_data.calendar_meeting_context.
+        DumpSite('utils/conversations/process_conversation.py', '_enrich_meeting_context', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),
         DumpSite(
@@ -598,17 +610,29 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'updated_at',
         'started_at',
         'finished_at',
+        # Server-computed recording and episode metadata, not display projections.
+        'recorded_start',
+        'recorded_end',
+        'arrival_at',
+        'clock',
+        'episode_id',
         'source',
         'language',
         'uses_custom_stt',
         # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
         'record_lane_owner',
+        # Server-authored partial audio proof metadata, not client display text.
+        'record_audio_partial',
         'structured',
         'client_processing',
         # Authenticated owner-confirmed edits, not device-authored display projections.
         # Corrections deliberately enter summarization; overview is the owned override.
         'user_corrections',
         'user_overview',
+        # Stored manual-edit read authority, not client display projection.
+        # Excluded from dumps/schema; its raw database field stays owned by manual edits.
+        # test_short_clip_authority.py proves that exclusion and floor admission.
+        'user_title',
         # S3 (§1.7): server-authored, NOT projection-family. It says why
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.
@@ -972,6 +996,7 @@ def test_conversation_field_set_is_pinned(render_mod: ModuleType) -> None:
     current = frozenset(Conversation.model_fields)
     new = sorted(current - PINNED_CONVERSATION_FIELDS)
     gone = sorted(PINNED_CONVERSATION_FIELDS - current)
+    assert 'user_title' not in family  # Stored manual-edit authority, never client projection.
     assert family <= PINNED_CONVERSATION_FIELDS
     assert family <= current
     assert current == PINNED_CONVERSATION_FIELDS, (
