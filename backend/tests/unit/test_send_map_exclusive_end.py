@@ -72,7 +72,7 @@ def sample_oracle(spans, first, end):
 @pytest.mark.parametrize('seed', range(24))
 def test_randomized_compact_maps_preserve_every_correct_base_window(base_mapper, seed):
     rng = random.Random(seed)
-    counts = dict(compared=0, correct_base=0, changed=0, shortened=0, refused=0, newly_proven=0)
+    counts = dict(compared=0, correct_base=0, changed=0, shortened=0, refused=0, newly_proven=0, newly_proven_start=0)
     shapes = ['contiguous', 'vad_gap', 'duplicate', 'reorder']
     for _ in range(16):
         sends = SendMap(1)  # zero edge tolerance: integer-sample provenance
@@ -105,13 +105,23 @@ def test_randomized_compact_maps_preserve_every_correct_base_window(base_mapper,
                     assert candidate == oracle
                 if base != candidate:
                     counts['changed'] += 1
-                    # Only exact exclusive ends at a discontinuous compact
+                    assert base != oracle  # never alter a previously correct accepted window
+                    # Only windows with an endpoint on a discontinuous compact
                     # boundary change. Non-boundary windows retain base output.
+                    start_index = next((i for i, span in enumerate(sends._spans) if span[0] + span[2] == first), None)
+                    if start_index is not None and start_index + 1 < len(sends._spans):
+                        previous, following = sends._spans[start_index : start_index + 2]
+                        if previous[1] + previous[2] != following[1] and base is None:
+                            # An inclusive start exactly on the first sample after a
+                            # capture gap belongs to the following send; the base
+                            # refused it as straddling the gap it does not touch.
+                            assert candidate == oracle
+                            counts['newly_proven_start'] += 1
+                            continue
                     index = next(i for i, span in enumerate(sends._spans) if span[0] + span[2] == end)
                     assert index + 1 < len(sends._spans)
                     previous, following = sends._spans[index : index + 2]
                     assert previous[1] + previous[2] != following[1]
-                    assert base != oracle  # never alter a previously correct accepted window
                     if candidate is None:
                         counts['refused'] += 1
                     elif base is None:
@@ -119,7 +129,7 @@ def test_randomized_compact_maps_preserve_every_correct_base_window(base_mapper,
                     else:
                         assert candidate[0] == base[0] and candidate[1] < base[1]
                         counts['shortened'] += 1
-    assert counts['changed'] and counts['correct_base']
+    assert counts['changed'] and counts['correct_base'] and counts['newly_proven_start']
     output = os.getenv('SEND_MAP_R9_PROPERTY_OUTPUT')
     if output:
         Path(f'{output}.{seed}.json').write_text(json.dumps(counts, sort_keys=True) + '\n')
@@ -150,3 +160,23 @@ def test_existing_outer_tolerance_and_point_semantics():
     assert sends.map_interval(101, 201) == (201, 300)
     assert sends.map_interval(201, 202) is None
     assert sends.map_interval(100, 100) == (200, 200)
+
+
+def test_inclusive_start_on_first_sample_after_capture_gap_maps_into_its_own_send():
+    """A window that begins exactly where the post-gap send begins is inside that send.
+
+    Provider time is continuous across a VAD skip while capture jumps, so the
+    first word after the skip starts on the span boundary. The preceding span
+    ends there (exclusive) and contributes no sample, so the adjacency check
+    must not treat the window as straddling the gap.
+    """
+    sends = SendMap(100)
+    sends.add_accepted_spans([(0, 100), (200, 100)])
+    assert sends.map_interval(100, 150) == (200, 250)
+    assert sends.map_interval(100, 101) == (200, 201)
+    assert sends.map_interval(100, 200) == (200, 300)
+    # One sample earlier really does straddle the gap and stays refused.
+    assert sends.map_interval(99, 150) is None
+    # A window ending exactly on the gap boundary still belongs to the first send.
+    assert sends.map_interval(50, 100) == (50, 100)
+    assert sends.accepted_provider_samples(100, 150) == 50
