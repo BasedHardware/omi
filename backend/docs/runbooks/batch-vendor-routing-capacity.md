@@ -1,8 +1,9 @@
 # Batch vendor routing: GPU floor, provider capacity and drills
 
 Capacity side of all-vendor batch routing (slice E). Selection, health and the
-provider stage are in `utils/batch_pipeline/vendor_route_contracts.py` and its
-slices. This page covers what keeps routing alive when a vendor or the L4 pool
+provider stage code against the frozen contracts in
+`utils/batch_pipeline/vendor_route_contracts.py` (slice A, landing before this
+page's later steps) and their slices B–D. This page covers what keeps routing alive when a vendor or the L4 pool
 fails: the standing GPU floor, the `provider-stt` queue, the staging rate-limit
 ladder, the failover drills and the guard interlocks. Numbers marked
 **estimate** are modelled, not measured.
@@ -77,19 +78,19 @@ the staging ladder below, then set:
 - `max_concurrent_dispatches` ≈ 2 × peak unit rate × L p95.
 
 Peak rate by step (estimate: about 205k builtin provider units/day at 100%
-batch, plus the vendor-routed share of about 672k supported units/day, less a
-15% GPU floor share at 100%; peak = 2 × mean). The ops scope's 12–16/s counted
-supported units only.
+batch, plus the vendor-routed share of about 672k supported units/day after a
+15% GPU floor share at every step; peak = 2 × mean). The ops scope's 12–16/s
+counted supported units only.
 
 | Vendor routing | Units/day | Peak/s | Dispatch/s | Concurrency at L = 3 / 5 / 10 / 20 s |
 | --- | ---: | ---: | ---: | --- |
-| 0–1% (builtin, draining) | ~212k | ~5 | 10 (as created) | 30 / 50 / 100 / 200 |
-| 5% | ~239k | ~5.5 | 12 | 33 / 55 / 110 / 220 |
-| 25% | ~373k | ~8.6 | 18 | 52 / 86 / 172 / 344 |
+| 0–1% (builtin, draining) | ~211k | ~4.9 | 10 (as created) | 29 / 49 / 98 / 196 |
+| 5% | ~234k | ~5.4 | 11 | 32 / 54 / 108 / 216 |
+| 25% | ~348k | ~8.1 | 17 | 48 / 81 / 161 / 322 |
 | 100% | ~776k | ~18 | 36 | 108 / 180 / 360 / 720 |
 
-48/10 holds through 1% if L ≤ about 5s. Resize before 25% using the measured
-L. The handler runs the delivery on the shared `sync` executor (16 threads per
+48/10 holds through 1% if L ≤ about 5s, and through 5% if L ≤ about 4s (at
+1.85× dispatch headroom). Resize before 25% using the measured L. The handler runs the delivery on the shared `sync` executor (16 threads per
 instance), so one backend-integration instance holds at most 16 vendor calls
 at once. Its cap of 50 instances (concurrency 40) gives 800 threads, shared
 with other integration work. At 100% and L = 10s, 360 held calls need about
@@ -99,26 +100,39 @@ p95 is above about 5s, the stage needs async submit-and-poll before 25%. That
 is slice D's change, not a bigger queue. Alarm on queue age p95 over 15 min,
 never on depth; depth is unbounded by design.
 
-Staging mirrors prod's queue (the mirror test enforces it), so every resize
-lands in both files.
+The `provider-stt` entries arrive with #24222: prod at 48/10, and staging's
+`staging-provider-stt` (created at 16/5 by `deploy/staging/create_queues.sh`)
+raised to the same 48/10 by the config-train. From then on
+`test_config_train.py::test_staging_mirrors_prod_except_names` holds the two
+equal, so every resize lands in both `deploy/ops/prod.yaml` and
+`deploy/ops/staging.yaml`.
 
 ## Staging rate-limit ladder (vendor limits are unknown)
 
 Neither vendor's rate limit is in our records. Find them on staging only,
 never with a burst in prod.
 
-1. Preconditions: staging `staging-provider-stt` queue exists; slice C's
-   breaker is on in staging; synthetic 30s units (non-speech and speech
-   fixtures, no user audio); a daily audio-hour cap on the staging route table
-   sized to the ladder (about 2 audio-h per rung).
-2. Rungs: 5 → 10 → 25 → 50 concurrent, each held 10 min, Modulate first, then
-   Soniox (failover-only, $0.10/h list, so keep its rungs short).
-3. Record per rung: 429 count and share, 5xx share, timeout share, L p50/p95,
+1. Preconditions: `staging-provider-stt` exists at the #24222 size; the lead
+   raises it for the window only (staging config-train) to 50 concurrent / 20
+   per second, so the 25 and 50 rungs are reachable, and restores it after.
+   Slice C's breaker is on in staging. Synthetic 30s units (non-speech and
+   speech fixtures, no user audio).
+2. Audio budget: a rung of C concurrent calls at latency L sends C / L units/s,
+   so 10 minutes of 30s units bill about 5 × C / L audio-hours. The full
+   ladder (5 + 10 + 25 + 50) bills about 450 / L audio-hours: about 150
+   audio-h (~$4.50 on Modulate list) at L = 3s. Set the staging route table's
+   daily cap above that total. A cap hit ends the ladder early and measures
+   nothing, so it is not a clean rung.
+3. Rungs: 5 → 10 → 25 → 50 concurrent, each held 10 min, Modulate first, then
+   Soniox (failover-only, $0.10/h list), with 2-minute rungs to keep its bill
+   near $3 at L = 3s.
+4. Record per rung: 429 count and share, 5xx share, timeout share, L p50/p95,
    integration CPU s/unit, and vendor audio-seconds billed (from
    `omi_batch_pipeline_vendor_attempt_audio_seconds_total`).
-4. Stop at the first rung with 429 ≥ 1% or 5xx ≥ 5% sustained 5 min, or when
-   L p95 doubles from rung 1. The last clean rung is the measured ceiling.
-5. Set the prod queue from section "provider-stt queue" at no more than 50% of
+5. Stop at the first rung with 429 ≥ 1% or 5xx ≥ 5% sustained for half the
+   rung, or when L p95 doubles from rung 1. The last clean rung is the
+   measured ceiling.
+6. Set the prod queue from section "provider-stt queue" at no more than 50% of
    the measured ceiling, and record the receipt beside the change.
 
 Budget the window from the real ceiling of the staging tools (queue drain
@@ -126,9 +140,13 @@ rate, Job timeouts) before scheduling it.
 
 ## Failover drills
 
-**Staging/sim (step 0, before any prod percent).** The pipeline sim runs
-each case, and each must show zero 5xx, zero custody events, zero
-paid-intent violations and no `failed_held` with a vendor cause:
+**Staging/sim (step 0, before any prod percent).** These cases do not exist
+yet. Today the pipeline sim has only a generic provider-failure scenario.
+Slice D (vroute-d) owns adding them as vendor-down conformance scenarios
+beside `test_batch_provider_stt.py`, on the breaker (slice C) and
+`vendor_held` (frozen in `vendor_route_contracts.py`, slice A). Until those
+land, step 0 cannot pass. Each case must show zero 5xx, zero custody events,
+zero paid-intent violations and no `failed_held` with a vendor cause:
 
 | Case | Expect |
 | --- | --- |
@@ -156,16 +174,22 @@ predicates:
 - **F1 (T4, hard):** route proof is read only from GPU-worker logs
   (`event=batch_language_route surface=worker`). Provider units complete on
   Cloud Run and leave none, so each completed provider unit counts as
-  `T4_completed_without_route_proof`. Fix: the provider stage emits a route
-  proof at settle, and the observer reads it with the same scrutiny as worker
-  proof.
+  `T4_completed_without_route_proof`. Fix (observer, omi-workspace
+  `observer_scaling/provider_evidence.py`): accept the durable job-document
+  proof, meaning the admission-stamped `stt_route` (`provider`) plus a
+  `provider_intent` settled without `failure` and, once multi-vendor attempts
+  exist, a matching `ok`/`silence` attempt. Keep those fields stable in the
+  provider stage.
 - **F2 (T2, blind):** a provider-cause `failed_held` unit has no VAD receipt,
-  so T2 can never be CLEAN. Fix: the provider stage logs its CPU Silero
-  receipt, and the observer reads it.
+  so T2 can never be CLEAN. The observer already reads
+  `measured_held_vad_speech_seconds` / `worker_vad_receipt` from the job
+  document. Fix (provider stage): write the CPU Silero measurement on the
+  failed-held settle, as quarantine recovery does.
 - **F3 (T3 and the 2h backstop):** `vendor_held` units count as wedges and
-  against ADR-0001's 2h backstop. Exclude them only while
-  `is_vendor_policy_hold` holds (redrive due plus the stale grace), so a dead
-  redrive still alerts.
+  against ADR-0001's 2h backstop, which `trips.toml` still marks as rollback
+  authority. Any exclusion must be bounded by `is_vendor_policy_hold` (redrive
+  due plus the stale grace), so a dead redrive still alerts. The lead decides
+  the bound before it is coded.
 - **F4 (in-cluster batch verdict):** `batch_pipeline_store.oldest()` skips
   only allowance holds and fails toward the oldest hold past 500 holds, so a
   large `vendor_held` population drives `uncommitted_job_age_over_30m`.
