@@ -14,7 +14,11 @@ New designs join as new arms; the split is set in PostHog, never in code.
 
 **Unit.** A signed-in reader who reaches the steps after consent. Exposure = `Onboarding Variant
 Shown` (property `$feature/onboarding-variant`), emitted once by the onboarding wrapper at the
-moment the arm is entered; an unread flag counts as control.
+moment the arm is entered; an unread flag counts as control. Assignment is sticky per account on
+the phone: the first arm resolved (control included, when the read was slow or unread) is stored
+until onboarding completes, so a relaunch mid-onboarding re-enters that arm and repeats the same
+exposure without reading the flag again (before 2026-10-29, 5.6% of new readers switched arm on
+a relaunch, 56 of 64 from control to pocket).
 
 **Primary metrics.** `Onboarding Completed` per exposed reader (funnel, 7-day window) and
 `Upgrade Succeeded` per exposed reader (funnel, 7-day window).
@@ -31,6 +35,7 @@ regardless of conversion. Run until each arm has at least 2,000 exposed readers 
 whichever is later.
 
 **Kill switch.** Set the flag's split to control 100% (or deactivate the flag); every build
-falls back to the shipped steps without a release.
+falls back to the shipped steps without a release. A reader already mid-onboarding finishes the
+arm they were given; everyone who has not resolved an arm yet gets control.
 
 **Owner.** nik. Created 2026-10-14. Review by 2026-11-13.
