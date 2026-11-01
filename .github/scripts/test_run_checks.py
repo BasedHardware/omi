@@ -22,9 +22,11 @@ from unittest.mock import patch
 
 from git_bash import bash_executable, bash_path, native_path_from_bash
 from run_checks import (
+    MAX_CHECK_JOBS,
     VALID_PLATFORMS,
     Check,
     Manifest,
+    check_jobs,
     command_for_check,
     command_for_host,
     detect_platform,
@@ -1548,6 +1550,39 @@ class ParallelRunnerTests(unittest.TestCase):
             # The preflight runner names the failing phase from the last `==> ` line.
             self.assertEqual([line for line in stdout.splitlines() if line.startswith("==> ")][-1], "==> bad")
             self.assertIn("Manifest checks failed: bad", stderr)
+
+    def test_checks_finished_by_the_first_failure_keep_their_real_result(self) -> None:
+        """Luna r1 on #24232: a pass or a second failure that finished alongside the first must not read CANCELLED."""
+        real_sleep = time.sleep
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            quick = {"bad": "raise SystemExit(3)", "also-bad": "raise SystemExit(4)", "fine": "print('fine')"}
+            checks = [
+                self.script(root, name, f"import pathlib\npathlib.Path('{name}.done').touch()\n{body}\n")
+                for name, body in quick.items()
+            ]
+            checks.append(self.script(root, "slow", "import time\ntime.sleep(60)\n"))
+
+            def wait_for_quick_checks(_seconds: float) -> None:
+                # Hold the poll until all three quick checks have exited, so one scan sees them together.
+                deadline = time.monotonic() + 120  # interpreter startup alone took >30 s at load 140 on m5
+                while not all((root / f"{name}.done").exists() for name in quick) and time.monotonic() < deadline:
+                    real_sleep(0.02)
+                real_sleep(0.5)
+
+            with patch("run_checks.time.sleep", wait_for_quick_checks):
+                result, stdout, stderr = self.run_checks_in(root, checks, jobs="4")
+            self.assertEqual(result, 1)
+            self.assertIn("<== PASS fine", stdout)
+            self.assertIn("<== CANCELLED slow", stdout)
+            self.assertNotIn("CANCELLED fine", stdout)
+            self.assertNotIn("CANCELLED also-bad", stdout)
+            self.assertIn("Manifest checks failed: bad, also-bad", stderr)
+
+    def test_jobs_override_is_clamped(self) -> None:
+        for raw, expected in (("54", MAX_CHECK_JOBS), ("0", 1), ("3", 3)):
+            with self.subTest(raw=raw), patch.dict(os.environ, {"OMI_CHECKS_JOBS": raw}):
+                self.assertEqual(check_jobs(), expected)
 
     def test_keep_going_reports_every_failure_in_manifest_order(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -23,6 +23,8 @@ from git_bash import bash_executable
 
 VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
 MANIFEST_RELATIVE_PATH = ".github/checks-manifest.yaml"
+DEFAULT_MAX_CHECK_JOBS = 4
+MAX_CHECK_JOBS = 8
 
 
 def detect_platform() -> str:
@@ -463,14 +465,17 @@ def command_for_host(
 
 
 def check_jobs() -> int:
-    """Worker count for parallel-safe checks; OMI_CHECKS_JOBS=1 restores the serial run."""
+    """Worker count for parallel-safe checks; OMI_CHECKS_JOBS=1 restores the serial run.
+
+    Overrides are clamped to MAX_CHECK_JOBS: the pool runs inside one omi-heavy slot on shared hosts.
+    """
     raw = os.environ.get("OMI_CHECKS_JOBS", "").strip()
     if raw:
         try:
-            return max(1, int(raw))
+            return min(MAX_CHECK_JOBS, max(1, int(raw)))
         except ValueError:
             print(f"WARN: ignoring non-integer OMI_CHECKS_JOBS={raw!r}", file=sys.stderr)
-    return min(4, max(1, (os.cpu_count() or 2) // 2))
+    return min(DEFAULT_MAX_CHECK_JOBS, max(1, (os.cpu_count() or 2) // 2))
 
 
 def is_parallel_safe(check: Check) -> bool:
@@ -581,6 +586,20 @@ def execute_parallel_checks(
     running: dict[str, tuple[subprocess.Popen[bytes], Any, float]] = {}
     failures: list[str] = []
     failed_block: str | None = None
+
+    def collect(check_id: str) -> tuple[int, str]:
+        process, log, started = running.pop(check_id)
+        elapsed = time.monotonic() - started
+        durations[check_id] = elapsed
+        log.seek(0)
+        output = log.read().decode("utf-8", "replace")
+        log.close()
+        status = "PASS" if process.returncode == 0 else "FAIL"
+        block = f"==> {check_id}\n{output}"
+        if output and not output.endswith("\n"):
+            block += "\n"
+        return process.returncode, block + f"<== {status} {check_id} ({elapsed:.2f}s)\n"
+
     try:
         while pending or running:
             while pending and len(running) < jobs:
@@ -599,30 +618,27 @@ def execute_parallel_checks(
                 time.sleep(0.05)
                 continue
             for check_id in finished:
-                process, log, started = running.pop(check_id)
-                elapsed = time.monotonic() - started
-                durations[check_id] = elapsed
-                log.seek(0)
-                output = log.read().decode("utf-8", "replace")
-                log.close()
-                status = "PASS" if process.returncode == 0 else "FAIL"
-                block = f"==> {check_id}\n{output}"
-                if output and not output.endswith("\n"):
-                    block += "\n"
-                block += f"<== {status} {check_id} ({elapsed:.2f}s)\n"
-                if process.returncode:
+                returncode, block = collect(check_id)
+                if returncode:
                     failures.append(check_id)
-                    if not keep_going:
+                    if not keep_going and failed_block is None:
                         failed_block = block
-                        break
+                        continue
                 print(block, end="", flush=True)
             if failed_block is not None:
+                pending.clear()
+                # Checks that finished on their own report their real result; only live ones are cancelled.
                 for check_id, (process, log, _) in list(running.items()):
+                    if process.poll() is not None:
+                        returncode, block = collect(check_id)
+                        if returncode:
+                            failures.append(check_id)
+                        print(block, end="", flush=True)
+                        continue
                     _stop(process)
                     log.close()
+                    running.pop(check_id)
                     print(f"<== CANCELLED {check_id} (stopped after the first failure)", flush=True)
-                running.clear()
-                pending.clear()
     finally:
         for process, log, _ in running.values():
             _stop(process)
