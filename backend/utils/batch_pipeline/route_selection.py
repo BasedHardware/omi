@@ -126,14 +126,19 @@ def _price(table: contracts.RouteTable, route: str) -> float:
 def decide(table: contracts.RouteTable, language: str | None, *, byok: bool, uid: str) -> RouteDecision | None:
     """Pure selection over one table; ``None`` when the table offers no capable route."""
     options = contracts.capable_options(table, language)
-    if not options:
-        return None
     capable = [option.route for option in options]
     healthy = [route for route in capable if route_allowed(route)]
     primaries = [route for route in healthy if not table.routes[route].failover_only]
 
-    if contracts.GPU in capable and cohort_bucket(uid, contracts.GPU_FLOOR_COHORT_SALT) < table.gpu_floor_percent:
+    # The floor is a fleet share, not a row preference: it holds wherever deployed Parakeet can
+    # serve the language (code-owned capability), even when the row leaves GPU out.
+    if (
+        contracts.route_capable(contracts.GPU, language)
+        and cohort_bucket(uid, contracts.GPU_FLOOR_COHORT_SALT) < table.gpu_floor_percent
+    ):
         selected, reason = contracts.GPU, VendorRouteReason.GPU_FLOOR
+    elif not capable:
+        return None
     elif primaries:
         if len([route for route in capable if not table.routes[route].failover_only]) == 1:
             selected, reason = primaries[0], VendorRouteReason.SOLE_CAPABLE

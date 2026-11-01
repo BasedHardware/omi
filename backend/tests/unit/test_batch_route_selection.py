@@ -328,6 +328,16 @@ def test_gpu_floor_share_takes_gpu_regardless_of_price(monkeypatch):
     assert _select(UNSUPPORTED).selected == 'modulate'  # the floor never routes an unsafe language
 
 
+def test_gpu_floor_holds_when_the_row_omits_gpu(monkeypatch):
+    table = {**copy.deepcopy(TABLE), 'gpu_floor_percent': 100.0}
+    table['rows'] = [{'language_class': '*', 'options': [_option('modulate')]}]
+    _cohort(monkeypatch, table)
+    decision = _select(SUPPORTED)
+    assert (decision.selected, decision.reason) == ('gpu', Reason.GPU_FLOOR)
+    assert decision.route == resolve_route(SUPPORTED)
+    assert _select(UNSUPPORTED).selected == 'modulate'
+
+
 def test_gpu_floor_is_a_stable_bucket_independent_of_the_ramp(monkeypatch):
     table = {**copy.deepcopy(TABLE), 'gpu_floor_percent': 20.0}
     _cohort(monkeypatch, table)
@@ -361,6 +371,15 @@ def test_invalid_schema_is_rejected_without_logging_content(monkeypatch, caplog)
         assert rs.current_table() == (c.BUILTIN_TABLE, VendorRouteTableOutcome.BUILTIN)
     assert 'outcome=rejected served=builtin' in caplog.text
     assert '0.1' not in caplog.text and 'soniox' not in caplog.text
+
+
+@pytest.mark.parametrize('payload', ['null', ' null ', '[]', '"t1"'])
+def test_json_null_or_non_table_after_valid_serves_last_valid(monkeypatch, payload):
+    _cohort(monkeypatch)
+    rs.current_table()
+    _cohort(monkeypatch, payload)
+    table, outcome = rs.current_table()
+    assert outcome is VendorRouteTableOutcome.LAST_VALID and table.table_version == 't1'
 
 
 def test_unset_table_after_valid_serves_builtin(monkeypatch):

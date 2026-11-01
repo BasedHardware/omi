@@ -56,10 +56,15 @@ def route_table_raw() -> str | None:
 
 
 def parse_route_table(raw: str | None) -> Any:
-    """``None`` stays ``None``; text that is not JSON becomes ``INVALID_PAYLOAD``."""
+    """``None`` (unset) stays ``None``; text that is not a JSON table becomes ``INVALID_PAYLOAD``.
+
+    A literal JSON ``null`` is a set-but-invalid payload, not an unset table: it must serve the
+    last valid table, never silently switch to the builtin one.
+    """
     if raw is None:
         return None
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
     except ValueError:
         return INVALID_PAYLOAD
+    return INVALID_PAYLOAD if parsed is None else parsed
