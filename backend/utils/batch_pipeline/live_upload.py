@@ -191,6 +191,10 @@ async def registered_record_response(
         row = snapshot.to_dict() or {}
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
+            # The upload follows a prior durable owner whether the re-home
+            # succeeds (BATCH) or holds (LEGACY): never a fresh batch admission.
+            if evidence is not None:
+                evidence.final_pass_owner_followed = True
             return await _legacy_final_pass_route(uid, conversation_id, store, legacy_mode)
         if row.get('record_lane_owner') == 'batch_sync_v1':
             return RecordUploadRoute.BATCH

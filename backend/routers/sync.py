@@ -944,7 +944,11 @@ async def sync_local_files_v2(
                 evidence=intake_evidence,
             )
             if batch_response is not None:
-                record_upload_outcome('batch')
+                # Count only a fresh admission this request (a re-ACK of prior
+                # custody, a fence/unavailable response, or a rehomed final-pass
+                # owner is a follow-on, not a batch landing).
+                if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
+                    record_upload_outcome('batch')
                 return batch_response
             sequencer_registration_started = False
 

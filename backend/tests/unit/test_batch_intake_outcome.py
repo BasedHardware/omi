@@ -29,7 +29,8 @@ from utils.batch_pipeline.intake_outcome import (
     record_upload_outcome,
 )
 from utils.batch_pipeline.live_upload import RecordUploadRoute
-from utils.sync import legacy_dark
+from utils.sync import final_pass_rehome, legacy_dark
+from utils.sync.final_pass_rehome import RehomeOutcome
 from utils.sync.legacy_dark import LegacySyncMode
 
 UID, CID = 'test-uid', 'synthetic-conversation'
@@ -79,8 +80,10 @@ def _no_durable_owner_client():
     return client
 
 
-def _language_world(monkeypatch):
+def _language_world(monkeypatch, *, owner=None):
     row = {'status': 'completed', 'language': 'auto', '_test_revision': 1}
+    if owner:
+        row['record_lane_owner'] = owner
     user = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
     client = StrictFirestore({USER: user, CONVERSATION: row})
     store = MemoryStore()
@@ -179,6 +182,86 @@ async def test_intake_language_exclusion_decline_marks_evidence(monkeypatch):
     assert not world.store.rows  # No batch ledger, jobs, intakes or queue writes.
 
 
+async def test_accept_upload_marks_evidence_only_on_a_fresh_admission(monkeypatch):
+    """Luna r1 P1: the batch flag belongs to the admission itself, never to the
+    non-None responses that re-ack prior batch custody."""
+
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_dev'
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+    monkeypatch.setattr(intake, 'serving_for', lambda *a, **k: False)
+    monkeypatch.setattr(intake, 'admission_language_exclusion_enabled', lambda: False)
+    monkeypatch.setattr(intake, 'language_guard_enabled', lambda: False)
+    monkeypatch.setattr(
+        intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
+    )
+    monkeypatch.setattr(intake, 'with_context', lambda wav, ctx: wav)
+    artifacts = Mock()
+    artifacts.stage_audio = Mock(return_value='gs://synthetic/audio.bin')
+    monkeypatch.setattr(intake, 'artifacts_for', Mock(return_value=artifacts))
+
+    def authorize(_store, _work, snapshots):
+        snapshots['user'] = {}
+        snapshots['conversations'] = {}
+        return ProtectionContext('standard', 0)
+
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(intake, 'admit', lambda *a, **k: {'outcome': 'batch', 'job_id': 'bp_new'})
+    monkeypatch.setattr(
+        intake,
+        'durable_status',
+        lambda *a, **k: {
+            'job_id': 'bp_new',
+            'status': 'queued',
+            'total_files': 1,
+            'total_segments': 0,
+            'poll_after_ms': 0,
+            'lane': 'fresh',
+        },
+    )
+    from utils.stt import batch_language
+
+    monkeypatch.setattr(
+        batch_language,
+        'resolve_language',
+        lambda *a, **k: SimpleNamespace(
+            language='en', parakeet_safe=True, evidence=None, confidence=1.0, probe_seconds=0.0
+        ),
+    )
+
+    def decode(_max_seconds):
+        yield SimpleNamespace(capture_at=0.0, duration_seconds=1.0, wav=b'x', coverage_runs=())
+
+    arguments = dict(
+        uid=UID,
+        job_id='job',
+        content_id='content',
+        paths=[],
+        lane='fresh',
+        recording_age_seconds=60,
+        source='omi',
+        should_lock=False,
+        conversation_id=None,
+        client_device_id=None,
+        client_platform='ios',
+        policy=BatchUnitPolicy(batch_enabled=True, batch_percent=5),
+        decode=decode,
+    )
+    evidence = IntakeRouteEvidence()
+    response = await intake.accept_upload(**arguments, evidence=evidence)
+    assert response.status_code == 202
+    assert evidence.batch_accepted
+
+    # A prior batch receipt re-ACKs custody with the same 202 shape: no fresh admission.
+    store.rows['content', f'{UID}/content'] = {'dispatch_protocol': 'batch_v1', 'job_id': 'bp_prior'}
+    reupload = IntakeRouteEvidence()
+    response = await intake.accept_upload(**arguments, evidence=reupload)
+    assert response.status_code == 202
+    assert not reupload.batch_accepted
+
+
 # --- one counter branch per upload outcome, through the real router ------------------------------
 
 
@@ -188,9 +271,12 @@ async def test_upload_accepted_by_batch_counts_batch(monkeypatch):
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
         module.resolve_batch_policy = lambda uid: enabled_policy()
         module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
-        module.accept_batch_upload = AsyncMock(
-            return_value=module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
-        )
+
+        async def admit_fresh(**kwargs):
+            kwargs['evidence'].batch_accepted = True
+            return module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
+
+        module.accept_batch_upload = admit_fresh
         module.create_sync_job = Mock()
         before = _counts()
         response = await _upload(module, BytesIO)
@@ -198,6 +284,60 @@ async def test_upload_accepted_by_batch_counts_batch(monkeypatch):
         after = _counts()
         assert after['batch'] == before['batch'] + 1
         assert {k: v for k, v in after.items() if k != 'batch'} == {k: v for k, v in before.items() if k != 'batch'}
+        module.create_sync_job.assert_not_called()
+    finally:
+        _restore(saved)
+
+
+async def test_batch_response_without_fresh_admission_is_not_counted(monkeypatch):
+    """Luna r1 P1: a non-None batch response is not a landing — only an admission is."""
+
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+        module.resolve_batch_policy = lambda uid: enabled_policy()
+        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+        # A re-ACK of prior batch custody or an unavailable 503 returns non-None
+        # without admitting fresh work; neither may count as a batch landing.
+        module.accept_batch_upload = AsyncMock(
+            return_value=module.JSONResponse(
+                status_code=503, content={'code': 'sync_batch_unavailable', 'detail': 'retain local audio'}
+            )
+        )
+        module.create_sync_job = Mock()
+        before = _counts()
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 503
+        assert _counts() == before
+        module.create_sync_job.assert_not_called()
+    finally:
+        _restore(saved)
+
+
+async def test_rehomed_final_pass_owner_batch_landing_is_not_counted(monkeypatch):
+    """Luna r1 P1: a rehomed legacy_final_pass_v1 owner follows a durable owner,
+    so its batch landing is an owner transition, not a fresh ramp admission."""
+
+    world = _language_world(monkeypatch, owner='legacy_final_pass_v1')
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.DRAINING)
+        monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: RehomeOutcome.REHOMED)
+        module.resolve_batch_policy = lambda uid: world.policy
+        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+        module.compute_sync_content_id = lambda *a: 'new'
+        module.registered_record_response = live_upload.registered_record_response
+
+        async def admit_fresh(**kwargs):
+            kwargs['evidence'].batch_accepted = True  # Fresh content admission...
+            return module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
+
+        module.accept_batch_upload = admit_fresh
+        module.create_sync_job = Mock()
+        before = _counts()
+        response = await _upload(module, BytesIO, conversation_id=CID)
+        assert response.status_code == 202
+        assert _counts() == before  # ...behind a final-pass owner: still not counted.
         module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)

@@ -34,15 +34,20 @@ INTAKE_OUTCOMES.labels(outcome='not_cohort').inc(0)
 
 @dataclass
 class IntakeRouteEvidence:
-    """Fresh exclusion decisions observed while routing one upload request.
+    """Fresh admission decisions observed while routing one upload request.
 
     The router owns one instance per request and passes it down as ``evidence``;
-    each decision module marks only the exclusion it itself decided, so a flag
-    is set iff this request's routing actually hit that exclusion.
+    each decision module marks only the decision it itself made. ``batch``
+    counts an upload only when this request admitted fresh work into batch
+    intake (``batch_accepted``): a re-ACK of prior batch custody, a fence or
+    unavailable response, and a rehomed final-pass owner
+    (``final_pass_owner_followed``) are follow-ons, not fresh admissions.
     """
 
     heavy_owner_excluded: bool = False
     language_excluded: bool = False
+    batch_accepted: bool = False
+    final_pass_owner_followed: bool = False
 
 
 def record_upload_outcome(outcome: BatchIntakeOutcome | str) -> None:
