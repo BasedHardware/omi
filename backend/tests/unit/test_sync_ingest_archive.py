@@ -565,7 +565,9 @@ async def test_archive_failure_retains_pcm_path(monkeypatch, buckets):
     assert buckets['canonical'].blob(paths[0]).data == chunk['data']
 
 
-def test_pcm_retirement_requires_whole_byte_identical_coverage(monkeypatch, buckets):
+@pytest.mark.parametrize('on_demand', ['false', 'true'])
+def test_pcm_retirement_requires_whole_byte_identical_coverage(monkeypatch, buckets, on_demand):
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', on_demand)
     pcm = b'\x00\x01' * 160
     pack = CapturePack('pcm16', 16000)
     pack.append(pcm, 'conversation', 1000, 160)
@@ -587,7 +589,7 @@ def test_pcm_retirement_requires_whole_byte_identical_coverage(monkeypatch, buck
     assert not any(name.startswith('chunks/') for name in buckets['canonical'].blobs)
     # Rolling writes back preserves committed raw reads; READ stays on after phase C.
     monkeypatch.setenv('AUDIO_ARCHIVE_STOP_PCM_ENABLED', 'false')
-    chunks = storage.list_audio_chunks('owner', 'conversation')
+    chunks = storage.list_audio_chunks('owner', 'conversation', source_identity=True)
     assert len(chunks) == 1
     assert storage.download_audio_chunks_and_merge('owner', 'conversation', [1000]) == pcm
     blob = buckets['canonical'].blob(path)

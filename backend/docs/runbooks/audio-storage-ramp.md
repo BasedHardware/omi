@@ -3,7 +3,7 @@
 The rollout lead owns every apply, via an existing Cloud Run/GKE train. Config
 PRs are a sequence, never a batch of flags to merge together. Keep later PRs
 draft until the preceding step passes its soak and the lead requests the next
-apply. The batch release freeze remains in force; no extra Cloud Run train.
+apply. Coordinate with the current batch freeze; no extra Cloud Run train.
 No lifecycle changes, audio deletion, or custody kill-switch changes belong here.
 
 ## Sequence and rollback
@@ -18,13 +18,24 @@ No lifecycle changes, audio deletion, or custody kill-switch changes belong here
 
 Each commit updates both production chart values, six production runtime
 overlay maps, the generated manifest and flag registry. Development stays at
-zero. Rebase/recompose the next draft against current main before requesting
+zero. Merge current main into the published next draft and recompose before requesting
 merge; train operators must use that checked revision, rather than a live env
 patch that the next train overwrites. Both GKE and Cloud Run must read back the
-step before its full observation window starts. Lead ruling 6418ac requires
-the custody baseline after the 06Z roll's actual DONE plus one hour; no
-pre-roll lookback may become this ramp's baseline. First apply remains in the
-bundled post-10Z train, outside op2's 05:45 through GKE DONE+1h reservation.
+step before its full observation window starts. Collect a new matched baseline
+after the latest custody-affecting GKE roll's actual DONE plus one hour; no
+pre-roll lookback may become this ramp's baseline. The October 27/29 train
+reservations and accepted numeric baselines are historical, not permission
+to apply now. The lead must name a current train and accept the new baseline.
+Hold the batch percentage and playback-on-demand state fixed across the
+comparison; first let those changes settle so their savings are not credited
+to STOP_PCM. If they change during a soak, restart attribution with a new
+accepted baseline rather than expanding from a confounded receipt.
+
+The lead owns expansion: schedule the 5% canary only after current batch and
+playback acceptance, then 25% after at least 12h clean and 100% after at least
+4h clean. Review the apply-or-close decision by November 2, 2026; if applied,
+target completion or explicit rollback/hold by November 5. Do not expand on a
+calendar deadline without passing receipts and positive incremental net value.
 
 STOP_PCM rollback: percent 0, optionally disable; READ and custody remain on.
 Regional rollback: set REGIONAL_CACHE_PERCENT=0 first, then disable
@@ -83,7 +94,7 @@ Receipt fields:
   `image_digest`, `share_percent` (sum 100), `ready`, and `effective_env`.
   Cloud Run uses `status.traffic` and those revisions' release identity, never
   the newest service spec. GKE uses ready pods/images and effective flags,
-  including all running images during a roll. Omitted default-on custody must
+including all running images during a roll. Omitted default-on custody must
   be verified from the exact image source before recording effective `true`.
 - `quality`: batch_stt, shadow_wer, speech_redrive, playback, audio_merge,
   decode_failed; each has `passed` plus a linked `evidence_ref`. Require flat
@@ -111,6 +122,41 @@ projection/transient ~1477, commit/other ~3, queue would_drop ~196; it is
 context, not the new step's acceptance baseline.
 
 ## Savings reporting
+
+November 1 refresh: KEEP as a small, conditional duplicate-write lever, with
+$0 realized and $0 committed to the margin forecast until measured. It is
+not a demonstrated $50/day saving. In the 24h ending 2026-11-01 05:00Z,
+in-cluster reset-aware counters measured about 239,716 span-bearing projection
+batches, 8,683 spanless batches and zero PCM writes avoided. Pusher raw PCM16
+capture was about 394.96 GB (367.84 GiB). At the latest exported rates of
+$9/million Standard multi-region Class A operations and $0.018/GiB replication,
+removing every span-bearing write and a duplicate of all those PCM bytes would
+save about $2.16 + $6.62 = $8.78/day gross. This is a generous current-traffic
+envelope, not an eligibility measurement or a post-batch forecast: some raw
+bytes never make a duplicate projection, proof can miss, requests can retry,
+and PCM batches need not align to one raw pack. Added proof LIST/GET/download
+and decode work reduce net savings. A proof LIST costs the same Class A rate
+as a write; do not equate one avoided write with one avoided billed operation.
+Future at-rest growth avoidance is separate and depends on retention; no
+historical storage or deletion saving is claimed.
+
+Batch 100% is an admission percentage, not proof that all PCM projection work
+disappears. The current server-batch listen path still starts pusher and sends
+audio when private cloud sync is enabled; pusher still projects durable
+receipts through `upload_audio_chunks_batch`. Mobile local-preview traffic
+can remove that work, so remeasure the residual after the ramp. Playback on
+demand gates merge enqueue/build activity, not this ingestion writer. Never
+add STOP_PCM's old estimate to those levers without measuring the residual.
+
+Skipping requires READ, 16 kHz positioned chunks, full committed raw coverage,
+successful checksum/decode/sample checks and PCM identity proof. A miss or
+exception keeps the PCM write. Custody media and manifests remain immutable;
+no successful projection deletes them. Rollback restores future PCM writes,
+and READ must stay on for recordings whose PCM write was already skipped.
+Local fake-storage checks establish these paths, not live audio acceptance.
+Before applying, qualify actual raw-backed playback, batch STT and speech
+redrive through the lead's authorized canary; this refresh does not read audio
+or certify current production parity.
 
 After every step, post the observed write/avoidance/replication changes and
 monthly estimate to plans-cost with its report reference. Label a modeled
