@@ -161,7 +161,7 @@ async def run_push_async(
     """
     claimed = await run_sync(outbox.claim_key, row_id, wake_token, consumer.lease_seconds, now=now)
     if not isinstance(claimed, Claim):
-        return _unclaimed(consumer, claimed)
+        return await run_sync(_unclaimed, consumer, claimed)
     latest = [now]
 
     def heartbeat() -> bool:

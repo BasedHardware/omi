@@ -68,7 +68,7 @@ async def run_delivery_async(
     event loop (Velma batch is synchronous-only, so its open request must not hold a thread)."""
     return await run_push_async(
         consumer or ProviderSttConsumer(),
-        outbox or outbox_for(OutboxKind.PROVIDER_STT),
+        outbox or await _run_sync(outbox_for, OutboxKind.PROVIDER_STT),
         row_id,
         wake_token,
         now=time.time(),
