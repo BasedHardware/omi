@@ -95,6 +95,20 @@ def process_start(pid):
                           env={**os.environ, 'LC_ALL': 'C', 'TZ': 'UTC'}).stdout.strip()
 
 
+def profile_command(spec, device):
+    command = [spec['heavy'], 'run', '--', 'nice', '-n', '19', 'bash',
+               str(APP / 'tool/perf_sim_profile.sh'), '--platform', spec['platform'],
+               '--device', device, '--runs', str(spec['runs']), '--out', spec['out'],
+               '--upload', spec.get('upload', 'refuse'),
+               '--semantics', spec.get('semantics', 'off'),
+               '--upload-wals', str(spec.get('upload_wals', 12))]
+    if spec['timeline']:
+        command.append('--timeline')
+    if spec.get('synced_wals'):
+        command += ['--synced-wals', str(spec['synced_wals'])]
+    return command
+
+
 def worker(spec_path):
     spec = json.loads(Path(spec_path).read_text())
     out = Path(spec['out'])
@@ -142,13 +156,7 @@ def worker(spec_path):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with (out / 'runner.log').open('w') as log:
             device = spec['device'] or detect(spec['platform'])
-            command = [spec['heavy'], 'run', '--', 'nice', '-n', '19', 'bash',
-                       str(APP / 'tool/perf_sim_profile.sh'), '--platform', spec['platform'],
-                       '--device', device, '--runs', str(spec['runs']), '--out', str(out)]
-            if spec['timeline']:
-                command.append('--timeline')
-            if spec.get('synced_wals'):
-                command += ['--synced-wals', str(spec['synced_wals'])]
+            command = profile_command(spec, device)
             log.write('COMMAND ' + shlex.join(command) + '\n')
             log.flush()
             process = subprocess.Popen(command, cwd=REPO, stdout=log, stderr=subprocess.STDOUT,
@@ -194,7 +202,7 @@ def run(args):
                 parent_pid=os.getpid(),
                 parent_start=process_start(os.getpid()), launch_expires_at=time.time() + 300,
                 device=args.device, platform=args.platform, runs=args.runs, timeline=args.timeline, synced_wals=args.synced_wals,
-                aqua_app=args.aqua_app,
+                aqua_app=args.aqua_app, upload=args.upload, semantics=args.semantics, upload_wals=args.upload_wals,
                 baseline=str(Path(args.baseline).expanduser().resolve()) if args.baseline else None,
                 accept_baseline=args.accept_baseline,
                 env={key: os.environ[key] for key in ENV_KEYS if key in os.environ})
@@ -277,6 +285,12 @@ def main():
     parser.add_argument('--baseline', help='accepted baseline directory; otherwise use artifact root last-accepted pointer')
     parser.add_argument('--accept-baseline', action='store_true', help='publish a pointer only after profile variance passes')
     parser.add_argument('--timeline', action='store_true', help='attribution diagnostic; never baseline acceptance')
+    parser.add_argument('--upload-wals', type=int, choices=range(1, 19), default=12,
+                        help='file-backed pending WALs to finish in success window (1..18)')
+    parser.add_argument('--upload', choices=('refuse', 'accept'), default='refuse',
+                        help='hermetic upload/job completion in the appended success window')
+    parser.add_argument('--semantics', choices=('off', 'on'), default='off',
+                        help='measure accessibility semantics separately (default off)')
     parser.add_argument('--synced-wals', type=int, default=0,
                         help='field-shaped diagnostic: add N synced WAL records (0..80000); never baseline acceptance')
     parser.add_argument('--dry-run', action='store_true', help='show plan without launching, building or installing')

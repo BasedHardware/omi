@@ -45,7 +45,8 @@ launch lets it complete and retains its output, then invalidates the entire
 batch without retry. Every warmup and measured launch needs passing host-load
 evidence before the report can qualify a virtual baseline.
 
-All measured runs participate in the unchanged 15% p90 spread gate. Slow runs
+All measured runs participate in scoring. Dense windows retain the 15% p90 spread gate;
+sparse windows use readiness/stall gates described below. Slow runs
 and frames are retained, including first exposure in warmup. No statistical
 outlier is silently dropped. A passing profile emulator batch is marked
 `qualified_virtual_baseline`; `accepted_baseline` remains false, and the
@@ -143,8 +144,22 @@ Earlier qualification directories predate this ledger and remain retained.
 
 Each frame receipt includes per-flow build/raster/total p50/p90/p99, counts over
 16/32/100 ms, worst frame, nonempty-frame checks and exact measurement windows.
-The gate requires three identical-binary runs and `(max p90 - min p90)/min p90`
-at most 15% for **every** build/raster/total p90. A failed batch remains failed;
+The gate requires at least three identical-binary runs. SCENARIOS explicitly declares
+`cold_start` and `home_idle_sync_refresh` sparse: their p90 values remain in the
+report/comparison but are not variance-gated. All other windows require
+`(max p90 - min p90)/min p90 <= 15%` for every build/raster/total p90.
+Cold start instead requires the same <=15% spread on `cache_ready_us`, measured
+monotonically from mount to cache/WAL/provider readiness (before the fixed settle).
+Both sparse windows must meet, in **each** run, at most 2 stalls >=100ms and
+at most 500,000us total blocked time from those stalls. These fixed absolute
+budgets allow bounded cold decode work but reject repeated idle blocking or a
+single long freeze; unlike a spread rule they remain defined at zero and
+reject consistently bad batches. Stalls in dense windows remain diagnostic.
+These are initial budgets requiring device qualification, not field-derived SLOs.
+`variance_pass` includes all these scoring gates for existing runner compatibility;
+`scoring_protocol=sparse-readiness-stalls/v1` and the budgets are saved in summary.
+Comparisons require matching scoring protocol and budgets. This protocol change
+requires a newly qualified baseline; historical failures stay failed. A failed batch remains failed;
 never discard one run, reduce the heavy fixture, or raise the limit to pass.
 
 `--accept-baseline` updates `last-accepted-baseline.json` only for a qualifying
@@ -237,6 +252,74 @@ all evidence, compares with the accepted reference, and leaves notification and
 cadence to that scheduler. It never pulls, merges, deploys, signs in, installs a
 scheduler, creates a GitHub workflow or automatically rebaselines.
 
+## Successful uploads and semantics
+
+The default is `--upload refuse --semantics off`. Semantics is disabled using
+`testWidgets(semanticsEnabled: false)`, leaving ordinary framework scheduling
+intact. `--semantics on` measures the accessibility tree separately. The harness
+asserts the actual binding semantics state matches the requested setting;
+disable assistive technology for an off run if that assertion fails. Receipts
+and summary `dataset.semantics` explicitly record `on`/`off`; comparison rejects
+mixed or missing settings both within and across batches.
+
+`--upload accept --upload-wals 12` appends `wal_sync_upload_success` after the
+existing nine windows, preserving their names/order and delayed loopback 429
+behavior. Only the appended window enables the injected `SyncUploadGate`
+uploader and job-status fetcher. It reads synthetic framed bytes and returns
+queued jobs, then completed results, with no server/STT/LLM calls. All production
+sync phases, WAL transitions, index persistence, refreshes and notifications run.
+No device is attached: phases 1a/1b run their empty discovery boundaries; BLE
+transfer itself is not simulated. Existing history remains in every inventory
+scan. In this last window the remaining backlog is temporarily held for the
+user while N file-backed pending WALs fully drain; hold flags are restored in
+finally. Admission setup/restore persists outside the measurement window so
+synthetic hold edits are not charged to upload completion. `--upload-wals` is 1..18 (default 12), fitting the real poller's
+18 requests/minute budget. The window honors the real 20s job defer with a
+fixed 21s pause before one reconcile burst; no fake clock or pacing bypass.
+The result asserts all selected WALs became synced and records uploaded WALs
+and completed jobs. Mode/N are comparison dataset identity. This measures a
+bounded success burst over the heavy inventory, not completion of all 6,500
+pending files in a single window.
+
+Direct defines: `PERF_SIM_UPLOAD=accept`, `PERF_SIM_UPLOAD_WALS=12`, and
+`PERF_HEAVY_SEMANTICS=on` (default `off`). Both runner entrypoints forward them.
+After owner-approved DEV installation/device access, run from the repository root:
+
+```bash
+export PATH="$HOME/fvm/versions/3.44.5/bin:$PATH"
+bash app/tool/perf_device_run.sh --device "$UDID" --runs 3 \
+  --upload accept --upload-wals 12 --semantics off --synced-wals 66222 \
+  --artifact-root "$SCRATCH_ROOT/mobile-heavy-profile/harness2-off" \
+  --out "$SCRATCH_ROOT/mobile-heavy-profile/harness2-field-off"
+bash app/tool/perf_device_run.sh --device "$UDID" --runs 3 \
+  --upload accept --upload-wals 12 --semantics on --synced-wals 66222 \
+  --artifact-root "$SCRATCH_ROOT/mobile-heavy-profile/harness2-on" \
+  --out "$SCRATCH_ROOT/mobile-heavy-profile/harness2-field-on"
+```
+
+These field-shaped batches remain diagnostic for standard-baseline acceptance.
+Use a separate artifact root for each setting, so an old default pointer does not
+request an incompatible comparison. For a new standard reference omit
+`--synced-wals`, use a new artifact root and explicitly `--accept-baseline` only
+when the coordinator is ready to qualify the new protocol. Never compare
+semantics-on with semantics-off as a performance regression.
+
+Local proof without a phone uses profile iOS kernel compilation:
+
+```bash
+# From app/, after the normal hermetic generated-env/bootstrap prerequisites:
+flutter assemble --output=build/perf-harness2-kernel \
+  -dTargetPlatform=ios -dBuildMode=profile \
+  -dTargetFile=integration_test/perf/heavy_profile_main.dart \
+  -dDartDefines=UEVSRl9TSU1fVVBMT0FEPWFjY2VwdA== kernel_snapshot_program
+```
+
+This compiles the integration entry and transitive Dart code with profile/iOS
+settings, including the opt-in branch. It does not link native plugins, sign,
+install or validate frame behavior; the coordinator's device runner must do that.
+A profile `flutter build bundle` alone only assembles assets in Flutter 3.44.5
+and is insufficient compilation proof.
+
 ## Field signal
 
 The [watch-only dashboard/gate design](../../integration_test/perf/HEAVY_PROFILE.md#field-signal-design-watch-only)
@@ -244,3 +327,22 @@ groups `mobile_lag_stall` by surface, build and device class, with foreground
 exposure and unknown/insufficient cohorts explicit. Current main only has local
 diagnostic logs; aggregate transport and an exposure denominator are separate
 prerequisites. This harness adds no fleet telemetry transport or rollout action.
+
+
+`mobile_lag_stall.work_in_flight` lists fixed code-owned tags overlapping the
+watchdog interval (including work that ended just before its delayed callback).
+The bounded 64-slot registry uses integer begin/end tokens and allocates tag
+lists only when recording stalls. `work_registry_dropped` exposes saturation.
+Tags identify concurrent context, not proven causality. The local retained
+`worst_stalls` report carries the same tags. No new telemetry transport is added.
+Current hooks cover provider sync/download/upload state, full inventory refresh,
+reconcile passes, HTTP job polls and multipart uploads. Finally blocks close
+operation tokens; cancel/logout/dispose also close the provider phase token.
+
+Coordinator insertion points excluded by this lane's WAL ownership boundary:
+`lib/services/wals/wal_syncs.dart:syncAll` for exact Phase 1a/1b/2 tokens;
+`lib/services/wals/wal_index_persistence.dart:_saveWalsToFile/_writeIndexDelta`
+for `indexSave`/`indexFlush` around actual persistence;
+`lib/services/wals/local_wal_sync.dart:_initializeWals` for the initial disk load.
+No production index-save call site exists outside those protected files;
+provider refresh is labeled `walLoad`, never falsely labeled index save.
