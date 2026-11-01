@@ -179,7 +179,7 @@ def _schedule_action_item_reminder(
 
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     action_item = action_items_db.get_action_item(uid, action_item_id)
-    if not action_item:
+    if not action_item or action_item.get('deleted', False):
         raise HTTPException(status_code=404, detail="Action item not found")
 
     if action_item.get('is_locked', False):
@@ -260,11 +260,11 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
     if not request.items:
         return {"status": "ok", "updated_count": 0}
 
-    # Pre-fetch items to skip locked ones
+    # Pre-fetch items to skip missing, soft-deleted, or locked ones
     locked_ids = set()
     for item in request.items:
         existing = action_items_db.get_action_item(uid, item.id)
-        if existing and existing.get('is_locked', False):
+        if not existing or existing.get('deleted', False) or existing.get('is_locked', False):
             locked_ids.add(item.id)
 
     updates = []
@@ -703,7 +703,9 @@ def search_action_items(
         return {"action_items": []}
 
     action_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
-    action_items = [item for item in action_items if not item.get('is_locked', False)]
+    action_items = [
+        item for item in action_items if not item.get('is_locked', False) and not item.get('deleted', False)
+    ]
     return {"action_items": _safe_action_item_responses(action_items, uid=uid)}
 
 
@@ -962,6 +964,10 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
+    for item in action_items:
+        if item.get('is_locked', False):
+            description = item.get('description') or ''
+            item['description'] = (description[:70] + '...') if len(description) > 70 else description
     response_items = _safe_action_item_responses(action_items, uid=uid, context=f'conversation {conversation_id}')
 
     return {"action_items": response_items, "conversation_id": conversation_id}
@@ -1101,7 +1107,7 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
     # Validate all task_ids belong to user and are not locked
     for task_id in request.task_ids:
         item = action_items_db.get_action_item(uid, task_id)
-        if not item:
+        if not item or item.get('deleted', False):
             raise HTTPException(status_code=404, detail=f"Action item {task_id} not found")
         if item.get('is_locked', False):
             raise HTTPException(status_code=402, detail="Cannot share locked action items.")
@@ -1132,7 +1138,7 @@ def get_shared_action_items(token: str):
     tasks = []
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item and not item.get('is_locked', False):
+        if item and not item.get('deleted', False) and not item.get('is_locked', False):
             tasks.append(
                 {
                     "description": item.get('description', ''),
@@ -1166,7 +1172,7 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     existing_items_count = 0
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item:
+        if item and not item.get('deleted', False):
             existing_items_count += 1
             if not item.get('is_locked', False):
                 eligible_ids.append(task_id)
@@ -1191,7 +1197,7 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     try:
         for task_id in eligible_ids:
             original = action_items_db.get_action_item(sender_uid, task_id)
-            if not original or original.get('is_locked', False):
+            if not original or original.get('deleted', False) or original.get('is_locked', False):
                 continue
 
             new_item = {
