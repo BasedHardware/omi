@@ -115,6 +115,67 @@ async def test_grouped_persist_releases_both_gpu_locks_before_publication(units)
     assert all(store.rows['jobs', work.segment_id]['state'] == 'committed' for work in works)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('units', [6, 8, 32])
+async def test_short_group_slow_first_persist_does_not_hold_either_gpu_lock(units):
+    loop = asyncio.get_running_loop()
+    persisting, computed = asyncio.Event(), asyncio.Event()
+    release = threading.Event()
+    lock = threading.Lock()
+    store = MemoryStore()
+    queue = Scheduler(store)
+    works = [item(f'short-{index}', 2) for index in range(units)]
+    for work in works:
+        queue.enqueue(work, time.time())
+
+    def persist(work, payload):
+        if work.segment_id == decoded[0]:
+            loop.call_soon_threadsafe(persisting.set)
+            assert release.wait(10)
+        return 'encrypted://result'
+
+    worker, _, _, decoded, _, _ = setup_worker(persist=persist, gpu_lock=lock, io_concurrency=5)
+    receipts = []
+    process = worker.process_batch_deferred
+
+    def deferred(items, **kwargs):
+        receipt = process(items, **kwargs)
+        receipts.append(receipt)
+        return receipt
+
+    worker.process_batch_deferred = deferred
+    pump = Pump(
+        queue,
+        SynchronizedWorker(worker, lambda: loop.call_soon_threadsafe(computed.set)),
+        batch_size=units,
+        flights=2,
+    )
+    running = asyncio.create_task(pump.run_once(maintain=False))
+    try:
+        await asyncio.wait_for(persisting.wait(), 3)
+        await asyncio.wait_for(computed.wait(), 3)
+        # All units fit one decoded group and exceed the five IO slots. The
+        # admitted pull, not IO slots, bounds its outstanding persist receipts.
+        assert len(decoded) == units and len(receipts) == 1
+        assert len(receipts[0].futures) == units <= 32
+        assert not lock.locked() and not running.done()
+        await asyncio.wait_for(pump._gpu.acquire(), 1)
+        pump._gpu.release()
+        assert all(store.rows['jobs', work.segment_id]['state'] == 'leased' for work in works)
+        assert all(('results', work.segment_id) not in store.rows for work in works)
+        # A second pump lane must perform real compute and commit while the
+        # first lane still owns its unsettled encrypted write.
+        queue.enqueue(item('following'), time.time())
+        assert await asyncio.wait_for(pump.run_once(maintain=False), 3) == 1
+        assert store.rows['jobs', 'following']['state'] == 'committed'
+        assert not running.done()
+    finally:
+        release.set()
+        await asyncio.wait_for(running, 5)
+    assert all(store.rows['jobs', work.segment_id]['state'] == 'committed' for work in works)
+    assert worker._decode_budget.seconds == 0
+
+
 def test_later_group_fatal_error_drains_earlier_group_writes():
     started, later, release, finished = (threading.Event() for _ in range(4))
     worker, _, _, _, _, _ = setup_worker(io_concurrency=5, vad=lambda samples: [(0, 2)])

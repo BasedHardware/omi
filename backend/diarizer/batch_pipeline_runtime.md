@@ -42,7 +42,11 @@ chain; the model chain (VAD, ASR, diarization and CUDA quiescence) stays
 exclusive behind one asyncio lock. Each waiting lane can prepare its first
 decode within one shared 1800-audio-second budget, using the same artifact IO
 pool (default five). Final persist settlement runs after releasing the GPU lock,
-before publication, with renewal still active. Active decoded groups remain
+before publication, with renewal still active. A pull admits at most 32 units,
+so each lane retains at most 32 persist payloads/receipts; the IO pool bounds
+simultaneous uploads rather than waiting for a free upload slot under the GPU
+lock. Even a slow first upload cannot stall the sixth short unit's GPU work.
+Active decoded groups remain
 bounded to 7200 audio seconds; at most the configured pump depth of result
 tails can remain resident. Model precision, batching and CUDA concurrency stay
 unchanged. Each lane renews its own leases while it waits for the GPU.

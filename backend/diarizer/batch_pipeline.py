@@ -1204,9 +1204,10 @@ class PipelineWorker:
                 ]
             )
             for item, state, words, silence, duration, single, evidence, short in prepared:
-                # Bound in-flight encrypted writes; settle outside any item handler.
-                while len(pending_persist) >= self.io_concurrency:
-                    settle_persist(pending_persist.pop(0))
+                # The admitted pull bounds pending payloads/receipts to 32;
+                # executor size bounds simultaneous uploads. Never wait for an
+                # upload here: both GPU locks remain held until this returns.
+                # Settlement after CUDA quiescence retains publication custody.
                 stage = 'assemble_words'
                 try:
                     if state['silence']:
