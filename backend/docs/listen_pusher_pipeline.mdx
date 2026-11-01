@@ -6019,8 +6019,11 @@ received with no stream would be deleted as an empty conversation. No provider
 socket opens at session start (no vendor, no Parakeet window leg); the first
 audio that reaches the socket (the journal refused it, e.g. low disk or a journal
 failure) opens today's stream and counts in
-`omi_listen_deferred_stream_opened_total{deferred_by}`. `CLOUD_LIVE_STT_MODE=off`
-uses the same deferral. Setting the kill switch off revokes at the next
+`omi_listen_deferred_stream_opened_total{deferred_by}`. At teardown,
+`omi_listen_deferred_stream_open_seconds{deferred_by,provider}` observes how long
+that stream stayed open: an upper bound on its provider connection time, which
+separates a stop-time flush (seconds) from a session that streamed throughout.
+`CLOUD_LIVE_STT_MODE=off` uses the same deferral. Setting the kill switch off revokes at the next
 renewal; the client streams again and the stream opens on its first audio.
 
 ### Forward canonical audio archive (default off)
