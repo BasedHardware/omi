@@ -108,8 +108,8 @@ if [ "$shard_total" -ge 2 ]; then
 import os
 import sys
 
-DEFAULT_WEIGHT = 1.85  # mean measured wall seconds of the files below the table's 2s floor
-# (p90-wall table, 19 main runs to 2026-10-30; the old 1.1 priced pytest time
+DEFAULT_WEIGHT = 1.70  # mean measured wall seconds of the files below the table's 2s floor
+# (p90-wall table, 20 main runs to 2026-11-01; the old 1.1 priced pytest time
 # only and undercharged per-file import/collection startup)
 selection, total, shard, table, will_typecheck = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5] == '1'
 with open(selection, encoding='utf-8') as handle:
