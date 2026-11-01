@@ -1,5 +1,6 @@
 """Synthetic record ownership, raw-reference and annotation contracts."""
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -18,6 +19,108 @@ from utils.batch_pipeline.live import record_identity, register_recording
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_reference
 from utils.sync.assignment_errors import SyncAssignmentConflict
+
+
+@pytest.mark.asyncio
+async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, caplog):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    for i in range(10):
+        store.rows['jobs', str(i)] = {
+            'state': 'record_pending',
+            'available_at': 0,
+            'partial_coordinator': i == 0,
+        }
+    slow, full, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    active, peak, completed = 0, 0, []
+
+    async def admit(store, pending):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            if pending.get('partial_coordinator'):
+                slow.set()
+                await release.wait()
+            else:
+                if active == live.RECORD_DRAIN_CONCURRENCY:
+                    full.set()
+                await slow.wait()
+                await full.wait()
+                completed.append(1)
+        finally:
+            active -= 1
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    with caplog.at_level('INFO', logger=live.__name__):
+        task = asyncio.create_task(live.drain_recordings(store))
+        try:
+            await asyncio.wait_for(full.wait(), timeout=1)
+            for _ in range(50):
+                if len(completed) == 9:
+                    break
+                await asyncio.sleep(0.001)
+            assert len(completed) == 9
+            assert not task.done()
+            assert peak == live.RECORD_DRAIN_CONCURRENCY
+        finally:
+            release.set()
+            await task
+    events = [r.getMessage() for r in caplog.records if 'event=batch_drain_pass' in r.getMessage()]
+    assert len(events) == 1
+    assert 'row_count=10 partial_count=1 seconds=' in events[0]
+    assert all(row['state'] == 'record_pending' and 'expires_at' not in row for row in store.rows.values())
+
+
+@pytest.mark.asyncio
+async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'bad'] = {'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'slow'] = {'state': 'record_pending', 'available_at': 0}
+    original_run = store.run
+    slow, release = asyncio.Event(), asyncio.Event()
+
+    def run(body):
+        result = original_run(body)
+        if result.get('broken'):
+            raise RuntimeError('synthetic store failure')
+        return result
+
+    store.rows['jobs', 'bad']['broken'] = True
+    monkeypatch.setattr(store, 'run', run)
+
+    async def admit(store, pending):
+        slow.set()
+        await release.wait()
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    task = asyncio.create_task(live.drain_recordings(store))
+    try:
+        await asyncio.wait_for(slow.wait(), timeout=1)
+        assert not task.done()
+    finally:
+        release.set()
+        with pytest.raises(RuntimeError, match='synthetic store failure'):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_drain_emits_one_identifier_free_pass_on_query_failure(monkeypatch, caplog):
+    from utils.batch_pipeline import live
+
+    def unavailable(*args):
+        raise RuntimeError('synthetic-private-message')
+
+    store = MemoryStore()
+    monkeypatch.setattr(store, 'due', unavailable)
+    with caplog.at_level('INFO', logger=live.__name__), pytest.raises(RuntimeError):
+        await live.drain_recordings(store)
+    assert len(caplog.records) == 1
+    assert 'row_count=0 partial_count=0 seconds=' in caplog.text
+    assert 'synthetic-private-message' not in caplog.text
 
 
 @pytest.fixture(autouse=True)
