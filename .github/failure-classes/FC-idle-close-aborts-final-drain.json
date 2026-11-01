@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-idle-close-aborts-final-drain",
+  "violated_contract": "A planned close of a paid streaming STT transport that keeps the logical leg alive still owes the user the final tokens of the last utterance. Those finals arrive only after finalize and end-of-audio, and the receive loop flushes the last committed word only when the drain completes, so the planned close may abort the drain only after the provider's finished message or a cap that real finalize latency rarely exceeds, never after a fixed budget shorter than typical finalize latency.",
+  "canonical_prevention": "Bound the idle-close drain (soniox_idle.IDLE_DRAIN_SECONDS) above measured finalize latency and below the onset buffer (ONSET_BUFFER_SECONDS) that holds resuming speech, pin that ordering in a unit test, count every drain outcome (omi_soniox_idle_drains_total{outcome=drained|timeout}) so a rising timeout share is visible, and keep a regression test whose peer answers finalize after a real delay so a too-short cap drops the late final and the shipped cap keeps it.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/soniox_idle.py",
+    "backend/tests/unit/test_soniox_idle_close.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/soniox_idle.py",
+    "backend/utils/stt/soniox.py"
+  ],
+  "status": "open"
+}

@@ -568,7 +568,7 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SERVER_BATCH_ONLY_ENABLED` | Default on; consented supported-language platform sessions reserve durable batch ownership and open no managed live STT | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
-| `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 20 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
 | `SPEAKER_AUTO_ENROLL_ENABLED` | Default on; explicit speaker tags teach an encrypted vector-only roster for retained private-cloud sync users | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `SPEAKER_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `SPEAKER_PER_WINDOW_ENABLED` | Default on; a manifest dispute abstains speaker windows instead of the recording, for batch-authoritative conversations and beta clients | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
@@ -1153,7 +1153,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SERVER_BATCH_ONLY_ENABLED` — Default on; consented supported-language platform sessions reserve durable batch ownership and open no managed live STT (fail: open)
 - `SERVER_BATCH_ONLY_PLATFORMS` — Default macos,windows; comma-separated desktop platforms admitted to server batch-only capture; linux supported explicitly (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
-- `SONIOX_IDLE_CLOSE_SECONDS` — Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch (fail: open)
+- `SONIOX_IDLE_CLOSE_SECONDS` — Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 20 s with no client frames; 0 or off is the kill switch (fail: open)
 - `SPEAKER_AUTO_ENROLL_ENABLED` — Default on; explicit speaker tags teach an encrypted vector-only roster for retained private-cloud sync users (fail: closed)
 - `SPEAKER_EVIDENCE_MODE` — off/shadow/serve; default shadow records ranked speaker evidence without changing labels (fail: closed)
 - `SPEAKER_EVIDENCE_MODE_SERVE_PERCENT` — Default zero; deterministic percentage cohort for speaker evidence projection (fail: closed)

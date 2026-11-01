@@ -5002,8 +5002,10 @@ one warning per process. No environment overrides it.
 Two triggers start a planned close:
 
 - **VAD silence.** Continuous active-VAD silence for the threshold, after the
-  gate's hangover has released the word boundary.
-- **No client frames.** `SONIOX_IDLE_NO_FRAMES_SECONDS` (default `60`, floor
+  gate's hangover has released the word boundary. Until the leg has heard any
+  speech the threshold is the 20 s floor (`trigger="pre_speech"`): there are no
+  words to finalize and no speaker scope yet, and the first onset reopens it.
+- **No client frames.** `SONIOX_IDLE_NO_FRAMES_SECONDS` (default `20`, floor
   `10`, `0` disables only this trigger) of wall time in which the client sent no
   frames at all, in any VAD mode. VAD only runs on arriving frames, so a
   backgrounded app or a dropped pendant otherwise holds a billed socket open on
@@ -5046,7 +5048,11 @@ closes/reopens/latency/avoided series labelled `arm=control|treatment`.
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
 queue `finalize` behind admitted audio, queue the empty end-of-audio frame, drain
-final tokens for at most two seconds, then close/abort the paid transport. The
+final tokens for at most twenty seconds, then close/abort the paid transport. The
+last utterance's final tokens arrive only after `finalize`, and the receive loop
+flushes the last committed word when the drain completes, so an abort before
+Soniox's `finished` loses them; the cap stays below the thirty-second onset buffer
+that holds speech resuming during the drain. The
 logical leg stays alive and owns its pending text through that drain; this is
 neither a provider death nor a recovery episode or router health observation.
 
@@ -5088,7 +5094,10 @@ real failures even if they arrive during the planned drain.
 Shutdown while closed never opens a socket just to finalize the session.
 
 The `omi_soniox_idle_*` close/reopen/failure counters (including
-`omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"no_frames"}`), reopen latency
+`omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"pre_speech"|"no_frames"}`,
+`omi_soniox_idle_drains_total{outcome="drained"|"timeout"}` and
+`omi_soniox_idle_close_refusals_total{reason="rearm"|"cap"}`, counted once per
+idle episode the re-arm floor or hourly cap kept on keepalives), reopen latency
 histogram and estimated connected-seconds avoided counter register only for
 flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort,origin}`
 counts the wall time every Soniox websocket is actually open, flag on or off,
