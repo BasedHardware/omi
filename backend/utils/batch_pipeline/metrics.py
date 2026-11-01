@@ -80,6 +80,12 @@ class QueueMetrics:
             ['event'],
             registry=registry,
         )
+        self.completed_audio = Counter(
+            'omi_batch_pipeline_completed_audio_seconds_total',
+            'Capture audio seconds at unique fenced completion, including silence',
+            ['outcome'],
+            registry=registry,
+        )
 
         self.head_not_found = Counter(
             'omi_batch_pipeline_head_not_found_total',
@@ -170,6 +176,7 @@ class QueueMetrics:
             'leased',
             'completed',
             'retry',
+            'requeued',
             'lease_expired',
             'dead',
             'committed',
@@ -182,3 +189,8 @@ class QueueMetrics:
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:
             self.owner_wait.observe(max(0.0, wait_seconds))
+
+    def record_completed_audio(self, outcome: str, seconds: float) -> None:
+        if outcome not in {'success', 'silence'}:
+            raise ValueError('invalid completion outcome')
+        self.completed_audio.labels(outcome).inc(seconds)

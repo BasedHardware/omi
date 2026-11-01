@@ -48,6 +48,9 @@ worker:
   batchSize: 8
   # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
   pipelineDepth: 2
+  # Shared artifact IO pool, including first decode before the GPU lock.
+  # 1 disables preparation and restores serial artifact IO.
+  ioConcurrency: 5
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""

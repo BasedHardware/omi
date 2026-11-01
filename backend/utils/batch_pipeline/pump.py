@@ -23,7 +23,8 @@ from utils.batch_pipeline.contracts import (
 )
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError, error_site_field
-from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
+from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
+from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -39,6 +40,16 @@ SEGMENT_OWNER_MEMO = 4096
 # Bound on one lease-renewal round trip; a timeout marks the lease lost but the
 # blocking DB leaf may still land later, fenced by its token.
 HEARTBEAT_TIMEOUT_SECONDS = 8
+
+
+async def _drain_task(task):
+    """Repeated caller cancellation cannot orphan a non-preemptible IO leaf."""
+    while True:
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.cancelled():
+                raise
 
 
 class Pump:
@@ -299,6 +310,8 @@ class Pump:
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
+        prepared = None
+        watching = None
         try:
             if self.shadow is not None:
                 try:
@@ -321,8 +334,13 @@ class Pump:
                             self._run_blocking('admission', db_executor, self.authorize_compute, required),
                             timeout=10,
                         )
-                    except Exception:
+                    except Exception as error:
+                        worker_metrics.admission(failure_outcome(error))
                         receipt = {}
+                    else:
+                        worker_metrics.admission('received')
+                else:
+                    worker_metrics.admission('unconfigured')
                 permitted = set(receipt.get('allowed') or [])
                 retries = receipt.get('retry_after') or {}
                 held_reason = receipt.get('held_reason') or {}
@@ -370,6 +388,20 @@ class Pump:
                     return {segment: (None if segment in permitted else held.get(segment, '')) for segment in segments}
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
+            prepare = getattr(self.worker, 'prepare_first', None)
+            if prepare is not None and not (stop_event is not None and stop_event.is_set()):
+                prepared = prepare([v.item for v in leases if v.item.segment_id not in lost])
+            if prepared is not None:
+
+                async def discard_invalid_preparation(handle):
+                    while handle.item.segment_id not in lost and not (stop_event is not None and stop_event.is_set()):
+                        await asyncio.sleep(0.1)
+                    # Cancellation is immediate for queued work. Running SDK
+                    # calls retain their reservation until the lane's final
+                    # drain, and cannot be reused by a replacement attempt.
+                    handle.cancel()
+
+                watching = asyncio.create_task(discard_invalid_preparation(prepared))
             try:
                 async with self._gpu:
                     if stop_event is not None and stop_event.is_set() and self.flights > 1:
@@ -396,12 +428,20 @@ class Pump:
                                     type(error).__name__,
                                 )
                         return 0
+                    if prepared is not None:
+                        # A queued decode may have been cancelled on stop/lease
+                        # loss. Never let it become this or a replacement attempt.
+                        if prepared.cancelled or prepared.item.segment_id in lost:
+                            await run_blocking(sync_executor, prepared.close)
+                        else:
+                            dispatch_kwargs['prepared'] = prepared
+                    process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)
                     compute = asyncio.create_task(
                         self._run_blocking(
                             'worker_flight',
                             sync_executor,
-                            self.worker.process_batch,
-                            [v.item for v in leases],
+                            process,
+                            [v.item for v in leases if v.item.segment_id not in lost],
                             **dispatch_kwargs,
                         )
                     )
@@ -410,7 +450,18 @@ class Pump:
                     try:
                         results = await asyncio.shield(compute)
                     except asyncio.CancelledError:
-                        results = await compute
+                        results = await _drain_task(compute)
+                        if callable(getattr(results, 'close', None)):
+                            await _drain_task(asyncio.create_task(run_blocking(sync_executor, results.close)))
+                        raise
+                # CUDA is quiescent and the next lane may compute. Leases stay
+                # renewed until every write and fenced publication has settled.
+                if callable(getattr(results, 'settle', None)):
+                    settling = asyncio.create_task(self._run_blocking('persist_settle', sync_executor, results.settle))
+                    try:
+                        results = await asyncio.shield(settling)
+                    except asyncio.CancelledError:
+                        await _drain_task(settling)
                         raise
             except FatalGpuError:
                 # The whole GPU flight is uncertain. Return every owned lease
@@ -451,9 +502,21 @@ class Pump:
             await self._release(claimed)
             raise
         finally:
-            self._normal_flights -= 1
-            done.set()
-            await renew
+            try:
+                if watching is not None:
+                    watching.cancel()
+                    await _drain_task(asyncio.gather(watching, return_exceptions=True))
+                if prepared is not None:
+                    cleanup = asyncio.create_task(run_blocking(sync_executor, prepared.close))
+                    try:
+                        await asyncio.shield(cleanup)
+                    except asyncio.CancelledError:
+                        await _drain_task(cleanup)
+                        raise
+            finally:
+                self._normal_flights -= 1
+                done.set()
+                await _drain_task(renew)
 
     async def _release(self, leases: list[LeasedWork]) -> None:
         for lease in leases:

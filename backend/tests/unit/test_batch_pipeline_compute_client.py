@@ -73,6 +73,35 @@ def test_hold_reason_receipt_round_trips_for_the_durable_decision():
 
 
 @pytest.mark.parametrize(
+    'error,expected',
+    [
+        (TimeoutError(), 'timeout'),
+        (__import__('urllib.error', fromlist=['URLError']).URLError(TimeoutError()), 'timeout'),
+        (ConnectionError(), 'transport'),
+    ],
+)
+def test_client_faults_have_bounded_distinct_outcomes(error, expected):
+    from utils.batch_pipeline.compute_client import failure_outcome, InvalidReceipt
+
+    assert failure_outcome(error) == expected
+    assert failure_outcome(InvalidReceipt()) == 'invalid_receipt'
+
+
+def test_malformed_json_is_invalid_receipt_and_never_permission():
+    from utils.batch_pipeline.compute_client import InvalidReceipt
+
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'aud',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(b'invalid-json'),
+    )
+    with pytest.raises(InvalidReceipt):
+        client([lease()])
+
+
+@pytest.mark.parametrize(
     'url,audience,stage',
     [
         ('', 'aud', 'dev'),
