@@ -24,6 +24,7 @@ from llm_gateway.gateway.accounting import (
     cache_write_ttl_for_anthropic_request,
     cache_requested_for_openai_request,
     complete_openai_billable_usage,
+    complete_openai_embedding_usage,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
@@ -305,11 +306,12 @@ class OpenAICompatibleChatCompletionProvider:
         return ProviderResponse(
             response=parsed,
             accounting=ProviderResponseMetadata(
+                token_usage_complete=complete_openai_embedding_usage(usage_raw),
                 usage=ProviderUsage(
                     prompt_tokens=prompt_tokens,
                     uncached_input_tokens=prompt_tokens,
                     total_tokens=total_tokens,
-                )
+                ),
             ),
         )
 
