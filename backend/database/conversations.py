@@ -3622,8 +3622,9 @@ def update_conversation_segments(
         planned = None
         prior_commits: list[list[str]] = []
         if live_segments is not None:
+            raw_segments = current.get('transcript_segments')
             persisted = _decode_transcript_segments_strict(
-                uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+                uid, [] if raw_segments is None else raw_segments, bool(current.get('transcript_segments_compressed'))
             )
             if 'live_transcript_replay_receipt' in current:
                 prior_commits = replay_receipt_commits(
