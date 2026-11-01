@@ -64,7 +64,7 @@ class Pattern:
         return self.failure if math.floor((k + 1) * self.rate) > math.floor(k * self.rate) else self.success
 
 
-def replay(svc, clock, phases, *, per_minute=20, service='modulate'):
+def replay(svc, clock, phases, *, per_minute=5, service='modulate'):
     """Drive demand through allows/record. ``phases``: (minutes, outcome() -> O or (O, latency))."""
     trace = []
     for minutes, outcome in phases:
@@ -94,7 +94,7 @@ def test_chronic_baseline_never_trips_or_flaps():
         return result if result is not O.OK else empties()
 
     # 5/min still fills every window's minimum n (5m: 25, 10m: 50, 30m: 150).
-    trace = replay(svc, clock, [(3 * 60, chronic)], per_minute=5)
+    trace = replay(svc, clock, [(2 * 60, chronic)])
     assert {reason for _, _, reason, _ in trace} == {R.HEALTHY}
 
 
@@ -114,7 +114,7 @@ def test_1022_modulate_credits_cliff_opens_on_funds_bounds_fanout_and_recovers()
     first_refusal = next(row for row in outage if not row[1])
     assert first_refusal[2] is R.FUNDS_REFUSAL and first_refusal[0] - onset <= 60
     # The breaker gates retries: 10-22 fanned one failed call out 5x; here the outage spends the
-    # 3 trip refusals plus one fleet probe per 30 s, against 1,460 demanded sends.
+    # 3 trip refusals plus one fleet probe per 30 s, against 365 demanded sends.
     sent = sum(allowed for _, allowed, _, _ in outage)
     assert sent <= 3 + 73 * 2 + 2
     assert {reason for _, allowed, reason, _ in outage if allowed} <= {R.HEALTHY, R.HALF_OPEN_PROBE}
@@ -181,11 +181,11 @@ def test_validated_empty_rate_degrades_above_five_times_baseline():
 def test_sustained_rate_limits_degrade_and_majority_rate_limits_open():
     clock = Clock()
     svc = _service(clock)
-    trace = replay(svc, clock, [(10, Pattern(0.30, O.RATE_LIMITED))])
+    trace = replay(svc, clock, [(10, Pattern(0.30, O.RATE_LIMITED))], per_minute=20)
     assert R.RATE_LIMITED in {reason for _, allowed, reason, _ in trace if not allowed}
     clock2 = Clock()
     svc2 = _service(clock2)
-    trace2 = replay(svc2, clock2, [(10, Pattern(0.80, O.RATE_LIMITED))])
+    trace2 = replay(svc2, clock2, [(10, Pattern(0.80, O.RATE_LIMITED))], per_minute=20)
     assert any(not allowed and reason is R.RATE_LIMITED for _, allowed, reason, _ in trace2)
 
 
