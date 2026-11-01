@@ -100,8 +100,8 @@ def test_stale_replay_terminalizes_only_exhausted_budget(store, status, attempts
 def test_healthy_replays_do_not_consume_worker_budget_and_can_succeed(store, claims):
     store.rows[JOB_PATH].update(status='queued', worker_claim_count=claims, attempt_count=0)
     before_row = deepcopy(store.rows[ROW_PATH])
-    # Enqueue failure / task not delivered: arbitrarily many reconciler passes
-    # never consume a worker claim. The exact boundary is claims - 1 >= 5.
+    # Transport failure never consumes a worker claim. Replay stops minting
+    # generations at its separate transport budget; the last task stays valid.
     for _ in range(8):
         store.rows[JOB_PATH]['dispatch_requested_at'] = NOW - timedelta(minutes=6)
         assert replay(store)['status'] == 'queued'
@@ -114,6 +114,55 @@ def test_healthy_replays_do_not_consume_worker_budget_and_can_succeed(store, cla
     if claims < 5:
         store.rows[JOB_PATH]['fanout_status'] = 'completed'
         assert jobs.mark_finalization_completed(JOB_PATH[-1], generation, claim['lease_epoch'], firestore_client=store)
+    assert store.rows[ROW_PATH] == before_row
+
+
+@pytest.mark.parametrize('enqueue_fails', [False, True])
+def test_replay_transport_budget_holds_once_without_invalidating_latest_task(
+    store, monkeypatch, inline_replay, enqueue_fails
+):
+    clock = [NOW]
+    monkeypatch.setattr(jobs, '_now', lambda: clock[0])
+    job = store.rows[JOB_PATH]
+    job.update(status='queued', worker_claim_count=0, attempt_count=0)
+    before_row = deepcopy(store.rows[ROW_PATH])
+    if enqueue_fails:
+        inline_replay.side_effect = RuntimeError('synthetic enqueue failure')
+    outcome = 'enqueue_failed' if enqueue_fails else 'requeued'
+    for expected in range(1, jobs.MAX_UNCLAIMED_REPLAY_DISPATCHES + 1):
+        result = service.reconcile_listen_finalization_jobs(firestore_client=store)
+        assert result[outcome] == 1
+        assert result['dispatch_exhausted'] == 0
+        assert job['replay_dispatches_without_claim'] == expected
+        clock[0] += timedelta(minutes=6)
+    before_hold = deepcopy(job)
+    result = service.reconcile_listen_finalization_jobs(firestore_client=store)
+    assert result['dispatch_exhausted'] == 1
+    assert result['retired'] == result['requeued'] == result['enqueue_failed'] == 0
+    assert job == before_hold | {
+        'reconcile_after_at': jobs.firestore.DELETE_FIELD,
+        'replay_dispatch_suspended_at': clock[0],
+        'updated_at': clock[0],
+    }
+    writes = sum(len(tx.updates) + len(tx.sets) for tx in store.transactions)
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['dispatch_exhausted'] == 0
+    assert sum(len(tx.updates) + len(tx.sets) for tx in store.transactions) == writes
+    assert inline_replay.call_count == jobs.MAX_UNCLAIMED_REPLAY_DISPATCHES
+    assert store.rows[ROW_PATH] == before_row
+    service._record_dead_letter.assert_not_called()
+
+    # A delayed task can still claim the held generation and restore its lease
+    # marker. Once that lease expires, replay gets a new transport budget.
+    claim = jobs.claim_finalization_job(
+        JOB_PATH[-1], job['dispatch_generation'], count_worker_claim=True, firestore_client=store
+    )
+    assert claim['status'] == 'claimed'
+    assert job['reconcile_after_at'] == job['lease_expires_at']
+    clock[0] = job['lease_expires_at'] + timedelta(seconds=1)
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)[outcome] == 1
+    assert job['replay_dispatches_without_claim'] == 1
+    assert job['worker_claim_count'] == 1
+    assert job['replay_dispatch_suspended_at'] == jobs.firestore.DELETE_FIELD
     assert store.rows[ROW_PATH] == before_row
 
 
@@ -187,6 +236,7 @@ def test_replay_preserves_worker_account_admission_fences(store, monkeypatch, gu
 def test_real_reconciler_claim_path_retires_without_enqueue(store, monkeypatch):
     monkeypatch.setenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true')
     monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
     monkeypatch.setattr(service, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
     monkeypatch.setattr(jobs, 'recover_stranded_byok_jobs', lambda **_: {'blocked': 0, 'errors': 0})
     monkeypatch.setattr(jobs, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **_: 0)
@@ -218,7 +268,7 @@ def inline_replay(store, monkeypatch):
         'SYNC_TASKS_LOCATION': 'us-central1',
         'LISTEN_FINALIZATION_TASKS_QUEUE': 'conversation-finalization',
         'LISTEN_FINALIZATION_TASKS_HANDLER_URL': 'https://synthetic.invalid/finalize',
-        'LISTEN_FINALIZATION_TASKS_INVOKER_SA': 'synthetic@example.invalid',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA': 'synthetic@synthetic-project.iam.gserviceaccount.com',
         'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS': '5',
     }.items():
         monkeypatch.setenv(key, value)
@@ -295,12 +345,16 @@ def test_inline_replay_committed_effects_are_not_repeated(store, inline_replay):
     service._record_dead_letter.assert_not_called()
 
 
-@pytest.mark.parametrize('disabled_by', ['kill_switch', 'missing_binding'])
-def test_inline_replay_off_preserves_today_behavior(store, monkeypatch, inline_replay, disabled_by):
+@pytest.mark.parametrize('mode', ['inline', 'cloud_tasks'])
+@pytest.mark.parametrize('disabled_by', ['kill_switch', 'missing_binding', 'invalid_binding'])
+def test_inline_replay_off_preserves_today_behavior(store, monkeypatch, inline_replay, disabled_by, mode):
+    monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', mode)
     if disabled_by == 'kill_switch':
         monkeypatch.setenv('LISTEN_FINALIZATION_REPLAY_ENABLED', 'false')
-    else:
+    elif disabled_by == 'missing_binding':
         monkeypatch.delenv('LISTEN_FINALIZATION_TASKS_QUEUE')
+    else:
+        monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'not a URL')
     before = deepcopy(store.rows)
     assert not any(service.reconcile_listen_finalization_jobs(firestore_client=store).values())
     assert store.rows == before

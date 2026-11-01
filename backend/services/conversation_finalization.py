@@ -72,6 +72,7 @@ REPLAY_OUTCOME_METRICS = {
     'retired': REPLAY_OUTCOMES.labels(outcome='retired'),
     'advanced': REPLAY_OUTCOMES.labels(outcome='advanced'),
     'error': REPLAY_OUTCOMES.labels(outcome='error'),
+    'dispatch_exhausted': REPLAY_OUTCOMES.labels(outcome='dispatch_exhausted'),
 }
 
 
@@ -187,6 +188,7 @@ def reconcile_listen_finalization_jobs(
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
     }
     try:
         recovery = jobs_db.recover_stranded_byok_jobs(firestore_client=firestore_client)
@@ -197,7 +199,7 @@ def reconcile_listen_finalization_jobs(
     except Exception:
         logger.exception('listen BYOK ownership reclaim scan failed')
     dispatch_enabled = is_listen_finalization_dispatch_enabled()
-    if not replay_enabled() or (not dispatch_enabled and not is_listen_finalization_tasks_configured()):
+    if not replay_enabled() or not is_listen_finalization_tasks_configured():
         _publish_job_metrics(firestore_client=firestore_client)
         return result
 
@@ -318,6 +320,9 @@ def reconcile_listen_finalization_jobs(
             except Exception:
                 logger.exception('listen finalization reconciliation claim failed job=%s', job_id)
                 result['skipped'] += 1
+                continue
+            if claimed.get('replay_dispatch_exhausted') is True:
+                result['dispatch_exhausted'] += 1
                 continue
             if claimed.get('created') and claimed['status'] == 'dead_letter':
                 _record_dead_letter(job_id, firestore_client=firestore_client)

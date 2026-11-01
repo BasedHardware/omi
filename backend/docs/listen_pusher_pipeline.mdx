@@ -2778,7 +2778,7 @@ the worker must never silently use Omi keys.
 
 `LISTEN_FINALIZATION_REPLAY_ENABLED` defaults on. The existing startup/periodic
 FSR singleton pass can replay ordinary platform-key jobs from an inline listener
-when its Cloud Tasks worker binding is complete: `SYNC_TASKS_PROJECT`,
+when its Cloud Tasks worker binding is syntactically valid: `SYNC_TASKS_PROJECT`,
 `SYNC_TASKS_LOCATION`, `LISTEN_FINALIZATION_TASKS_QUEUE`,
 `LISTEN_FINALIZATION_TASKS_HANDLER_URL`, and
 `LISTEN_FINALIZATION_TASKS_INVOKER_SA` (or the existing sync invoker fallback).
@@ -2786,6 +2786,10 @@ The enqueueing runtime needs Cloud Tasks enqueue permission and permission to
 act as that invoker. `LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS` mirrors the queue's
 attempt policy. Production listen uses the existing conversation-finalization
 queue and backend-sync handler; its live dispatch mode stays inline.
+Every host, including a Cloud Tasks admission host, requires valid bindings
+before replay selection. Syntax validation does not prove queue existence,
+IAM permission, handler health, or the queue's retry policy; verify these when
+rolling out a binding.
 
 This binding does not enable stale `in_progress` admission, which still requires
 `LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks`. Inline replay skips quiet-check
@@ -2802,6 +2806,17 @@ dead-letter transition and retains transcript, audio references, photos and
 committed effects. Completed fanout finishes through the worker's completion
 fence rather than executing those effects again.
 
+Transport failure has a separate bound: five replay generations without an
+intervening accepted lease. This counts minted generations even if enqueue
+fails or the task fails before claim. The next due pass removes only the due
+marker and stamps `replay_dispatch_suspended_at`, counting `dispatch_exhausted`
+once. It keeps the job nonterminal, its current generation and any accepted
+task valid, and leaves the conversation and worker-claim budget untouched.
+This is an operational hold requiring investigation if no task can reach a
+worker, not a dead-letter or successful completion. A later accepted task
+restores its lease marker; its advanced lease epoch resets the transport budget
+on subsequent replay. No new query or selection widening is involved.
+
 Set `LISTEN_FINALIZATION_REPLAY_ENABLED=false` in the listener's Helm values and
 matching runtime-env source, regenerate the manifest/flag catalog, and roll
 listen to stop replay only. Live admission, BYOK reclaim and backlog publishing
@@ -2809,7 +2824,8 @@ remain unchanged; already dispatched tasks still belong to their workers.
 This change requires the listener rollout with its worker binding, while the
 existing backend-sync worker remains the target. It changes no Firestore read
 lever. After rollout, verify the serving release and singleton admissions;
-`requeued`/`retired` replay outcomes prove ordinary-job work, while `skipped`
+`requeued`/`retired` replay outcomes prove ordinary-job work; `dispatch_exhausted`
+reports a transport hold requiring follow-up, while `skipped`
 alone may count only excluded quiet/merge candidates.
 
 The default-off `finjob_candidate_queries` read lever narrows reconciliation

@@ -13,7 +13,7 @@ import os
 import socket
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Literal, Mapping, TypedDict
+from typing import Any, Callable, Literal, Mapping, NotRequired, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -73,6 +73,9 @@ TERMINAL_JOB_STATUSES = frozenset({'completed', 'dead_letter'})
 NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok'})
 DEFAULT_LEASE_SECONDS = 1500
 DEFAULT_RECONCILE_STALE_SECONDS = 300
+# Bound transport failures separately from accepted worker claims. Holding the
+# job leaves its latest task valid; transport failure is not processing failure.
+MAX_UNCLAIMED_REPLAY_DISPATCHES = 5
 SYNC_REVISION_QUIET_SECONDS = 30
 SYNC_REVISION_MAX_REDISPATCHES = 3
 SYNC_REVISION_MAX_WAIT_SECONDS = 600
@@ -95,6 +98,7 @@ class FinalizationIntent(TypedDict):
     requires_byok: bool
     fanout_key: str | None
     created: bool
+    replay_dispatch_exhausted: NotRequired[bool]
 
 
 class FinalizationAdmission(TypedDict):
@@ -1952,6 +1956,29 @@ def _claim_finalization_replay_txn(
         )
         return _intent_from_job(job_ref.id, {**job, 'status': 'dead_letter'}, created=True)
 
+    lease_epoch = int(job.get('lease_epoch') or 0)
+    unclaimed_dispatches = (
+        int(job.get('replay_dispatches_without_claim') or 0)
+        if job.get('replay_observed_lease_epoch') == lease_epoch
+        else 0
+    )
+    if unclaimed_dispatches >= MAX_UNCLAIMED_REPLAY_DISPATCHES:
+        # Do not manufacture a processing failure, cancel an accepted task, or
+        # invalidate its generation. An eventual accepted lease restores its
+        # own due marker and advances the epoch, resetting this budget.
+        intent = _intent_from_job(job_ref.id, job)
+        if not isinstance(job.get('replay_dispatch_suspended_at'), datetime):
+            transaction.update(
+                job_ref,
+                {
+                    'reconcile_after_at': firestore.DELETE_FIELD,
+                    'replay_dispatch_suspended_at': now,
+                    'updated_at': now,
+                },
+            )
+            intent['replay_dispatch_exhausted'] = True
+        return intent
+
     generation = int(job.get('dispatch_generation') or 1) + 1
     transaction.update(
         job_ref,
@@ -1963,6 +1990,9 @@ def _claim_finalization_replay_txn(
             'updated_at': now,
             'lease_expires_at': now,
             'reconcile_after_at': now + stale_after,
+            'replay_dispatches_without_claim': unclaimed_dispatches + 1,
+            'replay_observed_lease_epoch': lease_epoch,
+            'replay_dispatch_suspended_at': firestore.DELETE_FIELD,
         },
     )
     if status == 'leased':

@@ -379,12 +379,66 @@ def test_listen_finalization_dispatch_configuration_requires_every_static_bindin
     assert cloud_tasks.is_listen_finalization_dispatch_configured() is False
 
     monkeypatch.setenv('SYNC_TASKS_PROJECT', 'project')
-    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'location')
+    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'us-central1')
     monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_QUEUE', 'conversation-finalization')
     monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://example.invalid/finalize')
-    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@example.invalid')
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@project.iam.gserviceaccount.com')
 
     assert cloud_tasks.is_listen_finalization_dispatch_configured() is True
+
+
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('SYNC_TASKS_PROJECT', '  project'),
+        ('SYNC_TASKS_PROJECT', 'project/other'),
+        ('SYNC_TASKS_LOCATION', 'not-a-region'),
+        ('SYNC_TASKS_LOCATION', 'us-central1/other'),
+        ('LISTEN_FINALIZATION_TASKS_QUEUE', 'queue/other'),
+        ('LISTEN_FINALIZATION_TASKS_QUEUE', ' '),
+        ('LISTEN_FINALIZATION_TASKS_QUEUE', 'q' * 101),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'relative/path'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://-invalid/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker..invalid/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://@worker.invalid/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid:bad/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid:0/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://user:password@worker.invalid/run'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid/run#fragment'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid/\nrun'),
+        ('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'https://worker.invalid/' + 'x' * 2083),
+        ('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@example.invalid'),
+        ('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@project..iam.gserviceaccount.com'),
+        ('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker.@project.iam.gserviceaccount.com'),
+        ('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'worker@project.iam.gserviceaccount.com '),
+    ],
+)
+def test_finalization_binding_rejects_malformed_nonempty_values(monkeypatch, key, value):
+    for name, valid in {
+        'SYNC_TASKS_PROJECT': 'synthetic-project',
+        'SYNC_TASKS_LOCATION': 'us-central1',
+        'LISTEN_FINALIZATION_TASKS_QUEUE': 'conversation-finalization',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL': 'https://worker.invalid/run',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA': 'worker@synthetic-project.iam.gserviceaccount.com',
+    }.items():
+        monkeypatch.setenv(name, valid)
+    assert cloud_tasks.is_listen_finalization_tasks_configured()
+    monkeypatch.setenv(key, value)
+    assert not cloud_tasks.is_listen_finalization_tasks_configured()
+
+
+@pytest.mark.parametrize(
+    'invoker', ['worker@project.iam.gserviceaccount.com', '123-compute@developer.gserviceaccount.com']
+)
+def test_finalization_binding_accepts_invoker_fallback_and_loopback_harness(monkeypatch, invoker):
+    monkeypatch.setenv('SYNC_TASKS_PROJECT', 'synthetic-project')
+    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'us-central1')
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_QUEUE', 'conversation-finalization')
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_HANDLER_URL', 'http://127.0.0.1:8080/run')
+    monkeypatch.delenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', raising=False)
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', invoker)
+    assert cloud_tasks.is_listen_finalization_tasks_configured()
 
 
 def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
