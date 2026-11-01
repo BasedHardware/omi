@@ -1,3 +1,11 @@
+"""User-account HTTP surface: profile, onboarding, people/contacts, webhooks,
+tokens, geolocation, and the account-deletion wipe runner.
+
+The OIDC-posted wipe endpoint is the sole wipe executor in production (startup
+rejects inline or incomplete dispatch), so destructive-lifecycle invariants
+concentrate here even though most routes are plain users/{uid} CRUD.
+"""
+
 from __future__ import annotations
 
 import re
