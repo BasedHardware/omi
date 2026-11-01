@@ -808,6 +808,19 @@ async def create_calendar_event_tool(
         f"start_time: {start_time}, end_time: {end_time}, location: {location}"
     )
 
+    # Validate title, start_time, and end_time
+    if not title or not isinstance(title, str) or not title.strip():
+        return "Error: title is required and cannot be empty."
+    title = title.strip()
+
+    if not start_time or not isinstance(start_time, str) or not start_time.strip():
+        return "Error: start_time is required in format YYYY-MM-DDTHH:MM:SS+HH:MM"
+    start_time = start_time.strip()
+
+    if not end_time or not isinstance(end_time, str) or not end_time.strip():
+        return "Error: end_time is required in format YYYY-MM-DDTHH:MM:SS+HH:MM"
+    end_time = end_time.strip()
+
     try:
         uid, integration, access_token, access_err = await run_blocking(
             db_executor,
@@ -1009,6 +1022,18 @@ async def delete_calendar_event_tool(
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
         clock = clock_for_config(config, uid)
+
+        # Sanitize event_id and event_title
+        if isinstance(event_id, str):
+            event_id = event_id.strip() or None
+        else:
+            event_id = None
+
+        if isinstance(event_title, str):
+            event_title = event_title.strip() or None
+        else:
+            event_title = None
+
         # If event_id is provided, delete directly
         if event_id:
             try:
@@ -1093,7 +1118,7 @@ async def delete_calendar_event_tool(
             # Filter events by title if provided
             matching_events: List[Dict[str, Any]] = events
             if event_title:
-                matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                matching_events = [e for e in events if event_title.lower() in (e.get('summary') or '').lower()]
 
             if not matching_events:
                 date_info = ""
@@ -1155,7 +1180,7 @@ async def delete_calendar_event_tool(
 
                         matching_events = events
                         if event_title:
-                            matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                            matching_events = [e for e in events if event_title.lower() in (e.get('summary') or '').lower()]
 
                         if not matching_events:
                             return f"No calendar events found matching '{event_title}'{date_info_retry}."
@@ -1266,7 +1291,8 @@ async def update_calendar_event_tool(
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
         # Find the event if event_id not provided
-        target_event_id = event_id
+        target_event_id = event_id.strip() if isinstance(event_id, str) and event_id.strip() else None
+        event_title = event_title.strip() if isinstance(event_title, str) and event_title.strip() else None
         if not target_event_id:
             if not event_title:
                 return "Error: Please provide either event_id or event_title to identify which event to update."
@@ -1300,7 +1326,7 @@ async def update_calendar_event_tool(
                     return f"No calendar events found matching '{event_title}'."
 
                 # Filter events by title if provided
-                matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                matching_events = [e for e in events if event_title.lower() in (e.get('summary') or '').lower()]
 
                 if not matching_events:
                     return f"No calendar events found matching '{event_title}'."
