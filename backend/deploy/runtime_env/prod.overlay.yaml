@@ -1003,6 +1003,9 @@ overlay:
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
             category: rollout
+          DREAM_STATE_PASS_MODE:
+            value: shadow
+            category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
             category: rollout
@@ -1372,6 +1375,9 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
+            category: rollout
+          DREAM_STATE_PASS_MODE:
+            value: shadow
             category: rollout
           MENTOR_PIPELINE:
             value: cohort
