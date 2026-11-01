@@ -492,6 +492,7 @@ def _write(
     guard: Optional[Callable[[Mapping[str, Any]], Optional[str]]] = None,
 ) -> str:
     """CAS write with bounded retries. ``guard(current)`` returns an outcome to stop, or None."""
+    outcome = 'conflict'
     for _attempt in range(3):
         current = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
         if not current:
@@ -511,9 +512,9 @@ def _write(
                 firestore_client=c.firestore_client,
             )
             return 'written'
-        except episodes_db.EpisodeConflict:
-            continue
-    return 'conflict'
+        except episodes_db.EpisodeConflict as error:
+            outcome = 'conflict' if str(error) == 'state_version_changed' else 'refused'
+    return outcome
 
 
 def _record_failure(uid: str, episode_id: str, c: Any, print_: str) -> None:
@@ -686,7 +687,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         return None
 
     written = _write(uid, episode_id, c, finish, guard=finish_guard)
-    if written == 'conflict':
+    if written == 'refused':
         # Older data can refuse a window change: keep the paid notes on the window it already has.
         written = _write(
             uid,
@@ -695,9 +696,9 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
             lambda current: {k: v for k, v in finish(current).items() if k != 'member_activity'},
             guard=finish_guard,
         )
-    if written == 'conflict':
+    if written in {'conflict', 'refused'}:
         _record_failure(uid, episode_id, c, print_)
-        return written
+        return 'conflict'
     if written != 'written':
         _write(uid, episode_id, c, lambda current: _release(current, print_))
         return written

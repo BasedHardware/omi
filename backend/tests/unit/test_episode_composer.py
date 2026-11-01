@@ -279,6 +279,21 @@ def test_a_final_write_that_keeps_conflicting_backs_off_instead_of_paying_again(
     assert len(calls) == 1
 
 
+def test_a_sustained_version_race_keeps_activity_and_backs_off(store, monkeypatch):
+    calls = []
+    update = store.update_episode
+
+    def race(uid, episode_id, *, updates, **kw):
+        if 'bullets' in updates:
+            assert 'member_activity' in updates
+            raise composer.episodes_db.EpisodeConflict('state_version_changed')
+        return update(uid, episode_id, updates=updates, **kw)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', race)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'conflict'
+    assert store.episode['compose_failures'] == 1 and len(calls) == 1
+
+
 def test_a_visible_change_after_capped_failures_still_recomposes(store):
     done = {
         'status': 'closed',
