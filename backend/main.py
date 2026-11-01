@@ -187,6 +187,14 @@ app.add_middleware(SyncUploadMetricsMiddleware)
 app.add_middleware(ExternalListMetricsMiddleware)
 app.add_middleware(DesktopProxyDeadlineMiddleware)
 
+# Compress buffered JSON responses for clients that send Accept-Encoding: gzip
+# (browsers, web admin, OkHttp); streaming endpoints are exempt so token/audio
+# chunk boundaries and first-byte latency survive. Added last = outermost, so
+# the metrics middleware above still observe uncompressed response bytes.
+from utils.other.response_gzip import GatedGZipMiddleware
+
+app.add_middleware(GatedGZipMiddleware)
+
 
 def _run_fsr_loop(loop_name, callback, interval_seconds):
     """Run on the DB executor, including Redis admission and origin attribution."""
