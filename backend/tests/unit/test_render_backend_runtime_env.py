@@ -1349,8 +1349,15 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         enabled = environment == 'prod' and name.startswith('cloud_run/')
         literal = env['FIRESTORE_READ_LEVERS']
         assert set(literal) == {'value', 'category'}, name
-        # umt CR override off with the guard flag-off; restore the 100-if-CR term when usage_month_total re-enables (#23739 precedent)
+        # Only prod backend-sync restores monthly reads for compute admission (admitscope 2026-11-01).
+        # All other services/jobs (including listen/pusher) retain the guard literal.
         wanted = {**expected}
+        if environment == 'prod' and name == 'cloud_run/backend-sync':
+            wanted.update(usage_month_cache=100, usage_month_total=100)
+            assert {key for key in wanted if wanted[key] != expected[key]} == {
+                'usage_month_cache',
+                'usage_month_total',
+            }
         assert json.loads(literal['value']) == wanted, name
         epoch = 'c2fs_20261026_r1' if enabled else 'v1'
         assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name
