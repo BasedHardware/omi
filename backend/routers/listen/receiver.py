@@ -25,7 +25,7 @@ from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, supp
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
-from routers.listen.local_preview import admit_local_preview
+from routers.listen.local_preview import admit_local_preview, note_deferred_stream_closed
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
@@ -1488,6 +1488,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not getattr(self, '_cloud_live_opening', False) or getattr(self, '_deferred_open_counted', False):
             return
         self._deferred_open_counted = True
+        self._deferred_open_at = time.monotonic()  # Teardown observes the open duration.
         try:
             OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
                 deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
@@ -2802,6 +2803,7 @@ class ListenReceiver(ReplayFilterMixin):
 
     async def _teardown_body(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
         request = self.host.request
+        note_deferred_stream_closed(self)
         if self.recovery is not None:
             self.recovery.mark_client_leaving()
         # Teardown owns subsequent tail-send/transport symptoms. Mark the

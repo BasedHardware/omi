@@ -12,14 +12,26 @@ Realtime apps and webhooks degrade for these sessions by ruling (David,
 """
 
 import logging
+import time
+
+from prometheus_client import Histogram
 
 from config.batch_live_preview import local_preview_batch_owned
 from config.cloud_live_stt import local_preview_batch_enabled
-from utils.metrics import OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL
+from utils.metrics import OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL, audio_timeline_provider_label
 from utils.observability.reasons import LocalPreviewOutcome, ReasonFamily, reason_label
 from utils.observability.transcription import bounded_client_platform
 
 logger = logging.getLogger(__name__)
+
+# Upper bound on the provider connection time a deferred open costs: an idle
+# close can end the provider socket earlier, never later than session teardown.
+OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS = Histogram(
+    'omi_listen_deferred_stream_open_seconds',
+    'Seconds from a deferred cloud live STT stream opening to session teardown, by why it was deferred and provider',
+    ['deferred_by', 'provider'],
+    buckets=(2, 5, 15, 30, 60, 120, 300, 900, 1800, 3600, 7200),
+)
 
 ADMITTED = LocalPreviewOutcome.ADMITTED.value
 # Closed reason set; every refusal keeps today's streaming behavior.
@@ -83,3 +95,19 @@ def renew_local_preview(host) -> bool:
     if getattr(host, 'local_preview_batch', False) and not local_preview_batch_enabled():
         host.local_preview_batch = False
     return bool(getattr(host, 'local_preview_batch', False))
+
+
+def note_deferred_stream_closed(receiver) -> None:
+    """At teardown, observe once how long a deferred open kept a stream: a stop-time flush reads seconds."""
+
+    opened_at = getattr(receiver, '_deferred_open_at', None)
+    if opened_at is None:
+        return
+    receiver._deferred_open_at = None
+    try:
+        OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS.labels(
+            deferred_by=getattr(receiver, '_cloud_live_deferred_by', None) or 'off',
+            provider=audio_timeline_provider_label(receiver._serving_provider()),
+        ).observe(max(0.0, time.monotonic() - opened_at))
+    except Exception:
+        pass  # Telemetry never blocks teardown.

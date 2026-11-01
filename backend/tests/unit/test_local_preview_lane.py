@@ -10,10 +10,20 @@ from models.message_event import MessageServiceStatusEvent
 from routers.listen import local_preview as local_preview_module
 from routers.listen import receiver as receiver_module
 from routers.listen import runtime as runtime_module
-from routers.listen.local_preview import REASONS, admit_local_preview, local_preview_reason, renew_local_preview
+from routers.listen.local_preview import (
+    OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS,
+    REASONS,
+    admit_local_preview,
+    local_preview_reason,
+    note_deferred_stream_closed,
+    renew_local_preview,
+)
 from routers.listen.receiver import ListenReceiver
 from routers.listen.runtime import ListenSessionRuntime
-from utils.metrics import OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL
+from utils.metrics import (
+    OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL,
+    OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
+)
 
 KILL = 'LOCAL_PREVIEW_BATCH_ENABLED'
 
@@ -182,6 +192,40 @@ async def test_cap_paused_deferred_open_waits_for_cap_recovery(monkeypatch):
         fake.ensure_live_demand_routing()
     assert counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview') == before + 1
     fake.host.task_supervisor.create_lifetime_task.assert_called_once_with('run', name='live_demand_routing')
+
+
+def open_seconds(**labels):
+    """(count, sum) of the deferred-stream open-duration histogram for these labels."""
+    samples = [
+        sample
+        for family in OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS.collect()
+        for sample in family.samples
+        if all(sample.labels.get(k) == v for k, v in labels.items())
+    ]
+    count = sum(s.value for s in samples if s.name.endswith('_count'))
+    total = sum(s.value for s in samples if s.name.endswith('_sum'))
+    return count, total
+
+
+def test_deferred_stream_open_duration_observed_once_at_teardown(monkeypatch):
+    clock = [100.0, 103.5]
+    monkeypatch.setattr(receiver_module.time, 'monotonic', lambda: clock.pop(0) if len(clock) > 1 else clock[0])
+    fake = make_receiver(make_host(stt_service=SimpleNamespace(value='soniox')))
+    fake._cloud_live_opening = True
+    fake._cloud_live_deferred_by = 'local_preview'
+    fake._serving_provider = lambda: ListenReceiver._serving_provider(fake)
+    labels = {'deferred_by': 'local_preview', 'provider': 'soniox'}
+    count, total = open_seconds(**labels)
+
+    ListenReceiver.note_deferred_stream_opened(fake)
+    note_deferred_stream_closed(fake)
+    # A second teardown call (or a session that never opened) observes nothing.
+    note_deferred_stream_closed(fake)
+    assert open_seconds(**labels) == (count + 1, pytest.approx(total + 3.5))
+
+    never_opened = make_receiver(make_host())
+    note_deferred_stream_closed(never_opened)
+    assert open_seconds(**labels) == (count + 1, pytest.approx(total + 3.5))
 
 
 @pytest.mark.asyncio
