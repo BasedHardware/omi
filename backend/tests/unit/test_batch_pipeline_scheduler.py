@@ -128,6 +128,9 @@ class MemoryStore:
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
 
+    def cancel_fenced_recovery(self, segment_id):
+        raise AssertionError('privacy isolation must use real emulator transactions')
+
     def longest_ready_pending(self, owner_key):
         jobs = [
             v
