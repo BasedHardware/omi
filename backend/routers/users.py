@@ -62,8 +62,6 @@ from database.users import (
 )
 from utils import screen_vector_entitlements
 from utils.observability.fallback import record_fallback
-from utils.observability.held_content import record_backlog_choice
-from utils.observability.reasons import BacklogChoiceOutcome
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled, recovery_cohort_admits
@@ -1314,11 +1312,11 @@ def process_waiting_recordings(
     uid: str = Depends(auth.get_current_user_uid),
     idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=8, max_length=128),
 ):
-    if not recovery_cohort_admits(uid) or not funded_processing_enabled(uid):
-        record_backlog_choice('manual', BacklogChoiceOutcome.OUT_OF_SCOPE)
-        raise HTTPException(status_code=404, detail='Not found')
     from utils import processing_backlog
 
+    if not recovery_cohort_admits(uid) or not funded_processing_enabled(uid):
+        processing_backlog.record_backlog_choice('manual', 'out_of_scope')
+        raise HTTPException(status_code=404, detail='Not found')
     processing_backlog.choose(uid, request_key=idempotency_key)
     snapshot = processing_backlog.snapshot(uid)
     if snapshot is not None and snapshot.state == 'capped':
