@@ -164,6 +164,13 @@ are best effort; durable quarantined job records are the authoritative census
 
 ### Fenced recovery follow-up
 
+Status (2026-11-01): shipped. `utils/batch_pipeline/quarantine_recovery.py`
+gives each held unit one fenced paid recovery (`recovery.epoch`/`token` on the
+job). Prod census for the last 24h: 1,486 quarantines, 79% recovered and
+committed, the rest awaiting recovery or terminal `failed_held`. Only
+`failed_held` remains a transcript gap, and it needs a reviewed operator redrive
+(`redrive_scope.py`). The design notes below are the original plan.
+
 The existing legacy claim/run entry points own an entire upload, not one batch
 unit. Clearing that claim or dispatching the whole upload could replay already
 projected siblings. Recovery therefore needs a separate per-unit intent, keyed

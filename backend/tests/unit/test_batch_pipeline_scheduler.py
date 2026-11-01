@@ -585,6 +585,45 @@ def test_per_pool_unit_ceiling_and_malformed_capacity_fail_closed():
         assert queue.pull(10, capacity=capacity) == []
 
 
+def test_frame_exact_hour_with_clock_noise_leases_at_hour_ceiling():
+    # Prod 2026-11-01: record units are end - start of epoch clocks, so a full
+    # hour admitted as 3600.0000005s parked four owners' FIFOs for up to 40h.
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    queue = Scheduler(MemoryStore())
+    queue.enqueue(item('hour', duration=3600 + 4.76837158203125e-07), 0)
+    queue.enqueue(item('later', duration=30, capture=2), 0)
+    capacity = PoolCapacity(10, 1, max_item_seconds=3600)
+    assert queue.pull(10, capacity=capacity)[0].item.segment_id == 'hour'
+    assert queue.pull(10, capacity=capacity)[0].item.segment_id == 'later'
+
+
+def test_parked_heads_are_counted_by_bounded_reason(monkeypatch):
+    from dataclasses import replace
+    from prometheus_client import CollectorRegistry
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from utils.batch_pipeline.contracts import PoolCapacity
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    queue = Scheduler(MemoryStore(), metrics=QueueMetrics(registry))
+    queue.enqueue(item('long', duration=3601), 0)
+    queue.enqueue(replace(item('fenced', owner=colliding_owner('heavy')), conversation_id='deleted'), 0)
+    check = MemoryTransaction.check_privacy
+
+    def privacy(tx, uid, conversation_ids=(), expected_generation=None):
+        if 'deleted' in conversation_ids:
+            raise BatchPrivacyBlocked('synthetic deletion')
+        return check(tx, uid, conversation_ids, expected_generation)
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', privacy)
+    assert queue.pull(10, capacity=PoolCapacity(10, 1, max_item_seconds=3600)) == []
+    scope = {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    sample = 'omi_batch_pipeline_head_parked_total'
+    assert registry.get_sample_value(sample, {**scope, 'reason': 'pool_duration'}) == 1
+    assert registry.get_sample_value(sample, {**scope, 'reason': 'privacy'}) == 1
+
+
 def test_shared_gpu_exclusivity_survives_completion_and_lease_expiry(monkeypatch):
     from utils.batch_pipeline.contracts import PoolCapacity
 
