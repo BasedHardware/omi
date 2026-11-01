@@ -26,6 +26,15 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+
+def projection_hold_recovery_enabled() -> bool:
+    """Ship-on hold age gate and automatic redrive; false restores old behavior."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED',
+        os.getenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 T = TypeVar('T')
 
 
@@ -411,6 +420,13 @@ def projection_pending_page_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
+
+
+def projection_followup_page_enabled() -> bool:
+    """Kill switch: discover only finishable receipts, without per-row fetches."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
 
 
 def owner_drain_enabled() -> bool:

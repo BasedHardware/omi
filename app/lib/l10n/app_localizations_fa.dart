@@ -14679,9 +14679,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get episodeOnThisPhone => 'روی این گوشی';
 
   @override
-  String get liveCardTitle => 'زنده';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'پی‌نوشت نهایی حدود $duration عقب است';
   }
@@ -14696,7 +14693,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'با امنیت ضبط می‌کند';
 
   @override
-  String get livePreviewOnPhoneDivider => 'زنده روی این گوشی';
+  String get livePreviewOnPhoneDivider => 'همین الان، روی این تلفن';
 
   @override
   String get livePreviewTurnOnLiveText => 'روشن کردن متن زنده';
@@ -14941,21 +14938,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count بخش',
-      many: '$count بخش',
-      few: '$count بخش',
-      two: '$count بخش',
-      one: '$count بخش',
-      zero: '$count بخش',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'پیام را در $app ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.';
   }
@@ -14964,4 +14946,28 @@ class AppLocalizationsFa extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'کد جدید بگیرید و از $app ارسال کنید.';
   }
+
+  @override
+  String get episodeWritingNotes => 'در حال نوشتن یادداشت‌ها…';
+
+  @override
+  String get episodeWritingNotesDetail => 'اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'تا $time · یادداشت‌های کامل در پایان';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'رونویسی تا $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration ذخیره شد';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
 }

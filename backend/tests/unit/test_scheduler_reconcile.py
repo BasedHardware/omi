@@ -45,6 +45,18 @@ class FakeSession:
         return Response({})
 
 
+def test_dream_sweep_targets_backfill_with_its_sync_oidc_audience():
+    jobs = reconcile.load_manifest()['environments']['prod']['jobs']
+    dream = next(job for job in jobs if job['name'] == 'dream-agent-sweep-hourly')
+    target = dream['target']
+    assert target['uri'].split('/')[2].startswith('backend-sync-backfill-')
+    assert target['uri'] == target['oidc']['audience'].removesuffix('/v2/sync-jobs/run') + '/v2/dream-agent/sweep'
+    assert dream['schedule'] == '0,30 * * * *' and dream['attempt_deadline'] == '1740s'
+    cap_hold = next(job for job in jobs if job['name'] == 'cap-hold-durable-redrive')
+    assert cap_hold['target']['uri'].split('/')[2].startswith('backend-sync-')
+    assert not cap_hold['target']['uri'].split('/')[2].startswith('backend-sync-backfill-')
+
+
 def test_secret_headers_are_resolved_in_memory_and_never_in_diff_output():
     session = FakeSession()
     manifest = reconcile.load_manifest()

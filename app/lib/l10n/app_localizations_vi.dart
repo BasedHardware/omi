@@ -14686,9 +14686,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeOnThisPhone => 'Trên điện thoại này';
 
   @override
-  String get liveCardTitle => 'Trực tiếp';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Bản ghi chép cuối cùng chậm khoảng $duration';
   }
@@ -14703,7 +14700,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Đang ghi âm an toàn';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Trực tiếp trên điện thoại này';
+  String get livePreviewOnPhoneDivider => 'Vừa xong, trên điện thoại này';
 
   @override
   String get livePreviewTurnOnLiveText => 'Bật văn bản trực tiếp';
@@ -14948,21 +14945,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count phần',
-      many: '$count phần',
-      few: '$count phần',
-      two: '$count phần',
-      one: '$count phần',
-      zero: '$count phần',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Gửi tin nhắn trong $app. Màn hình này sẽ cập nhật ngay khi Omi nhận được.';
   }
@@ -14971,4 +14953,28 @@ class AppLocalizationsVi extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Lấy mã mới và gửi từ $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Đang viết ghi chú…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Đang hoàn tất bản chép trước. Bạn có thể rời trang này.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Đến $time · ghi chú đầy đủ khi kết thúc';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Đã chép đến $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Đã lưu $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
 }

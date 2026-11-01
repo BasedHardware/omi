@@ -23,6 +23,16 @@ DURATION = Counter(
 LABELS = Counter(
     'omi_batch_pipeline_projected_segments_total', 'New persisted segments by assignment authority', ['authority']
 )
+CONFLICT_HOLDS = Counter(
+    'omi_batch_pipeline_projection_conflict_holds_total', 'Observed assignment conflict holds', ['subtype']
+)
+
+
+def record_conflict_hold(subtype: object) -> None:
+    from utils.sync.assignment_errors import bounded_sync_assignment_subtype
+
+    if enabled():
+        CONFLICT_HOLDS.labels(bounded_sync_assignment_subtype(subtype)).inc()
 
 
 def enabled() -> bool:

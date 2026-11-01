@@ -22,6 +22,7 @@ patches.
 | `omi_firestore_billed_writes_by_origin_total` | `origin`, `collection`, `op` |
 | `omi_firestore_write_caller_label_overflow_total` | none |
 | `omi_firestore_ambiguous_commit_writes_total` | none |
+| `omi_firestore_noop_writes_by_caller_total` | `collection`, `caller` |
 
 `op` is `create`, `update` (exists or last-update-time precondition: `update()`), `merge` (mask,
 no precondition: `set(merge=True)`), `set` (whole-document replace), `delete`
@@ -33,7 +34,18 @@ Cloud Run services (`backend/deploy/cloud_run_gmp_sync.yaml`) keep the total
 and by-caller counters but not by-origin, to stay under the scrape samples
 limit.
 
+A no-op write (Cloud Monitoring `UPDATE_NOOP`) is still billed. Firestore
+returns the document's previous `update_time` for a write that changed nothing,
+so a Commit result whose `update_time` is earlier than the response
+`commit_time` is counted on the no-op counter. BatchWrite has no commit time
+and is not classified. The counter is a lower bound: a second write to the same
+document in one Commit reports this commit as its previous time whether or not
+it changed anything, so such no-ops are not counted.
+
 ```promql
+# No-op writers (billed, changed nothing)
+topk(25, sum by (job, caller, collection) (rate(omi_firestore_noop_writes_by_caller_total[1h])))
+
 # Writes per second by collection and op
 sum by (collection, op) (rate(omi_firestore_billed_writes_total[30m]))
 

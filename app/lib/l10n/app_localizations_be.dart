@@ -14719,9 +14719,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get episodeOnThisPhone => 'На гэтым тэлефоне';
 
   @override
-  String get liveCardTitle => 'Нажыва';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Канчатковая расшыфроўка адстае прыблізна на $duration';
   }
@@ -14736,7 +14733,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Бяспечны запіс';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Нажыва на гэтым тэлефоне';
+  String get livePreviewOnPhoneDivider => 'Толькі што, на гэтым тэлефоне';
 
   @override
   String get livePreviewTurnOnLiveText => 'Уключыць жывы тэкст';
@@ -14981,21 +14978,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count часткі',
-      many: '$count частак',
-      few: '$count часткі',
-      two: '$count часткі',
-      one: '$count частка',
-      zero: '$count часткі',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Адпраў паведамленне ў праграме $app. Гэты экран абновіцца, як толькі Omi яго атрымае.';
   }
@@ -15004,4 +14986,28 @@ class AppLocalizationsBe extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Атрымай новы код і адпраў яго з праграмы $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Пішам нататкі…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Спачатку завяршаем транскрыпцыю. Можаце пакінуць гэту старонку.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Ахоплівае да $time · поўныя нататкі пасля завяршэння';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Транскрыбавана да $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Захавана $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Удзельнікі і канчатковая транскрыпцыя з\'явяцца тут падчас загрузкі.';
 }

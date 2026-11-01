@@ -1437,6 +1437,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_firestore_billed_writes_by_caller_total',
         'omi_firestore_write_caller_label_overflow_total',
         'omi_firestore_ambiguous_commit_writes_total',
+        'omi_firestore_noop_writes_by_caller_total',
         # Legacy dark: drain_census and the soak gates (contract (h)).
         'omi_legacy_sync_mode',
         'omi_legacy_sync_admissions_total',

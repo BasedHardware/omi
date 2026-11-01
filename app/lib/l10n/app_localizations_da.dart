@@ -14676,9 +14676,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get episodeOnThisPhone => 'På denne telefon';
 
   @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Endelig transskription ca. $duration bagefter';
   }
@@ -14693,7 +14690,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Optager sikkert';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live på denne telefon';
+  String get livePreviewOnPhoneDivider => 'Lige nu, på denne telefon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Aktivér live-tekst';
@@ -14939,21 +14936,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count dele',
-      many: '$count dele',
-      few: '$count dele',
-      two: '$count dele',
-      one: '$count del',
-      zero: '$count dele',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Send beskeden i $app. Denne skærm opdateres, så snart Omi modtager den.';
   }
@@ -14962,4 +14944,28 @@ class AppLocalizationsDa extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Få en ny kode, og send den fra $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Skriver noter…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Vi gør først transskriptionen færdig. Du kan godt forlade siden.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Dækker frem til $time · fulde noter, når det er slut';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transskriberet frem til $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration gemt';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Talere og den endelige transskription dukker op her under upload.';
 }

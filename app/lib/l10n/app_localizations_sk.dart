@@ -14680,9 +14680,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get episodeOnThisPhone => 'V tomto telefóne';
 
   @override
-  String get liveCardTitle => 'Naživo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Konečný prepis mešká približne $duration';
   }
@@ -14697,7 +14694,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Bezpečne nahráva';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Naživo v tomto telefóne';
+  String get livePreviewOnPhoneDivider => 'Práve teraz, na tomto telefóne';
 
   @override
   String get livePreviewTurnOnLiveText => 'Zapnúť živý text';
@@ -14941,21 +14938,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count častí',
-      many: '$count častí',
-      few: '$count časti',
-      two: '$count častí',
-      one: '$count časť',
-      zero: '$count častí',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Pošlite správu v aplikácii $app. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.';
   }
@@ -14964,4 +14946,28 @@ class AppLocalizationsSk extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Získajte nový kód a pošlite ho z aplikácie $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Píšeme poznámky…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Najprv dokončujeme prepis. Túto stránku môžete opustiť.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Pokrýva do $time · úplné poznámky po dokončení';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Prepísané do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Uložené $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Rečníci a konečný prepis sa tu objavia počas nahrávania.';
 }
