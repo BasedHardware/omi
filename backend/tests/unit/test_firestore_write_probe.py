@@ -123,6 +123,28 @@ def test_document_writes_counted_by_op_and_caller(client, transport):
     assert len(transport.requests) == 5
 
 
+def test_transaction_retry_helper_is_not_the_caller(client, transport, monkeypatch):
+    from google.cloud.firestore_v1.types import BeginTransactionResponse
+
+    from database.firestore_transaction_retry import run_with_transaction_contention_retry
+
+    monkeypatch.setattr(
+        FirestoreClient,
+        'begin_transaction',
+        lambda self, request=None, **kw: BeginTransactionResponse(transaction=b'tx'),
+    )
+    caller = f'{__name__}:test_transaction_retry_helper_is_not_the_caller'
+    before = _by_caller('users/memories', 'set', caller)
+    ref = client.collection('users').document('u1').collection('memories').document('m1')
+
+    @firestore.transactional
+    def operation(transaction):
+        transaction.set(ref, {'x': 1})
+
+    run_with_transaction_contention_retry(client.transaction, operation, operation_name='probe_test')
+    assert _by_caller('users/memories', 'set', caller) == before + 1
+
+
 def test_batch_counts_each_write_and_failed_commit_counts_nothing(client, transport):
     before = _billed('users/memories', 'set')
     batch = client.batch()

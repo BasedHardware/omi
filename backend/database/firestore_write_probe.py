@@ -144,6 +144,10 @@ _WRITE_PLUMBING_MODULES = frozenset(
         'database.list_projection',
         'database.memory_change_head',
         'database.action_item_write_fence',
+        # The transactional callback has returned before the SDK commits, so the
+        # retry helper would otherwise be the first frame for every caller of it
+        # (~50% of Cloud Run writes on 2026-11-01).
+        'database.firestore_transaction_retry',
     }
 )
 _CALLER_RE = re.compile(r'^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*){0,6}:[A-Za-z_][A-Za-z0-9_]{0,60}$')
