@@ -1,3 +1,12 @@
+"""Plan entitlement policy: trial paywall, desktop access tiers, per-platform
+plan visibility, grandfathering, and the wire plan shapes clients decode.
+
+Plan definitions come only from config.plan_catalog (generated from
+config/plan_catalog.json; runtime never reads the JSON), and legacy-client
+adaptation keeps released apps decoding the catalog as it evolves
+(.github/agent-docs/plan-source-of-truth.md).
+"""
+
 from config.stt_cap_dispatch import any_legacy_admission_enabled as stt_cap_dispatch_enabled
 from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os

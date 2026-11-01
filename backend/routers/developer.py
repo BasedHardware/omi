@@ -1,3 +1,12 @@
+"""Developer-platform API (/v1/dev/*): transcript ingestion into conversations,
+plus memories, action items, facts, folders, apps and people for SDK clients.
+
+This is a released-client surface: request/response shapes are consumed by the
+shipped Python CLI SDK (sdks/python-cli) and external tooling, and the
+from-segments intake carries capture evidence lineage, so compatibility rules
+apply here that do not apply to app-facing routes.
+"""
+
 from models.developer_transcript import SimpleTranscriptSegment
 from routers import developer_segments
 from routers.developer_segments_models import (

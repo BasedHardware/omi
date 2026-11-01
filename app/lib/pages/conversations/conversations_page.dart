@@ -1,3 +1,10 @@
+// The conversations list page: paged list with filter-keyed load-more state,
+// plus the capture-status surfaces stacked above it (processing card, held
+// audio, on-device queue banners).
+//
+// The page stays alive across tab switches (AutomaticKeepAliveClientMixin), so
+// scroll position and pagination survive background sync mutations; load-more
+// state is keyed by the active filter and resets deliberately on filter change.
 import 'dart:async';
 
 import 'package:flutter/material.dart';

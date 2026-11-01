@@ -1,3 +1,11 @@
+// The chat page: transcript list, composer, send pipeline, and scroll
+// anchoring for /v2/messages chat.
+//
+// Sends are turn-fenced (_sendTurn) so a stale async continuation cannot land
+// after a newer send, and draft text survives app kill until a send is
+// accepted. List/layout changes must keep
+// app/test/widgets/chat_scroll_layout_test.dart green -- it pins the
+// scroll-extent behavior single-message pumps miss.
 import 'package:omi/pages/chat/widgets/chat_budget_pause.dart';
 import 'dart:async';
 

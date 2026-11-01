@@ -490,6 +490,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
+  - id: new-file-headers
+    command: ["python3", ".github/scripts/check_new_file_headers.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/agent/src/**/*.ts", ".github/scripts/check_new_file_headers.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14527 merged the 75-line headerless app/lib/backend/http/api_result.dart (the C3 typed-result contract) with no statement of what it owns; a new first-party source file must say what it owns and the constraint it upholds where the next reader looks first"
+  - id: new-file-headers-tests
+    command: ["python3", ".github/scripts/test_check_new_file_headers.py"]
+    triggers: [".github/scripts/check_new_file_headers.py", ".github/scripts/test_check_new_file_headers.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "header detection must keep accepting top-of-file and after-import comment blocks while rejecting marker-only comments, parse failures, and wrongly exempting tests, generated files, __init__.py and small files"
 
   - id: twitter-app-callback-error-escaping-tests
     command: ["python3", "plugins/omi-twitter-app/test_callback_error_escaping.py"]

@@ -1,4 +1,14 @@
 # ruff: noqa: F401
+"""LLM client construction and re-export seam: Luna/OpenAI instances, the
+desktop Anthropic path, and OpenRouter, with shared prompt-cache and usage
+callback wiring.
+
+The broad re-export surface (hence the noqa above) is deliberate -- feature
+modules construct clients through here so provider routing, caching and usage
+accounting stay one decision instead of per-feature copies
+(backend/utils/llm/ARCHITECTURE.md).
+"""
+
 import hashlib
 import logging
 import os
