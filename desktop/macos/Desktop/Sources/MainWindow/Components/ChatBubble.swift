@@ -1,3 +1,10 @@
+// Chat message bubble rendering: markdown, citations, resource strips, and the
+// metadata controls on hover.
+//
+// Layout metrics are centralized (ChatBubbleMetadataControlMetrics) because the
+// transcript's row spacing subtracts the hover strip's reserved band -- the gap
+// under a reply must be the band itself, not the band plus a full
+// inter-exchange gap.
 import AppKit
 import OmiTheme
 import SwiftUI
