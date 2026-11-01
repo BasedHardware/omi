@@ -109,8 +109,9 @@ class SynchronizedWorker:
         except Exception as error:
             # Synchronization can fail after compute handed off writes. Fatal
             # CUDA must not leave those writes running beyond the receipt.
-            if callable(getattr(pending, 'close', None)):
-                pending.close()
+            close = getattr(pending, 'close', None)
+            if callable(close):
+                close()
             if is_fatal_cuda_error(error):
                 self._unavailable = True
                 if self.on_fatal:

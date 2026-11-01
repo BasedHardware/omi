@@ -21,6 +21,10 @@ class PendingResults:
         wait(self._futures)
         self._futures.clear()
 
+    @property
+    def futures(self):
+        return tuple(self._futures)
+
 
 class FirstDecode:
     """One lane's first decode; never a cache indexed by segment identity."""
@@ -38,16 +42,20 @@ class FirstDecode:
             future.cancel()
 
     def take(self, item):
-        if item is not self.item or self._closed or self.cancelled:
+        future = self.future
+        if future is None or item is not self.item or self._closed or self.cancelled:
             raise ValueError('prepared decode belongs to another attempt')
-        return self.future.result()
+        return future.result()
 
     def close(self):
         with self._lock:
             if self._closed:
                 return
-            if not self.future.cancel():
-                wait([self.future])  # SDK IO has its own bounded request/retry deadline.
+            future = self.future
+            if future is None:
+                raise RuntimeError('prepared decode missing its IO receipt')
+            if not future.cancel():
+                wait([future])  # SDK IO has its own bounded request/retry deadline.
             # Release decoded buffers as well as the reservation on discard.
             self.future = None
             self._closed = True

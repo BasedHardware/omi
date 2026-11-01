@@ -645,7 +645,7 @@ class PipelineWorker:
                 group.append(item)
                 seconds += item.duration_seconds
             tail = self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared)
-            return PendingResults(lambda: [*results, *tail.settle()], tail._futures)
+            return PendingResults(lambda: [*results, *tail.settle()], tail.futures)
 
     def _process(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
         states: dict[str, dict[str, Any]] = {}

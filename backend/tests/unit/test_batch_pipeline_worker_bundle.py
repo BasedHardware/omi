@@ -274,12 +274,12 @@ async def test_repeated_cancellation_drains_persist_before_renewal_ends(monkeypa
     assert not [t for t in asyncio.all_tasks() if t is not asyncio.current_task() and not t.done()]
 
 
-@pytest.mark.parametrize('cause', ['stop', 'lost', 'privacy'])
+@pytest.mark.parametrize('cause', ['stop', 'lost', 'recovered', 'privacy'])
 @pytest.mark.asyncio
 async def test_waiting_preparation_cancelled_on_stop_lease_loss_or_privacy(monkeypatch, cause):
     monkeypatch.setattr(pump_module, 'HEARTBEAT_SECONDS', 0.01)
     loop = asyncio.get_running_loop()
-    decoded, discarded = asyncio.Event(), asyncio.Event()
+    decoded, discarded, renewed = asyncio.Event(), asyncio.Event(), asyncio.Event()
     calls = []
     stop = asyncio.Event()
     worker, _, _, _, _, _ = setup_worker(io_concurrency=2)
@@ -312,6 +312,17 @@ async def test_waiting_preparation_cancelled_on_stop_lease_loss_or_privacy(monke
     pump = Pump(queue, worker, flights=2)
     if cause == 'lost':
         monkeypatch.setattr(queue, 'heartbeat', lambda *args: False)
+    if cause == 'recovered':
+        heartbeat = queue.heartbeat
+
+        def recover_renewal(*args):
+            if not discarded.is_set():
+                return False
+            valid = heartbeat(*args)
+            loop.call_soon_threadsafe(renewed.set)
+            return valid
+
+        monkeypatch.setattr(queue, 'heartbeat', recover_renewal)
     await pump._gpu.acquire()
     running = asyncio.create_task(pump.run_once(stop_event=stop, maintain=False))
     try:
@@ -320,6 +331,8 @@ async def test_waiting_preparation_cancelled_on_stop_lease_loss_or_privacy(monke
             stop.set()
         if cause == 'lost':
             await asyncio.wait_for(discarded.wait(), 2)
+        if cause == 'recovered':
+            await asyncio.wait_for(renewed.wait(), 2)
         if cause == 'stop':
             await asyncio.wait_for(discarded.wait(), 2)
     finally:
@@ -327,6 +340,9 @@ async def test_waiting_preparation_cancelled_on_stop_lease_loss_or_privacy(monke
         await asyncio.wait_for(running, 3)
     assert not calls and ('results', 'a') not in store.rows
     assert worker._decode_budget.seconds == 0
+    if cause == 'recovered':
+        assert store.rows['jobs', 'a']['state'] == 'retry'
+        assert store.rows['jobs', 'a']['attempt'] == 0
 
 
 def test_released_attempt_cannot_overwrite_another_attempts_staged_context():

@@ -402,6 +402,7 @@ class Pump:
                     handle.cancel()
 
                 watching = asyncio.create_task(discard_invalid_preparation(prepared))
+            skipped: set[str] = set()
             try:
                 async with self._gpu:
                     if stop_event is not None and stop_event.is_set() and self.flights > 1:
@@ -428,10 +429,12 @@ class Pump:
                                     type(error).__name__,
                                 )
                         return 0
+                    skipped = set(lost)
                     if prepared is not None:
                         # A queued decode may have been cancelled on stop/lease
                         # loss. Never let it become this or a replacement attempt.
-                        if prepared.cancelled or prepared.item.segment_id in lost:
+                        if prepared.cancelled or prepared.item.segment_id in skipped:
+                            skipped.add(prepared.item.segment_id)
                             await run_blocking(sync_executor, prepared.close)
                         else:
                             dispatch_kwargs['prepared'] = prepared
@@ -441,7 +444,7 @@ class Pump:
                             'worker_flight',
                             sync_executor,
                             process,
-                            [v.item for v in leases if v.item.segment_id not in lost],
+                            [v.item for v in leases if v.item.segment_id not in skipped],
                             **dispatch_kwargs,
                         )
                     )
@@ -492,8 +495,27 @@ class Pump:
                     result_map[segment] = replace(result, retry_after=dispatch_retries[segment])
             if len(result_map) != len(results) or not set(result_map).issubset(v.item.segment_id for v in leases):
                 raise ValueError('worker returned duplicate or foreign results')
-            await self._publish_flight(leases, result_map, lost)
-            return len(leases)
+            # A renewal may recover after a waiting attempt was cancelled.
+            # Never interpret its intentionally absent result as a GPU failure.
+            for lease in leases:
+                if lease.item.segment_id in skipped:
+                    try:
+                        await self._run_blocking(
+                            'publication',
+                            db_executor,
+                            self.scheduler.defer,
+                            lease.item.segment_id,
+                            lease.token,
+                            time.time(),
+                            1,
+                        )
+                    except Exception as error:
+                        logger.error(
+                            'event=batch_flight outcome=lease_recovery exception_type=%s', type(error).__name__
+                        )
+            active = [v for v in leases if v.item.segment_id not in skipped]
+            await self._publish_flight(active, result_map, lost)
+            return len(active)
         except FatalGpuError:
             raise  # Its handler already refunded every lease without an attempt charge.
         except Exception:
