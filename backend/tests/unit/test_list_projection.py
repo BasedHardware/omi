@@ -77,7 +77,7 @@ def store(monkeypatch):
     monkeypatch.setattr(checks, '_version', read_version)
     monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'synthetic-complete-writer-rollout')
     monkeypatch.setenv('OMI_BACKEND_RELEASE_SHA', 'a' * 40)
-    monkeypatch.delenv('OMI_LIST_PROJECTION_WRITER_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
     state.client = client
     return state
 

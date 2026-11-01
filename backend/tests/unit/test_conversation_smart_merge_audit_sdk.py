@@ -28,6 +28,8 @@ from utils.conversations import smart_merge
 @pytest.fixture
 def sdk_world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_AUDIT_ENV, 'on')
+    # These commits are asserted with the list projection writer's appended writes.
+    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
     world = World(monkeypatch)
     client = OfflineFirestoreClient(project='synthetic-audit-test')
     api = MagicMock()
