@@ -196,9 +196,8 @@ def reconcile_listen_finalization_jobs(
             logger.error('listen BYOK ownership reclaim failed rows=%s', recovery['errors'])
     except Exception:
         logger.exception('listen BYOK ownership reclaim scan failed')
-    if not replay_enabled() or (
-        not is_listen_finalization_dispatch_enabled() and not is_listen_finalization_tasks_configured()
-    ):
+    dispatch_enabled = is_listen_finalization_dispatch_enabled()
+    if not replay_enabled() or (not dispatch_enabled and not is_listen_finalization_tasks_configured()):
         _publish_job_metrics(firestore_client=firestore_client)
         return result
 
@@ -227,9 +226,15 @@ def reconcile_listen_finalization_jobs(
         _publish_job_metrics(firestore_client=firestore_client)
         return result | {'error': 1}
 
+    # Inline listen owns only ordinary finalization replay. Quiet/merge jobs
+    # retain their existing cloud_tasks admission and scheduling ownership.
+    replay_candidates = candidates
+    if not dispatch_enabled:
+        replay_candidates = [c for c in candidates if c.get('kind') not in {'listen_quiet_check', 'conversation_merge'}]
+        result['skipped'] += len(candidates) - len(replay_candidates)
     quiet_candidates = [
         candidate
-        for candidate in candidates
+        for candidate in replay_candidates
         if candidate.get('kind') == 'listen_quiet_check'
         and isinstance(candidate.get('job_id'), str)
         and candidate['job_id']
@@ -281,7 +286,7 @@ def reconcile_listen_finalization_jobs(
                 for future in as_completed(futures):
                     future.result()
 
-    for candidate in candidates:
+    for candidate in replay_candidates:
         try:
             job_id = candidate.get('job_id')
             if not isinstance(job_id, str) or not job_id:

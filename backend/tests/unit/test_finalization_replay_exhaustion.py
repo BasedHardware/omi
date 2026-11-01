@@ -325,3 +325,24 @@ def test_replay_kill_switch_also_stops_cloud_tasks_host(store, monkeypatch, inli
     assert not any(service.reconcile_listen_finalization_jobs(firestore_client=store).values())
     assert store.rows == before
     inline_replay.assert_not_called()
+
+
+@pytest.mark.parametrize('kind', ['listen_quiet_check', 'conversation_merge'])
+def test_inline_replay_does_not_run_or_defer_other_job_kinds(store, monkeypatch, inline_replay, kind):
+    from utils.conversations import lifecycle
+
+    store.rows[JOB_PATH].update(kind=kind, reconcile_after_at=NOW - timedelta(minutes=1))
+    before = deepcopy(store.rows)
+    quiet = Mock()
+    merge = Mock()
+    claim = Mock()
+    defer = Mock()
+    monkeypatch.setattr(service.quiet_finalization, 'run', quiet)
+    monkeypatch.setattr(lifecycle.merge_jobs, 'reconcile', merge)
+    monkeypatch.setattr(jobs, 'claim_finalization_replay', claim)
+    monkeypatch.setattr(jobs, 'defer_finalization_replay', defer)
+
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['skipped'] == 1
+    assert store.rows == before
+    for effect in (quiet, merge, claim, defer, inline_replay):
+        effect.assert_not_called()
