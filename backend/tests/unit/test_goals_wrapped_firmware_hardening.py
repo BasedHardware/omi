@@ -247,6 +247,58 @@ class TestWrapped2025Hardening:
         assert "let's do this" not in phrases
         assert phrases.get("makes sense") == 1
 
+    def test_llm_helpers_unwrap_lists_and_fallback_on_null_or_non_collection_json(self, modules, monkeypatch):
+        wrapped_2025 = modules.wrapped_2025
+        conv = SimpleNamespace(
+            is_locked=False,
+            created_at=datetime(2025, 6, 1, 10, 0, tzinfo=timezone.utc),
+            structured=SimpleNamespace(title="Launch Day", overview="Shipped v1"),
+            transcript_segments=[],
+        )
+
+        # 1. Single-element JSON list unwrapped to dict for memorable_days / funniest / embarrassing
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content='[{"most_fun_day": {"date": "June 1", "title": "Launch", "description": "Great day", "emoji": "🚀"}}]'
+        )
+        monkeypatch.setattr(wrapped_2025, "get_llm", lambda *a, **kw: mock_llm)
+        memorable = wrapped_2025._analyze_memorable_days_with_llm([conv])
+        assert isinstance(memorable, dict)
+        assert memorable["most_fun_day"]["title"] == "Launch"
+
+        # 2. Null or scalar JSON falls back to default dict/list instead of raising or returning None
+        mock_llm.invoke.return_value = MagicMock(content="null")
+        assert isinstance(wrapped_2025._determine_archetype_with_llm([conv], {}), dict)
+        assert isinstance(wrapped_2025._analyze_memorable_days_with_llm([conv]), dict)
+        assert isinstance(wrapped_2025._find_funniest_event_with_llm([conv]), dict)
+        assert isinstance(wrapped_2025._find_most_embarrassing_event_with_llm([conv]), dict)
+        assert isinstance(wrapped_2025._find_obsessions_with_llm([conv]), dict)
+        assert isinstance(wrapped_2025._find_struggles_and_wins_with_llm([conv]), dict)
+
+        # 3. Object with null list field falls back cleanly
+        mock_llm.invoke.return_value = MagicMock(content='{"phrases": null, "movies": null}')
+        top_phrases = wrapped_2025._find_top_phrases_with_llm([conv])
+        assert isinstance(top_phrases, list) and len(top_phrases) == 5
+        movies = wrapped_2025._find_movie_recommendations_with_llm([conv])
+        assert isinstance(movies, list) and len(movies) == 5
+        buddies = wrapped_2025._find_top_buddies_with_llm([conv])
+        assert isinstance(buddies, list) and len(buddies) == 5 and all(isinstance(b, dict) for b in buddies)
+
+    def test_generate_wrapped_2025_marks_error_when_compute_gate_denies(self, modules, monkeypatch):
+        wrapped_2025 = modules.wrapped_2025
+        monkeypatch.setattr(wrapped_2025, "generated_compute_allowed", lambda *a, **kw: False)
+        update_mock = MagicMock()
+        monkeypatch.setattr(wrapped_2025.wrapped_db, "update_wrapped_status", update_mock)
+
+        wrapped_2025.generate_wrapped_2025("uid-denied", 2025)
+
+        update_mock.assert_called_once_with(
+            "uid-denied",
+            2025,
+            wrapped_2025.WrappedStatus.ERROR,
+            error="Failed to generate Wrapped. Please try again later.",
+        )
+
 
 class TestFirmwareVersionPaddingAndValidation:
     def test_parse_firmware_version_strips_null_bytes_and_whitespace(self, modules):
@@ -276,3 +328,4 @@ class TestFirmwareVersionPaddingAndValidation:
         candidates = firmware_router._find_candidate_releases(releases, "Omi_CV1", current_firmware_tuple=None)
         assert len(candidates) == 1
         assert candidates[0]["tag_name"] == "Omi_CV1_v3.0.14"
+
