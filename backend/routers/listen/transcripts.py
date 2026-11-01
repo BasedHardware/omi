@@ -1179,7 +1179,10 @@ class TranscriptProcessor:
                     value_error_conversation_id = conversation_id
                 else:
                     value_error_failures = 0
-                oversized = self._handle_oversized_legacy_persist(error)
+                # The segment transaction already authorized this speech. A
+                # later permanent photo/reply fault cannot enter any speech
+                # retry path, including the existing size-limit escape.
+                oversized = not self._legacy_segments_committed and self._handle_oversized_legacy_persist(error)
                 retained_count = len(legacy_retry_segments or [])
                 failures = getattr(self, '_legacy_persist_failures', 0) + 1
                 self._legacy_persist_failures = failures

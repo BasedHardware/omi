@@ -467,7 +467,7 @@ def _decode_transcript_segments_blob(
             return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
     except TranscriptSegmentsDecodeError:
         raise
-    except (ValueError, TypeError, zlib.error) as error:
+    except (ValueError, TypeError, RecursionError, zlib.error) as error:
         raise TranscriptSegmentsDecodeError('undecodable transcript_segments: invalid encoding') from error
     raise TranscriptSegmentsDecodeError(
         f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}'

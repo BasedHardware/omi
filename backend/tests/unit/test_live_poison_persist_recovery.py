@@ -1,12 +1,14 @@
 """Strictly rejected live rows must not strand retained speech on one generation."""
 
 import asyncio
+import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from google.api_core.exceptions import InvalidArgument
 from pydantic import ValidationError
 
 from database import conversations as db
@@ -25,6 +27,11 @@ def _processor(monkeypatch, *, segments, update, rollover):
 
     processor.host.conversations.rollover_after_transcript_decode_failure = escape
     return processor, state, clock
+
+
+def _nested_transcript_blob():
+    depth = sys.getrecursionlimit() + 32
+    return '[' * depth + '0' + ']' * depth
 
 
 def test_null_transcript_row_merges_as_empty(world):
@@ -210,10 +217,16 @@ async def test_unrelated_value_errors_never_split_conversation(monkeypatch, sour
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('blob_kind', ['dict', 'nested'])
 @pytest.mark.parametrize('multi_channel', [False, True])
-async def test_real_controller_finalizes_displaced_row_without_blocking_speech(world, monkeypatch, multi_channel):
+async def test_real_controller_finalizes_displaced_row_without_blocking_speech(
+    world, monkeypatch, multi_channel, blob_kind
+):
     store, old_path, _ = world
-    store.rows[old_path]['transcript_segments'] = {'corrupt': True}
+    store.rows[old_path]['transcript_segments'] = (
+        {'corrupt': True} if blob_kind == 'dict' else _nested_transcript_blob()
+    )
+    monkeypatch.setattr(db.encryption, 'decrypt', lambda value, _owner: value)
     finalization_entered, release_finalization = asyncio.Event(), asyncio.Event()
     committed, dispatched, tasks = [], [], []
     real_start = controller_module.start_background_task
@@ -308,7 +321,7 @@ async def test_real_controller_finalizes_displaced_row_without_blocking_speech(w
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('photo_fault', ['false', 'raise'])
+@pytest.mark.parametrize('photo_fault', ['false', 'raise', 'permanent'])
 async def test_committed_speech_is_not_replayed_after_photo_failure(world, monkeypatch, photo_fault):
     store, path, _ = world
     store.rows[path]['transcript_segments'] = []
@@ -322,6 +335,8 @@ async def test_committed_speech_is_not_replayed_after_photo_failure(world, monke
             if len(photo_attempts) == 1:
                 if photo_fault == 'raise':
                     raise ValueError('synthetic photo failure')
+                if photo_fault == 'permanent':
+                    raise InvalidArgument('document exceeds the maximum allowed size')
                 return False
             return True
         if fn is db.update_conversation_finished_at:
@@ -349,6 +364,7 @@ async def test_committed_speech_is_not_replayed_after_photo_failure(world, monke
     state.source_position_map = None
     processor.host.is_multi_channel = False
     processor.host.request.uid = 'u'
+    processor._oversized_rollover_probe_at = 0.0
     processor.host.persistence = SimpleNamespace(call=persist)
     processor.host.speakers.segment_assignments = {}
     processor.host.speakers.speaker_to_person = {}
@@ -365,6 +381,17 @@ async def test_committed_speech_is_not_replayed_after_photo_failure(world, monke
     rollover.assert_not_awaited()
     assert not processor.segment_buffer and not processor.photo_buffer
     assert ' '.join(s['text'] for s in read(world)['transcript_segments']) == 'word 0 word 1'
+
+
+def test_nested_json_is_a_decoder_failure_and_remains_finalizable(monkeypatch):
+    blob = _nested_transcript_blob()
+    monkeypatch.setattr(db.encryption, 'decrypt', lambda value, _owner: value)
+    with pytest.raises(db.TranscriptSegmentsDecodeError) as caught:
+        db._decode_transcript_segments_blob('synthetic', blob, False)
+    assert isinstance(caught.value.__cause__, RecursionError)
+    # This is the lifecycle's real content predicate. It must admit recovery
+    # without interpreting malformed data as empty or raising again.
+    assert db.raw_conversation_has_content('synthetic', {'transcript_segments': blob})
 
 
 @pytest.mark.parametrize(
