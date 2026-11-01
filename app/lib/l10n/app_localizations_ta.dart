@@ -14478,6 +14478,18 @@ class AppLocalizationsTa extends AppLocalizations {
   String get processingPaused => 'செயலாக்கம் இடைநிறுத்தப்பட்டது. இந்த மாத வரம்பை அடைந்துவிட்டீர்கள்.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'உங்கள் $duration பதிவுகள் பாதுகாப்பாக உள்ளன, ஆனால் இன்னும் செயலாக்கப்படவில்லை.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'இப்போதே செயலாக்க மேம்படுத்தவும்.';
+
+  @override
+  String get processingFreeStored =>
+      'உங்கள் பதிவுகள் பாதுகாப்பாக உள்ளன, ஆனால் இன்னும் செயலாக்கப்படவில்லை. இப்போதே செயலாக்க மேம்படுத்தவும்.';
+
+  @override
   String get processingStored =>
       'உங்கள் பதிவுகளும் உரைகளும் சேமிக்கப்பட்டுள்ளன. நீங்கள் செயலாக்கத் தேர்ந்தெடுக்கும் வரை காத்திருக்கும் பதிவுகள் காத்திருக்கும்.';
 

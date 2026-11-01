@@ -14415,6 +14415,17 @@ class AppLocalizationsHr extends AppLocalizations {
   String get processingPaused => 'Obrada je pauzirana. Dosegnuli ste ograničenje za ovaj mjesec.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration vaših snimaka je na sigurnom, ali nije obrađeno.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Nadogradite da ih obradite sada.';
+
+  @override
+  String get processingFreeStored => 'Vaše snimke su na sigurnom, ali nisu obrađene. Nadogradite da ih obradite sada.';
+
+  @override
   String get processingStored =>
       'Vaše snimke i transkripti su spremljeni. Snimke na čekanju čekat će dok ne odaberete obradu.';
 

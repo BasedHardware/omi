@@ -14363,6 +14363,18 @@ class AppLocalizationsHi extends AppLocalizations {
   String get processingPaused => 'प्रोसेसिंग रुकी हुई है। आप इस महीने की सीमा तक पहुँच गए हैं।';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'आपकी $duration की रिकॉर्डिंग सुरक्षित हैं, लेकिन अभी प्रोसेस नहीं हुई हैं।';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'अभी प्रोसेस करने के लिए अपग्रेड करें।';
+
+  @override
+  String get processingFreeStored =>
+      'आपकी रिकॉर्डिंग सुरक्षित हैं, लेकिन अभी प्रोसेस नहीं हुई हैं। अभी प्रोसेस करने के लिए अपग्रेड करें।';
+
+  @override
   String get processingStored =>
       'आपकी रिकॉर्डिंग और ट्रांसक्रिप्ट सहेजे गए हैं। प्रतीक्षारत रिकॉर्डिंग तब तक प्रतीक्षा में रहेंगी जब तक आप उन्हें प्रोसेस करने का विकल्प नहीं चुनते।';
 

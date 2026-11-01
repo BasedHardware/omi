@@ -14414,6 +14414,18 @@ class AppLocalizationsMs extends AppLocalizations {
   String get processingPaused => 'Pemprosesan dijeda. Anda telah mencapai had bulan ini.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration rakaman anda selamat tetapi belum diproses.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Naik taraf untuk memprosesnya sekarang.';
+
+  @override
+  String get processingFreeStored =>
+      'Rakaman anda selamat tetapi belum diproses. Naik taraf untuk memprosesnya sekarang.';
+
+  @override
   String get processingStored =>
       'Rakaman dan transkrip anda disimpan. Rakaman yang menunggu akan terus menunggu sehingga anda memilih untuk memprosesnya.';
 

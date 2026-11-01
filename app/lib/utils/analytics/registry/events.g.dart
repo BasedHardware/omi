@@ -3333,3 +3333,90 @@ final class WalUploadRefused extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"reason": reason.wireName, "status_code": statusCode};
 }
+
+enum HeldAudioCardSeenSurface {
+  home("home"),
+  live("live"),
+  settings("settings");
+  const HeldAudioCardSeenSurface(this.wireName);
+  final String wireName;
+}
+
+enum HeldAudioCardSeenVariant {
+  personal("personal"),
+  holdout("holdout"),
+  paid("paid");
+  const HeldAudioCardSeenVariant(this.wireName);
+  final String wireName;
+}
+
+enum HeldAudioCardSeenState {
+  capped("capped"),
+  waitingChoice("waiting_choice"),
+  processing("processing");
+  const HeldAudioCardSeenState(this.wireName);
+  final String wireName;
+}
+
+final class HeldAudioCardSeen extends RegisteredEvent {
+  const HeldAudioCardSeen({required this.surface, required this.variant, required this.state});
+  final HeldAudioCardSeenSurface surface;
+  final HeldAudioCardSeenVariant variant;
+  final HeldAudioCardSeenState state;
+  @override
+  String get wireName => "Held Audio Card Seen";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName, "variant": variant.wireName, "state": state.wireName};
+}
+
+enum HeldAudioUpgradeTappedSurface {
+  home("home"),
+  live("live"),
+  settings("settings");
+  const HeldAudioUpgradeTappedSurface(this.wireName);
+  final String wireName;
+}
+
+enum HeldAudioUpgradeTappedVariant {
+  personal("personal"),
+  holdout("holdout"),
+  paid("paid");
+  const HeldAudioUpgradeTappedVariant(this.wireName);
+  final String wireName;
+}
+
+final class HeldAudioUpgradeTapped extends RegisteredEvent {
+  const HeldAudioUpgradeTapped({required this.surface, required this.variant});
+  final HeldAudioUpgradeTappedSurface surface;
+  final HeldAudioUpgradeTappedVariant variant;
+  @override
+  String get wireName => "Held Audio Upgrade Tapped";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName, "variant": variant.wireName};
+}
+
+enum HeldAudioProcessTappedSurface {
+  home("home"),
+  live("live"),
+  settings("settings");
+  const HeldAudioProcessTappedSurface(this.wireName);
+  final String wireName;
+}
+
+enum HeldAudioProcessTappedVariant {
+  personal("personal"),
+  holdout("holdout"),
+  paid("paid");
+  const HeldAudioProcessTappedVariant(this.wireName);
+  final String wireName;
+}
+
+final class HeldAudioProcessTapped extends RegisteredEvent {
+  const HeldAudioProcessTapped({required this.surface, required this.variant});
+  final HeldAudioProcessTappedSurface surface;
+  final HeldAudioProcessTappedVariant variant;
+  @override
+  String get wireName => "Held Audio Process Tapped";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName, "variant": variant.wireName};
+}

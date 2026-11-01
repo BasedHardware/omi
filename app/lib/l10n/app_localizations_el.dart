@@ -14474,6 +14474,18 @@ class AppLocalizationsEl extends AppLocalizations {
   String get processingPaused => 'Η επεξεργασία διακόπηκε. Φτάσατε το όριο αυτού του μήνα.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration από τις ηχογραφήσεις σας είναι ασφαλείς αλλά δεν έχουν επεξεργαστεί.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Αναβαθμίστε για να τις επεξεργαστείτε τώρα.';
+
+  @override
+  String get processingFreeStored =>
+      'Οι ηχογραφήσεις σας είναι ασφαλείς αλλά δεν έχουν επεξεργαστεί. Αναβαθμίστε για να τις επεξεργαστείτε τώρα.';
+
+  @override
   String get processingStored =>
       'Οι εγγραφές και οι απομαγνητοφωνήσεις σας αποθηκεύτηκαν. Οι εγγραφές σε αναμονή θα περιμένουν μέχρι να επιλέξετε την επεξεργασία τους.';
 

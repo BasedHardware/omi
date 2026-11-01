@@ -14393,6 +14393,18 @@ class AppLocalizationsUr extends AppLocalizations {
   String get processingPaused => 'پروسیسنگ روک دی گئی ہے۔ آپ اس مہینے کی حد تک پہنچ گئے ہیں۔';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'آپ کی $duration ریکارڈنگز محفوظ ہیں لیکن ابھی پروسیس نہیں ہوئیں۔';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'ابھی پروسیس کرنے کے لیے اپ گریڈ کریں۔';
+
+  @override
+  String get processingFreeStored =>
+      'آپ کی ریکارڈنگز محفوظ ہیں لیکن ابھی پروسیس نہیں ہوئیں۔ ابھی پروسیس کرنے کے لیے اپ گریڈ کریں۔';
+
+  @override
   String get processingStored =>
       'آپ کی ریکارڈنگز اور متن محفوظ ہیں۔ منتظر ریکارڈنگز تب تک منتظر رہیں گی جب تک آپ انہیں پروسیس کرنے کا انتخاب نہیں کرتے۔';
 

@@ -14175,6 +14175,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processingPaused => '処理を一時停止しました。今月の上限に達しました。';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$durationの録音は安全に保存されていますが、まだ処理されていません。';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'アップグレードすると今すぐ処理できます。';
+
+  @override
+  String get processingFreeStored => '録音は安全に保存されていますが、まだ処理されていません。アップグレードすると今すぐ処理できます。';
+
+  @override
   String get processingStored => '録音と文字起こしは保存されています。処理を選択するまで、待機中の録音はそのまま保持されます。';
 
   @override

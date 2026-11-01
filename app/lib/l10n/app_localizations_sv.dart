@@ -14387,6 +14387,17 @@ class AppLocalizationsSv extends AppLocalizations {
   String get processingPaused => 'Bearbetningen är pausad. Du har nått månadens gräns.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration av dina inspelningar är säkra men obearbetade.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Uppgradera för att bearbeta dem nu.';
+
+  @override
+  String get processingFreeStored => 'Dina inspelningar är säkra men obearbetade. Uppgradera för att bearbeta dem nu.';
+
+  @override
   String get processingStored =>
       'Dina inspelningar och transkriptioner är sparade. Väntande inspelningar väntar tills du väljer att bearbeta dem.';
 

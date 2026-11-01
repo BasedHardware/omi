@@ -14402,6 +14402,18 @@ class AppLocalizationsLt extends AppLocalizations {
   String get processingPaused => 'Apdorojimas pristabdytas. Pasiekėte šio mėnesio limitą.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration jūsų įrašų yra saugūs, bet neapdoroti.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Atnaujinkite planą, kad juos apdorotumėte dabar.';
+
+  @override
+  String get processingFreeStored =>
+      'Jūsų įrašai yra saugūs, bet neapdoroti. Atnaujinkite planą, kad juos apdorotumėte dabar.';
+
+  @override
   String get processingStored =>
       'Jūsų įrašai ir išklotinės išsaugoti. Laukiantys įrašai lauks, kol pasirinksite juos apdoroti.';
 

@@ -14423,6 +14423,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get processingPaused => 'Procesamiento en pausa. Has alcanzado el límite de este mes.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration de tus grabaciones están a salvo, pero sin procesar.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Mejora tu plan para procesarlas ahora.';
+
+  @override
+  String get processingFreeStored =>
+      'Tus grabaciones están a salvo, pero sin procesar. Mejora tu plan para procesarlas ahora.';
+
+  @override
   String get processingStored =>
       'Tus grabaciones y transcripciones están guardadas. Las grabaciones pendientes esperarán hasta que decidas procesarlas.';
 

@@ -14437,6 +14437,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processingPaused => 'A feldolgozás szünetel. Elérted az e havi keretet.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration felvételed biztonságban van, de még nincs feldolgozva.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Válts nagyobb csomagra a feldolgozáshoz most.';
+
+  @override
+  String get processingFreeStored =>
+      'A felvételeid biztonságban vannak, de még nincsenek feldolgozva. Válts nagyobb csomagra a feldolgozáshoz most.';
+
+  @override
   String get processingStored =>
       'A felvételeid és átirataid el vannak mentve. A várakozó felvételek addig várnak, amíg a feldolgozásukat nem választod.';
 

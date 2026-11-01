@@ -14442,6 +14442,18 @@ class AppLocalizationsRo extends AppLocalizations {
   String get processingPaused => 'Procesarea este în pauză. Ai atins limita pentru această lună.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration din înregistrările tale sunt în siguranță, dar neprocesate.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Fă upgrade pentru a le procesa acum.';
+
+  @override
+  String get processingFreeStored =>
+      'Înregistrările tale sunt în siguranță, dar neprocesate. Fă upgrade pentru a le procesa acum.';
+
+  @override
   String get processingStored =>
       'Înregistrările și transcrierile tale sunt salvate. Înregistrările în așteptare vor rămâne așa până alegi să le procesezi.';
 

@@ -14413,6 +14413,18 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processingPaused => 'Апрацоўка прыпынена. Вы дасягнулі ліміту на гэты месяц.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration вашых запісаў у бяспецы, але яшчэ не апрацаваны.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Абнавіце план, каб апрацаваць іх зараз.';
+
+  @override
+  String get processingFreeStored =>
+      'Вашы запісы ў бяспецы, але яшчэ не апрацаваны. Абнавіце план, каб апрацаваць іх зараз.';
+
+  @override
   String get processingStored =>
       'Вашы запісы і расшыфроўкі захаваны. Запісы будуць чакаць, пакуль вы не выбераце іх апрацоўку.';
 

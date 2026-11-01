@@ -14443,6 +14443,18 @@ class AppLocalizationsMk extends AppLocalizations {
   String get processingPaused => 'Обработката е паузирана. Го достигнавте лимитот за овој месец.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration од вашите снимки се безбедни, но не се обработени.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Надградете за да ги обработите сега.';
+
+  @override
+  String get processingFreeStored =>
+      'Вашите снимки се безбедни, но не се обработени. Надградете за да ги обработите сега.';
+
+  @override
   String get processingStored =>
       'Вашите снимки и транскрипти се зачувани. Снимките на чекање ќе чекаат додека не изберете да ги обработите.';
 

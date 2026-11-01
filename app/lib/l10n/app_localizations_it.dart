@@ -14455,6 +14455,18 @@ class AppLocalizationsIt extends AppLocalizations {
   String get processingPaused => 'Elaborazione in pausa. Hai raggiunto il limite di questo mese.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration delle tue registrazioni sono al sicuro ma non ancora elaborate.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Passa a un piano superiore per elaborarle ora.';
+
+  @override
+  String get processingFreeStored =>
+      'Le tue registrazioni sono al sicuro ma non ancora elaborate. Passa a un piano superiore per elaborarle ora.';
+
+  @override
   String get processingStored =>
       'Le registrazioni e le trascrizioni sono salvate. Le registrazioni in attesa rimarranno tali finché non sceglierai di elaborarle.';
 

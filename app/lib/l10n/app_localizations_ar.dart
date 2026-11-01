@@ -14298,6 +14298,17 @@ class AppLocalizationsAr extends AppLocalizations {
   String get processingPaused => 'المعالجة متوقفة مؤقتًا. لقد بلغت حد هذا الشهر.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration من تسجيلاتك في أمان لكنها لم تُعالَج بعد.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'قم بالترقية لمعالجتها الآن.';
+
+  @override
+  String get processingFreeStored => 'تسجيلاتك في أمان لكنها لم تُعالَج بعد. قم بالترقية لمعالجتها الآن.';
+
+  @override
   String get processingStored => 'تم حفظ تسجيلاتك ونصوصك. ستبقى التسجيلات قيد الانتظار حتى تختار معالجتها.';
 
   @override

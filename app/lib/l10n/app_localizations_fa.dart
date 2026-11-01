@@ -14374,6 +14374,17 @@ class AppLocalizationsFa extends AppLocalizations {
   String get processingPaused => 'پردازش متوقف شد. به سقف این ماه رسیده‌اید.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration از ضبط‌های شما امن است اما هنوز پردازش نشده است.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'برای پردازش همین حالا، ارتقا دهید.';
+
+  @override
+  String get processingFreeStored => 'ضبط‌های شما امن است اما هنوز پردازش نشده است. برای پردازش همین حالا، ارتقا دهید.';
+
+  @override
   String get processingStored =>
       'ضبط‌ها و متن‌های شما ذخیره شده‌اند. ضبط‌های منتظر تا زمانی که پردازش را انتخاب کنید در انتظار می‌مانند.';
 

@@ -14308,6 +14308,17 @@ class AppLocalizationsTh extends AppLocalizations {
   String get processingPaused => 'หยุดประมวลผลชั่วคราว คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'การบันทึก $duration ของคุณปลอดภัย แต่ยังไม่ได้ประมวลผล';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'อัปเกรดเพื่อประมวลผลตอนนี้';
+
+  @override
+  String get processingFreeStored => 'การบันทึกของคุณปลอดภัย แต่ยังไม่ได้ประมวลผล อัปเกรดเพื่อประมวลผลตอนนี้';
+
+  @override
   String get processingStored =>
       'บันทึกเสียงและข้อความถอดเสียงของคุณถูกบันทึกไว้ บันทึกที่รออยู่จะยังรอจนกว่าคุณจะเลือกประมวลผล';
 

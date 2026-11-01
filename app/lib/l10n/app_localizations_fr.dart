@@ -14495,6 +14495,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get processingPaused => 'Traitement en pause. Vous avez atteint la limite de ce mois.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration de vos enregistrements sont en sécurité mais pas encore traités.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Passez à l’offre supérieure pour les traiter maintenant.';
+
+  @override
+  String get processingFreeStored =>
+      'Vos enregistrements sont en sécurité mais pas encore traités. Passez à l’offre supérieure pour les traiter maintenant.';
+
+  @override
   String get processingStored =>
       'Vos enregistrements et transcriptions sont sauvegardés. Les enregistrements en attente le resteront jusqu\'à ce que vous choisissiez de les traiter.';
 

@@ -14488,6 +14488,18 @@ class AppLocalizationsDe extends AppLocalizations {
   String get processingPaused => 'Verarbeitung pausiert. Du hast das Limit für diesen Monat erreicht.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration deiner Aufnahmen sind sicher, aber noch nicht verarbeitet.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Upgrade, um sie jetzt zu verarbeiten.';
+
+  @override
+  String get processingFreeStored =>
+      'Deine Aufnahmen sind sicher, aber noch nicht verarbeitet. Upgrade, um sie jetzt zu verarbeiten.';
+
+  @override
   String get processingStored =>
       'Deine Aufnahmen und Transkripte sind gespeichert. Wartende Aufnahmen bleiben gespeichert, bis du ihre Verarbeitung auswählst.';
 

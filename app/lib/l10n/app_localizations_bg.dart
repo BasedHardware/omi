@@ -14430,6 +14430,18 @@ class AppLocalizationsBg extends AppLocalizations {
   String get processingPaused => 'Обработката е на пауза. Достигнахте лимита за този месец.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration от записите ви са в безопасност, но не са обработени.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Надградете, за да ги обработите сега.';
+
+  @override
+  String get processingFreeStored =>
+      'Записите ви са в безопасност, но не са обработени. Надградете, за да ги обработите сега.';
+
+  @override
   String get processingStored =>
       'Записите и транскрипциите ви са запазени. Чакащите записи ще останат така, докато изберете да ги обработите.';
 
