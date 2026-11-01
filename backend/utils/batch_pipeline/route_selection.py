@@ -137,7 +137,8 @@ def decide(table: contracts.RouteTable, language: str | None, *, byok: bool, uid
         and cohort_bucket(uid, contracts.GPU_FLOOR_COHORT_SALT) < table.gpu_floor_percent
     ):
         selected, reason = contracts.GPU, VendorRouteReason.GPU_FLOOR
-    elif not capable:
+    elif not capable or all(table.routes[route].failover_only for route in capable):
+        # No capable route, or only failover capacity (Soniox, admitted by slice D): today's routing.
         return None
     elif primaries:
         if len([route for route in capable if not table.routes[route].failover_only]) == 1:

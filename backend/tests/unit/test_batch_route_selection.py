@@ -234,12 +234,14 @@ def test_byok_reason_is_kept(monkeypatch):
     assert _select(UNSUPPORTED, byok=True).route.provider_reason == 'byok'
 
 
-def test_soniox_is_never_selected_while_policy_does_not_admit_it(monkeypatch):
+def test_soniox_is_failover_capacity_under_the_real_prerecorded_admission(monkeypatch):
+    # Slice D admits Soniox on the prerecorded surface (no monkeypatch): it serves only when the
+    # primary vendor is down, and a row whose only capable vendor is failover-only is today's routing.
     _cohort(monkeypatch)
+    assert _select(UNSUPPORTED).selected == 'modulate'
     monkeypatch.setattr(rs, '_health', Health(down={'modulate'}))
     decision = _select(UNSUPPORTED)
-    assert decision.selected == 'modulate' and decision.reason is Reason.NO_HEALTHY_ROUTE
-    assert 'soniox' not in decision.failover
+    assert (decision.selected, decision.reason) == ('soniox', Reason.FAILOVER)
 
 
 def test_soniox_is_failover_only(monkeypatch):

@@ -67,6 +67,7 @@ from utils.observability.reasons import (
     VendorHealthReason,
     VendorHoldOutcome,
     VendorHoldReason,
+    VendorRouteTableOutcome,
 )
 from utils.workers.consumer import Result, Role
 
@@ -686,20 +687,24 @@ def _default_armed() -> bool:
     no `provider_pending` unit with a settled attempt (a failover awaiting its immediate redelivery)
     remains; a pre-D worker ignores `provider_attempts` and would re-call the admitted vendor.
     """
-    # Slice B's route_selection.current_table() replaces this when it lands (configured/last_valid).
-    return False
+    # Deferred: route_selection imports this module.
+    from utils.batch_pipeline.route_selection import current_table
+
+    return current_table()[1] in (VendorRouteTableOutcome.CONFIGURED, VendorRouteTableOutcome.LAST_VALID)
 
 
 def _default_failover_routes(language: str | None) -> tuple[str, ...]:
-    """Vendor routes the route table lists for the language, in row order.
+    """Vendor routes the served route table (slice B) lists for the language, in row order.
 
     The builtin table (today's routing; also the kill-switch target) lists Modulate only, so no
     unit fails over until a configured table names a second vendor.
     """
-    # Slice B's resolved table replaces BUILTIN_TABLE here when it lands.
+    from utils.batch_pipeline.route_selection import current_table
+
+    table, _ = current_table()
     return tuple(
         option.route
-        for option in contracts.capable_options(contracts.BUILTIN_TABLE, language)
+        for option in contracts.capable_options(table, language)
         if option.route in contracts.VENDOR_SERVICES
     )
 
