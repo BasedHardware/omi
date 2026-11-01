@@ -30,7 +30,7 @@ from llm_gateway.gateway.errors import (
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
 )
-from llm_gateway.gateway.metrics import LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL
+from llm_gateway.gateway.metrics import FLEX_FIRST_TOTAL, LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
     EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
@@ -471,6 +471,53 @@ PROVIDER_429_BACKOFF_BASE_SECONDS = 2.0
 PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
 
 
+# Flex-first: try OpenAI Flex (Batch-API token rates, 50% below Standard) on
+# background conversation lanes, then fall straight back to Standard on any
+# provider failure. Prod 7d on memory-l2-flex (gpt-6-luna): 92% served, 8%
+# Flex 429, p50 7.3s vs 5.2s Standard. The Flex attempt is capped so Standard
+# keeps most of the route budget and the backend's 60s foreground client
+# timeout. Kill switch: LLM_GATEWAY_FLEX_FIRST_LANES=off.
+FLEX_FIRST_LANES_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_LANES'
+FLEX_FIRST_TIMEOUT_MS_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_TIMEOUT_MS'
+DEFAULT_FLEX_FIRST_LANES = frozenset({'omi:auto:conv-structure', 'omi:auto:memory-l1'})
+DEFAULT_FLEX_FIRST_TIMEOUT_MS = 25_000
+
+
+def flex_first_lanes() -> frozenset[str]:
+    raw = os.getenv(FLEX_FIRST_LANES_ENV_VAR)
+    if raw is None:
+        return DEFAULT_FLEX_FIRST_LANES
+    value = raw.strip()
+    if value.lower() in {'', 'off', 'none', 'false', '0'}:
+        return frozenset()
+    return frozenset(part.strip() for part in value.split(',') if part.strip())
+
+
+def flex_first_timeout_ms(remaining_ms: int) -> int:
+    try:
+        cap = int(os.getenv(FLEX_FIRST_TIMEOUT_MS_ENV_VAR, '') or DEFAULT_FLEX_FIRST_TIMEOUT_MS)
+    except ValueError:
+        cap = DEFAULT_FLEX_FIRST_TIMEOUT_MS
+    return max(1, min(cap, remaining_ms // 2))
+
+
+def _flex_first_applies(
+    resolved_route: ResolvedRoute,
+    route: RouteArtifact,
+    provider_ref: ProviderRef,
+    credential_context: CredentialContext,
+    max_provider_attempts: int | None,
+) -> bool:
+    return (
+        provider_ref.provider == 'openai'
+        and route.lane_id in flex_first_lanes()
+        and route.lane_id not in DREAM_LANES
+        and credential_context.mode != CredentialMode.BYOK
+        and max_provider_attempts is None
+        and 'service_tier' not in resolved_route.validated_request.forwarded_params
+    )
+
+
 async def sleep_for_provider_retry(seconds: float) -> None:
     """Injectable pause between accounted provider retries."""
     await asyncio.sleep(seconds)
@@ -655,8 +702,17 @@ async def _attempt_provider(
         except GatewayError as exc:
             return None, exc
     max_attempts = 1 if route.lane_id in DREAM_LANES else max(route.retry.max_attempts, 1)
+    # The Flex attempt is extra: Standard keeps every configured attempt. A
+    # request already on a fallback (LKG or next provider) goes straight to Standard.
+    flex_offset = (
+        1
+        if fallback_reason is None
+        and _flex_first_applies(resolved_route, route, provider_ref, credential_context, max_provider_attempts)
+        else 0
+    )
     error: GatewayError | None = None
-    for retry_ordinal in range(1, max_attempts + 1):
+    for retry_ordinal in range(1, max_attempts + flex_offset + 1):
+        flex_attempt = flex_offset == 1 and retry_ordinal == 1
         if (
             max_provider_attempts is not None
             and attempt_trace is not None
@@ -670,6 +726,9 @@ async def _attempt_provider(
                 'provider request deadline exhausted',
                 failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
             )
+        if flex_attempt:
+            provider_request['service_tier'] = 'flex'
+            timeout_ms = flex_first_timeout_ms(timeout_ms)
         try:
             response = await provider.create_chat_completion(
                 provider_request,
@@ -690,6 +749,8 @@ async def _attempt_provider(
                     error_class='none',
                     metadata=response.accounting,
                 )
+            if flex_attempt:
+                FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='flex').inc()
             return response, None
         except ProviderFailure as exc:
             error = _map_provider_failure(exc, credential_context, provider_ref)
@@ -707,11 +768,16 @@ async def _attempt_provider(
                     metadata=exc.accounting,
                     usage_status=UsageStatus.INDETERMINATE,
                 )
+            if flex_attempt:
+                # Any Flex failure (capacity 429, slow, rejected) goes straight to
+                # Standard with no backoff; the user-visible path never depends on Flex.
+                FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='fallback_standard').inc()
+                continue
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
             await _pause_before_provider_429_retry(
                 failure=exc,
-                retry_ordinal=retry_ordinal,
+                retry_ordinal=retry_ordinal - flex_offset,
                 max_attempts=max_attempts,
                 deadline_monotonic=deadline_monotonic,
             )
