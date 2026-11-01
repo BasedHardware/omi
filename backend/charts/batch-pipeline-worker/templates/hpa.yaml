@@ -27,6 +27,24 @@ spec:
       policies:
         - {type: Pods, value: 1, periodSeconds: 600}
   metrics:
+    # HPA v2 takes the highest recommendation across metrics (max-of-two,
+    # batchdesign 2026-11-01 PR-2): the ready backlog keeps capacity through
+    # claim-chain wedges (occupancy alone sheds lanes whenever claims bind
+    # rather than flights), and GPU-chain occupancy keeps capacity through
+    # healthy drains where the backlog reads low but flights are real.
+    - type: External
+      external:
+        metric:
+          name: omi_batch_pipeline_admissible_ready_units
+          selector:
+            matchLabels:
+              worker_release: {{ .Release.Name }}
+              namespace: {{ .Release.Namespace }}
+        target:
+          # Each pool sees the same total. Doubling the per-worker target in
+          # balanced mode divides demand, instead of buying it twice.
+          type: AverageValue
+          averageValue: {{ .instance.capacityTarget | quote }}
     - type: External
       external:
         metric:

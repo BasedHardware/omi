@@ -128,10 +128,17 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     hpa = manifests['HorizontalPodAutoscaler']['spec']
     assert hpa['minReplicas'] == 1 and hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 1800
     assert hpa['behavior']['scaleDown']['policies'] == [{'type': 'Pods', 'value': 1, 'periodSeconds': 600}]
-    assert len(hpa['metrics']) == 1
-    assert hpa['metrics'][0]['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
-    assert hpa['metrics'][0]['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
-    assert all(m['external']['metric']['selector']['matchLabels'] == {'namespace': 'synthetic'} for m in hpa['metrics'])
+    assert len(hpa['metrics']) == 2
+    ready, chain = hpa['metrics']
+    assert ready['external']['metric']['name'] == 'omi_batch_pipeline_admissible_ready_units'
+    assert ready['external']['metric']['selector']['matchLabels'] == {
+        'worker_release': 'synthetic-worker',
+        'namespace': 'synthetic',
+    }
+    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '16'}
+    assert chain['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
+    assert chain['external']['metric']['selector']['matchLabels'] == {'namespace': 'synthetic'}
+    assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
 
 
 def test_enabled_chart_refuses_unpinned_image_and_unsampled_scale_to_zero():
@@ -301,14 +308,22 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         assert h['scaleTargetRef']['name'] == name
         assert h['minReplicas'] == 1 and h['maxReplicas'] == 12
         assert h['behavior']['scaleDown']['stabilizationWindowSeconds'] == 1800
-        for metric in h['metrics']:
-            labels = metric['external']['metric']['selector']['matchLabels']
-            assert labels == {'namespace': 'synthetic'}
-            assert metric['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
-            # Both pool deployments export the same worker_release, so both
-            # HPAs see the fleet total; the doubled target divides the demand
-            # between them instead of buying it twice.
-            assert metric['external']['target'] == {'type': 'AverageValue', 'averageValue': '1'}
+        assert len(h['metrics']) == 2
+        ready, chain = h['metrics']
+        ready_labels = ready['external']['metric']['selector']['matchLabels']
+        assert ready_labels == {'worker_release': 'synthetic-worker', 'namespace': 'synthetic'}
+        assert ready['external']['metric']['name'] == 'omi_batch_pipeline_admissible_ready_units'
+        chain_labels = chain['external']['metric']['selector']['matchLabels']
+        # Stage timers export only the stage label, so the chain metric scopes
+        # by namespace alone; requiring worker_release would match zero series.
+        assert chain_labels == {'namespace': 'synthetic'}
+        assert chain['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
+        # Both pool deployments export the same worker_release and one
+        # namespace's chain metric covers the whole fleet, so both targets
+        # double: each pool HPA buys half of either demand instead of buying
+        # it twice.
+        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '32'}
+        assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '1'}
     assert (
         deployments['synthetic-worker']['metadata']['annotations']['omi.ai/required-companion-deployment']
         == 'synthetic-worker-spot'
@@ -324,6 +339,7 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         'autoscaling.maxReplicas=23',
         'autoscaling.maxReplicas=0',
         'autoscaling.balancedPools.spotNodePool=batch-pipeline-pool',
+        'autoscaling.targetQueuedUnitsPerWorker=0',
         'autoscaling.targetChainBusyPerWorker=0',
         'autoscaling.targetChainBusyPerWorker=1.5',
     ],

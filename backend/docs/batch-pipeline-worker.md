@@ -298,18 +298,24 @@ maximum (3 -> 16) in the same reviewed
 qualification window, using a real scale-up during the 25% soak as the
 scheduling proof.
 
-The scaler sizes on **GPU-chain occupancy**, not the ready backlog: the
-external metric `omi_batch_pipeline_gpu_chain_busy_seconds` exposes fleet
-`worker_flight` busy seconds per second, and the HPA target is
-`targetChainBusyPerWorker=0.5` (~89% of the measured healthy per-worker chain
-ceiling 0.56; hpafit 2026-11-01 replay over 24h held mean 5.6 replicas with
-zero starved minutes while the earlier ready-backlog target of 16 units per
-worker thrashed 10-16 replicas through a claim-chain wedge and an L4 stockout).
-Scale-down sheds one pod per 600s after a 1800s window so a stockout never
-costs a warm on-demand node it cannot re-obtain; the earlier admissible-count
-rule stays installed so rollback is a values revert without an adapter
-redeploy. The target remains provisional pending throughput qualification
-before any apply.
+The scaler sizes on the **higher of two signals** (max-of-two, batchdesign
+2026-11-01 PR-2): the incumbent admissible-ready backlog
+(`targetQueuedUnitsPerWorker=16`) and GPU-chain occupancy — the external metric
+`omi_batch_pipeline_gpu_chain_busy_seconds` exposes fleet `worker_flight` busy
+seconds per second at `targetChainBusyPerWorker=0.5` (~89% of the measured
+healthy per-worker chain ceiling 0.56; hpafit 2026-11-01). Occupancy alone sheds
+lanes whenever claims bind rather than flights: through a claim-chain wedge the
+ready backlog is real work that converts the moment the wedge clears, so the
+ready count holds capacity exactly when occupancy under-reads. Occupancy pays
+the reverse dividend — through a healthy drain the backlog reads low while
+flights are real, and the 24h replay shows the chain signal covering hours the
+ready-only answer starves (52 minutes), with the combined replay at 0 starved
+minutes and replica counts at or above the ready-only answer whenever backlog
+exceeds 16 units per worker. Scale-down sheds one pod per 600s after a 1800s
+window so a stockout never costs a warm on-demand node it cannot re-obtain; the
+admissible-count adapter rule stays installed so rollback is a values revert
+without an adapter redeploy. The targets remain provisional pending throughput
+qualification before any apply.
 
 For cutover/rollback, op1 captures the current release values/manifest privately,
 keeps the image pinned, preserves all runtime bindings and the 1500s SIGTERM
