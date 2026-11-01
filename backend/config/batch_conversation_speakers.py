@@ -18,6 +18,15 @@ def vendor_turns_enabled() -> bool:
     return default_on(VENDOR_SPEAKER_TURNS_ENV)
 
 
+def vendor_speaker_authority(payload) -> bool:
+    """A vendor-route result whose own unit-local speaker turns stand in for pyannote's."""
+    return (
+        payload.get('recovery_version') == 1
+        and bool((payload.get('diarization') or {}).get('turns'))
+        and vendor_turns_enabled()
+    )
+
+
 def has_batch_authority(segments) -> bool:
     # Resolution changes public scopes; the original partition survives in the
     # internal provider marker so retries cannot fall back to unconstrained AHC.

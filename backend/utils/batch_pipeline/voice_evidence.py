@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 
-from config.batch_conversation_speakers import sync_off_enabled
+from config.batch_conversation_speakers import sync_off_enabled, vendor_speaker_authority
 from database import batch_voice_evidence as storage
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -52,8 +52,6 @@ def prepare(projector, item, binding, conversation_id):
         artifacts.verify_voice_retention()
         job_result = projector.store.ref('results', item.segment_id).get().to_dict() or {}
         payload = projector.load_result(item, job_result['result']['result_uri'])
-        from utils.batch_pipeline.projection_parts import vendor_speaker_authority
-
         if payload.get('recovery_version') == 1 and not vendor_speaker_authority(payload):
             return  # Recovered provider words without vendor turns have no voice authority.
         wav = projector.fetch_audio(item)

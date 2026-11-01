@@ -47,11 +47,8 @@ from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_c
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
-from utils.batch_pipeline.projection_parts import (
-    align_projection_words,
-    bounded_projection_words,
-    vendor_speaker_authority,
-)
+from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
+from config.batch_conversation_speakers import vendor_speaker_authority
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
     SyncAssignmentSuperseded,

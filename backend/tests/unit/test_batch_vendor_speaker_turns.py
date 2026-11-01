@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from config import batch_conversation_speakers as flags
+from config.batch_conversation_speakers import vendor_speaker_authority
 from models.conversation import Conversation
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
@@ -16,7 +17,7 @@ from tests.unit.test_batch_voice_evidence import CID, UID, VECTOR, persist, setu
 from utils.batch_pipeline import projection, provider_stt, voice_evidence as evidence
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from config.policy import ProjectionPolicy
-from utils.batch_pipeline.projection_parts import split_result, vendor_speaker_authority
+from utils.batch_pipeline.projection_parts import split_result
 from utils.conversations import speaker_resolution as stage
 from utils.conversations import sync_off_speakers
 
