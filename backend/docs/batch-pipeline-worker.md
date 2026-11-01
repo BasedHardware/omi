@@ -233,6 +233,10 @@ CPU-only strict VAD runs as record-only decode work. Its result never gates VAD,
 ASR, diarization, persistence or publication. The shadow counter records
 `evaluated`, `strict_silent`, `strict_silent_pyannote_nonempty`, and `unavailable`
 (including a missing pyannote comparison); synthetic shadow traffic is excluded.
+Units are sampled deterministically by segment hash at
+`BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT` (default 10; 0 disables the shadow,
+100 restores full sampling), so a re-leased unit samples identically and
+unsampled units emit no shadow counters or stage timings.
 Thread CPU seconds and the optional `strict_vad_shadow` wall stage measure its
 cost. Local Apple Silicon synthetic silence/tone measurements at 60 seconds
 were 0.278/0.280 CPU seconds (about 0.47% of audio duration); first ONNX setup

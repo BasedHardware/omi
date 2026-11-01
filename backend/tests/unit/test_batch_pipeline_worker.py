@@ -933,6 +933,8 @@ async def test_worker_strict_silence_commits_or_preserves_quarantine(monkeypatch
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     strict = Mock(return_value=[{'start': 0.25, 'end': 0.5}] if speech else [])
     monkeypatch.setattr(vad, 'offline_pcm_speech_segments', strict)
+    # Full shadow sampling keeps the record-only inspection in the expected count.
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
     provider = Mock()
     provider.transcribe_batch.side_effect = lambda samples: [[] for _ in samples]
     retry = Mock(return_value=[])
