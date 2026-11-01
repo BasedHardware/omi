@@ -111,6 +111,7 @@ entries are exempt: they are queued for removal, not running.
 | `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | undecided | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
 | `onboarding-variant` | undecided | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
 | `paywall-variant` | undecided | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
+| `settings-plan-card` | undecided | yinka | [product/experiments/settings-plan-card.md](../../product/experiments/settings-plan-card.md) | 2026-11-15 |
 
 ## Overdue for a decision
 
@@ -134,6 +135,7 @@ and an explicit empty literal renders as `''`.
 | `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | Generate optional episode claim bindings, default off; visible provenance rules remain | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-05 | dazheng |
 | `onboarding-variant` | Mobile first-run onboarding A/B/C/D after sign-in and consent: control (native steps unchanged) / reid (device-first onboarding rendered from a web page, OTA; payload names it) / yinka (onboarding ending in a first conversation, PR #21445, native) / pocket (Pocket's order and trial mechanics, native). Client-evaluated multivariate flag; an unread flag, an unknown variant or a reid payload without an https URL is control; the page never owns completion | mobile | posthog | closed | — | — | — | expected (exposure) | pending | undecided | 2026-11-13 | nik |
 | `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant) / trial (native free-trial paywall shown once right after sign-up, Stripe checkout with trial_days). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | pending | undecided | 2026-11-12 | nik |
+| `settings-plan-card` | Mobile Settings plan section A/B for Free and Plus readers: control (Plan & Usage row with the minutes meter and a full-width Upgrade under it) / card (plan card: plan name large, minutes meter, full-width Upgrade; tapping it opens Plan & Usage). Client-evaluated multivariate flag; no identity, an unread flag or an unknown variant is control and is not counted | mobile | posthog | closed | — | — | — | expected (exposure) | pending | undecided | 2026-11-15 | yinka |
 
 ### rollout
 
