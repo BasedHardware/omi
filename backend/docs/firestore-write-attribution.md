@@ -38,7 +38,9 @@ A no-op write (Cloud Monitoring `UPDATE_NOOP`) is still billed. Firestore
 returns the document's previous `update_time` for a write that changed nothing,
 so a Commit result whose `update_time` is earlier than the response
 `commit_time` is counted on the no-op counter. BatchWrite has no commit time
-and is not classified.
+and is not classified. The counter is a lower bound: a second write to the same
+document in one Commit reports this commit as its previous time whether or not
+it changed anything, so such no-ops are not counted.
 
 ```promql
 # No-op writers (billed, changed nothing)

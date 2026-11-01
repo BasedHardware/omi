@@ -114,6 +114,9 @@ FIRESTORE_AMBIGUOUS_COMMIT_WRITES = Counter(
 # nothing) with no caller. A Commit's WriteResult.update_time is the document's
 # previous update time when the write changed nothing, so it is earlier than the
 # response's commit_time; a write that changed the document carries commit_time.
+# Lower bound: when one Commit writes a document twice, the second write's
+# "previous" time is this commit, whether or not it changed anything, so a
+# repeated-document no-op is not counted (the response cannot tell them apart).
 FIRESTORE_NOOP_WRITES_BY_CALLER = Counter(
     'omi_firestore_noop_writes_by_caller_total',
     'Committed Firestore writes that left the document unchanged (billed as writes), by collection and call site.',
