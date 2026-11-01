@@ -2,10 +2,10 @@
 
 import copy
 import math
-from pathlib import Path
+
+import re
 
 import pytest
-import yaml
 
 from config.stt_provider_policy import (
     MODULATE_SUPPORTED_LANGUAGES,
@@ -22,8 +22,6 @@ from utils.observability.reasons import (
     VendorHoldReason,
     VendorRouteTableOutcome,
 )
-
-REPO = Path(__file__).resolve().parents[3]
 
 
 def _route(price, *, cap=None, budget=None, failover_only=False):
@@ -343,6 +341,17 @@ def test_held_unit_with_a_running_attempt_is_measured_as_a_wedge():
     assert not _policy_hold(malformed, now=400.0)
 
 
+@pytest.mark.parametrize('outcome', [Outcome.OK, Outcome.SILENCE])
+def test_held_unit_that_already_has_a_result_is_measured(outcome):
+    job = {**_held(), c.ATTEMPTS_FIELD: [_attempt(1, 'modulate', outcome).to_dict()]}
+    assert not _policy_hold(job, now=400.0)
+
+
+@pytest.mark.parametrize('attempts', [{}, None, 'x', ()])
+def test_non_list_attempts_are_malformed(attempts):
+    assert not _policy_hold({**_held(), c.ATTEMPTS_FIELD: attempts}, now=400.0)
+
+
 @pytest.mark.parametrize(
     'job',
     [
@@ -362,14 +371,10 @@ def test_malformed_or_other_states_are_not_policy_holds(job):
 # --- frozen names ----------------------------------------------------------------------------------
 
 
-def test_flag_names_are_new_and_owned_by_one_slice():
-    registry = yaml.safe_load((REPO / 'config' / 'feature-flags.yaml').read_text(encoding='utf-8'))
-    rows = {flag['key']: flag for flag in registry['flags']}
-    # Each slice registers only its own rows, and only names frozen here.
-    assert {key for key in rows if key.startswith('BATCH_VENDOR_')} <= set(c.FLAGS)
-    assert all(rows[name]['kind'] == 'env' and rows[name]['summary'] for name in set(c.FLAGS) & set(rows))
+def test_flag_names_are_owned_by_one_slice():
+    # Registry rows are each slice's job (the registry checker enforces them once a slice reads a flag).
     assert {owner for owner, _ in c.FLAGS.values()} <= {'B', 'C', 'D', 'E'}
-    assert all(name.startswith('BATCH_VENDOR_') for name in c.FLAGS)
+    assert all(re.fullmatch(r'BATCH_VENDOR_[A-Z0-9_]+', name) for name in c.FLAGS)
 
 
 def test_metric_names_are_frozen_kept_and_backed_by_collectors():
