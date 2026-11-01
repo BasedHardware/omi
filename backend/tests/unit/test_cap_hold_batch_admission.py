@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.responses import JSONResponse
 
+from database.cap_recovery_pacing import Decision
 from utils.batch_pipeline import cap_hold_admission as adapter
 from utils.batch_pipeline import intake
 from utils.sync import cap_hold, cap_hold_recovery
@@ -169,13 +170,19 @@ def hook(monkeypatch):
     monkeypatch.setattr(cap_hold_recovery, '_erase', lambda uid, snapshot, current: events.append(('erase',)))
     monkeypatch.setattr(cap_hold_recovery, '_settle_and_erase', lambda *a: events.append(('settle_and_erase',)))
     monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: True)
+    paced = []
+    monkeypatch.setattr(
+        cap_hold_recovery.cap_recovery_pacing,
+        'reserve',
+        lambda seconds: paced.append(seconds) or Decision('granted'),
+    )
 
     async def selected_lane(uid, current):
         return 'sync'  # main #22494: recovery follows the hold's original lane (missing legacy origin = sync)
 
     monkeypatch.setattr(cap_hold_recovery, '_selected_lane', selected_lane)
     snapshot = SimpleNamespace(id='hold-1', reference=object(), to_dict=lambda: dict(row))
-    return SimpleNamespace(events=events, snapshot=snapshot, row=row)
+    return SimpleNamespace(events=events, snapshot=snapshot, row=row, paced=paced)
 
 
 @pytest.mark.asyncio
@@ -227,6 +234,76 @@ async def test_restricted_or_capped_owner_keeps_the_audio_held(hook, monkeypatch
     monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('gated owner admitted'))
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False
     assert hook.events == [('release', 'lease')]
+
+
+@pytest.mark.asyncio
+async def test_hand_off_spends_the_recovery_pacing_budget_first(hook, monkeypatch):
+    hook.row.update(seconds=13.3)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
+
+    async def admit(uid, snapshot, row):
+        hook.events.append(('admit',))
+        return adapter.HeldAdmission('admitted', 'bp_job')
+
+    monkeypatch.setattr(adapter, 'admit_held', admit)
+    monkeypatch.setattr(cap_hold_recovery.cap_hold_reservations, 'reserve', lambda *a, **k: None)
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    assert hook.paced == [13.3]
+    assert hook.events[0] == ('admit',)  # nothing saved before the grant; admission follows it
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'decision', [Decision('deferred', 12.5), Decision('refused', 60, 'unavailable')], ids=['deferred', 'refused']
+)
+async def test_unpaced_hand_off_keeps_the_audio_held_and_schedules_a_retry(hook, monkeypatch, decision):
+    hook.row.update(seconds=30.0)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
+    monkeypatch.setattr(cap_hold_recovery.cap_recovery_pacing, 'reserve', lambda seconds: decision)
+    monkeypatch.setattr(cap_hold_recovery.time, 'time', lambda: 1000.0)
+    monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('admitted without a pacing grant'))
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False
+    assert hook.events == [
+        (
+            'save',
+            {
+                'next_attempt_at': 1000.0 + decision.retry_after,
+                'pacing_deferred_since': 1000.0,
+                'pacing_reason': decision.reason,
+            },
+        ),
+        ('release', 'lease'),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_hold_larger_than_the_burst_is_charged_one_full_bucket(hook, monkeypatch):
+    # 60 audio-h/h with a 60 s burst is a 3600 s bucket; a 2 h hold must not be refused as oversized forever.
+    monkeypatch.setenv('CAP_HOLD_RECOVERY_AUDIO_HOURS_PER_HOUR', '60')
+    hook.row.update(seconds=7200.0)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
+
+    async def admit(uid, snapshot, row):
+        return adapter.HeldAdmission('admitted', 'bp_job')
+
+    monkeypatch.setattr(adapter, 'admit_held', admit)
+    monkeypatch.setattr(cap_hold_recovery.cap_hold_reservations, 'reserve', lambda *a, **k: None)
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    assert hook.paced == [3600.0]
+
+
+@pytest.mark.asyncio
+async def test_a_granted_hand_off_clears_an_earlier_pacing_deferral(hook, monkeypatch):
+    hook.row.update(seconds=10.0, pacing_deferred_since=900.0, pacing_reason='capacity', next_attempt_at=950.0)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
+
+    async def admit(uid, snapshot, row):
+        return adapter.HeldAdmission('admitted', 'bp_job')
+
+    monkeypatch.setattr(adapter, 'admit_held', admit)
+    monkeypatch.setattr(cap_hold_recovery.cap_hold_reservations, 'reserve', lambda *a, **k: None)
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    assert hook.events[0] == ('save', {'pacing_deferred_since': 0, 'pacing_reason': '', 'next_attempt_at': 0})
 
 
 @pytest.mark.asyncio
