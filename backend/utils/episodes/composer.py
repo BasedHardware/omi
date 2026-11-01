@@ -686,6 +686,18 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         return None
 
     written = _write(uid, episode_id, c, finish, guard=finish_guard)
+    if written == 'conflict':
+        # Older data can refuse a window change: keep the paid notes on the window it already has.
+        written = _write(
+            uid,
+            episode_id,
+            c,
+            lambda current: {k: v for k, v in finish(current).items() if k != 'member_activity'},
+            guard=finish_guard,
+        )
+    if written == 'conflict':
+        _record_failure(uid, episode_id, c, print_)
+        return written
     if written != 'written':
         _write(uid, episode_id, c, lambda current: _release(current, print_))
         return written

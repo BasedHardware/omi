@@ -246,6 +246,39 @@ def test_model_failure_never_raises_and_backs_off_on_the_same_evidence(store):
     assert store.episode['compose_failures'] == 0
 
 
+def test_a_refused_window_change_keeps_the_paid_notes_on_the_old_window(store, monkeypatch):
+    calls = []
+    update = store.update_episode
+
+    def refuse_window(uid, episode_id, *, updates, **kw):
+        if 'member_activity' in updates:
+            raise composer.episodes_db.EpisodeConflict('recorded_window_overlap')
+        return update(uid, episode_id, updates=updates, **kw)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', refuse_window)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert store.episode['title'] == 'Omi app bugs and labeling tool' and 'member_activity' not in store.episode
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
+    assert len(calls) == 1
+
+
+def test_a_final_write_that_keeps_conflicting_backs_off_instead_of_paying_again(store, monkeypatch):
+    calls = []
+    update = store.update_episode
+
+    def refuse_notes(uid, episode_id, *, updates, **kw):
+        if 'bullets' in updates:
+            raise composer.episodes_db.EpisodeConflict('conversation_already_owned')
+        return update(uid, episode_id, updates=updates, **kw)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', refuse_notes)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'conflict'
+    assert store.episode['compose_failures'] == 1 and store.episode['compose_lease'] is None
+    assert composer.needs_compose(store.episode) is False
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'backoff'
+    assert len(calls) == 1
+
+
 def test_a_visible_change_after_capped_failures_still_recomposes(store):
     done = {
         'status': 'closed',
