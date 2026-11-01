@@ -928,3 +928,24 @@ affinity:
               operator: In
               values:
                 - high-cpu
+    # Soft preference only: the required labels above still admit the N2
+    # fallback/rescue pools, so peak capacity and availability cannot
+    # regress. Without this term the scheduler spreads evenly across every
+    # eligible node, which strands pods on the dearer n2d-standard-4
+    # fallback nodes 24/7 (11 nodes ≈ $52/day, 2026-10-29) because listen
+    # pods never reschedule on their own and the nodes stay above the
+    # autoscaler's scale-down utilization threshold.
+    # Deploy gate: this is a pod-template change, so per
+    # backend/docs/runbooks/audio-fleet.md it must NOT be rolled onto active
+    # sessions — only a verified traffic-free window or a qualified
+    # admission drain (audio-fleet.md "Retire one node/pool" steps) makes
+    # the reschedule safe; a plain off-peak window is not sufficient.
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: cloud.google.com/gke-nodepool
+              operator: In
+              values:
+                - backend-listen-pool-v2
+                - backend-listen-pool-v2-b

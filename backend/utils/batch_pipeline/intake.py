@@ -31,7 +31,8 @@ from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from database.outbox import OutboxKind, outbox_for
-from utils.batch_pipeline.provider_stt import provider_enqueue, resolve_route
+from utils.batch_pipeline.provider_stt import provider_enqueue
+from utils.batch_pipeline.route_selection import select_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
 from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route
@@ -478,9 +479,18 @@ async def accept_upload(
             return None
         if inherited:
             input_language = inherited
-        route = resolve_route(language, byok=byok_enabled)
+        # All-vendor routing: outside its cohort, with its kill switch off, or while this
+        # owner's legacy is on, this is resolve_route exactly (today's routing).
+        route = select_route(
+            language,
+            byok=byok_enabled,
+            uid=uid,
+            batch_percent=policy.batch_percent,
+            vendor_eligible=mode is not LegacySyncMode.ON,
+        ).route
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
-        # to the batch provider-STT stage instead of the legacy fallback.
+        # to the batch provider-STT stage instead of the legacy fallback; inside the
+        # vendor-routing cohort a supported language may also take a vendor route.
         provider = mode is not LegacySyncMode.ON and route.stt_route == 'provider'
         # Contract (c): admission records the route it actually takes. A unit that
         # stays on Parakeet keeps only the BYOK funding decision (lane 6's dispatch
