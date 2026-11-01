@@ -67,7 +67,7 @@ async def test_20ms_frame_beyond_eof_needs_independent_silence_evidence(monkeypa
     scheduler = Scheduler(store)
     scheduler.enqueue(item('short', 0.02), time.time())
     await Pump(scheduler, worker).run_once()
-    strict.assert_called_once()
+    assert strict.call_count == 2  # record-only shadow plus the independent disposition
     assert provider.calls == [] and not diarized
     job = store.rows['jobs', 'short']
     assert job['attempt'] == 1
