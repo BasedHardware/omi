@@ -330,6 +330,29 @@ def worker_validation_disposition_enabled() -> bool:
     )
 
 
+STRICT_VAD_SHADOW_PERCENT_DEFAULT = 10.0
+
+
+def strict_vad_shadow_percent() -> float:
+    """Sampled share of the CPU strict-VAD shadow; 0 disables, 100 restores full."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '10').strip())
+    except ValueError:
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    if not math.isfinite(value):
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    return min(100.0, max(0.0, value))
+
+
+def strict_vad_shadow_sampled(segment_id: str) -> bool:
+    """Deterministic by segment hash: a re-leased unit samples identically."""
+    if not segment_id:
+        return False
+    from config.policy import cohort_bucket
+
+    return cohort_bucket(segment_id, '') < strict_vad_shadow_percent()
+
+
 def head_priority_enabled() -> bool:
     from config.policy import resolve_stage_policy
 

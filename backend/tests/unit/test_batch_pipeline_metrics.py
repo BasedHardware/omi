@@ -156,7 +156,7 @@ def test_scheduler_records_new_transitions_without_duplicate_completion_count():
     assert queue.complete(result, lease.token, 11)
     assert queue.complete(result, lease.token, 12)
     assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'completed'}) == 1
-    assert registry.get_sample_value('omi_batch_pipeline_owner_wait_seconds_sum') == 10
+    assert registry.get_sample_value('omi_batch_pipeline_owner_wait_seconds_sum', {'relet': 'false'}) == 10
     merge = OrderedMerge(store, metrics=metrics)
     merge.commit_next('heavy', 13)
     merge.commit_next('heavy', 14)

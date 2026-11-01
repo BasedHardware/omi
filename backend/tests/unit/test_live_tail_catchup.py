@@ -62,12 +62,6 @@ def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
-@pytest.fixture(autouse=True)
-def _adapter_clocks(monkeypatch, virtual_clock):
-    monkeypatch.setattr(st, 'clock', lambda: virtual_clock.now)
-    monkeypatch.setattr(soniox_module, 'clock', lambda: virtual_clock.now)
-
-
 def tail_host():
     return SimpleNamespace(
         state=SimpleNamespace(active=True, stt_terminal_failure=False),
