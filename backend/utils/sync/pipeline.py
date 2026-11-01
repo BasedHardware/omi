@@ -88,7 +88,10 @@ from database.sync_jobs import (
     update_sync_job,
 )
 from database.sync_ledger import (
+    SEGMENT_ALREADY_PROCESSED,
+    SEGMENT_FOREIGN_OWNER,
     add_processed_sync_segment_id,
+    checkpoint_and_mark_sync_segment,
     checkpoint_sync_content_partial_result,
     get_processed_sync_segment_ids,
     get_sync_content_partial_result,
@@ -3354,6 +3357,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         )
                 if deferred_outcome.get('cap_held'):
                     return  # Durable policy hold, not success/silence/provider failure.
+                ledger_segment = None
                 if ok:
                     # Persist result contributions before the processed marker.
                     # Therefore any skipped segment on a retry has its visible
@@ -3363,13 +3367,29 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         partial = lineage_partial_result(response, sync_lineage_resolve_active_for(uid))
                         _update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})
                         if content_id:
-                            checkpointed = checkpoint_sync_content_partial_result(
-                                uid,
-                                content_id,
-                                job_id,
-                                partial,
-                                run_token=active_run_lock_token,
-                                run_epoch=active_run_lock_epoch,
+                            # With a segment id, one ledger commit carries checkpoint and
+                            # marker; an already-processed segment raises after the job marker.
+                            if segment_id:
+                                ledger_segment = checkpoint_and_mark_sync_segment(
+                                    uid,
+                                    content_id,
+                                    job_id,
+                                    partial,
+                                    segment_id,
+                                    run_token=active_run_lock_token,
+                                    run_epoch=active_run_lock_epoch,
+                                )
+                            checkpointed = (
+                                ledger_segment != SEGMENT_FOREIGN_OWNER
+                                if segment_id
+                                else checkpoint_sync_content_partial_result(
+                                    uid,
+                                    content_id,
+                                    job_id,
+                                    partial,
+                                    run_token=active_run_lock_token,
+                                    run_epoch=active_run_lock_epoch,
+                                )
                             )
                             if not checkpointed:
                                 raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
@@ -3378,7 +3398,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 )
                 if (ok or silence_confirmed) and task_mode:
                     _add_processed_segment_for_run(job_id, active_run_lock_token, path)
-                if (ok or silence_confirmed) and content_id and segment_id:
+                if ledger_segment == SEGMENT_ALREADY_PROCESSED:
+                    raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
+                if ledger_segment is None and (ok or silence_confirmed) and content_id and segment_id:
                     marked_segment = add_processed_sync_segment_id(
                         uid,
                         content_id,

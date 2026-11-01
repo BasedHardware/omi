@@ -198,8 +198,22 @@ autoscaling:
   workloadOnly: true
   # The ratified 2 active requests / 35% GPU targets trigger scale-out;
   # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
-  # Floor 8 retains warm headroom; cap 12 bounds burst scale-out.
-  minReplicas: 8
+  # Floor 6 (2026-11-01, marginfleet, lead ruling a5b4b8 window): 7d GPU engine
+  # active averaged 5.6% fleet-wide (max 17.3%), the Pods metric computes ~6
+  # desired (0.857 avg active requests vs target 2), and each replica pins one
+  # g2-standard-8 + L4 node (~$13.7/day), so floor 8 held two mostly-idle GPUs.
+  # Scale-out is unchanged (0s stabilization, +4 pods/15s, cap 12) — bursts
+  # still reach full capacity in about a minute. Ladder to 4 only after the
+  # batch-100 live-demand read. Rollback: restore minReplicas=8 (or 12
+  # pre-P77r) and workloadOnly=false together.
+  # COUPLING (Luna r1, #24276): the incluster-guards floorSchedule owns the
+  # running floor whenever it is enabled AND not deferred by a rollback marker
+  # (prod schedule: 4 for 00-11Z, 7 for 12-23Z since 2026-11-01). This
+  # chart floor is what the fleet holds while the schedule is deferred — it
+  # must stay >= every schedule hour so the deferred state is never colder
+  # than the scheduled one (pinned by test_audio_fleet_helm).
+  # 7 = the schedule's day floor (liveoptimal, lead ruling f66b37).
+  minReplicas: 7
   maxReplicas: 12
   behavior:
     scaleUp:

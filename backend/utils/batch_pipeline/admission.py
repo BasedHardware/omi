@@ -11,6 +11,7 @@ from prometheus_client import Histogram
 
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from config.sync_telemetry import bounded_exception_class
+from config.batch_pipeline import allowance_hold_retry_seconds
 from utils.stt_cap_dispatch import sync_admission
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease
@@ -116,7 +117,19 @@ async def authorize(store, leases: list[dict], *, now: float | None = None) -> d
                     path=DispatchPath.BATCH_GPU,
                 )
                 if not permitted:
-                    retries[segment] = 60
+                    # An exhausted allowance/budget is durable until the plan
+                    # changes, so the unit parks for the hold window instead of
+                    # re-charging the lease cycle at every escalation step.
+                    # Transient denials keep the short retry.
+                    retries[segment] = (
+                        allowance_hold_retry_seconds()
+                        if reason
+                        in {
+                            DispatchReason.ALLOWANCE_EXHAUSTED.value,
+                            DispatchReason.BUDGET_EXHAUSTED.value,
+                        }
+                        else 60
+                    )
                     held_reason[segment] = reason
                     continue
                 allow_reason = reason

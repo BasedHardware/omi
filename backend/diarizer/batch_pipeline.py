@@ -38,6 +38,7 @@ from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline import leaf_timings
+from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.contracts import (
     WorkItem,
     WorkResult,
@@ -625,7 +626,7 @@ class PipelineWorker:
     def process_batch_deferred(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
-        if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
+        if not all(within_unit_ceiling(item.duration_seconds, self.config.max_unit_seconds) for item in items):
             raise ValueError('conversation requires a dedicated batch GPU or a smaller admitted unit')
         if self.config.pool_kind == 'shared_live' and sum(i.duration_seconds for i in items) > 120:
             raise ValueError('shared-live pull exceeds 120 audio seconds; yield between pulls')

@@ -168,14 +168,21 @@ def item(segment, owner='heavy', capture=1, duration=30, priority=Priority.DEEP,
     return WorkItem(segment, owner, capture, f'gs://synthetic/{segment}', duration, priority, unit_kind)
 
 
-def test_heavy_owner_does_not_starve_light_owner():
+@pytest.mark.parametrize('multi_lease', [False, True])
+def test_heavy_owner_does_not_starve_light_owner(monkeypatch, multi_lease):
+    monkeypatch.setenv('BATCH_PULL_MULTI_LEASE_ENABLED', str(multi_lease).lower())
     queue = Scheduler(MemoryStore())
     for n in range(30):
         queue.enqueue(item(f'h{n}'), 0)
     queue.enqueue(item('light', owner='light'), 0)
     pulled = queue.pull(1, 3)
-    assert 'light' in [v.item.owner_id for v in pulled[:2]]
     assert len(pulled) == 3
+    if not multi_lease:
+        assert 'light' in [v.item.owner_id for v in pulled[:2]]
+        return
+    # One shard transaction may fill the batch, but the service it charged
+    # puts the light owner's shard first on the very next pull.
+    assert 'light' in [v.item.owner_id for v in pulled + queue.pull(1, 1)]
 
 
 def test_duration_deficit_round_robin():
@@ -313,7 +320,7 @@ def test_contention_backoff_returns_prior_leases_and_suppresses_hot_repull(monke
     monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
     queue = Scheduler(MemoryStore())
     lease = LeasedWork(item('leased'), 'synthetic-token', 1, 120.0)
-    pull_one = Mock(side_effect=[lease, FirestoreContentionExhausted('bounded'), None])
+    pull_one = Mock(side_effect=[[lease], FirestoreContentionExhausted('bounded'), []])
     monkeypatch.setattr(queue, '_pull_one', pull_one)
 
     assert queue.pull(0, 2) == [lease]
@@ -585,6 +592,45 @@ def test_per_pool_unit_ceiling_and_malformed_capacity_fail_closed():
         assert queue.pull(10, capacity=capacity) == []
 
 
+def test_frame_exact_hour_with_clock_noise_leases_at_hour_ceiling():
+    # Prod 2026-11-01: record units are end - start of epoch clocks, so a full
+    # hour admitted as 3600.0000005s parked four owners' FIFOs for up to 40h.
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    queue = Scheduler(MemoryStore())
+    queue.enqueue(item('hour', duration=3600 + 4.76837158203125e-07), 0)
+    queue.enqueue(item('later', duration=30, capture=2), 0)
+    capacity = PoolCapacity(10, 1, max_item_seconds=3600)
+    assert queue.pull(10, capacity=capacity)[0].item.segment_id == 'hour'
+    assert queue.pull(10, capacity=capacity)[0].item.segment_id == 'later'
+
+
+def test_parked_heads_are_counted_by_bounded_reason(monkeypatch):
+    from dataclasses import replace
+    from prometheus_client import CollectorRegistry
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from utils.batch_pipeline.contracts import PoolCapacity
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    queue = Scheduler(MemoryStore(), metrics=QueueMetrics(registry))
+    queue.enqueue(item('long', duration=3601), 0)
+    queue.enqueue(replace(item('fenced', owner=colliding_owner('heavy')), conversation_id='deleted'), 0)
+    check = MemoryTransaction.check_privacy
+
+    def privacy(tx, uid, conversation_ids=(), expected_generation=None):
+        if 'deleted' in conversation_ids:
+            raise BatchPrivacyBlocked('synthetic deletion')
+        return check(tx, uid, conversation_ids, expected_generation)
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', privacy)
+    assert queue.pull(10, capacity=PoolCapacity(10, 1, max_item_seconds=3600)) == []
+    scope = {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    sample = 'omi_batch_pipeline_head_parked_total'
+    assert registry.get_sample_value(sample, {**scope, 'reason': 'pool_duration'}) == 1
+    assert registry.get_sample_value(sample, {**scope, 'reason': 'privacy'}) == 1
+
+
 def test_shared_gpu_exclusivity_survives_completion_and_lease_expiry(monkeypatch):
     from utils.batch_pipeline.contracts import PoolCapacity
 
@@ -630,19 +676,32 @@ def test_conversation_kind_never_runs_on_live_pool_even_when_short(monkeypatch):
     assert Scheduler(queue.store).pull(1)[0].item.unit_kind == 'conversation'
 
 
-def test_shards_weight_service_by_active_owner_count_and_preserve_global_priority():
+@pytest.mark.parametrize('multi_lease', [False, True])
+def test_shards_weight_service_by_active_owner_count_and_preserve_global_priority(monkeypatch, multi_lease):
+    monkeypatch.setenv('BATCH_PULL_MULTI_LEASE_ENABLED', str(multi_lease).lower())
     store = MemoryStore()
     queue = Scheduler(store)
     other = colliding_owner('heavy')
     assert scheduler_control_key(owner_key('light')) != scheduler_control_key(owner_key('heavy'))
     for owner in ('heavy', other, 'light'):
-        for n in range(12):
+        for n in range(24):
             queue.enqueue(item(f'{owner}-{n}', owner=owner), 0)
     queue.enqueue(item('fresh-across-shards', owner='fresh', priority=Priority.FRESH), 0)
     assert queue.pull(1)[0].item.segment_id == 'fresh-across-shards'
-    pulled = queue.pull(1, 18)
-    counts = {uid: sum(v.item.owner_id == uid for v in pulled) for uid in ('heavy', other, 'light')}
-    assert set(counts.values()) == {6}
+    if not multi_lease:
+        pulled = queue.pull(1, 18)
+        counts = {uid: sum(v.item.owner_id == uid for v in pulled) for uid in ('heavy', other, 'light')}
+        assert set(counts.values()) == {6}
+    else:
+        # Each transaction leases up to the batch from one shard and charges
+        # service per lease, so per-owner shares drift by at most one batch
+        # and the owner-count weighting restores them on the next shard turn.
+        counts = {uid: 0 for uid in ('heavy', other, 'light')}
+        for _ in range(4):
+            for lease in queue.pull(1, 9):
+                counts[lease.item.owner_id] += 1
+            assert max(counts.values()) - min(counts.values()) <= 9
+        assert min(counts.values()) >= 9
     assert ('control', 'scheduler') not in store.rows
     assert len([key for table, key in store.rows if table == 'control']) >= 2
 
