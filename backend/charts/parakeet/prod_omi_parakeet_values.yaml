@@ -196,10 +196,16 @@ autoscaling:
   # P77r retry proposal: install the relative-refusal guard before activating.
   # Rollback: restore minReplicas=12 and workloadOnly=false together.
   workloadOnly: true
-  # The ratified 2 active requests / 35% GPU targets trigger scale-out;
-  # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
-  # Floor 8 retains warm headroom; cap 12 bounds burst scale-out.
-  minReplicas: 8
+  # retire100 candidate, based on ruling 907116's English residual model.
+  # Qualify residual live demand and Soniox health after batch-100 before
+  # applying; 2026-11-01 live min/current were 4/8, not the old pinned 12/12.
+  # A floor of 2 is not a measured capacity guarantee. If batch overflow
+  # relies on PARAKEET_BATCH_PRESSURE_MIN_REPLICAS=3, qualify floor 3 instead.
+  # Keep max 12, targets, workload-only mode and scale policies unchanged:
+  # the guard's build_rollback asserts cap 12 and the 2-request/35% targets.
+  # Operational rollback: captured live floor (4 on 11-01); guard trip: 12
+  # with latency restored. The pre-change chart floor is 8.
+  minReplicas: 2
   maxReplicas: 12
   behavior:
     scaleUp:

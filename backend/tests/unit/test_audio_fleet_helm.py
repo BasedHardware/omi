@@ -179,7 +179,10 @@ def test_prod_pool_placement_preserves_current_cpu_pools(chart):
 def test_parakeet_scales_conservatively_without_relaxing_admission():
     objects = render('parakeet')
     hpa = objects['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 8
+    # 2026-10-29 retire100 (ruling 907116): the English residual (~12-17% of
+    # conversations, peak ~29 concurrent) needs 2 of the 16-session windows;
+    # cap 12 stays: failover surge absorber + guard build_rollback contract.
+    assert hpa['minReplicas'] == 2
     assert hpa['maxReplicas'] == 12
     assert hpa['behavior']['scaleUp'] == {
         'stabilizationWindowSeconds': 0,
