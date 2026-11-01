@@ -275,7 +275,7 @@ def sync_module():
             load_module_fresh("routers.sync", os.path.join(str(_BACKEND), "routers", "sync.py"))
             load_module_fresh(
                 "utils.sync.legacy_segment_core",
-                os.path.join(str(_BACKEND), "utils", "sync", "pipeline.py"),
+                os.path.join(str(_BACKEND), "utils", "sync", "legacy_segment_core.py"),
             )
             load_module_fresh("utils.stt.pre_recorded", os.path.join(str(_BACKEND), "utils", "stt", "pre_recorded.py"))
             yield
@@ -1246,7 +1246,6 @@ class TestIdentifySpeakersForSegments:
         assert segments[1].person_id == 'p2'
 
 
-@patch('utils.sync.legacy_segment_core.run_blocking', MagicMock())
 class TestProcessSegmentSpeakerIdIntegration:
     """Verify process_segment wires speaker identification correctly."""
 
@@ -1362,7 +1361,6 @@ class TestDownloadAudioBytes:
         assert result is None
 
 
-@patch('utils.sync.legacy_segment_core.run_blocking', MagicMock())
 class TestSpeakerIdExceptionHandling:
     """Verify process_segment swallows speaker ID exceptions gracefully."""
 

@@ -2104,7 +2104,11 @@ async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_t
         )
     )
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         with pytest.raises(module.HTTPException) as error:
             await module.sync_local_files_v2(files=uploads, uid='test-uid')
         assert error.value.status_code == 413
