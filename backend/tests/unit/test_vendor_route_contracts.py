@@ -364,8 +364,10 @@ def test_malformed_or_other_states_are_not_policy_holds(job):
 
 def test_flag_names_are_new_and_owned_by_one_slice():
     registry = yaml.safe_load((REPO / 'config' / 'feature-flags.yaml').read_text(encoding='utf-8'))
-    existing = {flag['key'] for flag in registry['flags']}
-    assert not set(c.FLAGS) & existing  # each slice adds only its own rows
+    rows = {flag['key']: flag for flag in registry['flags']}
+    # Each slice registers only its own rows, and only names frozen here.
+    assert {key for key in rows if key.startswith('BATCH_VENDOR_')} <= set(c.FLAGS)
+    assert all(rows[name]['kind'] == 'env' and rows[name]['summary'] for name in set(c.FLAGS) & set(rows))
     assert {owner for owner, _ in c.FLAGS.values()} <= {'B', 'C', 'D', 'E'}
     assert all(name.startswith('BATCH_VENDOR_') for name in c.FLAGS)
 
