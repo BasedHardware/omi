@@ -39,6 +39,9 @@ _CGNAT_NETWORK = ipaddress.ip_network('100.64.0.0/10')
 
 
 def _is_unsafe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    mapped = getattr(ip, 'ipv4_mapped', None)
+    if mapped is not None:
+        ip = mapped
     if isinstance(ip, ipaddress.IPv4Address) and ip in _CGNAT_NETWORK:
         return True
     return (

@@ -32,6 +32,7 @@
  * A line that cannot be sourced is reported in `missing`, never dropped silently.
  */
 import { isLlmService } from "./services/gcp-billing";
+import goals from "./omi-tv-goals.json";
 import { shiftDay } from "./qualified-activity";
 
 export const SAAS_MONTHLY_USD = 4800; // "Omi Cost vs Revenue" artifact, Oct 2026 row
@@ -561,7 +562,7 @@ export function allInCost(
 // ----------------------------------------------------------- variable margin
 
 /** Variable margin (David, 2026-10-23; tile approved 2026-10-24):
- * (MRR − real monthly cost) ÷ MRR, goal 50%.
+ * (MRR − real monthly cost) ÷ MRR, goal VARIABLE_MARGIN_TARGET.
  * Real monthly cost = the trailing-7-day run rate (× 30.44/7) of
  *   GCP net of credits EXCLUDING only the prepaid Vertex reserved-capacity
  *   line — the GCP input is taken BEFORE the all-in wall's one-time-incident
@@ -573,7 +574,9 @@ export function allInCost(
  * Out of scope by the same ruling: marketing, hardware, SaaS tooling, non-GCP
  * infra, the Anthropic API leg and Deepgram. The all-in stack keeps counting
  * and labelling all of those; the margin never silently re-adds them. */
-export const VARIABLE_MARGIN_TARGET = 0.5;
+/** The board's one goal setting, shared with grafana/build_wall_dashboard.py
+ * (threshold, dashed line, descriptions); change it there, rebuild the board. */
+export const VARIABLE_MARGIN_TARGET = goals.variableMarginTargetPct / 100;
 /** The contract's exact month factor (David 2026-10-23): the run rate scales
  * by 30.44/7, not the calendar 365.25/12 the all-in daily constants use. */
 export const MARGIN_DAYS_PER_MONTH = 30.44;

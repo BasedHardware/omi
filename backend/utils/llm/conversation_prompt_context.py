@@ -12,7 +12,12 @@ from typing import Any, Iterable, List, Optional
 
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
-from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder, bind_speakers_with_roster
+from utils.conversations.meeting_participants import (
+    MeetingRoster,
+    is_silent_recorder,
+    bind_speakers_with_roster,
+    looks_like_ai_agent_name,
+)
 from utils.llm.meeting_notes_validation import strip_speaker_placeholders
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.shaped_agent import route_for_uid
@@ -55,6 +60,11 @@ class ConversationPromptPrefix:
     speaker_names: tuple[tuple[str, Optional[str]], ...] = ()
     meeting_names: tuple[str, ...] = ()
     transcript_body: str = ''
+    # Notes-only elimination needs an actually captured owner, never a profile guess.
+    owner_call_speaker: Optional[str] = None
+    call_tile_names: tuple[str, ...] = ()
+    call_tile_agent_names: tuple[str, ...] = ()
+    call_identity_ambiguous: bool = False
 
     @property
     def cache_key(self) -> str:
@@ -233,6 +243,7 @@ def build_conversation_prompt_prefix(
     started_at_local = format_instant(aware_started_at, display_clock)
     transcript, speaker_names = prompt_speaker_map(transcript, speaker_map or {})
     source_speaker_names = dict(speaker_names)
+    authoritative_roles = getattr(speaker_map, 'role_evidence_authoritative', False)
     metadata_lines = [
         f'- Captured at: {started_at_local}',
     ]
@@ -248,6 +259,12 @@ def build_conversation_prompt_prefix(
                 ]
             )
         bind_speakers_with_roster(speaker_names, roster, desktop_meeting_capture)
+        if authoritative_roles:
+            # Retain remote-channel demotion, but a roster cannot fill an
+            # identity the shared evidence map deliberately left unbound.
+            for key, name in source_speaker_names.items():
+                if name is None:
+                    speaker_names[key] = None
         if speaker_names:
             metadata_lines.extend(_speaker_metadata_lines(speaker_names, roster, desktop_meeting_capture))
         if roster.entries:
@@ -291,11 +308,26 @@ def build_conversation_prompt_prefix(
             for participant in calendar_context.participants
             if participant.name and participant.name.casefold() not in bound_names
         ]
-        if len(unresolved_keys) == 1 and len(remaining_names) == 1:
+        if not authoritative_roles and len(unresolved_keys) == 1 and len(remaining_names) == 1:
             speaker_names[unresolved_keys[0]] = remaining_names[0]
 
     if roster is None and speaker_names:
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
+
+    if authoritative_roles:
+        # Current notes also embed their spk table in the transcript. A remote
+        # demotion must agree there and in shaped evidence, not just metadata.
+        table = re.match(r'(?:\[Diarization marked [^\n]*\]\n)?(?:spk [^\n]*\n)+', transcript)
+        if table:
+            header = re.sub(
+                r'(?m)^spk (\S+) [^\n]*$',
+                lambda match: (
+                    f'spk {match[1]} {speaker_names[match[1]] or "?"}' if match[1] in speaker_names else match[0]
+                ),
+                table[0],
+            )
+            transcript = header + transcript[table.end() :]
+        source_speaker_names = dict(speaker_names)
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
     photo_descriptions = (
@@ -348,6 +380,57 @@ def build_conversation_prompt_prefix(
         source_ids = source_ids & rendered_ids
     # Rich meeting notes name people through their roster rules instead.
     title_people, owner_names = _title_people(speaker_map) if roster is None else ((), ())
+    owner_call_speaker = None
+    clusters = getattr(speaker_map, 'clusters', ())
+    if (
+        desktop_meeting_capture
+        and len(clusters) == 2
+        and len({cluster.scope for cluster in clusters}) == 1
+        and len({cluster.speaker_id for cluster in clusters}) == 2
+        and sum(cluster.owner for cluster in clusters) == 1
+        and len(source_speaker_names) == 2
+        and 'others' not in source_speaker_names
+    ):
+        owner_cluster = next(cluster for cluster in clusters if cluster.owner)
+        keys = [cluster.prompt_key for cluster in clusters]
+        owner_key = owner_cluster.prompt_key
+        owner_labels = {(account_owner_name or 'You').casefold(), 'you'}
+        owner_display_name = source_speaker_names.get(owner_key)
+        if (
+            set(keys) == set(source_speaker_names)
+            and owner_key in source_speaker_names
+            and (not owner_display_name or owner_display_name.casefold() in owner_labels)
+            and not any(
+                name and name.casefold() in owner_labels
+                for key, name in source_speaker_names.items()
+                if key != owner_key
+            )
+        ):
+            owner_call_speaker = owner_key
+
+    def remote_human(name: Optional[str]) -> bool:
+        return (
+            not name
+            or not name.strip()
+            or (
+                not looks_like_ai_agent_name(name)
+                and name.strip().casefold() not in {(account_owner_name or 'You').strip().casefold(), 'you'}
+            )
+        )
+
+    # Count people before names are deduplicated: namesakes can share a channel.
+    ambiguous = bool(roster and sum(entry.kind == 'human' for entry in roster.entries) > 1)
+    if calendar_context:
+        sources = calendar_context.participants_by_source()
+        ambiguous = ambiguous or any(
+            sum(remote_human(p.name) for p in participants or ()) > 1
+            for participants in (
+                calendar_context.participants,
+                sources.expected_calendar,
+                sources.observed_screen_listing,
+            )
+        )
+    observed_tiles = calendar_context.participants_by_source().observed_call_tiles if calendar_context else None
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
         context='\n\n'.join(context_parts),
@@ -366,4 +449,10 @@ def build_conversation_prompt_prefix(
             else ()
         ),
         transcript_body=transcript,
+        owner_call_speaker=owner_call_speaker,
+        call_identity_ambiguous=ambiguous,
+        call_tile_names=tuple(p.name for p in observed_tiles or () if p.name and not looks_like_ai_agent_name(p.name)),
+        call_tile_agent_names=tuple(
+            p.name for p in observed_tiles or () if p.name and looks_like_ai_agent_name(p.name)
+        ),
     )

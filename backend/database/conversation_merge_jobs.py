@@ -12,6 +12,7 @@ from uuid import uuid4
 from google.cloud import firestore
 
 from database.quiet_check_retirement import stop_quiet_checks_for_job
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database._client import get_firestore_client
 from database.conversation_merge_policy import source_has_merge_receipt
 
@@ -44,7 +45,9 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
     def commit(transaction: Any) -> dict | None:
         deleting = client.collection('account_deletions').document(uid).get(transaction=transaction)
         rows = [ref.get(transaction=transaction).to_dict() or {} for ref in refs]
-        if deleting.exists or any(
+        if account_deletion_marker_blocks_access(
+            marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+        ) or any(
             row.get('status') != 'completed'
             or row.get('deleted')
             or row.get('is_locked')
@@ -93,6 +96,12 @@ def claim(job_id: str, *, generation: int | None = None, firestore_client: Any =
     @firestore.transactional
     def commit(transaction: Any) -> dict | None:
         row = ref.get(transaction=transaction).to_dict() or {}
+        if isinstance(row.get('uid'), str):
+            deleting = client.collection('account_deletions').document(row['uid']).get(transaction=transaction)
+            if account_deletion_marker_blocks_access(
+                marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+            ):
+                return row | {'account_pending_deletion': True}
         if (
             row.get('kind') != KIND
             or row.get('status') != 'queued'
@@ -146,7 +155,9 @@ def renew(job_id: str, epoch: int, *, phase: str | None = None, firestore_client
                 for source in refs
             ]
             if (
-                deleting.exists
+                account_deletion_marker_blocks_access(
+                    marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+                )
                 or any(doc.exists for doc in tombstones)
                 or any(
                     data.get('merge_job_id') != job_id
@@ -190,6 +201,12 @@ def begin_recovery(job_id: str, *, firestore_client: Any = None) -> dict | None:
     @firestore.transactional
     def commit(transaction: Any) -> dict | None:
         row = ref.get(transaction=transaction).to_dict() or {}
+        if isinstance(row.get('uid'), str):
+            deleting = client.collection('account_deletions').document(row['uid']).get(transaction=transaction)
+            if account_deletion_marker_blocks_access(
+                marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+            ):
+                return row | {'account_pending_deletion': True}
         now = _now()
         if row.get('kind') != KIND or row.get('status') not in {'queued', 'leased'}:
             return None

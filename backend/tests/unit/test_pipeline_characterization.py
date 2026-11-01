@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 
 import pytest
+from unittest.mock import Mock
 
 from diarizer import batch_pipeline as worker_module
 from config import batch_pipeline_empty_asr as empty_safety
@@ -94,6 +95,24 @@ def test_trace_has_no_raw_synthetic_identifiers_or_tokens(traces):
     for name, text in traces.items():
         assert 'sim-owner-' not in text and 'sim-conv-' not in text and 'sim://' not in text, name
         assert '"token"' not in text and '<hex64>' not in text, name
+
+
+@pytest.fixture(scope='module')
+def trace_with_unmodeled_provider_key():
+    from utils.stt import soniox_batch
+
+    client = Mock(side_effect=AssertionError('simulation must not invoke a real provider client'))
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
+        patch.setattr(soniox_batch, 'transcribe', client)
+        actual = dumps(golden_trace('empty_asr_terminal'))
+    return actual, client
+
+
+def test_unmodeled_provider_cannot_spend_even_with_host_credentials(traces, trace_with_unmodeled_provider_key):
+    actual, client = trace_with_unmodeled_provider_key
+    assert actual == traces['empty_asr_terminal']
+    client.assert_not_called()
 
 
 @pytest.mark.parametrize('key', sorted(PERTURBATIONS))

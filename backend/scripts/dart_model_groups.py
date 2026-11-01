@@ -28,7 +28,10 @@ SCHEMA_GROUPS = {
     'episodes': {
         'output': DEFAULT_OUTPUT_DIR / 'episodes_wire.g.dart',
         'schemas': (
+            'EpisodeMember',
+            'EpisodeListResponse',
             'EpisodeMoment',
+            'EpisodePoint',
             'EpisodeProvisionalItem',
             'Episode',
             'EpisodeLiveResponse',
@@ -183,6 +186,7 @@ SCHEMA_GROUPS = {
             'ConversationSpeakers',
             'AudioTimelineProvenance',
             'Conversation',
+            'RecordAudioPartial',
             'ProjectedActionItem',
             'ProjectedSection',
             'ProjectedEvent',
@@ -478,6 +482,10 @@ SCHEMA_GROUPS = {
     'users': {
         'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
         'schemas': (
+            'AccountDeletionLossSummary',
+            'AccountDeletionStatusResponse',
+            'AccountDeletionRestoreResponse',
+            'AccountDeletionActionResponse',
             'MobileFeedbackReceipt',
             'UserStatusResponse',
             'UserWebhooksStatusResponse',
@@ -574,6 +582,7 @@ SCHEMA_GROUPS = {
             'PaymentUpgradeSubscriptionResponse',
             'CustomerPortalSessionResponse',
             'RetentionOfferResponse',
+            'YearlySwitchResponse',
             'PlanLimits',
             'routers__payment__PricingOption',
             'AvailablePlansResponse',
@@ -591,6 +600,10 @@ SCHEMA_GROUPS = {
             'MemoryEditResponse',
             'MemoryRevertRequest',
         ),
+    },
+    'flags': {
+        'output': DEFAULT_OUTPUT_DIR / 'flags_wire.g.dart',
+        'schemas': ('ClientFlag', 'ClientFlagsResponse'),
     },
     'goals': {
         'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',

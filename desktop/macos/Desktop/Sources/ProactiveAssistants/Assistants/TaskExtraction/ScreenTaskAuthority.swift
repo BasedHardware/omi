@@ -107,34 +107,22 @@ struct ScreenTaskLease: Sendable {
   }
 }
 
-enum ScreenTaskFreshFlagResponse {
-  static func enabled(_ data: Data) -> Bool {
-    guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return true }
-    guard body["errorsWhileComputingFlags"] as? Bool != true,
-      !(body["quotaLimited"] as? [String] ?? []).contains("feature_flags")
-    else { return true }
-    if let flags = body["featureFlags"] as? [String: Any] {
-      return !ScreenTaskFeature.isKillSwitchOff(flagValue: flags[ScreenTaskFeature.flagName])
-    }
-    if let flags = body["flags"] as? [String: [String: Any]] {
-      return !ScreenTaskFeature.isKillSwitchOff(flagValue: flags[ScreenTaskFeature.flagName]?["enabled"])
-    }
-    return true
-  }
-}
-
 @MainActor enum ScreenTaskFlagRefresh {
   private static var timer: Timer?
   private static var reloadInFlight = false
   private static var lastFlagReload: TimeInterval?
-  /// Every PostHog flag reload is a billed request. The 30-second cadence renews the
-  /// 55-second leases while the gate is on; an explicit kill switch can use the slow cadence.
-  static let disabledReloadInterval: TimeInterval = 30 * 60
+  /// Every PostHog flag request is billed, so the SDK cache reloads on this slow cadence whatever the flag
+  /// says. The 30-second tick renews the flag lease from that cache; the fast stop is the backend admission
+  /// (`SCREEN_TASK_STOP`), which is still read on every tick.
+  static let flagReloadInterval: TimeInterval = 30 * 60
 
-  static func shouldReloadFlags(enabled: Bool, now: TimeInterval, last: TimeInterval?) -> Bool {
+  static func shouldReloadFlags(now: TimeInterval, last: TimeInterval?) -> Bool {
     guard let last else { return true }
-    return enabled || now - last >= disabledReloadInterval
+    return now - last >= flagReloadInterval
   }
+
+  /// Analytics opt-out withholds the cached-flag renewal, so an existing lease expires within 55 s.
+  static func renewsFlagLease(analyticsOptedOut: Bool) -> Bool { !analyticsOptedOut }
 
   static func start() {
     guard timer == nil else { return }
@@ -148,7 +136,7 @@ enum ScreenTaskFreshFlagResponse {
     let now = ProcessInfo.processInfo.systemUptime
     let enabled = !ScreenTaskFeature.isKillSwitchOff(
       flagValue: PostHogManager.shared.getFeatureFlag(ScreenTaskFeature.flagName))
-    if shouldReloadFlags(enabled: enabled, now: now, last: lastFlagReload) {
+    if shouldReloadFlags(now: now, last: lastFlagReload) {
       lastFlagReload = now
       PostHogManager.shared.reloadFeatureFlags()
     }
@@ -157,12 +145,12 @@ enum ScreenTaskFreshFlagResponse {
     else { return }
     reloadInFlight = true
     let requestedAt = ProcessInfo.processInfo.systemUptime
+    if renewsFlagLease(analyticsOptedOut: PostHogManager.shared.screenTaskFlagWithheld) {
+      ScreenTaskFeature.authority.refresh(enabled: true, requestedAt: requestedAt, authorization: owner)
+    }
     Task { @MainActor in
       defer { reloadInFlight = false }
       do {
-        let flagEnabled = try await PostHogManager.shared.screenTaskFlagAdmission(authorization: owner)
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
-        ScreenTaskFeature.authority.refresh(enabled: flagEnabled, requestedAt: requestedAt, authorization: owner)
         let serverEnabled = try await APIClient.shared.screenTaskAdmissionStatus(authorization: owner)
         guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
         ScreenTaskFeature.serverAuthority.refresh(

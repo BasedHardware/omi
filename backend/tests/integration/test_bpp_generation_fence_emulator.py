@@ -27,7 +27,7 @@ def world(monkeypatch):
     from google.cloud import firestore
     from google.cloud.firestore_v1.types import CommitRequest
     from database import _client, batch_pipeline_privacy as privacy, batch_privacy_write_fence as fence
-    from database import conversations, users, account_deletion_marker, recording_sessions
+    from database import conversations, users, recording_sessions
 
     client = firestore.Client(project='demo-wq26', credentials=AnonymousCredentials())
     uid = 'wq26-' + uuid4().hex
@@ -36,7 +36,6 @@ def world(monkeypatch):
     token = client.document(f'batch_pipeline_privacy/{privacy.privacy_owner_key(uid)}')
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: client)
-    monkeypatch.setattr(account_deletion_marker, 'get_data_plane_firestore_client', lambda: client)
     for module in (users, conversations):
         monkeypatch.setattr(module, 'db', client)
     for module in (conversations, recording_sessions):
@@ -109,6 +108,23 @@ WRITERS = [
     'purge_finish',
     'admission_ownership',
 ]
+
+
+def test_absent_cloud_sync_consent_is_allowed_then_explicit_opt_out_invalidates(world):
+    from google.cloud import firestore
+    from database.batch_privacy_attempt import batch_privacy_attempt
+
+    world.user.update({'private_cloud_sync_enabled': firestore.DELETE_FIELD})
+    with batch_privacy_attempt():
+        assert world.check() == 7
+        assert world.check() == 7
+        before = world.token.get().to_dict()
+        world.user.update({'private_cloud_sync_enabled': False})
+        after = world.token.get().to_dict()
+        assert before['memo_token'] != after['memo_token']
+        assert before['generation'] == after['generation'] == 7
+        with pytest.raises(world.privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
+            world.check()
 
 
 @pytest.mark.parametrize('writer', WRITERS)

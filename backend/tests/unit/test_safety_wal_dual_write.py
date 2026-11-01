@@ -4,6 +4,7 @@ Every phrase and audio sample is synthetic; no incident customer data.
 """
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -218,6 +219,49 @@ def test_revision_does_not_zero_live_slop(monkeypatch):
     result, created, survivors = intake(store, incoming, target_id='live')
     assert not created and not survivors
     assert len(result['transcript_segments']) == 2
+
+
+def test_cohort_revision_keeps_fleet_fuzzy_dedupe_without_capture_proof(monkeypatch, caplog):
+    from config.sync_live_dedupe import sync_live_dedupe_active_for
+    from database import conversations as db
+    from tests.unit.test_sync_cross_job_assignment import chunk
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
+    monkeypatch.setattr(db, 'index_sync_assignment', lambda *a: None)
+    assert sync_live_dedupe_active_for('u')
+    store = StrictFirestore()
+    first = 'Please bring the blue notebook to our planning meeting'
+    second = 'Our synthetic budget discussion needs a separate exact transcript anchor'
+    live = chunk('live', T, text=first)
+    live.update(sync_live_target=True, sync_content_revision=5)
+    live['transcript_segments'] = [
+        dict(segment(first, T), start=0, end=8),
+        dict(segment(second, T + 10), start=10, end=18),
+    ]
+    store.rows[('users', 'u', 'conversations', 'live')] = live
+    incoming = chunk('wal', T + 35, text=first)
+    incoming['transcript_segments'] = [
+        dict(segment(first.lower(), T + 35), start=0, end=8),
+        dict(segment(second.lower(), T + 45), start=10, end=18),
+    ]
+    assert 'capture_evidence' not in incoming and 'capture_evidence' not in live
+    with caplog.at_level(logging.INFO):
+        result, created, survivors = db.assign_sync_conversation(
+            'u', incoming, target_id='live', firestore_client=store
+        )
+    assert not created and not survivors
+    assert len(result['transcript_segments']) == 2
+    assert store.rows[('users', 'u', 'conversations', 'live')] == live
+    lines = [r.message for r in caplog.records if 'event=sync_lineage_append ' in r.message]
+    assert len(lines) == 1
+    assert 'appended_seconds=0.00 ' in lines[0]
+    assert 'appended_seconds_overlapping_live=0.0 ' in lines[0]
+    assert 'dropped_as_repeat_seconds=16.00 ' in lines[0]
+    assert 'repeat_only=True ' in lines[0]
 
 
 @pytest.mark.parametrize('flag', ['off', 'typo', 'false'])

@@ -48,6 +48,9 @@ class ReasonFamily(StrEnum):
     NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
+    SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
+    RECORD_PARTIAL_RERUN = 'record_partial_rerun'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -65,6 +68,26 @@ OMI_REASON_TOTAL = Counter(
 for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
     REASON_UNKNOWN_TOTAL.labels(family=_family.value)
     OMI_REASON_TOTAL.labels(family=_family.value)
+
+
+class SyncProcessingHoldOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    QUIET_WAIT = 'quiet_wait'
+    WATERMARK_WAIT = 'watermark_wait'
+    READY = 'ready'
+    MAX_HOLD = 'max_hold'
+    UNCHANGED = 'unchanged'
+    IMMATERIAL = 'immaterial'
+    LATE_CAP = 'late_cap'
+
+
+class ListenSessionTranscriptOutcome(StrEnum):
+    """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
+
+    UNKNOWN = 'unknown'
+    TRANSCRIBED = 'transcribed'
+    NO_TRANSCRIPT = 'no_transcript'
+    TOO_SHORT = 'too_short'
 
 
 class PersonVoiceQualityReason(StrEnum):

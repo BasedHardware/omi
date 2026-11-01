@@ -422,6 +422,7 @@ def _run_completed_day_generation(monkeypatch: pytest.MonkeyPatch, capture: Help
     from utils.other import daily_recap
 
     monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    _stub(monkeypatch, daily_recap, 'account_deletion_blocks_user_work', lambda _uid: False)
     _stub(monkeypatch, notifications_utils, 'generated_compute_allowed', lambda *_: True)
     _stub(monkeypatch, notifications_utils, 'try_acquire_daily_summary_lock', lambda *_: True)
     _stub(monkeypatch, notifications_utils, 'release_daily_summary_lock', lambda *_: None)

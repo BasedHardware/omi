@@ -12,6 +12,7 @@ from google.api_core.exceptions import Aborted, InvalidArgument
 from google.cloud.firestore_v1.transaction import _Transactional
 import pytest
 
+from database import batch_pipeline_store
 from database import firestore_transaction_retry
 from utils.batch_pipeline import retention
 from utils.batch_pipeline.projection import error_site_field, error_type
@@ -183,3 +184,53 @@ def test_expire_completed_segment_runs_through_the_bounded_retry(monkeypatch):
     store = Mock(namespace='batch_pipeline_test_contention')
     assert retention.expire_completed_segment(store, 'synthetic-owner', 'segment', 0.0) == 'ran'
     assert calls == [store.client]
+
+
+class SuccessfulTransaction(AlwaysAbortedTransaction):
+    def _commit(self):
+        self.commits += 1
+        return []
+
+
+def test_batch_store_retries_with_fresh_single_attempt_transactions(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    actual = batch_pipeline_store.run_with_transaction_contention_retry
+    monkeypatch.setattr(
+        batch_pipeline_store,
+        'run_with_transaction_contention_retry',
+        lambda *args, **kwargs: actual(*args, **kwargs, sleep=lambda _: None),
+    )
+    transactions = []
+
+    def new_transaction(max_attempts=5):
+        transaction = AlwaysAbortedTransaction() if not transactions else SuccessfulTransaction()
+        transaction._max_attempts = max_attempts
+        transactions.append(transaction)
+        return transaction
+
+    client = Mock()
+    client.transaction.side_effect = new_transaction
+    store = batch_pipeline_store.FirestoreStore('batch_pipeline_dev', firestore_client=client)
+    body_calls = []
+
+    assert store.run(lambda tx: body_calls.append(tx) or True) is True
+    assert len(body_calls) == 2
+    assert [tx._max_attempts for tx in transactions] == [1, 1]
+    assert [tx.commits for tx in transactions] == [1, 1]
+
+
+def test_batch_store_kill_switch_restores_single_legacy_attempt(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'false')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client = Mock()
+    transaction = AlwaysAbortedTransaction()
+    client.transaction.return_value = transaction
+    store = batch_pipeline_store.FirestoreStore('batch_pipeline_dev', firestore_client=client)
+
+    with pytest.raises(ValueError) as caught:
+        store.run(lambda _tx: True)
+
+    assert isinstance(caught.value.__cause__, Aborted)
+    client.transaction.assert_called_once_with()
+    assert transaction.commits == 5

@@ -1,6 +1,23 @@
 import { BigQueryDate } from "@google-cloud/bigquery";
 import { getGcpBillingClient } from "@/lib/services/gcp-billing";
-import { WallSourceError } from "./wall-source-error";
+import { bigQueryFailure, WallSourceError } from "./wall-source-error";
+
+/** Every `omi_finops` table the admin reads. The reader identity
+ * (`GCP_BILLING_SA_JSON`, omi-admin-billing-ro) holds table-level dataViewer
+ * grants, so a new table here needs a grant too (web/admin/docs/tv-mode.md);
+ * `admin-finops-grants.test.ts` keeps this list complete. */
+export const ADMIN_FINOPS_TABLES = [
+  "omi_finops.plan_revenue_daily",
+  "omi_finops.unit_cost_daily",
+  "omi_finops.unit_cost_reconciliation",
+  "omi_finops.mercury_saas_daily",
+  "omi_finops.mercury_vendor_spend_daily",
+  "omi_finops.mercury_infra_non_gcp_daily",
+  "omi_finops.stripe_fee_daily",
+  "omi_finops.stt_modulate_modelled_daily",
+  "omi_finops.vendor_balance_snapshot",
+  "omi_finops.vendor_balance_spend_daily",
+] as const;
 
 /** Aggregate FinOps tables only; no user-level table is read.
  * plan_revenue_daily repeats rows across producer runs: keep the latest
@@ -217,8 +234,17 @@ export async function fetchPlanCostHistory(
       maximumBytesBilled: String(100 * 1024 * 1024),
       jobTimeoutMs: 30_000,
     });
-  } catch {
-    throw new WallSourceError("FinOps plan cost query failed", true);
+  } catch (error) {
+    throw bigQueryFailure(
+      error,
+      [
+        "omi_finops.unit_cost_daily",
+        "omi_finops.mercury_saas_daily",
+        "omi_finops.mercury_vendor_spend_daily",
+      ],
+      "FinOps plan cost query failed",
+      true
+    );
   }
   return parsePlanCost(rows[0]?.history || "{}");
 }
@@ -337,9 +363,11 @@ export async function fetchStripeFeeHistory(
       maximumBytesBilled: String(10 * 1024 * 1024),
       jobTimeoutMs: 30_000,
     });
-  } catch {
+  } catch (error) {
     // NUMERIC arrives as a string; both parse. Missing table = unavailable line.
-    throw new WallSourceError(
+    throw bigQueryFailure(
+      error,
+      ["omi_finops.stripe_fee_daily"],
       "Stripe fees unavailable (finops key lacks balance-transaction read scope)"
     );
   }
@@ -413,8 +441,10 @@ export async function fetchInfraHistory(
       maximumBytesBilled: String(10 * 1024 * 1024),
       jobTimeoutMs: 30_000,
     });
-  } catch {
-    throw new WallSourceError(
+  } catch (error) {
+    throw bigQueryFailure(
+      error,
+      ["omi_finops.mercury_infra_non_gcp_daily"],
       "Infra (non-GCP) run rate unavailable (mercury_infra_non_gcp_daily dark: table not created yet or the daily job is stale)"
     );
   }
@@ -505,8 +535,13 @@ export async function fetchVendorBalanceHistory(
       maximumBytesBilled: String(10 * 1024 * 1024),
       jobTimeoutMs: 30_000,
     });
-  } catch {
-    throw new WallSourceError(
+  } catch (error) {
+    throw bigQueryFailure(
+      error,
+      [
+        "omi_finops.vendor_balance_snapshot",
+        "omi_finops.vendor_balance_spend_daily",
+      ],
       "Soniox measured STT unavailable (balance line dark: org key unmounted or table not created)"
     );
   }
@@ -578,8 +613,10 @@ export async function fetchModulateModelled(
       maximumBytesBilled: String(10 * 1024 * 1024),
       jobTimeoutMs: 30_000,
     });
-  } catch {
-    throw new WallSourceError(
+  } catch (error) {
+    throw bigQueryFailure(
+      error,
+      ["omi_finops.stt_modulate_modelled_daily"],
       "Modulate modelled STT unavailable (Prometheus series or committed price missing)"
     );
   }

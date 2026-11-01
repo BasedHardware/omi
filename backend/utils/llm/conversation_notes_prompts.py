@@ -5,6 +5,10 @@ SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the a
 # Notes-only instructions travel after the shared cacheable prefix. Keep the
 # baseline static/volatile prompt contracts independent of feature-specific rules.
 ACTION_ITEM_EXTRACTION_RULES = '''ACTION ITEM EXTRACTION RULES
+- Write a self-contained description of the action and its object or outcome. Resolve references
+  using cited source/context and the supplied speaker-role map, never a speaker number or a guessed name.
+  Do not invent a counterpart or object when unresolved; omit that candidate. A simple task such as
+  "Buy milk" is complete without a person's name. Keep exact supporting source_segment_ids.
 - Extract only tasks the account owner committed to or was directly asked to do.
   Use the account owner identity in the supplied evidence; never infer it from a speaker number.
   Another attendee's "Ask Riley for the download link" or "Email Riley" is that attendee's task,

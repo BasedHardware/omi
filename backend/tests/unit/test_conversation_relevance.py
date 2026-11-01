@@ -76,12 +76,15 @@ def test_only_user_actions_skip_assessment():
     # would spend the finalization and drop the only recovered copy. SMART_MERGE
     # refreshes a survivor whose fragments were each already assessed and kept.
     # BACKLOG_CHOICE carries an explicit user/upgrade choice to process a
-    # retained recording.
+    # retained recording. CAPTURE_GROUP regenerates a primary whose transcript
+    # is unchanged — only confirmed same-event meeting context is new — so
+    # grouping must never re-judge (and possibly hide) the rendered row.
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
         ProcessingTrigger.USER_REPROCESS,
         ProcessingTrigger.MERGE,
         ProcessingTrigger.SMART_MERGE,
+        ProcessingTrigger.CAPTURE_GROUP,
         ProcessingTrigger.SERVER_RECOVERY,
         ProcessingTrigger.BACKLOG_CHOICE,
         ProcessingTrigger.SILENT_BACKFILL,
@@ -298,12 +301,12 @@ def test_a_model_discard_next_to_a_kept_conversation_links_to_it():
         neighbor=lambda: adjacent,
     )
     assert decision == RelevanceDecision(
-        'discard', 'model', 'neighbor_fragment', ProcessingTrigger.SYNC_UPDATE, 'meeting'
+        'keep', 'policy', 'occasion_neighbor', ProcessingTrigger.SYNC_UPDATE, 'meeting'
     )
     assert decision.as_record()['neighbor_id'] == 'meeting'
 
 
-def test_neighbor_is_never_looked_up_when_the_rules_settle():
+def test_neighbor_is_checked_before_a_rule_can_discard():
     lookup = MagicMock(return_value=None)
     decision = decide_relevance(
         trigger=ProcessingTrigger.CAPTURE_END,
@@ -318,4 +321,4 @@ def test_neighbor_is_never_looked_up_when_the_rules_settle():
         neighbor=lookup,
     )
     assert decision.reason == 'filler_only'
-    lookup.assert_not_called()
+    lookup.assert_called_once()

@@ -46,6 +46,9 @@ def row(id, source, start=0, end=600, text=MEETING, **extra):
         'discarded': False,
         'started_at': T0 + timedelta(seconds=start),
         'finished_at': T0 + timedelta(seconds=end),
+        # The capture receipt proves the full recording, including silent tails.
+        'recorded_start': T0 + timedelta(seconds=start),
+        'recorded_end': T0 + timedelta(seconds=end),
         'created_at': T0,
         'structured': {},
         'transcript_segments': segments(text),
@@ -303,6 +306,39 @@ def test_processing_writes_never_clobber_membership(monkeypatch):
     assert conversations_db.persist_processing_result_with_lifecycle(UID, stale)
     assert fake.rows[path('pendant')]['capture_group'] == group
     assert fake.rows[path('pendant')]['structured'] == {'title': 'x'}
+
+
+def test_notes_refresh_write_is_fenced_by_the_exact_group_revision(monkeypatch):
+    fake = StrictFirestore()
+    current_group = {
+        'id': 'g',
+        'primary_id': 'pendant',
+        'revision': 2,
+        'members': [],
+    }
+    fake.rows[path('pendant')] = {
+        **row('pendant', 'omi', status='processing'),
+        'capture_group': current_group,
+        'structured': {'title': 'before'},
+    }
+    monkeypatch.setattr(conversations_db, 'db', fake)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(conversations_db, '_reapply_current_manual_assignments', lambda *a: None)
+    stale = {
+        'id': 'pendant',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+        'capture_group': None,
+        'structured': {'title': 'stale revision notes'},
+    }
+
+    assert not conversations_db.persist_processing_result_with_lifecycle(
+        UID,
+        stale,
+        expected_capture_group=('g', 1),
+    )
+    assert fake.rows[path('pendant')]['capture_group'] == current_group
+    assert fake.rows[path('pendant')]['structured'] == {'title': 'before'}
 
 
 # --------------------------------------------------------------- finalization seam

@@ -228,31 +228,165 @@ class WalStats {
 }
 
 class Wal {
-  int timerStart;
-  BleAudioCodec codec;
-  int channel;
-  int sampleRate;
-  int seconds;
-  String device;
-  String? deviceModel;
+  /// Runtime ordinal from a validated index load, used to seed the index owner
+  /// without sending or serializing the unchanged history back to it.
+  int? loadedIndexToken;
 
-  WalStatus status;
-  WalStorage storage;
+  /// The exact file validated by the loader, including backup recovery.
+  String? loadedIndexSource;
+
+  // Persisted object fields follow replacement semantics (see persistentFingerprint).
+  // Subscribers track identity: device timestamps and paths can change.
+  final Set<void Function(Wal)> _changeListeners = {};
+  final Set<void Function(Wal)> _viewChangeListeners = {};
+  void addViewChangeListener(void Function(Wal) listener) => _viewChangeListeners.add(listener);
+  void removeViewChangeListener(void Function(Wal) listener) => _viewChangeListeners.remove(listener);
+  void _viewChanged() {
+    for (final listener in _viewChangeListeners) {
+      listener(this);
+    }
+  }
+
+  void addChangeListener(void Function(Wal) listener) => _changeListeners.add(listener);
+  void removeChangeListener(void Function(Wal) listener) => _changeListeners.remove(listener);
+  void _changed() {
+    _viewChanged();
+    for (final listener in _changeListeners) {
+      listener(this);
+    }
+  }
+
+  int _timerStart;
+  int get timerStart => _timerStart;
+  set timerStart(int value) {
+    if (_timerStart == value) return;
+    _timerStart = value;
+    _changed();
+  }
+
+  BleAudioCodec _codec;
+  BleAudioCodec get codec => _codec;
+  set codec(BleAudioCodec value) {
+    if (_codec == value) return;
+    _codec = value;
+    _changed();
+  }
+
+  int _channel;
+  int get channel => _channel;
+  set channel(int value) {
+    if (_channel == value) return;
+    _channel = value;
+    _changed();
+  }
+
+  int _sampleRate;
+  int get sampleRate => _sampleRate;
+  set sampleRate(int value) {
+    if (_sampleRate == value) return;
+    _sampleRate = value;
+    _changed();
+  }
+
+  int _seconds;
+  int get seconds => _seconds;
+  set seconds(int value) {
+    if (_seconds == value) return;
+    _seconds = value;
+    _changed();
+  }
+
+  String _device;
+  String get device => _device;
+  set device(String value) {
+    if (_device == value) return;
+    _device = value;
+    _changed();
+  }
+
+  String? _deviceModel;
+  String? get deviceModel => _deviceModel;
+  set deviceModel(String? value) {
+    if (_deviceModel == value) return;
+    _deviceModel = value;
+    _changed();
+  }
+
+  WalStatus _status;
+  WalStatus get status => _status;
+  set status(WalStatus value) {
+    if (_status == value) return;
+    _status = value;
+    _changed();
+  }
+
+  WalStorage _storage;
+  WalStorage get storage => _storage;
+  set storage(WalStorage value) {
+    if (_storage == value) return;
+    _storage = value;
+    _changed();
+  }
 
   /// Explicit phone-only custody. Never admitted to a cloud audio drain.
-  bool onDeviceOnly;
+  bool _onDeviceOnly;
+  bool get onDeviceOnly => _onDeviceOnly;
+  set onDeviceOnly(bool value) {
+    if (_onDeviceOnly == value) return;
+    _onDeviceOnly = value;
+    _changed();
+  }
 
   /// Explicit Transcribe Later consent: only a manual upload may release this hold.
-  bool holdForUser;
-  DeviceType? deviceType;
-  Map<String, dynamic>? onDeviceConversation;
+  bool _holdForUser;
+  bool get holdForUser => _holdForUser;
+  set holdForUser(bool value) {
+    if (_holdForUser == value) return;
+    _holdForUser = value;
+    _changed();
+  }
+
+  DeviceType? _deviceType;
+  DeviceType? get deviceType => _deviceType;
+  set deviceType(DeviceType? value) {
+    if (_deviceType == value) return;
+    _deviceType = value;
+    _changed();
+  }
+
+  Map<String, dynamic>? _onDeviceConversation;
+  Map<String, dynamic>? get onDeviceConversation => _onDeviceConversation;
+  set onDeviceConversation(Map<String, dynamic>? value) {
+    if (_onDeviceConversation == value) return;
+    _onDeviceConversation = value;
+    _changed();
+  }
 
   /// Immutable continuation input, retained until conversation receipt is durable.
-  Map<String, dynamic>? onDevicePreparedUpload;
-  String? onDeviceUploadFailure;
+  Map<String, dynamic>? _onDevicePreparedUpload;
+  Map<String, dynamic>? get onDevicePreparedUpload => _onDevicePreparedUpload;
+  set onDevicePreparedUpload(Map<String, dynamic>? value) {
+    if (_onDevicePreparedUpload == value) return;
+    _onDevicePreparedUpload = value;
+    _changed();
+  }
+
+  String? _onDeviceUploadFailure;
+  String? get onDeviceUploadFailure => _onDeviceUploadFailure;
+  set onDeviceUploadFailure(String? value) {
+    if (_onDeviceUploadFailure == value) return;
+    _onDeviceUploadFailure = value;
+    _changed();
+  }
 
   /// Recording-time custody evidence. Null identifies pre-fix dev records.
-  bool? capturedOnDeviceOnly;
+  bool? _capturedOnDeviceOnly;
+  bool? get capturedOnDeviceOnly => _capturedOnDeviceOnly;
+  set capturedOnDeviceOnly(bool? value) {
+    if (_capturedOnDeviceOnly == value) return;
+    _capturedOnDeviceOnly = value;
+    _changed();
+  }
 
   /// Imported device storage was never part of the phone's live STT route.
   /// Repair only the erroneous pre-fix stamp, preserving explicit capture consent.
@@ -264,94 +398,321 @@ class Wal {
     }
   }
 
-  String? filePath;
-  List<List<int>> data;
-  int storageOffset = 0;
-  int storageTotalBytes = 0;
-  int fileNum = 1;
+  String? _filePath;
+  String? get filePath => _filePath;
+  set filePath(String? value) {
+    if (_filePath == value) return;
+    _filePath = value;
+    _changed();
+  }
 
-  bool isSyncing = false;
-  DateTime? syncStartedAt;
-  int? syncEtaSeconds;
-  double? syncSpeedKBps;
+  List<List<int>> data;
+  int _storageOffset = 0;
+  int get storageOffset => _storageOffset;
+  set storageOffset(int value) {
+    if (_storageOffset == value) return;
+    _storageOffset = value;
+    _changed();
+  }
+
+  int _storageTotalBytes = 0;
+  int get storageTotalBytes => _storageTotalBytes;
+  set storageTotalBytes(int value) {
+    if (_storageTotalBytes == value) return;
+    _storageTotalBytes = value;
+    _changed();
+  }
+
+  int _fileNum = 1;
+  int get fileNum => _fileNum;
+  set fileNum(int value) {
+    if (_fileNum == value) return;
+    _fileNum = value;
+    _changed();
+  }
+
+  bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
+  set isSyncing(bool value) {
+    if (_isSyncing == value) return;
+    _isSyncing = value;
+    _viewChanged();
+  }
+
+  DateTime? _syncStartedAt;
+  DateTime? get syncStartedAt => _syncStartedAt;
+  set syncStartedAt(DateTime? value) {
+    if (_syncStartedAt == value) return;
+    _syncStartedAt = value;
+    _viewChanged();
+  }
+
+  int? _syncEtaSeconds;
+  int? get syncEtaSeconds => _syncEtaSeconds;
+  set syncEtaSeconds(int? value) {
+    if (_syncEtaSeconds == value) return;
+    _syncEtaSeconds = value;
+    _viewChanged();
+  }
+
+  double? _syncSpeedKBps;
+  double? get syncSpeedKBps => _syncSpeedKBps;
+  set syncSpeedKBps(double? value) {
+    if (_syncSpeedKBps == value) return;
+    _syncSpeedKBps = value;
+    _viewChanged();
+  }
 
   /// 0..1 fraction of this recording's device transfer. Runtime only.
   /// Null when this recording is not the active device download.
   /// Zero means the transfer has started but no countable bytes have arrived.
-  double? deviceDownloadFraction;
+  double? _deviceDownloadFraction;
+  double? get deviceDownloadFraction => _deviceDownloadFraction;
+  set deviceDownloadFraction(double? value) {
+    if (_deviceDownloadFraction == value) return;
+    _deviceDownloadFraction = value;
+    _viewChanged();
+  }
+
   SyncMethod syncMethod = SyncMethod.ble;
 
-  int frameSize = 160;
+  int _frameSize = 160;
+  int get frameSize => _frameSize;
+  set frameSize(int value) {
+    if (_frameSize == value) return;
+    _frameSize = value;
+    _changed();
+  }
 
-  int totalFrames = 0;
-  int syncedFrameOffset = 0;
+  int _totalFrames = 0;
+  int get totalFrames => _totalFrames;
+  set totalFrames(int value) {
+    if (_totalFrames == value) return;
+    _totalFrames = value;
+    _changed();
+  }
 
-  WalStorage? originalStorage;
+  int _syncedFrameOffset = 0;
+  int get syncedFrameOffset => _syncedFrameOffset;
+  set syncedFrameOffset(int value) {
+    if (_syncedFrameOffset == value) return;
+    _syncedFrameOffset = value;
+    _changed();
+  }
+
+  WalStorage? _originalStorage;
+  WalStorage? get originalStorage => _originalStorage;
+  set originalStorage(WalStorage? value) {
+    if (_originalStorage == value) return;
+    _originalStorage = value;
+    _changed();
+  }
 
   /// The conversation this WAL belongs to. Stamped when ConversationProcessingStartedEvent
   /// arrives so WALs survive app kill and can be recovered on startup.
-  String? conversationId;
+  String? _conversationId;
+  String? get conversationId => _conversationId;
+  set conversationId(String? value) {
+    if (_conversationId == value) return;
+    _conversationId = value;
+    _changed();
+  }
 
   /// Client recording id (`activeRecordingId` / `external_data.recording_session_id`).
   /// Stamped when the WAL is created so a safety copy that misses
   /// ConversationProcessingStarted can still bind to the live conversation.
-  String? recordingSessionId;
+  String? _recordingSessionId;
+  String? get recordingSessionId => _recordingSessionId;
+  set recordingSessionId(String? value) {
+    if (_recordingSessionId == value) return;
+    _recordingSessionId = value;
+    _changed();
+  }
 
   /// The account that created this recording, stamped from the signed-in uid
   /// at creation (or back-filled at logout). Loaded records owned by another
   /// account are parked durably instead of being loaded, so a session never
   /// renders or uploads another account's recordings after an account switch.
   /// Null on records written before this field existed (pre-upgrade data).
-  String? ownerUid;
-  String? captureRoot;
-  int? sourceFrameStart;
-  int? sourceClockEpoch;
+  String? _ownerUid;
+  String? get ownerUid => _ownerUid;
+  set ownerUid(String? value) {
+    if (_ownerUid == value) return;
+    _ownerUid = value;
+    _changed();
+  }
 
-  int? liveRingId;
-  int? liveOrdinalStart;
-  int? liveOrdinalEnd;
+  String? _captureRoot;
+  String? get captureRoot => _captureRoot;
+  set captureRoot(String? value) {
+    if (_captureRoot == value) return;
+    _captureRoot = value;
+    _changed();
+  }
+
+  int? _sourceFrameStart;
+  int? get sourceFrameStart => _sourceFrameStart;
+  set sourceFrameStart(int? value) {
+    if (_sourceFrameStart == value) return;
+    _sourceFrameStart = value;
+    _changed();
+  }
+
+  int? _sourceClockEpoch;
+  int? get sourceClockEpoch => _sourceClockEpoch;
+  set sourceClockEpoch(int? value) {
+    if (_sourceClockEpoch == value) return;
+    _sourceClockEpoch = value;
+    _changed();
+  }
+
+  int? _liveRingId;
+  int? get liveRingId => _liveRingId;
+  set liveRingId(int? value) {
+    if (_liveRingId == value) return;
+    _liveRingId = value;
+    _changed();
+  }
+
+  int? _liveOrdinalStart;
+  int? get liveOrdinalStart => _liveOrdinalStart;
+  set liveOrdinalStart(int? value) {
+    if (_liveOrdinalStart == value) return;
+    _liveOrdinalStart = value;
+    _changed();
+  }
+
+  int? _liveOrdinalEnd;
+  int? get liveOrdinalEnd => _liveOrdinalEnd;
+  set liveOrdinalEnd(int? value) {
+    if (_liveOrdinalEnd == value) return;
+    _liveOrdinalEnd = value;
+    _changed();
+  }
 
   int? liveConnectionEpoch;
 
   /// Canonical start-time location snapshot for delayed/offline finalization.
-  Geolocation? geolocation;
+  Geolocation? _geolocation;
+  Geolocation? get geolocation => _geolocation;
+  set geolocation(Geolocation? value) {
+    if (_geolocation == value) return;
+    _geolocation = value;
+    _changed();
+  }
 
   /// Number of sync retry attempts for this WAL.
-  int retryCount;
+  int _retryCount;
+  int get retryCount => _retryCount;
+  set retryCount(int value) {
+    if (_retryCount == value) return;
+    _retryCount = value;
+    _changed();
+  }
 
   /// Unix timestamp (seconds) of the last sync retry attempt.
-  int lastRetryAt;
+  int _lastRetryAt;
+  int get lastRetryAt => _lastRetryAt;
+  set lastRetryAt(int value) {
+    if (_lastRetryAt == value) return;
+    _lastRetryAt = value;
+    _changed();
+  }
 
   /// Server job id assigned when this recording's audio was uploaded (HTTP 202).
   /// The reconciler polls this to resolve [WalStatus.uploaded] → synced / miss /
   /// corrupted. Null until uploaded. Multiple WALs in one upload batch share it.
-  String? jobId;
+  String? _jobId;
+  String? get jobId => _jobId;
+  set jobId(String? value) {
+    if (_jobId == value) return;
+    _jobId = value;
+    _changed();
+  }
 
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
-  int uploadedAt;
-  int jobPendingConfirmedAt;
+  int _uploadedAt;
+  int get uploadedAt => _uploadedAt;
+  set uploadedAt(int value) {
+    if (_uploadedAt == value) return;
+    _uploadedAt = value;
+    _changed();
+  }
+
+  int _jobPendingConfirmedAt;
+  int get jobPendingConfirmedAt => _jobPendingConfirmedAt;
+  set jobPendingConfirmedAt(int value) {
+    if (_jobPendingConfirmedAt == value) return;
+    _jobPendingConfirmedAt = value;
+    _changed();
+  }
 
   /// Unix timestamp (seconds) when the server confirmed this recording synced
   /// (job resolved to [WalStatus.synced], or the live-stream ack completed it).
   /// 0 = unknown: records synced before this field existed, and WALs whose
   /// status was migrated without a timestamp. The synced-copy auto-remove
   /// policy deliberately skips records with 0 — never delete on unknown age.
-  int syncedAt;
+  int _syncedAt;
+  int get syncedAt => _syncedAt;
+  set syncedAt(int value) {
+    if (_syncedAt == value) return;
+    _syncedAt = value;
+    _changed();
+  }
 
-  bool keptForTranscriptRecovery;
+  bool _keptForTranscriptRecovery;
+  bool get keptForTranscriptRecovery => _keptForTranscriptRecovery;
+  set keptForTranscriptRecovery(bool value) {
+    if (_keptForTranscriptRecovery == value) return;
+    _keptForTranscriptRecovery = value;
+    _changed();
+  }
 
   /// Set only when [timerStart] is an app estimate (the device gave no
   /// trustworthy recording time): names the one contiguous device recording
   /// this audio belongs to. The upload filename carries it so the backend
   /// never merges it with audio outside that run by invented adjacency.
-  String? clockRun;
+  String? _clockRun;
+  String? get clockRun => _clockRun;
+  set clockRun(String? value) {
+    if (_clockRun == value) return;
+    _clockRun = value;
+    _changed();
+  }
 
   /// Why the server refused the last upload attempt, as a bounded
   /// [WalUploadRejection] token; null when the row was never refused.
-  String? uploadRejectionReason;
-  int uploadRejectionStatusCode;
-  int uploadRejectedAt;
-  int uploadRefusalLastAttemptAt;
+  String? _uploadRejectionReason;
+  String? get uploadRejectionReason => _uploadRejectionReason;
+  set uploadRejectionReason(String? value) {
+    if (_uploadRejectionReason == value) return;
+    _uploadRejectionReason = value;
+    _changed();
+  }
+
+  int _uploadRejectionStatusCode;
+  int get uploadRejectionStatusCode => _uploadRejectionStatusCode;
+  set uploadRejectionStatusCode(int value) {
+    if (_uploadRejectionStatusCode == value) return;
+    _uploadRejectionStatusCode = value;
+    _changed();
+  }
+
+  int _uploadRejectedAt;
+  int get uploadRejectedAt => _uploadRejectedAt;
+  set uploadRejectedAt(int value) {
+    if (_uploadRejectedAt == value) return;
+    _uploadRejectedAt = value;
+    _changed();
+  }
+
+  int _uploadRefusalLastAttemptAt;
+  int get uploadRefusalLastAttemptAt => _uploadRefusalLastAttemptAt;
+  set uploadRefusalLastAttemptAt(int value) {
+    if (_uploadRefusalLastAttemptAt == value) return;
+    _uploadRefusalLastAttemptAt = value;
+    _changed();
+  }
 
   /// Daily recovery is independent of the transient network retry budget.
   /// Old indexes get a new seven-day window on their first recovery pass.
@@ -458,53 +819,98 @@ class Wal {
   }
 
   Wal({
-    required this.timerStart,
-    required this.codec,
-    required this.seconds,
-    this.sampleRate = 16000,
-    this.channel = 1,
-    this.status = WalStatus.inProgress,
-    this.storage = WalStorage.mem,
-    this.onDeviceOnly = false,
-    this.holdForUser = false,
-    this.deviceType,
-    this.onDeviceConversation,
-    this.onDevicePreparedUpload,
-    this.onDeviceUploadFailure,
-    this.capturedOnDeviceOnly,
-    this.filePath,
-    this.device = "phone",
-    this.deviceModel,
-    this.storageOffset = 0,
-    this.storageTotalBytes = 0,
-    this.fileNum = 1,
+    required int timerStart,
+    required BleAudioCodec codec,
+    required int seconds,
+    int sampleRate = 16000,
+    int channel = 1,
+    WalStatus status = WalStatus.inProgress,
+    WalStorage storage = WalStorage.mem,
+    bool onDeviceOnly = false,
+    bool holdForUser = false,
+    DeviceType? deviceType,
+    Map<String, dynamic>? onDeviceConversation,
+    Map<String, dynamic>? onDevicePreparedUpload,
+    String? onDeviceUploadFailure,
+    bool? capturedOnDeviceOnly,
+    String? filePath,
+    String device = "phone",
+    String? deviceModel,
+    int storageOffset = 0,
+    int storageTotalBytes = 0,
+    int fileNum = 1,
     List<List<int>>? data,
-    this.totalFrames = 0,
-    this.syncedFrameOffset = 0,
-    this.originalStorage,
-    this.conversationId,
-    this.recordingSessionId,
-    this.ownerUid,
-    this.captureRoot,
-    this.sourceFrameStart,
-    this.sourceClockEpoch,
-    this.liveRingId,
-    this.liveOrdinalStart,
-    this.liveOrdinalEnd,
-    this.geolocation,
-    this.retryCount = 0,
-    this.lastRetryAt = 0,
-    this.jobId,
-    this.uploadedAt = 0,
-    this.jobPendingConfirmedAt = 0,
-    this.syncedAt = 0,
-    this.keptForTranscriptRecovery = false,
-    this.clockRun,
-    this.uploadRejectionReason,
-    this.uploadRejectionStatusCode = 400,
-    this.uploadRejectedAt = 0,
-    this.uploadRefusalLastAttemptAt = 0,
-  }) : data = data ?? [] {
+    int totalFrames = 0,
+    int syncedFrameOffset = 0,
+    WalStorage? originalStorage,
+    String? conversationId,
+    String? recordingSessionId,
+    String? ownerUid,
+    String? captureRoot,
+    int? sourceFrameStart,
+    int? sourceClockEpoch,
+    int? liveRingId,
+    int? liveOrdinalStart,
+    int? liveOrdinalEnd,
+    Geolocation? geolocation,
+    int retryCount = 0,
+    int lastRetryAt = 0,
+    String? jobId,
+    int uploadedAt = 0,
+    int jobPendingConfirmedAt = 0,
+    int syncedAt = 0,
+    bool keptForTranscriptRecovery = false,
+    String? clockRun,
+    String? uploadRejectionReason,
+    int uploadRejectionStatusCode = 400,
+    int uploadRejectedAt = 0,
+    int uploadRefusalLastAttemptAt = 0,
+  })  : _timerStart = timerStart,
+        _codec = codec,
+        _seconds = seconds,
+        _sampleRate = sampleRate,
+        _channel = channel,
+        _status = status,
+        _storage = storage,
+        _onDeviceOnly = onDeviceOnly,
+        _holdForUser = holdForUser,
+        _deviceType = deviceType,
+        _onDeviceConversation = onDeviceConversation,
+        _onDevicePreparedUpload = onDevicePreparedUpload,
+        _onDeviceUploadFailure = onDeviceUploadFailure,
+        _capturedOnDeviceOnly = capturedOnDeviceOnly,
+        _filePath = filePath,
+        _device = device,
+        _deviceModel = deviceModel,
+        _storageOffset = storageOffset,
+        _storageTotalBytes = storageTotalBytes,
+        _fileNum = fileNum,
+        _totalFrames = totalFrames,
+        _syncedFrameOffset = syncedFrameOffset,
+        _originalStorage = originalStorage,
+        _conversationId = conversationId,
+        _recordingSessionId = recordingSessionId,
+        _ownerUid = ownerUid,
+        _captureRoot = captureRoot,
+        _sourceFrameStart = sourceFrameStart,
+        _sourceClockEpoch = sourceClockEpoch,
+        _liveRingId = liveRingId,
+        _liveOrdinalStart = liveOrdinalStart,
+        _liveOrdinalEnd = liveOrdinalEnd,
+        _geolocation = geolocation,
+        _retryCount = retryCount,
+        _lastRetryAt = lastRetryAt,
+        _jobId = jobId,
+        _uploadedAt = uploadedAt,
+        _jobPendingConfirmedAt = jobPendingConfirmedAt,
+        _syncedAt = syncedAt,
+        _keptForTranscriptRecovery = keptForTranscriptRecovery,
+        _clockRun = clockRun,
+        _uploadRejectionReason = uploadRejectionReason,
+        _uploadRejectionStatusCode = uploadRejectionStatusCode,
+        _uploadRejectedAt = uploadRejectedAt,
+        _uploadRefusalLastAttemptAt = uploadRefusalLastAttemptAt,
+        data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
 

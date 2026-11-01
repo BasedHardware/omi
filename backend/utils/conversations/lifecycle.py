@@ -214,7 +214,12 @@ def ingest_sync_conversation(
 
 @sync_phase('firestore')
 def persist_processed_conversation(
-    uid: str, conversation_data: dict[str, Any], *, smart_merge_refresh: tuple[int, str] | None = None
+    uid: str,
+    conversation_data: dict[str, Any],
+    *,
+    smart_merge_refresh: tuple[int, str] | None = None,
+    expected_capture_group: tuple[str, int] | None = None,
+    capture_group_notes_refresh: tuple[str, str] | None = None,
 ) -> bool:
     """Persist a processing result and report whether the conversation still exists.
 
@@ -231,9 +236,15 @@ def persist_processed_conversation(
     def _observe_first_completion() -> None:
         observe_completed_conversation_shape(uid, conversation_data)
 
-    return conversations_db.persist_processing_result_with_lifecycle(
-        uid, conversation_data, on_first_completion=_observe_first_completion, smart_merge_refresh=smart_merge_refresh
-    )
+    kwargs: dict[str, Any] = {
+        'on_first_completion': _observe_first_completion,
+        'smart_merge_refresh': smart_merge_refresh,
+    }
+    if expected_capture_group is not None:
+        kwargs['expected_capture_group'] = expected_capture_group
+    if capture_group_notes_refresh is not None:
+        kwargs['capture_group_notes_refresh'] = capture_group_notes_refresh
+    return conversations_db.persist_processing_result_with_lifecycle(uid, conversation_data, **kwargs)
 
 
 def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:

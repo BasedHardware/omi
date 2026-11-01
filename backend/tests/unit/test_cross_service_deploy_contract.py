@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -397,6 +397,44 @@ def test_prod_service_url_in_dev_fails(results: Results) -> None:
 def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     # Read through SMART_MERGE_FLATTEN_ENV; a literal-only scanner would call this kill switch dead.
     assert 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED' in results.baseline.readers.all_reads
+
+
+def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
+    rel = 'backend/config/synthetic_wrapped_switch.py'
+    source = OverlaySource(
+        tmp_path,
+        {
+            rel: (
+                "import os\n"
+                "SWITCH_ENV = 'SYNTHETIC_WRAPPED_SWITCH_ENABLED'\n"
+                "UNREAD_ENV = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'\n"
+                "def _default_on(name):\n"
+                "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
+                "def enabled():\n"
+                "    return _default_on(SWITCH_ENV)\n"
+                "def unrelated():\n"
+                "    return lookup(UNREAD_ENV)\n"
+            )
+        },
+    )
+    reads = contract.scan_env_reads(source, [rel])
+    assert set(reads) == {'SYNTHETIC_WRAPPED_SWITCH_ENABLED'}
+    assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
+
+
+def test_ops_kill_without_reader_still_fails(results: Results) -> None:
+    key = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'
+    # This check reads manifest entries and the reader inventory only; reuse
+    # the rendered fixture instead of rebuilding every deployment in the call.
+    manifest = {
+        'environments': {
+            'prod': {'gke': {'backend-listen': {'env': {key: {'value': 'false', 'category': 'ops_kill'}}}}}
+        }
+    }
+    model = replace(results.baseline.models['prod'], manifest=manifest)
+    context = replace(results.baseline, models={'prod': model})
+    violations = contract.check_kill_switches(context)
+    assert any(violation.key == f'kill-switch-reader|prod|gke/backend-listen/{key}' for violation in violations)
 
 
 # Real pre-fix commits from the 2026-10-18 rollout, each with the invariant that must catch it and its fix:

@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import os
 
+from config.refactor_modes import default_on as modes_default_on
 from config.refactor_switches import default_on as rollout_default_on
 
 from config.jev_decisions import percentage, uid_bucket
@@ -49,6 +50,11 @@ EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
 EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
 EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
+EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
+EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
+EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
+EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
+EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
 APP_CHANNELS = frozenset({'beta', 'store'})
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
@@ -89,6 +95,40 @@ def episodes_client_channels() -> frozenset[str]:
     return frozenset(item.strip().lower() for item in raw.split(',')) & APP_CHANNELS
 
 
+def episode_output_language_pinned() -> bool:
+    """Whether the shared output-language prompt pin is enabled.
+
+    The kill switch also covers provisional conversation topics, daily recaps, and
+    proactive notification prompts so one setting rolls the prompt changes back.
+    Unknown values stay on. Off restores each surface's legacy prompt wording and
+    the former cohort-gated episode language behavior.
+    """
+    return modes_default_on(EPISODE_OUTPUT_LANGUAGE_PIN_ENV)
+
+
+def episode_hard_cap_across_conversations_enabled() -> bool:
+    """Whether the strict episode-wide hard cap runs on attachment and moment boundaries."""
+    return modes_default_on(EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV)
+
+
+def episode_carry_on_session_end_enabled() -> bool:
+    """Whether a session-end buffer flushes after the bounded reconnect window."""
+    return modes_default_on(EPISODE_CARRY_ON_SESSION_END_ENV)
+
+
+def episode_moment_output_validator_enabled() -> bool:
+    """Whether live moment output validation and its one bounded repair call are enabled."""
+    return modes_default_on(EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV)
+
+
+def episode_composer_enabled() -> bool:
+    """Whether closed episodes get one whole-episode summary (``utils/episodes/composer.py``).
+
+    Off keeps the live incremental notes as the final episode notes, as before.
+    """
+    return modes_default_on(EPISODE_COMPOSER_ENV)
+
+
 def client_channel_admitted(raw: str | None) -> bool:
     """A missing or unknown channel is never admitted."""
     channel = app_channel(raw)
@@ -113,9 +153,11 @@ LAST_CLOSED_CACHE_SECONDS = 30
 
 # --------------------------------------------------------------------------- moments
 
-# A moment ends when the live stream pauses for this long, or when it grows past
-# MOMENT_MAX_WORDS (a rollover), or after MOMENT_MAX_SECONDS of steady speech (an
-# interval), or when its conversation finalizes or its live session ends.
+# A moment ends when the live stream pauses for this long, when it grows past
+# MOMENT_MAX_WORDS (a rollover), after MOMENT_MAX_SECONDS of steady speech (an
+# interval), or when finalize/wrap-up consumes the remaining buffer. A session
+# end preserves speech for one reconnect window before flushing the tail; a
+# conversation change carries speech into the next same-episode moment.
 MOMENT_PAUSE_SECONDS = 45
 MOMENT_MAX_WORDS = 600
 # Continuous talk never pauses for 45 s and rarely reaches 600 words quickly; without a
@@ -131,18 +173,24 @@ MOMENT_MIN_WORDS = 25
 MOMENT_TEXT_MAX_CHARS = 6_000
 # One live update per episode at most this often; a burst folds into the next.
 MOMENT_MIN_INTERVAL_SECONDS = 60
+# Recovered audio refreshes draft notes at most this often: the composer rewrites them at close.
+RECOVERY_NOTES_MIN_INTERVAL_SECONDS = MOMENT_MAX_SECONDS
 
 # --------------------------------------------------------------------------- close detection
 
 # Below this gap a new conversation simply continues the episode (it is the
 # live split itself, ``models/conversation_continuity.DEFAULT_GAP_SECONDS``).
-CONTINUE_GAP_SECONDS = 120
+from config.recorded_time_tolerances import (
+    CONTINUE_GAP_SECONDS as CONTINUE_GAP_SECONDS,
+    CLOSE_GAP_SECONDS as CLOSE_GAP_SECONDS,
+    MAX_EPISODE_SECONDS as MAX_EPISODE_SECONDS,
+    FALLBACK_CLOSE_GAP_SECONDS as FALLBACK_CLOSE_GAP_SECONDS,
+)
+
 # At or above this gap the episode is over without asking: the next speech opens
 # a new episode (reason ``gap``), and a read that finds an episode this idle
 # closes it (reason ``idle``). In between, Jev decides whether the user moved on.
-CLOSE_GAP_SECONDS = 30 * 60
-# Hard cap on one episode's wall-clock span (smart merge's conservative cap).
-MAX_EPISODE_SECONDS = 3 * 60 * 60
+# Hard cap on one episode's recorded span (David, 2026-10-29).
 MAX_MOMENTS = 48
 
 # Jev answers P(same occasion); below this the user moved on. Deliberately low:
@@ -152,7 +200,6 @@ MOVED_ON_THRESHOLD = 0.2
 JEV_LANE = 'episode_boundary'
 JEV_TIMEOUT_SECONDS = 2.5
 # Without a Jev answer, a source change or a gap this long still closes.
-FALLBACK_CLOSE_GAP_SECONDS = 15 * 60
 
 # --------------------------------------------------------------------------- compact state budget
 
@@ -181,3 +228,31 @@ INCREMENTAL_MAX_OUTPUT_TOKENS = 700
 # openai.gpt-5-nano.2026-07-17. The gateway attempt ledger stays authoritative.
 EST_INPUT_USD_PER_MTOK = 0.05
 EST_OUTPUT_USD_PER_MTOK = 0.40
+
+# Closed-episode composer: one strong call over member summaries plus the full transcript.
+COMPOSER_FEATURE = 'episode_composer'
+COMPOSER_VERSION = 'episode_composer_v2'
+COMPOSER_TIMEOUT_SECONDS = 90.0
+# About 60k tokens. With the 4h episode cap almost every episode fits whole; beyond it the
+# densest 10-minute windows are kept in time order.
+COMPOSER_MAX_TRANSCRIPT_CHARS = 240_000
+COMPOSER_MAX_CHAPTERS = 8
+# Read-side safety net: at most this many closed, uncomposed episodes queued per list read.
+COMPOSER_MAX_SCHEDULED_PER_READ = 2
+# A read-side caller re-queues the same episode at most this often per process.
+COMPOSER_READ_THROTTLE_SECONDS = 600
+# The per-conversation lookup runs once per Home row: cap the distinct episodes it queues per user
+# per throttle window, per process.
+COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
+# One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
+COMPOSER_LEASE_SECONDS = 240
+# After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
+# the evidence changes (a member finalize still composes).
+COMPOSER_RETRY_MINUTES = 10
+COMPOSER_MAX_FAILURES = 4
+# Wire budget per composed paragraph (to_wire serves bullets up to this length).
+COMPOSER_MAX_PARAGRAPH_CHARS = 1200
+# A composed moment's points (each with a few supporting details) are the episode page's sections.
+COMPOSER_MAX_POINTS = 6
+COMPOSER_MAX_DETAILS = 4
+COMPOSER_MAX_POINT_CHARS = 400

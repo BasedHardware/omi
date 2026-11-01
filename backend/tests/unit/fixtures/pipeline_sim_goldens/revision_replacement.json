@@ -343,7 +343,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {

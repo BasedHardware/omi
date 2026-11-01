@@ -15,6 +15,11 @@ from utils.agent_capabilities.reads import read_record, unavailable_is_transient
 _SEED_SCAN_CAP = 64
 
 
+def byte_ceiling(limits):
+    """Serialized seed budget by size bucket; shared with the pre-scan serve path."""
+    return 8000 if limits.bucket in {'empty', 'light'} else 24000
+
+
 def load(uid, caps):
     size = sum(dream_history.history_count(uid, collection) for collection in dream_history.COLLECTIONS)
     limits = SessionLimits.for_size(size, token_ceiling=caps.tokens, edit_ceiling=caps.edits)
@@ -31,7 +36,7 @@ def load(uid, caps):
         'recent_feedback': [],
         'previous_notes': '',
     }
-    ceiling = 8000 if limits.bucket in {'empty', 'light'} else 24000
+    ceiling = byte_ceiling(limits)
 
     def append(key, value):
         seed[key].append(value)

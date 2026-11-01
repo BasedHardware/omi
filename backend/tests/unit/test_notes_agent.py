@@ -7,6 +7,7 @@ import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from langchain_openai import ChatOpenAI
@@ -1124,3 +1125,133 @@ def test_an_evidence_rejection_at_the_lookup_cap_forces_the_next_turn(monkeypatc
     assert model.choices[2] == {'type': 'function', 'function': {'name': prompt.SUBMIT}}
     assert result.forced and result.force_reason == 'submission_rejected_at_cap'
     assert result.tool_calls == 2 and len(reviews) == 2
+
+
+def test_packet_tiles_use_only_in_call_rows_and_remove_observed_app_and_tab_titles(monkeypatch):
+    names = ['Robert Ream', 'Decision Mill', 'Best Trending Abliterated Mod', 'David Zhang']
+    rows = [
+        dict(
+            timestamp=(START + timedelta(minutes=i)).isoformat(),
+            appName='Google Chrome',
+            windowTitle='Meet - abc-defg-hij',
+            ocrText='\n'.join(names),
+        )
+        for i in range(4)
+    ]
+    rows += [
+        dict(timestamp=START.isoformat(), appName='Decision Mill', windowTitle='Decision Mill'),
+        dict(timestamp=START.isoformat(), appName='Google Chrome', windowTitle='Best Trending Abliterated Mod'),
+    ]
+    # A tile from before this call must never compete with the remote speaker.
+    rows += [
+        dict(
+            timestamp=(START - timedelta(minutes=i + 1)).isoformat(),
+            appName='Google Chrome',
+            windowTitle='Meet - abc-defg-hij',
+            ocrText='Priya Natarajan',
+        )
+        for i in range(4)
+    ]
+    monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
+    monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: rows)
+    packet, _ = tools.build_packet(
+        uid=OWNER,
+        conversation_id='synthetic-call',
+        started_at=START,
+        finished_at=START + timedelta(minutes=30),
+        timezone_name='UTC',
+        response_language='en',
+        length='LENGTH',
+        transcript_words=0,
+        account_owner_name='David',
+        task_intelligence_capture=False,
+        open_tasks=[],
+        roster=None,
+        owner_names=['David'],
+        background=None,
+        frames=(),
+    )
+    assert packet['call_tile_names'] == ['Robert Ream']
+    assert packet['call_tile_agent_names'] == []
+
+
+def test_agent_serving_receives_the_screen_binding_that_its_identity_repair_accepts(monkeypatch):
+    prefix = SimpleNamespace(
+        conversation_id='synthetic-call',
+        account_owner_name='David Zhang',
+        owner_names=(),
+        known_spellings='',
+        transcript_segment_ids=frozenset(),
+        speaker_names=(('c0', 'David Zhang'), ('c1', None)),
+        owner_call_speaker='c0',
+        call_tile_names=('Robert Ream',),
+        call_tile_agent_names=(),
+    )
+    monkeypatch.setattr(serving, 'has_byok_keys', lambda: False)
+    monkeypatch.setattr(serving, 'owner_profile', lambda uid: '')
+    monkeypatch.setattr(serving, 'build_packet', lambda **kwargs: ({}, set()))
+    monkeypatch.setattr(serving, 'select_notes_packet', lambda packet, **kwargs: packet)
+    monkeypatch.setattr(serving, 'langchain_complete', lambda *args, **kwargs: None)
+
+    @asynccontextmanager
+    async def isolated(model):
+        yield model
+
+    monkeypatch.setattr(serving, 'isolated_notes_model', isolated)
+    seen = {}
+
+    async def capture_run(**kwargs):
+        seen.update(kwargs)
+        return agent.NotesAgentResult(submission=submission(), stop='submitted')
+
+    monkeypatch.setattr(serving, 'run_notes_agent', capture_run)
+    result = serving.agentic_notes_payload(
+        uid=OWNER,
+        prefix=prefix,
+        model=GatewayContextChatOpenAI.model_construct(model='omi:auto:conv-structure'),
+        capture_evidence='',
+        words=2000,
+        frames=(),
+        kwargs={'started_at': START, 'desktop_meeting_capture': True},
+    )
+    assert result is not None
+    assert seen['identity'].supported('Robert Ream', 'c1')
+    seed = seen['seed']['content']
+    if isinstance(seed, list):
+        seed = seed[0]['text']
+    packet = json.loads(seed.split('\n', 1)[1].split('\n\nCAPTURE', 1)[0])
+    (binding,) = packet['screen_speaker_bindings']
+    assert binding['speaker'] == 'c1' and binding['name'] == 'Robert Ream'
+    assert binding['evidence_kind'] == 'screen' and binding['evidence']
+
+
+def test_capped_agent_screen_read_cannot_authorize_an_outdated_tile(monkeypatch):
+    rows = [
+        dict(
+            timestamp=(START + timedelta(seconds=i)).isoformat(),
+            appName='zoom.us',
+            windowTitle='Zoom Meeting',
+            ocrText='Robert Ream\nmute\nstop video',
+        )
+        for i in range(400)
+    ]
+    monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
+    monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: rows)
+    packet, _ = tools.build_packet(
+        uid=OWNER,
+        conversation_id='capped-screen',
+        started_at=START,
+        finished_at=START + timedelta(minutes=30),
+        timezone_name='UTC',
+        response_language='en',
+        length='LENGTH',
+        transcript_words=0,
+        account_owner_name='David',
+        task_intelligence_capture=False,
+        open_tasks=[],
+        roster=None,
+        owner_names=['David'],
+        background=None,
+        frames=(),
+    )
+    assert packet['call_tile_names'] == []

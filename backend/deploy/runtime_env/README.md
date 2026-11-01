@@ -3,6 +3,13 @@
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
 
+Batch admission percentage is runtime-owned in `rollout_cohorts/_ramp`; these
+deploy inputs and listen charts deliberately omit `BATCH_PIPELINE_PERCENT`.
+Keep it out of deployment defaults and use the
+[runtime ramp migration](../../docs/runbooks/batch-runtime-ramp.md) for the
+one-time zero seed, controller/guard cutover and rollback. Existing env values
+are fallback only, never evidence of effective admission after that seed.
+
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
 admission and the existing prebuild preflight reject missing, blank, implicit,
@@ -62,9 +69,9 @@ mixed identity cannot be established. No actual resource is configured here.
 ## Firestore read train (#23797, 2026-10-27)
 
 `FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
-surfaces explicitly declare all 19 current keys. The three train changes are
-`memory_list_index_window:0`, `batch_privacy_memoize:0`, and
-`people_scan_dedupe:100`; `finjob_candidate_queries` stays at 5.
+surfaces explicitly declare all 20 current keys. The guard flag-offs leave
+`memory_list_index_window:0`, `batch_privacy_memoize:0`,
+`people_scan_dedupe:0`, and `finjob_candidate_queries:0`.
 
 Monthly-total enablement and epoch deliberately remain split:
 

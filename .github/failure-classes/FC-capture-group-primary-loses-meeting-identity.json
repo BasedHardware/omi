@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-capture-group-primary-loses-meeting-identity",
+  "violated_contract": "Clients render one row per capture group: the primary's conversation is the event the user reads, so its notes must carry the meeting identity any confirmed same-event member holds. When the longest-window primary (a pendant, ambient-treated) is picked after the desktop meeting members were already summarized, the rendered row keeps ambient notes with no named participants or screen evidence while that identity sits on hidden members (owner meeting 2026-10-28: pendant primary 04:43-05:48Z over two Meet desktop halves that carried calendar_meeting_context and approved frames).",
+  "canonical_prevention": "Keep the longest-window primary, but route member-held identity to the primary's notes at two seams: summarization-time context resolution merges capture-group members' stored calendar_meeting_context through a member_contexts layer of resolve_meeting_context, and approved desktop-member screen frames join the notes evidence under their owning member's path; when grouping delivers that context after the primary was summarized, a once-per-group-revision refresh regenerates the primary's notes behind the shared processing claim (ProcessingTrigger.CAPTURE_GROUP, kill switch CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED), never touching membership, transcripts, discard state or audio.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_capture_group_meeting_context.py",
+    "backend/tests/unit/test_capture_group_notes_refresh.py",
+    "backend/tests/unit/test_meeting_context_resolution.py",
+    "backend/tests/unit/test_screen_frame_notes_evidence.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/capture_group_meeting_context.py",
+    "backend/utils/conversations/capture_group_notes_refresh.py",
+    "backend/utils/conversations/duplicate_capture.py",
+    "backend/utils/conversations/meeting_context.py",
+    "backend/utils/conversations/screen_frame_evidence.py"
+  ],
+  "status": "open"
+}

@@ -14,6 +14,11 @@ import database.conversations as conversations_db
 import database.redis_db as redis_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.list_version_check import ListVersionCheck
+from utils.task_intelligence.task_source_validation import TaskSourceValidationError
+from utils.retrieval.tool_services.action_items import (
+    create_action_item as create_task,
+    create_action_items_batch as create_tasks,
+)
 from database.vector_db import (
     upsert_action_item_vector,
     upsert_action_item_vectors_batch,
@@ -373,9 +378,9 @@ def create_action_item(
     action_item_data = request.storage_payload()
 
     try:
-        action_item_id = action_items_db.create_action_item(
-            uid, action_item_data, idempotency_key=_client_idempotency_key(idempotency_key)
-        )
+        action_item_id = create_task(uid, action_item_data, idempotency_key=_client_idempotency_key(idempotency_key))
+    except TaskSourceValidationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
@@ -1036,7 +1041,9 @@ def create_action_items_batch(
 
     # Create batch
     try:
-        created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+        created_ids = create_tasks(uid, action_items_data)
+    except TaskSourceValidationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:

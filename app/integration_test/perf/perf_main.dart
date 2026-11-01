@@ -46,15 +46,18 @@ void main() {
           });
           await world.boot(tester, extraProviders: providersFor(name, world));
           await pumpFrames(tester, 10);
+          // Real event-loop turns so boot-time loopback I/O lands outside the
+          // measured window; loopback responses arrive in ~1-5 ms, so short
+          // waits suffice and this pair ran 27x500 ms per CI gate run.
           await tester.runAsync(() async {
-            await Future<void>.delayed(const Duration(milliseconds: 250));
+            await Future<void>.delayed(const Duration(milliseconds: 80));
           });
           final collector = PerfInstrumentation()..start(binding);
           try {
             await runScenario(tester, world, name);
             collector.endWindow();
             await tester.runAsync(() async {
-              await Future<void>.delayed(const Duration(milliseconds: 250));
+              await Future<void>.delayed(const Duration(milliseconds: 80));
             });
           } finally {
             collector.stop(binding);
