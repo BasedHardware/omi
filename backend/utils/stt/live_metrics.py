@@ -389,12 +389,17 @@ class SonioxIdleMetrics(NamedTuple):
     cohort_closes_by_trigger: Counter
     drains: Counter
     close_refusals: Counter
+    silence_gaps: Histogram
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
 _soniox_idle_lock = threading.Lock()
 
 SONIOX_IDLE_COHORT_ARMS = ('control', 'treatment')
+# Silence-gap buckets bracket the speech-gate close thresholds (hangover + 1 s
+# up to today's 45 s), so the connected time any threshold would save reads
+# straight off the histogram before a cohort runs.
+SONIOX_SILENCE_GAP_BUCKETS = (2, 4, 5, 6, 8, 10, 12, 15, 20, 30, 45, 60, 120, 300, 900)
 
 
 def soniox_idle_metrics() -> SonioxIdleMetrics:
@@ -464,6 +469,11 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     'omi_soniox_idle_close_refusals_total',
                     'Idle episodes whose planned close was refused (rearm floor or hourly cap), once per episode',
                     ['reason'],
+                ),
+                Histogram(
+                    'omi_soniox_idle_silence_gap_seconds',
+                    'Active-VAD silence on a Soniox leg, first silent frame to the next speech, open or idle-closed',
+                    buckets=SONIOX_SILENCE_GAP_BUCKETS,
                 ),
             )
             _soniox_idle_metrics.drains.labels(outcome='drained')

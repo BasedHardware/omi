@@ -208,6 +208,10 @@ class IdleSonioxSocket(STTSocket):
         if mode != 'active' or self._finishing or self.is_connection_dead:
             return
         if output.is_speech:
+            if self._silent_since is not None:
+                # The same clock the close threshold reads, so the histogram
+                # prices any threshold whether this gap stayed open or closed.
+                self._metrics.silence_gaps.observe(now - self._silent_since)
             self._silent_since = None
         elif self._silent_since is None:
             self._silent_since = now

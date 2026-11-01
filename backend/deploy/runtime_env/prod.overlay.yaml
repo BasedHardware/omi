@@ -103,15 +103,15 @@ overlay:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '16'
-        # Soniox idle-close treatment values; the cohort percent lives in the listen chart only.
+        # Soniox idle-close treatment values (the speech gate); the cohort percent lives in the listen chart only.
         SONIOX_IDLE_COHORT_CLOSE_SECONDS:
-          value: '20'
+          value: '10'
           category: rollout
         SONIOX_IDLE_COHORT_REARM_SECONDS:
-          value: '15'
+          value: '2'
           category: rollout
         SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR:
-          value: '20'
+          value: '120'
           category: rollout
         # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
         PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
