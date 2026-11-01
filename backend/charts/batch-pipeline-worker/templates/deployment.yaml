@@ -28,7 +28,7 @@ spec:
   # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
   # before new ones start, so the deadline covers drain plus startup.
   progressDeadlineSeconds: 2400
-  {{- $replicas := .Values.replicaCount }}
+  {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
   {{- if hasKey .instance "fixedReplicas" }}
   {{- $replicas = .instance.fixedReplicas }}
   {{- /* Operators scale the fallback with kubectl; upgrades keep the live count. */}}
@@ -61,7 +61,22 @@ spec:
         app.kubernetes.io/instance: {{ .instance.name }}
     spec:
       serviceAccountName: {{ required "dedicated Workload Identity serviceAccountName required" .Values.serviceAccountName }}
+      {{- if .instance.borrowedPools }}
+      # Borrowed nodes must come back to their owner fast: a preempted borrower
+      # stops within this bound and its leases retry elsewhere.
+      terminationGracePeriodSeconds: {{ .instance.terminationGracePeriodSeconds }}
+      priorityClassName: {{ printf "%s-borrower" .Release.Name }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: cloud.google.com/gke-nodepool
+                    operator: In
+                    values: {{ .instance.borrowedPools | toJson }}
+      {{- else }}
       terminationGracePeriodSeconds: 1500
+      {{- end }}
       {{- with .instance.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
