@@ -549,12 +549,18 @@ def is_vendor_policy_hold(
     """
     if job.get('state') != VENDOR_HELD:
         return False
+    raw_attempts = job.get(ATTEMPTS_FIELD, [])
+    if not isinstance(raw_attempts, list):
+        return False
     try:
         hold = VendorHold.from_dict(job[HOLD_FIELD])
-        attempts = [VendorAttempt.from_dict(raw) for raw in job.get(ATTEMPTS_FIELD) or []]
+        attempts = [VendorAttempt.from_dict(raw) for raw in raw_attempts]
     except (KeyError, TypeError, ValueError):
         return False
-    if any(attempt.outcome is VendorAttemptOutcome.RUNNING for attempt in attempts):
+    # A live intent or a unit that already has a result is not waiting on a vendor.
+    if any(
+        attempt.outcome is VendorAttemptOutcome.RUNNING or attempt.outcome in SUCCESS_OUTCOMES for attempt in attempts
+    ):
         return False
     return hold.redrive_at - now <= redrive_seconds and now <= hold.redrive_at + stale_grace_seconds
 

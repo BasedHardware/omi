@@ -343,6 +343,17 @@ def test_held_unit_with_a_running_attempt_is_measured_as_a_wedge():
     assert not _policy_hold(malformed, now=400.0)
 
 
+@pytest.mark.parametrize('outcome', [Outcome.OK, Outcome.SILENCE])
+def test_held_unit_that_already_has_a_result_is_measured(outcome):
+    job = {**_held(), c.ATTEMPTS_FIELD: [_attempt(1, 'modulate', outcome).to_dict()]}
+    assert not _policy_hold(job, now=400.0)
+
+
+@pytest.mark.parametrize('attempts', [{}, None, 'x', ()])
+def test_non_list_attempts_are_malformed(attempts):
+    assert not _policy_hold({**_held(), c.ATTEMPTS_FIELD: attempts}, now=400.0)
+
+
 @pytest.mark.parametrize(
     'job',
     [
