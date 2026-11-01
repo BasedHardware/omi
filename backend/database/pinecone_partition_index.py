@@ -11,7 +11,7 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Mapping, Sequence, cast
 
 from database import pinecone_partition_state as state
 from database.legal_holds import external_write_fence
@@ -55,7 +55,7 @@ def _provider_mutation(index: Any, method: str, args: tuple, namespace: str, kwa
 
 class OwnerIndex:
     def __init__(self, index: Any, uid: str, *, index_name: str | None = None, firestore_client: Any = None):
-        if not isinstance(uid, str) or not uid.strip():
+        if not isinstance(cast(object, uid), str) or not uid.strip():
             raise ValueError('Pinecone owner is required')
         self.index = index
         self.uid = uid
@@ -148,7 +148,7 @@ class OwnerIndex:
             # A failed state write leaves the original durable pending marker.
             logger.error('Could not persist uncertain Pinecone operation key=%s', key.document_id)
 
-    def upsert(self, *, vectors: list[dict], namespace: str, **kwargs: Any) -> Any:
+    def upsert(self, *, vectors: Sequence[Mapping[str, Any]], namespace: str, **kwargs: Any) -> Any:
         self._check_records(vectors)
         return self._mutate('upsert', (), namespace, {'vectors': vectors, **kwargs}, [v['id'] for v in vectors])
 
@@ -174,6 +174,8 @@ class OwnerIndex:
         key = self._key(namespace)
         route = state.get_route(key, firestore_client=self.firestore_client)
         if route.mode == 'copying':
+            if route.migration_token is None:
+                raise state.PartitionStateError('Copying route lacks its migration token')
             if not route.pending_count:
                 state.cancel_migration(key, route.migration_token, firestore_client=self.firestore_client)
         # Erase known copies even if earlier provider work is unresolved. Final

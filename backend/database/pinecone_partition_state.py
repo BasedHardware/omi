@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from functools import wraps
 import json
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 from uuid import uuid4
 
 from database import _client as firestore_clients
@@ -46,7 +46,7 @@ class PartitionKey:
         if self.family not in FAMILIES:
             raise ValueError('unknown Pinecone family')
         for value in (self.index_name, self.uid):
-            if not isinstance(value, str) or not value.strip() or len(value) > 512:
+            if not isinstance(cast(object, value), str) or not value.strip() or len(value) > 512:
                 raise ValueError('index name and owner must be nonempty bounded strings')
 
     @property
@@ -235,7 +235,7 @@ def begin_mutation(
     ids = list(dict.fromkeys(affected_ids))
     if (
         len(ids) > MAX_AFFECTED_IDS
-        or any(not isinstance(item, str) or not item or len(item) > 4096 for item in ids)
+        or any(not isinstance(cast(object, item), str) or not item or len(item) > 4096 for item in ids)
         or len(json.dumps(ids).encode()) > 256_000
         or (not ids and not full_owner)
     ):
@@ -426,7 +426,7 @@ def reconcile_mutation(
         not _valid_token(operation_id)
         or type(expected_revision) is not int
         or expected_revision < 0
-        or not isinstance(receipt, Mapping)
+        or not isinstance(cast(object, receipt), Mapping)
         or len(json.dumps(dict(receipt)).encode()) > 32_000
     ):
         raise ValueError('bounded recovery receipt and exact revision are required')
@@ -486,7 +486,8 @@ def _validate_recovery_receipt(key: PartitionKey, operation_id: str, operation: 
         namespace = outcome.get('namespace')
         request_id = outcome.get('request_id')
         if (
-            namespace not in namespaces
+            not isinstance(namespace, str)
+            or namespace not in namespaces
             or namespace in observed
             or not isinstance(request_id, str)
             or not 0 < len(request_id.strip()) <= 256
@@ -643,7 +644,7 @@ def cutover(
     and correct metadata/values/absence before supplying this receipt. Counts
     alone are not parity. This module cannot itself prove provider visibility.
     """
-    if not isinstance(receipt, Mapping):
+    if not isinstance(cast(object, receipt), Mapping):
         raise ValueError('a verification receipt is required')
     if type(expected_revision) is not int or expected_revision < 0 or not _valid_token(token):
         raise ValueError('invalid cutover generation')
@@ -675,7 +676,10 @@ def _cutover(
     target_write_lsn = receipt.get('target_write_lsn')
     target_indexed_lsn = receipt.get('target_indexed_lsn')
     if (
-        any(type(lsn) is not int or lsn < 0 for lsn in (source_indexed_lsn, target_write_lsn, target_indexed_lsn))
+        type(source_indexed_lsn) is not int
+        or type(target_write_lsn) is not int
+        or type(target_indexed_lsn) is not int
+        or min(source_indexed_lsn, target_write_lsn, target_indexed_lsn) < 0
         or source_indexed_lsn < row['latest_write_lsn']
         or target_indexed_lsn < target_write_lsn
     ):
