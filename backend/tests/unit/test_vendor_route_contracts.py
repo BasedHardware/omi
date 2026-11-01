@@ -84,6 +84,8 @@ def test_vendor_capability_is_code_owned_policy_admission():
     for service in c.VENDOR_SERVICES:
         assert c.route_capable(service, 'en') == provider_is_enabled(service, STTServingSurface.PRERECORDED)
     assert not c.route_capable('deepgram', 'en')
+    # Pinned on purpose: Soniox failover needs slice D's reviewed prerecorded admission, not a table edit.
+    assert not c.route_capable('soniox', 'en')
     assert c.route_capable('gpu', None)  # unknown is multi, which Parakeet serves
     assert not c.route_capable('gpu', 'ja')
 
@@ -128,6 +130,7 @@ MALFORMED = {
     'missing top-level key': _mutate(('gpu_floor_percent',), _DELETE),
     'schema version 2': _mutate(('schema_version',), 2),
     'schema version bool': _mutate(('schema_version',), True),
+    'schema version float': _mutate(('schema_version',), 1.0),
     'bad table version': _mutate(('table_version',), 'Has Spaces'),
     'open selection': _mutate(('selection',), 'fastest'),
     'floor above 100': _mutate(('gpu_floor_percent',), 101),
@@ -252,6 +255,13 @@ def test_check_new_attempt_bounds(prior, service, allowed):
         assert c.check_new_attempt(attempts, service) == allowed
 
 
+def test_silence_is_unbilled_only_when_no_audio_was_sent():
+    assert not _attempt(1, 'modulate', Outcome.SILENCE, audio=0.0).billable
+    assert _attempt(1, 'soniox', Outcome.SILENCE, audio=30.0).billable
+    assert not _attempt(1, 'modulate', Outcome.CREDIT_REFUSAL).billable
+    assert _attempt(1, 'modulate', Outcome.EMPTY_VALIDATED).billable
+
+
 def test_non_contiguous_attempts_are_refused():
     with pytest.raises(c.AttemptRefused):
         c.check_new_attempt([_attempt(2, 'modulate', Outcome.ERROR_5XX)], 'soniox')
@@ -309,10 +319,28 @@ def test_hold_round_trips():
     assert c.VendorHold.from_dict(hold.to_dict()) == hold
 
 
+def _policy_hold(job, now):
+    return c.is_vendor_policy_hold(job, now, redrive_seconds=300.0, stale_grace_seconds=60.0)
+
+
 def test_live_hold_is_a_policy_hold_and_a_stale_one_is_measured():
-    assert c.is_vendor_policy_hold(_held(), now=400.0, stale_grace_seconds=60.0)
-    assert c.is_vendor_policy_hold(_held(), now=560.0, stale_grace_seconds=60.0)
-    assert not c.is_vendor_policy_hold(_held(), now=561.0, stale_grace_seconds=60.0)
+    assert _policy_hold(_held(), now=400.0)
+    assert _policy_hold(_held(), now=560.0)
+    assert not _policy_hold(_held(), now=561.0)
+
+
+def test_far_future_redrive_is_not_trusted():
+    assert _policy_hold(_held(redrive_at=500.0), now=200.0)  # exactly one interval out
+    assert not _policy_hold(_held(redrive_at=10_000.0), now=200.0)
+
+
+def test_held_unit_with_a_running_attempt_is_measured_as_a_wedge():
+    settled = {**_held(), c.ATTEMPTS_FIELD: [_attempt(1, 'modulate', Outcome.ERROR_5XX).to_dict()]}
+    assert _policy_hold(settled, now=400.0)
+    running = {**_held(), c.ATTEMPTS_FIELD: [_attempt(1, 'modulate', Outcome.RUNNING).to_dict()]}
+    assert not _policy_hold(running, now=400.0)
+    malformed = {**_held(), c.ATTEMPTS_FIELD: [{'attempt': 1}]}
+    assert not _policy_hold(malformed, now=400.0)
 
 
 @pytest.mark.parametrize(
@@ -328,7 +356,7 @@ def test_live_hold_is_a_policy_hold_and_a_stale_one_is_measured():
     ],
 )
 def test_malformed_or_other_states_are_not_policy_holds(job):
-    assert not c.is_vendor_policy_hold(job, now=200.0, stale_grace_seconds=60.0)
+    assert not _policy_hold(job, now=200.0)
 
 
 # --- frozen names ----------------------------------------------------------------------------------
