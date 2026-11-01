@@ -22,16 +22,21 @@ Billing assumptions (Cloud Firestore Standard pricing, encoded, not measured):
   that changes nothing is still billed; Cloud Monitoring calls it UPDATE_NOOP.
 * A Commit that raises is not counted: Firestore applies none of its writes,
   and an aborted transaction attempt applies none. A transaction retried three
-  times and then committed counts once.
+  times and then committed counts once. DeadlineExceeded / Unavailable may
+  arrive after the server applied the writes; those go to
+  ``omi_firestore_ambiguous_commit_writes_total`` instead, so the main counters
+  stay exact for known outcomes and the ambiguity is still visible.
 * BatchWrite is not atomic. Only writes whose status code is OK are counted.
 * Deletes are counted with ``op="delete"``; billing prices them under their own
   SKU. Index-entry maintenance is not billed separately and is not counted.
 * Writes to a named database are labelled ``database="named"``; billing prices
   them under their own "(named databases)" SKU.
 
-``op`` is ``create`` (precondition exists=false), ``update`` (an update mask:
-``update()`` or ``set(merge=True)``, or an exists=true precondition), ``set``
-(whole-document replace), ``delete``, or ``transform`` (a transform-only write).
+``op`` is ``create`` (precondition exists=false), ``update`` (precondition
+exists=true: ``update()``), ``merge`` (an update mask and no precondition, an
+upsert: ``set(merge=True)``), ``set`` (whole-document replace), ``delete``, or
+``transform`` (a transform-only write). ``update`` and ``merge`` are split
+because commit-boundary fences treat an upsert as able to create a document.
 
 Cardinality: collection patterns reuse the read probe's allowlist. The caller
 label is ``module:function`` from the first product frame, with the read
@@ -60,6 +65,7 @@ from database.firestore_read_origin import current_read_origin
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    'FIRESTORE_AMBIGUOUS_COMMIT_WRITES',
     'FIRESTORE_BILLED_WRITES',
     'FIRESTORE_BILLED_WRITES_BY_CALLER',
     'FIRESTORE_BILLED_WRITES_BY_ORIGIN',
@@ -90,6 +96,16 @@ FIRESTORE_BILLED_WRITES_BY_ORIGIN = Counter(
     'omi_firestore_billed_writes_by_origin_total',
     'Billed-equivalent Firestore writes by bounded route template or job/task name, collection, and op.',
     ['origin', 'collection', 'op'],
+)
+
+
+# DeadlineExceeded / Unavailable can arrive after the server applied the Commit.
+# Those writes are kept out of the counters above (which stay exact for known
+# outcomes) and counted here, so the size of the ambiguity is visible.
+FIRESTORE_AMBIGUOUS_COMMIT_WRITES = Counter(
+    'omi_firestore_ambiguous_commit_writes_total',
+    'Writes in Firestore Commit/BatchWrite calls that failed with DeadlineExceeded or Unavailable '
+    'and may have been applied and billed.',
 )
 
 
@@ -179,7 +195,7 @@ def write_op(write: Any) -> tuple[str, str, tuple[str, ...]]:
             if pb.HasField('current_document') and pb.current_document.HasField('exists'):
                 op = 'update' if pb.current_document.exists else 'create'
             else:
-                op = 'update' if pb.HasField('update_mask') else 'set'
+                op = 'merge' if pb.HasField('update_mask') else 'set'
             name = pb.update.name
         elif kind == 'delete':
             op, name = 'delete', pb.delete
@@ -244,6 +260,17 @@ def _applied(writes: list, response: Any) -> list:
     return [write for write, status in zip(writes, statuses) if not getattr(status, 'code', 0)]
 
 
+def _record_ambiguous(writes: list, error: BaseException) -> None:
+    """A Commit whose outcome is unknown may still have applied. Count it apart. Never raises."""
+    try:
+        from google.api_core import exceptions
+
+        if writes and isinstance(error, (exceptions.DeadlineExceeded, exceptions.ServiceUnavailable)):
+            FIRESTORE_AMBIGUOUS_COMMIT_WRITES.inc(len(writes))
+    except Exception:
+        pass
+
+
 def _wrap(original: Any, *, partial: bool) -> Any:
     if inspect.iscoroutinefunction(original):
 
@@ -251,7 +278,11 @@ def _wrap(original: Any, *, partial: bool) -> Any:
         async def async_call(client: Any, request: Any = None, *args: Any, **kwargs: Any) -> Any:
             caller = _call_site()
             writes = _request_writes(request, kwargs)
-            response = await original(client, request, *args, **kwargs)
+            try:
+                response = await original(client, request, *args, **kwargs)
+            except BaseException as error:
+                _record_ambiguous(writes, error)
+                raise
             _record(_applied(writes, response) if partial else writes, caller)
             return response
 
@@ -261,7 +292,11 @@ def _wrap(original: Any, *, partial: bool) -> Any:
     def call(client: Any, request: Any = None, *args: Any, **kwargs: Any) -> Any:
         caller = _call_site()
         writes = _request_writes(request, kwargs)
-        response = original(client, request, *args, **kwargs)
+        try:
+            response = original(client, request, *args, **kwargs)
+        except BaseException as error:
+            _record_ambiguous(writes, error)
+            raise
         _record(_applied(writes, response) if partial else writes, caller)
         return response
 

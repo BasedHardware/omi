@@ -21,10 +21,13 @@ patches.
 | `omi_firestore_billed_writes_by_caller_total` | `collection`, `op`, `caller` |
 | `omi_firestore_billed_writes_by_origin_total` | `origin`, `collection`, `op` |
 | `omi_firestore_write_caller_label_overflow_total` | none |
+| `omi_firestore_ambiguous_commit_writes_total` | none |
 
-`op` is `create`, `update` (update mask or exists precondition), `set`
-(whole-document replace), `delete` or `transform`. A failed Commit counts
-nothing; BatchWrite counts only writes with an OK status. Collection patterns
+`op` is `create`, `update` (exists precondition: `update()`), `merge` (mask,
+no precondition: `set(merge=True)`), `set` (whole-document replace), `delete`
+or `transform`. A failed Commit counts nothing; BatchWrite counts only writes
+with an OK status. A Commit that fails with DeadlineExceeded or Unavailable
+may still have applied; its writes go to the ambiguous counter. Collection patterns
 reuse the read probe's allowlist; callers have their own cap of 2048. The sync
 Cloud Run services (`backend/deploy/cloud_run_gmp_sync.yaml`) keep the total
 and by-caller counters but not by-origin, to stay under the scrape samples

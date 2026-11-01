@@ -46,7 +46,7 @@ class _Transport:
 
     def commit(self, client, request=None, **kwargs):
         if self.fail:
-            raise RuntimeError('commit refused')
+            raise self.fail if isinstance(self.fail, BaseException) else RuntimeError('commit refused')
         self.requests.append(request)
         writes = request['writes'] if isinstance(request, dict) else request.writes
         return CommitResponse(write_results=[WriteResult() for _ in writes])
@@ -81,7 +81,7 @@ def test_write_op_classifies_every_write_shape():
     create = Write(update=Document(name=name), current_document=Precondition(exists=False))
     assert probe.write_op(create) == ('create', 'default', ('users', 'u1', 'conversations', 'c1'))
     assert probe.write_op(Write(update=Document(name=name)))[0] == 'set'
-    assert probe.write_op(Write(update=Document(name=name), update_mask=DocumentMask(field_paths=['a'])))[0] == 'update'
+    assert probe.write_op(Write(update=Document(name=name), update_mask=DocumentMask(field_paths=['a'])))[0] == 'merge'
     assert probe.write_op(Write(update=Document(name=name), current_document=Precondition(exists=True)))[0] == 'update'
     assert probe.write_op(Write(delete=name))[0] == 'delete'
     assert probe.write_op({'delete': name})[0] == 'delete'
@@ -92,7 +92,7 @@ def test_write_op_classifies_every_write_shape():
 
 def test_document_writes_counted_by_op_and_caller(client, transport):
     caller = f'{__name__}:test_document_writes_counted_by_op_and_caller'
-    before = {op: _billed('users/conversations', op) for op in ('set', 'update', 'create', 'delete')}
+    before = {op: _billed('users/conversations', op) for op in ('set', 'merge', 'update', 'create', 'delete')}
     by_caller = _by_caller('users/conversations', 'set', caller)
 
     ref = client.collection('users').document('u1').collection('conversations').document('c1')
@@ -103,7 +103,8 @@ def test_document_writes_counted_by_op_and_caller(client, transport):
     ref.delete()
 
     assert _billed('users/conversations', 'set') == before['set'] + 1
-    assert _billed('users/conversations', 'update') == before['update'] + 2
+    assert _billed('users/conversations', 'merge') == before['merge'] + 1
+    assert _billed('users/conversations', 'update') == before['update'] + 1
     assert _billed('users/conversations', 'create') == before['create'] + 1
     assert _billed('users/conversations', 'delete') == before['delete'] + 1
     assert _by_caller('users/conversations', 'set', caller) == by_caller + 1
@@ -127,6 +128,26 @@ def test_batch_counts_each_write_and_failed_commit_counts_nothing(client, transp
     assert _billed('users/memories', 'set') == before + 3
 
 
+def test_ambiguous_commit_is_counted_apart(client, transport):
+    from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
+
+    billed = _billed('users/memories', 'set')
+    ambiguous = probe.FIRESTORE_AMBIGUOUS_COMMIT_WRITES._value.get()
+    ref = client.collection('users').document('u1').collection('memories').document('m1')
+
+    transport.fail = DeadlineExceeded('response lost')
+    with pytest.raises(DeadlineExceeded):
+        ref.set({'x': 1}, retry=None)
+    assert probe.FIRESTORE_AMBIGUOUS_COMMIT_WRITES._value.get() == ambiguous + 1
+
+    # A definite rejection applied nothing and is not ambiguous.
+    transport.fail = InvalidArgument('rejected')
+    with pytest.raises(InvalidArgument):
+        ref.set({'x': 1}, retry=None)
+    assert probe.FIRESTORE_AMBIGUOUS_COMMIT_WRITES._value.get() == ambiguous + 1
+    assert _billed('users/memories', 'set') == billed
+
+
 def test_batch_write_counts_only_applied_writes(transport):
     before = _billed('users/memories', 'delete')
     transport.batch_status = [0, 10, 0]
@@ -141,12 +162,12 @@ def test_probe_sees_writes_a_later_commit_patch_appends(transport):
     from database import memory_change_head
 
     head_wrapped = memory_change_head._wrap_commit(FirestoreClient.commit)
-    source_before = _billed('users/memories', 'update')
-    head_before = _billed('other', 'update') + _billed('users/memory_state', 'update')
+    source_before = _billed('users/memories', 'merge')
+    head_before = _billed('other', 'merge') + _billed('users/memory_state', 'merge')
     write = Write(update=Document(name=f'{ROOT}/users/u1/memories/m1'), update_mask=DocumentMask(field_paths=['a']))
     head_wrapped(object(), request={'database': 'projects/p/databases/(default)', 'writes': [write]})
-    assert _billed('users/memories', 'update') == source_before + 1
-    assert _billed('other', 'update') + _billed('users/memory_state', 'update') == head_before + 1
+    assert _billed('users/memories', 'merge') == source_before + 1
+    assert _billed('other', 'merge') + _billed('users/memory_state', 'merge') == head_before + 1
     assert len(transport.requests[-1].writes) == 2
 
 
