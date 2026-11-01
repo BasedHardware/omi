@@ -55,6 +55,19 @@ def test_large_json_identity_without_accept_encoding():
     assert r.json() == BIG_BODY
 
 
+def test_gzip_qvalue_zero_is_not_compressed():
+    r = client.get('/v1/big', headers={'Accept-Encoding': 'gzip;q=0, identity;q=1'})
+    assert r.status_code == 200
+    assert 'content-encoding' not in r.headers
+    assert r.json() == BIG_BODY
+
+
+def test_deflate_only_is_not_compressed():
+    r = client.get('/v1/big', headers={'Accept-Encoding': 'deflate'})
+    assert r.status_code == 200
+    assert 'content-encoding' not in r.headers
+
+
 def test_small_response_skipped_below_minimum_size():
     r = client.get('/v1/small', headers={'Accept-Encoding': 'gzip'})
     assert r.status_code == 200

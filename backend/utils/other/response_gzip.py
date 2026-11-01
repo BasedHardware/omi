@@ -19,6 +19,11 @@ path before the request reaches the compressor:
   ``/v1/users/export`` document) are exempted here and listed manually.
 
 New streaming routes must be added to the exemption set in the same change.
+
+Starlette's compressor matches a bare substring ``"gzip" in accept-encoding``
+and ignores quality values, so a client sending ``gzip;q=0`` would still be
+compressed. ``_gzip_acceptable`` parses the quality values first (RFC 9110
+§12.5.3) and routes such requests to the plain app.
 """
 
 from starlette.middleware.gzip import GZipMiddleware
@@ -43,15 +48,56 @@ def _is_exempt(path: str) -> bool:
     return path in _EXEMPT_PATHS or path.startswith(_EXEMPT_PREFIXES)
 
 
+def _header(scope: Scope, name: str) -> str:
+    raw = name.encode('latin-1')
+    for key, value in scope.get('headers') or []:
+        if key == raw:
+            return value.decode('latin-1')
+    return ''
+
+
+def _gzip_acceptable(accept_encoding: str) -> bool:
+    """True when gzip is named with a non-zero quality value (RFC 9110 §12.5.3).
+
+    A wildcard-only header (``*``) passes this check but stays identity in
+    practice: the underlying Starlette compressor requires the literal
+    ``gzip`` token. Serving identity is always RFC-acceptable.
+    """
+    codings: dict[str, float] = {}
+    for part in accept_encoding.split(','):
+        piece = part.split(';')
+        token = piece[0].strip().lower()
+        if not token:
+            continue
+        q = 1.0
+        for param in piece[1:]:
+            param = param.strip()
+            if param[:2].lower() == 'q=':
+                try:
+                    q = float(param[2:])
+                except ValueError:
+                    q = 0.0
+        codings[token] = q
+    if 'gzip' in codings:
+        return codings['gzip'] > 0
+    return codings.get('*', 0.0) > 0
+
+
 class GatedGZipMiddleware:
-    """GZipMiddleware, except for the streaming endpoints named above."""
+    """GZipMiddleware, except for the streaming endpoints named above and for
+    clients whose Accept-Encoding rules gzip out with a zero quality value."""
 
     def __init__(self, app: ASGIApp, minimum_size: int = 1024, compresslevel: int = 6) -> None:
         self.app = app
         self._gzip = GZipMiddleware(app, minimum_size=minimum_size, compresslevel=compresslevel)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope['type'] == 'http' and _is_exempt(scope.get('path', '')):
-            await self.app(scope, receive, send)
-            return
+        if scope['type'] == 'http':
+            if _is_exempt(scope.get('path', '')):
+                await self.app(scope, receive, send)
+                return
+            accept_encoding = _header(scope, 'accept-encoding')
+            if accept_encoding and not _gzip_acceptable(accept_encoding):
+                await self.app(scope, receive, send)
+                return
         await self._gzip(scope, receive, send)
