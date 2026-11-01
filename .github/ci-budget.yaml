@@ -3183,7 +3183,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -6094,7 +6094,7 @@
     "ui-author-approval.yml": {
       "name": "UI author approval",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
       "triggers": {
         "issue_comment": {
           "types": [
