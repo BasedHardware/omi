@@ -1,8 +1,10 @@
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
 #include <zephyr/shell/shell.h>
 
+#include "diagnostics.h"
 #include "lib/core/button.h"
 #include "lib/core/codec.h"
 #include "lib/core/config.h"
@@ -19,7 +21,6 @@
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "lib/core/storage.h"
 #endif
-#include <hal/nrf_reset.h>
 
 #include "imu.h"
 #include "lib/core/sd_card.h"
@@ -40,25 +41,17 @@ bool blink_toggle = false;
 
 static void print_reset_reason(void)
 {
-    uint32_t reas;
-
-    reas = nrf_reset_resetreas_get(NRF_RESET);
-    nrf_reset_resetreas_clear(NRF_RESET, reas);
-
-    if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
-        printk("Reset by WATCHDOG\n");
-    } else if (reas & NRF_RESET_RESETREAS_NFC_MASK) {
-        printk("Wake up by NFC field detect\n");
-    } else if (reas & NRF_RESET_RESETREAS_RESETPIN_MASK) {
-        printk("Reset by pin-reset\n");
-    } else if (reas & NRF_RESET_RESETREAS_SREQ_MASK) {
-        printk("Reset by soft-reset\n");
-    } else if (reas & NRF_RESET_RESETREAS_LOCKUP_MASK) {
-        printk("Reset by CPU LOCKUP\n");
-    } else if (reas) {
-        printk("Reset by a different source (0x%08X)\n", reas);
+    uint32_t cause = UINT32_MAX;
+    int err = hwinfo_get_reset_cause(&cause);
+    if (err == 0) {
+        omi_diagnostics_set_reset_cause(cause);
+        printk("Zephyr reset cause: 0x%08X\n", cause);
     } else {
-        printk("Power-on-reset\n");
+        printk("Reset cause unavailable: %d\n", err);
+    }
+    err = hwinfo_clear_reset_cause();
+    if (err) {
+        printk("Could not clear reset cause: %d\n", err);
     }
 }
 
@@ -88,45 +81,6 @@ static void mic_handler(int16_t *buffer)
     if (err) {
         LOG_ERR("Failed to process PCM data: %d", err);
     }
-}
-
-static void boot_led_sequence(void)
-{
-    // Quick blue pulse = "I'm alive, booting..."
-    set_led_blue(true);
-    k_msleep(300);
-    led_off();
-}
-
-static void boot_ready_sequence(void)
-{
-    const int steps = 50;
-    const int delay_ms = 10;
-
-    // Smooth green fade in/out 2 times = "Ready!"
-    for (int cycle = 0; cycle < 2; cycle++) {
-        // Fade in: ease-in-out
-        for (int i = 0; i <= steps; i++) {
-            float t = (float) i / steps;
-            // Ease-in-out quadratic
-            float eased = t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            uint8_t level = (uint8_t) (eased * 50.0f);
-            set_led_pwm(LED_GREEN, level);
-            k_msleep(delay_ms);
-        }
-
-        // Fade out: ease-in-out
-        for (int i = 0; i <= steps; i++) {
-            float t = (float) i / steps;
-            float eased = t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            uint8_t level = (uint8_t) ((1.0f - eased) * 70.0f);
-            set_led_pwm(LED_GREEN, level);
-            k_msleep(delay_ms);
-        }
-    }
-    k_msleep(10);
-    led_off();
-    k_msleep(10);
 }
 
 void set_led_state()

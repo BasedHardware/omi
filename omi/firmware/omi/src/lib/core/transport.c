@@ -23,8 +23,10 @@
 #include "accel.h"
 #include "button.h"
 #include "config.h"
+#include "diagnostics.h"
 #include "features.h"
 #include "haptic.h"
+#include "lib/battery/battery.h"
 #include "mic.h"
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
@@ -55,12 +57,14 @@ struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
                                         const void *buf,
                                         uint16_t len,
                                         uint16_t offset,
                                         uint8_t flags);
+#endif
 
 static struct bt_conn_cb _callback_references;
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
@@ -138,8 +142,10 @@ static struct bt_uuid_128 audio_characteristic_data_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_format_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
 static struct bt_uuid_128 audio_characteristic_speaker_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10003, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+#endif
 
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
@@ -292,6 +298,78 @@ static struct bt_gatt_attr time_sync_service_attr[] = {
 
 static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_service_attr);
 
+// Omi Diagnostics: read-only v1 snapshot, no pairing beyond adjacent services.
+static struct bt_uuid_128 diagnostics_service_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10040, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 diagnostics_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10041, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+/* One snapshot per connection. A new offset-zero read starts a new snapshot.
+ * The read callback does not identify the ATT bearer, so do not silently
+ * enable EATT with a connection-wide cache. */
+BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_EATT), "Diagnostics long reads require a single ATT bearer");
+
+static struct {
+    bool valid;
+    uint8_t value[OMI_DIAGNOSTICS_SIZE];
+} diagnostics_read_cache[CONFIG_BT_MAX_CONN];
+static struct k_spinlock diagnostics_read_lock;
+
+static void diagnostics_reset_read_cache(struct bt_conn *conn)
+{
+    if (conn == NULL) {
+        return;
+    }
+    uint8_t index = bt_conn_index(conn);
+    if (index >= ARRAY_SIZE(diagnostics_read_cache)) {
+        return;
+    }
+    k_spinlock_key_t key = k_spin_lock(&diagnostics_read_lock);
+    diagnostics_read_cache[index].valid = false;
+    k_spin_unlock(&diagnostics_read_lock, key);
+}
+
+static ssize_t diagnostics_read_handler(struct bt_conn *conn,
+                                        const struct bt_gatt_attr *attr,
+                                        void *buf,
+                                        uint16_t len,
+                                        uint16_t offset)
+{
+    if (offset > OMI_DIAGNOSTICS_SIZE) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+    if (conn == NULL) {
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+    uint8_t index = bt_conn_index(conn);
+    if (index >= ARRAY_SIZE(diagnostics_read_cache)) {
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+
+    uint8_t value[OMI_DIAGNOSTICS_SIZE];
+    k_spinlock_key_t key = k_spin_lock(&diagnostics_read_lock);
+    if (offset == 0 || !diagnostics_read_cache[index].valid) {
+        struct omi_diagnostics_snapshot snapshot;
+        omi_diagnostics_snapshot(&snapshot);
+        omi_diagnostics_pack(diagnostics_read_cache[index].value, &snapshot);
+        diagnostics_read_cache[index].valid = true;
+    }
+    memcpy(value, diagnostics_read_cache[index].value, sizeof(value));
+    k_spin_unlock(&diagnostics_read_lock, key);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
+}
+
+static struct bt_gatt_attr diagnostics_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&diagnostics_service_uuid),
+    BT_GATT_CHARACTERISTIC(&diagnostics_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           diagnostics_read_handler,
+                           NULL,
+                           NULL),
+};
+static struct bt_gatt_service diagnostics_service = BT_GATT_SERVICE(diagnostics_service_attr);
+
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -356,6 +434,7 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
 }
 
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
                                         const void *buf,
@@ -364,12 +443,11 @@ static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         uint8_t flags)
 {
     uint16_t amount = 400;
-    int16_t *int16_buf = (int16_t *) buf;
-    uint8_t *data = (uint8_t *) buf;
     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
     amount = speak(len, buf);
     return len;
 }
+#endif
 
 static ssize_t settings_dim_ratio_write_handler(struct bt_conn *conn,
                                                 const struct bt_gatt_attr *attr,
@@ -555,8 +633,13 @@ void broadcast_battery_level(struct k_work *work_item)
                                          ? BATTERY_REFRESH_INTERVAL_CONNECTED
                                          : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
 
-    if (battery_get_millivolt(&battery_millivolt) == 0 &&
-        battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
+    int battery_err = battery_get_millivolt(&battery_millivolt);
+    if (battery_err == 0) {
+        omi_diagnostics_set_battery_mv(battery_millivolt);
+    } else {
+        omi_diagnostics_set_battery_mv(UINT16_MAX);
+    }
+    if (battery_err == 0 && battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
@@ -592,6 +675,8 @@ void broadcast_battery_level(struct k_work *work_item)
 
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
+    diagnostics_reset_read_cache(conn);
+
     struct bt_conn_info info = {0};
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     storage_is_on = true;
@@ -668,6 +753,8 @@ K_SEM_DEFINE(audio_tx_sem,
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
+    diagnostics_reset_read_cache(conn);
+
     k_work_cancel_delayable(&mtu_recheck_work);
     mtu_recheck_attempts = 0;
 
@@ -987,6 +1074,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
 #endif
 
     if (size > CODEC_OUTPUT_MAX_BYTES) {
+        omi_diagnostics_inc_ble_tx_drop();
         return false;
     }
 
@@ -1001,6 +1089,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
                      tx_buffer_2,
                      (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE) {
+        omi_diagnostics_inc_ble_tx_drop();
         return false;
     } else {
         k_sem_give(&tx_queue_sem);
@@ -1119,6 +1208,7 @@ static bool push_to_gatt(struct bt_conn *conn)
         }
 
         if (retry_count >= max_retries) {
+            omi_diagnostics_inc_ble_tx_drop();
             LOG_ERR("Failed to send packet after %d retries", max_retries);
             // bt_gatt_notify_cb never succeeded so its callback will never fire;
             // release the throttle slot manually.
@@ -1132,7 +1222,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
-static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -1174,11 +1263,8 @@ bool write_to_storage(void)
 }
 #endif
 
-static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
-static int recent_file_size_updated = 0;
-static uint8_t heartbeat_count = 0;
 
 void test_pusher(void)
 {
@@ -1391,6 +1477,7 @@ int transport_start()
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
     bt_gatt_service_register(&time_sync_service);
+    bt_gatt_service_register(&diagnostics_service);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // Register storage service for offline audio
