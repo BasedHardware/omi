@@ -1026,7 +1026,7 @@ def upload_audio_chunks_batch(
                     # The same key may already be committed in the other chunk
                     # bucket (a replay across a regional ramp step): readers
                     # resolve one object per path, so check every bucket.
-                    identical = False
+                    committed = False
                     for candidate in _chunk_bucket_names(bucket_name):
                         probe = blob if candidate == bucket_name else _get_storage_client().bucket(candidate).blob(path)
                         try:
@@ -1055,8 +1055,9 @@ def upload_audio_chunks_batch(
                             raise ValueError(f'v2 audio blob collision at {path}: existing blob unreadable') from error
                         if not identical:
                             raise AudioChunkContentConflict(f'v2 audio blob content conflict at {path}')
-                        break
-                    if identical:
+                        # Keep scanning: a divergent copy in another bucket must still conflict.
+                        committed = True
+                    if committed:
                         # Identical retry: never overwrite or double-write.
                         # Exit the playback gate before the optional archive.
                         break

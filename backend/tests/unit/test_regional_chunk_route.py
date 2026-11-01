@@ -171,6 +171,29 @@ def test_different_bytes_under_the_same_key_in_the_other_bucket_conflict(buckets
     assert buckets[PRIVATE].writes == []
 
 
+def test_identical_copy_in_one_bucket_never_hides_a_divergent_copy_in_the_other(buckets):
+    # Rolled back to 0: the private copy matches this retry, but the derived copy (which
+    # the listing prefers) differs. Accepting the upload would let readers serve other bytes.
+    data = b'\x01\x02' * 8
+    path = 'chunks/owner/conv/100.000.batch.bin'
+    buckets[PRIVATE].objects[path] = data
+    buckets[DERIVED].objects[path] = b'\x09\x09' * 8
+    with pytest.raises(storage.AudioChunkContentConflict):
+        _upload(_chunks(data))
+    assert buckets[PRIVATE].writes == [] and buckets[DERIVED].writes == []
+
+
+def test_rollout_allowlist_member_is_not_admitted_at_percent_zero(monkeypatch):
+    # Percent 0 is the rollback: allowlist membership for the other archive phases must not
+    # keep routing chunks regional.
+    monkeypatch.setattr(audio_archive, 'in_rollout_cohort', lambda uid, name: True)
+    monkeypatch.setenv('AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED', 'true')
+    monkeypatch.setenv('AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT', '0')
+    monkeypatch.setenv('BUCKET_AUDIO_DERIVED', DERIVED)
+    assert audio_archive.regional_bucket(UID, PRIVATE) == DERIVED  # step 1 allowlist canary unchanged
+    assert audio_archive.regional_chunk_bucket(UID, PRIVATE) == PRIVATE
+
+
 def test_delete_audio_chunks_sweeps_both_buckets(buckets):
     for name in (PRIVATE, DERIVED):
         buckets[name].objects['chunks/owner/conv/100.000-101.000.batch.bin'] = b'x'
