@@ -542,3 +542,7 @@ tests/unit/test_batch_pipeline_projection_release.py::test_redriven_reassignment
 # scheduler and ordered merge, with no sleeps or network. Measured up to 2.44s CPU per drill on a
 # loaded local shard (2026-11-01); the outage windows, not the code paths, set the size.
 tests/unit/test_batch_vendor_outage_drills.py
+# Pull write budget: 512 queues is the scenario (128 visits reach only 4 short heads), so the walk can't shrink
+# without losing the bound it proves. Measured 1.01-1.07s CPU on CI (2026-11-01).
+tests/unit/test_batch_pipeline_pull_multi_lease.py::test_long_heads_never_push_one_transaction_past_the_write_budget[None]
+tests/unit/test_batch_pipeline_pull_multi_lease.py::test_long_heads_never_push_one_transaction_past_the_write_budget[1000000]
