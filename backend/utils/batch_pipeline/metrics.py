@@ -5,10 +5,11 @@ import logging
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
-from utils.batch_pipeline.contracts import Priority
+from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
+PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
 
 
 class QueueMetrics:
@@ -80,6 +81,12 @@ class QueueMetrics:
             ['event'],
             registry=registry,
         )
+        self.completed_audio = Counter(
+            'omi_batch_pipeline_completed_audio_seconds_total',
+            'Capture audio seconds at unique fenced completion, including silence',
+            ['outcome'],
+            registry=registry,
+        )
 
         self.head_not_found = Counter(
             'omi_batch_pipeline_head_not_found_total',
@@ -100,10 +107,18 @@ class QueueMetrics:
             buckets=(1, 10, 30, 60, 120, 300, 600, 900, 3600, 86400),
             registry=registry,
         )
+        self.head_parked = Counter(
+            'omi_batch_pipeline_head_parked_total',
+            'Owner queue visits parked behind an unleasable head, by bounded reason',
+            ['priority', 'reason', 'worker_release', 'namespace'],
+            registry=registry,
+        )
 
     def record_head(self, event: str, priority: Priority, *, age: float | None = None) -> None:
         if event == 'ready_age' and age is not None:
             self.predecessor_ready_age.labels(LABELS[priority], *self.scope).observe(age)
+        elif event.startswith('parked_') and event[len('parked_') :] in PARK_REASONS:
+            self.head_parked.labels(LABELS[priority], event[len('parked_') :], *self.scope).inc()
         elif event == 'head_not_found':
             self.head_not_found.labels(LABELS[priority], *self.scope).inc()
         elif event == 'budget_exhausted':
@@ -170,6 +185,7 @@ class QueueMetrics:
             'leased',
             'completed',
             'retry',
+            'requeued',
             'lease_expired',
             'dead',
             'committed',
@@ -182,3 +198,8 @@ class QueueMetrics:
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:
             self.owner_wait.observe(max(0.0, wait_seconds))
+
+    def record_completed_audio(self, outcome: str, seconds: float) -> None:
+        if outcome not in WORK_OUTCOMES:
+            raise ValueError('invalid completion outcome')
+        self.completed_audio.labels(outcome).inc(seconds)

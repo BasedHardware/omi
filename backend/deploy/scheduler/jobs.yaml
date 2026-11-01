@@ -185,8 +185,9 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/actions/sync-backfill-lifecycle/action.yml
+      # Plan C prod activation: active once the backend train carries ENRICHMENT_TASKS_* on backend-integration
+      # (the sweep verifies that audience); it also sweeps the provider-stt outbox (provider_stt_live).
       - name: enrichment-maintenance
-        lifecycle: planned
         region: us-central1
         schedule: "*/2 * * * *"
         time_zone: UTC
@@ -208,17 +209,17 @@ environments:
       - name: dream-agent-sweep-hourly
         region: us-central1
         # :00 and :30 (David 2026-10-30: fill idle reservation); each drain is 28 min, so ticks never
-        # overlap. Kill switch for the :30 tick: DREAM_HALF_HOUR_SWEEP_ENABLED=false on backend-sync.
+        # overlap. Kill switch for the :30 tick: DREAM_HALF_HOUR_SWEEP_ENABLED=false on backend-sync-backfill.
         schedule: "0,30 * * * *"
         time_zone: UTC
         state: ENABLED
         target:
           type: http
-          uri: https://backend-sync-hhibjajaja-uc.a.run.app/v2/dream-agent/sweep
+          uri: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/dream-agent/sweep
           method: POST
           oidc:
             service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
-            audience: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+            audience: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
         retry:
           max_backoff: 3600s
           max_doublings: 5

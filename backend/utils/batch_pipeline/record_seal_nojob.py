@@ -158,6 +158,10 @@ def plan_backfill(
         except (ValueError, TypeError, AttributeError, KeyError) as error:
             entry['disposition'] = 'proof_refused'
             entry.update(proof_diagnostics(error))
+        except TimeoutError as error:
+            entry['disposition'] = 'read_error'
+            if str(error) == 'speaker audio listing budget exhausted':
+                entry['proof_reason'] = 'budget_limit'
         except Exception:
             entry['disposition'] = 'read_error'
         entry.update(diagnostics)

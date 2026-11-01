@@ -248,6 +248,7 @@ def test_coverage_epoch_rotation_never_reuses_pre_gap_payloads(store, monkeypatc
 
 def test_mcp_cards_reuse_p1_version_and_respect_its_kill_switch(store, monkeypatch):
     monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'p1-coverage')
+    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
     store.token = 'a' * 32
     store.query = store.client.collection('users/u/conversations').limit(100)
     store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(100)}

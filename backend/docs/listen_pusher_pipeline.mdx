@@ -6,6 +6,126 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Cohort-scoped legacy sync retirement
+
+Upload admission, record-owner selection, final-pass claims, cap-hold handoff
+and sequencer dispatch resolve legacy mode for the audio owner. The runtime
+`legacy-sync` percent uses the deployed batch-percent hash and is clamped to batch admission; owners outside
+the percent keep legacy `on`. In draining/dark, admission language exclusion
+cannot refuse the owner's batch path, even during env-update skew. Named
+unsupported languages use C8 provider STT; unknown multilingual inputs retain
+the GPU language barrier and fenced recovery path. Ledger custody and duplicate
+fences are unchanged. Live vendor retirement still requires its separate
+language-quality and durable capture eligibility checks.
+
+Prepare draining/dark env sets with `scripts.rollout.legacy_env`, which forces
+`BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` on each Cloud Run entry.
+Serve the cohort-aware implementation everywhere before setting a partial
+mode/percent; rollback remains a single `legacy_sync=on` write. Operational
+preconditions and the C9 holds are in [the legacy-dark runbook](runbooks/legacy-dark.md).
+
+## Partial finishes for retained recordings
+
+Batch GPU compute admission returns partial receipts within a four-second server
+budget, below the existing worker client's five-second timeout. Completed
+decisions survive a slow dependency; unfinished and unreached leases receive
+`retry_after: 30` without an allow or a policy hold. Evaluation remains serial
+because fresh funding/fair-use checks do not reserve in-flight usage. Each
+blocking substage uses the DB executor and exports identifier-free stage timing;
+per-lease errors log only a bounded exception class. Cancellation cannot stop an
+already running database RPC or commit: it may finish a conservative backfill
+reservation or lease-fenced seal, but cannot grant unfinished work in the receipt
+or schedule another substage. No worker image or attempt-refund change is needed.
+
+Recording admission runs on its own serving loop, with a stop-aware 20-second
+wait after each pass, independently of reconciliation and recovery dispatch.
+Each pass selects the existing ten due `record_pending` rows and runs at most
+four admissions concurrently, so a slow partial inventory does not serialize
+the other selected recordings. All workers finish before the next pass starts;
+the existing intake transactions and partial-generation CAS remain authoritative.
+`event=batch_drain_pass` reports selected `row_count`, observed `partial_count`
+and elapsed `seconds`, without recording identifiers. Shared executor contention
+and the slowest admission can still extend a pass; the interval is not an SLA.
+
+[ADR 0007](adr/0007-partial-retained-recordings.md) separates availability from
+complete-tail proof. Repair may mark a completed, batch-owned recording partial
+after 1,800 seconds when complete proof refuses its tail or size budget. Fresh
+producer inventory is still required. A live or unidentified producer waits
+for its own drain or the existing death proof, without an age expiry. The
+transaction rechecks the current row, pending job, deletion/tombstone/PCS and
+privacy generation. Custom-STT/BYOK rows remain excluded. No audio is deleted.
+
+`record_audio_partial` carries a closed reason, upload revision, finish time,
+generation and applied generation. `record_audio_closed` stays false. The
+separate partial barrier must match the upload revision and have no pending
+producer tokens. A late producer's clean close cannot upgrade this receipt to
+complete. `RECORD_AUDIO_PARTIAL_ENABLED` is on unless explicitly `false`; off
+stops new partial finishes and continuation admission, preserving accepted jobs.
+
+The existing record-pending drainer owns an encrypted, generation-pinned plan.
+Partial units are at most 300 seconds and 256 references; bindings stay at most
+128 siblings. Pages advance only after their content ledger is durably complete.
+The continuation and sample coverage use the same transactional privacy fence
+and recorded payer policy as ordinary batch work. The source snapshot and
+coverage are bounded at 8,192 entries, and the encrypted plan at 8 MiB. Exceeding
+a bound retries with audio retained; it never truncates a listing or manifest.
+
+An active page uses the existing one-minute reconciliation cadence. After a
+generation completes, inventory is listed at most hourly (including retry after
+a listing failure). After 24 hours without a changed inventory, the coordinator
+enters `partial_retired`; no audio or plan is deleted, no completion/TTL receipt
+is created, and the conversation remains partial with `record_audio_closed=false`.
+Retirement increments the closed `outcome=retired` rerun counter once.
+A later producer upload that increments `record_upload_revision` lets the
+existing repair pass refresh the partial barrier and reopen the coordinator,
+retaining prior coverage. A storage-only late arrival without that revision
+signal is **not automatically picked up after retirement**; operator recovery
+must rearm it under a separately authorized repair. Ordinary repair does not
+restart an unchanged retired coordinator. Each five-minute repair attempt reads
+the coordinator and, for a partial coordinator, its row before producer inventory.
+A matching partial barrier skips inventory entirely: zero producer-inventory
+reads per unchanged row per day (288 attempts), including retired rows. A changed
+upload revision still requires fresh producer inventory before transactional rearm.
+A changed
+storage inventory creates a new generation only after the prior generation
+settles. It subtracts actual recognized source-frame coverage, including gaps
+inside earlier padded units, and sends only newly stored audio to the normal
+worker. No duplicate speech usage is charged for the previous frames. Replayed
+pages share immutable content identities and projection receipts. Every partial
+pass, including the first, preserves existing text, IDs, translations and user
+edits. Incoming sentences are added only in empty spans: any overlap or
+ambiguous stored alignment keeps the original text and omits that new sentence.
+Incoming partial alignment must be valid both before and after shifting to the
+conversation clock, even for an empty initial transcript; negative offsets are omitted.
+Recorded BYOK policies are refused before plan/audio reads and again at atomic
+intake, including late generations; initial refusals and continuation outcomes
+have closed counters. Discard is rechecked before reads and at atomic intake.
+An applied-generation
+receipt replaces the prior partial result while remaining explicitly partial.
+
+The conversation API exposes optional reason/generation metadata; existing
+clients render the available transcript with their current UI. The paired seal
+census selects only the partial receipt's version, reason and generation fields,
+counts partial/applied/pending and unprovable separately, and excludes explicit
+partial finishes from unfinished. Old rows retain their classification. The
+lead installs the collector patch with the release; no hard-3 threshold changes.
+
+Closed metrics: `omi_record_audio_partial_reruns_total{phase,outcome}` on the CPU
+serving process; the repair log metric `omi_record_audio_partial_finishes` by
+reason. Repair row/pass logs include partial counts separately from complete
+seals. These are observed transitions; the durable marker is the census.
+
+Release order: keep `recordSealRules.partialEnabled=false` until every old
+pusher has drained. Roll pusher first; require rollout completion **and** an
+authoritative PodList with zero old-image pusher instances, including terminating
+instances (ready-only counts are insufficient). Roll all CPU admission/projection
+hosts and API, then the batch worker and repair image. Only then enable the
+existing partial switch for new repair Jobs. Existing Jobs retain startup env;
+wait for or stop every old/previously enabled repair Job before that step. The
+lead owns these operations and records counts and release identities without
+printing workload names or environment. A later complete proof still does not
+upgrade a partial row; held pages still use the existing operator redrive path.
+
 ## Operator recovery of empty terminal captures
 
 The windowed `scripts/capture_empty_recovery.py` tool can re-transcribe retained
@@ -189,6 +309,59 @@ desktop without a device WAL is not crash-safe. This policy does not claim a
 new client replay guarantee. Deploy compatible listen/pusher and finalizer
 artifacts together through the lead's release train; local hermetic receipts
 prove code behavior, not production or installed-client acceptance.
+
+## Pusher receive work and committed projection capacity
+
+Pusher counts frames actually received as `pusher_socket_frames_total` with
+closed `kind` (`heartbeat`, `audio`, `control`, `invalid`) and `age_bucket`
+(`<5m`, `5m_to_30m`, `30m_plus`) labels. Receive work is measured separately
+for `record_begin`, `custody_commit`, `projection_enqueue`, `inline_finish` and
+`drain`. Each wait crossing 300 seconds increments
+`pusher_receive_work_stalls_total` once and remains visible in
+`pusher_receive_work_stalled_handlers` until completion or cancellation.
+`pusher_receive_work_duration_seconds` records completed waits; a closed drain's
+observation follows its existing worker through process-owner handoff, including
+a worker already blocked in projection when the socket closes.
+
+`pusher_socket_closed_total` runs in a synchronous finalizer with closed reason,
+age and `frames_seen` (`none`, `control_only`, `audio`) labels. It counts handler
+exit after socket cleanup, not proof that TCP remained open during processing.
+These five families add at most 225 series per emitting process, including optional
+Prometheus creation timestamps. Two label-free process-close measurements add
+three more series (228 maximum total):
+`omi_pusher_record_close_abandoned_outstanding` counts abandoned metadata calls
+until their futures settle, and `omi_pusher_record_close_outstanding_refusals_total`
+counts admissions refused at the outstanding-call cap. Deadline and completion
+race under the same admission lock, so a completed call cannot become abandoned
+or decrement the gauge twice. Twelve never-settling calls can stop further close
+progress in that process; the producer fences remain. This accepted bounded
+behavior is observable rather than a trigger for age-based release.
+The authenticated `/metrics` router and committed
+`pusher-metrics` scrape configuration expose the complete families. Release
+verification must still prove the serving targets are up and all seven families are
+queryable; local exposition does not prove live scrape coverage.
+
+After immutable custody commits, the receipt enters one owned pending projection
+slot before ACK or queue waiting. The slot holds a reference, never PCM. The
+receiver discards its committed window buffer before it waits; only the queue
+capacity wait uses the existing 300-second receive-liveness budget. Expiry stops
+frame admission and enters ordinary close/drain with the slot intact. Queue
+release transfers the pending reference at the tail in capture order. Both
+queued and slotted references participate in per-conversation drain proof before
+producer tokens can clear. The same worker can transfer to the capped closed
+drain owner; refused admission retains the durable producer fence and receipts.
+Peer departure during custody ACK also follows this owned delivery path without
+classifying the closed send as an application failure. Unknown commit outcomes
+retain the fence and are never rerun by shutdown tail cleanup.
+
+`PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED=false` restores unbounded capacity
+waiting for new sockets. Ownership, measurements and ACK classification stay
+active. Unset or malformed values keep the deadline on. No wire capability or
+listen change is required, so old listeners and new listeners work during a
+mixed rollout; old pushers retain their existing behavior until replaced. Quiet
+sessions without a queue wait are unaffected. There is no audio-idle reclaim or
+age-based token release. Production share of handlers retained by this mechanism
+remains unknown until these measurements are deployed.
 
 ## Sync storage round trips
 
@@ -2647,6 +2820,62 @@ or raw exception text. `blocked_byok` is an explicit recovery state: durable
 offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
 
+#### Replay without changing listen admission
+
+`LISTEN_FINALIZATION_REPLAY_ENABLED` defaults on. The existing startup/periodic
+FSR singleton pass can replay ordinary platform-key jobs from an inline listener
+when its Cloud Tasks worker binding is syntactically valid: `SYNC_TASKS_PROJECT`,
+`SYNC_TASKS_LOCATION`, `LISTEN_FINALIZATION_TASKS_QUEUE`,
+`LISTEN_FINALIZATION_TASKS_HANDLER_URL`, and
+`LISTEN_FINALIZATION_TASKS_INVOKER_SA` (or the existing sync invoker fallback).
+The enqueueing runtime needs Cloud Tasks enqueue permission and permission to
+act as that invoker. `LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS` mirrors the queue's
+attempt policy. Production listen uses the existing conversation-finalization
+queue and backend-sync handler; its live dispatch mode stays inline.
+Every host, including a Cloud Tasks admission host, requires valid bindings
+before replay selection. Syntax validation does not prove queue existence,
+IAM permission, handler health, or the queue's retry policy; verify these when
+rolling out a binding.
+This replay-only check leaves live admission's existing mode-and-presence
+configuration contract unchanged, including its handling of malformed bindings.
+
+This binding does not enable stale `in_progress` admission, which still requires
+`LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks`. Inline replay skips quiet-check
+and conversation-merge candidates without claiming, dispatching, or advancing
+their backoff; their separate admission and recovery ownership remain unchanged.
+Cloud Tasks hosts retain their existing replay paths. The due-page bound is 100,
+or 500 when the oldest due entry is at least 300 seconds overdue; an explicit
+`LISTEN_FINALIZATION_RECONCILE_LIMIT` clamps to 1–2000. Future quiet windows and
+missing due markers are excluded by selection, and live leases/fresh dispatches
+are fenced again transactionally before any new generation.
+
+With the existing durable-attempt cap enabled, exhausted replay uses the shared
+dead-letter transition and retains transcript, audio references, photos and
+committed effects. Completed fanout finishes through the worker's completion
+fence rather than executing those effects again.
+
+Transport failure has a separate bound: five replay generations without an
+intervening accepted lease. This counts minted generations even if enqueue
+fails or the task fails before claim. The next due pass removes only the due
+marker and stamps `replay_dispatch_suspended_at`, counting `dispatch_exhausted`
+once. It keeps the job nonterminal, its current generation and any accepted
+task valid, and leaves the conversation and worker-claim budget untouched.
+This is an operational hold requiring investigation if no task can reach a
+worker, not a dead-letter or successful completion. A later accepted task
+restores its lease marker; its advanced lease epoch resets the transport budget
+on subsequent replay. No new query or selection widening is involved.
+
+Set `LISTEN_FINALIZATION_REPLAY_ENABLED=false` in the listener's Helm values and
+matching runtime-env source, regenerate the manifest/flag catalog, and roll
+listen to stop replay only. Live admission, BYOK reclaim and backlog publishing
+remain unchanged; already dispatched tasks still belong to their workers.
+This change requires the listener rollout with its worker binding, while the
+existing backend-sync worker remains the target. It changes no Firestore read
+lever. After rollout, verify the serving release and singleton admissions;
+`requeued`/`retired` replay outcomes prove ordinary-job work; `dispatch_exhausted`
+reports a transport hold requiring follow-up, while `skipped`
+alone may count only excluded quiet/merge candidates.
+
 The default-off `finjob_candidate_queries` read lever narrows reconciliation
 candidate reads without changing loop leases or transactional admission. BYOK
 abandonment excludes terminal jobs in Firestore; BYOK reclaim queries only BYOK
@@ -3290,7 +3519,15 @@ and retained-audio limits are documented in the
 ### Sync backfill handler-budget deferral (Cloud Run request timeout)
 
 `backend-sync-backfill` runs each Cloud Tasks sync job inside one
-`POST /v2/sync-jobs/run` request. Starlette's `TimeoutMiddleware` answers its
+`POST /v2/sync-jobs/run` request. Stale sequencer epochs and no-op deliveries
+skip cohort warming; real work warms membership after the run-lock and
+terminal/convergence checks. A valid sequencer claim carries its prior Redis
+job snapshot back to the route, preserving retry history without a second
+executor dispatch. Locked retries and the final terminal re-read stay fenced.
+Cohort-only timeouts retain the queue-owned 409 after a confirmed lock release;
+an uncertain release keeps the existing preserved-lock continuation. Paid-work
+timeouts still preserve their lock and staged audio.
+Starlette's `TimeoutMiddleware` answers its
 route cap (`HTTP_SYNC_JOBS_RUN_TIMEOUT`, default 1500 s) with a 504 without
 cancelling the downstream pipeline, so an over-budget job would hold the ASGI
 request until Cloud Run kills it at the platform's maximum request timeout.
@@ -4386,6 +4623,27 @@ privacy-safe: a `ValidationError` raised while building the wire event logs
 only the model title plus the first structural error's `loc` and `type`
 (`validation_model`/`validation_loc`/`validation_type`) — never input
 values, field contents, or transcript text.
+
+### Legacy transcript decoder recovery
+
+An explicit null or absent stored transcript field merges as empty. Other
+malformed shapes and encodings raise `TranscriptSegmentsDecodeError` and remain
+unchanged. Only that decoder failure earns the legacy persist loop's escape:
+five consecutive pre-commit failures on the same conversation, with probes at
+most once per 60 seconds. Unrelated validation, replay-receipt, and absorption
+errors reset that streak. Diagnostics use the fixed `reason=` allowlist.
+
+After a successful escape, the displaced generation enters the existing
+`process_conversation` / finalization handoff in a tracked background task.
+This runs for single-channel and multi-channel sessions, survives socket
+teardown, and lets buffered speech persist on the new generation immediately.
+Normal finalization and episode processing retain their existing policies;
+this does not repair a corrupt stored transcript or force an episode boundary.
+A failed or unchanged-owner rollover retains the entire pending speech batch.
+
+The segment transaction's commit is also the legacy speech retry boundary.
+Later photo or reply failures retain photos for retry without replaying already
+committed speech into a fresh conversation.
 
 ## 6. Event Wire Protocol
 
@@ -6952,6 +7210,35 @@ retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
+### Batch worker artifact IO and fenced publication
+
+The dedicated worker prepares a lane's first fetch/decode before acquiring the
+GPU lock, within one shared 1800-admitted-audio-second budget across pump lanes.
+Oversize units retain ordinary locked decode. Prepared audio, language and
+capture-stream context belong to the exact lease attempt; a replacement attempt
+cannot consume an older context. Stop and lost renewal cancel queued preparation
+and drain bounded running IO before renewal ends. The waiting-lane watcher is
+joined before GPU dispatch; a dispatched bounded chain drains normally.
+Cancelled waiting attempts are
+refunded through the existing lease fence, including after renewal recovers.
+
+All model calls and CUDA quiescence remain exclusive on the calling thread.
+The final encrypted persist tail settles after releasing GPU ownership, with
+renewal active through fenced publication. No result publishes before its write
+settles; per-unit persistence errors retain the existing retry/recovery path.
+Fatal CUDA and SIGTERM still drain outstanding IO. The shared artifact pool is
+`BATCH_PIPELINE_WORKER_IO_CONCURRENCY=5` (Helm `worker.ioConcurrency`); `1`
+restores serial IO and disables preparation at worker restart. For the exact
+previous overlap/default, restore the prior image with IO concurrency `3`.
+
+Retry-to-ready wakeups now emit `requeued`; `retry` counts real worker failures.
+Unique fenced completion exports capture seconds by success/silence, including
+silence. CPU-only strict-VAD shadow records strict-silent/pyannote-nonempty
+comparisons and CPU cost without changing any disposition or GPU model call.
+There is no early-silence enablement, new wire contract or job-schema migration.
+Details and rollback custody: [worker runtime](../diarizer/batch_pipeline_runtime.md)
+and [worker contract](./batch-pipeline-worker.md).
+
 ### Batch worker GPU skips (speech-only diarization, short single speaker)
 
 Two switches decide whether the batch worker runs diarization on the whole
@@ -7098,6 +7385,12 @@ transaction work; it does not limit positions searched within an owner. The
 `head_not_found_total` and `head_budget_exhausted_total` counters plus
 `predecessor_ready_age_seconds` histogram use only priority/release/namespace
 labels. New ready-predecessor indexes must be READY before deploying this code.
+`head_parked_total{reason}` counts each pull's visit to an owner queue whose
+head it cannot lease (`privacy`, `pool_duration`, `pool_unit_kind`,
+`shared_live_policy`); the whole FIFO waits behind that head, so a steady rate
+names a parked owner. Unit ceilings compare at frame resolution: admitted record
+durations are epoch-clock differences, and a frame-exact hour can read
+3600.0000005 seconds.
 Strict ordered merge remains authoritative; compute remains concurrent per owner.
 `BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` (default `false`) restricts the batch
 owner claim to ordered multipart assignment. Persisted receipts then drive
@@ -7209,13 +7502,47 @@ an accounting diagnostic, not a serving-failure abort.
 
 `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
 `false` restores oldest-100 discovery). Assignment and async follow-ups each
-advance their own bounded 100-row keyset scan across pending, persisted and
-ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+advance their own bounded 100-row keyset scan. Assignment scans pending
+results; async follow-ups scan persisted/ready results by default. The cursor
+uses `(committed_at, document ID)`, so equal timestamps
 and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
 restart begins at the head without dropping any durable obligations. Follow-ups
 launch the whole bounded page before fetching the next one. Discovery order is
 only a hint: existing transactional predecessor, privacy, all-sibling readiness,
 receipt replay and paid-intent fences remain authoritative.
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED` defaults to `true`.
+Follow-up discovery uses only the persisted/ready result page, plus one job
+read per receipt for its pinned policy. It no longer fetches each result twice
+after the query. Synchronous receipts are filtered before queueing so they
+cannot delay async recovery wakeups. Legacy unpinned policies still use the
+existing privacy-aware resolution; execution rechecks policy and receipt
+fences. Setting the switch to `false` restores the mixed page and
+per-candidate reads. Pagination's separate kill switch still controls rotation.
+Pending partial assignments and quarantine-held rows do not enter the finish
+page; recovery and repair still return them through pending assignment to
+persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
+or destination can unblock them without changing their own result version.
+Already-ready siblings in one discovered page share a content-completion
+probe for their exact immutable binding. Every row still rechecks its receipt
+and privacy fences; persisted rows still finish their own side effects and
+probe completion. Failed/cancelled probes clear their marker. Each new
+discovery page gets a fresh probe; an older page keeps its marker until its
+queued/running rows finish. Priority/owed recovery work bypasses sharing,
+including owed rows also found by discovery or woken before their probe. Thus an
+unchanged ready row gets a fresh probe each cycle even when its dependency
+changed elsewhere. No cooldown or version cache is used. When the existing
+quarantine-hold transaction finds a quarantined sibling, it uses its existing
+read set to settle all matching ready siblings' discovery hints together.
+It verifies their full binding, owner and segment identity before any write;
+persisted side effects and receipt payloads are untouched. This prevents ready
+siblings leaving discovery one per later pass. The same kill switch restores
+single-row hold hints as well as independent completion probes.
+
+The execution read origin `task:batch_projection_followup` covers these row
+fences and sibling completion scans; candidate discovery runs in its caller's
+origin. Measure them separately: reducing candidate reads alone does not
+establish a reduction in the execution-origin read counter.
 
 The query reuses the declared prod/dev results composite index:
 `projection_state ASC, committed_at ASC, __name__ ASC` in

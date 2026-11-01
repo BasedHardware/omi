@@ -1221,17 +1221,17 @@ async def test_failed_tail_never_runs_inline_or_background_finish(inline_session
 
 
 @pytest.mark.asyncio
-async def test_shutdown_ack_failure_keeps_token_without_poisoning_retained_custody(inline_session, remote, monkeypatch):
+async def test_shutdown_ack_departure_still_delivers_projection_and_finishes(inline_session, remote, monkeypatch):
     client, path, barrier, projected = inline_session
     sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
     sock.send_bytes = AsyncMock(side_effect=WebSocketDisconnect(1006))
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
     assert remote.list_blobs('raw-live/') and remote.list_blobs('audio-outbox/')
-    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path]['record_upload_sessions']
     assert not client.rows[path].get('record_upload_failed')
-    assert 'conversation' in barrier.failed_recordings
-    assert client.rows[path]['record_audio_closed'] is False
-    assert not projected and sock.close_code == 1011
+    assert not barrier.failed_recordings
+    assert client.rows[path]['record_audio_closed'] is True
+    assert projected and sock.close_code == 1006
 
 
 @pytest.mark.asyncio
@@ -1247,9 +1247,15 @@ async def test_later_socket_reclears_only_receipt_proven_shutdown_tail(
     else:
         monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('synthetic tail failure')))
     await pusher._websocket_util_trigger(first, 'owner', 16000, audio_custody=1)
-    held = earlier.upload_sessions['conversation']
-    assert set(client.rows[path]['record_upload_sessions']) == {held}
-    assert not client.rows[path]['record_audio_closed']
+    held = earlier.upload_sessions.get('conversation')
+    if committed_before_failure:
+        # ACK departure no longer strands an owned projection at shutdown.
+        assert held is None and client.rows[path]['record_audio_closed']
+        assert client.rows[path]['record_upload_sessions'] == {}
+    else:
+        assert held is not None
+        assert set(client.rows[path]['record_upload_sessions']) == {held}
+        assert not client.rows[path]['record_audio_closed']
 
     monkeypatch.setattr(pusher, 'commit_pcm_window', real_commit)
     later = PusherRecordBarrier('owner')
@@ -1718,6 +1724,8 @@ async def test_four_unknown_metadata_calls_allow_fifth_and_safe_late_success(inl
 @pytest.mark.asyncio
 async def test_abandoned_metadata_calls_are_bounded_and_capacity_recovers(inline_session, monkeypatch):
     _, _, barrier, _ = inline_session
+    gauge_before = barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get()
+    refusals_before = barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get()
     barrier.keep_close_pending = True
     active = barrier_module.CLOSE_RETRY_MAX_IN_FLIGHT
     outstanding = barrier_module.CLOSE_METADATA_MAX_OUTSTANDING
@@ -1745,9 +1753,12 @@ async def test_abandoned_metadata_calls_are_bounded_and_capacity_recovers(inline
         await barrier._close_metadata('conversation', lambda: None)
     assert len(futures) == outstanding
     assert barrier_module._CLOSE_DEADLINE_COUNTER._value.get() == before + outstanding
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before + outstanding
+    assert barrier_module.RECORD_CLOSE_OUTSTANDING_REFUSALS._value.get() == refusals_before + 1
     # Completion of any abandoned call must permit new admission even if
     # every other call remains stalled after its deadline.
     futures[0].set_result(None)
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before + outstanding - 1
     retry = asyncio.create_task(barrier._close_metadata('conversation', lambda: None))
     await asyncio.sleep(0)
     assert len(futures) == outstanding + 1
@@ -1757,6 +1768,7 @@ async def test_abandoned_metadata_calls_are_bounded_and_capacity_recovers(inline
         future.set_exception(OSError('late unknown write failure'))
     await asyncio.sleep(0)
     await asyncio.sleep(0)
+    assert barrier_module.RECORD_CLOSE_ABANDONED_OUTSTANDING._value.get() == gauge_before
     assert all(slots.acquire(blocking=False) for _ in range(active))
     assert not slots.acquire(blocking=False)
     assert all(outstanding_slots.acquire(blocking=False) for _ in range(outstanding))

@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import glob
+import hashlib
 import json
 import os
 import platform as _platform_mod
+import signal
 import subprocess
 import sys
 import tempfile
@@ -21,6 +23,8 @@ from git_bash import bash_executable
 
 VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
 MANIFEST_RELATIVE_PATH = ".github/checks-manifest.yaml"
+DEFAULT_MAX_CHECK_JOBS = 4
+MAX_CHECK_JOBS = 8
 
 
 def detect_platform() -> str:
@@ -460,6 +464,195 @@ def command_for_host(
     return command
 
 
+def check_jobs() -> int:
+    """Worker count for parallel-safe checks; OMI_CHECKS_JOBS=1 restores the serial run.
+
+    Overrides are clamped to MAX_CHECK_JOBS: the pool runs inside one omi-heavy slot on shared hosts.
+    """
+    raw = os.environ.get("OMI_CHECKS_JOBS", "").strip()
+    if raw:
+        try:
+            return min(MAX_CHECK_JOBS, max(1, int(raw)))
+        except ValueError:
+            print(f"WARN: ignoring non-integer OMI_CHECKS_JOBS={raw!r}", file=sys.stderr)
+    return min(DEFAULT_MAX_CHECK_JOBS, max(1, (os.cpu_count() or 2) // 2))
+
+
+def is_parallel_safe(check: Check) -> bool:
+    """Plain `python3 <script>` checks are read-only analyzers; anything else (bash, bun, swift, ruby) stays serial.
+
+    Generators in the manifest run in their --check/validate form; their writes sit behind explicit
+    --write/--update-baseline flags. execute_checks fails the run if a parallel check changes a tracked file.
+    """
+    return bool(check.command) and check.command[0] == "python3"
+
+
+def tracked_tree_snapshot(root: Path) -> dict[str, str] | None:
+    """Content hashes of tracked files that differ from HEAD, or None when git is unavailable.
+
+    Untracked files are left out on purpose: checks keep ignored scratch state in the tree
+    (`.agent-brief/`), and only some hosts ignore it.
+    """
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain=v1", "-z", "--untracked-files=no"],
+            cwd=root,
+            capture_output=True,
+            check=True,
+        ).stdout.decode("utf-8", "surrogateescape")
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    snapshot: dict[str, str] = {}
+    entries = status.split("\0")
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
+        if len(entry) < 4:
+            continue
+        if entry[0] in "RC":
+            index += 1  # the rename/copy source path follows as its own NUL-separated field
+        path = entry[3:]
+        try:
+            snapshot[path] = hashlib.sha256((root / path).read_bytes()).hexdigest()
+        except OSError:
+            snapshot[path] = "missing"
+    return snapshot
+
+
+def duration_cache_path(root: Path) -> Path | None:
+    """Per-clone record of each check's last wall time, used to start the slowest checks first."""
+    try:
+        common = run_git(root, "rev-parse", "--git-common-dir")
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return (root / common).resolve() / "omi-preflight" / "check-durations.json"
+
+
+def load_durations(path: Path | None) -> dict[str, float]:
+    if path is None:
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(key): float(value) for key, value in data.items() if isinstance(value, (int, float))}
+
+
+def save_durations(path: Path | None, durations: dict[str, float]) -> None:
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        temp.write_text(json.dumps(durations, sort_keys=True), encoding="utf-8")
+        os.replace(temp, path)
+    except OSError:
+        pass
+
+
+def _stop(process: subprocess.Popen[bytes]) -> bool:
+    """Stop a running check; True only when this call ended it, False when it had already exited on its own."""
+    if process.poll() is not None:
+        return False
+    try:
+        if os.name == "nt":
+            process.terminate()
+        else:
+            os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        process.kill()
+        process.wait()
+    if os.name == "nt":
+        return True  # TerminateProcess leaves no signal trace; the poll above is the best available check
+    # A check that exited between the poll and the signal keeps its own exit status.
+    return process.returncode in (-signal.SIGTERM, -signal.SIGKILL)
+
+
+def execute_parallel_checks(
+    root: Path,
+    checks: list[Check],
+    commands: dict[str, list[str]],
+    *,
+    jobs: int,
+    keep_going: bool,
+    durations: dict[str, float],
+) -> list[str]:
+    """Run checks in a bounded pool, longest-known first, printing each check's output as one block.
+
+    Fail-fast stops scheduling and terminates the running checks at the first failure, then prints the
+    failing block last so the preflight runner's last `==> ` line still names the failing check.
+    Returns the failed check ids in manifest order; `durations` is updated in place.
+    """
+    pending = sorted(checks, key=lambda check: -durations.get(check.id, 0.0))
+    running: dict[str, tuple[subprocess.Popen[bytes], Any, float]] = {}
+    failures: list[str] = []
+    failed_block: str | None = None
+
+    def collect(check_id: str) -> tuple[int, str]:
+        process, log, started = running.pop(check_id)
+        elapsed = time.monotonic() - started
+        durations[check_id] = elapsed
+        log.seek(0)
+        output = log.read().decode("utf-8", "replace")
+        log.close()
+        status = "PASS" if process.returncode == 0 else "FAIL"
+        block = f"==> {check_id}\n{output}"
+        if output and not output.endswith("\n"):
+            block += "\n"
+        return process.returncode, block + f"<== {status} {check_id} ({elapsed:.2f}s)\n"
+
+    try:
+        while pending or running:
+            while pending and len(running) < jobs:
+                check = pending.pop(0)
+                log = tempfile.TemporaryFile()
+                process = subprocess.Popen(
+                    commands[check.id],
+                    cwd=root,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=os.name != "nt",
+                )
+                running[check.id] = (process, log, time.monotonic())
+            finished = [check_id for check_id, (process, _, _) in running.items() if process.poll() is not None]
+            if not finished:
+                time.sleep(0.05)
+                continue
+            for check_id in finished:
+                returncode, block = collect(check_id)
+                if returncode:
+                    failures.append(check_id)
+                    if not keep_going and failed_block is None:
+                        failed_block = block
+                        continue
+                print(block, end="", flush=True)
+            if failed_block is not None:
+                pending.clear()
+                # Checks that finished on their own report their real result; only live ones are cancelled.
+                for check_id, (process, log, _) in list(running.items()):
+                    if _stop(process):
+                        log.close()
+                        running.pop(check_id)
+                        print(f"<== CANCELLED {check_id} (stopped after the first failure)", flush=True)
+                        continue
+                    returncode, block = collect(check_id)
+                    if returncode:
+                        failures.append(check_id)
+                    print(block, end="", flush=True)
+    finally:
+        for process, log, _ in running.values():
+            _stop(process)
+            log.close()
+    if failed_block is not None:
+        print(failed_block, end="", flush=True)
+    order = {check.id: index for index, check in enumerate(checks)}
+    return sorted(failures, key=order.__getitem__)
+
+
 def execute_checks(
     root: Path,
     checks: list[Check],
@@ -473,6 +666,51 @@ def execute_checks(
     keep_going: bool = False,
 ) -> int:
     failures: list[str] = []
+    total = len(checks)
+    jobs = check_jobs()
+    parallel = [check for check in checks if is_parallel_safe(check)] if jobs > 1 else []
+    if len(parallel) > 1:
+        commands = {
+            check.id: command_for_host(
+                command_for_check(
+                    check,
+                    changed_files_path=changed_files_path,
+                    base=base,
+                    target_base=target_base or base,
+                    head=head,
+                    pr_body_file=pr_body_file,
+                    skip_changelog=skip_changelog,
+                ),
+                python_executable=sys.executable,
+            )
+            for check in parallel
+        }
+        cache = duration_cache_path(root)
+        durations = load_durations(cache)
+        before = tracked_tree_snapshot(root)
+        print(
+            f"Running {len(parallel)} python check(s) with {jobs} workers (OMI_CHECKS_JOBS=1 runs serially).",
+            flush=True,
+        )
+        failures = execute_parallel_checks(
+            root, parallel, commands, jobs=jobs, keep_going=keep_going, durations=durations
+        )
+        save_durations(cache, durations)
+        after = tracked_tree_snapshot(root)
+        if before is not None and after is not None and before != after:
+            changed = sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+            print(
+                f"FAIL: parallel checks modified tracked files: {', '.join(changed)}. A check that writes must not "
+                "run in the parallel pool; rerun with OMI_CHECKS_JOBS=1 to find it, then make it read-only or "
+                "exclude it in is_parallel_safe().",
+                file=sys.stderr,
+            )
+            return 1
+        if failures and not keep_going:
+            print(f"Manifest checks failed: {', '.join(failures)}", file=sys.stderr)
+            return 1
+        parallel_ids = {check.id for check in parallel}
+        checks = [check for check in checks if check.id not in parallel_ids]
     for check in checks:
         started = time.monotonic()
         print(f"==> {check.id}", flush=True)
@@ -496,7 +734,7 @@ def execute_checks(
     if failures:
         print(f"Manifest checks failed: {', '.join(failures)}", file=sys.stderr)
         return 1
-    print(f"Manifest checks passed: {len(checks)} check(s).")
+    print(f"Manifest checks passed: {total} check(s).")
     return 0
 
 

@@ -49,7 +49,7 @@ BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR=0
 
 Apply the same shadow settings to all four intake/recovery Cloud Run roles and
 the batch workers. Keep serving batch admission at its separately approved
-percentage and keep the existing three L4 workers/node cap unchanged. The
+percentage and keep the existing L4 worker floor (four since 11-01) and node cap unchanged. The
 shadow cohort is 25% of eligible non-serving owners, not 25% guaranteed audio.
 Busy/late offers still drop. Roll back with `BATCH_PIPELINE_SHADOW_PERCENT=0`
 on those same roles. Already running CUDA/RPC work drains; normal cleanup and

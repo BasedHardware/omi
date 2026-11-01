@@ -58,7 +58,6 @@ from config.episodes import (
     CONTINUE_GAP_SECONDS,
     LAST_CLOSED_CACHE_SECONDS,
     MAX_EPISODE_SECONDS,
-    MAX_MOMENTS,
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
     episode_hard_cap_across_conversations_enabled,
@@ -79,9 +78,10 @@ from utils.episodes import capture_groups as episode_groups
 from utils.episodes.capture_groups import calendar_identity as _calendar_identity
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
 from utils.episodes.moment import MomentInput
-from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
+from utils.episodes.moment_order import newest_moments, timeline_moments
+from utils.episodes.state import apply_update, clean_text, is_placeholder_heading, provisional_items, render_state
 from utils.episodes.visibility import visible_episode, hidden_conversation
-from utils.episodes.recorded_recovery import record_windows
+from utils.episodes.recorded_recovery import record_walk, record_windows, unconsumed_moments
 
 logger = logging.getLogger(__name__)
 
@@ -933,15 +933,15 @@ def _record_moment_once(
         return 'skipped_short'
 
     state_updated_at = policy.utc(episode.get('state_updated_at')) if episode else None
+    compose_owns = closed is not None and composer.owns_closed_notes(uid, closed, moment.conversation_id, c)
     if (
         moment.trigger == 'pause'
         and state_updated_at is not None
         and (now - state_updated_at).total_seconds() < MOMENT_MIN_INTERVAL_SECONDS
-    ):
+    ) or (recovered and not compose_owns and composer.recovery_notes_wait(episode, state_updated_at, now)):
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'
 
-    compose_owns = closed is not None and composer.owns_closed_notes(uid, closed, moment.conversation_id, c)
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     output_language, repair = '', None
     conversation_language = moment.language or ''
@@ -998,6 +998,14 @@ def _record_moment_once(
     )
     moments = [dict(m) for m in base.get('moments') or []]
     heading = result.update.moment_heading or clean_text(result.update.title, 48)
+    if is_placeholder_heading(heading):
+        heading = ''
+    # A finalize tail carries its whole conversation's bounds; the moment covers only the tail's words.
+    moment_start = moment.current_started_at or moment.started_at
+    moment_end = moment.current_ended_at or moment.ended_at
+    if moment.trigger == 'finalize' and segments:
+        moment_start = _wall(moment.started_at, start_offset) or moment_start
+        moment_end = _wall(moment.started_at, end_offset) or moment_end
     last = moments[-1] if moments else None
     if (
         not compose_owns
@@ -1006,14 +1014,14 @@ def _record_moment_once(
         and heading
         and str(last.get('heading') or '').casefold() == heading.casefold()
     ):
-        last.update({'ended_at': moment.current_ended_at or moment.ended_at, 'end_offset': end_offset})
+        last.update({'ended_at': moment_end, 'end_offset': end_offset})
     elif not compose_owns:
         moments.append(
             {
                 'id': uuid4().hex[:12],
                 'conversation_id': moment.conversation_id,
-                'started_at': moment.current_started_at or moment.started_at,
-                'ended_at': moment.current_ended_at or moment.ended_at,
+                'started_at': moment_start,
+                'ended_at': moment_end,
                 'start_offset': start_offset,
                 'end_offset': end_offset,
                 'heading': heading,
@@ -1056,7 +1064,7 @@ def _record_moment_once(
         **changes,
         **_with_conversation(base, moment.conversation_id, moment.source),
         'member_activity': {moment.conversation_id: moment.current_ended_at or moment.ended_at},
-        'moments': moments[-MAX_MOMENTS:],
+        'moments': newest_moments(moments),
         'applied': applied,
         'usage': usage,
         'speaker_display_order': list(text.voice_order),
@@ -1428,13 +1436,10 @@ def _attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[st
 def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
     if recorded_episodes_enabled():
         owner = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
-        return record_windows(uid, conversation_id, row, [owner] if owner else [], c, record_moment, now=_now(c))
-    outcome = 'skipped_applied'
-    for moment in recovery.moments(conversation_id, row, now=_now(c), calendar_identity=_calendar_identity(row)):
-        outcome = record_moment(uid, moment, c, member_episode_id=episode_id)
-        if outcome not in {'applied', 'skipped_applied'}:
-            return outcome
-    return outcome
+        windows = [owner] if owner else []
+        return record_windows(uid, conversation_id, row, windows, c, record_moment, now=_now(c))
+    walk = recovery.moments(conversation_id, row, now=_now(c), calendar_identity=_calendar_identity(row))
+    return record_walk(uid, episode_id, unconsumed_moments(uid, conversation_id, walk, c), c, record_moment)
 
 
 def _attach_synced(
@@ -1863,6 +1868,11 @@ def episode_by_id(
     return visible_episode(uid, episode, firestore_client=c.firestore_client)
 
 
+def _wire_heading(heading: Any) -> str:
+    text = clean_text(heading, 240)
+    return '' if is_placeholder_heading(text) else text
+
+
 def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     """Only the client-visible projection; applied offsets, usage and speaker keys stay server-side."""
     if not episode:
@@ -1906,10 +1916,10 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
                 'ended_at': m.get('ended_at') or m.get('started_at'),
                 'start_offset': float(m.get('start_offset') or 0.0),
                 'end_offset': float(m.get('end_offset') or 0.0),
-                'heading': clean_text(m.get('heading'), 240),
+                'heading': _wire_heading(m.get('heading')),
                 'points': composer.wire_points(m.get('points')),
             }
-            for m in episode.get('moments') or []
+            for m in timeline_moments(episode.get('moments') or [])
             if m.get('id') and m.get('conversation_id') and m.get('started_at')
         ],
         'conversation_ids': [

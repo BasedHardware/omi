@@ -149,7 +149,7 @@ env:
   - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
     value: "false"
   - name: PLAYBACK_ON_DEMAND_ENABLED
-    value: "false"
+    value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
   - name: REPEAT_WORK_REVISION_ENABLED
@@ -232,7 +232,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":0}'
+    value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -371,6 +371,17 @@ env:
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
+  # Replay-only binding: keep live/stale-conversation admission in inline mode.
+  - name: LISTEN_FINALIZATION_REPLAY_ENABLED
+    value: "true"
+  - name: LISTEN_FINALIZATION_TASKS_QUEUE
+    value: "conversation-finalization"
+  - name: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+    value: "https://backend-sync-hhibjajaja-uc.a.run.app/v1/conversation-finalization-jobs/run"
+  - name: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+    value: "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+  - name: LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS
+    value: "5"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
@@ -631,9 +642,9 @@ env:
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
-  # Soniox bills every connected second; 5% uid cohort tests tighter idle close (registry ramp 5→25→50→100, speaker bars).
+  # Cohort off 2026-11-01: at 5% the treatment arm fell well below control on words per capture second and transcribed share. Diagnose before re-ramping.
   - name: SONIOX_IDLE_COHORT_PERCENT
-    value: "5"
+    value: "0"
   - name: SONIOX_IDLE_COHORT_CLOSE_SECONDS
     value: "20"
   - name: SONIOX_IDLE_COHORT_REARM_SECONDS
@@ -917,3 +928,24 @@ affinity:
               operator: In
               values:
                 - high-cpu
+    # Soft preference only: the required labels above still admit the N2
+    # fallback/rescue pools, so peak capacity and availability cannot
+    # regress. Without this term the scheduler spreads evenly across every
+    # eligible node, which strands pods on the dearer n2d-standard-4
+    # fallback nodes 24/7 (11 nodes ≈ $52/day, 2026-10-29) because listen
+    # pods never reschedule on their own and the nodes stay above the
+    # autoscaler's scale-down utilization threshold.
+    # Deploy gate: this is a pod-template change, so per
+    # backend/docs/runbooks/audio-fleet.md it must NOT be rolled onto active
+    # sessions — only a verified traffic-free window or a qualified
+    # admission drain (audio-fleet.md "Retire one node/pool" steps) makes
+    # the reschedule safe; a plain off-peak window is not sufficient.
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: cloud.google.com/gke-nodepool
+              operator: In
+              values:
+                - backend-listen-pool-v2
+                - backend-listen-pool-v2-b

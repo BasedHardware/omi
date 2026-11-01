@@ -12,7 +12,9 @@ from config.batch_conversation_speakers import (
     has_batch_authority,
     sync_off_enabled,
 )
-from config.refactor_modes import serving_for
+from utils.conversations.speaker_clips import MAX_CLIP_SECONDS, SAMPLE_RATE, verified_clip as _verified_clip
+from utils.conversations.speaker_sync_store import in_sync_store, sync_store_placements
+from utils.conversations.speaker_window_cohort import per_window_evidence
 from utils.speakers import processing as speaker_evidence
 
 import bisect
@@ -106,9 +108,6 @@ from database import speaker_auto_enroll as auto_enroll_db
 
 logger = logging.getLogger(__name__)
 
-SAMPLE_RATE = 16000
-# Long segments often hold more than one voice; the middle is the most representative.
-MAX_CLIP_SECONDS = 15.0
 EMBED_TIMEOUT_SECONDS = 10.0
 # Consecutive embedding failures that mean the diarizer is down, not one bad clip.
 MAX_CONSECUTIVE_EMBED_FAILURES = 3
@@ -122,6 +121,8 @@ MAX_PLACEMENT_SPANS = 10000
 # Ring-drained pendant audio arrives as ~10s objects, so the teaching budget of 32
 # proves only the first minutes of a long recording. The read deadline still applies.
 PER_WINDOW_MAX_DOWNLOADS = 600
+# Proving more windows than can be embedded loses them all: keep time per proven window.
+PER_WINDOW_EMBED_RESERVE_SECONDS = 0.25
 PER_WINDOW_MAX_PCM_BYTES = 128 * 1024 * 1024
 
 
@@ -267,72 +268,6 @@ class EmbeddingDiagnostics:
     attempted: int = 0
 
 
-def _inward_sample(bound: float, origin: float, *, exclusive_end: bool) -> int:
-    """Cut inward on this chunk's grid, snapping only arithmetic roundoff.
-
-    Subtracting epoch-sized floats loses low bits. Bound that uncertainty by
-    the operands' ULPs rather than treating a fractional sample as an integer.
-    An end index includes only complete samples before the exclusive end.
-    """
-    offset = (bound - origin) * SAMPLE_RATE
-    uncertainty = (math.ulp(bound) + math.ulp(origin)) * SAMPLE_RATE + math.ulp(offset)
-    nearest = round(offset)
-    if abs(offset - nearest) <= uncertainty:
-        offset = float(nearest)
-    return math.floor(offset) if exclusive_end else math.ceil(offset)
-
-
-def _verified_clip(
-    session: AudioChunkReadSession, start: float, end: float, *, windows: Optional[List[Tuple[float, float]]] = None
-) -> Tuple[Optional[bytes], str]:
-    """Assemble at most 15s from the invocation's generation-pinned decoded cache.
-
-    No downloads, padding, or interpolation. Only a tolerance-sized leading or
-    trailing edge may be trimmed; an internal missing extent refuses the clip.
-    Used only when the exact base midpoint clip cannot embed. Inventory/decoded
-    coverage validation has already admitted this session. Cuts are inward and
-    the sum of pieces has an integer 240,000-sample budget, even on mixed grids.
-    """
-    if end - start > MAX_CLIP_SECONDS:
-        middle = (start + end) / 2.0
-        start, end = middle - MAX_CLIP_SECONDS / 2, middle + MAX_CLIP_SECONDS / 2
-    if end - start < MIN_EMBED_SECONDS:
-        return None, 'clip_too_short'
-    position = start
-    pieces = []
-    remaining_samples = int(MAX_CLIP_SECONDS * SAMPLE_RATE)
-    for chunk in sorted(session.chunks, key=lambda c: c.get('span', {}).get('start', c['timestamp'])):
-        chunk_start = chunk.get('span', {}).get('start', chunk['timestamp'])
-        pcm, _ = session.cache.get(chunk['path'], (None, 'missing_blob'))
-        if pcm is None:
-            continue
-        chunk_end = chunk_start + len(pcm) / (SAMPLE_RATE * 2)
-        if chunk_end <= position or chunk_start >= end:
-            continue
-        # Between pieces, allow only wall-axis roundoff (well below one sample).
-        if chunk_start > position + 1e-6:
-            if pieces or chunk_start - position > COVERAGE_TOLERANCE_SECONDS:
-                return None, 'chunk_boundary' if pieces else 'no_clip'
-            position = chunk_start
-        stop = min(end, chunk_end)
-        first_sample = max(0, _inward_sample(position, chunk_start, exclusive_end=False))
-        last_sample = min(len(pcm) // 2, _inward_sample(stop, chunk_start, exclusive_end=True))
-        last_sample = min(last_sample, first_sample + remaining_samples)
-        piece = pcm[first_sample * 2 : last_sample * 2]
-        if piece and windows is not None:
-            windows.append((chunk_start + first_sample / SAMPLE_RATE, chunk_start + last_sample / SAMPLE_RATE))
-        pieces.append(piece)
-        remaining_samples -= len(piece) // 2
-        position = stop
-        if position >= end - 1e-6:
-            clip = b''.join(pieces)
-            return (clip, 'none') if len(clip) >= MIN_EMBED_SECONDS * SAMPLE_RATE * 2 else (None, 'clip_too_short')
-    if pieces and end - position <= COVERAGE_TOLERANCE_SECONDS:
-        clip = b''.join(pieces)
-        return (clip, 'none') if len(clip) >= MIN_EMBED_SECONDS * SAMPLE_RATE * 2 else (None, 'clip_too_short')
-    return None, 'chunk_boundary' if pieces else 'no_clip'
-
-
 def _embed_missing(
     uid: str,
     conversation: Conversation,
@@ -376,6 +311,10 @@ def _embed_missing(
     embedded = 0
     failures = 0
 
+    def store_only(segment: TranscriptSegment) -> bool:
+        placement = placements.get(segment.id) if placements and segment.id is not None else None
+        return placement is not None and placement.store is not None
+
     def wanted(start: float, next_start: Optional[float]) -> bool:
         index = bisect.bisect_left(midpoints, start)
         return index < len(midpoints) and (next_start is None or midpoints[index] < next_start)
@@ -408,6 +347,9 @@ def _embed_missing(
             first = bisect.bisect_left(midpoints, chunk_start)
             last = bisect.bisect_left(midpoints, chunk_end)
             for segment in pending[first:last]:
+                # Chunks here mix stores; these assemble from their own store below.
+                if store_only(segment):
+                    continue
                 abs_start, abs_end = window_of(segment)
                 begin, end = max(abs_start, chunk_start), min(abs_end, chunk_end)
                 if end - begin > MAX_CLIP_SECONDS:
@@ -436,7 +378,9 @@ def _embed_missing(
                 if time.monotonic() > deadline:
                     return
                 windows: List[Tuple[float, float]] = []
-                clip, reason = _verified_clip(session, *window_of(segment), windows=windows)
+                clip, reason = _verified_clip(
+                    session, *window_of(segment), windows=windows, sync_store_only=store_only(segment)
+                )
                 if clip is None:
                     diagnostics.clip_skips += 1
                     if reason == 'clip_too_short':
@@ -508,8 +452,8 @@ def _verified_read_session(
     the requested windows. A failed window abstains; previously proven windows
     remain usable when another window is missing, ambiguous or over budget.
     """
-    # refactor: superseded by per-window abstention when SPEAKER_EVIDENCE_MODE=serve
-    per_window = serving_for('SPEAKER_EVIDENCE_MODE', uid)
+    # Superseded by per-window abstention for the per_window_evidence cohort
+    per_window = per_window_evidence(uid, conversation.transcript_segments)
     session = AudioChunkReadSession(uid, conversation.id, SAMPLE_RATE)
     session.deadline = min(session.deadline, deadline)
     if per_window:
@@ -588,6 +532,8 @@ def _verified_read_session(
     refusals: Counter = Counter()
     first_refusal = None
     for segment in pending:
+        if per_window:
+            session.deadline = min(session.deadline, deadline - PER_WINDOW_EMBED_RESERVE_SECONDS * (len(verified) + 1))
         placement = placements.get(segment.id) if segment.id is not None else None
         window = placement.window if placement is not None else None
         if window is None:
@@ -601,6 +547,8 @@ def _verified_read_session(
         extents = []
         refusal = None
         for chunk in chunks:
+            if placement and placement.store and not in_sync_store(chunk):
+                continue
             start, upper_end = bounds_by_path[chunk['path']]
             # Unknown Opus durations are deliberately unbounded: never assume
             # the next filename proves the previous object's end/non-overlap.
@@ -1282,6 +1230,19 @@ def _resolve(
             if segment.id is None or segment.id in invalid_text_ids:
                 continue
             placements[segment.id] = place_segment(segment, mapping, index)
+        if mapping.get('started_at') is not None:
+            placements.update(
+                sync_store_placements(
+                    uid,
+                    conversation.id,
+                    segments,
+                    placements,
+                    index,
+                    mapping['started_at'],
+                    deadline,
+                    max_spans=MAX_PLACEMENT_SPANS,
+                )
+            )
 
     clip_seconds: Dict[str, float] = {}
     cache_data = download_speaker_embedding_cache(uid, conversation.id)
@@ -1293,7 +1254,7 @@ def _resolve(
         if not segment.id or segment.id in invalid_text_ids:
             continue
         placement = placements.get(segment.id)
-        if placement is not None and placement.reason == 'capture_span' and placement.window is not None:
+        if placement is not None and (placement.reason == 'capture_span' or placement.store) and placement.window:
             scope = segment.speaker_id_scope or ''
             historical = scope == f'conversation:{conversation.id}' or scope.startswith(
                 ('legacy-conversation:', BATCH_CONVERSATION_SCOPE)
@@ -1370,8 +1331,8 @@ def _resolve(
         # It must never borrow the nearest voice or a bare legacy cache entry.
         # Manifest contradictions and known coverage holes still refuse globally.
         all_usable_invalid = bool(invalid_text) and not any(s.id not in invalid_text_ids for s in embeddable)
-        # refactor: superseded by per-window abstention when SPEAKER_EVIDENCE_MODE=serve
-        if not serving_for('SPEAKER_EVIDENCE_MODE', uid) and (
+        # Superseded by per-window abstention for the per_window_evidence cohort
+        if not per_window_evidence(uid, segments) and (
             index.ambiguity
             or all_usable_invalid
             or any(p.reason in ('uncovered_audio', 'invalid_window') for p in placements.values())

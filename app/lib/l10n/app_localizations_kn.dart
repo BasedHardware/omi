@@ -14721,9 +14721,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get episodeOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
 
   @override
-  String get liveCardTitle => 'ಲೈವ್';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'ಅಂತಿಮ ಪ್ರತಿಲಿಪಿ ಸುಮಾರು $duration ಹಿಂದಿದೆ';
   }
@@ -14738,7 +14735,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'ಸುರಕ್ಷಿತವಾಗಿ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ';
 
   @override
-  String get livePreviewOnPhoneDivider => 'ಈ ಫೋನ್‌ನಲ್ಲಿ ಲೈವ್';
+  String get livePreviewOnPhoneDivider => 'ಈಗಷ್ಟೇ, ಈ ಫೋನ್‌ನಲ್ಲಿ';
 
   @override
   String get livePreviewTurnOnLiveText => 'ಲೈವ್ ಪಠ್ಯ ಆನ್ ಮಾಡಿ';
@@ -14984,21 +14981,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಭಾಗಗಳು',
-      many: '$count ಭಾಗಗಳು',
-      few: '$count ಭಾಗಗಳು',
-      two: '$count ಭಾಗಗಳು',
-      one: '$count ಭಾಗಗಳು',
-      zero: '$count ಭಾಗಗಳು',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return '$app ನಲ್ಲಿ ಸಂದೇಶ ಕಳುಹಿಸಿ. Omi ಗೆ ಅದು ಸಿಕ್ಕ ತಕ್ಷಣ ಈ ಪರದೆ ನವೀಕರಣಗೊಳ್ಳುತ್ತದೆ.';
   }
@@ -15007,4 +14989,28 @@ class AppLocalizationsKn extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'ಹೊಸ ಕೋಡ್ ಪಡೆದು $app ನಿಂದ ಕಳುಹಿಸಿ.';
   }
+
+  @override
+  String get episodeWritingNotes => 'ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get episodeWritingNotesDetail => 'ಮೊದಲು ಪ್ರತಿಲೇಖನ ಮುಗಿಸಲಾಗುತ್ತಿದೆ. ನೀವು ಈ ಪುಟದಿಂದ ಹೊರಡಬಹುದು.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time ವರೆಗೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time ವರೆಗೆ ಪ್ರತಿಲೇಖನವಾಗಿದೆ';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration ಉಳಿಸಲಾಗಿದೆ';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.';
 }

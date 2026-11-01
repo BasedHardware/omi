@@ -37,6 +37,7 @@ from utils.sync.size_telemetry import (
     size_backstop_scope,
     size_fields,
 )
+from utils.conversations.word_pieces import drop_replayed_words, drop_repeated_word_runs, join_word_pieces
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
@@ -254,6 +255,7 @@ def assign_in_transaction(
     lineage_eligible = incoming.pop('_sync_lineage_eligible', False) is True
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
+    redrive_target = incoming.pop('_batch_redrive_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
     collection = user_ref.collection('conversations')
     read: dict[str, dict | None] = {}
@@ -322,6 +324,22 @@ def assign_in_transaction(
         # timestamp anchor here becomes a twin when listen later persists. The
         # already-read target document fences concurrent create on replay.
         raise SyncAssignmentConflict('batch live target not persisted', subtype=Reason.LIVE_TARGET_NOT_PERSISTED)
+    if redrive_target:
+        # Release is a scheduling hint. Recheck lifecycle under the very
+        # transaction that appends, including a discard racing the release.
+        if not target:
+            raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
+        if target.get('deleted'):
+            raise SyncAssignmentSuperseded('sync target was deleted')
+        if target.get('discarded'):
+            raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
+        if target.get('status') != 'completed':
+            raise SyncAssignmentConflict('record finalize still pending', subtype=Reason.RECORD_FINALIZE_PENDING)
+        if target.get('uses_custom_stt') or target.get('data_protection_level', 'enhanced') not in {
+            'standard',
+            'enhanced',
+        }:
+            raise SyncAssignmentConflict('record privacy changed', subtype=Reason.RECORD_PRIVACY_CHANGED)
     replacement = None
     if record_span is not None:
         if not target or not target_id:
@@ -787,6 +805,9 @@ def assign_in_transaction(
                 conversation_rows=records,
                 proof=capture_covered_indices,
             )
+        survivors = drop_repeated_word_runs(
+            existing, drop_replayed_words(existing, survivors, clock='timestamp'), clock='timestamp'
+        )
         append_stats = None
         if (
             live_row is not None
@@ -829,10 +850,19 @@ def assign_in_transaction(
                 # claim playback alignment for that line.
                 segment['audio_alignment'] = 'unplaced'
                 segment['audio_capture_run'] = None
+        receipt = result.get('manual_speaker_assignments') or {}
+        # Capture receipts name segment IDs, so a batch that carries them keeps its pieces.
+        segments = join_word_pieces(
+            segments,
+            joinable_ids=(
+                set() if incoming.get('capture_evidence') else {str(segment.get('id')) for segment in survivors}
+            ),
+            protected_ids=set(receipt.get('segments') or ()),
+        )
         result.update(
             started_at=capture_start,
             finished_at=extent['finished_at'],
-            transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
+            transcript_segments=apply_manual_assignments(segments, receipt),
         )
         if late_audio_intake_enabled():
             merged_span = recorded_span(capture_start, segments)
@@ -1281,6 +1311,10 @@ def assign_in_transaction(
         chosen.created,
         chosen.survivors,
     )
+    if redrive_target and any(
+        (accepted.matched.get(accepted.canonical) or {}).get('discarded') for accepted in [chosen, *extra_plans]
+    ):
+        raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
     remember_size_payload(canonical, result)
     for accepted in [chosen, *extra_plans]:
         remember_size_payload(accepted.canonical, accepted.result)

@@ -718,6 +718,16 @@ def close_episode(
     )
 
 
+def _moves_closed_episode(raw, merged):
+    """A notes write on a closed episode moves nothing, so older overlaps must not refuse it."""
+    return not (
+        raw.get('status') == merged.get('status') == 'closed'
+        and set(raw.get('conversation_ids') or []) == set(merged.get('conversation_ids') or [])
+        and raw.get('started_at') == merged.get('started_at')
+        and episode_timeline.recorded_end(raw) == episode_timeline.recorded_end(merged)
+    )
+
+
 @firestore.transactional
 def _update(
     transaction: Any,
@@ -743,9 +753,11 @@ def _update(
     _drop_legacy_receipts(merged, segment_receipts)
     merged['state_version'] = expected_version + 1
     links = _member_links(raw, merged, link_conversation_ids)
-    _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
+    moves = bool(links) or _moves_closed_episode(raw, merged)
+    if moves:
+        _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
-    if recorded_episodes_enabled():
+    if moves and recorded_episodes_enabled():
         fence = episode_timeline.check_window(transaction, client, uid, merged)
         if fence:
             transaction.set(fence[0], {'version': fence[1]})

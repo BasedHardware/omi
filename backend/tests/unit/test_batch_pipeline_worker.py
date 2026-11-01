@@ -676,6 +676,16 @@ def test_pool_unit_limits_reject_conversation_on_shared_live_before_decode():
     assert not words.calls and failures == [('a', 'ValueError')]
 
 
+def test_unit_ceiling_ignores_admission_clock_noise_below_one_frame():
+    # Admitted record durations are epoch-clock differences; the decoded
+    # sample count, not float noise, decides whether a unit fits the pool.
+    worker, _, saved, _, _, failures = setup_worker(config=ProviderConfig(max_unit_seconds=2))
+    assert worker.process_batch([item(duration=2 + 4.76837158203125e-07)])
+    assert 'a' in saved and not failures
+    with pytest.raises(ValueError, match='dedicated batch'):
+        worker.process_batch([item('b', duration=2 + 1 / 16000)])
+
+
 def test_pool_defaults_and_unsafe_config(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'shared_live')
     monkeypatch.delenv('BATCH_PIPELINE_UNIT_SECONDS', raising=False)
@@ -940,7 +950,7 @@ async def test_worker_strict_silence_commits_or_preserves_quarantine(monkeypatch
     await pump.run_once()
     provider.transcribe_batch.assert_called_once()
     retry.assert_called_once()
-    assert strict.call_count == int(enabled)
+    assert strict.call_count == 1 + int(enabled)  # one record-only shadow inspection
     if enabled and not speech:
         assert store.rows['jobs', 'a']['state'] == 'committed'
         assert store.rows['results', 'a']['result']['outcome'] == 'silence'

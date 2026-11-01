@@ -83,7 +83,7 @@ cloud_tasks:
     # utils/cloud_tasks.py get_sync_tasks_max_attempts mirrors it. The config-train is
     # the only writer of this cap now that trains skip the ops-owned queues.
     max_concurrent_dispatches: 160
-    max_dispatches_per_second: 25
+    max_dispatches_per_second: 15
     max_attempts: 5
     min_backoff: 60s
     max_backoff: 300s
@@ -96,10 +96,16 @@ cloud_tasks:
     max_backoff: 60s
     log_sampling_ratio: 0.1
   staging-enrichment:
-    # Off until prod's enrichment queue turns on at M3 (mirror test enforces it).
-    enabled: false
+    # Mirrors prod's enrichment queue (mirror test enforces it); create_queues.sh already made it.
     max_concurrent_dispatches: 50
     max_dispatches_per_second: 25
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
+  staging-provider-stt:
+    # Mirrors prod's provider-stt queue; create_queues.sh made it at 16/5 and the config-train raises it.
+    max_concurrent_dispatches: 48
+    max_dispatches_per_second: 10
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s

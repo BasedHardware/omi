@@ -50,6 +50,8 @@ class ReasonFamily(StrEnum):
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
+    RECORD_PARTIAL_RERUN = 'record_partial_rerun'
+    VENDOR_ROUTE = 'vendor_route'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -258,6 +260,87 @@ class ProviderSttReason(StrEnum):
     BYOK = 'byok'
     UNSUPPORTED_LANGUAGE = 'unsupported_language'
     PROVIDER_FAILED = 'provider_failed'
+
+
+# All-vendor batch routing (utils/batch_pipeline/vendor_route_contracts.py). Slice A froze
+# these member lists; a slice that needs a new value posts the change before adding it.
+
+
+class VendorRouteReason(StrEnum):
+    """Why selection chose a route: ``omi_batch_pipeline_vendor_route_decisions_total{route,reason}``."""
+
+    UNKNOWN = 'unknown'
+    CHEAPEST = 'cheapest'
+    ORDERED = 'ordered'
+    GPU_FLOOR = 'gpu_floor'
+    SOLE_CAPABLE = 'sole_capable'
+    FAILOVER = 'failover'
+    NO_HEALTHY_ROUTE = 'no_healthy_route'
+    KILL_SWITCH = 'kill_switch'
+    NOT_IN_COHORT = 'not_in_cohort'
+
+
+class VendorRouteTableOutcome(StrEnum):
+    """Which rung of the table ladder served: ``..._vendor_route_table_loads_total{outcome}``."""
+
+    UNKNOWN = 'unknown'
+    CONFIGURED = 'configured'
+    LAST_VALID = 'last_valid'
+    BUILTIN = 'builtin'
+
+
+class VendorHealthReason(StrEnum):
+    """Second element of ``VendorHealth.allows(service)``."""
+
+    UNKNOWN = 'unknown'
+    HEALTHY = 'healthy'
+    HALF_OPEN_PROBE = 'half_open_probe'
+    DEGRADED = 'degraded'
+    BREAKER_OPEN = 'breaker_open'
+    FUNDS_REFUSAL = 'funds_refusal'
+    RATE_LIMITED = 'rate_limited'
+    DAILY_CAP_REACHED = 'daily_cap_reached'
+    MONTHLY_BUDGET_REACHED = 'monthly_budget_reached'
+    NOT_ADMITTED = 'not_admitted'
+    STATE_UNAVAILABLE = 'state_unavailable'
+
+
+class VendorAttemptOutcome(StrEnum):
+    """One vendor attempt's outcome: ``..._vendor_attempts_total{provider,outcome}``."""
+
+    UNKNOWN = 'unknown'
+    RUNNING = 'running'
+    OK = 'ok'
+    SILENCE = 'silence'
+    ERROR_5XX = 'error_5xx'
+    TIMEOUT = 'timeout'
+    RATE_LIMITED = 'rate_limited'
+    CREDIT_REFUSAL = 'credit_refusal'
+    EMPTY_VALIDATED = 'empty_validated'
+    INVALID_RESPONSE = 'invalid_response'
+    ABANDONED = 'abandoned'
+    SUPERSEDED = 'superseded'
+
+
+class VendorHoldReason(StrEnum):
+    """Why a unit is parked in ``vendor_held``: ``..._vendor_held_units{reason}``."""
+
+    UNKNOWN = 'unknown'
+    NO_HEALTHY_VENDOR = 'no_healthy_vendor'
+    FUNDS_REFUSAL = 'funds_refusal'
+    CAP_REACHED = 'cap_reached'
+    RATE_LIMITED = 'rate_limited'
+    HEALTH_UNAVAILABLE = 'health_unavailable'
+
+
+class VendorHoldOutcome(StrEnum):
+    """``..._vendor_held_transitions_total{outcome}``."""
+
+    UNKNOWN = 'unknown'
+    HELD = 'held'
+    REDRIVEN = 'redriven'
+    REROUTED_GPU = 'rerouted_gpu'
+    RELEASED = 'released'
 
 
 class LiveSttReason(StrEnum):

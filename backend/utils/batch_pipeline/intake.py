@@ -31,7 +31,8 @@ from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from database.outbox import OutboxKind, outbox_for
-from utils.batch_pipeline.provider_stt import provider_enqueue, resolve_route
+from utils.batch_pipeline.provider_stt import provider_enqueue
+from utils.batch_pipeline.route_selection import select_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
 from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route
@@ -341,7 +342,7 @@ async def accept_upload(
                 status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
                 if status:
                     return start_response(status)
-        mode = await run_blocking(db_executor, legacy_dark.current_mode)
+        mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
         adopt = None
         if previous:
             if mode is LegacySyncMode.ON:
@@ -404,13 +405,15 @@ async def accept_upload(
         admission_language = None
         if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
             admission_language, exclusion_reason = batch_admission_language(user, target)
-            if exclusion_reason:
-                # This is before re-home, decode, LID or custody. The caller's
-                # legacy-dark fence still refuses new legacy work outside ON.
+            # Exclusion is safe only while this owner still has legacy. Once its
+            # legacy is draining/dark the upload is admitted (C8's provider route
+            # serves it) instead of being refused by both lanes; a supported
+            # conversation keeps its pinned input language in every mode.
+            if exclusion_reason and mode is LegacySyncMode.ON:
                 record_admission_exclusion(
                     target.get('language') or user.get('language'),
                     exclusion_reason,
-                    legacy_available=mode is LegacySyncMode.ON,
+                    legacy_available=True,
                 )
                 return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
@@ -476,9 +479,18 @@ async def accept_upload(
             return None
         if inherited:
             input_language = inherited
-        route = resolve_route(language, byok=byok_enabled)
+        # All-vendor routing: outside its cohort, with its kill switch off, or while this
+        # owner's legacy is on, this is resolve_route exactly (today's routing).
+        route = select_route(
+            language,
+            byok=byok_enabled,
+            uid=uid,
+            batch_percent=policy.batch_percent,
+            vendor_eligible=mode is not LegacySyncMode.ON,
+        ).route
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
-        # to the batch provider-STT stage instead of the legacy fallback.
+        # to the batch provider-STT stage instead of the legacy fallback; inside the
+        # vendor-routing cohort a supported language may also take a vendor route.
         provider = mode is not LegacySyncMode.ON and route.stt_route == 'provider'
         # Contract (c): admission records the route it actually takes. A unit that
         # stays on Parakeet keeps only the BYOK funding decision (lane 6's dispatch

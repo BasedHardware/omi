@@ -1,6 +1,58 @@
 # Legacy dark: retiring legacy sync without a deploy
 
-Contract (h) of the legacy-retire swarm. Code: `utils/sync/legacy_dark.py`. Switch: `rollout_cohorts/_ramp.envs.<env>.legacy_sync`, read through `utils.rollout.runtime_percent.legacy_sync_mode()` (30s TTL, last-known-good on read errors).
+Contract (h) of the legacy-retire swarm. Code: `utils/sync/legacy_dark.py`. Switch: `rollout_cohorts/_ramp.envs.<env>.legacy_sync`, scoped by the same entry's `percents.legacy-sync`, read through `utils.rollout.runtime_percent.legacy_sync_mode(uid)` (30s TTL, mode fails safe to `on` on read errors).
+
+## Cohort retirement
+
+`legacy-sync` is a percent from 0 to 100 using the deployed batch admission
+hash and bucket. Owners outside it retain `on`. Missing scope, invalid owners,
+pending reads and read errors retain `on`. The shared cache still serves
+last-known-good admission percents, but legacy retirement waits for a successful
+read before resuming. Mode and percent always come from one snapshot. No per-owner identifiers are
+stored in the control document. An ownerless sweep stops only at explicit 100%;
+partial sweeps check each owner before claims, repair or dispatch, and
+rotate dark entries by deferring scan deadlines so other owners progress. Accepted
+legacy tasks and the ledger's completed/held/active/stranded fences keep their
+existing behavior.
+
+Legacy retirement uses the same deployed batch hash and an effective percent
+of `min(legacy-sync, batch-pipeline)`, so it never introduces owners outside the
+batch percent. An explicit legacy-percent write above the configured batch
+percent is refused; lowering batch percent automatically clamps retirement at
+read time, so rollback needs no second write. This follows the lead's correction
+to the original bucket instruction. The existing ramp controller holds while
+mode is not `on`; the lead owns these partial steps.
+
+Rollout order is mandatory: first serve this implementation on every admission,
+sequencer, recovery and final-pass revision. Older code interprets the mode
+globally and cannot safely join a partial retirement. Next prepare every env set
+that drains or darkens legacy with the pure generator:
+
+```bash
+.venv/bin/python -m scripts.rollout.legacy_env --input <ramp-env.json> \
+  --output <prepared-ramp-env.json> --set <set-name>=draining
+```
+
+The generator sets `BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` on every
+Cloud Run service in each named draining/dark set. Apply that set fleet-wide
+before the runtime mode CAS. Admission also ignores the exclusion whenever the
+owner's mode is draining/dark, protecting mixed env-update revisions. Outside
+retirement, language exclusion and legacy fallback still work as before.
+
+The lead then writes mode and percent in one CAS with `ramp_set.py
+--legacy-sync draining --legacy-percent <percent>` and the existing confirmed
+preconditions. Increasing that percent requires the same preconditions again.
+Rollback is one write, `--legacy-sync on`, without changing percent or env.
+Missing `legacy-sync` now means zero: existing non-`on` configurations need an
+explicit scope before retirement resumes. Do not turn language exclusion back
+on as part of emergency rollback; accepted batch work keeps its durable route.
+
+Global zero censuses and the bulk final-pass rehome sweep remain full-retirement
+tools. Bulk rehome refuses partial scope; the upload path rehomes the selected
+owner with the existing grace and revision fence. A partial dark step still
+requires evidence that its selected owners have drained; global zero is not a
+valid partial-cohort acceptance claim. C9's release holds, including phone/Watch
+Process Now, ladder debit and the full dark soak, are unchanged.
 
 ## Modes
 
@@ -14,7 +66,7 @@ Any failure to read the mode serves `on`. During the soak the legacy image, queu
 
 ## Preconditions
 
-- **`on` → `draining`:** batch percent 100 at a clean fleet gate, C8 `provider_stt` live, cap-hold rehome live (or S12: cap enforcement held at its current cohort), parity gate PASS, the enrichment queue switch (C3) complete, **and the ladder v1 usage budget is debited for batch-admitted cap-hold units** (Subscription session ruling 10-19; lane 6 owns it)., **and onthway's operator minimal-mode redrives (#22503) are finished or moved to the batch redrive path** (lead ruling 10-20 05:17Z: `draining` stops new sequencer registration, which minimal redrive needs, and C11 deletes it). **C8 provider-STT is live in prod** (`provider_stt_live`: the provider-stt queue, `PROVIDER_STT_TASKS_*` env and the enrichment maintenance job, which also sweeps the provider-stt outbox; M3 review), **and conversations still owned by `legacy_final_pass_v1` with no live legacy job are re-homed to batch** (`legacy_final_pass_rehomed`; lead ruling 10-21 b209a5). `ramp_set.py` refuses to leave `on` until each id in `DRAINING_PRECONDITIONS` (`scripts/rollout/ramp_controller.py`) is confirmed with `--precondition-met <id>`.
+- **`on` → `draining`:** selected-cohort batch readiness at a clean fleet gate (full retirement still requires batch 100), C8 `provider_stt` live, cap-hold rehome live (or S12: cap enforcement held at its current cohort), parity gate PASS, the enrichment queue switch (C3) complete, **and the ladder v1 usage budget is debited for batch-admitted cap-hold units** (Subscription session ruling 10-19; lane 6 owns it)., **and onthway's operator minimal-mode redrives (#22503) are finished or moved to the batch redrive path** (lead ruling 10-20 05:17Z: `draining` stops new sequencer registration, which minimal redrive needs, and C11 deletes it). **C8 provider-STT is live in prod** (`provider_stt_live`: the provider-stt queue, `PROVIDER_STT_TASKS_*` env and the enrichment maintenance job, which also sweeps the provider-stt outbox; M3 review), **and conversations still owned by `legacy_final_pass_v1` with no live legacy job are re-homed to batch** (`legacy_final_pass_rehomed`; lead ruling 10-21 b209a5). `ramp_set.py` refuses to leave `on` until each id in `DRAINING_PRECONDITIONS` (`scripts/rollout/ramp_controller.py`) is confirmed with `--precondition-met <id>`.
 
   The re-home sweep is the evidence for `legacy_final_pass_rehomed`. It needs the `conversations.record_lane_owner` collection-group field index (`scripts/reconcile_firestore_indexes.py --provision-missing`, as the M2 staging cycle did for the ledger index; provision it well before the flip, the group index builds over every conversation). The gate is confirmed on leaving `on` when the re-home mechanism (#23129) serves on every revision and the dry run has sized the stock; the sweep is **applied in `draining`**, at least 5 minutes after the flip (`--apply` refuses `on` and the grace: at `on` it cannot serialize with live legacy admission), and repeated until `CLEAR` before `dark`:
 
@@ -33,7 +85,7 @@ Any failure to read the mode serves `on`. During the soak the legacy image, queu
   cd backend && .venv/bin/python -m scripts.legacy_dark.drain_census --env prod --confirm
   ```
 
-  It gates on `sync_backfill_pending`, sequencer active owners, `sync_redrive_required`, `stt_cap_holds` (upper bound), the depth of `sync-jobs`, `sync-jobs-fresh`, `sync-backfill` and `sync-backfill-fresh`, and `increase(omi_legacy_sync_admissions_total[30m])`. Any unavailable read blocks. Inline (non-Cloud-Tasks) legacy jobs have no aggregate source; the 30-minute zero-admission window plus the 10-minute confirmation bounds them. A stranded `sr-` enrichment backlog on a legacy queue (C3's pre-switch rows still bound to `sync_handler`) is non-blocking for `dark` entry only when the enrichment route is switched (`ENRICHMENT_ROUTE=enrichment_queue`) AND the backlog's cause is external, as on staging, where the LLM gateway is blackholed (lead ruling 10-20). Every legacy count must still read zero, including non-`sr-` tasks (operator count of task names). Prod's gateway works, so prod's pre-switch backlog drains and the plain census applies. `--with-ledger` adds informational ledger counts where a collection-group index exists (prod has none).
+  It gates on `sync_backfill_pending`, sequencer active owners, `sync_redrive_required`, the depth of `sync-jobs`, `sync-jobs-fresh`, `sync-backfill` and `sync-backfill-fresh`, and `increase(omi_legacy_sync_admissions_total[30m])`. Any unavailable read blocks. Pending `stt_cap_holds` are counted but never gate: held rows are retained audio waiting on credits (5.3M in prod, 2026-11-01) and never drain to zero, and `dark` does not strand them, because eligible holds go to batch admission and spend-started holds finish on the shared segment core. Gate 4c below carries the cap-hold assurance. Inline (non-Cloud-Tasks) legacy jobs have no aggregate source; the 30-minute zero-admission window plus the 10-minute confirmation bounds them. A stranded `sr-` enrichment backlog on a legacy queue (C3's pre-switch rows still bound to `sync_handler`) is non-blocking for `dark` entry only when the enrichment route is switched (`ENRICHMENT_ROUTE=enrichment_queue`) AND the backlog's cause is external, as on staging, where the LLM gateway is blackholed (lead ruling 10-20). Every legacy count must still read zero, including non-`sr-` tasks (operator count of task names). Prod's gateway works, so prod's pre-switch backlog drains and the plain census applies. `--with-ledger` adds informational ledger counts where a collection-group index exists (prod has none).
 
 ## Transitions
 
@@ -109,7 +161,7 @@ Any FAIL read fails the window (`SOAK_WINDOW_FAIL`, exit 1; `data_loss` when it 
 | # | Gate | Concrete check (every 30-minute read) | Green when |
 |---|---|---|---|
 | 1 | **Zero legacy traffic** | `sum(increase(omi_legacy_sync_admissions_total[30m]))` | `0` |
-| 1b | | `drain_census --env prod` (it gates on pending, sequencer owners, redrive, cap holds and the four queue depths) | verdict `ZERO` |
+| 1b | | `drain_census --env prod` (it gates on pending, sequencer owners, redrive and the four queue depths; cap holds are informational) | verdict `ZERO` |
 | 1c | | `sum(omi_legacy_sync_mode{mode="dark"}) == count(omi_legacy_sync_mode{mode="dark"})` and `sum(increase(omi_legacy_sync_mode_read_total{source=~"error\|malformed"}[30m]))` | every process serves `dark`; `0` fallbacks |
 | 1d | | `sum(increase(omi_legacy_dark_ack_total{reason=~"legacy_active_in_dark\|admission_refused"}[30m]))` | `0` |
 | 2 | **Outcome SLOs held** | `fleet_gate.sh <T_dark> 20 30 100` (the workspace gate at 100%) | exit 0 (`GATE_PASS`) |

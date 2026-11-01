@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Not bermula apabila transkrip akhir tiba.",
     "episodeOnDeviceNotesFootnote": "Disediakan di telefon anda semasa anda bercakap. Nota penuh tiba bersama transkrip akhir.",
     "episodeOnThisPhone": "Di telefon ini",
-    "liveCardTitle": "Siaran langsung",
     "livePreviewBehind": "Transkrip akhir ketinggalan kira-kira {duration}",
     "livePreviewCatchingUp": "Transkrip akhir sedang mengemas kini",
     "livePreviewNoEngineBody": "Perkataan anda muncul di sini satu hingga dua minit selepas anda menuturkannya.",
     "livePreviewNoEngineTitle": "Merakam dengan selamat",
-    "livePreviewOnPhoneDivider": "Langsung di telefon ini",
+    "livePreviewOnPhoneDivider": "Baru sahaja, pada telefon ini",
     "livePreviewTurnOnLiveText": "Hidupkan teks langsung",
     "deviceCatchUpOnItsWay": "dalam perjalanan",
     "deviceCatchUpWhenOnline": "apabila dalam talian",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.",
     "yearlySwitchDoneTitle": "Anda kini membayar tahunan",
     "yearlySwitchDoneBody": "{amount} dicaj hari ini. Diperbaharui pada {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} bahagian} one{{count} bahagian} two{{count} bahagian} few{{count} bahagian} many{{count} bahagian} other{{count} bahagian}}",
     "chatAppsWaitingMessageIn": "Hantar mesej dalam {app}. Skrin ini dikemas kini sebaik sahaja Omi menerimanya.",
-    "chatAppsCodeExpiredMessageIn": "Dapatkan kod baharu dan hantar daripada {app}."
+    "chatAppsCodeExpiredMessageIn": "Dapatkan kod baharu dan hantar daripada {app}.",
+    "episodeWritingNotes": "Menulis nota…",
+    "episodeWritingNotesDetail": "Menyiapkan transkrip dahulu. Anda boleh meninggalkan halaman ini.",
+    "episodeCoversUpTo": "Meliputi sehingga {time} · nota penuh apabila selesai",
+    "liveTranscribedUpTo": "Ditranskripsi sehingga {time}",
+    "liveAudioSaved": "{duration} disimpan",
+    "liveAudioSavedDetail": "Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik."
 }

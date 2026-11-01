@@ -30,7 +30,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyRea
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.outbox import Claim, OutboxKind, Outcome
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, projection_speech_spans
+from utils.batch_pipeline.contracts import WorkItem, WorkResult, held_vad_census, projection_speech_spans
 from utils.batch_pipeline.recovery_disposition import (
     REASONS,
     STAGES,
@@ -233,6 +233,7 @@ class ProviderSttStore:
         *,
         outcome: str = 'success',
         failure: dict | None = None,
+        measured_held_vad_speech_seconds: float | None = None,
     ) -> bool:
         closed_failure = None
         if result_uri is None:
@@ -262,6 +263,11 @@ class ProviderSttStore:
                     recovery_state='failed_held',
                 )
                 job['provider_intent']['failure'] = closed_failure
+                # Held VAD evidence, as quarantine recovery records it: the guard's T2
+                # census reads it from the job, and the provider stage logs no worker receipt.
+                census = held_vad_census(job, measured_held_vad_speech_seconds)
+                if census is not None:
+                    job['measured_held_vad_speech_seconds'] = census
             else:
                 job.update(state='result_ready', result=asdict(WorkResult(segment_id, result_uri or '', outcome)))
             job['provider_intent']['settled_at'] = now
@@ -445,7 +451,11 @@ class ProviderSttStage:
             except Exception:
                 failure = {'stage': 'provider', 'reason': 'operation_failed'}
         if failure is not None:
-            if not self.protocol.settle(segment_id, token, self.clock(), failure=failure):
+            # CPU Silero spans from inspection; None when inspection itself failed.
+            measured = sum(span['end'] - span['start'] for span in inspected[2]) if inspected is not None else None
+            if not self.protocol.settle(
+                segment_id, token, self.clock(), failure=failure, measured_held_vad_speech_seconds=measured
+            ):
                 return UnitOutcome('done', 'superseded')
             self._log('failed_held', failure['reason'])
             return UnitOutcome('done', 'processed', provider_reason='provider_failed')

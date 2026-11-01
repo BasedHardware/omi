@@ -18,6 +18,7 @@ from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_en
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
+from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
@@ -71,9 +72,18 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
 
 
 def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
-    return job['duration_seconds'] <= max_seconds and not (
+    return within_unit_ceiling(job['duration_seconds'], max_seconds) and not (
         shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span'
     )
+
+
+def _park_reason(job: dict, max_seconds: float, shared_gpu: bool) -> str:
+    """Bounded label for a head this pull cannot lease; privacy is labeled by the caller."""
+    if not within_unit_ceiling(job['duration_seconds'], max_seconds):
+        return 'pool_duration'
+    if shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span':
+        return 'pool_unit_kind'
+    return 'shared_live_policy'
 
 
 def _prefer_merge_head(
@@ -401,6 +411,7 @@ class Scheduler:
                         )
                     except BatchPrivacyBlocked:
                         blocked.add(queue_key)
+                        observations.append(('parked_privacy', None))
                     else:
                         privacy_checked_segment = job['segment_id']
                         policy = stage_in_transaction(
@@ -419,6 +430,7 @@ class Scheduler:
                                 candidates=candidates,
                             )
                         job.setdefault('unit_kind', 'conversation')
+                        park = None
                         try:
                             if job['segment_id'] != privacy_checked_segment:
                                 tx.check_privacy(
@@ -431,11 +443,14 @@ class Scheduler:
                                 not gpu_key or policy.shared_live
                             )
                         except BatchPrivacyBlocked:
-                            allowed = False
+                            allowed, park = False, 'privacy'
                         if allowed:
                             eligible_queues[queue_key] = job['duration_seconds']
                         else:
                             blocked.add(queue_key)
+                            # Parking is otherwise silent: the owner's whole FIFO waits behind this head.
+                            park = park or _park_reason(job, max_seconds, bool(gpu_key))
+                            observations.append((f'parked_{park}', None))
                 if queue_key in blocked:
                     ring.append(ring.pop(0))
                     if len(blocked) == len(ring):
@@ -539,20 +554,24 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', result.segment_id)
             if job.get('state') in {'result_ready', 'committed'}:
-                return job.get('result') == asdict(result) and job.get('token') == token, False
+                return job.get('result') == asdict(result) and job.get('token') == token, False, 0
             if not owns_lease(job, token, now):
-                return False, False
+                return False, False, 0
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
-                return False, False
+                return False, False, 0
             job.update(state='result_ready', result=asdict(result), ready_at=now)
             job.pop('retry_started_at', None)
             job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)
-            return True, True
+            return True, True, job['duration_seconds']
 
-        accepted, changed = self.store.run(commit)
+        accepted, changed, seconds = self.store.run(commit)
         if changed and self.metrics:
             self.metrics.record('completed')
+            try:
+                self.metrics.record_completed_audio(result.outcome, seconds)
+            except Exception:
+                pass  # Duration telemetry cannot undo a fenced completion.
         return accepted
 
     def fail(
@@ -606,6 +625,11 @@ class Scheduler:
             state, attempt, seconds = outcome
             if state == 'quarantined':
                 record_correctness('failed', seconds=seconds)
+            else:
+                try:
+                    logger.info('event=batch_retry reason=worker_failed outcome=deferred attempt=%d', attempt)
+                except Exception:
+                    pass
             # Best effort AFTER the transaction/exception scope: telemetry may
             # neither fail a sibling nor reveal a worker exception via handleError.
             if self.metrics:
@@ -729,7 +753,7 @@ class Scheduler:
                         control = read_control(tx, scheduler_control_key(job['owner_key']))
                         job['state'] = 'ready'
                         _append(tx, control, job)
-                        outcome = ('retry', 0, None)
+                        outcome = ('requeued', 0, None)
                     else:
                         return None
                     tx.put('jobs', segment_id, job)
