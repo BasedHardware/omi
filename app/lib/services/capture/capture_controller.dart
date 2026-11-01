@@ -1,3 +1,11 @@
+// Realtime capture execution engine: socket streaming, STT/codec configuration,
+// permissions, geolocation, and recording-preserving recovery for live sessions.
+//
+// Every await is guarded by a session-generation token and effects cross the
+// explicit seams in capture_seams.dart, because stale callbacks after stop or
+// device/account switches were the recurring capture-corruption incidents. The
+// ownership reducer lives in capture_coordinator.dart; this controller executes
+// (OWNERSHIP.md).
 import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/services/capture/live_held_audio_state.dart';
 import 'package:omi/models/stt_provider.dart';

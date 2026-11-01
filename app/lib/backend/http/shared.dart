@@ -1,3 +1,11 @@
+// The shared HTTP layer every API call goes through: auth header with a
+// five-minute expiry buffer and forced refresh, the standard request headers,
+// and the raw call path with retry and clock-skew handling.
+//
+// Token refresh and 401 retry are centralized here because per-caller token
+// handling produced divergent auth behavior, and while a custom API base URL
+// override is active the credential headers are stripped -- an override is a
+// hard boundary for Authorization and account-generation headers.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

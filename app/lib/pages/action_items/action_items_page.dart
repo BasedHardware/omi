@@ -1,3 +1,9 @@
+// The Tasks page: dated Today/Tomorrow/Later sections plus an expandable
+// No Deadline section, completion toggles, and task-integration entry points.
+//
+// Dated sections render complete lists on load while No Deadline is the only
+// section allowed to page, and completion state is driven through the shared
+// action-items provider so list, widget and integration views stay consistent.
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 

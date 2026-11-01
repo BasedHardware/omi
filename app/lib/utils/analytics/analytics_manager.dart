@@ -1,3 +1,10 @@
+// Analytics fan-out: the typed event registry, adapter plumbing, and the
+// PostHog/telemetry gates deciding what leaves the device.
+//
+// Events go through the typed registry (registry/typed_events.dart) instead of
+// free-form properties, flags dual-read the Omi flag store with a PostHog
+// fallback, and session replay ships with all text and images masked --
+// privacy masking is enforced here, not left to call sites.
 export 'registry/typed_events.dart';
 
 import 'dart:async';
