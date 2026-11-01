@@ -71,6 +71,14 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> Processin
     )
 
 
+def manual_choice_in_scope(uid: str) -> bool:
+    """The process route's 404 gate; an out-of-scope tap is still counted."""
+    if recovery_cohort_admits(uid) and funded_processing.enabled(uid):
+        return True
+    record_backlog_choice('manual', BacklogChoiceOutcome.OUT_OF_SCOPE)
+    return False
+
+
 def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: Any = None) -> dict | None:
     source = 'upgrade' if automatic else 'manual'
     try:

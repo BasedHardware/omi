@@ -708,8 +708,7 @@ def test_backlog_choice_errors_and_out_of_scope_404s_are_counted(monkeypatch):
         backlog.choose('synthetic', request_key='synthetic-choice', automatic=True, intent_at=None)
     assert _choices('upgrade', 'error') == before + 1
 
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: False)
     monkeypatch.setattr(backlog, 'choose', Mock(side_effect=AssertionError('chose out of scope')))
     app = FastAPI()
     app.include_router(route.router)
