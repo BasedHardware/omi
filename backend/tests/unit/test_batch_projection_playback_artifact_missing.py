@@ -7,7 +7,7 @@ from google.api_core.exceptions import NotFound
 import pytest
 
 from database import conversations as conversations_db
-from utils.batch_pipeline import projection
+from utils.batch_pipeline import artifact_missing, projection
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.sync import merge_audio
 
@@ -63,12 +63,12 @@ def _missing(_item):
 def test_missing_staged_object_skips_playback_and_counts(row, monkeypatch, caplog):
     stored = []
     monkeypatch.setattr(merge_audio, 'store_intake_audio', lambda *args: stored.append(args))
-    before = projection.ARTIFACT_MISSING.labels(site='playback')._value.get()
+    before = artifact_missing.ARTIFACT_MISSING.labels(site='playback')._value.get()
 
     assert _projector(row, _missing).persist_playback(ITEM, BINDING, 'conv-1', RECEIPT) is None
 
     assert stored == []
-    assert projection.ARTIFACT_MISSING.labels(site='playback')._value.get() == before + 1
+    assert artifact_missing.ARTIFACT_MISSING.labels(site='playback')._value.get() == before + 1
     assert 'event=batch_artifact_missing site=playback outcome=skipped' in caplog.text
     # The closed log line names no owner, conversation, segment or object.
     assert 'owner-1' not in caplog.text and 'conv-1' not in caplog.text and 'seg-1' not in caplog.text
