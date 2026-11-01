@@ -152,6 +152,7 @@ def db(monkeypatch):
     monkeypatch.delenv('SYNC_BACKFILL_ORDER_PERCENT', raising=False)
     monkeypatch.delenv('SYNC_BACKFILL_ORDER_UID_ALLOWLIST', raising=False)
     monkeypatch.setattr(backfill_cutover, 'r', fakeredis.FakeRedis())
+    monkeypatch.setattr(sync_jobs, 'r', fakeredis.FakeRedis())
 
     def transactional(fn):
         def run(transaction):
@@ -176,6 +177,29 @@ def test_nonprod_delivery_guard_is_pure_before_any_redis_read(monkeypatch):
     assert not uid_sequencer.foreign_delivery({'lane': 'fresh'})
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     assert not uid_sequencer.foreign_delivery({'lane': 'backfill', 'sequencer_epoch': 3})
+
+
+def test_begin_job_returns_prior_state_only_after_a_valid_claim(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    claim = registry.claim_next('a', firestore_client=db, now=NOW)
+    prior = {'status': 'queued', 'attempt': 4}
+    read = MagicMock(return_value=prior)
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', read)
+    assert registry.begin_job('a', 'job', claim['epoch'], firestore_client=db, now=NOW) == {'job': prior}
+    read.assert_called_once_with('job')
+    read.reset_mock()
+    before = copy.deepcopy(db.docs)
+    assert registry.begin_job('a', 'job', claim['epoch'] + 1, firestore_client=db, now=NOW) is None
+    assert db.docs == before
+    read.assert_not_called()
+
+
+def test_begin_job_keeps_a_valid_claim_when_the_redis_job_is_missing(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    claim = registry.claim_next('a', firestore_client=db, now=NOW)
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: None)
+    assert registry.begin_job('a', 'job', claim['epoch'], firestore_client=db, now=NOW) == {'job': None}
+    assert registry.get_owner('a', firestore_client=db)['active_state'] == 'running'
 
 
 def test_dev_cannot_read_or_claim_production_registry(db, monkeypatch):
