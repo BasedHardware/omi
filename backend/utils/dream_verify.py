@@ -29,7 +29,29 @@ INSTRUCTIONS = (
 )
 
 
-VOICE_FIELD_PREFIXES = ('speaker_embedding', 'speech_sample')
+PERSON_EVIDENCE_FIELDS = (
+    'id',
+    'entity_id',
+    'type',
+    'name',
+    'aliases',
+    'is_dismissed',
+    'user_confirmed',
+    'is_user_created',
+    'pinned',
+    'pinned_at',
+    'label_evidence',
+    'labels_to_confirm',
+    'last_labeled_at',
+    'conversation_count',
+    'auto_conversation_count',
+    'last_heard_at',
+    'talk_seconds',
+    'confidence_reasons',
+    'created_at',
+    'updated_at',
+)
+VOICE_MARKERS = ('speaker_embedding', 'speech_samples', 'person_voice_base', 'person_voice_confirmations')
 
 
 def compact_json(value):
@@ -46,10 +68,11 @@ def evidence(item):
     return {**payload, 'evidence': rows}
 
 
-def without_voice(row):
-    # Staging has already judged protection from the full row; a verifier needs only that voice exists.
-    kept = {key: value for key, value in row.items() if not key.startswith(VOICE_FIELD_PREFIXES)}
-    if len(kept) != len(row):
+def person_evidence(row):
+    # An allowlist: a voice field added to person rows later cannot reach a verifier by default.
+    # Staging has already judged protection from the full row.
+    kept = {key: row[key] for key in PERSON_EVIDENCE_FIELDS if key in row}
+    if any(row.get(key) for key in VOICE_MARKERS):
         kept['has_voice_profile'] = True
     return kept
 
@@ -62,7 +85,7 @@ def minimal_context(ref, records):
         # A memory/task/person is already a small cited record. Its provenance,
         # subject, dates and protection metadata are relevant to verification.
         value = cited_value(ref, records)
-        return without_voice(value) if isinstance(value, dict) else value
+        return person_evidence(value) if ref.startswith('people/') and isinstance(value, dict) else value
     fields = ('id', 'status', 'created_at', 'started_at', 'finished_at', 'language', 'structured')
     context = {key: row[key] for key in fields if key in row}
     segments = row.get('transcript_segments') or []

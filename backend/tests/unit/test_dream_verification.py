@@ -27,6 +27,11 @@ def test_person_voice_fields_never_reach_a_verifier():
         'speech_sample_transcripts': ['synthetic words'],
         'speech_samples_version': 3,
         'speech_sample_source': {'conversation_id': 'one'},
+        'person_voice_base': {'embedding': [0.5] * 4, 'samples': ['synthetic/base'], 'transcripts': ['base words']},
+        'person_voice_confirmations': [
+            {'embedding': [0.75] * 4, 'sample_path': 'synthetic/clip', 'transcript': 'clip words'}
+        ],
+        'voice_field_added_later': 'synthetic-voice',
     }
     item = SimpleNamespace(
         refs=('people/sam',),
@@ -42,8 +47,16 @@ def test_person_voice_fields_never_reach_a_verifier():
     assert 'speaker_embedding' in person
 
 
-def test_a_person_without_voice_is_not_marked_as_having_it():
-    assert minimal_context('people/junk', {'people/junk': {'name': 'Canadian'}}) == {'name': 'Canadian'}
+def test_empty_voice_fields_are_not_a_voice_profile():
+    person = {'name': 'Canadian', 'speech_samples': [], 'speech_samples_version': 3, 'speaker_embedding': None}
+
+    assert minimal_context('people/junk', {'people/junk': person}) == {'name': 'Canadian'}
+
+
+def test_only_person_rows_are_narrowed_to_the_allowlist():
+    memory = {'content': 'Synthetic fact', 'category': 'synthetic'}
+
+    assert minimal_context('memories/one', {'memories/one': memory}) == memory
 
 
 def test_two_independent_batched_invocations_have_identical_evidence_without_history():
