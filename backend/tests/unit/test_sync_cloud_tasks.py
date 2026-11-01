@@ -6684,13 +6684,14 @@ async def test_work_cohort_timeout_keeps_queue_owned_retry_before_paid_work(expi
         module.sync_backfill_sequencer.note_budget_deferral = MagicMock(return_value=True)
         module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
 
+    expire_budget = _pipeline_expiring_the_handler_budget(module)
+
     async def warm(_uid):
         if expiry == 'read_timeout':
             raise TimeoutError('membership read timed out')
-        await asyncio.sleep(30)
+        await expire_budget()
 
     module.warm_rollout_cohorts = warm
-    module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
     try:
         response = await module.run_sync_job(request, task_retry_count=0)
         module.release_job_run_lock_strict.assert_called_once()
