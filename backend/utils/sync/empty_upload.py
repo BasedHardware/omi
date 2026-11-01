@@ -50,5 +50,17 @@ def nonempty_manifest_claims(
 ) -> list[dict[str, str]] | None:
     # Verify the full signed request before dropping no-audio members: omission
     # must not demote legitimate remaining capture to the legacy lane.
+    if claims is None:
+        return None
     names = {os.path.basename(name) for name in filenames}
-    return None if claims is None else [claim for claim in claims if claim['name'] in names]
+    kept, renamed = [], False
+    for claim in claims:
+        if claim['name'] not in names:
+            # The signature covers the sent name; staging uses the canonical one.
+            [canonical] = canonical_sync_upload_filenames([claim['name']])
+            if canonical not in names:
+                continue
+            claim, renamed = {**claim, 'name': canonical}, True
+        kept.append(claim)
+    # manifest_claims_match_paths compares against the staged names in sorted order.
+    return sorted(kept, key=lambda item: (item['name'], item['sha256'])) if renamed else kept

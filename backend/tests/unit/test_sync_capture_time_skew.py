@@ -27,6 +27,7 @@ from utils.request_validation import canonical_sync_upload_filenames, parse_sync
 from utils.sync import capture_clock, lanes
 from utils.sync.capture_clock import CaptureTimeWindowError, SyncCaptureTimeRejected, capture_time_rejection
 from utils.sync.clock_run import clock_run_from_path
+from utils.sync.empty_upload import nonempty_manifest_claims
 from utils.sync.files import get_timestamp_from_path
 from utils.sync.pipeline import _retrieve_file_paths_v2
 
@@ -945,6 +946,43 @@ def test_v2_route_admits_collision_suffixed_upload_with_sound_clock(client, monk
     assert response.status_code == 202, response.text
     assert staged == [name.replace('_u3.bin', '.bin').replace('_fs160_', '_fs160_u3_')]
     assert _capture_time_counter('rejected_malformed') == before
+
+
+def test_manifest_claim_follows_its_file_to_the_canonical_name():
+    collided, plain = 'audio_omi_opus_16000_1_fs160_1761955200_u3.bin', 'audio_omi_opus_16000_1_fs160_1761955300.bin'
+    claims = [{'name': collided, 'sha256': 'a'}, {'name': plain, 'sha256': 'b'}]
+    staged = canonical_sync_upload_filenames([collided, plain])
+
+    assert nonempty_manifest_claims(claims, staged) == [
+        {'name': plain, 'sha256': 'b'},
+        {'name': 'audio_omi_opus_16000_1_fs160_u3_1761955200.bin', 'sha256': 'a'},
+    ]
+    # Unrenamed requests keep the verified claims exactly as before.
+    assert nonempty_manifest_claims(claims, [collided, plain]) == claims
+
+
+def test_v2_route_keeps_manifest_proof_for_collision_suffixed_upload(client, monkeypatch):
+    collided, plain = _collided(-20), _filename(-10)
+    audio_a, audio_b = b'\x01\0\0\0\x42', b'\x01\0\0\0\x43'
+    claims = sorted(
+        [
+            {'name': collided, 'sha256': hashlib.sha256(audio_a).hexdigest()},
+            {'name': plain, 'sha256': hashlib.sha256(audio_b).hexdigest()},
+        ],
+        key=lambda item: item['name'],
+    )
+    seen_names = []
+
+    def verified(_token, _uid, _device, _conversation, filenames):
+        seen_names.extend(filenames)
+        return claims
+
+    monkeypatch.setattr(router, 'verify_capture_manifest', verified)
+    monkeypatch.setattr(router, '_capture_matches_server_conversation', lambda *_a, **_k: True)
+    response = client.post('/v2/sync-local-files', files=[('files', (collided, audio_a)), ('files', (plain, audio_b))])
+
+    assert response.status_code == 202, response.text
+    assert seen_names == [collided, plain]
 
 
 def test_v2_route_still_refuses_collision_suffixed_upload_with_broken_clock(client):
