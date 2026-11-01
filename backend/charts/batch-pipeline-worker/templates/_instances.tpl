@@ -61,7 +61,7 @@ on nodes the owner left free. The OD instance above is unchanged. */ -}}
     "borrowedPools" $pools
     "terminationGracePeriodSeconds" $grace
     "minReplicas" 1 "maxReplicas" $max "baselineReplicas" 1
-    "capacityTarget" $target) -}}
+    "capacityTarget" $readyTarget "chainTarget" $chainTarget) -}}
 {{- end -}}
 {{- end -}}
 {{- toYaml $instances -}}
