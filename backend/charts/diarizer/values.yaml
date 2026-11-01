@@ -12,6 +12,8 @@ image:
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # Batch installation pins the published artifact, while standard keeps SHA tags.
+  digest: ""
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -97,6 +99,8 @@ resources: {}
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
+  # Optional Pods metric; requires a Prometheus custom-metrics adapter mapping.
+  queueDepthAverageValue: null
   enabled: false
   minReplicas: 1
   maxReplicas: 100
@@ -121,3 +125,26 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Additive metrics discovery; enable only where the GMP CRD is installed.
+podMonitoring:
+  enabled: false
+  interval: 30s
+
+# Raise for long final-pass requests when enabling a cohort behind the ingress.
+backendConfig:
+  name: diarizer-backend-config
+  timeoutSeconds: 30
+
+# Empty keeps the image entrypoint serving concurrent legacy embeddings/v1.
+command: []
+
+# Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
+gateway:
+  enabled: false
+  name: ""
+  listenerName: http
+  pathPrefix: /diarizer
+  healthCheckPath: /health
+  timeoutSeconds: 30
+  connectionDrainingSeconds: 0

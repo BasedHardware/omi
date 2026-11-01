@@ -97,8 +97,10 @@ struct ConversationDetailView: View {
   // ("impossible to assign speakers" reports).
   private var people: [Person] { AppState.current?.people ?? [] }
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
+  @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue) private var meetingMemoryBriefsEnabled = false
 
   @StateObject private var appProvider = AppProvider()
+  @StateObject private var summaryAppPicker = ConversationSummaryAppPicker()
   /// Playback belongs to the canonical detail, not to the capture browser.
   /// This keeps the signed URL and AVPlayer lifecycle scoped to whichever
   /// conversation detail is currently visible.
@@ -150,6 +152,8 @@ struct ConversationDetailView: View {
   // Action states
   @State private var showDeleteConfirmation = false
   @State private var showEditDialog = false
+  @State private var showFollowUpDraft = false
+  @State private var followUpDraftText = ""
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
   @State private var isDeleting = false
@@ -225,6 +229,22 @@ struct ConversationDetailView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       pageHeader
+      if displayConversation.discarded {
+        HStack(spacing: OmiSpacing.md) {
+          Text("Discarded · Hidden from your feed")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+          Spacer()
+          Button(isReprocessing ? "Restoring…" : "Restore Conversation") {
+            Task { await restoreConversation() }
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .disabled(isReprocessing)
+          .accessibilityIdentifier("conversation-detail-restore")
+        }
+        .padding(.horizontal, OmiSpacing.xl)
+        .padding(.vertical, OmiSpacing.sm)
+      }
       if let retrySpeakerAssignment {
         HStack {
           Text("Couldn't assign this speaker")
@@ -239,8 +259,20 @@ struct ConversationDetailView: View {
 
       switch Self.visiblePane(transcriptOpen: showTranscriptDrawer) {
       case .summary:
-        summaryPane
-          .transition(.opacity)
+        if displayConversation.discarded {
+          VStack(spacing: OmiSpacing.md) {
+            Text("Your audio and transcript stay available here. Restore this conversation to your feed.")
+              .foregroundColor(Ink.secondary)
+            Button("View Transcript") { showTranscriptDrawer = true }
+              .buttonStyle(OmiButtonStyle(.secondary))
+              .accessibilityIdentifier("discarded-view-transcript")
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .padding(OmiSpacing.xl)
+        } else {
+          summaryPane
+            .transition(.opacity)
+        }
       case .transcript:
         transcriptDrawerView
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -285,6 +317,19 @@ struct ConversationDetailView: View {
         },
         onCancel: { showEditDialog = false }
       )
+    }
+    .dismissableSheet(isPresented: $showFollowUpDraft) {
+      MeetingFollowUpDraftSheet(
+        text: $followUpDraftText,
+        onReviewTranscript: {
+          showFollowUpDraft = false
+          showTranscriptDrawer = true
+        },
+        onCopy: {
+          OmiToastCenter.shared.copy(followUpDraftText, confirming: "Draft copied")
+          showFollowUpDraft = false
+        },
+        onClose: { showFollowUpDraft = false })
     }
     .onAppear {
       showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
@@ -439,13 +484,15 @@ struct ConversationDetailView: View {
         editedTitle = displayConversation.title
         showEditDialog = true
       case "delete": showDeleteConfirmation = true
+      case "restore": Task { await restoreConversation() }
       default: break
       }
     }
     .dismissableSheet(isPresented: $showAppSelector) {
       AppSelectorSheet(
-        apps: appProvider.apps.filter { $0.capabilities.contains("memories") },
+        picker: summaryAppPicker,
         isLoading: isReprocessing,
+        processingAppId: selectedAppForReprocess?.id,
         selectedAppId: ConversationSummarySelection.primarySummary(for: displayConversation).appId,
         preferredAppId: preferredSummaryAppId,
         onSelect: { app in
@@ -457,9 +504,22 @@ struct ConversationDetailView: View {
         onSetPreferred: { app in
           setPreferredSummaryApp(app)
         },
+        onBrowseApps: {
+          showAppSelector = false
+          NotificationCenter.default.post(
+            name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.apps.rawValue])
+        },
         onDismiss: { showAppSelector = false }
       )
       .frame(width: 400, height: 500)
+    }
+    .task(id: showAppSelector) {
+      if showAppSelector {
+        await summaryAppPicker.load()
+      } else {
+        summaryAppPicker.reset()
+      }
     }
     .dismissableSheet(item: $selectedSegmentForNaming) { segment in
       NameSpeakerSheet(
@@ -498,6 +558,15 @@ struct ConversationDetailView: View {
       },
       onMoveToFolder: onMoveToFolder.map { move in { folderId in moveToFolder(folderId, using: move) } },
       onCopyTranscript: copyTranscript,
+      // Compose once per render: the same draft decides the menu item and fills the sheet.
+      onDraftFollowUp: (meetingMemoryBriefsEnabled
+        ? MeetingFollowUpDraftComposer.compose(from: displayConversation) : nil)
+        .map { text in
+          {
+            followUpDraftText = text
+            showFollowUpDraft = true
+          }
+        },
       onDiscussInChat: onDiscussInChat,
       onDelete: { showDeleteConfirmation = true },
       bannerInset: { headerBannerInset },
@@ -779,8 +848,25 @@ struct ConversationDetailView: View {
     // Action items sit directly under the summary: they are the part of a
     // meeting a reader acts on. Nothing here is a task until the reader says
     // so (I1) — each row carries its own "Add to Tasks".
-    ConversationActionItemsSection(conversation: displayConversation, onOpenLinkedTask: onOpenLinkedTask)
-      .padding(.top, OmiSpacing.xxl)
+    ConversationActionItemsSection(
+      conversation: displayConversation, onOpenLinkedTask: onOpenLinkedTask,
+      onTaskAdded: { selected, taskID in
+        guard
+          let linked = ConversationSummaryTaskPromoter.linkedConversation(
+            displayConversation, selected: selected, taskID: taskID)
+        else { return }
+        loadedConversation = linked
+        let canonical = serverClockConversation ?? linked
+        if let cached = ConversationSummaryTaskPromoter.linkedConversation(
+          canonical, selected: selected, taskID: taskID)
+        {
+          serverClockConversation = cached
+          AppState.current?.replaceConversation(cached)
+        }
+      }
+    )
+    .id(displayConversation.id)
+    .padding(.top, OmiSpacing.xxl)
   }
 
   @ViewBuilder
@@ -1253,6 +1339,24 @@ struct ConversationDetailView: View {
   }
 
   // MARK: - Reprocess
+
+  private func restoreConversation() async {
+    guard displayConversation.discarded, !isReprocessing, let appState = AppState.current else { return }
+    let generation = detailLoadGeneration
+    isReprocessing = true
+    defer { isReprocessing = false }
+    do {
+      let restored = try await appState.restoreConversation(conversation.id)
+      guard isCurrentDetailRequest(generation) else { return }
+      loadedConversation = restored
+      OmiToastCenter.shared.confirm("Conversation restored")
+    } catch is CancellationError {
+      // The account changed before the response arrived.
+    } catch {
+      guard isCurrentDetailRequest(generation) else { return }
+      OmiToastCenter.shared.notice("Couldn't restore conversation. Try again.", systemImage: "exclamationmark.triangle")
+    }
+  }
 
   private func reprocessWithApp(_ app: OmiApp) async {
     let requestGeneration = detailLoadGeneration

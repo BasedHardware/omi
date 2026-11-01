@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Keep the database package real so shared persistence telemetry remains importable.
 _HEAVY_MOCKS = {
     'anthropic': MagicMock(),
     'firebase_admin': MagicMock(),
@@ -15,7 +16,6 @@ _HEAVY_MOCKS = {
     'google.cloud.firestore_v1': MagicMock(),
     'google.cloud.firestore_v1.base_query': MagicMock(),
     'tiktoken': MagicMock(encoding_for_model=MagicMock(return_value=MagicMock())),
-    'database': MagicMock(),
     'database._client': MagicMock(),
     'database.llm_usage': MagicMock(),
 }

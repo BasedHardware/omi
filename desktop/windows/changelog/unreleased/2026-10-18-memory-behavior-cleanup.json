@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Memory management now uses the canonical current-memory and retained ledger-history reads without retired belief-model or JIT controls."
+  ]
+}

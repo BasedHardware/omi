@@ -1,7 +1,0 @@
-apiVersion: networking.gke.io/v1
-kind: ManagedCertificate
-metadata:
-  name: prod-omi-deepgram-grafana-alb-cert
-spec:
-  domains:
-    - dg-monitor.omi.me

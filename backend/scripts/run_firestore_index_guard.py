@@ -47,7 +47,7 @@ def main() -> int:
         BACKEND_UNIT_TEST_FILE_LIST=str(test_list),
         BACKEND_PYTEST_FILE_ISOLATION='1',
         BACKEND_PYTEST_PARALLEL_SESSION='0',
-        BACKEND_PYTEST_WORKERS='2',
+        BACKEND_PYTEST_WORKERS=os.environ.get('BACKEND_PYTEST_WORKERS', '2'),
         # Include the digest-pinned skip/covered-by sentinel even though the
         # general backend PR lane marks it slow. It is part of this guard.
         BACKEND_PYTEST_MARK_EXPR='not integration',

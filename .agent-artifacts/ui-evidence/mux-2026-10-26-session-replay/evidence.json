@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-replay-name-device-vs-masked.png",
+      "platform": "mobile-ios",
+      "description": "Name step on the iPhone 17 Pro simulator (left, scaled to 402x874) and the frame PostHog stored for it in session 01a17a5b-18c9-75a6-990d-8013d49a588b (right): title, typed name and button label are black boxes. The onboarding photo is bundled art.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-replay-home-device-vs-masked.png",
+      "platform": "mobile-ios",
+      "description": "Home after onboarding on the simulator (left) and the stored replay frame (right): every label, icon glyph and the empty state are masked.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-replay-session-masked-frames.png",
+      "platform": "mobile-ios",
+      "description": "Every frame PostHog stored for session 01a17a5b-18c9-75a6-990d-8013d49a588b, in order: auth, consent, name, language, source survey, permissions, voice intro, setup page with rating alert, connect step, Home.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

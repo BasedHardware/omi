@@ -125,9 +125,6 @@ final class SettingsAssistantControlsTests: XCTestCase {
       TaskAssistantSettings.shared.extractionInterval = step
       XCTAssertEqual(TaskAssistantSettings.shared.extractionInterval, step)
 
-      InsightAssistantSettings.shared.extractionInterval = step
-      XCTAssertEqual(InsightAssistantSettings.shared.extractionInterval, step)
-
       MemoryAssistantSettings.shared.extractionInterval = step
       XCTAssertEqual(MemoryAssistantSettings.shared.extractionInterval, step)
     }
@@ -146,10 +143,6 @@ final class SettingsAssistantControlsTests: XCTestCase {
     TaskAssistantSettings.shared.extractionInterval = 0
     XCTAssertEqual(TaskAssistantSettings.shared.extractionInterval, 600)
     XCTAssertEqual(UserDefaults.standard.double(forKey: taskIntervalDefaultsKey), 600)
-
-    InsightAssistantSettings.shared.extractionInterval = -30
-    XCTAssertEqual(InsightAssistantSettings.shared.extractionInterval, 600)
-    XCTAssertEqual(UserDefaults.standard.double(forKey: insightIntervalDefaultsKey), 600)
 
     // Memory's default is 1800 (30 min), not 600: 2026-08-17 measured value ranking —
     // worst CTR of any proactive lane at half the notification volume — cut its cadence 3x.
@@ -189,7 +182,6 @@ final class SettingsAssistantControlsTests: XCTestCase {
   func testControlProjectionFollowsAnAccountSnapshot() {
     TaskAssistantSettings.shared.isEnabled = false
     TaskAssistantSettings.shared.extractionInterval = 10
-    InsightAssistantSettings.shared.isEnabled = false
     MemoryAssistantSettings.shared.isEnabled = false
     AssistantSettings.shared.analysisDelay = 0
 
@@ -199,8 +191,6 @@ final class SettingsAssistantControlsTests: XCTestCase {
         task: TaskSettingsResponse(
           enabled: true, extractionInterval: 1800, minConfidence: 0.8,
           allowedApps: ["Mail"], browserKeywords: ["review"]),
-        insight: InsightSettingsResponse(
-          enabled: true, extractionInterval: 300, minConfidence: 0.9, excludedApps: ["Passwords"]),
         memory: MemorySettingsResponse(
           enabled: true, extractionInterval: 60, minConfidence: 0.65, excludedApps: ["Keychain"])
       ))
@@ -212,10 +202,6 @@ final class SettingsAssistantControlsTests: XCTestCase {
     XCTAssertEqual(values.taskMinConfidence, 0.8)
     XCTAssertEqual(values.taskAllowedApps, ["Mail"])
     XCTAssertEqual(values.taskBrowserKeywords, ["review"])
-    XCTAssertTrue(values.insightEnabled)
-    XCTAssertEqual(values.insightExtractionInterval, 300)
-    XCTAssertEqual(values.insightMinConfidence, 0.9)
-    XCTAssertEqual(values.insightExcludedApps, ["Passwords"])
     XCTAssertTrue(values.memoryEnabled)
     XCTAssertEqual(values.memoryExtractionInterval, 60)
     XCTAssertEqual(values.memoryMinConfidence, 0.65)
@@ -230,7 +216,7 @@ final class SettingsAssistantControlsTests: XCTestCase {
     AssistantSettings.shared.analysisDelay = 20
 
     SettingsSyncManager.shared.applyRemoteSettings(
-      AssistantSettingsResponse(insight: InsightSettingsResponse(enabled: true)))
+      AssistantSettingsResponse())
 
     let values = AssistantControlValues.current()
     XCTAssertEqual(values.taskExtractionInterval, 1800)
@@ -267,7 +253,7 @@ final class SettingsAssistantControlsTests: XCTestCase {
       encoding: .utf8)
 
     for subsection in [
-      "taskAssistantSubsection", "insightAssistantSubsection", "memoryAssistantSubsection",
+      "taskAssistantSubsection", "memoryAssistantSubsection",
       "analysisThrottleSubsection",
     ] {
       XCTAssertTrue(advanced.contains(subsection), "advancedSection no longer renders \(subsection)")

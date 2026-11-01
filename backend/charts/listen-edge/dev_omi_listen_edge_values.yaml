@@ -1,0 +1,125 @@
+# listen-edge development values (plan D, D2 shadow ingest). Deployed by
+# gcp_backend_listen_helm.yml (environment=development) with image.digest
+# from a development build-only train run.
+
+replicaCount: 2
+
+image:
+  repository: gcr.io/based-hardware-dev/listen-edge
+  pullPolicy: Always
+  tag: ""
+  digest: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# EDGE_SHADOW_TOKEN is a secret: only through privateEnv
+# (LISTEN_EDGE_PRIVATE_VALUES_YAML), never committed.
+privateEnv: {}
+
+env:
+  - name: EDGE_UPSTREAM_URL
+    value: "ws://dev-omi-backend-listen:8080"
+  - name: EDGE_VAD_MODEL_PATH
+    value: "/models/silero_vad.onnx"
+  - name: EDGE_SHADOW_MAX_SESSIONS
+    value: "500"
+
+resources:
+  requests:
+    cpu: 1
+    memory: 512Mi
+  limits:
+    cpu: 2
+    memory: 1Gi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  failureThreshold: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 2
+  timeoutSeconds: 5
+
+autoscaling:
+  enabled: false
+
+terminationGracePeriodSeconds: 40
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: backend-listen
+          app.kubernetes.io/instance: dev-omi-backend-listen
+  extraIngressFrom: []
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: listen-edge
+        app.kubernetes.io/instance: dev-omi-listen-edge
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

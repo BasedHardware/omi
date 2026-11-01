@@ -17,17 +17,39 @@ transaction.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from google.api_core.exceptions import FailedPrecondition
 
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client, run_transactional
-from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
+from database.firestore_index_registry import (
+    CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
+    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
+)
+from database.people_stats_cache import invalidate_people_stats_cache
+from config.sync_live_dedupe import sync_live_dedupe_active_for
+from utils.conversations.smart_merge_policy import rebase_donor_segments
+from utils.sync.bridge_observation import log_bridge_observation
+from config import merge_ancestry
+from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.firestore_quick_reads import smart_merge_partition_enabled, indexed_string_value_safe
+from database.firestore_read_origin import read_origin
+from utils.conversations.size_limit import (
+    CONVERSATION_ABSORPTION_BYTE_CAP,
+    projected_document_bytes,
+    projected_size_bucket,
+)
+from utils.sync.assignment import run_with_size_limit_backstop
+from utils.sync.size_telemetry import log_size_rollover, remember_size_payload, size_fields
+from utils.observability.fallback import record_fallback
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD, OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +82,20 @@ _PRECEDING_FIELDS = (
     'uses_custom_stt',
     'external_data.duplicate_capture_of',
     'relevance_decision.trigger',
+    'sync_merged_into',
     SMART_MERGE_FIELD,
 )
 
 Plan = Callable[
-    [Mapping[str, Any], Sequence[Mapping[str, Any]], Mapping[str, Any], Sequence[Mapping[str, Any]]],
-    tuple[Optional[str], Optional[dict], Optional[dict]],
+    [
+        Mapping[str, Any],
+        Sequence[Mapping[str, Any]],
+        Mapping[str, Any],
+        Sequence[Mapping[str, Any]],
+        Mapping[str, Optional[Mapping[str, Any]]],
+        Optional[Mapping[str, Any]],
+    ],
+    tuple[Optional[str], Optional[dict], Optional[dict], Mapping[str, dict]],
 ]
 
 
@@ -74,6 +104,12 @@ class AbsorbResult:
     outcome: str  # 'absorbed' | 'already_absorbed' | 'rejected'
     reason: str
     audit: str = 'none'  # audit sibling outcome of a committed absorb (database/smart_merge_audit.py)
+    projected_size_bucket: str | None = None
+    flattened_ancestor_count: int = 0
+    bridge: dict | None = None
+
+
+_UNSET = object()
 
 
 def _collection(client: Any, uid: str) -> Any:
@@ -85,20 +121,25 @@ def find_preceding_conversations(
     *,
     source: str,
     created_before: datetime,
-    limit: int,
+    limit: Optional[int] = None,
+    discarded: bool = False,
+    transaction: Any = None,
     firestore_client: Any = None,
+    client_device_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
-    """Newest-first visible rows of one source created before ``created_before``.
+    """Newest-first rows of one source and discard flag created before ``created_before``.
 
     Every status is requested so a busy immediate predecessor is seen (and
     blocks the pair) instead of being skipped for an older row. Served by the
-    existing ``conversations_discarded_source_status_created`` index.
+    existing ``conversations_discarded_source_status_created`` index. ``None``
+    for ``limit`` runs the scan unbounded; ``transaction`` binds the stream to
+    that transaction's snapshot.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY.build(
         _collection(client, uid),
         {
-            'discarded': False,
+            'discarded': discarded,
             'source': source,
             'statuses': list(_ALL_STATUSES),
             'created_before': created_before,
@@ -106,12 +147,143 @@ def find_preceding_conversations(
         field_filter_factory=FieldFilter,
     )
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(list(_PRECEDING_FIELDS))
-    rows = []
-    for snapshot in query.limit(limit).stream():
-        data = snapshot.to_dict() or {}
-        data['id'] = snapshot.id
-        rows.append(data)
-    return rows
+    if limit is not None:
+        query = query.limit(limit)
+
+    def collect(selected):
+        stream = selected.stream(transaction=transaction) if transaction is not None else selected.stream()
+        rows = []
+        for snapshot in stream:
+            data = snapshot.to_dict() or {}
+            data['id'] = snapshot.id
+            rows.append(data)
+        return rows
+
+    # A filter before a finite limit changes the global six-row window. Keep
+    # that lookup unchanged; the expensive discarded-barrier scan is unbounded.
+    # Missing device fields are not matched by equality-to-null in Firestore.
+    if (
+        limit is None
+        and isinstance(client_device_id, str)
+        and client_device_id
+        and smart_merge_partition_enabled()
+        and indexed_string_value_safe(client_device_id)
+    ):
+        with read_origin('task:smart_merge_partition_lookup'):
+            try:
+                partition_query = (
+                    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY.build(
+                        _collection(client, uid),
+                        {
+                            'discarded': discarded,
+                            'source': source,
+                            'statuses': list(_ALL_STATUSES),
+                            'created_before': created_before,
+                            'client_device_id': client_device_id,
+                        },
+                        field_filter_factory=FieldFilter,
+                    )
+                    .order_by('created_at', direction=firestore.Query.DESCENDING)
+                    .select(list(_PRECEDING_FIELDS))
+                )
+                return collect(partition_query)
+            except FailedPrecondition as error:
+                if 'index' not in str(error).lower():
+                    raise
+                # The lead reconciles the index before shipping, but a rolling
+                # deploy must remain correct while the index is still building.
+                record_fallback(
+                    component='other',
+                    from_mode='indexed_query',
+                    to_mode='legacy_query',
+                    reason='unavailable',
+                    outcome='recovered',
+                    log=logger,
+                )
+                return collect(query)
+    return collect(query)
+
+
+def _epoch(value: Any) -> Optional[float]:
+    return value.timestamp() if isinstance(value, datetime) else None
+
+
+def _is_own_tombstone(row: Mapping[str, Any], survivor: Mapping[str, Any]) -> bool:
+    """A deleted donor already absorbed into this survivor, proven by lineage.
+
+    Requires the redirect marker, the donor ledger entry and membership in the
+    survivor's own fragment ledger or ``sync_merged_from`` set; a bare
+    ``smart_merge.survivor_id`` claim without lineage proof does not exempt.
+    """
+    survivor_id = survivor.get('id')
+    if row.get('deleted') is not True or row.get('sync_merged_into') != survivor_id:
+        return False
+    donor_state = row.get(SMART_MERGE_FIELD)
+    if not isinstance(donor_state, Mapping):
+        return False
+    if donor_state.get('role') != 'donor' or donor_state.get('survivor_id') != survivor_id:
+        return False
+    if str(row.get('id')) in {str(entry) for entry in survivor.get('sync_merged_from') or ()}:
+        return True
+    survivor_state = survivor.get(SMART_MERGE_FIELD) or {}
+    fragments = survivor_state.get('fragments') or ()
+    return any(isinstance(entry, Mapping) and entry.get('id') == row.get('id') for entry in fragments)
+
+
+def has_intervening_discarded(
+    uid: str,
+    survivor: Mapping[str, Any],
+    donor: Mapping[str, Any],
+    *,
+    transaction: Any = None,
+    firestore_client: Any = None,
+) -> bool:
+    """True when a discarded row of the donor's device partition spans the gap.
+
+    The gap is the open interval between the survivor's ``finished_at`` and
+    ``max(donor.started_at, donor.created_at)``: the recorded gap plus the
+    wall-clock rescue gap a backward-drifting ``started_at`` would hide. A
+    discarded row blocks when its ``started_at``/``finished_at`` interval
+    intersects it; endpoint touches and rows wholly outside do not. The scan
+    runs unbounded on the registered preceding query with ``discarded=True``
+    and ``created_before=datetime.max``: speech times and ingestion times do
+    not align, so no creation-time bound may hide a delayed-ingest barrier. A
+    genuine own tombstone — deleted, redirecting into this survivor, ledgered
+    as its donor and listed in the survivor's own lineage — is a constituent
+    of the predecessor, not an independent discarded capture; every other
+    discarded row, deleted or not, counts. Rows whose interval bounds are not
+    datetimes are skipped — an unreadable tombstone cannot prove it crosses
+    the gap, and malformed endpoints make the pair itself fail the existing
+    gates first.
+    """
+    lower = _epoch(survivor.get('finished_at'))
+    started = _epoch(donor.get('started_at'))
+    created = _epoch(donor.get('created_at'))
+    if lower is None or started is None or created is None:
+        return False
+    upper = max(started, created)
+    if upper <= lower:
+        return False
+    for row in find_preceding_conversations(
+        uid,
+        source=donor['source'],
+        created_before=datetime.max.replace(tzinfo=timezone.utc),
+        limit=None,
+        discarded=True,
+        transaction=transaction,
+        firestore_client=firestore_client,
+        client_device_id=donor.get('client_device_id'),
+    ):
+        if row.get('client_device_id') != donor.get('client_device_id'):
+            continue
+        if _is_own_tombstone(row, survivor):
+            continue
+        row_started, row_finished = _epoch(row.get('started_at')), _epoch(row.get('finished_at'))
+        if row_started is None or row_finished is None:
+            continue
+        if row_started < upper and row_finished > lower:
+            return True
+    return False
 
 
 def _decode_row(uid: str, raw: Mapping[str, Any]) -> tuple[dict[str, Any], list[Any]]:
@@ -120,6 +292,7 @@ def _decode_row(uid: str, raw: Mapping[str, Any]) -> tuple[dict[str, Any], list[
     segments = conversations_db._decode_transcript_segments_strict(  # pyright: ignore[reportPrivateUsage]
         uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
     )
+    conversations_db._reveal_match_scores_for_read(row, uid)  # pyright: ignore[reportPrivateUsage]
     row.pop('transcript_segments', None)
     return row, list(segments)
 
@@ -147,12 +320,30 @@ def absorb_conversation(
     *,
     expected_revision: int,
     plan: Plan,
+    expected_survivor_sync_revision: Any = _UNSET,
+    expected_donor_sync_revision: Any = _UNSET,
+    last_fragment_id: Optional[str] = None,
+    finalization_fence: tuple[str, int, int] | None = None,
+    processing_owner: str | None = None,
+    before_processing: bool = False,
     firestore_client: Any = None,
 ) -> AbsorbResult:
     """Atomically append the donor to the survivor and leave a redirect tombstone.
 
     ``plan`` re-applies the deterministic policy to the rows read here and
-    returns ``(reason, survivor_update, donor_update)``; a reason rejects.
+    returns ``(reason, survivor_update, donor_update, ancestor_updates)``; a
+    reason rejects. With flatten enabled, every row in the ancestry union minus
+    the direct donor — the survivor's existing ancestry and the donor's
+    declared ancestry — is re-read in this same transaction before the audit
+    gate and any write, and ``ancestor_updates`` re-points each inherited
+    tombstone at the survivor.
+
+    ``last_fragment_id`` names the survivor's newest-finished ledger fragment
+    when it is a different document (a donor tombstone). It is re-read inside
+    the transaction — reusing the flatten ancestry read when the fragment is
+    already in the union — strictly decoded, and handed to ``plan`` so the
+    wall-clock policy rechecks lineage against current data. ``None`` adds no
+    reads: the newest fragment is the survivor's own.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = _collection(client, uid)
@@ -160,12 +351,43 @@ def absorb_conversation(
     donor_ref = collection.document(donor_id)
 
     audit_io_failed = False
+    size_bucket = None
 
     def absorb_attempt(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
+        nonlocal size_bucket
+        size_bucket = None
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
             return AbsorbResult('rejected', 'conversation_not_eligible')
+        if finalization_fence is not None:
+            job_id, generation, epoch = finalization_fence
+            job = (
+                client.collection('conversation_finalization_jobs')
+                .document(job_id)
+                .get(transaction=transaction)
+                .to_dict()
+                or {}
+            )
+            until = job.get('lease_expires_at')
+            if (
+                job.get('status') != 'leased'
+                or job.get('uid') != uid
+                or job.get('conversation_id') != donor_id
+                or job.get('dispatch_generation') != generation
+                or job.get('lease_epoch') != epoch
+                or donor_raw.get('finalization_job_id') != job_id
+                or donor_raw.get('finalization_revision') != job.get('finalization_revision')
+                or job.get('fanout_status') == 'completed'
+                or not isinstance(until, datetime)
+                or until <= datetime.now(timezone.utc)
+            ):
+                return AbsorbResult('rejected', 'survivor_changed')
+        if processing_owner is not None and (
+            donor_raw.get('summary_processing_owner') != processing_owner
+            or float(donor_raw.get('summary_processing_lease_until') or 0) <= datetime.now(timezone.utc).timestamp()
+        ):
+            return AbsorbResult('rejected', 'survivor_changed')
         donor_state = donor_raw.get(SMART_MERGE_FIELD) or {}
         if donor_raw.get('deleted'):
             if donor_state.get('role') == 'donor' and donor_state.get('survivor_id') == survivor_id:
@@ -173,21 +395,121 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'conversation_not_eligible')
         if not survivor_raw or survivor_raw.get('deleted'):
             return AbsorbResult('rejected', 'survivor_changed')
+        # Corrections own captured segment anchors. Intake must not absorb or
+        # re-key either side underneath an encrypted correction receipt.
+        if survivor_raw.get('has_transcript_corrections') or donor_raw.get('has_transcript_corrections'):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
+        flatten = smart_merge_flatten_enabled()
+        if flatten or before_processing:
+            if expected_survivor_sync_revision is not _UNSET and (
+                survivor_raw.get('sync_content_revision') != expected_survivor_sync_revision
+            ):
+                return AbsorbResult('rejected', 'flatten_content_changed')
+            if expected_donor_sync_revision is not _UNSET and (
+                donor_raw.get('sync_content_revision') != expected_donor_sync_revision
+            ):
+                return AbsorbResult('rejected', 'flatten_content_changed')
+        if flatten:
+            reason, union_ids = merge_ancestry.ancestry_union(survivor_raw, {donor_id: donor_raw})
+            if reason is not None:
+                return AbsorbResult('rejected', reason)
+            union_ancestors = [ancestor_id for ancestor_id in union_ids if ancestor_id != donor_id]
+            ancestor_rows = {
+                ancestor_id: collection.document(ancestor_id).get(transaction=transaction).to_dict()
+                for ancestor_id in union_ancestors
+            }
+        else:
+            ancestor_rows = {}
         survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
         donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
-        reason, survivor_update, donor_update = plan(survivor, survivor_segments, donor, donor_segments)
+        last_fragment_row = None
+        if last_fragment_id is not None:
+            if last_fragment_id == survivor_id:
+                last_fragment_row = dict(survivor, transcript_segments=survivor_segments)
+            else:
+                fragment_raw = (
+                    ancestor_rows.get(last_fragment_id)
+                    if last_fragment_id in ancestor_rows
+                    else collection.document(last_fragment_id).get(transaction=transaction).to_dict()
+                )
+                if fragment_raw is not None:
+                    fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
+                    last_fragment_row = dict(fragment_row, transcript_segments=fragment_segments)
+        if has_intervening_discarded(uid, survivor, donor, transaction=transaction, firestore_client=client):
+            return AbsorbResult('rejected', 'intervening_discarded')
+        reason, survivor_update, donor_update, ancestor_updates = plan(
+            survivor, survivor_segments, donor, donor_segments, ancestor_rows, last_fragment_row
+        )
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
+        bridge_observations = []
+        # Metadata-only plans do not transfer transcript content.
+        if 'transcript_segments' in survivor_update and sync_live_dedupe_active_for(uid):
+            survivor_update['transcript_segments'] = rebase_donor_segments(
+                survivor,
+                survivor_segments,
+                donor,
+                donor_segments,
+                uid=uid,
+                observations=bridge_observations,
+            )
         # Last read, only on the absorbing path: the gate fence for the audit sibling.
         audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
+        if survivor_raw.get('data_protection_level', 'standard') != level:
+            # A mixed-protection absorb upgrades retained derived content too.
+            # Decode strictly: never clear an unreadable blob or retain plaintext
+            # under an enhanced document's protection marker.
+            if OPEN_LOOP_EXTRACTIONS_FIELD in survivor_raw:
+                survivor_update[OPEN_LOOP_EXTRACTIONS_FIELD] = conversations_db.decode_open_loop_extractions(
+                    uid,
+                    survivor_raw[OPEN_LOOP_EXTRACTIONS_FIELD],
+                    bool(survivor_raw.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD)),
+                )
+        remember_size_payload(
+            survivor_id,
+            dict(survivor_update, transcript_segments=survivor_update.get('transcript_segments', survivor_segments)),
+        )
+        remember_size_payload(donor_id, dict(donor, transcript_segments=donor_segments))
+        from utils.conversations.recorded_time import write_span
+
+        survivor_update.update(write_span({**survivor, **survivor_update}))
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
+        conversations_db.guard_match_score_size(payload, survivor_raw)
+        if (
+            'speaker_match_scores' in survivor_raw
+            and 'speaker_match_scores' not in payload
+            and survivor_raw.get('data_protection_level') != level
+        ):
+            # An omitted optional merge must not retain an old standard blob
+            # when a mixed-protection absorb upgrades the survivor.
+            payload['speaker_match_scores'] = firestore.DELETE_FIELD
         # The survivor transcript changed: a stored client projection described the old one.
-        conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
+        conversations_db.clear_client_processing(payload)
+        if flatten:
+            donor_update = dict(donor_update)
+            marker = dict(donor_update.get(SMART_MERGE_FIELD) or {})
+            marker['flattened_ancestor_count'] = len(ancestor_updates)
+            donor_update[SMART_MERGE_FIELD] = marker
+        projected_bytes = max(
+            [
+                projected_document_bytes(survivor_ref, payload, survivor_raw),
+                projected_document_bytes(donor_ref, donor_update, donor_raw),
+            ]
+            + [
+                projected_document_bytes(collection.document(cid), patch, ancestor_rows[cid])
+                for cid, patch in ancestor_updates.items()
+            ]
+        )
+        size_bucket = projected_size_bucket(projected_bytes)
+        if projected_bytes > CONVERSATION_ABSORPTION_BYTE_CAP:
+            return AbsorbResult('rejected', 'size_cap_stop', projected_size_bucket=size_bucket)
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
+        for ancestor_id, patch in ancestor_updates.items():
+            transaction.update(collection.document(ancestor_id), patch)
         audit = audit or audit_db.stage_audit(
             transaction,
             client,
@@ -198,29 +520,68 @@ def absorb_conversation(
             donor_update=donor_update,
             source=donor.get('source'),
         )
-        return AbsorbResult('absorbed', 'absorbed', audit)
+        return AbsorbResult(
+            'absorbed',
+            'absorbed',
+            audit,
+            flattened_ancestor_count=len(ancestor_updates),
+            bridge=bridge_observations[0] if bridge_observations else None,
+        )
 
     @firestore.transactional
     def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
         nonlocal audit_io_failed
         try:
-            return absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+            result = absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+            return replace(result, projected_size_bucket=size_bucket)
         except audit_db.AuditUnavailable:
             # The SDK's rollback RPC can mask this exception. Remember that
             # the callback failed before commit even if rollback also fails.
             audit_io_failed = True
             raise
 
-    try:
-        result = run_transactional(client, absorb)
-    except Exception:
-        if not audit_io_failed:
-            raise
-        # No commit was attempted. Never continue writing on a transaction whose
-        # optional read/staging failed; re-read and re-plan on a fresh transaction.
-        logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
-        result = run_transactional(client, absorb, audit_unavailable=True)
+    def run_absorb(full_ids: frozenset[str]) -> AbsorbResult:
+        if full_ids:
+            # The donor already is a durable row. Rolling over a rejected
+            # absorb means leaving both rows untouched and finalizing it there.
+            log_size_rollover(
+                logger,
+                'event=sync_assignment_target reason=size_rollover outcome=rolled_over trigger=commit_limit '
+                + size_fields(cid=next(iter(full_ids)), target_kind='sibling_row'),
+            )
+            return AbsorbResult('rejected', 'size_cap_stop', projected_size_bucket=size_bucket)
+        try:
+            return run_transactional(client, absorb)
+        except Exception:
+            if not audit_io_failed:
+                raise
+            # Restart all reads on a fresh transaction after optional audit IO.
+            logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
+            return run_transactional(client, absorb, audit_unavailable=True)
+
+    result = run_with_size_limit_backstop(run_absorb, lambda: survivor_id)
+    if result.projected_size_bucket is not None:
+        logger.log(
+            logging.WARNING if result.reason == 'size_cap_stop' else logging.INFO,
+            'event=smart_merge_absorb outcome=%s projected_size_bucket=%s',
+            'size_cap_stop' if result.reason == 'size_cap_stop' else result.outcome,
+            result.projected_size_bucket,
+        )
+    if result.reason == 'size_cap_stop':
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='canonical_append',
+            to_mode='size_rollover',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
     if result.outcome == 'absorbed':
+        if result.bridge is not None:
+            log_bridge_observation(result.bridge)
+        for retired_id in (donor_id, survivor_id):
+            stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
+        invalidate_people_stats_cache(uid)
         # The same fail-open search-index hooks the conversation adapter runs after its writes.
         conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]
         conversations_db._delete_conversation_search_index(uid, donor_id)  # pyright: ignore[reportPrivateUsage]
@@ -332,3 +693,25 @@ def complete_survivor_refresh(
         return True
 
     return run_transactional(client, complete)
+
+
+def delegate_survivor_refresh(uid: str, survivor_id: str, *, revision: int, firestore_client: Any = None) -> bool:
+    """Receipt a durable outbox handoff, without claiming any processing completed."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = _collection(client, uid).document(survivor_id)
+
+    @firestore.transactional
+    def delegate(transaction):
+        row = ref.get(transaction=transaction).to_dict() or {}
+        state = dict(row.get(SMART_MERGE_FIELD) or {})
+        if row.get('deleted') or int(state.get('revision') or 0) != revision:
+            return False
+        lease = state.get('refresh_lease') or {}
+        until = lease.get('until')
+        if isinstance(until, datetime) and until > datetime.now(timezone.utc):
+            return False
+        state['delegated_revision'] = revision
+        transaction.update(ref, {SMART_MERGE_FIELD: state})
+        return True
+
+    return run_transactional(client, delegate)

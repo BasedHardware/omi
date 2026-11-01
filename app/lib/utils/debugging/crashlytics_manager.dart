@@ -8,6 +8,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 import 'package:omi/utils/build_provenance.dart';
+import 'package:omi/utils/debugging/non_fatal_reporter.dart';
 
 class CrashlyticsManager {
   static final CrashlyticsManager _instance = CrashlyticsManager._internal();
@@ -110,6 +111,21 @@ class CrashlyticsManager {
       }
     }
     await FirebaseCrashlytics.instance.recordError(exception, stackTrace);
+  }
+
+  Future<void> reportNonFatal(
+    Object exception,
+    StackTrace stackTrace, {
+    Map<String, String> userAttributes = const {},
+  }) async {
+    if (!_deliverable) return;
+    await recordNonFatalFailure(
+      exception,
+      stackTrace,
+      record: (error, stack, {required fatal}) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: fatal),
+      setAttribute: (key, value) => FirebaseCrashlytics.instance.setCustomKey(key, value),
+      attributes: userAttributes,
+    );
   }
 
   NavigatorObserver? getNavigatorObserver() {

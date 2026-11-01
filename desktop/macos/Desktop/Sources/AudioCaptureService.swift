@@ -70,6 +70,11 @@ class AudioCaptureService: @unchecked Sendable {
   // MARK: - Properties
 
   private var deviceID: AudioDeviceID = kAudioObjectUnknown
+  // Resolved on audioQueue before AudioDeviceStart, never through HAL while
+  // holding the watchdog lock or running an IOProc. A HAL/watchdog lock inversion
+  // can otherwise freeze both the main thread and the microphone callback.
+  private var captureDeviceIsBuiltIn = false
+  private var captureDeviceIsBluetooth = false
   private var ioProcID: AudioDeviceIOProcID?
   private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
   private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
@@ -112,6 +117,9 @@ class AudioCaptureService: @unchecked Sendable {
   /// silence. The watchdog re-arms after each fire (see `evaluateSilentMicWindow`), so a
   /// single capture session can recover from more than one silent episode.
   var onSilentMicDetected: (@Sendable (SilentMicDetection) -> Void)?
+  /// One notification when real PCM returns after a watchdog trip, including
+  /// after its recovery budget is exhausted. No per-buffer main-actor traffic.
+  var onLiveMicRecovered: (@Sendable () -> Void)?
   var detectSilentMicOnAnyTransport = false
   /// Fires (once per change) when the HAL reports a device/format/route change
   /// during an active capture — a known precursor of silent capture (headset
@@ -122,8 +130,7 @@ class AudioCaptureService: @unchecked Sendable {
   /// Human-readable description of the capture device currently in use — for
   /// diagnostics (which mic a turn was recorded from).
   var currentDeviceDescription: String {
-    let isBuiltIn = (deviceID == AudioCaptureService.findBuiltInMicDeviceID())
-    return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+    captureDeviceIsBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
   }
   /// Whether the active capture device is on a Bluetooth transport (A2DP/HFP),
   /// the known profile-conflict case that feeds zeros. Exposed so the PTT
@@ -131,22 +138,31 @@ class AudioCaptureService: @unchecked Sendable {
   /// device name. Derives from CoreAudio transport type, not the redacted
   /// `currentDeviceDescription` string.
   var isCurrentDeviceBluetoothTransport: Bool {
-    Self.isBluetoothTransport(deviceID: deviceID)
+    captureDeviceIsBluetooth
+  }
+
+  /// Bind metadata while the old IOProc is quiescent and before the new one
+  /// starts. Quiet-window classification is then a pure snapshot read.
+  func bindCaptureRoute(deviceID: AudioDeviceID, isBuiltIn: Bool, isBluetooth: Bool) {
+    self.deviceID = deviceID
+    captureDeviceIsBuiltIn = isBuiltIn
+    captureDeviceIsBluetooth = isBluetooth
   }
 
   // Silent-mic watchdog. Re-arms after each fire so one session can recover from more
   // than one silent episode; two guards keep it from spinning the recovery loop:
   //   - `silentMicRecoveryCooldown`: suppress re-detection right after a fire so a freshly
   //     rebuilt/switched capture has time to deliver real audio before we judge it again.
-  //   - `maxSilentMicFiresPerSession`: hard cap so an unrecoverable mic can't loop forever.
+  //   - `maxSilentMicFiresPerEpisode`: hard cap until genuine live PCM returns.
   // `silentMicDetectedFired` now means "recently fired, awaiting re-arm" (not a permanent latch).
   private var consecutiveSilentWindows: Int = 0
   private var silentMicDetectedFired: Bool = false
   private var silentMicFireCount: Int = 0
   private var lastSilentMicFireTime: CFAbsoluteTime = 0
+  private var awaitingLiveMicSignal = false
   private let silentMicWindowThreshold: Int = 2  // windows of ~1s each
   private let silentMicRecoveryCooldown: CFAbsoluteTime = 3.0  // seconds to let recovery take effect
-  private let maxSilentMicFiresPerSession: Int = 3
+  private let maxSilentMicFiresPerEpisode: Int = 3
 
   /// Target sample rate for DeepGram
   private let targetSampleRate: Double = 16000
@@ -192,6 +208,7 @@ class AudioCaptureService: @unchecked Sendable {
     silentMicDetectedFired = false
     silentMicFireCount = 0
     lastSilentMicFireTime = 0
+    awaitingLiveMicSignal = false
     watchdogWindowPeak = 0
     watchdogWindowStart = 0
     watchdogFrameCount = 0
@@ -206,15 +223,29 @@ class AudioCaptureService: @unchecked Sendable {
   /// caller then invokes `onSilentMicDetected`. Returns `nil` otherwise. After a fire the
   /// watchdog suppresses re-detection until `silentMicRecoveryCooldown` has elapsed, then
   /// re-arms, so a mic that recovered and later re-wedged (or a recovery that did not take)
-  /// is detected again — bounded by `maxSilentMicFiresPerSession` so an unrecoverable mic
+  /// is detected again — bounded by `maxSilentMicFiresPerEpisode` so an unrecoverable mic
   /// cannot loop the recovery path forever.
   ///
   /// `internal` (not `private`) so the recover-more-than-once-per-session contract can be
   /// unit-tested without driving real CoreAudio buffers.
   func evaluateSilentMicWindow(peak: Int16, isBluetooth: Bool, now: CFAbsoluteTime) -> SilentMicDetection? {
     silentMicWatchdogLock.lock()
-    defer { silentMicWatchdogLock.unlock() }
-    return evaluateSilentMicWindowLocked(peak: peak, isBluetooth: isBluetooth, now: now)
+    let recovered = takeLiveMicRecoveryLocked(peak: peak)
+    let detection = evaluateSilentMicWindowLocked(peak: peak, isBluetooth: isBluetooth, now: now)
+    silentMicWatchdogLock.unlock()
+    if recovered { onLiveMicRecovered?() }
+    return detection
+  }
+
+  private func takeLiveMicRecoveryLocked(peak: Int16) -> Bool {
+    guard awaitingLiveMicSignal, peak > 5 else { return false }
+    awaitingLiveMicSignal = false
+    // Allow a later quiet episode to be observed after genuine recovery.
+    // AppState retains the cross-driver rebuild budget, so this never opens
+    // another rebuild loop after it elected to continue system audio.
+    silentMicFireCount = 0
+    silentMicDetectedFired = false
+    return true
   }
 
   private func evaluateSilentMicWindowLocked(
@@ -235,7 +266,7 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     guard !silentMicDetectedFired,
-      silentMicFireCount < maxSilentMicFiresPerSession,
+      silentMicFireCount < maxSilentMicFiresPerEpisode,
       consecutiveSilentWindows >= silentMicWindowThreshold,
       isBluetooth || detectSilentMicOnAnyTransport
     else {
@@ -244,6 +275,7 @@ class AudioCaptureService: @unchecked Sendable {
 
     let firedWindows = consecutiveSilentWindows
     silentMicDetectedFired = true
+    awaitingLiveMicSignal = true
     silentMicFireCount += 1
     lastSilentMicFireTime = now
     // Require a fresh run of silent windows before the next fire so we never re-trigger
@@ -338,7 +370,10 @@ class AudioCaptureService: @unchecked Sendable {
     // 1. Resolve input device: explicit override wins while available, otherwise
     // fall back to the system default instead of pinning capture to a stale device.
     let inputDeviceID = try resolveInputDeviceID()
-    self.deviceID = inputDeviceID
+    bindCaptureRoute(
+      deviceID: inputDeviceID,
+      isBuiltIn: inputDeviceID == Self.findBuiltInMicDeviceID(),
+      isBluetooth: Self.isBluetoothTransport(deviceID: inputDeviceID))
     registerActiveCapture(deviceID: inputDeviceID)
 
     // 2. Get device stream format
@@ -856,21 +891,25 @@ class AudioCaptureService: @unchecked Sendable {
     // one-shot latch) so the watchdog observes recovery and can re-arm for a second
     // episode — see `evaluateSilentMicWindow`.
     let nowAbs = CFAbsoluteTimeGetCurrent()
-    let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
+    let isBluetooth = captureDeviceIsBluetooth
     silentMicWatchdogLock.lock()
     watchdogFrameCount += processedFrameLength
     if watchdogFirstFrameAt == nil { watchdogFirstFrameAt = nowAbs }
     if windowPeak > watchdogWindowPeak { watchdogWindowPeak = windowPeak }
     if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
     let detection: SilentMicDetection?
+    let recovered: Bool
     if nowAbs - watchdogWindowStart >= 1.0 {
+      recovered = takeLiveMicRecoveryLocked(peak: watchdogWindowPeak)
       detection = evaluateSilentMicWindowLocked(peak: watchdogWindowPeak, isBluetooth: isBluetooth, now: nowAbs)
       watchdogWindowPeak = 0
       watchdogWindowStart = nowAbs
     } else {
       detection = nil
+      recovered = false
     }
     silentMicWatchdogLock.unlock()
+    if recovered { onLiveMicRecovered?() }
     if let detection {
       if isBluetooth {
         log(
@@ -1115,7 +1154,10 @@ class AudioCaptureService: @unchecked Sendable {
       return
     }
 
-    self.deviceID = newDeviceID
+    bindCaptureRoute(
+      deviceID: newDeviceID,
+      isBuiltIn: newDeviceID == Self.findBuiltInMicDeviceID(),
+      isBluetooth: Self.isBluetoothTransport(deviceID: newDeviceID))
     registerActiveCapture(deviceID: newDeviceID)
 
     // Get new format

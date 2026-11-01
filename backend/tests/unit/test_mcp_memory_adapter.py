@@ -126,8 +126,10 @@ def test_mcp_sse_memory_tools_keep_scope_grants_and_use_universal_service():
 
     assert "auth_context is None" in get_tool
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in get_tool
-    assert "MemoryService(db_client=db).read" in get_tool
-    assert "collect_filtered_memories" in get_tool
+    assert "memories_page_core(" in get_tool
+    assert "MemoryService(db_client=db_client).read_mcp_filtered(" in source
+    assert "service.read_page(" in source
+    assert "collect_filtered_memories" not in source
     assert "read_default_read_rollout" not in get_tool
     assert "memories_db" not in get_tool
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in search_tool
@@ -140,7 +142,7 @@ def test_mcp_rest_memory_list_uses_single_authorization_context():
     source = (BACKEND / "routers/mcp.py").read_text(encoding="utf-8")
     profile_route = source[source.index('@router.get("/v1/mcp/profile"') : source.index("class CleanerMemory")]
     list_route = source[source.index('@router.get("/v1/mcp/memories"') : source.index("class SimpleStructured")]
-    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in profile_route
+    assert 'uid: str = Depends(get_uid_with_mcp_memories_read)' in profile_route
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' not in list_route
     assert (
         "auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context)" in list_route

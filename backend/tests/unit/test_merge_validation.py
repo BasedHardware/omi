@@ -36,7 +36,7 @@ _BACKEND = Path(__file__).resolve().parents[2]
 def merge():
     """Load a fresh merge_conversations against stubbed database/models/memory chains."""
     database_pkg = ModuleType("database")
-    database_pkg.__path__ = []  # type: ignore[attr-defined]
+    database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
 
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
@@ -44,8 +44,18 @@ def merge():
     conversations_stub = ModuleType("database.conversations")
     conversations_stub.get_conversation = MagicMock(return_value=None)
 
+    # merge_conversations now also imports the deletion-intent module at module
+    # scope; the pure validation surface never calls it, so a MagicMock client
+    # keeps the import graph hermetic.
+    tombstones_stub = ModuleType("database.conversation_tombstones")
+    tombstones_stub.db = MagicMock(name="tombstone-db")
+    tombstones_stub.COLLECTION = "deleted_conversations"
+    tombstones_stub.is_deleted = MagicMock(return_value=False)
+    tombstones_stub.record_deletion = MagicMock()
+
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
+    vector_db_stub.delete_action_item_vectors_batch = MagicMock()
 
     redis_db_stub = ModuleType("database.redis_db")
     users_stub = ModuleType("database.users")
@@ -117,6 +127,7 @@ def merge():
         "database": database_pkg,
         "database._client": client_stub,
         "database.conversations": conversations_stub,
+        "database.conversation_tombstones": tombstones_stub,
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
@@ -239,6 +250,20 @@ class TestValidateGateChecks:
         ok, err, warn = merge.validate_merge_compatibility([])
         assert ok is False
         assert "At least 2" in err
+
+    def test_rejects_duplicate_conversations(self, merge):
+        convs = [_conv("c1"), _conv("c1")]
+        ok, err, warn = merge.validate_merge_compatibility(convs)
+        assert ok is False
+        assert "duplicate" in err.lower()
+        assert warn is None
+
+    def test_rejects_duplicate_conversations_mixed(self, merge):
+        convs = [_conv("c1"), _conv("c2"), _conv("c1")]
+        ok, err, warn = merge.validate_merge_compatibility(convs)
+        assert ok is False
+        assert "duplicate" in err.lower()
+        assert warn is None
 
     def test_rejects_locked_conversation(self, merge):
         convs = [_conv("c1", locked=True), _conv("c2")]

@@ -71,7 +71,15 @@ def main() -> int:
         default='',
         help='optional environment variable holding an OIDC token for a tagged Cloud Run candidate',
     )
-    parser.add_argument('--timeout-seconds', type=float, default=30.0)
+    parser.add_argument(
+        '--timeout-seconds',
+        type=float,
+        # Dev candidates are no-traffic revisions: the first smoke request pays
+        # a full cold start plus LLM evaluation. Measured latencies on the dev
+        # fixture span 10-59s (2026-10-15/16), so 30s rejected healthy
+        # candidates on a cold-start lottery.
+        default=90.0,
+    )
     args = parser.parse_args()
     admin_key = os.environ.get(args.admin_key_env, '').strip()
     if not admin_key:

@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -261,6 +263,74 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def run_local_checks(command: list[str], root: Path, lane: str) -> subprocess.CompletedProcess[str]:
+    """Opt-in POSIX admission; all callers sharing LOCAL_DIR must use the same slot count.
+
+    OMI_PREFLIGHT_LOCAL_DIR defaults to the host temp directory's omi-preflight-local.
+    OMI_PREFLIGHT_BACKGROUND=0 disables priority wrapping independently of admission.
+    Slot files must not be unlinked while checks may still hold their locks.
+    """
+    # Concurrent local-lane runs have caused measured overload across shared hosts.
+    # Pre-push already has single-flight admission, but direct local invocations bypass it.
+    # This optional host-wide slot gate covers that path and is off by default.
+    slots_env = os.getenv("OMI_PREFLIGHT_LOCAL_SLOTS")
+    if lane != "local" or slots_env is None or os.getenv("GITHUB_ACTIONS") == "true":
+        return subprocess.run(command, cwd=root, check=False)
+    try:
+        slots = int(slots_env)
+        wait = float(os.getenv("OMI_PREFLIGHT_LOCAL_WAIT", "900"))
+        if slots <= 0 or not math.isfinite(wait) or wait < 0:
+            raise ValueError("slots must be positive and wait finite and nonnegative")
+        # Keep the default Windows path importable; explicit unsupported gating fails closed.
+        import fcntl
+
+        directory = Path(os.getenv("OMI_PREFLIGHT_LOCAL_DIR", str(Path(tempfile.gettempdir()) / "omi-preflight-local")))
+        directory.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + wait
+        fd = None
+        while fd is None:
+            for slot in range(slots):
+                candidate = os.open(str(directory / str(slot)), os.O_RDWR | os.O_CREAT, 0o600)
+                try:
+                    fcntl.flock(candidate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    os.close(candidate)
+                    continue
+                except BaseException:
+                    os.close(candidate)
+                    raise
+                fd = candidate
+                break
+            if fd is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    print(
+                        f"FAIL: OMI_PREFLIGHT_LOCAL_SLOTS={slots} busy in {directory}; "
+                        f"OMI_PREFLIGHT_LOCAL_WAIT={wait:g}s exhausted",
+                        file=sys.stderr,
+                    )
+                    return subprocess.CompletedProcess(command, 75)
+                time.sleep(min(2, remaining))
+        try:
+            os.ftruncate(fd, 0)
+            os.write(fd, str(os.getpid()).encode("ascii"))
+            if os.getenv("OMI_PREFLIGHT_BACKGROUND", "1").lower() in ("1", "true"):
+                if sys.platform == "darwin":
+                    if os.access("/usr/bin/taskpolicy", os.X_OK):
+                        command = ["/usr/bin/taskpolicy", "-b", *command]
+                else:
+                    nice = shutil.which("nice")
+                    if nice:
+                        command = [nice, "-n", "19", *command]
+            # Inherit the lock so a killed parent cannot admit work over its live child.
+            return subprocess.run(command, cwd=root, check=False, pass_fds=(fd,))
+        finally:
+            os.close(fd)
+    except (ImportError, OSError, ValueError) as exc:
+        print(f"FAIL: OMI_PREFLIGHT_LOCAL_SLOTS/OMI_PREFLIGHT_LOCAL_WAIT admission failed: {exc}", file=sys.stderr)
+        return subprocess.CompletedProcess(command, 2)
+
+
 def main() -> int:
     configure_output_streams()
     args = parse_args()
@@ -377,7 +447,7 @@ def main() -> int:
             command.append("--metadata-only")
         if skip_changelog:
             command.append("--skip-changelog")
-        result = subprocess.run(command, cwd=root, check=False)
+        result = run_local_checks(command, root, args.lane)
 
     elapsed = time.monotonic() - started
     if result.returncode:

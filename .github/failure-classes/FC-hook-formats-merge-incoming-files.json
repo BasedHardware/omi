@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-hook-formats-merge-incoming-files",
+  "violated_contract": "A staged-file formatter in the pre-commit hook must only act on content the committing branch authored. A merge commit stages every file the other side changed, so a hook that formats all staged files rewrites (or refuses over) the incoming side's untouched files and sweeps that churn into the merge. Merging origin/main into a PR branch reformatted 171 main-owned Dart files into tall style because the worktree had no app/.dart_tool/package_config.json, so the pinned SDK ignored the package language version, and the web formatter refused over main's web files until it was bypassed.",
+  "canonical_prevention": "Before any formatter runs, drop staged files whose index blob equals MERGE_HEAD's blob for the same path, so only conflict resolutions and the branch's own edits are formatted. Refuse Dart formatting when app/.dart_tool/package_config.json is absent instead of formatting with the SDK's default language version. Prove both in the hook fixture: a --no-commit merge leaves incoming Dart and web files byte-identical with no prettier installed while a resolved file is formatted, and a missing package_config.json is refused.",
+  "canonical_prevention_artifact": [
+    "scripts/pre-commit",
+    "scripts/test-pre-commit-pinned-toolchains.sh"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "scripts/pre-commit",
+    "scripts/test-pre-commit-pinned-toolchains.sh"
+  ],
+  "status": "open"
+}

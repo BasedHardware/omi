@@ -82,6 +82,11 @@ enum UserFacingErrorPresentation {
         }
       case .invalidResponse, .decodingError:
         return "Omi received an unexpected response. Try again."
+      case .memoryDeleteGateBusy:
+        if case .memoryDeletion = context {
+          return "Deletion is delayed while Omi finishes another account task. It will retry automatically."
+        }
+        return "Omi is busy right now. Try again in a moment."
       case .syncRateLimited:
         return "Omi is busy right now. Try again in a moment."
       case .unsupportedTierScopedBulkMutation:

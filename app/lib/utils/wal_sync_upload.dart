@@ -9,7 +9,7 @@ bool isFramedWalSyncFileName(String fileName) {
   return base.startsWith('audio_') && base.endsWith('.bin');
 }
 
-/// Rejects decoded WAV (and any other non-WAL name) before `/v2/sync-local-files`.
+/// Rejects decoded WAV (and any other non-WAL name) before `custody upload`.
 void assertWalSyncFilesAreFramedBins(Iterable<String> fileNames) {
   for (final name in fileNames) {
     if (!isFramedWalSyncFileName(name)) {

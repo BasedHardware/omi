@@ -158,6 +158,7 @@ actor APIClient {
 
   func get<T: Decodable>(
     _ endpoint: String,
+    queryItems: [URLQueryItem] = [],
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
@@ -170,8 +171,21 @@ actor APIClient {
     let authOwnerId = authPolicy.expectedAuthOwnerId
     try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
-    guard let url = URL(string: base + endpoint) else {
-      throw APIError.invalidResponse
+    let url: URL
+    if queryItems.isEmpty {
+      guard let endpointURL = URL(string: base + endpoint) else {
+        throw APIError.invalidResponse
+      }
+      url = endpointURL
+    } else {
+      guard var components = URLComponents(string: base + endpoint) else {
+        throw APIError.invalidResponse
+      }
+      components.queryItems = (components.queryItems ?? []) + queryItems
+      guard let endpointURL = components.url else {
+        throw APIError.invalidResponse
+      }
+      url = endpointURL
     }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
@@ -916,8 +930,19 @@ extension APIClient {
   }
 
   /// Fetches a single conversation by ID
-  func getConversation(id: String) async throws -> ServerConversation {
-    return try await get("v1/conversations/\(id)")
+  func getConversation(
+    id: String,
+    includeDiscarded: Bool? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ServerConversation {
+    let queryItems =
+      includeDiscarded.map {
+        [URLQueryItem(name: "include_discarded", value: String($0))]
+      } ?? []
+    return try await get(
+      "v1/conversations/\(id)",
+      queryItems: queryItems,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Reads conversation-lifetime photo bytes. Storage-backed photos no longer
@@ -985,14 +1010,31 @@ extension APIClient {
     try await performVoidRequest(request)
   }
 
-  /// Gets a shareable link for a conversation by setting it to shared visibility
-  /// - Parameter id: The conversation ID
-  /// - Returns: The shareable URL for the conversation
+  /// Gets a shareable link for a conversation by setting it to shared visibility.
+  ///
+  /// The visibility write is idempotent. When it fails, one read of the current
+  /// conversation decides the outcome: `shared` or `public` means the link
+  /// already exists, and any other state rethrows the original error.
   func getConversationShareLink(id: String) async throws -> String {
-    // Set visibility to shared
-    try await setConversationVisibility(id: id, visibility: "shared")
-    // Return the web URL for the shared conversation
+    do {
+      try await setConversationVisibility(id: id, visibility: "shared")
+    } catch {
+      guard await conversationVisibilityAlreadyShareable(id: id) else { throw error }
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "other",
+        from: "visibility_patch",
+        to: "existing_visibility",
+        reason: "local_heal",
+        outcome: .recovered)
+    }
     return DesktopBackendEnvironment.conversationShareURL(id: id)
+  }
+
+  /// Whether a failed share mutation left a link that already resolves.
+  /// A failed read is not evidence the conversation is shareable.
+  private func conversationVisibilityAlreadyShareable(id: String) async -> Bool {
+    guard let conversation = try? await getConversation(id: id) else { return false }
+    return conversation.visibility == "shared" || conversation.visibility == "public"
   }
 
   /// Calendar-detected people the meeting summary could be sent to (the other

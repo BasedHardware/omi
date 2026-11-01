@@ -184,4 +184,117 @@ describe('useChat session ownership', () => {
       expect.objectContaining({ id: 'file-2', name: 'Attached file' }),
     ]);
   });
+
+  it('replaces streamed marker text with the citation-stripped final message and memories on done', async () => {
+    vi.mocked(sendMessageStream).mockImplementation((async (
+      _text: string,
+      onChunk: (chunk: { type: string; text: string; message?: unknown }) => void,
+    ) => {
+      onChunk({ type: 'think', text: 'Searching conversations' });
+      onChunk({ type: 'data', text: 'I can name them.[1][2][4][' });
+      onChunk({ type: 'data', text: '6][7]' });
+      onChunk({
+        type: 'done',
+        text: '',
+        message: {
+          ...aiMessage('fixture-ai', 'I can name them.'),
+          memories_id: ['conversation-1', 'conversation-2'],
+          memories: [
+            {
+              id: 'conversation-1',
+              created_at: '2026-10-12T00:00:00Z',
+              structured: { title: 'Conversation 1', emoji: '📝' },
+            },
+            {
+              id: 'conversation-2',
+              created_at: '2026-10-12T00:00:00Z',
+              structured: { title: 'Conversation 2', emoji: '📝' },
+            },
+          ],
+        },
+      });
+    }) as never);
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage('Who did I meet?');
+    });
+
+    expect(result.current.streamingText).toBe('');
+    expect(result.current.messages).toHaveLength(2);
+    const aiReply = result.current.messages[1];
+    expect(aiReply?.text).toBe('I can name them.');
+    expect(aiReply?.memories).toEqual([
+      {
+        id: 'conversation-1',
+        created_at: '2026-10-12T00:00:00Z',
+        structured: { title: 'Conversation 1', emoji: '📝' },
+      },
+      {
+        id: 'conversation-2',
+        created_at: '2026-10-12T00:00:00Z',
+        structured: { title: 'Conversation 2', emoji: '📝' },
+      },
+    ]);
+  });
+});
+
+describe('useChat sendMessage acceptance', () => {
+  it('resolves true when the stream completes without an error chunk', async () => {
+    vi.mocked(getMessages).mockResolvedValue([] as never);
+    vi.mocked(sendMessageStream).mockImplementation((async (
+      _text: string,
+      onChunk: (chunk: { type: string; text: string; message?: unknown }) => void,
+    ) => {
+      onChunk({ type: 'done', text: '', message: aiMessage('ok-1', 'Answer') });
+    }) as never);
+
+    const { result } = renderHook(() => useChat());
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage('hello');
+    });
+
+    expect(accepted).toBe(true);
+  });
+
+  it('resolves false on an error chunk and on a transport failure', async () => {
+    vi.mocked(getMessages).mockResolvedValue([] as never);
+    vi.mocked(sendMessageStream).mockImplementation((async (
+      _text: string,
+      onChunk: (chunk: { type: string; text: string }) => void,
+    ) => {
+      onChunk({ type: 'error', text: 'quota' });
+    }) as never);
+
+    const { result } = renderHook(() => useChat());
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage('hello');
+    });
+    expect(accepted).toBe(false);
+
+    vi.mocked(sendMessageStream).mockImplementation((async () => {
+      throw new Error('offline');
+    }) as never);
+
+    await act(async () => {
+      accepted = await result.current.sendMessage('again');
+    });
+    expect(accepted).toBe(false);
+  });
+
+  it('resolves false when nothing could be sent', async () => {
+    vi.mocked(getMessages).mockResolvedValue([] as never);
+    const { result } = renderHook(() => useChat());
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage('   ');
+    });
+    expect(accepted).toBe(false);
+  });
 });

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-review-question.png",
+      "platform": "desktop-macos",
+      "description": "Mobile Review card rendered on the headless Flutter test device on macOS using synthetic data.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-review-conflict.png",
+      "platform": "desktop-macos",
+      "description": "The real Review card and provider show neutral feedback after a synthetic 409 answer. Headless Flutter rendering, not physical-device acceptance.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

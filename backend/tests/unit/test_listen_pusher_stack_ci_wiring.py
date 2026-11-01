@@ -62,6 +62,16 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     finalizer_leaves = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'finalizer_leaves.py').read_text(
         encoding='utf-8'
     )
+    assert 'def _free_ports(count: int) -> list[int]:' in runner
+    # SO_REUSEADDR on a probe waives the exclusive bind that makes the
+    # reservation meaningful; a probe must hold the port alone.
+    assert 'SO_REUSEADDR' not in runner
+    assert 'ports = _free_ports(5)' in runner
+    assert 'self.redis_port = ports[0]' in runner
+    assert 'self.backend_port = ports[1]' in runner
+    assert 'self.finalization_worker_port = ports[2]' in runner
+    assert 'self.pusher_port = ports[3]' in runner
+    assert 'self.parakeet_port = ports[4]' in runner
     assert '_rest_finalization_survives_listener_restart' in runner
     assert "state_dir / 'cloud-rest-restart'" in runner
     assert '_stale_processing_orphan_reconciled' in runner
@@ -178,3 +188,37 @@ def test_hermetic_gauntlet_redis_apt_installs_are_bounded() -> None:
     assert workflow.count(f'{_BOUNDED_APT_GET} update') == 3
     assert workflow.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 3
     assert 'sudo apt-get install --yes redis-server' not in workflow
+
+
+def test_listen_pusher_stack_free_ports_are_strictly_distinct_and_bindable() -> None:
+    import socket
+
+    def _free_ports(count: int) -> list[int]:
+        probes = []
+        ports = []
+        try:
+            for _ in range(count):
+                probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                probe.bind(('127.0.0.1', 0))
+                probes.append(probe)
+                ports.append(int(probe.getsockname()[1]))
+            return ports
+        finally:
+            for probe in probes:
+                probe.close()
+
+    ports = _free_ports(5)
+    assert len(ports) == 5
+    assert len(set(ports)) == 5
+    assert all(isinstance(p, int) and p > 1024 for p in ports)
+
+    sockets = []
+    try:
+        for p in ports:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(('127.0.0.1', p))
+            sockets.append(s)
+    finally:
+        for s in sockets:
+            s.close()

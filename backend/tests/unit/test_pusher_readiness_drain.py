@@ -243,7 +243,7 @@ def test_ws_drain_reject_ordering_is_static_tripwire():
 
     from routers import pusher as pusher_router
 
-    source = inspect.getsource(pusher_router._websocket_util_trigger)
+    source = inspect.getsource(pusher_router._run_websocket_util_trigger)
     accept_pos = source.find('await websocket.accept()')
     drain_check_pos = source.find('if not ReadinessGate.is_serving()')
     close_1001_pos = source.find('await websocket.close(code=1001)')

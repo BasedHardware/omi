@@ -1,0 +1,36 @@
+# Conformance image for a lane SHA (submitted like cloudbuild.yaml, with --no-source): backend image
+# from the archive, then an inline pytest layer (tests/ and testing/ are already in the backend image).
+# Runs as staging-builder.
+substitutions:
+  _REPO: us-central1-docker.pkg.dev/based-hardware-dev/staging
+  _SHA: ''
+  _SOURCE: ''
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: 3600s
+steps:
+  - id: source
+    name: gcr.io/cloud-builders/gcloud
+    entrypoint: bash
+    args: [-c, 'gcloud storage cp "${_SOURCE}" /workspace/src.tgz && tar -xzf /workspace/src.tgz -C /workspace && rm /workspace/src.tgz']
+  - id: backend
+    name: gcr.io/cloud-builders/docker
+    args: [build, -f, backend/Dockerfile, -t, '${_REPO}/backend:${_SHA}', .]
+  # The pytest layer is inline (not a file in the archive) so any lane SHA can be built.
+  - id: conformance
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        printf '%s\n' \
+          'FROM ${_REPO}/backend:${_SHA}' \
+          'USER root' \
+          'RUN /opt/venv/bin/python -m ensurepip --upgrade >/dev/null && /opt/venv/bin/python -m pip install --no-cache-dir pytest==8.4.1 pytest-asyncio==1.4.0 && chown -R omi:omi /app' \
+          'USER omi' > /workspace/conformance.Dockerfile && mkdir -p /workspace/empty-ctx &&
+        docker build -f /workspace/conformance.Dockerfile -t '${_REPO}/backend-conformance:${_SHA}' /workspace/empty-ctx 2>&1 || exit 1
+    waitFor: [backend]
+images:
+  - '${_REPO}/backend:${_SHA}'
+  - '${_REPO}/backend-conformance:${_SHA}'

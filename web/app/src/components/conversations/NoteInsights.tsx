@@ -1,5 +1,6 @@
 'use client';
 
+import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 import { Brain, History, Sparkles, Target, User } from 'lucide-react';
 import type { NoteInsight, NoteInsightKind } from '@/types/conversation';
 
@@ -12,12 +13,19 @@ const KIND_ICONS: Record<NoteInsightKind, typeof Sparkles> = {
 
 interface NoteInsightsProps {
   insights?: NoteInsight[] | null;
+  transcriptIDs?: string[];
 }
 
-export function NoteInsights({ insights }: NoteInsightsProps) {
-  const items = (insights ?? []).filter(
-    (insight) => typeof insight?.text === 'string' && insight.text.trim(),
-  );
+export function NoteInsights({ insights, transcriptIDs = [] }: NoteInsightsProps) {
+  const items = (insights ?? [])
+    .map((insight) => ({
+      ...insight,
+      text: repairNoteCitations(
+        typeof insight?.text === 'string' ? insight.text : '',
+        transcriptIDs,
+      ).text,
+    }))
+    .filter((insight) => typeof insight?.text === 'string' && insight.text.trim());
   if (items.length === 0) return null;
 
   return (

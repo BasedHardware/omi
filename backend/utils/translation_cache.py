@@ -1,7 +1,6 @@
 import time
 from typing import Dict, Optional
 
-from config.translation import translation_profile_gate_enabled
 from utils.translation_core.quality import output_rejection_reason
 from utils.translation_language import expected_foreign_language
 
@@ -154,8 +153,6 @@ class ConversationLanguageState:
         non-Latin script. Short ambiguous Latin fragments defer until a longer
         sample establishes their language in this conversation.
         """
-        if not translation_profile_gate_enabled():
-            return True
         language, confidence = detect_language_with_confidence(text)
         base = _normalize_base_language(language)
         if expected_foreign_language(text, self.target_base, expected_languages):

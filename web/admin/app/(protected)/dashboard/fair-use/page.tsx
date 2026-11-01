@@ -1,13 +1,36 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAuthFetch } from '@/hooks/useAuthToken';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { AlertCircle, Search, RefreshCw, ChevronLeft, Shield, ShieldAlert, ShieldOff, ShieldCheck } from 'lucide-react';
+import { useState, useEffect, useCallback } from "react";
+import { useAuthFetch } from "@/hooks/useAuthToken";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertCircle,
+  Search,
+  RefreshCw,
+  ChevronLeft,
+  Shield,
+  ShieldAlert,
+  ShieldOff,
+  ShieldCheck,
+} from "lucide-react";
 
 interface FlaggedUser {
   uid: string;
@@ -53,21 +76,50 @@ interface UserDetail {
 
 function stageBadge(stage: string) {
   switch (stage) {
-    case 'warning':
-      return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300"><ShieldAlert className="h-3 w-3 mr-1" />Warning</Badge>;
-    case 'throttle':
-      return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300"><ShieldOff className="h-3 w-3 mr-1" />Throttle</Badge>;
-    case 'restrict':
-      return <Badge variant="destructive"><Shield className="h-3 w-3 mr-1" />Restrict</Badge>;
-    case 'none':
-      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300"><ShieldCheck className="h-3 w-3 mr-1" />None</Badge>;
+    case "warning":
+      return (
+        <Badge
+          variant="outline"
+          className="border-yellow-300 bg-yellow-50 text-yellow-700"
+        >
+          <ShieldAlert className="mr-1 h-3 w-3" />
+          Warning
+        </Badge>
+      );
+    case "throttle":
+      return (
+        <Badge
+          variant="outline"
+          className="border-orange-300 bg-orange-50 text-orange-700"
+        >
+          <ShieldOff className="mr-1 h-3 w-3" />
+          Throttle
+        </Badge>
+      );
+    case "restrict":
+      return (
+        <Badge variant="destructive">
+          <Shield className="mr-1 h-3 w-3" />
+          Restrict
+        </Badge>
+      );
+    case "none":
+      return (
+        <Badge
+          variant="outline"
+          className="border-green-300 bg-green-50 text-green-700"
+        >
+          <ShieldCheck className="mr-1 h-3 w-3" />
+          None
+        </Badge>
+      );
     default:
       return <Badge variant="secondary">{stage}</Badge>;
   }
 }
 
 function formatDate(dateStr?: string) {
-  if (!dateStr) return '-';
+  if (!dateStr) return "-";
   try {
     return new Date(dateStr).toLocaleString();
   } catch {
@@ -77,10 +129,16 @@ function formatDate(dateStr?: string) {
 
 export default function FairUsePage() {
   const { fetchWithAuth, token } = useAuthFetch();
+  const { access, can } = useAdminAccess();
+  // subscription_plan is a financial field: the wall strips it from the
+  // user-detail response without finance:read, so the missing value must
+  // read as restricted, never fall back to "basic". Unknown access is
+  // treated as restricted until it loads.
+  const planRestricted = access ? !can("finance:read") : true;
   const [flaggedUsers, setFlaggedUsers] = useState<FlaggedUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stageFilter, setStageFilter] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [stageFilter, setStageFilter] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [userLoading, setUserLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -92,13 +150,15 @@ export default function FairUsePage() {
       setLoading(true);
       setError(null);
       const params = new URLSearchParams();
-      if (stageFilter) params.set('stage', stageFilter);
+      if (stageFilter) params.set("stage", stageFilter);
       const res = await fetchWithAuth(`/api/omi/fair-use/flagged?${params}`);
       if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
       const data = await res.json();
       setFlaggedUsers(data.users || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch flagged users');
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch flagged users"
+      );
     } finally {
       setLoading(false);
     }
@@ -117,7 +177,9 @@ export default function FairUsePage() {
       const data = await res.json();
       setSelectedUser(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch user detail');
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch user detail"
+      );
     } finally {
       setUserLoading(false);
     }
@@ -131,9 +193,11 @@ export default function FairUsePage() {
       setUserLoading(true);
       setError(null);
 
-      if (query.startsWith('FU-')) {
+      if (query.startsWith("FU-")) {
         // Case ref lookup
-        const res = await fetchWithAuth(`/api/omi/fair-use/case/${encodeURIComponent(query)}`);
+        const res = await fetchWithAuth(
+          `/api/omi/fair-use/case/${encodeURIComponent(query)}`
+        );
         if (!res.ok) {
           if (res.status === 404) {
             setError(`Case ${query} not found`);
@@ -151,25 +215,30 @@ export default function FairUsePage() {
         await fetchUserDetail(query);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
+      setError(err instanceof Error ? err.message : "Search failed");
     } finally {
       setUserLoading(false);
     }
   };
 
   const handleReset = async (uid: string) => {
-    if (!confirm('Reset this user\'s fair use state to clean? This will clear all enforcement.')) return;
+    if (
+      !confirm(
+        "Reset this user's fair use state to clean? This will clear all enforcement."
+      )
+    )
+      return;
     try {
-      setActionLoading('reset');
+      setActionLoading("reset");
       setError(null);
       const res = await fetchWithAuth(`/api/omi/fair-use/user/${uid}/reset`, {
-        method: 'POST',
+        method: "POST",
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       await fetchUserDetail(uid);
       await fetchFlaggedUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Reset failed');
+      setError(err instanceof Error ? err.message : "Reset failed");
     } finally {
       setActionLoading(null);
     }
@@ -180,31 +249,37 @@ export default function FairUsePage() {
     try {
       setActionLoading(`stage-${stage}`);
       setError(null);
-      const res = await fetchWithAuth(`/api/omi/fair-use/user/${uid}/set-stage?stage=${stage}`, {
-        method: 'POST',
-      });
+      const res = await fetchWithAuth(
+        `/api/omi/fair-use/user/${uid}/set-stage?stage=${stage}`,
+        {
+          method: "POST",
+        }
+      );
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       await fetchUserDetail(uid);
       await fetchFlaggedUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Set stage failed');
+      setError(err instanceof Error ? err.message : "Set stage failed");
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleResolveEvent = async (uid: string, eventId: string) => {
-    if (!confirm('Mark this event as resolved?')) return;
+    if (!confirm("Mark this event as resolved?")) return;
     try {
       setActionLoading(`resolve-${eventId}`);
       setError(null);
-      const res = await fetchWithAuth(`/api/omi/fair-use/user/${uid}/resolve-event/${eventId}`, {
-        method: 'POST',
-      });
+      const res = await fetchWithAuth(
+        `/api/omi/fair-use/user/${uid}/resolve-event/${eventId}`,
+        {
+          method: "POST",
+        }
+      );
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       await fetchUserDetail(uid);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Resolve failed');
+      setError(err instanceof Error ? err.message : "Resolve failed");
     } finally {
       setActionLoading(null);
     }
@@ -216,27 +291,51 @@ export default function FairUsePage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedUser(null)}>
-            <ChevronLeft className="h-4 w-4 mr-1" /> Back
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedUser(null)}
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" /> Back
           </Button>
           <h1 className="text-2xl font-bold">User Fair Use Detail</h1>
         </div>
 
         {error && (
-          <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm">{error}</div>
+          <div className="rounded-md bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            {error}
+          </div>
         )}
 
         {/* Profile + State */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Profile</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <div><span className="text-muted-foreground">UID:</span> <code className="text-xs">{selectedUser.uid}</code></div>
-              <div><span className="text-muted-foreground">Email:</span> {selectedUser.profile.email || '-'}</div>
-              <div><span className="text-muted-foreground">Name:</span> {selectedUser.profile.name || '-'}</div>
-              <div><span className="text-muted-foreground">Plan:</span> <Badge variant="outline">{selectedUser.profile.subscription_plan || 'basic'}</Badge></div>
+              <div>
+                <span className="text-muted-foreground">UID:</span>{" "}
+                <code className="text-xs">{selectedUser.uid}</code>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Email:</span>{" "}
+                {selectedUser.profile.email || "-"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Name:</span>{" "}
+                {selectedUser.profile.name || "-"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Plan:</span>{" "}
+                {planRestricted ? (
+                  <Badge variant="outline">Restricted</Badge>
+                ) : (
+                  <Badge variant="outline">
+                    {selectedUser.profile.subscription_plan || "basic"}
+                  </Badge>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -245,15 +344,40 @@ export default function FairUsePage() {
               <CardTitle className="text-lg">Enforcement State</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center gap-2"><span className="text-muted-foreground">Stage:</span> {stageBadge(state.stage as string || 'none')}</div>
-              <div><span className="text-muted-foreground">Violations (7d):</span> {(state.violation_count_7d as number) ?? 0}</div>
-              <div><span className="text-muted-foreground">Violations (30d):</span> {(state.violation_count_30d as number) ?? 0}</div>
-              <div><span className="text-muted-foreground">Classifier Score:</span> {(state.last_classifier_score as number)?.toFixed(2) ?? '-'}</div>
-              <div><span className="text-muted-foreground">Classifier Type:</span> {(state.last_classifier_type as string) || '-'}</div>
-              <div><span className="text-muted-foreground">Last Violation:</span> {formatDate(state.last_violation_at as string)}</div>
-              <div><span className="text-muted-foreground">Updated:</span> {formatDate(state.updated_at as string)}</div>
-              {typeof state.reset_by === 'string' && (
-                <div><span className="text-muted-foreground">Last Reset By:</span> <code className="text-xs">{state.reset_by}</code> at {formatDate(state.reset_at as string)}</div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Stage:</span>{" "}
+                {stageBadge((state.stage as string) || "none")}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Violations (7d):</span>{" "}
+                {(state.violation_count_7d as number) ?? 0}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Violations (30d):</span>{" "}
+                {(state.violation_count_30d as number) ?? 0}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Classifier Score:</span>{" "}
+                {(state.last_classifier_score as number)?.toFixed(2) ?? "-"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Classifier Type:</span>{" "}
+                {(state.last_classifier_type as string) || "-"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Last Violation:</span>{" "}
+                {formatDate(state.last_violation_at as string)}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Updated:</span>{" "}
+                {formatDate(state.updated_at as string)}
+              </div>
+              {typeof state.reset_by === "string" && (
+                <div>
+                  <span className="text-muted-foreground">Last Reset By:</span>{" "}
+                  <code className="text-xs">{state.reset_by}</code> at{" "}
+                  {formatDate(state.reset_at as string)}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -263,7 +387,9 @@ export default function FairUsePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Admin Actions</CardTitle>
-            <CardDescription>Changes take effect within 60 seconds (backend cache TTL).</CardDescription>
+            <CardDescription>
+              Changes take effect within 60 seconds (backend cache TTL).
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Button
@@ -272,14 +398,16 @@ export default function FairUsePage() {
               disabled={actionLoading !== null}
               onClick={() => handleReset(selectedUser.uid)}
             >
-              {actionLoading === 'reset' ? 'Resetting...' : 'Reset to Clean'}
+              {actionLoading === "reset" ? "Resetting..." : "Reset to Clean"}
             </Button>
             <Button
               variant="outline"
               size="sm"
               className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
-              disabled={actionLoading !== null || (state.stage as string) === 'warning'}
-              onClick={() => handleSetStage(selectedUser.uid, 'warning')}
+              disabled={
+                actionLoading !== null || (state.stage as string) === "warning"
+              }
+              onClick={() => handleSetStage(selectedUser.uid, "warning")}
             >
               Set Warning
             </Button>
@@ -287,16 +415,20 @@ export default function FairUsePage() {
               variant="outline"
               size="sm"
               className="border-orange-300 text-orange-700 hover:bg-orange-50"
-              disabled={actionLoading !== null || (state.stage as string) === 'throttle'}
-              onClick={() => handleSetStage(selectedUser.uid, 'throttle')}
+              disabled={
+                actionLoading !== null || (state.stage as string) === "throttle"
+              }
+              onClick={() => handleSetStage(selectedUser.uid, "throttle")}
             >
               Set Throttle
             </Button>
             <Button
               variant="destructive"
               size="sm"
-              disabled={actionLoading !== null || (state.stage as string) === 'restrict'}
-              onClick={() => handleSetStage(selectedUser.uid, 'restrict')}
+              disabled={
+                actionLoading !== null || (state.stage as string) === "restrict"
+              }
+              onClick={() => handleSetStage(selectedUser.uid, "restrict")}
             >
               Set Restrict
             </Button>
@@ -307,11 +439,15 @@ export default function FairUsePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Violation Events</CardTitle>
-            <CardDescription>{selectedUser.events.length} event(s)</CardDescription>
+            <CardDescription>
+              {selectedUser.events.length} event(s)
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {selectedUser.events.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No events recorded.</p>
+              <p className="text-sm text-muted-foreground">
+                No events recorded.
+              </p>
             ) : (
               <Table>
                 <TableHeader>
@@ -328,20 +464,44 @@ export default function FairUsePage() {
                 <TableBody>
                   {selectedUser.events.map((event) => (
                     <TableRow key={event.id}>
-                      <TableCell className="font-mono text-xs">{event.case_ref || '-'}</TableCell>
-                      <TableCell>
-                        {event.previous_stage && event.new_stage
-                          ? <span>{stageBadge(event.previous_stage)} <span className="mx-1">→</span> {stageBadge(event.new_stage)}</span>
-                          : stageBadge(event.new_stage || 'none')}
+                      <TableCell className="font-mono text-xs">
+                        {event.case_ref || "-"}
                       </TableCell>
-                      <TableCell>{event.classifier?.misuse_score?.toFixed(2) ?? '-'}</TableCell>
-                      <TableCell>{event.trigger || event.classifier?.usage_type || '-'}</TableCell>
-                      <TableCell className="text-xs">{formatDate(event.created_at)}</TableCell>
+                      <TableCell>
+                        {event.previous_stage && event.new_stage ? (
+                          <span>
+                            {stageBadge(event.previous_stage)}{" "}
+                            <span className="mx-1">→</span>{" "}
+                            {stageBadge(event.new_stage)}
+                          </span>
+                        ) : (
+                          stageBadge(event.new_stage || "none")
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {event.classifier?.misuse_score?.toFixed(2) ?? "-"}
+                      </TableCell>
+                      <TableCell>
+                        {event.trigger || event.classifier?.usage_type || "-"}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {formatDate(event.created_at)}
+                      </TableCell>
                       <TableCell>
                         {event.resolved ? (
-                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">Resolved</Badge>
+                          <Badge
+                            variant="outline"
+                            className="border-green-300 bg-green-50 text-green-700"
+                          >
+                            Resolved
+                          </Badge>
                         ) : (
-                          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Active</Badge>
+                          <Badge
+                            variant="outline"
+                            className="border-red-300 bg-red-50 text-red-700"
+                          >
+                            Active
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell>
@@ -350,13 +510,19 @@ export default function FairUsePage() {
                             variant="ghost"
                             size="sm"
                             disabled={actionLoading !== null}
-                            onClick={() => handleResolveEvent(selectedUser.uid, event.id)}
+                            onClick={() =>
+                              handleResolveEvent(selectedUser.uid, event.id)
+                            }
                           >
-                            {actionLoading === `resolve-${event.id}` ? 'Resolving...' : 'Resolve'}
+                            {actionLoading === `resolve-${event.id}`
+                              ? "Resolving..."
+                              : "Resolve"}
                           </Button>
                         )}
                         {event.resolved && event.admin_notes && (
-                          <span className="text-xs text-muted-foreground">{event.admin_notes}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {event.admin_notes}
+                          </span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -378,20 +544,32 @@ export default function FairUsePage() {
           <AlertCircle className="h-6 w-6 text-orange-500" />
           <h1 className="text-2xl font-bold">Fair Use Admin</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchFlaggedUsers} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchFlaggedUsers}
+          disabled={loading}
+        >
+          <RefreshCw
+            className={`mr-1 h-4 w-4 ${loading ? "animate-spin" : ""}`}
+          />{" "}
+          Refresh
         </Button>
       </div>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm">{error}</div>
+        <div className="rounded-md bg-destructive/10 px-4 py-2 text-sm text-destructive">
+          {error}
+        </div>
       )}
 
       {/* Search */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Lookup</CardTitle>
-          <CardDescription>Search by case reference (FU-XXXX) or user UID</CardDescription>
+          <CardDescription>
+            Search by case reference (FU-XXXX) or user UID
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
@@ -399,10 +577,14 @@ export default function FairUsePage() {
               placeholder="FU-A92A2893DF4A or user UID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             />
-            <Button onClick={handleSearch} disabled={userLoading || !searchQuery.trim()}>
-              <Search className="h-4 w-4 mr-1" /> {userLoading ? 'Searching...' : 'Search'}
+            <Button
+              onClick={handleSearch}
+              disabled={userLoading || !searchQuery.trim()}
+            >
+              <Search className="mr-1 h-4 w-4" />{" "}
+              {userLoading ? "Searching..." : "Search"}
             </Button>
           </div>
         </CardContent>
@@ -410,14 +592,16 @@ export default function FairUsePage() {
 
       {/* Stage filter */}
       <div className="flex gap-2">
-        {['', 'warning', 'throttle', 'restrict'].map((stage) => (
+        {["", "warning", "throttle", "restrict"].map((stage) => (
           <Button
             key={stage}
-            variant={stageFilter === stage ? 'default' : 'outline'}
+            variant={stageFilter === stage ? "default" : "outline"}
             size="sm"
             onClick={() => setStageFilter(stage)}
           >
-            {stage === '' ? 'All Stages' : stage.charAt(0).toUpperCase() + stage.slice(1)}
+            {stage === ""
+              ? "All Stages"
+              : stage.charAt(0).toUpperCase() + stage.slice(1)}
           </Button>
         ))}
       </div>
@@ -427,7 +611,9 @@ export default function FairUsePage() {
         <CardHeader>
           <CardTitle className="text-lg">Flagged Users</CardTitle>
           <CardDescription>
-            {loading ? 'Loading...' : `${flaggedUsers.length} user(s) with active enforcement`}
+            {loading
+              ? "Loading..."
+              : `${flaggedUsers.length} user(s) with active enforcement`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -436,7 +622,9 @@ export default function FairUsePage() {
               <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : flaggedUsers.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center py-8">No flagged users found.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No flagged users found.
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -452,19 +640,36 @@ export default function FairUsePage() {
               </TableHeader>
               <TableBody>
                 {flaggedUsers.map((u) => (
-                  <TableRow key={u.uid} className="cursor-pointer hover:bg-accent/50" onClick={() => fetchUserDetail(u.uid)}>
-                    <TableCell className="font-mono text-xs">{u.uid.slice(0, 12)}...</TableCell>
+                  <TableRow
+                    key={u.uid}
+                    className="cursor-pointer hover:bg-accent/50"
+                    onClick={() => fetchUserDetail(u.uid)}
+                  >
+                    <TableCell className="font-mono text-xs">
+                      {u.uid.slice(0, 12)}...
+                    </TableCell>
                     <TableCell>{stageBadge(u.stage)}</TableCell>
                     <TableCell>{u.violation_count_7d ?? 0}</TableCell>
                     <TableCell>{u.violation_count_30d ?? 0}</TableCell>
                     <TableCell>
                       {u.last_classifier_score !== undefined
-                        ? `${u.last_classifier_score.toFixed(2)} (${u.last_classifier_type || '-'})`
-                        : '-'}
+                        ? `${u.last_classifier_score.toFixed(2)} (${
+                            u.last_classifier_type || "-"
+                          })`
+                        : "-"}
                     </TableCell>
-                    <TableCell className="text-xs">{formatDate(u.updated_at)}</TableCell>
+                    <TableCell className="text-xs">
+                      {formatDate(u.updated_at)}
+                    </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); fetchUserDetail(u.uid); }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fetchUserDetail(u.uid);
+                        }}
+                      >
                         View
                       </Button>
                     </TableCell>

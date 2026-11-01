@@ -412,6 +412,10 @@ export class KernelSessions extends KernelArtifacts {
       where.push("owner_id = ?");
       values.push(input.ownerId);
     }
+    if (input.sessionId) {
+      where.push("session_id = ?");
+      values.push(input.sessionId);
+    }
     if (input.status) {
       where.push("status = ?");
       values.push(input.status);

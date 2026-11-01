@@ -15,10 +15,12 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import iconPath from '../../../resources/icon.png?asset'
 import type { InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../shared/types'
+import type { ToastDeliveryHooks } from './deliveryHooks'
 import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
 const HEIGHT = 168
+// V2 adds a source-opening action below bounded title/body previews.
 // The what's-new card carries more copy (a 3-item changelog + a button) than an
 // insight/meeting toast, so it gets a taller window sized to its content — three
 // changes each wrapping to two lines, the headline, and the release-notes button
@@ -41,7 +43,7 @@ let currentDismissMs = AUTO_DISMISS_MS
 function armDismiss(ms: number): void {
   currentDismissMs = ms
   if (dismissTimer) clearTimeout(dismissTimer)
-  dismissTimer = setTimeout(hideInsightToast, ms)
+  dismissTimer = setTimeout(() => dismissInsightToast(), ms)
 }
 // The meeting payload currently on screen. Kept so the toast renderer can PULL
 // it on mount ('meeting:getToast'): a push sent between the window's
@@ -137,7 +139,8 @@ function position(win: BrowserWindow, height: number = HEIGHT): void {
   })
 }
 
-export function showInsightToast(payload: InsightPayload): void {
+export function showInsightToast(payload: InsightPayload, hooks?: ToastDeliveryHooks): void {
+  if (hooks && !hooks.isCurrent()) return
   const win = ensureWindow()
   position(win)
   // An insight replaces whatever is on the shared toast — clear any meeting /
@@ -146,9 +149,11 @@ export function showInsightToast(payload: InsightPayload): void {
   currentMeetingToast = null
   currentWhatsNew = null
   // showInactive: appear on top without taking focus from the user's current app.
-  win.showInactive()
+  if (!hooks) win.showInactive()
   const send = (): void => {
-    if (!win.isDestroyed()) win.webContents.send('insight:payload', payload)
+    if (win.isDestroyed() || (hooks && !hooks.isCurrent())) return
+    if (hooks) win.showInactive()
+    win.webContents.send('insight:payload', payload)
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
@@ -223,4 +228,13 @@ export function resumeInsightDismiss(): void {
 /** Pre-create the (hidden) toast window so the first insight shows instantly. */
 export function createInsightToastWindow(): void {
   ensureWindow()
+}
+
+/** IPC cannot supply a target or report outcomes for another toast/owner. */
+export function isInsightToastSender(senderID: number): boolean {
+  return !!toastWindow && !toastWindow.isDestroyed() && toastWindow.webContents.id === senderID
+}
+
+export function dismissInsightToast(): void {
+  hideInsightToast()
 }

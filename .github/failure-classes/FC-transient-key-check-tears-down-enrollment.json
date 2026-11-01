@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-transient-key-check-tears-down-enrollment",
+  "violated_contract": "A key-validation attempt that produces no provider verdict (transport failure, timeout, provider 5xx/429, offline) must not be treated as a rejection of the key. Collapsing the two into one failure status let a single offline launch or provider blip deactivate a BYOK enrollment server-side while the key text stayed visible in Settings: the surface looked configured, every later request silently rode the managed lane into billing 402s, and the only recovery was re-saving the key once the network returned.",
+  "canonical_prevention": "Classify validation outcomes into provider verdicts (ok, rejected) and non-verdicts (transient) before any activation/teardown decision. Activate or deactivate enrollments only on verdicts; on a non-verdict, keep the existing enrollment and tell the user the check can be retried. Badge copy must distinguish 'Invalid' from 'Check failed'.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/BYOKValidator.swift",
+    "desktop/macos/Desktop/Tests/BYOKValidatorTransientTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/BYOKValidator.swift",
+    "desktop/macos/Desktop/Sources/APIKeyService.swift",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift"
+  ],
+  "status": "open"
+}

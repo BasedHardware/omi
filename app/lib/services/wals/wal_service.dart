@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
@@ -20,6 +21,8 @@ class WalService implements IWalService, IWalSyncListener {
     DateTime Function()? phoneNow,
     Timer Function(Duration, void Function(Timer))? phonePeriodic,
     Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+    WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
+    Future<int?> Function()? phoneFreeDiskBytes,
   }) {
     _syncs = WalSyncs(
       this,
@@ -27,6 +30,8 @@ class WalService implements IWalService, IWalSyncListener {
       phoneNow: phoneNow,
       phonePeriodic: phonePeriodic,
       phoneJobStatusFetcher: phoneJobStatusFetcher,
+      phoneCoverageTelemetry: phoneCoverageTelemetry,
+      phoneFreeDiskBytes: phoneFreeDiskBytes,
     );
   }
 

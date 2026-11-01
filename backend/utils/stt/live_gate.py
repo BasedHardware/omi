@@ -3,14 +3,40 @@
 from __future__ import annotations
 
 import math
-import os
 from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 from typing import Any
 
+from config.policy.listen import disruption_gate
+from config.live_stt_resilience import recovery_sample_guard_enabled
+
 # 10x 1,800 sessions/hour is 1,500 identities per five-minute window.
 HEALTHY_USERS = 2048
 FAILURE_RESERVE = 8
+RECOVERY_REBENCH_MINIMUM = 100
+RECOVERY_FAST_MINIMUM = 20
+RECOVERY_FAST_FAILURE_SHARE = 0.25
+# High digits identify an operator reset; low digits retain ordinary gate
+# generations. One million transitions of headroom keeps epochs distinct.
+RESET_GENERATION_STRIDE = 1_000_000
+
+
+def reset_generation_floor(raw: str | bytes | None) -> int:
+    if raw is None:
+        return 0
+    generation = int(raw)
+    if generation <= 0 or generation % RESET_GENERATION_STRIDE:
+        raise ValueError('invalid operator reset generation')
+    return generation
+
+
+def generation_allows(current: int, captured: int | None, *, connect: bool = False) -> bool:
+    """Connect failures follow ordinary gate changes, never an operator reset."""
+    if captured is None:
+        return current // RESET_GENERATION_STRIDE == 0
+    return current == captured or (
+        connect and current // RESET_GENERATION_STRIDE == captured // RESET_GENERATION_STRIDE
+    )
 
 
 @dataclass(frozen=True)
@@ -23,6 +49,7 @@ class GateState:
     until: float = 0
     strikes: int = 0
     generation: int = 0
+    trial_started_at: float = 0.0
     witnesses: tuple[str, ...] = ()
     recent_failures: tuple[str, ...] = ()
     trial_users: tuple[tuple[str, int, int], ...] = ()
@@ -47,7 +74,7 @@ class GateState:
                 or len(user[0]) != 16
                 or type(user[1]) is not int
                 or type(user[2]) is not int
-                or not 0 <= user[2] <= user[1] <= 240
+                or not 0 <= user[2] <= user[1] <= 3
                 or user[1] == 0
             ):
                 raise ValueError('invalid trial user vote')
@@ -83,6 +110,8 @@ class GateState:
             ):
                 raise ValueError('invalid cost gate witnesses')
             raw[field] = tuple(values)
+        if type(raw.get('trial_started_at', 0.0)) not in (int, float):
+            raise ValueError('invalid trial start')
         state = cls(**raw)
         if (
             not math.isfinite(state.threshold)
@@ -93,6 +122,8 @@ class GateState:
             or not all(math.isfinite(value) and 0 <= value <= 1000 for value in state.evidence)
             or not math.isfinite(state.until)
             or state.until < 0
+            or not math.isfinite(state.trial_started_at)
+            or state.trial_started_at < 0
             or state.generation < 0
             or not 0 <= state.strikes <= 10
             or len(state.witnesses) > 4
@@ -108,11 +139,7 @@ class GateState:
         return asdict(self)
 
 
-def gate_rate() -> float:
-    gate = float(os.getenv('STT_ROUTING_DISRUPTION_GATE', '0.08'))
-    if not math.isfinite(gate) or not 0 < gate < 1:
-        raise ValueError('disruption gate must be between 0 and 1')
-    return gate
+gate_rate = disruption_gate
 
 
 @lru_cache(maxsize=16)
@@ -141,6 +168,7 @@ def transition(
             healthy_users=(),
             healthy_window=-1,
             overflow_failures=(),
+            trial_started_at=now if state.stage in (5, 25) else 0.0,
             generation=state.generation + 1,
         )
     if state.stage == 0:
@@ -181,21 +209,22 @@ def transition(
         users[witness] = count + 1
         state = replace(state, healthy_window=window, healthy_users=tuple(users.items()))
     required = {5: 30, 25: 60}.get(state.stage)
-    accepted = True
     if required and witness is not None:
         users = list(state.trial_users)
         index = next((i for i, user in enumerate(users) if user[0] == witness), len(users))
         if index == len(users):
+            if len(users) >= 240:
+                return state
             users.append((witness, 1, int(failed)))
         else:
             uid, count, failures = users[index]
-            accepted = count < 3
+            if count >= 3:
+                return _promote_trial(state, now)
             users[index] = (uid, count + 1, failures + int(failed))
         state = replace(state, trial_users=tuple(users))
     if witness is not None and witness not in state.witnesses and len(state.witnesses) < 4:
         state = replace(state, witnesses=(*state.witnesses, witness))
-    if accepted:
-        state = replace(state, recent_failures=(*state.recent_failures, (witness or '0' * 16) if failed else '')[-32:])
+    state = replace(state, recent_failures=(*state.recent_failures, (witness or '0' * 16) if failed else '')[-32:])
     # Fleet writers always supply a UID fingerprint. A single repeated caller
     # must not turn its failures into a fleet outage, even after healthy history.
     # Anonymous outcomes are used only by the mathematical simulation.
@@ -209,13 +238,9 @@ def transition(
     # This is a change detector with empirically calibrated run lengths, NOT an
     # anytime-valid e-process or a posterior probability. Healthy-stage scores
     # do not reset at reporting-counter boundaries; held trial windows reset below.
-    evidence = (
-        tuple(
-            min(1000.0, max(0.0, old + increments[0 if failed else 1]))
-            for old, increments in zip(state.evidence, _increments(gate))
-        )
-        if accepted
-        else state.evidence
+    evidence = tuple(
+        min(1000.0, max(0.0, old + increments[0 if failed else 1]))
+        for old, increments in zip(state.evidence, _increments(gate))
     )
     n, failures = state.n + 1, state.failures + int(failed)
     user_rate = (
@@ -228,11 +253,21 @@ def transition(
     # short burst of five failures must not bench a mostly healthy target.
     detected = evidence[0] >= 12 or evidence[1] >= 11 or (sum(counts) >= 8 and evidence[2] >= 10)
     decisive = (broad_failure and detected) or (sparse_failure and max(evidence) >= 14)
-    if required:
+    guarded_trial = required and recovery_sample_guard_enabled()
+    if guarded_trial:
+        # The ordinary burst path needs a meaningful sample. A separately
+        # bounded high-failure path still removes a truly broken trial quickly.
+        # Both use admitted, non-censored outcomes and retain witness fairness.
+        fast_failure = n >= RECOVERY_FAST_MINIMUM and failures / n >= RECOVERY_FAST_FAILURE_SHARE and broad_failure
+        decisive = (decisive and n >= RECOVERY_REBENCH_MINIMUM and user_rate > gate) or fast_failure
+    elif required:
         decisive = decisive and user_rate > gate
-    rejected_trial = required and n >= required and user_rate > gate and broad_failure
+    rejected_trial = required and not guarded_trial and n >= required and user_rate > gate and broad_failure
     if n >= 8 and (decisive or rejected_trial):
-        strikes = min(state.strikes + 1, 10)
+        # A larger recovery sample must not multiply chronic-outage exposure.
+        # Advance one extra cooldown exponent on consecutive trial rejections;
+        # the first full-traffic bench and its first re-entry wait are unchanged.
+        strikes = min(state.strikes + (2 if guarded_trial else 1), 10)
         return GateState(
             threshold=gate,
             stage=0,
@@ -241,21 +276,24 @@ def transition(
             evidence=evidence,
             recent_failures=state.recent_failures,
             trial_users=state.trial_users,
-            until=now + min(14400, 300 * 2 ** (strikes - 1)),
+            until=now + min(21600 if guarded_trial else 14400, 300 * 2 ** (strikes - 1)),
             strikes=strikes,
             generation=state.generation + 1,
         )
-    if required and n >= required and user_rate <= gate:
-        return GateState(
-            threshold=gate,
-            stage=25 if state.stage == 5 else 100,
-            strikes=state.strikes,
-            generation=state.generation + 1,
-        )
+    if required:
+        promoted = _promote_trial(replace(state, n=n, failures=failures, evidence=evidence), now)
+        if promoted.stage != state.stage:
+            return promoted
     if required and n >= 4 * required:
         # A new bounded user-vote window, with the same share and strike history.
         return replace(
-            state, n=0, failures=0, trial_users=(), evidence=GateState().evidence, recent_failures=(), witnesses=()
+            state,
+            n=0,
+            failures=0,
+            trial_users=(),
+            evidence=GateState().evidence,
+            recent_failures=(),
+            witnesses=(),
         )
     if n >= 1_000_000:
         return replace(state, n=0, failures=0, evidence=evidence)
@@ -268,7 +306,37 @@ def transition(
     )
 
 
+def _promote_trial(state: GateState, now: float) -> GateState:
+    """Promote a trial stage purely from already-admitted evidence and dwell."""
+    required = {5: 30, 25: 60}.get(state.stage)
+    if required is None or not state.trial_users:
+        return state
+    breadth = {5: 10, 25: 20}[state.stage]
+    dwell = {5: 300.0, 25: 600.0}[state.stage]
+    user_rate = sum(failures * 2 > count for _, count, failures in state.trial_users) / len(state.trial_users)
+    if (
+        state.n >= required
+        and len(state.trial_users) >= breadth
+        and now - state.trial_started_at >= dwell
+        and user_rate <= gate_rate()
+    ):
+        return GateState(
+            threshold=state.threshold,
+            stage=25 if state.stage == 5 else 100,
+            strikes=0 if state.stage == 25 and recovery_sample_guard_enabled() else state.strikes,
+            generation=state.generation + 1,
+            trial_started_at=now,
+        )
+    return state
+
+
 def begin_trial(state: GateState, now: float) -> GateState:
     if state.stage == 0 and now >= state.until:
-        return GateState(threshold=state.threshold, stage=5, strikes=state.strikes, generation=state.generation + 1)
+        return GateState(
+            threshold=state.threshold,
+            stage=5,
+            strikes=state.strikes,
+            generation=state.generation + 1,
+            trial_started_at=now,
+        )
     return state

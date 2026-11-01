@@ -348,3 +348,26 @@ class IQRatingCalculateAITests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIqRatingHtmlAndApiExceptionMasking(unittest.TestCase):
+    def test_iq_rating_page_masks_exception_in_html(self):
+        import asyncio
+        with patch.object(main, "get_people_for_user", side_effect=RuntimeError("sensitive database leak: /var/data/sqlite.db")):
+            response = asyncio.run(main.iq_rating_page(uid="test_user"))
+            html_content = getattr(response, "body", None)
+            if html_content is None:
+                html_content = getattr(response, "content", "")
+            if isinstance(html_content, bytes):
+                html_content = html_content.decode("utf-8")
+            self.assertIn("Failed to load IQ ratings. Please try again later.", html_content)
+            self.assertNotIn("sensitive database leak", html_content)
+
+    def test_iq_rating_api_masks_exception_in_500(self):
+        import asyncio
+        with patch.object(main, "get_people_for_user", side_effect=RuntimeError("sensitive sql error")):
+            with self.assertRaises(main.HTTPException) as ctx:
+                asyncio.run(main.iq_rating_api(uid="test_user"))
+            self.assertEqual(ctx.exception.status_code, 500)
+            self.assertEqual(ctx.exception.detail, "Internal server error processing IQ ratings")
+            self.assertNotIn("sensitive sql error", ctx.exception.detail)

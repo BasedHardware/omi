@@ -153,11 +153,18 @@ def _install_sync_import_stubs(monkeypatch):
     sys.modules["utils.log_sanitizer"].sanitize = lambda value: value
 
 
-def test_storage_import_defers_missing_native_opus(monkeypatch):
+@pytest.fixture
+def _warmed_storage_import():
+    importlib.import_module('utils.other.storage')
+
+
+def test_storage_import_defers_missing_native_opus(monkeypatch, _warmed_storage_import):
     captured_storage = _capture_module("utils.other.storage")
+    captured_audio_opus = _capture_module("utils.other.audio_opus")
     _install_storage_import_stubs(monkeypatch)
     monkeypatch.setitem(sys.modules, "opuslib", None)
     try:
+        _drop_module("utils.other.audio_opus")
         _drop_module("utils.other.storage")
 
         storage = importlib.import_module("utils.other.storage")
@@ -167,6 +174,22 @@ def test_storage_import_defers_missing_native_opus(monkeypatch):
             storage.encode_pcm_to_opus(b"\x00" * 640)
     finally:
         _restore_module("utils.other.storage", captured_storage)
+        _restore_module("utils.other.audio_opus", captured_audio_opus)
+
+
+def test_audio_opus_import_defers_missing_native_opus(monkeypatch):
+    captured_audio_opus = _capture_module("utils.other.audio_opus")
+    monkeypatch.setitem(sys.modules, "opuslib", None)
+    try:
+        _drop_module("utils.other.audio_opus")
+
+        audio_opus = importlib.import_module("utils.other.audio_opus")
+
+        assert audio_opus.opuslib is None
+        with pytest.raises(RuntimeError, match=MISSING_OPUS_MESSAGE):
+            audio_opus.encode_pcm_to_opus(b"\x00" * 640)
+    finally:
+        _restore_module("utils.other.audio_opus", captured_audio_opus)
 
 
 def test_sync_import_defers_missing_native_opus(monkeypatch, tmp_path):

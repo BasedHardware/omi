@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-vertex-gemini-cache-handle-rejected",
+  "violated_contract": "A Vertex cachedContents resource created for Gemini must be reusable for its TTL when Vertex returns a valid resource name. The gateway currently accepts only a project-ID prefix while Vertex may return a project-number prefix; rejecting that handle drops the local entry but leaves the 30-minute storage charge, so repeated requests create new paid resources even though implicit caching already serves reads.",
+  "canonical_prevention": "Accept and retain cachedContents handles with either the configured project ID or its numeric project-number prefix, and keep Gemini lanes on implicit caching until that validation is fixed. Pin both the accepted handle forms and the no-create policy for affected Gemini lanes with hermetic tests; preserve OpenAI explicit caching.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_vertex_content_cache.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/llm_gateway/config/cache_policies.yaml",
+    "backend/tests/unit/test_vertex_content_cache.py"
+  ],
+  "status": "open"
+}

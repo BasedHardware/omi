@@ -175,3 +175,27 @@ def test_pretty_data_keys_and_matched_tags_are_literal(capsys) -> None:
     output = capsys.readouterr().out
     assert output.count("[key]") == 2
     assert output.count("[bold]keep tags[/bold] :warning:") == 2
+
+
+@pytest.mark.parametrize("literal_title", ["tool[/bold]", "https://example.com/[red]/hook"])
+def test_pretty_table_title_is_literal(capsys, literal_title) -> None:
+    Renderer(no_color=True).emit([{"id": "1"}], title=literal_title)
+    # Rich wraps a title that is wider than the rendered table, inserting
+    # whitespace/newlines — collapse those before comparing the literal text.
+    collapsed = "".join(capsys.readouterr().out.split())
+    assert "".join(literal_title.split()) in collapsed
+
+
+@pytest.mark.parametrize("literal_title", ["tool[/bold]", "https://example.com/[red]/hook"])
+def test_pretty_mapping_title_is_literal(capsys, literal_title) -> None:
+    Renderer(no_color=True).emit({"id": "1"}, title=literal_title)
+    collapsed = "".join(capsys.readouterr().out.split())
+    assert "".join(literal_title.split()) in collapsed
+
+
+def test_debug_keeps_prefix_and_renders_literal_message(capsys) -> None:
+    renderer = Renderer(verbose=True, no_color=True)
+    renderer.debug("message with [/bold] unmatched tag")
+    captured = capsys.readouterr()
+    assert "[debug]" in captured.err
+    assert "message with [/bold] unmatched tag" in captured.err

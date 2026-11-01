@@ -165,6 +165,84 @@ class TestSharedCanonicalVisibilityFilter:
         assert 'expired_active_pending_terminal_apply' not in caplog.text
 
 
+def test_mixed_store_visibility_golden_counts_are_unchanged():
+    """§1.3: expired processed short-term stays visible. Hidden, pending, and rejected rows do not."""
+    now = datetime(2026, 6, 2, tzinfo=timezone.utc)
+    long_term = _processed_short_term_item(memory_id="mem-lt").model_copy(
+        update={
+            "tier": MemoryTier.long_term,
+            "content": "Long-term fact",
+            "expires_at": None,
+            "updated_at": datetime(2026, 6, 2, tzinfo=timezone.utc),
+        }
+    )
+    fresh_short = _processed_short_term_item(memory_id="mem-fresh").model_copy(
+        update={"updated_at": datetime(2026, 6, 1, 12, tzinfo=timezone.utc)}
+    )
+    expired_short = _processed_short_term_item(memory_id="mem-expired").model_copy(
+        update={
+            "captured_at": datetime(2026, 5, 29, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 5, 29, tzinfo=timezone.utc),
+            "expires_at": datetime(2026, 5, 31, tzinfo=timezone.utc),
+        }
+    )
+    hidden = _processed_short_term_item(memory_id="mem-hidden").model_copy(
+        update={"status": MemoryItemStatus.hidden, "updated_at": datetime(2026, 6, 1, 6, tzinfo=timezone.utc)}
+    )
+    pending = _processed_short_term_item(memory_id="mem-pending").model_copy(
+        update={
+            "processing_state": ProcessingState.pending,
+            "updated_at": datetime(2026, 6, 1, 8, tzinfo=timezone.utc),
+        }
+    )
+    rejected = _processed_short_term_item(memory_id="mem-rejected").model_copy(
+        update={
+            "promotion": {"user_review": False},
+            "updated_at": datetime(2026, 6, 1, 9, tzinfo=timezone.utc),
+        }
+    )
+    items = [long_term, fresh_short, expired_short, hidden, pending, rejected]
+    visible = filter_canonical_default_visible_items(
+        items,
+        policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
+        now=now,
+    )
+    visible_ids = [item.memory_id for item in visible]
+
+    assert visible_ids == ["mem-lt", "mem-fresh", "mem-expired"]
+    assert len(visible_ids) == 3
+    assert "mem-expired" in visible_ids
+    assert "mem-hidden" not in visible_ids
+    assert "mem-pending" not in visible_ids
+    assert "mem-rejected" not in visible_ids
+
+
+def test_keyset_singleton_expiry_observations_log_once_per_batch(caplog):
+    now = datetime(2026, 6, 2, tzinfo=timezone.utc)
+    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
+    expired = [
+        _processed_short_term_item(memory_id=f"mem-expired-{index}").model_copy(
+            update={
+                "captured_at": datetime(2026, 5, 29, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 5, 29, tzinfo=timezone.utc),
+                "expires_at": datetime(2026, 5, 31, tzinfo=timezone.utc),
+            }
+        )
+        for index in range(3)
+    ]
+    caplog.set_level("WARNING", logger="utils.memory.canonical_visibility_filter")
+    from utils.memory.canonical_visibility_filter import batch_canonical_expiry_observations
+
+    with batch_canonical_expiry_observations():
+        for item in expired:
+            visible = filter_canonical_default_visible_items([item], policy=policy, now=now)
+            assert [row.memory_id for row in visible] == [item.memory_id]
+
+    assert caplog.text.count("canonical_memory_expiry_observation") == 1
+    assert "expired_active_pending_terminal_apply count=3" in caplog.text
+    assert caplog.text.count("to=readable_pending_adjudication") == 1
+
+
 class TestResolveMemorySystemIgnoresRetiredFlags:
     def test_retired_memory_env_cannot_change_universal_authority(self, monkeypatch):
         monkeypatch.setenv("MEMORY_MODE", "read")

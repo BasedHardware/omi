@@ -19,13 +19,6 @@ from models.workstream_association import (
     RecurrenceInboxReceipt,
     RecurrenceInboxStatus,
 )
-from utils.memory.canonical_consolidation import (
-    CONSOLIDATION_AGENT_PROMPT,
-    ConsolidationAgentBatch,
-    ConsolidationReport,
-)
-from utils.memory import canonical_short_term_maintenance_cron as maintenance_cron
-from utils.memory.short_term_promotion import CanonicalShortTermMaintenanceReport
 from utils.task_intelligence import workstream_association as association
 from utils.task_intelligence import workstream_index
 from database import vector_db
@@ -312,45 +305,6 @@ def _recurrence_signal(*, distinct_days: int) -> CanonicalRecurrenceSignal:
         last_seen_at=NOW,
         evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
     )
-
-
-def test_canonical_consolidation_emits_neutral_recurrence_contract_only():
-    signal = _recurrence_signal(distinct_days=3)
-    batch = ConsolidationAgentBatch.model_validate({'decisions': [], 'recurrence_signals': [signal.model_dump()]})
-
-    assert batch.recurrence_signals == [signal]
-    assert 'at least two distinct days' in ' '.join(CONSOLIDATION_AGENT_PROMPT.split())
-
-
-def test_maintenance_orchestrator_hands_recurrence_to_workflow_callback(monkeypatch):
-    signal = _recurrence_signal(distinct_days=3)
-    monkeypatch.setenv('MEMORY_CANONICAL_MAINTENANCE_ENABLED', 'true')
-    maintenance_kwargs = {}
-
-    def run_maintenance(uid, **kwargs):
-        maintenance_kwargs.update(kwargs)
-        return CanonicalShortTermMaintenanceReport(
-            uid=uid,
-            consolidation=ConsolidationReport(uid=uid, recurrence_signals=[signal]),
-        )
-
-    monkeypatch.setattr(maintenance_cron, 'run_canonical_short_term_maintenance', run_maintenance)
-    consumed: list[CanonicalRecurrenceSignal] = []
-
-    summary = maintenance_cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        run_id='run-1',
-        uid_inventory=lambda _db, _limit: ['uid-1'],
-        recurrence_signal_persister=lambda *args, **kwargs: 1,
-        recurrence_signal_consumer=lambda uid, signals, firestore_client=None: (
-            consumed.extend(signals) or len(signals)
-        ),
-    )
-
-    assert consumed == [signal]
-    assert summary.recurrence_candidates_total == 1
-    assert maintenance_kwargs['recurrence_signal_sink'] is not None
 
 
 def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enabled):

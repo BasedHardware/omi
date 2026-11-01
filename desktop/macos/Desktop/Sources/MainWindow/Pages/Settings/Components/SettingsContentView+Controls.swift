@@ -1007,6 +1007,7 @@ extension SettingsContentView {
     title: String,
     subtitle: String,
     isOn: Binding<Bool>,
+    errorText: String? = nil,
     onChange: @escaping (Bool) -> Void
   ) -> some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -1025,6 +1026,12 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
+
+          if let errorText {
+            Text(errorText)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+          }
         }
 
         Spacer(minLength: 12)

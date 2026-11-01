@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 import asyncio
 import time
 import uuid
@@ -5,7 +6,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 import logging
 
-from utils.executors import llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.conversation_processing import _word_count  # type: ignore[reportPrivateUsage]  # shared word count helper
@@ -247,6 +248,10 @@ class OnboardingHandler:
 
     async def _ai_check_answer(self, question: str, transcript: str) -> bool:
         """Use AI to determine if answer is valid"""
+        if generated_compute_configured() and not await run_blocking(
+            db_executor, generated_compute_allowed, self.uid, 'onboarding'
+        ):
+            return False
         try:
             prompt = f"""Determine if this transcript answers the question. Be lenient - any attempt to answer counts.
 Question: "{question}"

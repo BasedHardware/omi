@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-device-transfer-failure-reported-as-complete",
+  "violated_contract": "A per-recording device-to-phone transfer must tell its caller when it did not finish. RingStorageSyncImpl.syncWal, the Transfer to Phone path for firmware 3.0.20+ ring recordings, ignored _syncRing's completion result and caught every exception, returning the same empty SyncLocalFilesResponse either way. SyncProvider.transferWalToPhone treats any normal return as success, so a transfer that the device ended with an error, that went idle, lost its connection or was refused phone storage showed 'Transfer complete! You can now play this recording.' while the unread audio stayed on the pendant.",
+  "canonical_prevention": "A sub-sync's syncWal marks the recording synced only after a complete transfer. Otherwise it throws, and it rethrows errors from the transfer instead of only logging them, as SDCardWalSyncImpl.syncWal already does. Tests drive each incomplete outcome, including through WalSyncs.syncWal, and assert that the call throws and the recording stays pending on the device.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/ring_storage_sync_no_advance_test.dart",
+    "app/test/unit/ring_custody_download_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/ring_storage_sync.dart",
+    "app/lib/services/wals/storage_sync.dart",
+    "app/lib/services/wals/sdcard_wal_sync.dart",
+    "app/lib/services/wals/flash_page_wal_sync.dart",
+    "app/lib/services/wals/wal_syncs.dart",
+    "app/lib/providers/sync_provider.dart"
+  ],
+  "status": "open"
+}

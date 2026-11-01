@@ -1,0 +1,47 @@
+{
+  "source": "Synthetic TTS hardcases-m3-003; frozen intake metadata, no user data or vendor replay",
+  "corpus_manifest_sha256": "70a85a83666adf9854df6bcc082388a3d8738d85668db9bf2aaee4731930b899",
+  "evidence": "audio_lid; canonical 16000Hz mono PCM16; five observed false English permissions",
+  "cases": [
+    {
+      "case_id": "zh-clean_speech-6s-pcm16",
+      "actual_language": "zh",
+      "detected_language": "en",
+      "confidence": 0.8139931559562683,
+      "probe_seconds": 6.0,
+      "decoded_pcm_sha256": "c1a9bf12b2a5e1e090d5602e9c235782259155de34779aa797bd63bdb11cb5f5"
+    },
+    {
+      "case_id": "zh-clean_speech-6s-opus",
+      "actual_language": "zh",
+      "detected_language": "en",
+      "confidence": 0.8392312526702881,
+      "probe_seconds": 6.0,
+      "decoded_pcm_sha256": "879200ea340792cc02b457279a12ae496311c9da14302019b2691487da718345"
+    },
+    {
+      "case_id": "zh-heavy_noise-6s-opus",
+      "actual_language": "zh",
+      "detected_language": "en",
+      "confidence": 0.8187451362609863,
+      "probe_seconds": 6.0,
+      "decoded_pcm_sha256": "5bfdb9beae4ce3c5d9d12621d05192fb7452f75f8ddc6af36f7495774b63fe82"
+    },
+    {
+      "case_id": "zh-clean_speech-6s-pcm8",
+      "actual_language": "zh",
+      "detected_language": "en",
+      "confidence": 0.8044902682304382,
+      "probe_seconds": 5.9999375,
+      "decoded_pcm_sha256": "bca6b790937a582f0ba70a2d9ce52ab8c42f91d5e27b509874c0f37a73bc099a"
+    },
+    {
+      "case_id": "zh-heavy_noise-6s-pcm16",
+      "actual_language": "zh",
+      "detected_language": "en",
+      "confidence": 0.8208169341087341,
+      "probe_seconds": 6.0,
+      "decoded_pcm_sha256": "c1c3133b829f2de6b5757e585ca0291bc59c2c85d5661779b8d1c6d5bb80c0e4"
+    }
+  ]
+}

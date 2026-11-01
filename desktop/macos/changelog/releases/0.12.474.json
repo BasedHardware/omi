@@ -1,0 +1,9 @@
+{
+  "version": "0.12.474",
+  "date": "2026-10-12",
+  "changes": [
+    "Added an opt-in wake word in Settings: with audio recording on, say \"Omi\" and then your question, and Omi answers out loud from the notch and keeps the conversation going for follow-ups",
+    "Omi no longer hears its own spoken answers as if you had said them, so a long answer plays to the end and the transcript stays yours",
+    "Omi links to conversations, tasks, memories, and lists of them now open straight in the Mac app"
+  ]
+}

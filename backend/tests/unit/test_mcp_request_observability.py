@@ -2,8 +2,7 @@
 
 Covers the 100% structured ``mcp_request`` log line (the PostHog-free request
 envelope), deterministic per-uid ``MCP Tool Call`` sampling, the daily
-``MCP Active`` Redis dedupe marker, the MCP-only ``POSTHOG_EVENTS_API_KEY``
-capture path, and the HTTP 400 contract for header-caused protocol errors.
+``MCP Active`` Redis dedupe marker, shared server capture, and the HTTP 400 contract for header-caused protocol errors.
 """
 
 import json
@@ -395,18 +394,18 @@ class TestToolCallUserSampling:
 
 @pytest.fixture(autouse=True)
 def _reset_mcp_active_local_seen():
-    """The process-local uid/day cache survives across tests in one process."""
+    """The process-local uid/client/day cache survives across tests in one process."""
     with mcp_analytics._mcp_active_seen_lock:
-        mcp_analytics._mcp_active_seen_uids.clear()
+        mcp_analytics._mcp_active_seen_clients.clear()
         mcp_analytics._mcp_active_seen_day = None
     yield
     with mcp_analytics._mcp_active_seen_lock:
-        mcp_analytics._mcp_active_seen_uids.clear()
+        mcp_analytics._mcp_active_seen_clients.clear()
         mcp_analytics._mcp_active_seen_day = None
 
 
 class TestMcpActiveMarker:
-    """``MCP Active`` fires at most once per uid per UTC day behind a Redis
+    """``MCP Active`` fires at most once per uid/client per UTC day behind a Redis
     ``SET NX EX`` marker, and fails open when Redis is down."""
 
     def _properties(self):
@@ -421,7 +420,7 @@ class TestMcpActiveMarker:
         mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
         args, kwargs = redis.r.set.call_args
         assert args[0].startswith("mcp:active:")
-        assert args[0].endswith(":u1")
+        assert args[0].endswith(":u1:claude_ai")
         assert kwargs == {"nx": True, "ex": 172800}
         distinct_id, event, properties = emit.call_args.args
         assert distinct_id == "u1"
@@ -475,7 +474,7 @@ class TestMcpActiveMarker:
 
 
 class TestMcpActiveLocalCache:
-    """The bounded process-local uid/day cache short-circuits the Redis NX
+    """The bounded process-local uid/client/day cache short-circuits the Redis NX
     claim at scheduling time and inside the worker; Redis stays authority."""
 
     def _properties(self):
@@ -532,7 +531,7 @@ class TestMcpActiveLocalCache:
         current["day"] = "20260729"
         mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
         assert redis.r.set.call_count == 2
-        assert redis.r.set.call_args.args[0].endswith(":20260729:u1")
+        assert redis.r.set.call_args.args[0].endswith(":20260729:u1:claude_ai")
 
     def test_fifo_cap_evicts_oldest_entries(self, monkeypatch):
         redis = self._redis(monkeypatch)
@@ -566,88 +565,65 @@ class TestMcpActiveLocalCache:
 
         redis.r.set.side_effect = _set_then_roll
         mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
-        assert redis.r.set.call_args.args[0].endswith(":20260728:u1")
+        assert redis.r.set.call_args.args[0].endswith(":20260728:u1:claude_ai")
         assert mcp_analytics._mcp_active_seen_day == "20260728"
         mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
         assert redis.r.set.call_count == 2
-        assert redis.r.set.call_args.args[0].endswith(":20260729:u1")
+        assert redis.r.set.call_args.args[0].endswith(":20260729:u1:claude_ai")
 
+    def test_distinct_clients_emit_and_each_client_deduplicates_at_schedule(self, monkeypatch):
+        redis = self._redis(monkeypatch)
+        emit = MagicMock()
+        monkeypatch.setattr(mcp_analytics, 'emit_mcp_posthog_event', emit)
 
-class TestPostHogKeyScoping:
-    """``POSTHOG_EVENTS_API_KEY`` is scoped to MCP events only: generic capture
-    keeps the project/legacy key resolution and rollout decisions never touch
-    the events key."""
+        def immediate(executor, fn, **kwargs):
+            fn(**kwargs)
 
-    def _reset(self, monkeypatch):
-        import utils.integration_telemetry as it
+        submit = MagicMock(side_effect=immediate)
+        monkeypatch.setattr(mcp_analytics, 'submit_with_context', submit)
+        for client in ('claude_ai', 'cursor', 'claude_ai', 'cursor'):
+            mcp_analytics.schedule_mcp_active(uid='u1', **dict(self._properties(), client_name=client))
+        assert submit.call_count == redis.r.set.call_count == emit.call_count == 2
+        assert {call.args[0].rsplit(':', 1)[-1] for call in redis.r.set.call_args_list} == {'claude_ai', 'cursor'}
+        assert {call.args[2]['client_name'] for call in emit.call_args_list} == {'claude_ai', 'cursor'}
+        assert all(call.args[0] == 'u1' and call.args[1] == 'MCP Active' for call in emit.call_args_list)
+        assert all(call.kwargs == {'nx': True, 'ex': 172800} for call in redis.r.set.call_args_list)
 
-        monkeypatch.setattr(it, "_posthog_client", None)
-        monkeypatch.setattr(it, "_posthog_disabled", False)
-        monkeypatch.setattr(mcp_analytics, "_mcp_events_client", None)
-        monkeypatch.setattr(mcp_analytics, "_mcp_events_client_disabled", False)
-        for name in ("POSTHOG_EVENTS_API_KEY", "POSTHOG_PROJECT_API_KEY", "POSTHOG_API_KEY"):
-            monkeypatch.delenv(name, raising=False)
-        return it
+    def test_redis_deduplicates_each_client_across_local_cache_resets(self, monkeypatch):
+        redis = self._redis(monkeypatch)
+        claimed = set()
 
-    def test_generic_capture_prefers_project_key(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_client() == "client:project-key"
+        def claim(key, value, *, nx, ex):
+            assert nx is True and ex == 172800 and value == '1'
+            if key in claimed:
+                return None
+            claimed.add(key)
+            return True
 
-    def test_generic_capture_falls_back_to_legacy_key(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_API_KEY", "legacy-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_client() == "client:legacy-key"
+        redis.r.set.side_effect = claim
+        emit = MagicMock()
+        monkeypatch.setattr(mcp_analytics, 'emit_mcp_posthog_event', emit)
+        for _ in range(2):
+            # Model an independent process/evicted local cache. Redis remains
+            # the authority, separately for each of the two client enums.
+            with mcp_analytics._mcp_active_seen_lock:
+                mcp_analytics._mcp_active_seen_clients.clear()
+            for name in ('claude_ai', 'cursor'):
+                mcp_analytics.emit_mcp_active(uid='u1', **dict(self._properties(), client_name=name))
+        assert len(claimed) == emit.call_count == 2
+        assert redis.r.set.call_count == 4
 
-    def test_generic_capture_ignores_events_key(self, monkeypatch):
-        """A non-MCP event never captures through the events key."""
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_client() is None
-        build.assert_not_called()
-
-    def test_mcp_capture_uses_events_key(self, monkeypatch):
-        self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        fake = MagicMock()
-        build = MagicMock(return_value=fake)
-        monkeypatch.setattr(mcp_analytics, "_build_mcp_events_client", build)
-        mcp_analytics.emit_mcp_posthog_event("u", "MCP Tool Call", {"tool": "get_memories"})
-        build.assert_called_once_with("events-key")
-        fake.capture.assert_called_once_with(
-            distinct_id="u", event="MCP Tool Call", properties={"tool": "get_memories"}
-        )
-
-    def test_mcp_capture_falls_back_to_generic_emit(self, monkeypatch):
-        """Without the events key, MCP events route through generic capture."""
-        self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        generic = MagicMock()
-        monkeypatch.setattr(mcp_analytics, "emit_posthog_event", generic)
-        mcp_analytics.emit_mcp_posthog_event("u", "MCP Active", {"client_name": "other"})
-        generic.assert_called_once_with("u", "MCP Active", {"client_name": "other"})
-
-    def test_decision_code_is_project_key_only(self, monkeypatch):
-        """The dead decisions helper is gone; jit_rollout builds its own client
-        from POSTHOG_PROJECT_API_KEY and never reads the events key."""
-        import utils.integration_telemetry as it
-        import utils.jit_rollout as jr
-
-        assert not hasattr(it, "get_posthog_client_for_decisions")
-        self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        provider = jr.PostHogJITFlagProvider.__new__(jr.PostHogJITFlagProvider)
-        provider._timeout_seconds = 1
-        # Only the events key is present: no decision client may be built.
-        assert provider._build_client() is None
+    @pytest.mark.parametrize('client', ['private-unbounded-client-name', {}, [], None, 123])
+    def test_unknown_clients_share_one_bounded_marker(self, monkeypatch, client):
+        redis = self._redis(monkeypatch)
+        emit = MagicMock()
+        monkeypatch.setattr(mcp_analytics, 'emit_mcp_posthog_event', emit)
+        for name in (client, 'another arbitrary private value'):
+            mcp_analytics.emit_mcp_active(uid='u1', **dict(self._properties(), client_name=name))
+        assert redis.r.set.call_count == emit.call_count == 1
+        assert redis.r.set.call_args.args[0].endswith(':u1:unknown')
+        assert emit.call_args.args[2]['client_name'] == 'unknown'
+        assert set(mcp_analytics._mcp_active_seen_clients) == {('u1', 'unknown')}
 
 
 class TestInitializeNegotiatedAnalytics:

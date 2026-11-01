@@ -20,6 +20,7 @@ from models.person_confidence import (
     WEIGHTS,
     evidence_count,
 )
+from utils.speakers.person_pool import retract_profile
 from utils.speaker_learning_policy import decision_authorizes_training, winning_receipt_decision
 
 
@@ -136,6 +137,7 @@ def person_updates_for_assignment(
     after: Sequence[Mapping[str, Any]],
     rejected_person_id: Optional[str] = None,
     save_other_voice_profiles: bool = True,
+    source_conversation_ids: Sequence[str] = (),
 ) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
     """Every person-document write one manual assignment makes, and the sample paths it retires.
 
@@ -153,7 +155,11 @@ def person_updates_for_assignment(
             continue
         update: Dict[str, Any] = {'updated_at': now}
         taught = person.get('speech_sample_source') or {}
-        if taught.get('conversation_id') == conversation_id and set(taught.get('segment_ids', [])) & set(resolved):
+        pooled, retired = retract_profile(person, [conversation_id, *source_conversation_ids], resolved)
+        if person.get('person_voice_confirmations') is not None:
+            update.update(pooled)
+            removed.extend(retired)
+        elif taught.get('conversation_id') == conversation_id and set(taught.get('segment_ids', [])) & set(resolved):
             removed.extend(person.get('speech_samples', []))
             update.update(
                 speech_samples=[],

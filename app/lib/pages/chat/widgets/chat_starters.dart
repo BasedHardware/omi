@@ -42,28 +42,37 @@ class ChatGreeting extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 28, 18, OmiSpacing.md),
       child: SizedBox(
         width: double.infinity,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          ChatRise(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ChatRise(
               key: const Key('chat_greeting_rise'),
-              child: Semantics(
-                  header: true,
-                  child: Text(
-                    '$hello.',
-                    style: heading,
-                  ))),
-          ChatRise(
-            key: const Key('chat_count_rise'),
-            interval: ChatIntro.countLine,
-            child: _ConversationCount(count: count, style: heading),
-          ),
-          const SizedBox(height: 10),
-          ChatRise(
+              child: Semantics(header: true, child: Text('$hello.', style: heading)),
+            ),
+            // "No conversations today." is a status line, not a greeting, and reads wrong early in
+            // the day; the count line appears only once there is something to count.
+            if (count > 0)
+              ChatRise(
+                key: const Key('chat_count_rise'),
+                interval: ChatIntro.countLine,
+                child: _ConversationCount(count: count, style: heading),
+              ),
+            const SizedBox(height: 10),
+            ChatRise(
               key: const Key('chat_question_rise'),
               interval: ChatIntro.question,
-              child: Text(l10n.whatDoYouWantToKnow,
-                  style: OmiType.title3.copyWith(
-                      fontWeight: FontWeight.w500, letterSpacing: -0.2, height: 1.2, color: OmiColors.textSecondary))),
-        ]),
+              child: Text(
+                l10n.whatDoYouWantToKnow,
+                style: OmiType.title3.copyWith(
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.2,
+                  height: 1.2,
+                  color: OmiColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -99,8 +108,12 @@ class _ConversationCount extends StatelessWidget {
 
 /// Selecting a question fills the draft. Sending remains an explicit action.
 class ChatSuggestions extends StatelessWidget {
-  const ChatSuggestions(
-      {super.key, required this.hasExistingData, required this.isConnected, required this.onSelected});
+  const ChatSuggestions({
+    super.key,
+    required this.hasExistingData,
+    required this.isConnected,
+    required this.onSelected,
+  });
   final bool hasExistingData;
   final bool isConnected;
   final ValueChanged<String> onSelected;
@@ -113,31 +126,34 @@ class ChatSuggestions extends StatelessWidget {
         ? {'decide': l10n.askSuggestDecide, 'owe': l10n.askSuggestOwe, 'notice': l10n.askSuggestNotice}
         : {'capabilities': l10n.chatStarterPrompt('capabilities'), 'goal': l10n.chatStarterPrompt('goal')};
     return LayoutBuilder(
-        builder: (context, constraints) => ChatRise(
-              interval: ChatIntro.suggestions,
-              fadeOnly: true,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
-                child: Row(children: [
-                  for (final prompt in prompts.entries)
-                    Padding(
-                      padding: const EdgeInsetsDirectional.only(end: OmiSpacing.xs),
-                      child: OutlinedButton(
-                        key: ValueKey('chat_starter_${prompt.key}'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: OmiColors.textPrimary,
-                          minimumSize: const Size(44, 44),
-                          maximumSize: Size(constraints.maxWidth - OmiSpacing.md * 2, double.infinity),
-                          side: BorderSide(color: OmiColors.border),
-                          shape: const StadiumBorder(),
-                        ),
-                        onPressed: () => onSelected(prompt.value),
-                        child: Text(prompt.value, style: OmiType.callout),
-                      ),
+      builder: (context, constraints) => ChatRise(
+        interval: ChatIntro.suggestions,
+        fadeOnly: true,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+          child: Row(
+            children: [
+              for (final prompt in prompts.entries)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: OmiSpacing.xs),
+                  child: OutlinedButton(
+                    key: ValueKey('chat_starter_${prompt.key}'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: OmiColors.textPrimary,
+                      minimumSize: const Size(44, 44),
+                      maximumSize: Size(constraints.maxWidth - OmiSpacing.md * 2, double.infinity),
+                      side: BorderSide(color: OmiColors.border),
+                      shape: const StadiumBorder(),
                     ),
-                ]),
-              ),
-            ));
+                    onPressed: () => onSelected(prompt.value),
+                    child: Text(prompt.value, style: OmiType.callout),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

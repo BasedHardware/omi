@@ -24,176 +24,159 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-if "fastapi" not in sys.modules:
-    try:
-        import fastapi  # noqa: F401
-        import fastapi.exceptions  # noqa: F401
-        import fastapi.responses  # noqa: F401
-        import fastapi.staticfiles  # noqa: F401
-        import fastapi.templating  # noqa: F401
-    except ImportError:
-        fastapi = types.ModuleType("fastapi")
+def _install_hermetic_framework_stubs() -> None:
+    fastapi = types.ModuleType("fastapi")
 
-        class APIRouter:
-            def __init__(self, *args, **kwargs):
-                pass
-
-            def _decorator(self, *args, **kwargs):
-                return lambda f: f
-
-            get = post = put = delete = patch_ = on_event = websocket = _decorator
-
-        class Depends:
-            def __init__(self, *args, **kwargs):
-                pass
-
-        class Query:
-            def __init__(self, *args, **kwargs):
-                pass
-
-        class Request:
-            def __init__(self, *args, **kwargs):
-                pass
-
-        class HTTPException(Exception):
-            def __init__(self, status_code=500, detail="", headers=None):
-                super().__init__(detail)
-                self.status_code = status_code
-                self.detail = detail
-                self.headers = headers or {}
-
-        class FastAPI:
-            def __init__(self, *args, **kwargs):
-                self.routes = []
-
-            @staticmethod
-            def _decorator(*args, **kwargs):
-                return lambda f: f
-
-            @staticmethod
-            def _statement(*args, **kwargs):
-                return None
-
-            get = post = put = delete = patch_ = on_event = middleware = exception_handler = _decorator
-            mount = include_router = add_exception_handler = _statement
-
-        fastapi.APIRouter = APIRouter
-        fastapi.Depends = Depends
-        fastapi.Query = Query
-        fastapi.Request = Request
-        fastapi.HTTPException = HTTPException
-        fastapi.FastAPI = FastAPI
-        sys.modules["fastapi"] = fastapi
-
-        responses = types.ModuleType("fastapi.responses")
-
-        class HTMLResponse:
-            # Starlette encodes str content to bytes; mirror that so assertions
-            # read the same bytes in the hermetic lane and with real fastapi.
-            def __init__(self, content=None, status_code=200, **kwargs):
-                self.status_code = status_code
-                self.body = content.encode("utf-8") if isinstance(content, str) else content
-
-        class JSONResponse:
-            def __init__(self, content=None, status_code=200, **kwargs):
-                self.status_code = status_code
-                self.body = content
-
-        class RedirectResponse:
-            def __init__(self, url=None, status_code=307, **kwargs):
-                self.url = url
-                self.status_code = status_code
-
-        responses.HTMLResponse = HTMLResponse
-        responses.JSONResponse = JSONResponse
-        responses.RedirectResponse = RedirectResponse
-        sys.modules["fastapi.responses"] = responses
-        fastapi.responses = responses
-
-        staticfiles = types.ModuleType("fastapi.staticfiles")
-
-        class StaticFiles:
-            def __init__(self, *args, **kwargs):
-                pass
-
-        staticfiles.StaticFiles = StaticFiles
-        sys.modules["fastapi.staticfiles"] = staticfiles
-
-        templating = types.ModuleType("fastapi.templating")
-
-        class TemplateResponse:
-            def __init__(self, name, context=None, **kwargs):
-                self.name = name
-                self.template = name
-                self.context = context or {}
-                self.body = ""
-
-        class Jinja2Templates:
-            def __init__(self, *args, **kwargs):
-                pass
-
-            def TemplateResponse(self, name, context=None, **kwargs):
-                return TemplateResponse(name, context, **kwargs)
-
-            def get_template(self, name):
-                raise LookupError(name)
-
-        templating.Jinja2Templates = Jinja2Templates
-        templating.TemplateResponse = TemplateResponse
-        sys.modules["fastapi.templating"] = templating
-
-        exceptions = types.ModuleType("fastapi.exceptions")
-
-        class RequestValidationError(Exception):
-            def errors(self):
-                return []
-
-        exceptions.RequestValidationError = RequestValidationError
-        sys.modules["fastapi.exceptions"] = exceptions
-
-if "pydantic" not in sys.modules:
-    try:
-        import pydantic  # noqa: F401
-    except ImportError:
-        pydantic = types.ModuleType("pydantic")
-
-        class BaseModel:
-            def __init__(self, **data):
-                for key, value in data.items():
-                    setattr(self, key, value)
-
-        class Field:
-            def __init__(self, *args, **kwargs):
-                pass
-
-        pydantic.BaseModel = BaseModel
-        pydantic.Field = Field
-        sys.modules["pydantic"] = pydantic
-
-if "requests" not in sys.modules:
-    try:
-        import requests  # noqa: F401
-    except ImportError:
-        requests = types.ModuleType("requests")
-
-        def _unavailable(*args, **kwargs):
-            raise AssertionError("tests must not perform real HTTP")
-
-        class RequestException(Exception):
+    class APIRouter:
+        def __init__(self, *args, **kwargs):
             pass
 
-        requests.post = _unavailable
-        requests.get = _unavailable
-        requests.request = _unavailable
-        requests.RequestException = RequestException
-        sys.modules["requests"] = requests
+        def _decorator(self, *args, **kwargs):
+            return lambda f: f
 
-if "dotenv" not in sys.modules:
+        get = post = put = delete = patch_ = on_event = websocket = _decorator
+
+    class Depends:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class Query:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class Request:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class HTTPException(Exception):
+        def __init__(self, status_code=500, detail="", headers=None):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+            self.headers = headers or {}
+
+    class FastAPI:
+        def __init__(self, *args, **kwargs):
+            self.routes = []
+
+        @staticmethod
+        def _decorator(*args, **kwargs):
+            return lambda f: f
+
+        @staticmethod
+        def _statement(*args, **kwargs):
+            return None
+
+        get = post = put = delete = patch_ = on_event = middleware = exception_handler = _decorator
+        mount = include_router = add_exception_handler = _statement
+
+    fastapi.APIRouter = APIRouter
+    fastapi.Depends = Depends
+    fastapi.Query = Query
+    fastapi.Request = Request
+    fastapi.HTTPException = HTTPException
+    fastapi.FastAPI = FastAPI
+    sys.modules["fastapi"] = fastapi
+
+    responses = types.ModuleType("fastapi.responses")
+
+    class HTMLResponse:
+        # Starlette encodes str content to bytes; mirror that so assertions
+        # read the same bytes in the hermetic lane and with real fastapi.
+        def __init__(self, content=None, status_code=200, **kwargs):
+            self.status_code = status_code
+            self.body = content.encode("utf-8") if isinstance(content, str) else content
+
+    class JSONResponse:
+        def __init__(self, content=None, status_code=200, **kwargs):
+            self.status_code = status_code
+            self.body = content
+
+    class RedirectResponse:
+        def __init__(self, url=None, status_code=307, **kwargs):
+            self.url = url
+            self.status_code = status_code
+
+    responses.HTMLResponse = HTMLResponse
+    responses.JSONResponse = JSONResponse
+    responses.RedirectResponse = RedirectResponse
+    sys.modules["fastapi.responses"] = responses
+    fastapi.responses = responses
+
+    staticfiles = types.ModuleType("fastapi.staticfiles")
+
+    class StaticFiles:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    staticfiles.StaticFiles = StaticFiles
+    sys.modules["fastapi.staticfiles"] = staticfiles
+
+    templating = types.ModuleType("fastapi.templating")
+
+    class TemplateResponse:
+        def __init__(self, name, context=None, **kwargs):
+            self.name = name
+            self.template = name
+            self.context = context or {}
+            self.body = ""
+
+    class Jinja2Templates:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def TemplateResponse(self, name, context=None, **kwargs):
+            return TemplateResponse(name, context, **kwargs)
+
+        def get_template(self, name):
+            raise LookupError(name)
+
+    templating.Jinja2Templates = Jinja2Templates
+    templating.TemplateResponse = TemplateResponse
+    sys.modules["fastapi.templating"] = templating
+
+    exceptions = types.ModuleType("fastapi.exceptions")
+
+    class RequestValidationError(Exception):
+        def errors(self):
+            return []
+
+    exceptions.RequestValidationError = RequestValidationError
+    sys.modules["fastapi.exceptions"] = exceptions
+
+    pydantic = types.ModuleType("pydantic")
+
+    class BaseModel:
+        def __init__(self, **data):
+            for key, value in data.items():
+                setattr(self, key, value)
+
+    class Field:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    pydantic.BaseModel = BaseModel
+    pydantic.Field = Field
+    sys.modules["pydantic"] = pydantic
+
+    requests = types.ModuleType("requests")
+
+    def _unavailable(*args, **kwargs):
+        raise AssertionError("tests must not perform real HTTP")
+
+    class RequestException(Exception):
+        pass
+
+    requests.post = _unavailable
+    requests.get = _unavailable
+    requests.request = _unavailable
+    requests.RequestException = RequestException
+    sys.modules["requests"] = requests
+
     dotenv = types.ModuleType("dotenv")
     dotenv.load_dotenv = lambda *args, **kwargs: False
     sys.modules["dotenv"] = dotenv
 
-if "omi_plugin_sdk" not in sys.modules:
     sdk = types.ModuleType("omi_plugin_sdk")
     sdk_models = types.ModuleType("omi_plugin_sdk.models")
     for _name in ("Conversation", "EndpointResponse", "Structured", "TranscriptSegment"):
@@ -201,6 +184,9 @@ if "omi_plugin_sdk" not in sys.modules:
     sys.modules["omi_plugin_sdk"] = sdk
     sys.modules["omi_plugin_sdk.models"] = sdk_models
     sdk.models = sdk_models
+
+
+_install_hermetic_framework_stubs()
 
 os.environ.setdefault("OMI_APP_ID", "test-app-id")
 os.environ.setdefault("OMI_APP_SECRET", "test-app-secret")

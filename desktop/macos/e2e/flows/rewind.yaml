@@ -2,8 +2,14 @@ version: 2
 name: rewind
 tier: manual
 description: Rewind overlay — open via View menu (⌘⌥R), verify permission gate, search, date picker (v0.12.119+ redesign — Rewind is no longer in top nav)
-app: com.omi.computer-macos
+app: non-prod
 covers:
+  # S3c enters the same entitlement/kill-switch router used by chat.
+  - desktop/macos/Desktop/Sources/Rewind/Services/RewindScreenSearch.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/ScreenActivityCursorStore.swift
+  - desktop/macos/Desktop/Sources/LocalInference/ScreenEmbeddingPolicy.swift
+  - desktop/macos/Desktop/Sources/LocalInference/ScreenCloudEntitlementService.swift
+  - desktop/macos/Desktop/Sources/LocalInference/LocalCapabilityRemoteKill.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindOCRService.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
@@ -87,7 +93,7 @@ steps:
     # reads embedding blobs newest-first over an unbounded range, so results from days other than the
     # one on screen are what proves the range; results ordered from the oldest frames in the database
     # would be the ordering regression.
-    do: "With the timeline showing some day, type into the search field a phrase you know you read on a different, older day. Verify results come back and that the result groups carry full dates spanning more than the day the timeline was on. Verify a phrase that is semantically close but not literally present also returns frames (the vector pass), and that clearing the field restores the timeline."
+    do: "On an isolated named bundle with synthetic local screen fixtures, explicit localhost fixture URLs and no user authentication/settings/database seed, search a known fixture phrase from a different day. Verify the results span the fixture dates and clearing search restores the timeline. With local engine assets available, verify hybrid retrieval; without them, verify literal FTS results remain. Repeat with fixture plans basic, plus and unknown and with OMI_DISABLE_LOCAL_EMBEDDINGS=1: the localhost request recorder must show zero embedContent/batchEmbedContents requests. An entitled Pro fixture with the hard kill may use the intercepted legacy Gemini route. With two synthetic fixture owners and a high unowned historical cursor, verify each fresh owner sends row 1 to localhost; a later vector for an older row must not move its cursor backwards. Start with an unknown fixture plan, then return a paid subscription and verify periodic recovery sends the previously missing vector without relaunch; repeat a grant expiry between batches. Unit production-API tests supply the automated routing, cursor and recovery proof; this manual fixture flow is a separate runtime acceptance gate."
     expect:
       interactive_count: { min: 1 }
 

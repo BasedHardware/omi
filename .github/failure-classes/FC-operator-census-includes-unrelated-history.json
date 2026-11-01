@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-operator-census-includes-unrelated-history",
+  "violated_contract": "A bounded paid repair must census and approve the same immutable logical cohort; unrelated lifetime jobs, spent intents and prior receipts must not consume its selection budget or expand a canary replay.",
+  "canonical_prevention": "Use explicit owner/time/ID selection for new held units, page discovery independently of the selected-cohort budget, and freeze fingerprints and decisions in a private digest-bound manifest used unchanged by dry-run, canary and remainder.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_redrive_scope.py",
+    "backend/scripts/batch_redrive_scope_emulator_test.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/batch_pipeline_speech_redrive.py",
+    "backend/utils/batch_pipeline/redrive_scope.py"
+  ],
+  "status": "open"
+}

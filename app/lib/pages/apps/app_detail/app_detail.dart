@@ -10,9 +10,12 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:skeletonizer/skeletonizer.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/services/integrations/connection_wait.dart';
+import 'package:omi/services/integrations/connection_read.dart';
+import 'package:omi/services/integrations/integration_oauth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
@@ -25,7 +28,6 @@ import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -42,80 +44,67 @@ import 'package:omi/pages/apps/app_detail/widgets/app_setup_steps.dart';
 import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/ui/ui.dart';
 
+part 'app_setup_owner.dart';
+
 class AppDetailPage extends StatefulWidget {
   final App app;
   final bool preventAutoOpenHomePage;
+  final Future<(bool, String)> Function(String) enableApp;
+  final Future<Map<String, dynamic>?> Function(String) appDetailsLoader;
+  final Future<ApiResult<AppSetupStatus>> Function(String?) setupChecker;
+  final void Function(BuildContext context, App app) openAppHome;
+  final Future<bool> Function(Uri)? launchSetupUrl;
 
-  const AppDetailPage({super.key, required this.app, this.preventAutoOpenHomePage = false});
+  const AppDetailPage({
+    super.key,
+    required this.app,
+    this.preventAutoOpenHomePage = false,
+    this.enableApp = enableAppServer,
+    this.appDetailsLoader = getAppDetailsServer,
+    this.setupChecker = getAppSetupStatus,
+    this.openAppHome = _routeToAppHome,
+    this.launchSetupUrl,
+    this.detailReader,
+    this.setupProbeTimeout = const Duration(seconds: 20),
+    this.setupWaitTimeout = const Duration(minutes: 5),
+  });
+
+  static void _routeToAppHome(BuildContext context, App app) => routeToPage(context, AppHomeWebPage(app: app));
+
+  final Future<App?> Function(String)? detailReader;
+  final Duration setupProbeTimeout;
+  final Duration setupWaitTimeout;
 
   @override
   State<AppDetailPage> createState() => _AppDetailPageState();
 }
 
-class _AppDetailPageState extends State<AppDetailPage> {
+class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserver, _AppSetupOwner {
   String? instructionsMarkdown;
-  bool setupCompleted = false;
   bool appLoading = false;
+  Future<void>? _enableRequest;
   bool isLoading = false;
   bool chatButtonLoading = false;
   bool _reEnabling = false;
   Map<String, dynamic>? _subscriptionData;
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
-  Timer? _setupCheckTimer;
-  int _setupCheckGeneration = 0;
+  Timer? _openHomeTimer;
+  bool _paymentCheckInFlight = false;
+  bool _purchaseCompleted = false;
+  int _paymentCheckGeneration = 0;
   int _markdownLoadGeneration = 0;
+  @override
   late App app;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _reviewsSectionKey = GlobalKey();
 
-  /// Safely launches a URL with fallback from in-app browser to external browser.
-  /// Returns true if the URL was launched successfully, false otherwise.
   Future<bool> _launchUrlSafely(Uri uri) async {
-    final supportsInAppBrowser = uri.scheme == 'http' || uri.scheme == 'https';
-
-    try {
-      if (supportsInAppBrowser) {
-        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-      } else {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-      return true;
-    } catch (e) {
-      Logger.warning('Failed to launch URL with in-app browser: $e');
-      // Fall back to external browser
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return true;
-      } catch (e) {
-        Logger.warning('Failed to launch URL with external browser: $e');
-        if (mounted) {
-          OmiFeedback.error(context, context.l10n.couldNotOpenUrl);
-        }
-        return false;
-      }
-    }
-  }
-
-  checkSetupCompleted({bool autoInstallIfCompleted = false}) {
-    if (app.externalIntegration == null) {
-      _setupCheckGeneration++;
-      return;
-    }
-    // TODO: move check to backend
-    final generation = ++_setupCheckGeneration;
-    final requestedUrl = app.externalIntegration!.setupCompletedUrl;
-    isAppSetupCompleted(requestedUrl).then((value) {
-      if (!mounted) return;
-      if (generation != _setupCheckGeneration) return;
-      if (app.externalIntegration?.setupCompletedUrl != requestedUrl) return;
-
-      setState(() => setupCompleted = value);
-
-      if (autoInstallIfCompleted && value && !app.enabled) {
-        _tryAutoInstallAfterSetup();
-      }
-    });
+    final uid = SharedPreferencesUtil().uid;
+    final opened = await launchIntegrationOAuth(() async => uri.toString(),
+        isCurrent: () => mounted && SharedPreferencesUtil().uid == uid);
+    if (!opened && mounted) OmiFeedback.error(context, context.l10n.couldNotOpenUrl);
+    return opened;
   }
 
   void _loadSetupInstructionsMarkdown() {
@@ -139,43 +128,20 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
   }
 
+  @override
   Future<void> _tryAutoInstallAfterSetup() async {
     if (!mounted) return;
-
-    setState(() => appLoading = true);
-    var prefs = SharedPreferencesUtil();
-    var (enabled, _) = await enableAppServer(app.id);
-
-    if (!mounted) return;
-
-    if (enabled) {
-      prefs.enableApp(app.id);
-      PlatformManager.instance.analytics.appEnabled(app.id);
-      context.read<AppProvider>().filterApps();
-
-      setState(() {
-        app.enabled = true;
-        appLoading = false;
-      });
-
-      if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) {
-            routeToPage(context, AppHomeWebPage(app: app));
-          }
-        });
-      }
-    } else {
-      setState(() => appLoading = false);
-    }
+    await _enableApp(app.id);
   }
 
+  @override
   void setIsLoading(bool value) {
     if (mounted && isLoading != value) {
       setState(() => isLoading = value);
     }
   }
 
+  @override
   Future<void> _loadSubscriptionData() async {
     if (widget.app.isPaid) {
       final subscriptionResponse = await getAppSubscription(widget.app.id);
@@ -224,6 +190,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   @override
   void initState() {
+    super.initState();
     app = widget.app;
 
     // Track app detail page viewed
@@ -237,43 +204,63 @@ class _AppDetailPageState extends State<AppDetailPage> {
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Automatically open app home page if conditions are met
-      if (!widget.preventAutoOpenHomePage && app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        routeToPage(context, AppHomeWebPage(app: app));
+      // Load details first: a transport-backed app's home URL carries a one-use
+      // launch grant that only a fresh details response contains.
+      final loaded = await _refreshAppDetails();
+      if (loaded &&
+          mounted &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          !widget.preventAutoOpenHomePage &&
+          app.enabled &&
+          app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        widget.openAppHome(context, app);
       }
-      // Load details
-      await _refreshAppDetails();
     });
     if (app.worksExternally()) {
       checkSetupCompleted();
       _loadSetupInstructionsMarkdown();
     }
-
-    super.initState();
   }
 
-  Future<void> _refreshAppDetails() async {
-    setIsLoading(true);
-    var res = await context.read<AppProvider>().getAppDetails(app.id);
-    if (mounted) {
-      setState(() {
-        if (res != null) {
-          app = res;
-        }
-      });
-    }
+  /// Opens the app's home page with a launch grant fetched for this open. A grant
+  /// is one-use and short-lived, so a catalog copy or an earlier response is never
+  /// reused. A failed refresh must not fall back to a consumed grant.
+  Future<void> _openAppHome() async {
+    if (!await _refreshLaunchDetails() || !mounted) return;
+    if (app.externalIntegration?.appHomeUrl?.isNotEmpty != true) return;
+    widget.openAppHome(context, app);
+  }
 
-    setIsLoading(false);
-    if (mounted) {
-      context.read<AppProvider>().checkIsAppOwner(app.uid);
-      context.read<AppProvider>().setIsAppPublicToggled(!app.private);
-      if (app.isPaid) {
-        _loadSubscriptionData();
-      }
+  Future<bool> _refreshLaunchDetails() async {
+    final uid = SharedPreferencesUtil().uid;
+    final appId = app.id;
+    final fresh = await (widget.detailReader?.call(appId) ?? context.read<AppProvider>().getAppDetails(appId));
+    if (!mounted || SharedPreferencesUtil().uid != uid || app.id != appId) return false;
+    if (fresh == null) {
+      OmiFeedback.error(context, context.l10n.unableToFetchApps);
+      return false;
+    }
+    setState(() => app = fresh);
+    return true;
+  }
+
+  Future<void> _openSetupStep(int index) async {
+    if (!await _refreshLaunchDetails() || !mounted) return;
+    final steps = app.externalIntegration?.authSteps ?? const [];
+    if (index < 0 || index >= steps.length) return;
+    final uri = Uri.tryParse(appSetupUrlWithUid(steps[index].url, SharedPreferencesUtil().uid));
+    if (uri == null) {
+      OmiFeedback.error(context, context.l10n.invalidIntegrationUrl);
+      return;
+    }
+    final uid = SharedPreferencesUtil().uid;
+    if (await (widget.launchSetupUrl ?? _launchUrlSafely)(uri) && mounted && SharedPreferencesUtil().uid == uid) {
+      _startSetupCompletionCheck(autoInstallIfCompleted: true);
     }
   }
 
   void _onExternalIntegrationUpdated() {
+    _resetSetup();
     if (!app.worksExternally()) {
       _setupCheckGeneration++;
       _markdownLoadGeneration++;
@@ -309,45 +296,68 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   @override
   void dispose() {
+    _paymentCheckGeneration++;
     _paymentCheckTimer?.cancel();
-    _setupCheckTimer?.cancel();
+    _openHomeTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
 
+  void _stopPaymentCheck() {
+    _paymentCheckTimer?.cancel();
+    _paymentCheckTimer = null;
+    _paymentCheckInFlight = false;
+    _paymentCheckGeneration++;
+  }
+
   Future _checkPaymentStatus(String appId) async {
     PlatformManager.instance.analytics.appPurchaseStarted(appId);
+    _paymentCheckTimer?.cancel();
+    _paymentCheckInFlight = false;
+    _purchaseCompleted = false;
+    final generation = ++_paymentCheckGeneration;
     _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      var prefs = SharedPreferencesUtil();
-      if (mounted) {
+      if (!mounted || app.id != appId || generation != _paymentCheckGeneration) {
+        timer.cancel();
+        return;
+      }
+      if (timer.tick >= 60) {
+        _stopPaymentCheck();
+        if (mounted) {
+          setState(() => appLoading = false);
+          OmiFeedback.error(context, context.l10n.issueActivatingApp);
+        }
+        return;
+      }
+      if (_paymentCheckInFlight) return;
+      _paymentCheckInFlight = true;
+      if (!appLoading) {
         setState(() => appLoading = true);
       }
-
-      var details = await getAppDetailsServer(appId);
-      if (details != null && details['is_user_paid']) {
-        var (enabled, _) = await enableAppServer(appId);
-        if (enabled) {
-          PlatformManager.instance.analytics.appPurchaseCompleted(appId);
-          prefs.enableApp(appId);
-          PlatformManager.instance.analytics.appEnabled(appId);
-
-          if (!mounted) {
-            timer.cancel();
-            _paymentCheckTimer?.cancel();
-            return;
-          }
-
-          context.read<AppProvider>().filterApps();
-          setState(() {
-            app.isUserPaid = true;
-            app.enabled = true;
-            appLoading = false;
-          });
-          timer.cancel();
-          _paymentCheckTimer?.cancel();
-        } else {
-          Logger.debug('Payment not made yet');
+      var confirmed = false;
+      try {
+        final details = await widget.appDetailsLoader(appId);
+        confirmed = details != null && details['is_user_paid'] == true;
+      } catch (_) {
+        confirmed = false;
+      } finally {
+        if (generation == _paymentCheckGeneration) {
+          _paymentCheckInFlight = false;
         }
+      }
+      if (!mounted || generation != _paymentCheckGeneration) return;
+      if (confirmed) {
+        _stopPaymentCheck();
+        app.isUserPaid = true;
+        if (!_purchaseCompleted) {
+          _purchaseCompleted = true;
+          PlatformManager.instance.analytics.appPurchaseCompleted(appId);
+        }
+        await _enableApp(appId);
+        return;
+      }
+      if (appLoading) {
+        setState(() => appLoading = false);
       }
     });
   }
@@ -391,7 +401,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 OmiIconButton.filled(
                   icon: const FaIcon(FontAwesomeIcons.gear, size: 16),
                   label: l10n.appSettingsLabel(app.name.decodeString),
-                  onPressed: () => routeToPage(context, AppHomeWebPage(app: app)),
+                  onPressed: _openAppHome,
                 ),
               if (!isLoading && !app.private)
                 Builder(
@@ -434,10 +444,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                           ),
                         ),
-                        placeholder: (context, url) => const SizedBox.square(
-                          dimension: 108,
-                          child: Center(child: OmiSpinner()),
-                        ),
+                        placeholder: (context, url) =>
+                            const SizedBox.square(dimension: 108, child: Center(child: OmiSpinner())),
                         errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
                       ),
                       const SizedBox(width: 20),
@@ -485,20 +493,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     AppDetailNotice(icon: FontAwesomeIcons.circleExclamation, text: l10n.appRejectedMessage),
                   if (app.isDisabled()) _buildDisabledNotice(),
                   const SizedBox(height: OmiSpacing.xl),
+                  if (_detailFailed) ...[
+                    AppDetailNotice(icon: FontAwesomeIcons.circleInfo, text: l10n.connectionErrorDesc),
+                    OmiButton.secondary(
+                        key: const Key('app-detail-retry'),
+                        label: l10n.tryAgain,
+                        onPressed: () async {
+                          await _refreshAppDetails();
+                        }),
+                  ],
                   if (hasAuthSteps)
                     AppSetupSteps(
                       steps: app.externalIntegration!.authSteps,
-                      completed: setupCompleted,
-                      onStepTap: (step) async {
-                        final uri = Uri.tryParse(appSetupUrlWithUid(step.url, SharedPreferencesUtil().uid));
-                        if (uri == null) {
-                          OmiFeedback.error(context, l10n.invalidIntegrationUrl);
-                          return;
-                        }
-                        await _launchUrlSafely(uri);
-                        checkSetupCompleted(autoInstallIfCompleted: true);
-                      },
+                      completed: setupCompleted && !_setupFailed && !_setupWaiting,
+                      onStepTap: (step) => _openSetupStep(app.externalIntegration!.authSteps.indexOf(step)),
                     ),
+                  if (_setupWaiting || _setupFailed) ...[
+                    AppDetailNotice(
+                        icon: FontAwesomeIcons.circleInfo,
+                        text: _setupFailed ? l10n.connectionErrorDesc : l10n.completeAuthInBrowser),
+                    if (_setupFailed)
+                      OmiButton.secondary(
+                          key: const Key('app-setup-retry'),
+                          label: l10n.tryAgain,
+                          onPressed: () => _startSetupCompletionCheck(autoInstallIfCompleted: _autoInstallAfterSetup)),
+                  ],
                   if (!hasAuthSteps && hasSetupInstructions)
                     ListTile(
                       onTap: () async {
@@ -602,7 +621,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   Builder(
                     builder: (context) {
                       final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
-                      return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
+                      // The header already shows the average and count, so this card holds only reviews.
+                      return (app.reviews.isNotEmpty || canAddReview)
                           ? GestureDetector(
                               key: _reviewsSectionKey,
                               onTap: () {
@@ -623,13 +643,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const SizedBox(height: OmiSpacing.xxs),
-                                    RatingDistributionWidget(
-                                      ratingAvg: app.ratingAvg ?? 0,
-                                      ratingCount: app.ratingCount,
-                                      reviews: app.reviews,
-                                    ),
-                                    const SizedBox(height: OmiSpacing.md),
                                     RecentReviewsSection(
                                       reviews:
                                           app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
@@ -724,6 +737,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Future<void> _navigateToSetup() async {
+    if (!await _refreshLaunchDetails() || !mounted) return;
+    final uid = SharedPreferencesUtil().uid;
     final authSteps = app.externalIntegration?.authSteps ?? const [];
     if (app.worksExternally() && authSteps.isNotEmpty) {
       final uri = Uri.tryParse(appSetupUrlWithUid(authSteps.first.url, SharedPreferencesUtil().uid));
@@ -731,11 +746,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
         if (mounted) OmiFeedback.error(context, context.l10n.invalidIntegrationUrl);
         return;
       }
-      await _launchUrlSafely(uri);
+      if (!await (widget.launchSetupUrl ?? _launchUrlSafely)(uri)) return;
     } else {
       await _openSetupInstructions();
     }
-    _startSetupCompletionCheck();
+    if (mounted && SharedPreferencesUtil().uid == uid) _startSetupCompletionCheck(autoInstallIfCompleted: true);
   }
 
   /// Opens an integration's setup instructions: rendered markdown, an external link, or inline text.
@@ -758,37 +773,36 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
   }
 
-  void _startSetupCompletionCheck() {
-    // Cancel any existing timer
-    _setupCheckTimer?.cancel();
-
-    _setupCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      checkSetupCompleted();
-
-      // Stop checking after 5 minutes
-      if (timer.tick > 100) {
-        timer.cancel();
-      }
-
-      // Stop checking if app becomes enabled
-      if (app.enabled) {
-        timer.cancel();
-      }
+  Future<void> _enableApp(String appId) {
+    if (!mounted) return Future.value();
+    final existing = _enableRequest;
+    if (existing != null) return existing;
+    late final Future<void> request;
+    request = _enableAppBody(appId).whenComplete(() {
+      if (identical(_enableRequest, request)) _enableRequest = null;
     });
+    _enableRequest = request;
+    return request;
   }
 
-  Future<void> _enableApp(String appId) async {
+  Future<void> _enableAppBody(String appId) async {
+    if (!mounted) return;
+    final uid = SharedPreferencesUtil().uid;
     var prefs = SharedPreferencesUtil();
     setState(() => appLoading = true);
 
-    var (enabled, detail) = await enableAppServer(appId);
+    bool enabled;
+    String detail;
+    try {
+      (enabled, detail) = await widget.enableApp(appId).timeout(const Duration(seconds: 45));
+    } catch (_) {
+      if (!mounted) return;
+      showOmiAlert(context, title: context.l10n.errorActivatingApp, message: context.l10n.issueActivatingApp);
+      setState(() => appLoading = false);
+      return;
+    }
 
-    if (!mounted) return;
+    if (!mounted || SharedPreferencesUtil().uid != uid || app.id != appId) return;
 
     if (!enabled) {
       // Setup is only the right guess when the backend gave no reason. A
@@ -823,10 +837,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     // Automatically open app home page after installation if available
     if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          routeToPage(context, AppHomeWebPage(app: app));
-        }
+      _openHomeTimer?.cancel();
+      _openHomeTimer = Timer(const Duration(seconds: 1), () {
+        if (mounted) _openAppHome();
       });
     }
   }
@@ -888,7 +901,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     PlatformManager.instance.analytics.appDetailSubscribeClicked(appId: app.id, appName: app.name);
     final link = app.paymentLink;
     if (link == null || link.isEmpty) {
-      await _enableApp(app.id);
+      OmiFeedback.error(context, context.l10n.invalidPaymentUrl);
       return;
     }
     final uri = Uri.tryParse(link);
@@ -936,20 +949,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
     // iPad needs the share button's position for the popover.
     final box = buttonContext.findRenderObject() as RenderBox?;
     final origin = box != null ? box.localToGlobal(Offset.zero) & box.size : null;
-    final outcome = await SharePlus.instance
-        .share(ShareParams(text: appShareUrl(app.id, sid: sid), subject: app.name, sharePositionOrigin: origin));
+    final outcome = await SharePlus.instance.share(
+      ShareParams(
+        text: appShareUrl(app.id, sid: sid),
+        subject: app.name,
+        sharePositionOrigin: origin,
+      ),
+    );
     final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
-    PlatformManager.instance.analytics.track('App Shared', properties: {
-      'appId': app.id,
-      'share_id': sid,
-      'share_status': outcome.status.name,
-      if (targetApp != null) 'target_app': targetApp
-    });
-    PlatformManager.instance.analytics.track('App Detail Shared', properties: {
-      'app_id': app.id,
-      'app_name': app.name,
-      'share_id': sid,
-      if (targetApp != null) 'target_app': targetApp,
-    });
+    PlatformManager.instance.analytics.track(
+      'App Shared',
+      properties: {
+        'appId': app.id,
+        'share_id': sid,
+        'share_status': outcome.status.name,
+        if (targetApp != null) 'target_app': targetApp,
+      },
+    );
+    PlatformManager.instance.analytics.track(
+      'App Detail Shared',
+      properties: {
+        'app_id': app.id,
+        'app_name': app.name,
+        'share_id': sid,
+        if (targetApp != null) 'target_app': targetApp,
+      },
+    );
   }
 }

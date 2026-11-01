@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
@@ -85,49 +86,11 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
-        final cantFind = provider.deviceList.isEmpty && provider.enableInstructions;
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            FoundDevices(goNext: widget.goNext, isFromOnboarding: widget.isFromOnboarding, onRescan: _scanAgain),
-            // Nothing found after a while: troubleshooting first, support last (onboarding-home #13).
-            if (cantFind) ...[
-              const SizedBox(height: OmiSpacing.xxl),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      context.l10n.cantFindDeviceHint,
-                      textAlign: TextAlign.center,
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                    ),
-                    const SizedBox(height: OmiSpacing.md),
-                    OmiButton(
-                      key: const Key('find_devices_scan_again'),
-                      label: context.l10n.scanAgain,
-                      icon: Icons.refresh,
-                      onPressed: _scanAgain,
-                    ),
-                    const SizedBox(height: OmiSpacing.xs),
-                    OmiButton.secondary(
-                      key: const Key('find_devices_how_to_pair'),
-                      label: context.l10n.howToPair,
-                      onPressed: _showConnectionGuide,
-                    ),
-                    OmiButton.tertiary(
-                      key: const Key('find_devices_contact_support'),
-                      label: context.l10n.contactSupportAction,
-                      onPressed: () => launchUrl(Uri.parse('mailto:team@basedhardware.com')),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (widget.includeSkip)
-              OmiButton.tertiary(
+        final cantFind =
+            provider.deviceList.isEmpty && provider.enableInstructions && provider.pairingFailureReason == null;
+        final notNow = widget.includeSkip
+            ? OmiButton.tertiary(
+                key: const Key('find_devices_not_now'),
                 label: context.l10n.notNow,
                 onPressed: () {
                   if (widget.isFromOnboarding) {
@@ -137,7 +100,67 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                   }
                   PlatformManager.instance.analytics.useWithoutDeviceOnboardingFindDevices();
                 },
-              ),
+              )
+            : null;
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Stays mounted: it owns the connection listener. Once the scan has ended with nothing
+            // found it draws nothing, so "Searching for devices" does not sit above "No Omi Found".
+            FoundDevices(
+              goNext: widget.goNext,
+              isFromOnboarding: widget.isFromOnboarding,
+              onRescan: _scanAgain,
+              showStatus: !cantFind && provider.pairingFailureReason == null,
+            ),
+            // Nothing found after a while: troubleshooting first, support last (onboarding-home #13).
+            // The pairing guide has no support route, so Contact Support stays as a small link.
+            if (cantFind)
+              OmiEmptyState(
+                key: const Key('find_devices_none'),
+                glyph: Assets.images.omiWithoutRopeTurnedOff.image(width: 112, height: 112),
+                title: context.l10n.findDeviceNoneTitle,
+                message: context.l10n.findDeviceNoneMessage,
+                action: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    OmiButton(
+                      key: const Key('find_devices_scan_again'),
+                      labelStyle: OmiType.callout.copyWith(
+                          fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
+                      label: context.l10n.scanAgain,
+                      icon: Icons.refresh,
+                      onPressed: _scanAgain,
+                    ),
+                    const SizedBox(height: OmiSpacing.xs),
+                    OmiButton(
+                      variant: OmiButtonVariant.secondary,
+                      labelStyle: OmiType.callout.copyWith(
+                          fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
+                      key: const Key('find_devices_how_to_pair'),
+                      label: context.l10n.howToPair,
+                      onPressed: _showConnectionGuide,
+                    ),
+                    if (notNow != null) notNow,
+                    Center(
+                      child: TextButton(
+                        key: const Key('find_devices_contact_support'),
+                        onPressed: () => launchUrl(Uri.parse('mailto:team@basedhardware.com')),
+                        style: TextButton.styleFrom(
+                          foregroundColor: OmiColors.textSecondary,
+                          minimumSize: const Size(kOmiMinTapTarget, kOmiMinTapTarget),
+                          textStyle:
+                              OmiType.footnote.copyWith(fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
+                        ),
+                        child: Text(context.l10n.contactSupportAction),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (notNow != null)
+              notNow,
           ],
         );
       },

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-speaker-budget-starvation",
+  "violated_contract": "Repeated live updates from one rejected voice must not monopolize bounded matcher work and spend the remaining shared embedding quota before an already queued, untried voice can be examined. Undifferentiated repeated budget exits must not be interpreted as distinct exhausted voices or sockets.",
+  "canonical_prevention": "Use one bounded metadata queue slot per generation/conversation/scoped voice, prefer untried voices with an oldest-first age override, and serialize numeric active work across scopes/generations without lock-waiting task floods, and retain unselected fresh timing ranges across bounded queries. Keep all GPU query admission behind the existing voice and socket reservation limits. Pair every denial with exclusive cap attribution and deduplicated voice-generation/socket incidence.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_speaker_queue_fairness.py",
+    "backend/tests/unit/test_speaker_budget_telemetry.py",
+    "backend/tests/unit/test_owner_recognition_embedding_budget.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/speakers.py",
+    "backend/routers/listen/speaker_queue.py",
+    "backend/utils/observability/speaker_embedding_budget.py"
+  ],
+  "status": "open"
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import hashlib
 from collections import OrderedDict
@@ -11,10 +12,31 @@ from threading import Lock
 from typing import Any, Callable, Protocol, cast
 
 import redis
-from redis.exceptions import RedisError
+from redis.exceptions import OutOfMemoryError, RedisError
 
 from config.translation import TranslationProfile
 from utils.translation_core.metrics import TranslationMetrics
+from utils.llm.model_config import LUNA_MODEL
+
+logger = logging.getLogger(__name__)
+
+
+def _record_write_skipped(exc: RedisError) -> None:
+    reason = 'capacity_full' if isinstance(exc, OutOfMemoryError) else 'other'
+    logger.warning('translation cache write skipped reason=%s', reason)
+    try:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='other',
+            from_mode='cache_write',
+            to_mode='skip',
+            reason=reason,
+            outcome='degraded',
+            log=logger,
+        )
+    except Exception:
+        pass
 
 
 @dataclass(frozen=True)
@@ -90,7 +112,8 @@ class RedisTranslationStore:
                 encoded,
                 ex=ttl_seconds,
             )
-        except RedisError:
+        except RedisError as exc:
+            _record_write_skipped(exc)
             return None
 
     def is_negative(self, fingerprint: str, target_language: str) -> bool:
@@ -112,7 +135,8 @@ class RedisTranslationStore:
                 '1',
                 ex=ttl_seconds,
             )
-        except RedisError:
+        except RedisError as exc:
+            _record_write_skipped(exc)
             return None
 
     def _get_configured_client(self) -> Any | None:
@@ -246,7 +270,7 @@ def viewed_cache_fingerprint(
         [
             'viewed',
             policy_version,
-            'gemini-2.5-flash-lite',
+            LUNA_MODEL,
             'prompt-v1',
             source_language.strip().lower() or 'detect-v1',
             target_language.strip().lower(),

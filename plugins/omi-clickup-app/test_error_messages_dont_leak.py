@@ -9,6 +9,7 @@ generic message.
 
 import asyncio
 import importlib.util
+import os
 from pathlib import Path
 import sys
 import types
@@ -48,10 +49,15 @@ stubs = {
     "task_detector": module("task_detector", TaskDetector=Mock),
     "omi_notifications": module("omi_notifications", notify_task_created=Mock(), notify_task_failed=Mock()),
 }
+os.environ.setdefault("CLICKUP_SETTINGS_SECRET", "test-clickup-settings-secret")
 spec = importlib.util.spec_from_file_location("clickup_leak_under_test", Path(__file__).with_name("main.py"))
 main = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, stubs):
     spec.loader.exec_module(main)
+
+
+def _authed_request(uid="u1"):
+    return types.SimpleNamespace(cookies={main.COOKIE_NAME: main.session_value(uid)})
 
 
 SENSITIVE_DETAIL = "psycopg2.OperationalError: could not connect to server at 10.0.4.12:5432, password authentication failed for user 'clickup_app'"
@@ -66,26 +72,26 @@ class ErrorMessagesDoNotLeakTests(unittest.TestCase):
 
     def test_update_list_does_not_leak_the_storage_exception(self):
         with patch.object(main.SimpleUserStorage, "update_list_selection", side_effect=RuntimeError(SENSITIVE_DETAIL)):
-            res = asyncio.run(main.update_list(uid="u1", list="l1"))
+            res = asyncio.run(main.update_list(_authed_request("u1"), uid="u1", list="l1"))
         self.assert_generic_and_silent(res, "Failed to update default list.")
 
     def test_update_timezone_does_not_leak_the_storage_exception(self):
         with patch.object(main.SimpleUserStorage, "update_timezone", side_effect=RuntimeError(SENSITIVE_DETAIL)):
-            res = asyncio.run(main.update_timezone(uid="u1", timezone="America/Los_Angeles"))
+            res = asyncio.run(main.update_timezone(_authed_request("u1"), uid="u1", timezone="America/Los_Angeles"))
         self.assert_generic_and_silent(res, "Failed to update timezone.")
 
     def test_refresh_lists_does_not_leak_the_clickup_client_exception(self):
         with patch.object(
             main.SimpleUserStorage, "get_user", return_value={"access_token": "tok", "team_id": "t1"}
         ), patch.object(main.clickup_client, "get_workspaces", side_effect=RuntimeError(SENSITIVE_DETAIL)):
-            res = asyncio.run(main.refresh_lists(uid="u1"))
+            res = asyncio.run(main.refresh_lists(_authed_request("u1"), uid="u1"))
         self.assert_generic_and_silent(res, "Failed to refresh lists from ClickUp.")
 
     def test_logout_does_not_leak_the_storage_exception(self):
         broken_users = Mock()
         broken_users.__contains__ = Mock(side_effect=RuntimeError(SENSITIVE_DETAIL))
         with patch.dict(sys.modules, {"simple_storage": module("simple_storage", users=broken_users, sessions={}, save_users=Mock(), save_sessions=Mock())}):
-            res = asyncio.run(main.logout(uid="u1"))
+            res = asyncio.run(main.logout(_authed_request("u1"), uid="u1"))
         self.assert_generic_and_silent(res, "Failed to log out.")
 
 

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Service that bridges device state from Flutter to the iOS lock screen WidgetKit extension.
@@ -12,7 +13,17 @@ class BatteryWidgetService {
 
   static final BatteryWidgetService _instance = BatteryWidgetService._();
   factory BatteryWidgetService() => _instance;
-  BatteryWidgetService._();
+  BatteryWidgetService._() : _publish = _publishNative;
+
+  @visibleForTesting
+  BatteryWidgetService.testing(this._publish);
+
+  final Future<void> Function(Map<String, Object>) _publish;
+  (String, int, String, bool)? _lastInfo;
+
+  static Future<void> _publishNative(Map<String, Object> info) async {
+    if (Platform.isIOS) await _channel.invokeMethod('updateBatteryInfo', info);
+  }
 
   /// Push the latest device battery info to the iOS widget.
   /// Note: mute state is managed separately via [updateMuteState] and is never
@@ -23,15 +34,18 @@ class BatteryWidgetService {
     required String deviceType,
     required bool isConnected,
   }) async {
-    if (!Platform.isIOS) return;
+    final info = (deviceName, batteryLevel, deviceType, isConnected);
+    if (_lastInfo == info) return;
+    _lastInfo = info;
     try {
-      await _channel.invokeMethod('updateBatteryInfo', {
+      await _publish({
         'deviceName': deviceName,
         'batteryLevel': batteryLevel,
         'deviceType': deviceType,
         'isConnected': isConnected,
       });
     } catch (e) {
+      if (_lastInfo == info) _lastInfo = null; // Retry a failed publication.
       Logger.debug('BatteryWidgetService.updateBatteryInfo failed: $e');
     }
   }

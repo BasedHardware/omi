@@ -20,6 +20,10 @@ final class BleHostApiImpl: BleHostApi {
         bleManager.connectPeripheral(uuid: uuid)
     }
 
+    func configureSavedReconnect(uuid: String, enabled: Bool) throws {
+        bleManager.configureSavedReconnect(uuid: uuid, enabled: enabled)
+    }
+
     func unmanageDevice(uuid: String) throws {
         bleManager.disconnectPeripheral(uuid: uuid)
     }
@@ -59,8 +63,13 @@ final class BleHostApiImpl: BleHostApi {
         )
     }
 
-    func subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws {
-        bleManager.subscribeCharacteristic(peripheralUuid: peripheralUuid, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
+    func subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String,
+                                 completion: @escaping (Result<Void, Error>) -> Void) {
+        bleManager.subscribeCharacteristic(peripheralUuid: peripheralUuid, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, completion: completion)
+    }
+
+    func setCaptureAuthorized(uuid: String, authorized: Bool) throws {
+        bleManager.setCaptureAuthorized(uuid: uuid, authorized: authorized)
     }
 
     func unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws {

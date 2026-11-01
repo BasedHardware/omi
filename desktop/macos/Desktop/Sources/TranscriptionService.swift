@@ -44,7 +44,10 @@ class TranscriptionService: @unchecked Sendable {
   /// Matches `models.transcript_segment.TranscriptSegment` on the backend
   struct BackendSegment: Decodable {
     let id: String?
-    let text: String
+    /// Mutable so ingest can strip the assistant's own playback off the front of a segment
+    /// the user talked over (`VoicePlaybackEchoPolicy`) before it reaches the transcript,
+    /// the wake word, or persistence.
+    var text: String
     let speaker: String?  // e.g. "SPEAKER_00"
     let speaker_id: Int?
     let is_user: Bool
@@ -451,6 +454,16 @@ class TranscriptionService: @unchecked Sendable {
     return [URLQueryItem(name: "screen_evidence", value: "enabled")]
   }
 
+  /// The desktop detector owns meeting boundaries, including its quiet resume hold.
+  /// Cover input-only sustain and the resume window with margin, while a dropped
+  /// socket must not leave a backend conversation open for the four-hour maximum.
+  /// Normal desktop socket close still finalizes immediately; ambient retains the 120s default.
+  static func conversationLifetimeQueryItems(role: MeetingConversationBoundaryPolicy.Role) -> [URLQueryItem] {
+    role == .meeting
+      ? [URLQueryItem(name: "conversation_timeout", value: String(Int(MeetingDetectionTiming.conversationTimeout)))]
+      : []
+  }
+
   private func connectToBackend(authHeader: String) {
     let base = Self.pythonBackendBaseURL
       .replacingOccurrences(of: "https://", with: "wss://")
@@ -478,6 +491,7 @@ class TranscriptionService: @unchecked Sendable {
         items.append(URLQueryItem(name: "client_conversation_id", value: clientConversationId))
       }
       items.append(URLQueryItem(name: "conversation_role", value: conversationRole.rawValue))
+      items += Self.conversationLifetimeQueryItems(role: conversationRole)
       items += Self.screenEvidenceQueryItems(
         role: conversationRole, screenshotsEnabled: MeetingNoteScreenshotsFeature.isEnabled)
       queryItems = items

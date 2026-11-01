@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "listen-edge.fullname" . }}
+  labels:
+    {{- include "listen-edge.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "listen-edge.selectorLabels" . | nindent 6 }}
+  {{- with .Values.strategy}}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "listen-edge.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "listen-edge.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Must exceed the binary's drain deadline (defaults: ready delay 5 s +
+      # spread 10 s + close timeout 5 s + 3 s slack = 23 s) so SIGTERM's
+      # orderly drain always finishes before the kill. No preStop hook: the
+      # drain starts directly on SIGTERM and a preStop sleep would eat budget.
+      terminationGracePeriodSeconds: {{ required "terminationGracePeriodSeconds is required" .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ required "image.repository is required" .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ required "image.tag is required (or pass image.digest from the build-only train)" .Values.image.tag }}{{ end }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- /*
+          privateEnv (NAME: string) comes from a values file the deploy
+          workflow renders from a protected-environment secret
+          (LISTEN_EDGE_PRIVATE_VALUES_YAML), in the same Helm rollout — the
+          same pattern as backend-listen. Each name is emitted exactly once:
+          a privateEnv key replaces the env entry of the same name, because
+          duplicate names break strategic-merge upgrades.
+          */}}
+          {{- $privateEnv := .Values.privateEnv | default dict }}
+          env:
+            {{- range .Values.env }}
+            {{- if not (hasKey $privateEnv .name) }}
+            - name: {{ .name }}
+              {{- if hasKey . "value" }}
+              value: {{ .value | quote }}
+              {{- else if hasKey . "valueFrom" }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- range $name, $value := $privateEnv }}
+            {{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" $name) }}
+            {{- fail "privateEnv has a key that is not an env var name" }}
+            {{- end }}
+            {{- if not (kindIs "string" $value) }}
+            {{- fail (printf "privateEnv.%s must be a string" $name) }}
+            {{- end }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

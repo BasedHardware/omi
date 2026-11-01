@@ -19,6 +19,15 @@ on:
         description: 'Production only: exact main SHA with a successful first-attempt Release Eligibility proof'
         required: false
         default: ''
+      # Plan B B3: blank (the default) builds and deploys exactly today's
+      # llm-gateway:<sha7> image. A digest moves the gateway onto the
+      # backend-gateway role image published by a gcp_backend.yml build-only run
+      # of the SAME admitted SHA; admit_role_image.py rejects anything else
+      # before any mutation.
+      gateway_image_digest:
+        description: 'Role-image opt-in: backend-gateway digest sha256:<64 hex> from a build-only run of the admitted SHA (blank = build and deploy today image)'
+        required: false
+        default: ''
       # Break-glass: the eligibility proof requires a *successful*
       # first-attempt Release Eligibility push-run on this exact SHA. A flaky
       # or red check therefore poisons that SHA permanently -- rerunning does
@@ -41,14 +50,27 @@ on:
         description: 'Why the eligibility proof is unavailable (required with skip_eligibility_proof)'
         required: false
         default: ''
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
+        required: false
+        default: false
+        type: boolean
 
 # LLM Gateway deployment reapplies shared backend-secrets, so it joins the
 # full backend mutation domain for the selected environment.
+# B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
+# prod-train lock, so trains, config-trains and GPU/listen deploys never overlap and the
+# ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
+# Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
 concurrency:
-  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: llm-gateway
   REGION: us-central1
 
@@ -201,6 +223,23 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v5
 
+      - name: Admit role-image digest opt-in
+        # Plan B B3. Runs after GCR login so imagetools can read the private
+        # registry; sets ROLE_IMAGE_REPOSITORY/DIGEST/REFERENCE for the deploy,
+        # probe and smoke steps and fails the run on a stale or foreign digest.
+        if: github.event.inputs.gateway_image_digest != ''
+        env:
+          ADMITTED_SHA: ${{ env.CHECKED_OUT_SHA }}
+          ROLE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.gateway_image_digest }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/admit_role_image.py \
+            --service llm-gateway \
+            --digest "$ROLE_IMAGE_DIGEST_INPUT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --admitted-sha "$ADMITTED_SHA" \
+            --github-env "$GITHUB_ENV"
+
       - name: Verify production gateway service token
         if: github.event.inputs.environment == 'prod'
         run: |
@@ -219,6 +258,9 @@ jobs:
         run: test -n "$LLM_GATEWAY_GSA"
 
       - name: Build and Push Docker image
+        # Plan B B3: a role-image digest deploys the published backend-gateway
+        # image instead of building one; the fat build stays the default.
+        if: github.event.inputs.gateway_image_digest == ''
         run: |
           docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG} -f backend/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
@@ -240,8 +282,24 @@ jobs:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
+          # Plan B B3: set only by the role-image admission step; blank keeps
+          # deploy-llm-gateway.sh on the image.tag it built above.
+          IMAGE_REPOSITORY: ${{ env.ROLE_IMAGE_REPOSITORY }}
+          IMAGE_DIGEST: ${{ env.ROLE_IMAGE_DIGEST }}
         run: |
           IMAGE_TAG="${IMAGE_TAG}" backend/scripts/deploy-llm-gateway.sh
+          if [[ -n "$IMAGE_DIGEST" ]]; then
+            # Role-image opt-in: the gateway is outside the release vector, so prove the
+            # rolled-out Deployment runs exactly the admitted digest.
+            expected="${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+            actual="$(kubectl -n "${ENVIRONMENT}-omi-backend" get deployment "${ENVIRONMENT}-omi-llm-gateway" \
+              -o jsonpath='{.spec.template.spec.containers[0].image}')"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "ERROR: llm-gateway template image is '$actual', not the opted-in $expected" >&2
+              exit 1
+            fi
+            echo "llm-gateway runs role image $expected"
+          fi
 
       - name: Verify LLM Gateway serving data plane
         id: gateway-serving
@@ -257,7 +315,7 @@ jobs:
           bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
-            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}" \
+            --image "${ROLE_IMAGE_REFERENCE:-gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}}" \
             --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
             --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
             --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
@@ -271,7 +329,7 @@ jobs:
           METRICS_TOKEN="$(kubectl -n "$NAMESPACE" get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data.METRICS_SECRET}' | base64 -d)"
           kubectl -n "$NAMESPACE" run "llm-gateway-smoke-${GITHUB_RUN_ID}" \
             --rm -i --restart=Never \
-            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}" \
+            --image "${ROLE_IMAGE_REFERENCE:-gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}}" \
             --env "SMOKE_URL=http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080" \
             --env "SMOKE_TOKEN=$TOKEN" \
             --env "METRICS_SECRET=$METRICS_TOKEN" \

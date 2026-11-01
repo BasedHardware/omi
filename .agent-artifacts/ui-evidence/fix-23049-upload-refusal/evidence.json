@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-refused-recordings.png",
+      "platform": "mobile-ios",
+      "description": "Three retained HTTP-refused files remain visible as one recording, with explicit Try Again.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-isolated-refusal.png",
+      "platform": "mobile-ios",
+      "description": "After retry, only the singly refused file remains pending; the page keeps an honest failure state.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-recovered-siblings.png",
+      "platform": "mobile-ios",
+      "description": "The two valid sibling files appear as one processed recording under Synced.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-retained-audio-detail.png",
+      "platform": "mobile-ios",
+      "description": "The refused file remains reachable with a decoded one-minute local waveform.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-retained-audio-export.png",
+      "platform": "mobile-ios",
+      "description": "The existing Share Recording action remains reachable for the refused recording.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

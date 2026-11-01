@@ -214,6 +214,25 @@ else a symbol. No third-party favicon proxy, which would leak which servers a
 user browses. `ExtensionLogo` decodes with `NSImage` rather than `AsyncImage`
 because many publishers serve SVG, which SwiftUI's decoder rejects.
 
+Marketplace installation returns a receipt for the exact persisted server name,
+including collision suffixes. Its detail sheet stays open and hands that receipt
+to the existing connection controls. Sign In and Save Key remain explicit; a
+config write never starts OAuth or claims the server is connected. A successful
+credential replacement removes stale Authorization headers, preserving unrelated
+headers and transport. Closing setup leaves committed configuration installed.
+
+For isolated named-bundle QA, set `OMI_EXTENSION_QA_ISOLATION=1` in the local
+`.env.app.dev` before `run.sh`. Only `com.omi.omi-*` non-production bundles then
+use a bundle-specific temporary extension root, also exported to the runtime.
+Production, Beta and shared Omi Dev ignore this option. The screen-scoped
+`marketplace_setup_show_fixture` action accepts only an HTTP `127.0.0.1:<port>/mcp`
+endpoint; fixture actions are unavailable without that isolated launch.
+Start the read-only local OAuth fixture with
+`python3 desktop/macos/scripts/mcp-marketplace-fixture.py`; it prints its loopback
+endpoint and performs no external calls. Its inert token is not an authentication
+boundary. The fixture validates PKCE/resource/redirect and one-time redemption
+only to exercise Omi's client journey. Keep actual account connections separate.
+
 ## Server status
 
 `McpServerProbe` replaces an unconditional "Active in chat" badge. Remote

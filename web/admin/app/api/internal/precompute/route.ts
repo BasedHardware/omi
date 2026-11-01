@@ -50,6 +50,8 @@ import {
   activationCacheKey,
 } from "@/app/api/omi/stats/activation/route";
 import { setPayload } from "@/lib/payload-cache";
+import { computeMobileOnboarding } from "@/lib/mobile-onboarding-funnel";
+import { mobileOnboardingCacheKey } from "@/lib/mobile-onboarding-route";
 
 // Health payload key for this cron. A future panel/alert reads it to tell
 // "the cron ran and everything succeeded" apart from "the cron has not run
@@ -75,6 +77,8 @@ export const maxDuration = 3600;
 //   macos-versions: (no params)
 //   notifications: days=30
 //   onboarding/posthog: days=30
+//   mobileOnboarding (onboarding/mobile): days=30
+//   mobileOnboardingTutorial (onboarding/mobile/tutorial): days=30
 //   revenue / subscriptions / app-subscriptions: (no params)
 //   mrr-trends / subscription-trends: months=12
 //   k-factor/posthog: days=30 (no payload cache — posthogResults caches the query)
@@ -93,7 +97,9 @@ const K_FACTOR_DAYS = 30;
 const ACTIVATION_DAYS = 60;
 
 function defaultOverheadMonthly(): number {
-  const envOverhead = parseFloat(process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || "");
+  const envOverhead = parseFloat(
+    process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || ""
+  );
   return Number.isFinite(envOverhead) && envOverhead >= 0 ? envOverhead : 57447;
 }
 
@@ -134,16 +140,26 @@ export async function POST(request: NextRequest) {
   // carrying no cost params looks up.
   await run("profitability", async () => {
     const { days, desktopCost, mobileCost } = parseProfitabilityParams(
-      new URLSearchParams({ days: String(PROFIT_DAYS) }),
+      new URLSearchParams({ days: String(PROFIT_DAYS) })
     );
-    const payload = await computeProfitability({ days, desktopCost, mobileCost });
-    await setPayload(profitabilityCacheKey(days, desktopCost, mobileCost), payload);
+    const payload = await computeProfitability({
+      days,
+      desktopCost,
+      mobileCost,
+    });
+    await setPayload(
+      profitabilityCacheKey(days, desktopCost, mobileCost),
+      payload
+    );
   });
 
   // Infra costs
   await run("infraCosts", async () => {
     const overheadMonthly = defaultOverheadMonthly();
-    const payload = await computeInfraCosts({ days: INFRA_DAYS, overheadMonthly });
+    const payload = await computeInfraCosts({
+      days: INFRA_DAYS,
+      overheadMonthly,
+    });
     await setPayload(infraCostsCacheKey(INFRA_DAYS, overheadMonthly), payload);
   });
 
@@ -175,6 +191,23 @@ export async function POST(request: NextRequest) {
   await run("onboarding", async () => {
     const payload = await computeOnboarding(ONBOARDING_DAYS);
     await setPayload(onboardingCacheKey(ONBOARDING_DAYS), payload);
+  });
+
+  // Mobile attach is intentionally on-demand: its join-heavy query is least time-sensitive.
+  await run("mobileOnboarding", async () => {
+    const payload = await computeMobileOnboarding("first-run", ONBOARDING_DAYS);
+    await setPayload(
+      mobileOnboardingCacheKey("first-run", ONBOARDING_DAYS),
+      payload
+    );
+  });
+
+  await run("mobileOnboardingTutorial", async () => {
+    const payload = await computeMobileOnboarding("tutorial", ONBOARDING_DAYS);
+    await setPayload(
+      mobileOnboardingCacheKey("tutorial", ONBOARDING_DAYS),
+      payload
+    );
   });
 
   // Revenue
@@ -219,7 +252,9 @@ export async function POST(request: NextRequest) {
   const failedNames = Object.keys(failed);
   if (failedNames.length > 0) {
     console.error(
-      `[precompute] run finished with ${failedNames.length} failed metric(s): ${failedNames.join(", ")}`,
+      `[precompute] run finished with ${
+        failedNames.length
+      } failed metric(s): ${failedNames.join(", ")}`
     );
   }
 

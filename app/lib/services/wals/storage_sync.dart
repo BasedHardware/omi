@@ -1,11 +1,9 @@
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/sync_state.dart';
@@ -25,7 +23,10 @@ class StorageSyncImpl implements StorageSync {
   BtDevice? _device;
 
   StreamSubscription? _storageStream;
+  Completer<bool>? _activeTransfer;
   String? _activeSyncDeviceId;
+  DeviceConnection? _activeSyncConnection;
+  int? _activeSyncEpoch;
   bool _firmwareStopRequested = false;
 
   IWalSyncListener listener;
@@ -47,6 +48,14 @@ class StorageSyncImpl implements StorageSync {
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
 
+  @visibleForTesting
+  set testDevice(BtDevice? device) => _device = device;
+
+  DeviceConnection? _testConnection;
+
+  @visibleForTesting
+  set testConnection(DeviceConnection? connection) => _testConnection = connection;
+
   @override
   void setLocalSync(LocalWalSync localSync) {
     _localSync = localSync;
@@ -67,6 +76,13 @@ class StorageSyncImpl implements StorageSync {
       if (storageSub != null) {
         unawaited(storageSub.cancel());
       }
+      // The cancelled subscription delivers no more packets, so the data
+      // callback never sees _isCancelled. End the file transfer here, or it
+      // only ends at its 10-minute timeout.
+      final transfer = _activeTransfer;
+      if (transfer != null && !transfer.isCompleted) {
+        transfer.complete(false);
+      }
       unawaited(_requestFirmwareStopSync());
     }
   }
@@ -79,7 +95,13 @@ class StorageSyncImpl implements StorageSync {
     if (deviceId == null || deviceId.isEmpty) return;
 
     try {
-      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var connection = _activeSyncConnection ?? _testConnection;
+      if (connection != null && _activeSyncEpoch != null) {
+        try {
+          if (connection.connectionEpoch != _activeSyncEpoch) connection = null;
+        } catch (_) {}
+      }
+      connection ??= await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) return;
       await connection.stopStorageSync();
       Logger.debug("StorageSync: STOP command sent to firmware");
@@ -92,6 +114,8 @@ class StorageSyncImpl implements StorageSync {
     _isCancelled = false;
     _isSyncing = false;
     _activeSyncDeviceId = null;
+    _activeSyncConnection = null;
+    _activeSyncEpoch = null;
     _firmwareStopRequested = false;
     _totalBytesDownloaded = 0;
     _downloadStartTime = null;
@@ -138,6 +162,11 @@ class StorageSyncImpl implements StorageSync {
   Future<List<Wal>> getMissingWals() async {
     return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
   }
+
+  /// Whether [wal] is one of the device files this sync listed. Its recordings
+  /// share [WalStorage.sdcard] with the legacy SD card sync, so per-recording
+  /// actions use this to reach the right sync.
+  bool owns(Wal wal) => _wals.any((w) => identical(w, wal));
 
   /// Discover files on device via BLE. Must be called BEFORE syncAll() to populate _wals.
   /// Sends STOP command and subscribes to data characteristic — never call during an active sync.
@@ -224,40 +253,110 @@ class StorageSyncImpl implements StorageSync {
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
-    if (wal.device == _device?.id) await _deleteWalsOnDevice([wal]);
+    if (_device != null && wal.device != _device!.id) {
+      // Not this device's recording (e.g. left by a device this phone no
+      // longer pairs with): drop the stale local row, nothing to delete.
+      _wals = _wals.where((w) => w.id != wal.id).toList();
+      listener.onWalUpdated();
+      return;
+    }
+    // A delete that was attempted drops the row whatever the reply said: the
+    // positional file index is potentially burned (FC-deleted-device-file-
+    // stays-addressable) and the next listing re-adds a file that survived.
+    // Only a delete that never reached the device — no connection — keeps the
+    // row, so it cannot resurrect as "new" on the next listing (#14688).
+    final attempted = await _deleteWalsOnDevice([wal]);
+    if (!attempted.contains(wal.id)) {
+      Logger.debug('StorageSync.deleteWal: delete of ${wal.id} never reached the device, keeping WAL');
+      listener.onWalUpdated();
+      return;
+    }
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
   }
 
+  /// Cached rows of [status] recorded by a device other than the connected
+  /// one. setDevice swaps the device without clearing cached rows, and a
+  /// refresh that fails before listing keeps them, so after a pendant switch
+  /// these rows' file indexes name the NEW pendant's files. Deletes must
+  /// never see them; the rows drop locally instead (their audio still lives
+  /// on their own device and re-lists when that device reconnects).
+  Set<String> _previousDeviceWalIds(WalStatus status) {
+    final device = _device;
+    if (device == null) return const {};
+    return _wals.where((w) => w.status == status && w.device != device.id).map((w) => w.id).toSet();
+  }
+
   @override
   Future<void> deleteAllSyncedWals() async {
-    final toDelete = _wals.where((w) => w.status == WalStatus.synced).toList();
-    await _deleteWalsOnDevice(toDelete);
-    _wals = _wals.where((w) => w.status != WalStatus.synced).toList();
+    // Stale previous-device rows get the same drop-only handling as the
+    // single-row path: sending their fileNums would delete the current
+    // pendant's files at those indexes (#14688). Only the status this clear
+    // covers drops; the other device's pending rows keep their local rows.
+    final stale = _previousDeviceWalIds(WalStatus.synced);
+    final toDelete = _wals.where((w) => w.status == WalStatus.synced && !stale.contains(w.id)).toList();
+    final attempted = await _deleteWalsOnDevice(toDelete);
+    _wals = _wals
+        .where((w) => !stale.contains(w.id) && (w.status != WalStatus.synced || !attempted.contains(w.id)))
+        .toList();
+    _logStaleRowsDropped('synced', stale.length);
+    _logNeverAttemptedClear('storage_synced_clear_kept', toDelete, attempted);
     listener.onWalUpdated();
   }
 
   @override
   Future<void> deleteAllPendingWals() async {
-    final toDelete = _wals.where((w) => w.status == WalStatus.miss).toList();
-    await _deleteWalsOnDevice(toDelete);
-    _wals = _wals.where((w) => w.status != WalStatus.miss).toList();
+    // Stale previous-device rows never reach the device delete (see
+    // deleteAllSyncedWals); they drop locally like the single-row path.
+    final stale = _previousDeviceWalIds(WalStatus.miss);
+    final toDelete = _wals.where((w) => w.status == WalStatus.miss && !stale.contains(w.id)).toList();
+    final attempted = await _deleteWalsOnDevice(toDelete);
+    // Attempted deletes drop their rows whatever the reply said (a positional
+    // index a delete may have removed is burned; the listing re-adds
+    // survivors). Rows the clear never attempted — no device, no connection —
+    // stay listed, so a clear run with the pendant away does not remove rows
+    // whose audio is still on the device and resurrect them as "new"
+    // recordings on the next scan (#14688).
+    _wals =
+        _wals.where((w) => !stale.contains(w.id) && (w.status != WalStatus.miss || !attempted.contains(w.id))).toList();
+    _logStaleRowsDropped('miss', stale.length);
+    _logNeverAttemptedClear('storage_pending_clear_kept', toDelete, attempted);
     listener.onWalUpdated();
+  }
+
+  void _logStaleRowsDropped(String cleared, int count) {
+    if (count == 0) return;
+    DebugLogManager.logEvent('storage_clear_stale_rows_dropped', {'cleared': cleared, 'stale': count});
+  }
+
+  void _logNeverAttemptedClear(String event, List<Wal> intended, Set<String> attempted) {
+    final kept = intended.where((w) => !attempted.contains(w.id)).length;
+    if (kept == 0) return;
+    DebugLogManager.logEvent(event, {
+      'intended': intended.length,
+      'attempted': attempted.length,
+      'kept': kept,
+      'deviceConnected': _device != null,
+    });
   }
 
   /// Deletes files on the device via CMD_DELETE_FILE. Firmware re-indexes files
   /// after each delete (higher indices shift down by 1), so delete highest index
-  /// first to keep remaining fileNums valid.
-  Future<void> _deleteWalsOnDevice(List<Wal> wals) async {
-    if (wals.isEmpty || _device == null) return;
+  /// first to keep remaining fileNums valid. Returns the ids whose delete was
+  /// sent to the device; a delete that never left the phone (no device, no
+  /// connection) attempts nothing and confirms nothing.
+  Future<Set<String>> _deleteWalsOnDevice(List<Wal> wals) async {
+    final attempted = <String>{};
+    if (wals.isEmpty || _device == null) return attempted;
     final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) {
       Logger.debug('StorageSync._deleteWalsOnDevice: no connection, skipping firmware delete');
-      return;
+      return attempted;
     }
     final targets = wals.where((w) => w.fileNum >= 0).toList()..sort((a, b) => b.fileNum.compareTo(a.fileNum));
     final deletedIds = targets.map((w) => w.id).toSet();
     for (final wal in targets) {
+      attempted.add(wal.id);
       try {
         final ok = await connection.deleteStorageFile(wal.fileNum);
         Logger.debug('StorageSync._deleteWalsOnDevice: deleted fileNum=${wal.fileNum} ok=$ok');
@@ -274,6 +373,7 @@ class StorageSyncImpl implements StorageSync {
         Logger.debug('StorageSync._deleteWalsOnDevice: failed fileNum=${wal.fileNum}: $e');
       }
     }
+    return attempted;
   }
 
   @override
@@ -321,37 +421,24 @@ class StorageSyncImpl implements StorageSync {
         );
         bool complete = await _syncSingleFile(wal, progress: progress, fileIndex: i, totalFiles: wals.length);
 
-        wal.status = WalStatus.synced;
-
         // If transfer was interrupted (BLE disconnect), save what we have and stop
         if (!complete) {
-          Logger.debug('StorageSync: File ${wal.fileNum} incomplete (device disconnected), stopping download phase');
+          Logger.debug('StorageSync: File ${wal.fileNum} incomplete, stopping download phase');
           listener.onWalUpdated();
           break;
         }
 
-        // Delete the file from device after successful BLE transfer (per PR #5905)
-        if (wal.fileNum >= 0) {
-          try {
-            var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
-            if (connection != null) {
-              Logger.debug("StorageSync: Deleting file index ${wal.fileNum} after successful BLE sync");
-              bool deleted = await connection.deleteStorageFile(wal.fileNum);
-              Logger.debug("StorageSync: Delete file ${wal.fileNum} result: $deleted");
+        wal.status = WalStatus.synced;
+        wal.deviceDownloadFraction = null;
 
-              // After deletion, firmware shifts indices — decrement remaining WALs (per PR #5905)
-              for (var j = 0; j < wals.length; j++) {
-                if (j == i) continue;
-                if (wals[j].fileNum > wal.fileNum) {
-                  wals[j].fileNum = wals[j].fileNum - 1;
-                }
-              }
-            }
-          } catch (e) {
-            Logger.debug("StorageSync: Failed to delete file ${wal.fileNum}: $e (data is safe on phone)");
-          }
-        }
+        await _deleteTransferredFile(wal, wals);
 
+        // The recording is on the phone now, so it leaves the device list. After
+        // a delete the firmware re-indexes its files, so wal.fileNum then names
+        // another recording, which deleteAllSyncedWals would delete. A delete
+        // that timed out here can still finish on the device, so drop it either
+        // way; a file the device kept is listed again by the next refresh.
+        _wals = _wals.where((w) => !identical(w, wal)).toList();
         listener.onWalUpdated();
       }
     } catch (e) {
@@ -365,20 +452,81 @@ class StorageSyncImpl implements StorageSync {
     return resp;
   }
 
+  /// Delete the file from device after successful BLE transfer (per PR #5905),
+  /// only on the connection that served it, then shift [remaining] down.
+  /// Returns whether the device deleted the file.
+  Future<bool> _deleteTransferredFile(Wal wal, List<Wal> remaining) async {
+    if (wal.fileNum < 0) return false;
+    try {
+      final srcConn = _activeSyncConnection;
+      final srcDeviceId = _activeSyncDeviceId;
+      var sameSource = srcConn != null && srcDeviceId != null && _device?.id == srcDeviceId && !_isCancelled;
+      if (sameSource && _activeSyncEpoch != null) {
+        try {
+          sameSource = srcConn.connectionEpoch == _activeSyncEpoch;
+        } catch (_) {}
+      }
+      if (!sameSource) {
+        Logger.debug(
+          'StorageSync: device/connection changed during persistence — keeping fileNum ${wal.fileNum} on device',
+        );
+      } else if (srcConn != null) {
+        Logger.debug("StorageSync: Deleting file index ${wal.fileNum} after successful BLE sync");
+        bool deleted = await srcConn.deleteStorageFile(wal.fileNum);
+        Logger.debug("StorageSync: Delete file ${wal.fileNum} result: $deleted");
+
+        // After deletion, firmware shifts indices — decrement remaining WALs (per PR #5905)
+        if (deleted) {
+          for (final other in remaining) {
+            if (identical(other, wal)) continue;
+            if (other.fileNum > wal.fileNum) {
+              other.fileNum = other.fileNum - 1;
+            }
+          }
+        }
+        return deleted;
+      }
+    } catch (e) {
+      Logger.debug("StorageSync: Failed to delete file ${wal.fileNum}: $e (data is safe on phone)");
+    }
+    return false;
+  }
+
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    // Resetting the sync state here would hijack a drain that is still reading.
+    if (_isSyncing) throw Exception('Device transfer already in progress');
+
     _resetSyncState();
     _isSyncing = true;
+    wal.isSyncing = true;
+    wal.syncStartedAt = DateTime.now();
+    listener.onWalUpdated();
 
     try {
       progress?.onWalSyncedProgress(0.0);
-      await _syncSingleFile(wal);
+      final complete = await _syncSingleFile(wal, progress: progress);
+      if (!complete) {
+        // Same as an interrupted syncAll: keep the file on the device and the
+        // recording pending, but tell the caller nothing was transferred.
+        throw Exception('Device transfer incomplete; recording kept on device');
+      }
+      wal.status = WalStatus.synced;
+      if (await _deleteTransferredFile(wal, _wals)) {
+        // Its index now belongs to the next file, so it must not stay listed
+        // for deleteAllSyncedWals to delete again.
+        _wals = _wals.where((w) => !identical(w, wal)).toList();
+      }
       progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
-      listener.onWalUpdated();
     } catch (e) {
       Logger.debug('StorageSync: Error syncing file: $e');
+      rethrow;
     } finally {
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.deviceDownloadFraction = null;
       _isSyncing = false;
+      listener.onWalUpdated();
     }
 
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -405,18 +553,26 @@ class StorageSyncImpl implements StorageSync {
     );
     if (_device == null) return false;
 
-    var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) throw Exception('Device not connected');
 
     _activeSyncDeviceId = _device!.id;
+    _activeSyncConnection = connection;
+    try {
+      _activeSyncEpoch = connection.connectionEpoch;
+    } catch (_) {
+      _activeSyncEpoch = null;
+    }
     _downloadStartTime = DateTime.now();
     _totalBytesDownloaded = 0;
 
     final completer = Completer<bool>();
+    _activeTransfer = completer;
     List<List<int>> bytesData = [];
     int offset = wal.storageOffset;
     bool firstDataReceived = false;
     bool hasError = false;
+    bool hasParseGap = false;
     Timer? timeoutTimer;
     int packetCount = 0;
 
@@ -453,7 +609,11 @@ class StorageSyncImpl implements StorageSync {
           if (value[0] == 0) {
             Logger.debug('StorageSync: Ack received (good to go)');
           } else if (value[0] == 3) {
-            Logger.debug('StorageSync: Bad file size');
+            Logger.debug('StorageSync: Bad file size / cancel from device');
+            hasError = true;
+            if (!completer.isCompleted) {
+              completer.complete(false);
+            }
           } else if (value[0] == 4) {
             Logger.debug('StorageSync: File is empty');
             if (!completer.isCompleted) {
@@ -466,8 +626,9 @@ class StorageSyncImpl implements StorageSync {
             }
           } else {
             Logger.debug('StorageSync: Error/status byte: ${value[0]}');
+            hasError = true;
             if (!completer.isCompleted) {
-              completer.complete(true);
+              completer.complete(false);
             }
           }
           return;
@@ -478,6 +639,9 @@ class StorageSyncImpl implements StorageSync {
         // Data packet: [timestamp:4 BE][audio_data:440] per notification.
         // Firmware writes 440-byte blocks with packed [size:1][frame:size]... and zero padding.
         // Each BLE notification is one complete block — parse independently.
+        if (value.length <= 4) {
+          hasParseGap = true;
+        }
         if (value.length > 4) {
           var audioData = value.sublist(4);
           var audioLen = audioData.length;
@@ -510,6 +674,7 @@ class StorageSyncImpl implements StorageSync {
             if (wal.storageTotalBytes > 0) {
               double fileProgress = (offset / wal.storageTotalBytes).clamp(0.0, 1.0);
               double overallProgress = (fileIndex + fileProgress) / totalFiles;
+              wal.deviceDownloadFraction = fileProgress;
               progress?.onWalSyncedProgress(
                 overallProgress.clamp(0.0, 1.0),
                 speedKBps: _currentSpeedKBps,
@@ -562,8 +727,9 @@ class StorageSyncImpl implements StorageSync {
       'StorageSync: Waiting for file ${wal.fileNum} transfer (expecting ${wal.storageTotalBytes} bytes from offset $offset)...',
     );
 
+    bool endReached = false;
     try {
-      await completer.future.timeout(const Duration(minutes: 10));
+      endReached = await completer.future.timeout(const Duration(minutes: 10));
     } on TimeoutException {
       Logger.debug(
         'StorageSync: File ${wal.fileNum} OVERALL TIMEOUT. offset=$offset/${wal.storageTotalBytes} frames=${bytesData.length}',
@@ -571,19 +737,31 @@ class StorageSyncImpl implements StorageSync {
     } catch (e) {
       Logger.debug('StorageSync: File ${wal.fileNum} ERROR: $e. offset=$offset/${wal.storageTotalBytes}');
     } finally {
-      if (_isCancelled) {
-        await _requestFirmwareStopSync();
+      if (_isCancelled || !endReached) {
+        try {
+          await connection.stopStorageSync();
+          Logger.debug('StorageSync: STOP sent on the source connection');
+        } catch (e) {
+          Logger.debug('StorageSync: STOP failed: $e');
+        }
       }
       await _storageStream?.cancel();
       _storageStream = null;
+      if (identical(_activeTransfer, completer)) _activeTransfer = null;
       timeoutTimer.cancel();
+      if (!endReached || hasError) wal.deviceDownloadFraction = null;
     }
 
-    bool transferComplete = offset >= wal.storageTotalBytes;
+    bool transferComplete = endReached &&
+        offset >= wal.storageTotalBytes &&
+        !hasError &&
+        !hasParseGap &&
+        !_isCancelled &&
+        bytesData.isNotEmpty;
 
     if (bytesData.isEmpty) {
       Logger.debug('StorageSync: No opus frames parsed for file ${wal.fileNum} ($offset raw bytes)');
-      return transferComplete;
+      return false;
     }
 
     var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
@@ -591,20 +769,25 @@ class StorageSyncImpl implements StorageSync {
     int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
     int timerStart =
         wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+    // A file without a device timestamp gets an estimated start: one run per file.
+    final clockRun = wal.timerStart > 0 ? null : (wal.clockRun ?? Wal.newClockRun());
     int bytesLeft = 0;
 
-    while (bytesData.length - bytesLeft >= chunkSize) {
-      var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
-      bytesLeft += chunkSize;
-      var file = await _flushToDisk(wal, chunk, timerStart);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration);
-      timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
-    }
+    try {
+      while (bytesData.length - bytesLeft >= chunkSize) {
+        var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
+        bytesLeft += chunkSize;
+        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration, clockRun: clockRun);
+        timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
+      }
 
-    if (bytesLeft < bytesData.length) {
-      var chunk = bytesData.sublist(bytesLeft);
-      var file = await _flushToDisk(wal, chunk, timerStart);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration);
+      if (bytesLeft < bytesData.length) {
+        var chunk = bytesData.sublist(bytesLeft);
+        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration, clockRun: clockRun);
+      }
+    } catch (e) {
+      Logger.debug('StorageSync: durable write failed for file ${wal.fileNum}: $e');
+      transferComplete = false;
     }
 
     Logger.debug(
@@ -613,60 +796,18 @@ class StorageSyncImpl implements StorageSync {
     return transferComplete;
   }
 
-  /// Write opus frames to disk in WAL format: [frame_length_u32_le][frame_data]...
-  /// This format is compatible with /v2/sync-local-files backend endpoint.
-  /// Uses same ByteData conversion as SDCardWalSync._flushToDisk for consistency.
-  Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart) async {
-    final directory = await getApplicationDocumentsDirectory();
-    String filePath = '${directory.path}/${wal.getFileNameByTimeStarts(timerStart)}';
+  int _storageFileSeq = 0;
 
-    List<int> data = [];
-    for (int i = 0; i < frames.length; i++) {
-      var frame = frames[i];
-
-      final byteFrame = ByteData(frame.length);
-      for (int j = 0; j < frame.length; j++) {
-        byteFrame.setUint8(j, frame[j]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
-    }
-
-    final file = File(filePath);
-    await file.writeAsBytes(data);
-
-    Logger.debug('StorageSync: Wrote ${data.length} bytes (${frames.length} frames) to $filePath');
-    return file;
-  }
-
-  /// Register a downloaded chunk with LocalWalSync so it gets uploaded to backend.
-  Future<void> _registerWithLocalSync(
-      Wal wal, File file, int timerStart, int frameCount, int admittedGeneration) async {
-    if (_localSync == null) {
-      Logger.debug("StorageSync: WARNING - Cannot register file, LocalWalSync not available");
-      return;
-    }
-
-    int fps = wal.codec.getFramesPerSecond();
-    int seconds = fps > 0 ? frameCount ~/ fps : 0;
-
-    Wal localWal = Wal(
-      codec: wal.codec,
-      channel: wal.channel,
-      sampleRate: wal.sampleRate,
-      timerStart: timerStart,
-      filePath: file.path.split('/').last,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      device: wal.device,
-      deviceModel: wal.deviceModel,
-      seconds: seconds,
-      totalFrames: frameCount,
-      syncedFrameOffset: 0,
-      originalStorage: WalStorage.sdcard,
-    );
-
-    await _localSync!.addExternalWal(localWal, admittedGeneration: admittedGeneration);
-    Logger.debug('StorageSync: Registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames) with LocalWalSync');
+  Future<void> _writeChunkDurably(Wal wal, List<List<int>> chunk, int timerStart, int admittedGeneration,
+      {String? clockRun}) async {
+    final localSync = _localSync;
+    if (localSync == null) throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
+    await localSync.persistDeviceChunk(
+        source: wal,
+        frames: chunk,
+        timerStart: timerStart,
+        admittedGeneration: admittedGeneration,
+        clockRun: clockRun,
+        nextCollisionSequence: () => _storageFileSeq++);
   }
 }

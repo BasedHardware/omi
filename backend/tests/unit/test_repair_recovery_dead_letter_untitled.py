@@ -137,8 +137,6 @@ def evaluate(runtime, log):
         ({'sync_relevance_user_kept': True}, 'user_kept'),
         ({'starred': True}, 'user_curated'),
         ({'folder_user_set': True}, 'user_curated'),
-        ({'sync_live_target': True}, 'user_curated'),
-        ({'visibility': 'shared'}, 'user_curated'),
     ],
 )
 def test_eligibility_predicate(tmp_path, change, reason):
@@ -146,6 +144,13 @@ def test_eligibility_predicate(tmp_path, change, reason):
     client.rows[ROW_PATH].update(change)
     assert evaluate(runtime, log)['outcome'] == reason
     assert not client.transactions
+
+
+@pytest.mark.parametrize('change', [{'sync_live_target': True}, {'visibility': 'shared'}])
+def test_live_ownership_and_sharing_are_not_curation(tmp_path, change):
+    client, runtime, log = setup(tmp_path, apply=True)
+    client.rows[ROW_PATH].update(change)
+    assert evaluate(runtime, log)['outcome'] == 'written'
 
 
 def test_missing_conversation(tmp_path):

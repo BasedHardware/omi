@@ -6,7 +6,9 @@
   "canonical_prevention_artifact": [
     "backend/utils/conversations/finalizer.py",
     "backend/tests/unit/test_conversation_smart_merge_finalizer.py",
-    "backend/tests/unit/test_conversation_smart_merge.py"
+    "backend/tests/unit/test_conversation_smart_merge.py",
+    "backend/tests/unit/test_sync_enrichment_custody.py",
+    "backend/tests/integration/test_sync_enrichment_custody_emulator.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

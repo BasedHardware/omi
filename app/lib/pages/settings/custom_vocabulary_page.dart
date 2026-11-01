@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/app_globals.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class CustomVocabularyPage extends StatefulWidget {
@@ -24,12 +26,18 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
   // Debounced deletion
   final Set<String> _pendingDeletions = {};
   Timer? _deletionDebounceTimer;
+  VoidCallback? _runDeletionBatch;
   bool _isDeletingBatch = false;
 
   @override
   void dispose() {
     _vocabularyController.dispose();
-    _deletionDebounceTimer?.cancel();
+    // Leaving the page within the debounce window must still delete the queued words, not drop them. The batch starts
+    // in a microtask because removing a word notifies listeners, which must not happen while the tree is torn down.
+    if (_deletionDebounceTimer?.isActive ?? false) {
+      _deletionDebounceTimer!.cancel();
+      scheduleMicrotask(_runDeletionBatch!);
+    }
     super.dispose();
   }
 
@@ -195,10 +203,18 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
 
     if (words.isEmpty) return;
 
-    _vocabularyController.clear();
-
     final success = await userProvider.addVocabularyWords(words);
-    if (success && mounted) {
+    if (!mounted) return;
+
+    // Keep the typed words until they are saved, so a failed save can be retried. False with every word already in
+    // the list only means there was nothing new to save.
+    if (!success && !words.every(userProvider.transcriptionVocabulary.contains)) {
+      OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+      return;
+    }
+
+    _vocabularyController.clear();
+    if (success) {
       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
     }
   }
@@ -210,24 +226,37 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
 
     // Cancel existing timer and start new one (debounce)
     _deletionDebounceTimer?.cancel();
-    _deletionDebounceTimer = Timer(const Duration(seconds: 1), () {
-      _executeBatchDeletion(userProvider);
-    });
+    // Read now: dispose() may run the batch once the page can no longer look providers up.
+    final captureProvider = context.read<CaptureProvider>();
+    _runDeletionBatch = () => _executeBatchDeletion(userProvider, captureProvider);
+    _deletionDebounceTimer = Timer(const Duration(seconds: 1), _runDeletionBatch!);
   }
 
-  Future<void> _executeBatchDeletion(UserProvider userProvider) async {
+  Future<void> _executeBatchDeletion(UserProvider userProvider, CaptureProvider captureProvider) async {
     if (_pendingDeletions.isEmpty) return;
 
-    setState(() {
-      _isDeletingBatch = true;
-    });
+    // After dispose() the words are still removed; only the page updates are skipped.
+    if (mounted) {
+      setState(() {
+        _isDeletingBatch = true;
+      });
+    }
 
     final wordsToDelete = List<String>.from(_pendingDeletions);
     bool anySuccess = false;
+    bool anyFailed = false;
 
     for (final word in wordsToDelete) {
       final success = await userProvider.removeVocabularyWord(word);
-      if (success) anySuccess = true;
+      if (success) {
+        anySuccess = true;
+      } else {
+        anyFailed = true;
+      }
+    }
+
+    if (anySuccess) {
+      captureProvider.onTranscriptionSettingsChanged();
     }
 
     if (mounted) {
@@ -236,9 +265,14 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
         _isDeletingBatch = false;
       });
 
-      if (anySuccess) {
-        context.read<CaptureProvider>().onTranscriptionSettingsChanged();
+      // A word that could not be removed shows its chip again; say why instead of restoring it silently.
+      if (anyFailed) {
+        OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
       }
+    } else if (anyFailed) {
+      // The page is gone, so report the failure over whatever is showing now.
+      final l10n = globalNavigatorKey.currentContext?.l10n;
+      if (l10n != null) AppSnackbar.showSnackbarError(l10n.failedToSaveCheckConnection);
     }
   }
 

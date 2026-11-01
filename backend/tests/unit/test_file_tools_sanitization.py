@@ -92,6 +92,17 @@ for _name, _attrs in {
         if not hasattr(_m, _a):
             setattr(_m, _a, MagicMock())
 
+# file_tools catches this type. The isolated loader must see a real exception
+# class; a MagicMock in an except clause is a TypeError, not a catch.
+_chat_file_stub = _mod("utils.other.chat_file")
+_rejected = getattr(_chat_file_stub, "ProviderRejectedChatFileError", None)
+if not (isinstance(_rejected, type) and issubclass(_rejected, BaseException)):
+
+    class ProviderRejectedChatFileError(Exception):
+        pass
+
+    _chat_file_stub.ProviderRejectedChatFileError = ProviderRejectedChatFileError
+
 ft = _load(
     "utils.retrieval.tools._file_tools_sanitization_test",
     "utils/retrieval/tools/file_tools.py",
@@ -119,6 +130,21 @@ class TestFileToolsSanitization(unittest.TestCase):
                 "I encountered an error while searching the files. Please try again or rephrase your question.", result
             )
             self.assertNotIn("redis pool exhausted", result)
+
+    def test_search_files_provider_rejection_does_not_leak_provider_text(self):
+        config = {"configurable": {"user_id": "u1", "chat_session_id": "s1"}}
+
+        class _Rejected:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def process_chat_with_file(self, *_args, **_kwargs):
+                raise ft.ProviderRejectedChatFileError("secret provider body")
+
+        with patch.object(ft, "FileChatTool", _Rejected):
+            result = ft.search_files_tool.func(question="test", config=config)
+        self.assertEqual("The file could not be processed.", result)
+        self.assertNotIn("secret provider body", result)
 
 
 if __name__ == "__main__":

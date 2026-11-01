@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-failed-listing-read-as-complete-capture",
+  "violated_contract": "A caller that treats a storage listing as the complete set of captured audio must receive either the complete listing or an error. A timed-out or failed sub-listing must never be dropped into a shorter or empty result, because the caller then admits, completes or disposes of a recording with audio silently missing.",
+  "canonical_prevention": "Give the shared listing helper an explicit completeness mode that re-raises sub-listing failures, and have every completeness-critical caller (batch record admission and any terminal or partial decision) request it; best-effort readers such as playback and speaker sampling keep the degraded listing.",
+  "canonical_prevention_artifact": [
+    "backend/utils/other/storage.py",
+    "backend/tests/unit/test_audio_chunk_archive_listing.py",
+    "backend/tests/unit/test_batch_pipeline_live.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/other/storage.py",
+    "backend/utils/other/raw_audio_read.py",
+    "backend/utils/batch_pipeline/live.py"
+  ],
+  "status": "open"
+}

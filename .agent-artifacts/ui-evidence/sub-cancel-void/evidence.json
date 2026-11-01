@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-cancel-pending-plans.png",
+      "platform": "mobile-ios",
+      "description": "Cancel-pending Plus plan shows when it ends and that resubscribing is not charged until that date.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-resubscribe-button.png",
+      "platform": "mobile-ios",
+      "description": "The current monthly price stays selected and the primary action reads Resubscribe.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-before-yearly-selected.png",
+      "platform": "mobile-ios",
+      "description": "Before the fix, Resubscribe followed the default yearly price.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-desktop-macos-current-plan-resubscribe.png",
+      "platform": "desktop-macos",
+      "description": "The current-plan card shows Resubscribe beside Manage while a cancellation is pending.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -24,7 +24,6 @@ class FakeLLM:
 
 @pytest.fixture
 def stored_items(monkeypatch):
-    stored = []
 
     def fake_get_llm(feature):
         response = ExtractedInformation(
@@ -36,48 +35,14 @@ def stored_items(monkeypatch):
         return FakeLLM(response)
 
     monkeypatch.setattr(chat, 'get_llm', fake_get_llm)
-    monkeypatch.setattr(chat, 'add_filter_category_item', lambda uid, cat, item: stored.append((cat, item)))
-    return stored
 
 
-def test_extracted_metadata_survives_redis_error(monkeypatch) -> None:
-    import redis
-    from database import redis_db
-
-    def fake_get_llm(feature):
-        response = ExtractedInformation(
-            people=['Ada Lovelace'],
-            topics=['Mathematics'],
-            entities=['Analytical Engine'],
-            dates=[],
-        )
-        return FakeLLM(response)
-
-    def boom(*_a, **_k):
-        raise redis.exceptions.RedisError('OOM')  # type: ignore[attr-defined]
-
-    monkeypatch.setattr(chat, 'get_llm', fake_get_llm)
-    monkeypatch.setattr(redis_db, '_filter_category_scripts', boom)
-    metadata = chat._process_extracted_metadata('uid-1', prompt='ignored', reference_date='2026-08-16')
-    assert metadata['people'] == ['ada lovelace']
-    assert 'mathematics' in metadata['topics']
-
-
-def test_stored_filters_are_normalized_at_storage_boundary(monkeypatch, stored_items) -> None:
+def test_extracted_vector_metadata_is_normalized(monkeypatch, stored_items) -> None:
     metadata = chat._process_extracted_metadata('uid-1', prompt='ignored', reference_date='2026-08-16')
 
     assert metadata['people'] == ['new york city', 'john patrick doe']
     assert metadata['topics'] == ['ai research', 'great big topic']
     assert metadata['entities'] == ['bank america', 'nlp']
-
-    assert sorted(stored_items) == [
-        ('entities', 'bank america'),
-        ('entities', 'nlp'),
-        ('people', 'john patrick doe'),
-        ('people', 'new york city'),
-        ('topics', 'ai research'),
-        ('topics', 'great big topic'),
-    ]
 
 
 @pytest.mark.parametrize(

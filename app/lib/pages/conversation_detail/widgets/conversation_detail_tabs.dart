@@ -13,16 +13,20 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// Summary and Transcript under the title and its chips (Omi v8 `.ctabs`): 15/600 labels 22 pt
 /// apart at the leading edge, the open one in the primary ink with a 2 pt underline sitting on a hairline,
-/// the other in the tertiary ink. Swiping the pages below moves the underline with them. Private or
-/// Shared sits at the trailing end and opens [ConversationVisibilitySheet].
+/// the other in the tertiary ink. Swiping the pages below moves the underline with them. A shared
+/// conversation says so at the trailing end, which opens [ConversationVisibilitySheet]; a private one
+/// (the default) shows nothing there, and Visibility stays in the ⋯ menu.
 class ConversationDetailTabs extends StatelessWidget {
-  const ConversationDetailTabs({super.key, required this.controller, required this.onTap});
+  const ConversationDetailTabs({super.key, required this.controller, required this.onTap, this.showVisibility = true});
 
   /// Index 0 is Summary, 1 is Transcript.
   final TabController controller;
 
   /// A tab was tapped (not swiped to).
   final ValueChanged<int> onTap;
+
+  /// The saved conversation's "Shared" label; a live episode has no saved conversation to share yet.
+  final bool showVisibility;
 
   @override
   Widget build(BuildContext context) {
@@ -33,39 +37,46 @@ class ConversationDetailTabs extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
       child: DecoratedBox(
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: ConversationDetailInk.hairline))),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: ConversationDetailInk.hairline)),
+        ),
         child: Row(
           children: [
             Expanded(
               child: Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: TabBar(
-                  controller: controller,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  padding: EdgeInsets.zero,
-                  labelPadding: const EdgeInsetsDirectional.only(end: 22),
-                  indicatorSize: TabBarIndicatorSize.label,
-                  indicator: UnderlineTabIndicator(borderSide: BorderSide(color: OmiColors.textPrimary, width: 2)),
-                  dividerHeight: 0,
-                  labelColor: OmiColors.textPrimary,
-                  unselectedLabelColor: ConversationDetailInk.label,
-                  labelStyle: style,
-                  unselectedLabelStyle: style,
-                  overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-                  splashFactory: NoSplash.splashFactory,
-                  onTap: (index) {
-                    OmiHaptics.selection();
-                    onTap(index);
-                  },
-                  tabs: [
-                    Tab(key: const Key('conversation_tab_summary'), height: 44, text: l10n.summary),
-                    Tab(key: const Key('conversation_tab_transcript'), height: 44, text: l10n.transcript),
-                  ],
+                // The 44 pt tabs hold their labels up to this scale; past it the labels stop
+                // growing instead of clipping, as the system's own tab bars do.
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.6,
+                  child: TabBar(
+                    controller: controller,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsetsDirectional.only(end: 22),
+                    indicatorSize: TabBarIndicatorSize.label,
+                    indicator: UnderlineTabIndicator(borderSide: BorderSide(color: OmiColors.textPrimary, width: 2)),
+                    dividerHeight: 0,
+                    labelColor: OmiColors.textPrimary,
+                    unselectedLabelColor: ConversationDetailInk.label,
+                    labelStyle: style,
+                    unselectedLabelStyle: style,
+                    overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                    splashFactory: NoSplash.splashFactory,
+                    onTap: (index) {
+                      OmiHaptics.selection();
+                      onTap(index);
+                    },
+                    tabs: [
+                      Tab(key: const Key('conversation_tab_summary'), height: 44, text: l10n.summary),
+                      Tab(key: const Key('conversation_tab_transcript'), height: 44, text: l10n.transcript),
+                    ],
+                  ),
                 ),
               ),
             ),
-            const _VisibilityLabel(),
+            if (showVisibility) const _VisibilityLabel(),
           ],
         ),
       ),
@@ -73,18 +84,19 @@ class ConversationDetailTabs extends StatelessWidget {
   }
 }
 
-/// "Private" with a lock in the tertiary ink, or "Shared" with a globe in green.
+/// "Shared" with a globe in green, only when the conversation is not private (the default).
 class _VisibilityLabel extends StatelessWidget {
   const _VisibilityLabel();
 
   @override
   Widget build(BuildContext context) {
     final conversation = context.watch<ConversationDetailProvider>().conversationOrNull;
-    if (conversation == null) return const SizedBox.shrink();
+    if (conversation == null || conversation.visibility == ConversationVisibility.private_) {
+      return const SizedBox.shrink();
+    }
     final l10n = context.l10n;
-    final shared = conversation.visibility != ConversationVisibility.private_;
-    final label = shared ? l10n.shared : l10n.private;
-    final ink = shared ? OmiColors.success : ConversationDetailInk.label;
+    final label = l10n.shared;
+    final ink = OmiColors.success;
     return Semantics(
       button: true,
       label: '${l10n.visibility}: $label',
@@ -102,9 +114,12 @@ class _VisibilityLabel extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              FaIcon(shared ? FontAwesomeIcons.globe : FontAwesomeIcons.lock, size: 12, color: ink),
+              FaIcon(FontAwesomeIcons.globe, size: 12, color: ink),
               const SizedBox(width: 6),
-              Text(label, style: OmiType.footnote.copyWith(color: ink, fontWeight: FontWeight.w500)),
+              Text(
+                label,
+                style: OmiType.footnote.copyWith(color: ink, fontWeight: FontWeight.w500),
+              ),
             ],
           ),
         ),

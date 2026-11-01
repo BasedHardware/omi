@@ -36,6 +36,7 @@ from config.conversation_smart_merge import (
     STRETCH_SUMMARY_CHARS,
     TRANSCRIPT_EXCERPT_CHARS,
 )
+from utils.speakers.display import display_participants
 
 QUESTION_NAME = 'decision'
 QUESTIONS: dict[str, dict[str, Any]] = {
@@ -120,9 +121,10 @@ def _minutes(seconds: float) -> int:
 
 def transcript_lines(segments: Sequence[Mapping[str, Any]]) -> list[str]:
     lines = []
+    display = display_participants(segments, owner_name='You')
     for segment in segments:
         text = str(segment.get('text') or '').strip()
-        who = 'User' if segment.get('is_user') else f'Speaker {segment.get("speaker_id")}'
+        who = display.label(segment)
         lines.append(f'{who}: {text}')
     return lines
 

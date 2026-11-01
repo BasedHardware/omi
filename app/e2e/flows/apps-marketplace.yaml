@@ -34,7 +34,7 @@ steps:
 
   - id: S2
     name: Verify Apps marketplace page
-    do: "Verify the marketplace shows: 'Create Your Own App' banner at top, search bar ('Search 1500+ Apps') with person/download/filter icons, 'Featured' section with app cards, and category sections."
+    do: "Verify the marketplace shows: 'Create Your Own App' banner at top, search bar ('Search apps') with person/download/filter icons, 'Featured' section with app cards, and category sections."
     verify: true
     expect:
       - kind: text_visible

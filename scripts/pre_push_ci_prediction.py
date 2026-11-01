@@ -39,6 +39,8 @@ PHASE_ORDER = (
     "app-ios-compile",
     "desktop-agent-runtime",
     "desktop-swift-tests",
+    "desktop-swift-test-compile",
+    "desktop-siri-advisory",
     "desktop-swift-release-compile",
     "desktop-swift-release-test-compile",
     "desktop-swift-notification-release-regression",
@@ -138,6 +140,16 @@ DESKTOP_NOTIFICATION_REGRESSION_INPUTS = {
     "desktop/macos/Desktop/Sources/OmiApp.swift",
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift",
     "desktop/macos/Desktop/Sources/Providers/DeviceProvider.swift",
+}
+
+DESKTOP_SIRI_ADVISORY_INPUTS = {
+    "desktop/macos/Desktop/Tests/SiriIntentServiceTests.swift",
+    "desktop/macos/Desktop/Package.swift",
+    "desktop/macos/Desktop/Package.resolved",
+    "desktop/macos/ci/xcode-pin.json",
+    "desktop/macos/scripts/embed-app-intents-metadata.sh",
+    ".github/workflows/desktop-swift-ci.yml",
+    "scripts/pre_push_ci_prediction.py",
 }
 
 DESKTOP_RELEASE_PR_INPUTS = {
@@ -292,6 +304,7 @@ def _is_app_compile_smoke_input(path: str) -> bool:
             "app/setup/scripts/",
             "app/config/",
             "app/assets/",
+            "app/integration_test/android_fgs_probe/",
         )
     ) or path in {
         "app/pubspec.yaml",
@@ -300,24 +313,52 @@ def _is_app_compile_smoke_input(path: str) -> bool:
         "app/analysis_options.yaml",
         "app/l10n.yaml",
         "app/flavorizr.yaml",
+        "app/scripts/android_emulator.py",
+        "app/scripts/android_startup_smoke.py",
+        "app/scripts/android_fgs_probe.py",
     }
 
 
 def _is_app_android_pr_input(path: str) -> bool:
     """Inputs that can change Android's build graph or native interface on a PR."""
-    return path.startswith(("app/android/", "app/setup/prebuilt/", "app/setup/scripts/")) or path in {
-        "app/lib/pigeon_interfaces.dart", "app/lib/phone_mic_interface.dart",
-        "app/pubspec.yaml", "app/pubspec.lock", "app/build.yaml",
+    return path.startswith(
+        (
+            "app/android/",
+            "app/setup/prebuilt/",
+            "app/setup/scripts/",
+            "app/integration_test/android_fgs_probe/",
+            "app/lib/startup/",
+            "app/lib/services/wals/",
+            "app/lib/services/capture/",
+        )
+    ) or path in {
+        "app/lib/pigeon_interfaces.dart",
+        "app/lib/phone_mic_interface.dart",
+        "app/lib/main.dart",
+        "app/lib/startup_auth.dart",
+        "app/lib/startup_firebase.dart",
+        "app/lib/startup_routing.dart",
+        "app/lib/flavors.dart",
+        "app/scripts/android_emulator.py",
+        "app/scripts/android_startup_smoke.py",
+        "app/scripts/android_fgs_probe.py",
+        "app/pubspec.yaml",
+        "app/pubspec.lock",
+        "app/build.yaml",
         ".github/workflows/mobile-app-checks.yml",
     }
 
 
 def _is_app_journeys_pr_input(path: str) -> bool:
     """Journey definitions, their harness, and direct capture/dev-control inputs."""
-    return path.startswith((
-        "app/integration_test/journeys/", "app/test/support/capture/",
-        "app/lib/services/dev_controls/", "app/lib/services/capture/",
-    )) or path in {
+    return path.startswith(
+        (
+            "app/integration_test/journeys/",
+            "app/test/support/capture/",
+            "app/lib/services/dev_controls/",
+            "app/lib/services/capture/",
+        )
+    ) or path in {
         "contracts/session/session-evidence-v1.schema.json",
         "scripts/dev-harness/mobile-verify.sh",
         "scripts/dev-harness/dev_harness/mobile_verify.py",
@@ -343,7 +384,8 @@ def _is_app_ios_compile_input(path: str) -> bool:
         path.startswith("app/ios/")
         or path.startswith(".github/actions/detect-changes/")
         or path in IOS_PIGEON_DEFINITIONS
-        or path in {
+        or path
+        in {
             "app/pubspec.yaml",
             "app/pubspec.lock",
             ".github/workflows/mobile-app-checks.yml",
@@ -392,6 +434,10 @@ def _is_releasable_desktop_path(path: str) -> bool:
     if path in {"desktop/macos/CHANGELOG.json", "desktop/macos/AGENTS.md"}:
         return False
     return any(_matches_desktop_release_pathspec(path, pathspec) for pathspec in DESKTOP_RELEASE_PATHSPECS)
+
+
+def _is_generated_desktop_swift_client(path: str) -> bool:
+    return path.startswith("desktop/macos/Desktop/Sources/Generated/") and path.endswith(".generated.swift")
 
 
 def _is_desktop_swift_test_input(path: str) -> bool:
@@ -469,6 +515,15 @@ def resolve_impact(
         path in ROUTING_INPUTS or path.startswith(".github/actions/detect-changes/") for path in normalized_paths
     )
 
+    desktop_paths = [path for path in normalized_paths if path.startswith("desktop/macos/")]
+    # Selection edits must exercise the existing full lane too.
+    generated_only_pr = (
+        event == "pull_request"
+        and bool(desktop_paths)
+        and not selector_changed
+        and all(_is_generated_desktop_swift_client(path) for path in desktop_paths)
+    )
+
     for path in normalized_paths:
         if _is_app_android_pr_input(path):
             selected.add("app-android-pr")
@@ -501,11 +556,13 @@ def resolve_impact(
                 selected.add("desktop-swift-tests")
             # The full main/health lane compiles the complete release test
             # target. PRs reserve that build for release-specific inputs.
-            if _is_desktop_release_test_input(path) and (
-                event != "pull_request" or _is_desktop_release_pr_input(path)
+            if (
+                not generated_only_pr
+                and _is_desktop_release_test_input(path)
+                and (event != "pull_request" or _is_desktop_release_pr_input(path))
             ):
                 selected.add("desktop-swift-release-test-compile")
-            if _is_desktop_notification_input(path):
+            if not generated_only_pr and _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
             if _is_desktop_agent_runtime_input(path):
                 selected.add("desktop-agent-runtime")
@@ -515,10 +572,7 @@ def resolve_impact(
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
-    if any(
-        _defines_flutter_generation(path, read_text(path), read_base_text(path))
-        for path in normalized_paths
-    ):
+    if any(_defines_flutter_generation(path, read_text(path), read_base_text(path)) for path in normalized_paths):
         selected.update({"flutter-codegen", "flutter-l10n"})
 
     if selector_changed:
@@ -559,7 +613,10 @@ def resolve_impact(
         )
 
     releasable_desktop = any(_is_releasable_desktop_path(path) for path in normalized_paths) or selector_changed
-    release_pr_input = any(_is_desktop_release_pr_input(path) for path in normalized_paths)
+    release_pr_input = any(
+        _is_desktop_release_pr_input(path) and not (generated_only_pr and _is_generated_desktop_swift_client(path))
+        for path in normalized_paths
+    )
     if releasable_desktop:
         selected.add("desktop-ci-only")
     # Ordinary source/test PRs use the debug lane; release settings, packaging,
@@ -569,6 +626,19 @@ def resolve_impact(
         selected.add("desktop-swift-release-compile")
     if event == "push" and releasable_desktop:
         selected.add("desktop-swift-release-compile")
+
+    if generated_only_pr:
+        # Wire shapes still compile against every app and test consumer, but
+        # never wake suite execution (even if a DTO name contains Notification).
+        selected.discard("desktop-swift-tests")
+        selected.add("desktop-swift-test-compile")
+    if event == "pull_request":
+        if any(
+            path in DESKTOP_SIRI_ADVISORY_INPUTS
+            or path.startswith("desktop/macos/Desktop/Sources/SiriIntegration/")
+            for path in normalized_paths
+        ):
+            selected.add("desktop-siri-advisory")
 
     return ImpactPlan(frozenset(selected))
 
@@ -598,6 +668,8 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),
+        "should_test_compile": str(plan.includes("desktop-swift-test-compile")).lower(),
+        "should_siri_advisory": str(plan.includes("desktop-siri-advisory")).lower(),
         "should_release_compile": str(plan.includes("desktop-swift-release-compile")).lower(),
         "should_release_test_compile": str(plan.includes("desktop-swift-release-test-compile")).lower(),
         "should_notification_release_regression": str(

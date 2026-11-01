@@ -170,6 +170,37 @@ describe('useChatSessions — mutations', () => {
   })
 })
 
+describe('useChatSessions — date-bucket labels stay live', () => {
+  it('re-buckets Today into Yesterday after local midnight with no list change', async () => {
+    vi.useFakeTimers()
+    try {
+      const beforeMidnight = new Date(2026, 6, 14, 23, 59, 0).getTime()
+      vi.setSystemTime(beforeMidnight)
+      const { client } = makeClient([
+        session({ id: '1', updatedAt: new Date(beforeMidnight).toISOString() })
+      ])
+      const { result } = render(client)
+      // Flush the initial async listSessions() load (fake timers don't affect
+      // promise microtasks, so this needs no timer advance).
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(result.current.loading).toBe(false)
+      expect(result.current.groupedSessions.map((g) => g.label)).toEqual(['Today'])
+
+      // Cross midnight with no session-list change, then let the 60s tick fire.
+      vi.setSystemTime(beforeMidnight + 2 * 60_000)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+
+      expect(result.current.groupedSessions.map((g) => g.label)).toEqual(['Yesterday'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('useChatSessions — filter & search', () => {
   it('toggleStarredFilter re-queries the server with starred=true', async () => {
     const { client, fns } = makeClient([

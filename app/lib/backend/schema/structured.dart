@@ -1,12 +1,11 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 // Phase 4.1 — Structured, ActionItem, AppResponse, and Event are kept as deliberate
 // adapters, not typedefs:
 //  - Structured: client-only `id`, getEmoji() behavior (utf8 decode + random pick),
-//    fromJson that accepts String action items, and toJson that serializes actionItems
-//    as description strings (generated emits objects).
+//    fromJson that accepts String action items, and cache JSON that retains each
+//    valid action item's original stored row coordinate even when bad rows were skipped.
 //  - ActionItem: client-only `id`/`deleted` fields absent from GeneratedActionItem.
 //  - AppResponse: client-only `id` and toJson key 'appId' (generated emits 'app_id').
 //  - Event: client-only `id`, field name `startsAt` (generated `start`), and fromJson
@@ -16,6 +15,12 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 typedef Section = wire.GeneratedSection;
 
 class Structured {
+  /// The neutral emoji for a row where nothing chose one (server
+  /// `models.conversation_emoji.NEUTRAL_EMOJI`). 🧠 is the server's
+  /// "extraction omitted the field" sentinel and must not be the
+  /// missing/empty fallback here.
+  static const String neutralEmoji = '💬';
+
   int id = 0;
 
   String title;
@@ -29,24 +34,30 @@ class Structured {
 
   List<Event> events = [];
 
-  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
+  /// 'highlight' or 'background' from the notes pass (Episodes M3); null on legacy notes.
+  String? salience;
+
+  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other', this.salience});
+
+  bool get isBackground => salience == 'background';
 
   getEmoji() {
     try {
       if (emoji.isNotEmpty) return utf8.decode(emoji.toString().codeUnits);
-      return ['🧠', '😎', '🧑‍💻', '🚀'][Random().nextInt(4)];
+      return neutralEmoji;
     } catch (e) {
-      // return ['🧠', '😎', '🧑‍💻', '🚀'][Random().nextInt(4)];
       return emoji; // should return random?
     }
   }
 
   static Structured fromJson(Map<String, dynamic> json) {
+    final emojiSource = json['emoji'];
     var structured = Structured(
       json['title'] ?? '',
       json['overview'] ?? '',
-      emoji: json['emoji'] ?? '🧠',
+      emoji: emojiSource is String && emojiSource.trim().isNotEmpty ? emojiSource : neutralEmoji,
       category: json['category'] ?? 'other',
+      salience: json['salience'] is String ? json['salience'] as String : null,
     );
     final sections = json['sections'];
     if (sections is List) {
@@ -71,14 +82,16 @@ class Structured {
 
     final aItems = json['actionItems'] ?? json['action_items'];
     if (aItems is List) {
-      for (final item in aItems) {
+      for (final entry in aItems.indexed) {
+        final item = entry.$2;
         if (item is String) {
           if (item.isEmpty) continue;
-          structured.actionItems.add(ActionItem(item));
+          structured.actionItems.add(ActionItem(item, sourceIndex: entry.$1));
         } else if (item is Map) {
           final itemJson = item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item);
           try {
-            structured.actionItems.add(ActionItem.fromJson(itemJson));
+            structured.actionItems.add(ActionItem.fromJson(itemJson,
+                sourceIndex: entry.$1, retainCachedSourceIndex: json['actionItems'] is List));
           } on FormatException {
             continue;
           } on TypeError {
@@ -113,9 +126,13 @@ class Structured {
       generated.overview,
       emoji: generated.emoji,
       category: generated.category,
+      salience: generated.salience,
     );
     structured.sections = generated.sections?.toList() ?? [];
-    structured.actionItems = generated.actionItems?.map(ActionItem.fromGenerated).toList() ?? [];
+    structured.actionItems = generated.actionItems?.indexed
+            .map((entry) => ActionItem.fromGenerated(entry.$2, sourceIndex: entry.$1))
+            .toList() ??
+        [];
     structured.events = generated.events?.map(Event.fromGenerated).toList() ?? [];
     return structured;
   }
@@ -149,8 +166,17 @@ class Structured {
       'emoji': emoji,
       'category': category,
       'sections': sections.map((section) => section.toJson()).toList(),
-      'actionItems': actionItems.map((item) => item.description).toList(),
+      // This is the client cache adapter, not a task-write payload. Keep coordinates
+      // alongside the compacted rows, plus completed/deleted state, for safe recovery
+      // after reopening. Legacy description-string caches remain readable above.
+      'actionItems': actionItems
+          .map((item) => {
+                ...item.toJson(),
+                if (item.sourceIndex != null) '_cache_source_index': item.sourceIndex,
+              })
+          .toList(),
       'events': events.map((event) => event.toJson()).toList(),
+      if (salience != null) 'salience': salience,
     };
   }
 
@@ -163,6 +189,7 @@ class Structured {
       sections: sections.toList(),
       actionItems: actionItems.map((item) => item.toGenerated()).toList(),
       events: events.map((event) => event.toGenerated()).toList(),
+      salience: salience,
     );
   }
 }
@@ -170,22 +197,32 @@ class Structured {
 class ActionItem {
   int id = 0;
 
+  /// Index in the original stored summary array, independent of filtered UI rows.
+  /// Client cache metadata only; never included in generated wire/task-write payloads.
+  final int? sourceIndex;
+
   String description;
   bool completed = false;
   bool deleted = false;
 
-  ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false});
+  ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false, this.sourceIndex});
 
-  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated) {
-    return ActionItem(generated.description, completed: generated.completed);
+  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated, {int? sourceIndex}) {
+    return ActionItem(generated.description, completed: generated.completed, sourceIndex: sourceIndex);
   }
 
-  static fromJson(Map<String, dynamic> json) {
+  static ActionItem fromJson(Map<String, dynamic> json, {int? sourceIndex, bool retainCachedSourceIndex = false}) {
+    if (retainCachedSourceIndex && json.containsKey('_cache_source_index')) {
+      final cached = json['_cache_source_index'];
+      if (cached is! int || cached < 0) throw const FormatException('Invalid cached summary coordinate');
+      sourceIndex = cached;
+    }
     final generated = wire.GeneratedActionItem.fromJson(json);
     return ActionItem(
       generated.description,
       completed: generated.completed,
       deleted: json['deleted'] ?? false,
+      sourceIndex: sourceIndex,
     );
   }
 

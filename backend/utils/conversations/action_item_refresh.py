@@ -13,7 +13,9 @@ import logging
 from typing import Any, Callable
 
 from config.action_item_identity import action_item_refresh_preserve_enabled
+from config.action_item_reminder_policy import action_item_reminder_lifecycle_allows_delivery
 from database import action_item_refresh as refresh_db
+from utils.conversations.action_item_extraction import filter_extracted_items
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import postprocess_executor, submit_with_context
 from utils.metrics import OMI_ACTION_ITEM_REFRESH_TOTAL
@@ -41,7 +43,10 @@ def preserve(uid: str, conversation: Any, items: list[dict], trigger: Any, vecto
         _emit({'disabled': 1})
         return False
     result = refresh_db.reconcile(
-        uid, conversation.id, items, expected_revision=getattr(conversation, 'sync_content_revision', None)
+        uid,
+        conversation.id,
+        filter_extracted_items(uid, items),
+        expected_revision=getattr(conversation, 'sync_content_revision', None),
     )
     if result is None:
         return False
@@ -63,7 +68,9 @@ def _deliver(uid: str, conversation_id: str, rows: list[dict]) -> None:
     rows = [
         row
         for row in refresh_db.pending_rows(uid, conversation_id, [item['id'] for item in rows])
-        if not row.get('completed')
+        if action_item_reminder_lifecycle_allows_delivery(
+            completed=bool(row.get('completed')), status=row.get('status'), deleted=bool(row.get('deleted'))
+        )
         and not row.get('exported')
         and not row.get('sync_requested')
         and not row.get('apple_reminder_id')
@@ -75,6 +82,9 @@ def _deliver(uid: str, conversation_id: str, rows: list[dict]) -> None:
                 action_item_id=row['id'],
                 description=row['description'],
                 due_at=row['due_at'].isoformat(),
+                completed=bool(row.get('completed')),
+                status=row.get('status'),
+                deleted=bool(row.get('deleted')),
             )
     asyncio.run(auto_sync_action_items_batch(uid, rows))
 

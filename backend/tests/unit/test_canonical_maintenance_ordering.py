@@ -8,7 +8,7 @@ import pytest
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
-from utils.memory.canonical_consolidation import ConsolidationReport
+from utils.memory.canonical_consolidation import RequiredIntakeCompletion
 from utils.memory.canonical_required_processing import RequiredMemoryProcessingReport
 from utils.memory.memory_system import MemorySystem
 from utils.memory.short_term_promotion import (
@@ -36,12 +36,9 @@ def test_maintenance_runs_ttl_and_one_consolidation_route_in_order():
     uid = "uid-canonical"
     order = MagicMock()
     lifecycle = CanonicalShortTermLifecycleReport(uid=uid)
-    consolidation = ConsolidationReport(
+    consolidation = RequiredIntakeCompletion(
         uid=uid,
-        trigger_reason="pending_items",
-        batched_memory_ids=["mem_a", "mem_b"],
         promoted_memory_ids=["mem_a"],
-        archived_memory_ids=["mem_b"],
     )
     outbox_summaries = iter(
         [
@@ -80,7 +77,7 @@ def test_maintenance_runs_ttl_and_one_consolidation_route_in_order():
             side_effect=lambda *args, **kwargs: (order("ttl"), lifecycle)[1],
         ),
         patch(
-            "utils.memory.short_term_promotion.run_canonical_consolidation",
+            "utils.memory.short_term_promotion.complete_required_intake",
             side_effect=lambda *args, **kwargs: (order("route"), consolidation)[1],
         ),
         patch(
@@ -105,7 +102,7 @@ def test_maintenance_runs_ttl_and_one_consolidation_route_in_order():
     assert report.required_processing is not None
     assert report.required_processing.attempted_count == 0
     assert report.lifecycle is lifecycle
-    assert report.consolidation is consolidation
+    assert report.required_intake is consolidation
     assert report.outbox is not None
     assert report.outbox["delivered_count"] == 2
     assert report.outbox["retryable_failure_count"] == 1
@@ -116,7 +113,7 @@ def test_maintenance_runs_ttl_and_one_consolidation_route_in_order():
         {"event_id": "post-upsert", "action": "vector_upsert"},
     ]
     assert report.outbox["errors"] == [{"stage": "process", "event_id": "pre-retry", "code": "vector_delete_failed"}]
-    assert report.routed_count == 2
+    assert report.routed_count == 1
     assert report.promoted_count == 1
     assert outbox_tick.call_count == 2
     for outbox_call in outbox_tick.call_args_list:
@@ -162,7 +159,7 @@ def test_pending_delete_runs_before_malformed_short_term_row_aborts_maintenance(
             "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
             side_effect=fail_ttl,
         ),
-        patch("utils.memory.short_term_promotion.run_canonical_consolidation") as consolidation,
+        patch("utils.memory.short_term_promotion.complete_required_intake") as consolidation,
     ):
         with pytest.raises(ValueError, match="malformed Short-term row"):
             run_canonical_short_term_maintenance(
@@ -180,11 +177,8 @@ def test_pending_delete_runs_before_malformed_short_term_row_aborts_maintenance(
 
 def test_blocked_l2_output_never_falls_through_to_generic_promotion():
     uid = "uid-canonical"
-    consolidation = ConsolidationReport(
+    consolidation = RequiredIntakeCompletion(
         uid=uid,
-        trigger_reason="pending_items",
-        watermark_blocked=True,
-        pending_count=1,
     )
 
     with (
@@ -201,7 +195,7 @@ def test_blocked_l2_output_never_falls_through_to_generic_promotion():
             return_value=CanonicalShortTermLifecycleReport(uid=uid),
         ),
         patch(
-            "utils.memory.short_term_promotion.run_canonical_consolidation",
+            "utils.memory.short_term_promotion.complete_required_intake",
             return_value=consolidation,
         ),
         patch(
@@ -216,7 +210,7 @@ def test_blocked_l2_output_never_falls_through_to_generic_promotion():
             run_id="run-blocked",
         )
 
-    assert report.consolidation is consolidation
+    assert report.required_intake is consolidation
     assert report.routed_count == 0
     assert report.promoted_count == 0
 
@@ -254,8 +248,8 @@ def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations(
             return_value=CanonicalShortTermLifecycleReport(uid=uid),
         ),
         patch(
-            "utils.memory.short_term_promotion.run_canonical_consolidation",
-            return_value=ConsolidationReport(uid=uid),
+            "utils.memory.short_term_promotion.complete_required_intake",
+            return_value=RequiredIntakeCompletion(uid=uid),
         ),
         patch(
             "utils.memory.short_term_promotion.run_canonical_memory_outbox_worker_tick",
@@ -357,8 +351,8 @@ def test_projection_delete_preserves_pending_review_for_active_review_archive():
             return_value=CanonicalShortTermLifecycleReport(uid=uid),
         ),
         patch(
-            "utils.memory.short_term_promotion.run_canonical_consolidation",
-            return_value=ConsolidationReport(uid=uid),
+            "utils.memory.short_term_promotion.complete_required_intake",
+            return_value=RequiredIntakeCompletion(uid=uid),
         ),
         patch(
             "utils.memory.short_term_promotion.run_canonical_memory_outbox_worker_tick",
@@ -424,8 +418,8 @@ def test_projection_delete_failure_stays_retryable_and_does_not_partially_invali
             return_value=CanonicalShortTermLifecycleReport(uid=uid),
         ),
         patch(
-            "utils.memory.short_term_promotion.run_canonical_consolidation",
-            return_value=ConsolidationReport(uid=uid),
+            "utils.memory.short_term_promotion.complete_required_intake",
+            return_value=RequiredIntakeCompletion(uid=uid),
         ),
         patch(
             "utils.memory.short_term_promotion.run_canonical_memory_outbox_worker_tick",

@@ -39,10 +39,112 @@ version lookup fails or returns malformed data. A successful empty response is
 still allowed to seed from `pubspec.yaml`; a command failure is never turned
 into build zero.
 
+The Android build number also clears version codes Play has already burned off
+every track: the lane reads the highest build number across all tracks plus the
+highest uploaded bundle version code (`google-play bundles list`, parsed by
+`mobile_store_version.py` as the `play_bundles` source; a successful listing is
+a JSON array, so blank or `null` output fails closed). The resolve step first
+ensures the build image's `codemagic-cli-tools` provides `bundles list`
+(added in 0.57.0), upgrading in place only when the subcommand is missing so a
+newer image CLI is never downgraded. A rejected release
+leaves its uploaded bundle on no track — invisible to track-only lookups — but
+Play version codes are global and immutable, so reusing one fails the upload as
+a duplicate (2026-10-27/28: build 1527 was picked twice this way after a policy
+rejection orphaned its bundle; both reads fail closed like every other source).
+
 The internal dispatcher advances an iOS or Android baseline only after explicit
 platform-matched distribution evidence. Upload/build completion alone is not a
 distribution receipt. The current destination policy remains TestFlight
 internal for iOS and Play internal with alpha promotion for Android.
+
+Play held changes (2026-10-26 → 2026-10-27, on again since 2026-10-28): Play's
+requirement for the `changesNotSentForReview` commit parameter has flipped
+both ways within a day, and each direction has broken publishing while it
+disagreed with the repo:
+
+- 2026-10-26: Play rejected this app's automated `edits.commit` ("Changes
+  cannot be sent for review automatically. Please set the query parameter
+  changesNotSentForReview to true."), so every Play-side commit held its
+  changes for manual review submission — Codemagic publishing via
+  `changes_not_sent_for_review: true` in `codemagic.yaml`, and our own
+  scripts via the `changesNotSentForReview` commit parameter
+  (`mobile_store_promote.py`, `mobile_rollout_brake.py`; the flag is the
+  `CHANGES_NOT_SENT_FOR_REVIEW` constant there, read by the train below).
+- 2026-10-27: Play reverted — it auto-sends changes for review again and
+  rejects any commit that sets the parameter ("The query parameter
+  changesNotSentForReview must not be set."), which failed every
+  `android-internal-auto` Codemagic build at the Publishing step
+  (6ae027d351896e4d7456241e, 6adff5257fc36211fd770f24,
+  6adfc38e82d3cae8a7ae890b).
+
+Held mode is on again since 2026-10-28 (Play refused automated review
+submission after build 1504): `mobile_store_promote.py`'s
+`CHANGES_NOT_SENT_FOR_REVIEW` is `True` (every commit carries
+`changesNotSentForReview=true`, the train parks the ladder, and the brake
+joins the held queue) and both Play publishing blocks in `codemagic.yaml`
+set `changes_not_sent_for_review: true`. `ANDROID_HELD_CHANGES_MODE` in
+`.github/scripts/mobile_distribution.py` was not flipped back with them and
+is still `False` — the dispatcher prints no
+`android_distribution=held-changes-mode` line until it is. While the mode is
+on, the consequences below apply:
+
+- Distribution evidence: a settled Codemagic publishing action only proves
+  the edit committed — testers cannot install a held change. The internal
+  dispatcher's Android baseline still advances on that settled action
+  (deliberately: a held publish is not a failed publish, and rebuilding
+  the same source would not unhold it — it would drift back to a build per
+  scheduled run); while `ANDROID_HELD_CHANGES_MODE` is set, every scheduled
+  dispatcher run also prints an `android_distribution=held-changes-mode`
+  line so a held distribution cannot stall silently (that flag is currently
+  `False`, so the line is absent even though held mode is on). The press
+  itself is operator
+  evidence: the release gate treats Android internal distribution as done
+  only after it.
+- The press submits every pending change together, not just ours: check
+  Publishing overview for unrelated pending changes (listing edits, store
+  listings, other apps' automated edits) before pressing, exactly as the
+  brake's operator prerequisites require for its own commits.
+- The daily train parks the Android exposure ladder
+  (`mobile_daily_train.py` reads `CHANGES_NOT_SENT_FOR_REVIEW`): a held hop
+  is invisible to the API, so hopping blind could stack 10% -> 50% -> 100%
+  as held changes and one press would then release full exposure with no
+  observation windows. The train still stages a new candidate (the press
+  plus review gate its first exposure step); exposure then advances in
+  Play Console. One parked shape got an escape (2026-10-29): when the staged
+  release is itself a train-written held commit and the gate's pin names a
+  strictly newer build (higher version AND higher version code), the train
+  supersedes it — one held commit whose PUT carries the completed base
+  release unchanged (Play's `tracks.update` replaces the whole releases list)
+  plus exactly one `inProgress` release with the pinned candidate at the SAME
+  userFraction (exposure never rises, a fresh gate receipt is stamped) and the
+  operator still presses Send for review (summary
+  `android=staged-superseded <old> -> <new> @<fraction> (held; send for
+  review in Console)`). The Play API cannot distinguish a held-pending
+  commit from a live staged rollout — both read `inProgress` at the same
+  fraction — so the gate receipt in the release name is the liveness proxy,
+  and the limitation is accepted that a supersede may swap a cohort whose
+  held fraction already went live, at an unchanged fraction. A staged
+  release without a receipt (renamed in Play Console, or older than
+  receipts) is never superseded. Everything else keeps parking: no
+  candidate, `TRAIN_PIN_ANDROID` unset, candidate not strictly newer, a
+  halted rollout, staged rollouts disabled, or an advance-only watch run; a
+  set pin that mismatches the store refuses like every other pin check. On
+  2026-10-28 this wedge held production on 1.0.578/1522 while the fixed
+  1.0.579/1527 sat on internal, and the operator had to rebuild the release
+  by hand in Play Console. For a halted (not held) release the operator
+  tool is still the path: `BRAKE_ACTION=stage` in
+  `app/scripts/mobile_rollout_brake.md`.
+
+To flip held mode back off when Play again accepts automated review
+submission (one line plus its pinned tests): set `mobile_store_promote.py`'s
+`CHANGES_NOT_SENT_FOR_REVIEW = False`, set `ANDROID_HELD_CHANGES_MODE = False`
+in `.github/scripts/mobile_distribution.py` (it is already `False`), drop
+`changes_not_sent_for_review` from both Play publishing blocks in
+`codemagic.yaml` (and regenerate the workflow-contract fixture digests), and
+update the tests that pin the mode (`test_check_release_process_guards.py`,
+`test_dispatch_mobile_internal_builds.py`,
+`app/scripts/mobile_store_promote_test.py`, `app/scripts/mobile_daily_train_test.py`,
+`backend/tests/unit/test_mobile_rollout_brake.py`).
 
 ## Release notes
 
@@ -68,15 +170,170 @@ only drops or truncates the derived text — the release file is never touched.
 A release collected from only `none` fragments yields exactly
 "Bug fixes and improvements".
 
-Public promotion stays a manual operator action: the `mobile-store-promote`
-Codemagic lane runs only on an explicit trigger, requires
-`CONFIRM=submit-for-review`, selects an already-uploaded build, and attaches
-the derived notes as the store "What's New" text. Deriving notes never submits
-anything; a missing or invalid release file fails the promotion closed.
+Manual promotion: the `mobile-store-promote` Codemagic lane runs only on an
+explicit trigger, requires `CONFIRM=submit-for-review`, selects an
+already-uploaded build, and attaches the derived notes as the store "What's
+New" text. Deriving notes never submits anything; a missing or invalid release
+file fails the promotion closed.
 
-Rollback: revert the `codemagic.yaml` workflow addition to retire the lane, and
-delete `app/changelog/releases/<version>.json` to drop a collected release.
-Neither affects builds already uploaded to a store.
+## Daily store train
+
+`.github/workflows/mobile_daily_train.yml` (workflow_dispatch; the fixed 14:00
+UTC schedule was removed 2026-10-14 — dispatch is owned by the operator-side
+release gate, a daily agent cron that audits the candidate against the live
+baseline and only dispatches on a green verdict; manual dispatch with
+`dry_run` remains available) starts the Codemagic `mobile-daily-train` workflow
+on `main`, which runs `app/scripts/mobile_daily_train.py --platform both`.
+
+Self-driving release posture (since 2026-10-14, intraday exposure ladder since
+2026-10-17): the train no longer stops at a human queue point. iOS submissions
+use `AFTER_APPROVAL` release type with the automatic phased rollout enabled and
+explicitly attached post-submission (pausable in App Store Connect as the
+post-release brake). Android candidates go to production as a staged rollout
+at 1% (`inProgress`, `userFraction 0.01`; haltable in Play Console). The
+posture lives in the constants at the top of `mobile_daily_train.py`
+(`RELEASE_TYPE`, `PHASED_RELEASE`, `STAGED_ROLLOUT_FRACTION`,
+`STAGED_ROLLOUT_LADDER`, `IOS_PHASED_JUMP_HOURS`, `ROLLOUT_HOP_MIN_HOURS`);
+setting them to `MANUAL` / `False` / `None` restores the queue-for-a-human
+behavior. Nothing here releases without the store's own approval; the gate's
+evidence audit always runs first.
+
+Intraday exposure ladder (the agreed ~12-hour profile, 2026-10-17): Apple's
+phased release is fixed at 1% on day 1 and 100% on day 7, and Play hops the
+ladder one step per advancing run. To reach full exposure in about 12 hours
+without widening early exposure, the train advances the already-released
+rollouts itself between gate runs (Codemagic `mobile-rollout-advance`,
+dispatched every 4 hours by `.github/workflows/mobile_rollout_watch.yml` via
+`dispatch_mobile_rollout_watch.py`; the train runs with
+`TRAIN_ADVANCE_ROLLOUTS=true` / `--advance-rollouts`, which never submits or
+stages a candidate):
+
+- iOS: when the live version's phased rollout (read via
+  `GET appStoreVersionPhasedRelease`, whose `startDate` is the timing anchor)
+  has been `ACTIVE` for `IOS_PHASED_JUMP_HOURS` (12h), the train sets it to
+  `COMPLETE` (`PATCH appStoreVersionPhasedReleases/{id}`) — Apple's "release to
+  everyone" — taking exposure from ~1% to 100%, and reads the state back. Only
+  `ACTIVE` jumps: `PAUSED` is the operator brake, and any other state holds;
+  unreadable state fails closed (holds).
+- Android: the staged rollout hops one ladder step
+  (`STAGED_ROLLOUT_LADDER`: 1% -> 10% -> 50% -> 100%) per
+  `ROLLOUT_HOP_MIN_HOURS` (4h) window. A `halted` rollout always waits for a
+  human.
+- Receipts make the windows real: every advancing Android action stamps a
+  minute-precision gate receipt into the Play release name
+  (`1.0.554 (gate 2026-10-17-1307)`; legacy date-only receipts still parse).
+  A retry inside the window reads the receipt and holds position instead of
+  hopping twice; receipts live in server-side Play state and survive
+  ephemeral build machines. A staged release with no receipt (renamed in
+  Play Console, or in flight from before receipts) is not hopped: the train
+  stamps a receipt at the current fraction and holds for the window.
+
+Audited-candidate pins: the operator release gate audits a specific
+platform/version/build before dispatching. Those identifiers travel with the
+dispatch as optional `pin_ios` / `pin_android` workflow inputs
+(`TRAIN_PIN_IOS` / `TRAIN_PIN_ANDROID`, `X.Y.Z/build`, or `none` — an audited
+no-candidate verdict) and the train fails closed — no submission, no rollout
+start — when the store no longer matches the audited verdict: a newer build
+that appeared in the audit→dispatch gap is unaudited and refused, and a
+pinned build that vanished fails closed too. The self-driving posture removed
+the old human queue's final interception point; the pin is its replacement.
+An unset pin leaves the platform unpinned (how the gate dispatches today);
+making pins mandatory belongs to the gate, which lives outside this repo.
+
+Gate receipts: see "Intraday exposure ladder" above — every advancing Android
+action stamps a minute-precision receipt into the Play release name so a
+retry inside an observation window cannot hop twice.
+
+### One iOS version with Apple at a time
+
+A version that is `WAITING_FOR_REVIEW`, `IN_REVIEW`, waiting for export
+compliance, processing, or approved and unreleased (`PENDING_DEVELOPER_RELEASE`
+or `PENDING_APPLE_RELEASE`) is never withdrawn or developer-rejected to make
+room for a newer build. Withdrawing restarts Apple's queue: on 2026-10-23 three
+overnight withdrawals (1.0.571 at 04:44Z, 1.0.572 at 12:03Z, 1.0.573 at 15:14Z
+UTC), each made to ship a newer build, kept every one of them out of the store.
+A newer build waits for the next train after the in-flight version is released;
+urgent fixes ask Apple to expedite the version already in review. The train
+holds on these states, `mobile_store_promote.py` refuses an iOS submission while
+another version is in them, and an exception needs Nik's explicit go-ahead in
+chat naming the version to withdraw.
+
+iOS (App Store Connect, versions are read per state because the unfiltered
+listing only returns live versions):
+
+- live = newest `READY_FOR_SALE` version; candidate = highest TestFlight
+  marketing version above it with a processed (`VALID`, not expired) build, and
+  that version's highest build number. No candidate → nothing to do.
+- Anything `WAITING_FOR_REVIEW`, `IN_REVIEW`, `WAITING_FOR_EXPORT_COMPLIANCE`,
+  `PENDING_APPLE_RELEASE` or `PROCESSING_FOR_APP_STORE` → hold; one submission
+  is in flight at a time.
+- `PENDING_DEVELOPER_RELEASE` (approved, not released): the train attaches the
+  phased rollout to the pending version and releases it via
+  `POST /v1/appStoreVersionReleaseRequests` (verified live 2026-10-17 on
+  1.0.564 — Apple honors the endpoint for COMPLETE review submissions even
+  though it refuses to cancel them, 409), so the version starts at day-1 1%
+  exposure with the pause brake available, and the newer candidate can then
+  be submitted. As on submit, a duplicate-attach rejection is tolerated only
+  when the read-back confirms the phased resource exists. A paused live phased rollout defers the release (plain hold).
+  A pending version newer than every TestFlight build, or two pending
+  versions, stops the train.
+- Submission: `builds submit-to-app-store` with
+  `--app-store-version-localizations` carrying the derived iOS notes for
+  every locale of the live version (a bare `--whats-new` covers only the
+  primary locale and Apple rejects the submission). The run ends only after
+  the new version reads `WAITING_FOR_REVIEW`, and the phased rollout is
+  attached to the new version (`POST appStoreVersionPhasedReleases`;
+  a duplicate-attach rejection is tolerated only when the read-back confirms
+  the resource exists). Under the self-driving posture the submission carries
+  `--release-type AFTER_APPROVAL --phased-release`
+  (`RELEASE_TYPE` / `PHASED_RELEASE` constants), so the version releases on
+  Apple's approval; pausing the phased rollout in App Store Connect is the
+  post-release brake, and the intraday ladder completes it after the 12-hour
+  window. (Historical MANUAL shape: a `PENDING_DEVELOPER_RELEASE` version
+  waited for a human console press; that posture is now only the rollback,
+  see `RELEASE_TYPE`.)
+
+Android (Google Play): candidate = highest version code on the `internal` and
+`alpha` tracks whose release name version is newer than the live `production`
+release. Under the self-driving posture (`STAGED_ROLLOUT_FRACTION = 0.01`) the
+candidate is written to `production` as a staged rollout
+(`mobile_store_promote.submit_android(..., status="inProgress",
+user_fraction=0.01)`), haltable in Play Console. While a rollout is
+in flight, the intraday ladder promotes it one hop per observation window
+(1% -> 10% -> 50% -> completed), a HALTED rollout (`status: "halted"` or a missing
+`userFraction`) always waits for a human, and a newer internal build waits
+for the rollout to complete (Play allows only one staged release at a time).
+A legacy Play draft holding the selected code converts straight into the
+staged rollout. Setting `STAGED_ROLLOUT_FRACTION = None` restores the
+queue-for-human behavior: candidates are written as `draft` releases (a human
+presses Release in Play Console), and any rollout already in flight is parked
+for a human instead of being advanced further. While held-changes mode is on
+(see "Store and distribution behavior"), the staged write lands as a held
+change: it goes live only after the human Play Console → Publishing overview
+→ Send for review press, and the train parks the ladder — it never hops a
+rollout whose liveness it cannot read; the operator advances exposure in
+Play Console. The one exception is the held staged-release supersede (see
+"Store and distribution behavior"): a train-written held staged release with
+a strictly newer gate-pinned candidate is replaced at the same fraction so
+the ladder cannot wedge production on a stale held commit.
+
+Release notes: the train runs `collect` for a **new** candidate version in
+its checkout (unreleased fragments fold into `releases/<version>.json`
+without a commit, so notes are never empty); it logs the `collect` command to
+commit the same lines to `main`. Ladder hops of an in-flight rollout never
+collect: they re-use the What's-New text Play already holds for that rollout
+(the durable release file is only a no-collect fallback), so fragments
+authored for the *next* version are never misattributed to the one mid-flight.
+No release file and no fragments fails the platform. The run ends with one
+`TRAIN SUMMARY:` line; any platform failure exits non-zero.
+
+Rollback: revert the `codemagic.yaml` workflow additions to retire a lane,
+set the posture constants back (`RELEASE_TYPE = "MANUAL"`,
+`PHASED_RELEASE = False`, `STAGED_ROLLOUT_FRACTION = None`) to restore the
+queue-for-human train, and delete `app/changelog/releases/<version>.json` to
+drop a collected release. Store-side brakes (a paused iOS phased rollout, a
+halted Play rollout) and builds already uploaded to a store are unaffected by
+repo-side rollback.
 
 ## Operator prerequisites
 
@@ -99,4 +356,12 @@ Neither affects builds already uploaded to a store.
   group can receive it; verify the configured group and its capabilities in
   App Store Connect when investigating a failed post-publish task.
 
-No workflow in this document silently promotes a build to public production.
+No workflow in this document bypasses store approval or operator brakes:
+both stores' own review must approve before anything ships, iOS rolls out in
+phases pausable in App Store Connect, Android's staged rollout is haltable in
+Play Console, and the manual lane needs an explicit confirmation. What changed
+on 2026-10-14 is the queue point: after approval, releases proceed without a
+further human console press (previously: manual developer release on iOS and
+a Play production draft). The Play Publishing overview → Send for review
+press required 2026-10-26 → 2026-10-27 and again since 2026-10-28 is part of
+Play's held-changes mode (see "Store and distribution behavior").

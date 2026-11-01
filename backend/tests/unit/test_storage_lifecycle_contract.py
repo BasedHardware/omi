@@ -3,6 +3,7 @@ from pathlib import Path
 
 from scripts.validate_storage_lifecycle import (
     LEGACY_DELETE_RULES,
+    NONCURRENT_DELETE_RULE,
     validate_against_live,
     validate_desired_document,
     validate_notifications,
@@ -26,10 +27,12 @@ def test_checked_in_documents_pass_the_source_contract():
         assert validate_desired_document(_load(name)) == [], name
 
 
-def test_no_delete_rule_can_reach_chunks():
+def test_no_delete_rule_can_reach_chunks_except_the_scoped_noncurrent_rule():
     for name in APPLY_FILES + ROLLBACK_FILES:
         for rule in _rules(_load(name)):
             if rule["action"]["type"] != "Delete":
+                continue
+            if rule == NONCURRENT_DELETE_RULE:
                 continue
             prefixes = rule["condition"].get("matchesPrefix")
             assert prefixes, f"{name}: unscoped Delete rule"
@@ -48,6 +51,16 @@ def test_apply_files_declare_exactly_one_coldline_rule_scoped_to_chunks():
         assert rule["condition"]["matchesPrefix"] == ["chunks/"]
 
 
+def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
+    set_class = [r for r in _rules(_load("prod.json")) if r["action"]["type"] == "SetStorageClass"]
+    assert len(set_class) == 1
+    rule = set_class[0]
+    assert rule["condition"]["matchesSuffix"] == [".batch.enc", ".batch.bin"], (
+        "prod Coldline transitions must stay scoped to the large batch artifacts; "
+        "small .opus.enc chunks never pay back Coldline Class A pricing (p76)"
+    )
+
+
 def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
     for name in ("prod.json", "prod.rollback.json"):
         rules = _rules(_load(name))
@@ -57,14 +70,33 @@ def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
             assert legacy in rules, name
 
 
-def test_rollback_files_only_drop_the_set_storage_class_rule():
+def test_prod_noncurrent_delete_rule_is_pinned():
+    rules = _rules(_load("prod.json"))
+    assert NONCURRENT_DELETE_RULE in rules, "prod must declare the scoped noncurrent .opus.enc delete rule"
+    assert rules.count(NONCURRENT_DELETE_RULE) == 1
+    condition = NONCURRENT_DELETE_RULE["condition"]
+    assert condition["isLive"] is False
+    assert condition["numNewerVersions"] == 1, (
+        "numNewerVersions > 1 or 0 changes which generations survive; 1 keeps exactly the newest "
+        "generation of every object name (David 10-23 regen-check ruling)"
+    )
+    assert condition["matchesPrefix"] == ["chunks/"]
+    assert condition["matchesSuffix"] == [".opus.enc"], "wider suffixes would delete noncurrent PCM batch generations"
+
+
+def test_rollback_files_only_drop_rules_the_apply_variant_added():
     for apply_name, rollback_name in zip(APPLY_FILES, ROLLBACK_FILES):
         apply_rules = _rules(_load(apply_name))
         rollback_rules = _rules(_load(rollback_name))
         assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
         assert all(rule in apply_rules for rule in rollback_rules)
         dropped = [rule for rule in apply_rules if rule not in rollback_rules]
-        assert [rule["action"]["type"] for rule in dropped] == ["SetStorageClass"]
+        expected = ["Delete", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
+        assert (
+            sorted(rule["action"]["type"] for rule in dropped) == expected
+        ), f"{apply_name}: rollback must drop exactly the rules the apply variant added beyond legacy"
+        if apply_name == "prod.json":
+            assert NONCURRENT_DELETE_RULE in dropped
         assert _load(apply_name)["bucket"] == _load(rollback_name)["bucket"]
 
 
@@ -120,6 +152,42 @@ def test_noncurrent_version_rule_is_rejected():
     )
     errors = validate_desired_document(document)
     assert any("noncurrent" in error for error in errors)
+
+
+def test_scoped_noncurrent_delete_rule_passes_and_near_misses_are_rejected():
+    base = {
+        "bucket": "omi-private-cloud-sync",
+        "project": "based-hardware",
+        "lifecycle": {"rule": list(_rules(_load("prod.json")))},
+    }
+    assert validate_desired_document(base) == []
+
+    def errors_with(mutated_rule):
+        document = json.loads(json.dumps(base))
+        document["lifecycle"]["rule"] = [
+            mutated_rule if rule == NONCURRENT_DELETE_RULE else rule for rule in document["lifecycle"]["rule"]
+        ]
+        return validate_desired_document(document)
+
+    # A wider suffix would delete noncurrent PCM batch generations.
+    wider = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
+    wider["condition"]["matchesSuffix"] = [".opus.enc", ".batch.enc"]
+    assert any("noncurrent" in error or "can match 'chunks/'" in error for error in errors_with(wider))
+
+    # numNewerVersions != 1 changes which generations survive.
+    looser = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
+    del looser["condition"]["numNewerVersions"]
+    assert any("noncurrent" in error for error in errors_with(looser))
+
+    # Dropping isLive widens the rule beyond the reviewed shape.
+    no_is_live = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
+    del no_is_live["condition"]["isLive"]
+    assert any("noncurrent" in error for error in errors_with(no_is_live))
+
+    # The rule may appear at most once.
+    duplicated = json.loads(json.dumps(base))
+    duplicated["lifecycle"]["rule"].append(json.loads(json.dumps(NONCURRENT_DELETE_RULE)))
+    assert any("at most one" in error for error in validate_desired_document(duplicated))
 
 
 def test_live_rule_not_present_in_desired_fails_without_allow_rule_removal():

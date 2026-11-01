@@ -61,6 +61,7 @@ def clean_action_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "due_at": item.get("due_at"),
         "completed_at": item.get("completed_at"),
         "conversation_id": item.get("conversation_id"),
+        "source": action_item_source(item),
     }
 
 
@@ -100,3 +101,16 @@ def clean_screen_activity_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "window_title": row.get("windowTitle"),
         "ocr_text": row.get("ocrText"),
     }
+
+
+def action_item_source(item: Dict[str, Any]) -> str:
+    source = item.get('source')
+    if isinstance(source, str) and source.strip():
+        return source
+    if item.get('conversation_id'):
+        return 'conversation'
+    if item.get('chat_session_id') or item.get('message_id'):
+        return 'chat'
+    if item.get('manually_added') is True:
+        return 'manual'
+    return 'unknown'

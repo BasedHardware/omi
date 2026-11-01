@@ -5,12 +5,9 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import type { Memory, MemoryCategory, MemoryVisibility } from '@/types/conversation';
 import {
   getMemoriesPage,
-  type MemoryView,
-  type MemoryUseAction,
   createMemory,
   updateMemoryContent,
   updateMemoryVisibility,
-  setMemoryUse as setMemoryUseRequest,
   deleteMemory,
   deleteMemoriesBatch,
   reviewMemory,
@@ -37,7 +34,6 @@ import {
 export interface UseMemoriesOptions {
   categories?: MemoryCategory[];
   limit?: number;
-  view?: MemoryView;
 }
 
 /** Outcome of a chunked bulk delete. */
@@ -55,11 +51,6 @@ export interface UseMemoriesReturn {
   hasMore: boolean;
   /** True when the server could not complete the bounded provider read. */
   truncated: boolean;
-  /** Null means the server did not advertise the beta belief capability. */
-  beliefEnabled: boolean | null;
-  memoryView: MemoryView;
-  setMemoryView: (view: MemoryView) => void;
-  setMemoryUse: (id: string, action: MemoryUseAction) => Promise<boolean>;
   loadMore: () => Promise<void>;
   /** Returns true only after a canonical network refresh completed. */
   refresh: (throwOnError?: boolean) => Promise<boolean>;
@@ -81,20 +72,14 @@ interface CacheEntry {
   nextCursor: string | null;
   hasMore: boolean;
   truncated: boolean;
-  beliefEnabled?: boolean | null;
 }
 
 function getCacheKey(
   categories: MemoryCategory[],
-  view: MemoryView,
   scope: MemoryCacheScope | null,
 ): string | null {
   if (!scope) return null;
-  return cacheKeys.memories(
-    categories.length === 0 ? [] : [...categories].sort(),
-    view,
-    scope,
-  );
+  return cacheKeys.memories(categories.length === 0 ? [] : [...categories].sort(), scope);
 }
 
 function getFromCache(key: string): CacheEntry | null {
@@ -109,11 +94,10 @@ function setToCache(
   nextCursor: string | null,
   hasMore: boolean,
   truncated: boolean,
-  beliefEnabled: boolean | null,
 ): void {
   setCache<CacheEntry>(
     key,
-    { memories, offset, nextCursor, hasMore, truncated, beliefEnabled },
+    { memories, offset, nextCursor, hasMore, truncated },
     CACHE_TTL.MEDIUM,
   );
 }
@@ -133,18 +117,6 @@ function isCacheStale(key: string): boolean {
   return cached ? cached.isStale : true;
 }
 
-function createFeedbackId(): string {
-  if (typeof globalThis.crypto?.randomUUID === 'function') {
-    return globalThis.crypto.randomUUID();
-  }
-  // Keep the request contract UUID-shaped in older browsers and test runners.
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
-    const random = Math.floor(Math.random() * 16);
-    const value = character === 'x' ? random : (random & 0x3) | 0x8;
-    return value.toString(16);
-  });
-}
-
 export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn {
   const { limit = 25 } = options;
   const { user, loading: authLoading } = useAuth();
@@ -158,10 +130,9 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   const [activeCategories, setActiveCategories] = useState<MemoryCategory[]>(
     options.categories || [],
   );
-  const [memoryView, setMemoryView] = useState<MemoryView>(options.view || 'useful_now');
 
   // Get cache key for current categories
-  const cacheKey = getCacheKey(activeCategories, memoryView, memoryCacheScope);
+  const cacheKey = getCacheKey(activeCategories, memoryCacheScope);
   const cachedEntry = cacheKey ? getFromCache(cacheKey) : null;
 
   // Initialize state from cache if available
@@ -170,9 +141,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(cachedEntry?.hasMore ?? true);
   const [truncated, setTruncated] = useState(cachedEntry?.truncated ?? false);
-  const [beliefEnabled, setBeliefEnabled] = useState<boolean | null>(
-    cachedEntry?.beliefEnabled ?? null,
-  );
   // Bumped whenever a network fetch releases the fetching lock, so a
   // view/category change that arrived mid-fetch re-runs once idle.
   const [fetchIdleTick, setFetchIdleTick] = useState(0);
@@ -180,26 +148,22 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   // Use ref for offset to avoid dependency issues
   const offsetRef = useRef(cachedEntry?.offset || 0);
   const cursorRef = useRef<string | null>(cachedEntry?.nextCursor || null);
-  const feedbackIdsRef = useRef(new Map<string, string>());
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
   // In-flight canonical refresh, shared with concurrent callers (see refresh).
   const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
   // Track if initial fetch is done
   const initializedRef = useRef(false);
-  const capabilityRef = useRef<boolean | null>(cachedEntry?.beliefEnabled ?? null);
-  const capabilityRefreshRef = useRef(cachedEntry?.beliefEnabled === true);
-  const fallbackRefreshRef = useRef(false);
   const scopeKeyRef = useRef<string | null>(null);
   const scopeGenerationRef = useRef(0);
   const activeStateScopeRef = useRef<string | null>(null);
   const previousScopeRef = useRef<MemoryCacheScope | null>(null);
   const currentScopeRef = useRef<MemoryCacheScope | null>(null);
   currentScopeRef.current = memoryCacheScope;
-  // Latest categories+view query, assigned every render so an in-flight
+  // Latest categories query, assigned every render so an in-flight
   // request can detect the visible query moved on before its response lands.
   const latestQueryRef = useRef('');
-  latestQueryRef.current = `${JSON.stringify(activeCategories)}:${memoryView}`;
+  latestQueryRef.current = JSON.stringify(activeCategories);
   const captureScopeGeneration = () => {
     const requestScopeKey = scopeKeyRef.current;
     const requestGeneration = scopeGenerationRef.current;
@@ -224,11 +188,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     fetchingRef.current = false;
     refreshInFlightRef.current = null;
     initializedRef.current = false;
-    const scopedCache = cacheKey ? getFromCache(cacheKey) : null;
-    capabilityRef.current = scopedCache?.beliefEnabled ?? null;
-    capabilityRefreshRef.current = scopedCache?.beliefEnabled === true;
-    fallbackRefreshRef.current = false;
-    feedbackIdsRef.current.clear();
     offsetRef.current = 0;
     cursorRef.current = null;
     setMemories([]);
@@ -236,39 +195,12 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     setError(null);
     setHasMore(true);
     setTruncated(false);
-    setBeliefEnabled(scopedCache?.beliefEnabled ?? null);
 
     if (previousScope) {
       deleteCachePattern(invalidationPatterns.memories, previousScope);
       void invalidateMemoryCache(previousScope);
     }
   }, [memoryCacheScope, scopeKey]);
-
-  const applyCapability = useCallback((capability: boolean | null) => {
-    const previouslyEnabled = capabilityRef.current === true;
-    capabilityRef.current = capability;
-    if (capability !== true) capabilityRefreshRef.current = false;
-    setBeliefEnabled(capability);
-
-    // A server that withdraws the beta header must not leave a cached beta
-    // view visible or keep sending its optional query. Clear both browser
-    // cache layers, return to the released surface, and let the view-change
-    // effect issue a fresh unqualified request.
-    if (capability !== true && previouslyEnabled) {
-      fallbackRefreshRef.current = true;
-      const scope = currentScopeRef.current;
-      if (scope) {
-        deleteCachePattern(invalidationPatterns.memories, scope);
-        void invalidateMemoryCache(scope);
-      }
-      setMemoryView('useful_now');
-      setMemories([]);
-      setHasMore(true);
-      setTruncated(false);
-      offsetRef.current = 0;
-      cursorRef.current = null;
-    }
-  }, []);
 
   // Core fetch function
   const doFetch = useCallback(
@@ -281,13 +213,10 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         limit,
         offset: currentOffset,
         cursor: cursor || undefined,
-        // Discover beta capability through the response header first. Until
-        // then preserve the released endpoint semantics by omitting view.
-        view: capabilityRef.current === true ? memoryView : undefined,
         categories: categories.length > 0 ? categories : undefined,
       });
     },
-    [limit, memoryView],
+    [limit],
   );
 
   // Initial load - check cache first (memory → IndexedDB → network)
@@ -298,7 +227,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
     const requestScopeKey = scopeKey;
     const requestGeneration = scopeGenerationRef.current;
-    const requestQuery = `${JSON.stringify(activeCategories)}:${memoryView}`;
+    const requestQuery = JSON.stringify(activeCategories);
     const isCurrentRequest = () =>
       scopeKeyRef.current === requestScopeKey &&
       scopeGenerationRef.current === requestGeneration;
@@ -310,11 +239,10 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     const cached = getFromCache(key);
 
     // If we have fresh in-memory cache, use it and skip fetch
-    if (cached && !isCacheStale(key) && cached.beliefEnabled !== true) {
+    if (cached && !isCacheStale(key)) {
       setMemories(cached.memories);
       setHasMore(cached.hasMore);
       setTruncated(cached.truncated);
-      setBeliefEnabled(cached.beliefEnabled ?? null);
       offsetRef.current = cached.offset;
       cursorRef.current = cached.nextCursor;
       setLoading(false);
@@ -326,7 +254,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       setMemories(cached.memories);
       setHasMore(cached.hasMore);
       setTruncated(cached.truncated);
-      setBeliefEnabled(cached.beliefEnabled ?? null);
       offsetRef.current = cached.offset;
       cursorRef.current = cached.nextCursor;
       setLoading(false);
@@ -339,10 +266,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
       // Try IndexedDB first if no in-memory cache
       if (!cached) {
-        const indexedDBMemories =
-          memoryView === 'useful_now'
-            ? await getCachedMemories(memoryView, memoryCacheScope)
-            : null;
+        const indexedDBMemories = await getCachedMemories(memoryCacheScope);
         if (!isCurrentRequest() || !isQueryCurrent()) {
           // A same-scope query change can abandon this warmup before the
           // network fetch's finally block. Release the shared fetch lock so
@@ -366,7 +290,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
             null,
             indexedDBMemories.length >= limit,
             false,
-            null,
           );
           setLoading(false);
           // Continue to background refresh to get latest data
@@ -391,7 +314,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         cursorRef.current = page.nextCursor;
         setHasMore(pageHasMore);
         setTruncated(page.truncated);
-        applyCapability(page.beliefEnabled);
         // Update both caches
         setToCache(
           key,
@@ -400,22 +322,16 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           page.nextCursor,
           pageHasMore,
           page.truncated,
-          page.beliefEnabled,
         );
-        if (memoryView === 'useful_now') {
-          await cacheMemories(page.memories, memoryView, memoryCacheScope);
-          if (!isCurrentRequest() || !isQueryCurrent()) return;
-        }
+        await cacheMemories(page.memories, memoryCacheScope);
+        if (!isCurrentRequest() || !isQueryCurrent()) return;
       } catch (err) {
         if (!isCurrentRequest() || !isQueryCurrent()) return;
         // Check if we have any cached data to show
         let hasAnyCachedData = !!cached;
         if (!hasAnyCachedData) {
           try {
-            const indexedDbMemories =
-              memoryView === 'useful_now'
-                ? await getCachedMemories(memoryView, memoryCacheScope)
-                : null;
+            const indexedDbMemories = await getCachedMemories(memoryCacheScope);
             if (!isCurrentRequest() || !isQueryCurrent()) return;
             hasAnyCachedData = !!indexedDbMemories;
           } catch {
@@ -442,30 +358,26 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
     loadInitial();
   }, [
-    applyCapability,
     authLoading,
     cacheKey,
     doFetch,
     activeCategories,
     limit,
     memoryCacheScope,
-    memoryView,
     scopeKey,
   ]);
 
-  // Handle category/view changes (after initial load)
-  const prevQueryRef = useRef<string>(
-    `${JSON.stringify(activeCategories)}:${memoryView}`,
-  );
+  // Handle category changes (after initial load)
+  const prevQueryRef = useRef<string>(JSON.stringify(activeCategories));
   useEffect(() => {
     if (!scopeKey || authLoading || !memoryCacheScope) return;
-    const currentQuery = `${JSON.stringify(activeCategories)}:${memoryView}`;
+    const currentQuery = JSON.stringify(activeCategories);
     if (prevQueryRef.current === currentQuery) return;
 
     // Only refetch if already initialized
     if (!initializedRef.current) return;
 
-    const key = getCacheKey(activeCategories, memoryView, memoryCacheScope);
+    const key = getCacheKey(activeCategories, memoryCacheScope);
     if (!key) return;
     const cached = getFromCache(key);
 
@@ -474,12 +386,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       setMemories(cached.memories);
       setHasMore(cached.hasMore);
       setTruncated(cached.truncated);
-      setBeliefEnabled(cached.beliefEnabled ?? null);
       offsetRef.current = cached.offset;
       cursorRef.current = cached.nextCursor;
 
       // If not stale, we're done
       if (!isCacheStale(key)) {
+        // No fetch runs here, so clear the error left by the previous categories
+        setError(null);
         prevQueryRef.current = currentQuery;
         return;
       }
@@ -518,7 +431,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         cursorRef.current = page.nextCursor;
         setHasMore(pageHasMore);
         setTruncated(page.truncated);
-        applyCapability(page.beliefEnabled);
         // Update cache
         setToCache(
           key,
@@ -527,7 +439,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           page.nextCursor,
           pageHasMore,
           page.truncated,
-          page.beliefEnabled,
         );
       } catch (err) {
         if (isCurrentRequest() && isQueryCurrent() && !cached) {
@@ -545,13 +456,11 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     loadForCategories();
   }, [
     activeCategories,
-    applyCapability,
     authLoading,
     doFetch,
     fetchIdleTick,
     limit,
     memoryCacheScope,
-    memoryView,
     scopeKey,
   ]);
 
@@ -563,7 +472,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     fetchingRef.current = true;
     setLoading(true);
 
-    const key = getCacheKey(activeCategories, memoryView, scope);
+    const key = getCacheKey(activeCategories, scope);
     if (!key) {
       fetchingRef.current = false;
       setFetchIdleTick((tick) => tick + 1);
@@ -590,15 +499,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         const updated = [...prev, ...newMemories];
         // Update cache with new memories
         const newOffset = offsetRef.current + page.memories.length;
-        setToCache(
-          key,
-          updated,
-          newOffset,
-          page.nextCursor,
-          pageHasMore,
-          page.truncated,
-          page.beliefEnabled,
-        );
+        setToCache(key, updated, newOffset, page.nextCursor, pageHasMore, page.truncated);
         return updated;
       });
 
@@ -606,7 +507,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       cursorRef.current = page.nextCursor;
       setHasMore(pageHasMore);
       setTruncated(page.truncated);
-      applyCapability(page.beliefEnabled);
     } catch (err) {
       if (isCurrentRequest() && isQueryCurrent()) {
         setError(err instanceof Error ? err.message : 'Failed to load more memories');
@@ -618,7 +518,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         setFetchIdleTick((tick) => tick + 1);
       }
     }
-  }, [activeCategories, applyCapability, doFetch, hasMore, limit, memoryView]);
+  }, [activeCategories, doFetch, hasMore, limit]);
 
   // Refresh
   const refresh = useCallback(
@@ -635,7 +535,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       setLoading(true);
       setError(null);
 
-      const key = getCacheKey(activeCategories, memoryView, scope);
+      const key = getCacheKey(activeCategories, scope);
       if (!key) {
         fetchingRef.current = false;
         setFetchIdleTick((tick) => tick + 1);
@@ -662,7 +562,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           cursorRef.current = page.nextCursor;
           setHasMore(pageHasMore);
           setTruncated(page.truncated);
-          applyCapability(page.beliefEnabled);
           // Update cache
           setToCache(
             key,
@@ -671,7 +570,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
             page.nextCursor,
             pageHasMore,
             page.truncated,
-            page.beliefEnabled,
           );
           return true;
         } catch (err) {
@@ -693,7 +591,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       refreshInFlightRef.current = holder.promise;
       return holder.promise;
     },
-    [activeCategories, applyCapability, doFetch, limit, memoryView],
+    [activeCategories, doFetch, limit],
   );
 
   // Subscribe to cache invalidation - refetch when memories are modified elsewhere
@@ -711,59 +609,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     return unsubscribe;
   }, [authLoading, memoryCacheScope, refresh, scopeKey]);
 
-  // The discovery request intentionally omits the beta-only view query. Once
-  // the server advertises the capability, re-read the default Useful now
-  // surface with the explicit view so first load is server-selected.
-  useEffect(() => {
-    if (beliefEnabled !== true || capabilityRefreshRef.current) return;
-    if (fetchingRef.current) return;
-    capabilityRefreshRef.current = true;
-    void refresh();
-  }, [beliefEnabled, loading, refresh]);
-
-  useEffect(() => {
-    if (beliefEnabled === true || !fallbackRefreshRef.current) return;
-    if (fetchingRef.current) return;
-    fallbackRefreshRef.current = false;
-    void refresh();
-  }, [beliefEnabled, loading, refresh]);
-
-  const setMemoryUse = useCallback(
-    async (id: string, action: MemoryUseAction): Promise<boolean> => {
-      if (!scopeKeyRef.current || !currentScopeRef.current) return false;
-      const isCurrentRequest = captureScopeGeneration();
-      const key = `${id}:${action}`;
-      let feedbackId = feedbackIdsRef.current.get(key);
-      if (!feedbackId) {
-        feedbackId = createFeedbackId();
-        feedbackIdsRef.current.set(key, feedbackId);
-      }
-
-      try {
-        await setMemoryUseRequest(id, action, feedbackId);
-        if (!isCurrentRequest()) return false;
-        // Re-read the canonical row before changing the visible list. A suppress
-        // action must remain inspectable in history and must never be simulated
-        // by deleting the row from this client cache.
-        const refreshed = await refresh(true);
-        if (!isCurrentRequest() || !refreshed) return false;
-        feedbackIdsRef.current.delete(key);
-        return true;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to update memory use');
-        return false;
-      }
-    },
-    [refresh],
-  );
-
   // Add memory
   const addMemory = useCallback(
     async (
       content: string,
       visibility: MemoryVisibility = 'public',
     ): Promise<Memory | null> => {
-      const key = getCacheKey(activeCategories, memoryView, currentScopeRef.current);
+      const key = getCacheKey(activeCategories, currentScopeRef.current);
       if (!key) return null;
       const isCurrentRequest = captureScopeGeneration();
       try {
@@ -781,13 +633,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         return null;
       }
     },
-    [activeCategories, memoryView],
+    [activeCategories],
   );
 
   // Edit memory
   const editMemory = useCallback(
     async (id: string, content: string): Promise<boolean> => {
-      const key = getCacheKey(activeCategories, memoryView, currentScopeRef.current);
+      const key = getCacheKey(activeCategories, currentScopeRef.current);
       if (!key) return false;
       const isCurrentRequest = captureScopeGeneration();
       try {
@@ -807,13 +659,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         return false;
       }
     },
-    [activeCategories, memoryView],
+    [activeCategories],
   );
 
   // Remove memory
   const removeMemory = useCallback(
     async (id: string): Promise<boolean> => {
-      const key = getCacheKey(activeCategories, memoryView, currentScopeRef.current);
+      const key = getCacheKey(activeCategories, currentScopeRef.current);
       if (!key) return false;
       const isCurrentRequest = captureScopeGeneration();
       try {
@@ -828,7 +680,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         return false;
       }
     },
-    [activeCategories, memoryView],
+    [activeCategories],
   );
 
   // Remove multiple memories via the batch API. IDs are sent in chunks of 100 (the
@@ -841,7 +693,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   const removeMemories = useCallback(
     async (ids: string[]): Promise<RemoveMemoriesResult> => {
       if (ids.length === 0) return { success: true, deletedIds: [] };
-      const key = getCacheKey(activeCategories, memoryView, currentScopeRef.current);
+      const key = getCacheKey(activeCategories, currentScopeRef.current);
       if (!key) return { success: false, deletedIds: [] };
       const isCurrentRequest = captureScopeGeneration();
       const CHUNK_SIZE = 100;
@@ -863,13 +715,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         return { success: false, deletedIds };
       }
     },
-    [activeCategories, memoryView],
+    [activeCategories],
   );
 
   // Toggle visibility
   const toggleVisibility = useCallback(
     async (id: string, visibility: MemoryVisibility): Promise<boolean> => {
-      const key = getCacheKey(activeCategories, memoryView, currentScopeRef.current);
+      const key = getCacheKey(activeCategories, currentScopeRef.current);
       if (!key) return false;
       const isCurrentRequest = captureScopeGeneration();
       try {
@@ -887,13 +739,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         return false;
       }
     },
-    [activeCategories, memoryView],
+    [activeCategories],
   );
 
   // Accept memory
   const acceptMemory = useCallback(
     async (id: string): Promise<boolean> => {
-      const key = getCacheKey(activeCategories, memoryView, currentScopeRef.current);
+      const key = getCacheKey(activeCategories, currentScopeRef.current);
       if (!key) return false;
       const isCurrentRequest = captureScopeGeneration();
       try {
@@ -911,13 +763,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         return false;
       }
     },
-    [activeCategories, memoryView],
+    [activeCategories],
   );
 
   // Reject memory
   const rejectMemory = useCallback(
     async (id: string): Promise<boolean> => {
-      const key = getCacheKey(activeCategories, memoryView, currentScopeRef.current);
+      const key = getCacheKey(activeCategories, currentScopeRef.current);
       if (!key) return false;
       const isCurrentRequest = captureScopeGeneration();
       try {
@@ -932,7 +784,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         return false;
       }
     },
-    [activeCategories, memoryView],
+    [activeCategories],
   );
 
   // Set categories
@@ -940,13 +792,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     setActiveCategories(categories);
     offsetRef.current = 0;
     cursorRef.current = null;
-  }, []);
-
-  const setMemoryViewAndReset = useCallback((view: MemoryView) => {
-    setMemoryView(view);
-    offsetRef.current = 0;
-    cursorRef.current = null;
-    setTruncated(false);
   }, []);
 
   const scopeIsActive =
@@ -958,10 +803,6 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     error: scopeIsActive ? error : null,
     hasMore: scopeIsActive ? hasMore : true,
     truncated: scopeIsActive ? truncated : false,
-    beliefEnabled: scopeIsActive ? beliefEnabled : null,
-    memoryView,
-    setMemoryView: setMemoryViewAndReset,
-    setMemoryUse,
     loadMore,
     refresh,
     addMemory,

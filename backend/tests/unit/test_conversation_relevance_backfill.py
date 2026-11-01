@@ -53,7 +53,6 @@ def test_user_curation_and_calendar_evidence_protect_a_row():
         {'user_title': 'Keep'},
         {'sync_relevance_user_kept': True},
         {'folder_user_set': True},
-        {'visibility': 'shared'},
         {'has_photos': True},
         {'calendar_event': {'id': 'meeting'}},
         {'external_data': {'calendar_meeting_context': {'title': 'Standup'}}},

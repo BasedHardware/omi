@@ -10,7 +10,10 @@ vi.mock("@/lib/firebase/admin", () => ({
     }),
   }),
 }));
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
+vi.mock("@/lib/auth", async () => {
+  const { testIdentity } = await import("./support/test-identity");
+  return { requireScope: vi.fn().mockResolvedValue(testIdentity()) };
+});
 
 import {
   aggregateRatedMessages,

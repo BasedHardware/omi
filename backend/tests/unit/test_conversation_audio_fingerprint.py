@@ -1,4 +1,4 @@
-"""Fingerprint + staleness invalidation for the conversation playback artifact.
+"""Fingerprint versioning and identity for the conversation playback artifact.
 
 Runs against the REAL utils.other.storage functions (no module stubbing — the
 GCS client is lazy, so importing storage is safe). Kept separate from
@@ -31,31 +31,15 @@ def test_fingerprint_ignores_parts_without_id_or_chunks():
     assert storage_mod.compute_audio_files_fingerprint(with_junk) == storage_mod.compute_audio_files_fingerprint(a)
 
 
-def test_maybe_invalidate_no_stamp_is_noop(monkeypatch):
-    enqueues = []
-    monkeypatch.setattr(storage_mod, 'enqueue_conversation_artifact_build', lambda *a, **k: enqueues.append(a))
-    files = [{'id': 'A', 'chunk_timestamps': [1.0]}]
-
-    storage_mod.maybe_invalidate_conversation_playback('u', 'c', None, files, 'test')
-    storage_mod.maybe_invalidate_conversation_playback('u', 'c', {}, files, 'test')
-    storage_mod.maybe_invalidate_conversation_playback('u', 'c', {'conversation_audio': {}}, files, 'test')
-    assert enqueues == []
+def test_source_identity_ignores_audio_file_order(monkeypatch):
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    files = [dict(id='B', chunk_timestamps=[9.0]), dict(id='A', chunk_timestamps=[1.0, 2.0])]
+    key = storage_mod.compute_audio_files_fingerprint(files, origin=0, source_identity=True)
+    assert key == storage_mod.compute_audio_files_fingerprint(files[::-1], origin=0, source_identity=True)
 
 
-def test_maybe_invalidate_enqueues_only_on_fingerprint_change(monkeypatch):
-    enqueues = []
-    monkeypatch.setattr(
-        storage_mod,
-        'enqueue_conversation_artifact_build',
-        lambda uid, cid, fingerprint, caller: enqueues.append((uid, cid, fingerprint, caller)),
-    )
-    files = [{'id': 'A', 'chunk_timestamps': [1.0]}]
-    current_fp = storage_mod.compute_audio_files_fingerprint(files)
-
-    stamped = {'conversation_audio': {'audio_files_fingerprint': current_fp}}
-    storage_mod.maybe_invalidate_conversation_playback('u', 'c', stamped, files, 'test')
-    assert enqueues == []
-
-    stale = {'conversation_audio': {'audio_files_fingerprint': 'fp-old'}}
-    storage_mod.maybe_invalidate_conversation_playback('u', 'c', stale, files, 'test')
-    assert enqueues == [('u', 'c', current_fp, 'test')]
+def test_conversation_build_format_bump_changes_artifact_key(monkeypatch):
+    files = [dict(id='A', chunk_timestamps=[1.0])]
+    key = storage_mod.compute_audio_files_fingerprint(files, origin=0, source_identity=True)
+    monkeypatch.setattr(storage_mod, 'CONVERSATION_BUILD_FORMAT', 'test-next-assembly-format')
+    assert key != storage_mod.compute_audio_files_fingerprint(files, origin=0, source_identity=True)

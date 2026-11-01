@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -16,6 +17,8 @@ os.environ.setdefault(
 )
 
 from utils import task_integrations_ops as ops
+
+SENSITIVE_ERROR = "[Errno -2] Name or service not known: internal-db.svc.cluster.local:5432"
 
 
 def _mock_response(status_code: int, json_data=None, text: str = ""):
@@ -130,3 +133,74 @@ async def test_asana_retry_reuses_injected_client_for_refresh_and_retry():
     assert calls[2].args[0] == "https://app.asana.com/api/1.0/tasks"
     assert calls[2].kwargs["headers"]["Authorization"] == "Bearer fresh-token"
     mock_run_blocking.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_asana_resend_failure_after_refresh_is_in_doubt(monkeypatch):
+    # The resend after a 401 may reach Asana; a timeout there must never read as "not sent".
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = [_mock_response(401), httpx.ReadTimeout("timed out")]
+    monkeypatch.setattr(ops, "refresh_oauth_token", AsyncMock(return_value={"access_token": "fresh"}))
+
+    result = await ops.create_task_internal(
+        uid="uid-3",
+        app_key="asana",
+        integration={"connected": True, "access_token": "stale", "workspace_gid": "w1"},
+        title="Ship it",
+        client=client,
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "in_doubt"
+    assert client.post.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_asana_refresh_failure_before_resend_is_not_sent(monkeypatch):
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = _mock_response(401)
+    monkeypatch.setattr(ops, "refresh_oauth_token", AsyncMock(side_effect=RuntimeError("revoked")))
+
+    result = await ops.create_task_internal(
+        uid="uid-4",
+        app_key="asana",
+        integration={"connected": True, "access_token": "stale", "workspace_gid": "w1"},
+        title="Ship it",
+        client=client,
+    )
+
+    assert result["error_code"] == "token_refresh_failed"
+    assert client.post.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_oauth_token_unexpected_failure_hides_exception_text():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = httpx.ConnectError(SENSITIVE_ERROR)
+
+    with patch.dict(os.environ, {"ASANA_CLIENT_ID": "client-id", "ASANA_CLIENT_SECRET": "client-secret"}):
+        with pytest.raises(HTTPException) as exc_info:
+            await ops.refresh_oauth_token("uid-5", "asana", {"refresh_token": "refresh-token"}, client=client)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Failed to refresh Asana token due to an internal error"
+
+
+@pytest.mark.asyncio
+async def test_create_task_unexpected_failure_hides_exception_text():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = httpx.ConnectError(SENSITIVE_ERROR)
+
+    result = await ops.create_task_internal(
+        uid="uid-6",
+        app_key="todoist",
+        integration={"connected": True, "access_token": "tok"},
+        title="Plan launch",
+        client=client,
+    )
+
+    assert result == {
+        "success": False,
+        "error": "Failed to create task due to an internal error",
+        "error_code": "in_doubt",
+    }

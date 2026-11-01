@@ -8,19 +8,24 @@ import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/review_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
+import 'project_task_sections.dart';
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/task_row_parts.dart';
+import 'widgets/task_suggestions_section.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -40,6 +45,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   // Track the item being hovered over during drag
   String? _hoveredItemId;
+  TaskCategory? _hoveredCategory;
   bool _hoverAbove = false; // true = insert above, false = insert below
   int _hoverIndent = 0; // target indent_level for the drop slot
 
@@ -56,6 +62,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   bool _overdueExpanded = true;
 
   bool _noDeadlineExpanded = true;
+
+  /// Group the list by project instead of by due date (offered once projects exist).
+  bool _groupByProject = false;
 
   // Search header lifecycle objects.
   final TextEditingController _searchController = TextEditingController();
@@ -80,6 +89,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!mounted) return;
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      final suggestions = provider.suggestions;
+      if (suggestions != null && !suggestions.loaded && suggestions.loadProblem == null) {
+        suggestions.load();
+      }
       final phase = provider.apiViewState.phase;
       final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
           phase == ApiViewPhase.locked ||
@@ -229,6 +242,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return PullDownButton(
       itemBuilder: (context) => [
         PullDownMenuItem(
+          title: context.l10n.taskIntegrations,
+          iconWidget: const Icon(Icons.ios_share_rounded, size: 18),
+          onTap: () => routeToPage(context, const TaskIntegrationsPage()),
+        ),
+        PullDownMenuItem(
           title: context.l10n.selectActionItems,
           iconWidget: const Icon(Icons.check_box_outlined, size: 18),
           onTap: () {
@@ -251,6 +269,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             }
           },
         ),
+        if (context.read<ReviewProvider?>()?.isOn ?? false)
+          PullDownMenuItem(
+            title: _groupByProject ? context.l10n.tasksGroupByDate : context.l10n.tasksGroupByProject,
+            iconWidget: Icon(_groupByProject ? Icons.event_outlined : Icons.folder_outlined, size: 18),
+            onTap: () {
+              OmiHaptics.light();
+              final review = context.read<ReviewProvider?>();
+              if (!_groupByProject && review != null && review.projects.isEmpty) review.loadProjects();
+              setState(() => _groupByProject = !_groupByProject);
+            },
+          ),
         PullDownMenuItem(
           title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
           iconWidget: Icon(showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
@@ -338,7 +367,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       destructive: true,
     );
     if (!shouldClear) return;
-    await Future.wait(items.map((item) => provider.deleteActionItem(item)));
+    final deleted = await Future.wait(items.map(provider.deleteActionItem));
+    if (!mounted || deleted.every((ok) => ok)) return;
+    // The provider has already put each rejected row back; say so, as a single delete does
+    // (task_delete_undo.dart), instead of letting the rows reappear in silence.
+    OmiFeedback.error(context, l10n.failedToDeleteActionItem);
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {
@@ -462,6 +495,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
+                                SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
                                 SliverFillRemaining(
                                   hasScrollBody: false,
                                   child: Center(child: ActionItemsApiStatus(provider: provider)),
@@ -469,7 +503,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ],
                             )
                           : categorizedItems.values.every((l) => l.isEmpty)
-                              ? _buildEmptyTasksList()
+                              ? _buildEmptyTasksList(provider)
                               : _buildTasksList(categorizedItems, provider),
                 ),
               ),
@@ -497,12 +531,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildEmptyTasksList() {
+  Widget _buildEmptyTasksList(ActionItemsProvider provider) {
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+        SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
+        if (provider.suggestions?.items.isEmpty ?? true)
+          SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+        SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
       ],
     );
   }
@@ -535,6 +572,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverToBoxAdapter(child: _buildPageHeader(provider)),
+        if (!isSearching) SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
 
         if (isSearching) ...[
           if (filteredItems.isEmpty)
@@ -554,25 +592,18 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 );
               }, childCount: filteredItems.length),
             ),
+        ] else if (_groupByProject) ...[
+          const SliverPadding(padding: EdgeInsets.only(top: 6)),
+          ...projectTaskSections(
+            context: context,
+            items: categorizedItems.values.expand((items) => items).toList(growable: false),
+            projects: context.watch<ReviewProvider?>()?.projects ?? const {},
+            buildRow: (item, group) =>
+                _buildTaskItem(item, provider, category: _getCategoryForItem(item), categoryItems: group),
+          ),
         ] else ...[
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
-
-          // Build each category section (skip empty ones, skip overdue — rendered separately below)
-          for (final category in TaskCategory.values)
-            if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
-              SliverToBoxAdapter(
-                child: _buildCategorySection(
-                  category: category,
-                  items: categorizedItems[category] ?? [],
-                  provider: provider,
-                ),
-              ),
-
-          // Overdue section — expanded by default
-          if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
-            ),
+          _buildDateSections(categorizedItems, provider),
         ],
 
         // Bottom padding so the last row scrolls clear of the nav bar
@@ -581,7 +612,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildCategorySection({
+  _TaskSection _buildCategorySection({
     required TaskCategory category,
     required List<ActionItemWithMetadata> items,
     required ActionItemsProvider provider,
@@ -589,22 +620,27 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final title = _getCategoryTitle(context, category);
     final orderedItems = _getOrderedItems(category, items);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: DragTarget<ActionItemWithMetadata>(
-        onWillAcceptWithDetails: (details) => true,
+    final expanded = category != TaskCategory.noDeadline || _noDeadlineExpanded;
+    return _TaskSection(
+      items: expanded ? orderedItems : const [],
+      header: DragTarget<ActionItemWithMetadata>(
+        onWillAcceptWithDetails: (details) {
+          _setHoveredCategory(category);
+          return true;
+        },
+        onLeave: (_) => _setHoveredCategory(null),
         onAcceptWithDetails: (details) {
+          _setHoveredCategory(null);
           // Only change category if dropped on empty area (not on a specific item)
           if (_hoveredItemId == null) {
             _updateTaskCategory(details.data, category);
           }
         },
         builder: (context, candidateData, rejectedData) {
-          final isHovering = candidateData.isNotEmpty && _hoveredItemId == null;
           return AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              color: isHovering ? OmiColors.surface1 : Colors.transparent,
+            decoration: const BoxDecoration(
+              color: Colors.transparent,
               borderRadius: OmiRadius.mdAll,
             ),
             child: Column(
@@ -629,7 +665,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
-                              Text(title.toUpperCase(), style: _sectionLabelStyle),
+                              Text(title, style: _sectionLabelStyle),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 _SectionCount(orderedItems.length),
@@ -640,7 +676,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       else
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(title.toUpperCase(), style: _sectionLabelStyle),
+                          child: Text(title, style: _sectionLabelStyle),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -674,17 +710,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
                 // Drop zone for first position
                 if (orderedItems.isNotEmpty && (category != TaskCategory.noDeadline || _noDeadlineExpanded))
-                  _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
-
-                // Task items. Row padding alone carries the rhythm — no
-                // dividers between rows; matches Things 3 / Apple Reminders.
-                if (category != TaskCategory.noDeadline || _noDeadlineExpanded)
-                  ...orderedItems.map(
-                    (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
+                  _buildFirstPositionDropZone(
+                    category,
+                    orderedItems,
+                    candidateData.isNotEmpty || _hoveredCategory == category,
                   ),
-
-                // Spacing after section
-                const SizedBox(height: 12),
               ],
             ),
           );
@@ -693,11 +723,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildOverdueSection({required List<ActionItemWithMetadata> items, required ActionItemsProvider provider}) {
+  _TaskSection _buildOverdueSection(
+      {required List<ActionItemWithMetadata> items, required ActionItemsProvider provider}) {
     final orderedItems = _getOrderedItems(TaskCategory.overdue, items);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Column(
+    return _TaskSection(
+      items: _overdueExpanded ? orderedItems : const [],
+      header: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
@@ -720,7 +751,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         size: 16,
                       ),
                       const SizedBox(width: 4),
-                      Text(context.l10n.tasksOverdue.toUpperCase(), style: _sectionLabelStyle),
+                      Text(context.l10n.tasksOverdue, style: _sectionLabelStyle),
                       const SizedBox(width: 8),
                       _SectionCount(orderedItems.length),
                     ],
@@ -731,14 +762,119 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
           if (_overdueExpanded) ...[
             _buildFirstPositionDropZone(TaskCategory.overdue, orderedItems, false),
-            ...orderedItems.map(
-              (item) => _buildTaskItem(item, provider, category: TaskCategory.overdue, categoryItems: orderedItems),
-            ),
           ],
-          const SizedBox(height: 12),
         ],
       ),
     );
+  }
+
+  // One delegate across date sections: even a lazy list per section asks every
+  // offscreen section for its first row. Create/sort a section only when this
+  // delegate actually requests its header or rows.
+  Widget _buildDateSections(
+    Map<TaskCategory, List<ActionItemWithMetadata>> categorized,
+    ActionItemsProvider provider,
+  ) {
+    final categories = [
+      for (final category in TaskCategory.values)
+        if (category != TaskCategory.overdue && categorized[category]!.isNotEmpty) category,
+      if (categorized[TaskCategory.overdue]!.isNotEmpty) TaskCategory.overdue,
+    ];
+    final entries = <({TaskCategory category, int row})>[
+      for (final category in categories) ...[
+        (category: category, row: -1),
+        if ((category != TaskCategory.noDeadline || _noDeadlineExpanded) &&
+            (category != TaskCategory.overdue || _overdueExpanded))
+          for (var i = 0; i < categorized[category]!.length; i++) (category: category, row: i),
+        (category: category, row: -2),
+      ],
+    ];
+    final sections = <TaskCategory, _TaskSection>{};
+    _TaskSection sectionFor(TaskCategory category) => sections.putIfAbsent(
+          category,
+          () => category == TaskCategory.overdue
+              ? _buildOverdueSection(items: categorized[category]!, provider: provider)
+              : _buildCategorySection(category: category, items: categorized[category]!, provider: provider),
+        );
+    int? findIndex(Key key) {
+      if (key is ValueKey<(TaskCategory, int)>) {
+        final index = entries.indexWhere((entry) => (entry.category, entry.row) == key.value);
+        return index < 0 ? null : index;
+      }
+      if (key is! ValueKey<String>) return null;
+      // Only mounted rows request remapping. Resolve that row's category first
+      // and sort just that section, leaving non-visible categories untouched.
+      for (final category in categories) {
+        if (!categorized[category]!.any((item) => item.id == key.value)) continue;
+        final section = sectionFor(category);
+        final row = section.items.indexWhere((item) => item.id == key.value);
+        if (row < 0) return null;
+        final index = entries.indexWhere((entry) => entry.category == category && entry.row == row);
+        return index < 0 ? null : index;
+      }
+      return null;
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final entry = entries[index];
+          final section = sectionFor(entry.category);
+          final row = entry.row;
+          final key = row < 0 ? ValueKey((entry.category, row)) : ValueKey(section.items[row].id);
+          final hovered =
+              entry.category != TaskCategory.overdue && _hoveredCategory == entry.category && _hoveredItemId == null;
+          return Padding(
+            key: key,
+            padding: EdgeInsets.only(
+              left: OmiSpacing.md,
+              right: OmiSpacing.md,
+              top: row == -1 ? OmiSpacing.xxs : 0,
+              bottom: row == -2 ? OmiSpacing.xxs : 0,
+            ),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              decoration: BoxDecoration(
+                color: hovered ? OmiColors.surface1 : Colors.transparent,
+                borderRadius: BorderRadius.vertical(
+                  top: row == -1 ? const Radius.circular(OmiRadius.md) : Radius.zero,
+                  bottom: row == -2 ? const Radius.circular(OmiRadius.md) : Radius.zero,
+                ),
+              ),
+              child: row == -1
+                  ? section.header
+                  : row == -2
+                      ? _buildSectionEnd(entry.category)
+                      : _buildTaskItem(section.items[row], provider,
+                          category: entry.category, categoryItems: section.items),
+            ),
+          );
+        },
+        childCount: entries.length,
+        findChildIndexCallback: findIndex,
+      ),
+    );
+  }
+
+  Widget _buildSectionEnd(TaskCategory category) {
+    if (category == TaskCategory.overdue) return const SizedBox(height: OmiSpacing.sm);
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (_) {
+        _setHoveredCategory(category);
+        return true;
+      },
+      onLeave: (_) => _setHoveredCategory(null),
+      onAcceptWithDetails: (details) {
+        _setHoveredCategory(null);
+        if (_hoveredItemId == null) _updateTaskCategory(details.data, category);
+      },
+      builder: (context, candidates, rejected) => const SizedBox(height: OmiSpacing.sm),
+    );
+  }
+
+  void _setHoveredCategory(TaskCategory? category) {
+    if (_hoveredCategory == category) return;
+    setState(() => _hoveredCategory = category);
   }
 
   Widget _buildFirstPositionDropZone(
@@ -835,10 +971,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     return DragTarget<ActionItemWithMetadata>(
       onWillAcceptWithDetails: (details) {
+        _setHoveredCategory(category);
         // Accept if it's a different item
         return details.data.id != item.id;
       },
       onAcceptWithDetails: (details) {
+        _setHoveredCategory(null);
         final draggedItem = details.data;
         final targetIndent = _hoverIndent;
 
@@ -888,6 +1026,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         }
       },
       onLeave: (data) {
+        _setHoveredCategory(null);
         if (_hoveredItemId == item.id) {
           setState(() {
             _hoveredItemId = null;
@@ -990,6 +1129,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         if (!_dragHasMoved) _showTaskMenu(item, categoryItems);
         setState(() {
           _hoveredItemId = null;
+          _hoveredCategory = null;
           _dragHasMoved = false;
           _hoverIndent = 0;
           _dragStartX = null;
@@ -1061,8 +1201,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
-    await provider.updateActionItemState(item, !item.completed);
-    if (!item.completed) _onActionItemCompleted();
+    final saved = await provider.updateActionItemState(item, !item.completed);
+    if (!saved && mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
+    if (saved && !item.completed) _onActionItemCompleted();
   }
 
   /// Long-press menu: the same shape as memories and conversations, with Select for multi-select
@@ -1254,10 +1395,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
 /// A section header's label ("TODAY", "OVERDUE").
+// Title Case like OmiSectionHeader (the contract's section header is not all caps), at a label's
+// size so the groups stay quieter than the page title.
 final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
   color: OmiColors.textTertiary,
   fontWeight: FontWeight.w600,
-  letterSpacing: 0.8,
 );
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.
@@ -1305,4 +1447,10 @@ class _SectionHeaderTapTarget extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TaskSection {
+  const _TaskSection({required this.header, required this.items});
+  final Widget header;
+  final List<ActionItemWithMetadata> items;
 }

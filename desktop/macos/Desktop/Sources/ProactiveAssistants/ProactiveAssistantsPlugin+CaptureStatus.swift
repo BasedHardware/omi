@@ -10,7 +10,6 @@ extension ProactiveAssistantsPlugin {
       isMonitoring: isMonitoring,
       hasScreenRecordingPermission: ScreenCaptureService.checkPermission(),
       screenAnalysisEnabled: AssistantSettings.shared.screenAnalysisEnabled,
-      contextBucketsEnabled: ContextBucketsFeature.isEnabled,
       captureHealth: screenCaptureHealth.rawValue,
       captureGate: automationCaptureGateLabel,
       systemIdleBucket: Self.automationSystemIdleBucket(for: systemIdleSeconds()),

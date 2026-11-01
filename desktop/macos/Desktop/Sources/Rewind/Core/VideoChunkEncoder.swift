@@ -2,7 +2,6 @@
 import AppKit
 import CoreGraphics
 import Foundation
-import Sentry
 import os
 
 /// Identifies one writer's ownership of a video chunk. The generation remains
@@ -135,7 +134,7 @@ actor VideoChunkEncoder {
   private let maxConsecutiveFailures = 5
 
   /// Consecutive not-ready states that force an encoder reset. This keeps
-  /// writer readiness loops bounded instead of emitting one Sentry event per frame.
+  /// writer readiness loops bounded instead of one error log per frame.
   private let maxConsecutiveNotReadyFailures = 3
 
   // MARK: - State
@@ -582,22 +581,6 @@ actor VideoChunkEncoder {
 
     log("VideoChunkEncoder: Started native HEVC writer for chunk at \(relativePath)")
 
-    // Log frame dimensions to Sentry for debugging user quality issues
-    let breadcrumb = Breadcrumb(level: .info, category: "video_encoder")
-    breadcrumb.message = "Started video chunk encoding"
-    breadcrumb.data = [
-      "chunk_path": relativePath,
-      "input_width": Int(imageSize.width),
-      "input_height": Int(imageSize.height),
-      "output_width": Int(outputSize.width),
-      "output_height": Int(outputSize.height),
-      "quality": 65,
-      "estimated_bitrate": bitrate,
-      "encoder": "AVAssetWriter.hevc",
-      "input_format": "cvpixelbuffer_bgra",
-      "max_resolution": Int(maxResolution),
-    ]
-    SentrySDK.addBreadcrumb(breadcrumb)
   }
 
   /// HEVC's VideoToolbox encoder rejects
@@ -878,15 +861,6 @@ actor VideoChunkEncoder {
       "VideoChunkEncoder: Stale chunk detected (age: \(String(format: "%.0f", age))s, no new frames) — finalizing to release encoder resources"
     )
 
-    let breadcrumb = Breadcrumb(level: .warning, category: "video_encoder")
-    breadcrumb.message = "Stale chunk finalized"
-    breadcrumb.data = [
-      "age_seconds": Int(age),
-      "frame_count": frameTimestamps.count,
-      "chunk_path": currentChunkPath ?? "none",
-    ]
-    SentrySDK.addBreadcrumb(breadcrumb)
-
     do {
       _ = try await finalizeCurrentChunk()
     } catch {
@@ -1126,21 +1100,6 @@ actor VideoChunkEncoder {
   private func emergencyReset(reason: String = "failure_threshold") async throws -> RewindAbandonedVideoChunkError? {
     let droppedFrames = frameTimestamps.count
     emergencyResetCount += 1
-
-    // Report to Sentry for monitoring
-    let breadcrumb = Breadcrumb(level: .error, category: "video_encoder")
-    breadcrumb.message = "Emergency reset triggered"
-    breadcrumb.data = [
-      "reason": reason,
-      "dropped_frames": droppedFrames,
-      "consecutive_failures": consecutiveWriteFailures,
-      "writer_not_ready_count": writerNotReadyCount,
-      "encoder_restart_count": encoderRestartCount,
-      "emergency_reset_count": emergencyResetCount,
-      "buffer_limit": maxBufferFrames,
-      "chunk_path": currentChunkPath ?? "none",
-    ]
-    SentrySDK.addBreadcrumb(breadcrumb)
 
     logError(
       "VideoChunkEncoder: Emergency reset (reason=\(reason)) - dropping \(droppedFrames) frames to prevent memory leak")

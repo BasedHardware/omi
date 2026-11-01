@@ -27,6 +27,17 @@ they do not gate the universal Candidate/task authority.
 List and point reads expose only the current account generation, including legacy staged by-ID projections, so
 an identifier retained across an account reset cannot retrieve prior evidence.
 
+Mobile and desktop summary recovery use separate `/v1/candidates/from-conversation` preparation and
+`/v1/candidates/{candidate_id}/accept` requests, identifying the stored conversation, original row index and
+expected description. Preparation accepts both object rows and historical plain-text rows without changing
+the conversation. Acceptance atomically links the selected row to its canonical task; a selected text row
+becomes an object with its original description and task ID, while sibling rows and transcript data stay intact.
+Reopening replays that link rather than creating another task. Candidate preparation and task acceptance use
+the shared bounded contention retry helper: only explicit Firestore aborts are retried in a fresh transaction,
+which rechecks generation and row state. Unknown/ambiguous failures are not replayed by this helper, and
+integration/reminder dispatch remains after commit. Real-router/database coverage is in
+`backend/tests/integration/test_summary_task_promotion_emulator.py`.
+
 Capture quality is enforced at the shared boundary, before a Candidate can become product noise. Direct requests,
 inferred next steps, and silently accepted commitments must name a concrete deliverable owned by the user and carry
 both capture and ownership confidence of at least `0.8`. Vague commitments are ignored. A concrete first-person

@@ -1,4 +1,4 @@
-"""Deploy boundaries reject missing or inconsistent staged lineage gates, offline."""
+"""Deploy boundaries require private membership bindings to remain absent, offline."""
 
 import sys
 
@@ -14,46 +14,43 @@ SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integra
 
 
 @pytest.fixture
-def rollout(tmp_path):
+def rollout(tmp_path, monkeypatch):
+    monkeypatch.setenv('GITHUB_OUTPUT', str(tmp_path / 'github-output'))
     chart = tmp_path / 'listen.yaml'
-    chart.write_text(yaml.safe_dump({'env': [{'name': KEY, 'value': 'SYNTHETIC-OWNER'}]}))
+    chart.write_text(yaml.safe_dump({'env': []}))
     config = {
         'gke': {
-            'backend-listen': {'env': {KEY: {'value': 'SYNTHETIC-OWNER'}}, 'values_file': str(chart)},
+            'backend-listen': {'env': {}, 'values_file': str(chart)},
             'config_map': {
                 'name': 'prod-backend-config',
                 'entries': {'SAFE_SETTING': {'source': 'literal', 'value': '1'}},
             },
         },
-        'cloud_run': {'services': {service: {'env': {KEY: {'value': 'SYNTHETIC-OWNER'}}} for service in SERVICES}},
+        'cloud_run': {'services': {service: {'env': {}} for service in SERVICES}},
     }
     return config, chart
 
 
 def corrupt(config, chart, defect):
-    if defect == 'chart_drift':
-        chart.write_text(yaml.safe_dump({'env': [{'name': KEY, 'value': 'OTHER-OWNER'}]}))
-    elif defect == 'all_missing':
-        for service in config['cloud_run']['services'].values():
-            service['env'].pop(KEY)
-        config['gke']['backend-listen']['env'].pop(KEY)
+    if defect == 'chart':
+        chart.write_text(yaml.safe_dump({'env': [{'name': KEY, 'value': 'SYNTHETIC-OWNER'}]}))
+    elif defect == 'gke':
+        config['gke']['backend-listen']['env'][KEY] = {'value': ''}
     else:
-        service, change = defect.split(':')
-        entry = config['cloud_run']['services'][service]['env']
-        if change == 'missing':
-            entry.pop(KEY)
+        service, source = defect.split(':')
+        host = config['cloud_run']['services'][service]
+        if source == 'secret':
+            host['secrets'] = {KEY: {'secret': KEY, 'version': '1'}}
         else:
-            entry[KEY]['value'] = 'OTHER-OWNER'
+            host['env'][KEY] = {'value': '' if source == 'empty' else 'SYNTHETIC-OWNER'}
 
 
-DEFECTS = ['all_missing', 'chart_drift'] + [
-    f'{service}:{change}' for service in SERVICES for change in ('missing', 'drift')
-]
+DEFECTS = [f'{service}:{source}' for service in SERVICES for source in ('literal', 'empty', 'secret')]
 
 
 @pytest.mark.parametrize('boundary', ['cloud_run', 'helm'])
 @pytest.mark.parametrize('defect', DEFECTS)
-def test_deploy_rejects_missing_or_divergent_allowlists(rollout, tmp_path, monkeypatch, boundary, defect):
+def test_deploy_rejects_reintroduced_allowlist_bindings(rollout, tmp_path, monkeypatch, boundary, defect):
     config, chart = rollout
     corrupt(config, chart, defect)
     manifest = tmp_path / 'runtime.yaml'
@@ -66,18 +63,24 @@ def test_deploy_rejects_missing_or_divergent_allowlists(rollout, tmp_path, monke
             gke.config_map_entries('prod', manifest)
 
 
-def test_manifest_validator_rejects_cross_service_drift(rollout):
+def test_manifest_validator_rejects_reintroduced_binding(rollout):
     config, chart = rollout
-    corrupt(config, chart, 'backend-sync:drift')
+    corrupt(config, chart, 'backend-sync:literal')
     assert any(KEY in error.message for error in _validate_manifest_shape(config, 'prod'))
 
 
-def test_explicit_widening_allows_empty_on_all_hosts(rollout, tmp_path, monkeypatch):
+def test_both_renderers_accept_absent_cohort_keys(rollout, tmp_path, monkeypatch):
+    config, _ = rollout
+    manifest = tmp_path / 'runtime.yaml'
+    manifest.write_text(yaml.safe_dump({'environments': {'prod': config}}))
+    monkeypatch.setattr(sys, 'argv', ['render', '--env', 'prod', '--manifest', str(manifest)])
+    assert cloud_run.main() == 0
+    assert gke.config_map_entries('prod', manifest)[0] == 'prod-backend-config'
+
+
+def test_helm_keeps_legacy_lineage_binding(rollout, tmp_path, monkeypatch):
     config, chart = rollout
-    for service in config['cloud_run']['services'].values():
-        service['env'][KEY]['value'] = ''
-    config['gke']['backend-listen']['env'][KEY]['value'] = ''
-    chart.write_text(yaml.safe_dump({'env': [{'name': KEY, 'value': ''}]}))
+    corrupt(config, chart, 'chart')
     manifest = tmp_path / 'runtime.yaml'
     manifest.write_text(yaml.safe_dump({'environments': {'prod': config}}))
     monkeypatch.setattr(sys, 'argv', ['render', '--env', 'prod', '--manifest', str(manifest)])

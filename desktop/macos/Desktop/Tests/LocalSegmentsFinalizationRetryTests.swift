@@ -7,6 +7,7 @@ private enum LocalUploadStubMode: Sendable {
   case offline
   case httpStatus(Int)
   case success
+  case deleted
 }
 
 /// Scripted `/v1/conversations/from-segments`: success returns `backend-<client_conversation_id>`, and
@@ -20,6 +21,13 @@ private final class LocalUploadRetryURLStub: URLProtocol, @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return _uploadBodies
+  }
+
+  static var isDeleted: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    if case .deleted = _mode { return true }
+    return false
   }
 
   static func setMode(_ mode: LocalUploadStubMode) {
@@ -85,12 +93,12 @@ private final class LocalUploadRetryURLStub: URLProtocol, @unchecked Sendable {
       client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
     case .httpStatus(let statusCode):
       respond(url: url, statusCode: statusCode, body: Data(#"{"detail":"stubbed upload failure"}"#.utf8))
-    case .success:
+    case .success, .deleted:
       let json = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
       let clientConversationId = json?["client_conversation_id"] as? String ?? "unknown"
       let response: [String: Any] = [
         "id": "backend-\(clientConversationId)",
-        "status": "processing",
+        "status": Self.isDeleted ? "deleted" : "processing",
         "discarded": false,
       ]
       let responseBody = (try? JSONSerialization.data(withJSONObject: response)) ?? Data()
@@ -187,7 +195,71 @@ final class LocalSegmentsFinalizationRetryTests: XCTestCase {
     try await super.tearDown()
   }
 
+  func testTombstoneAcknowledgementPurgesSessionAndStopsRetrying() async throws {
+    let id = try await makeFinishedLocalSession(clientConversationId: "deleted-session")
+    LocalUploadRetryURLStub.setMode(.deleted)
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+    let session = try await TranscriptionStorage.shared.getSession(id: id)
+    XCTAssertNil(session)
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+    XCTAssertEqual(LocalUploadRetryURLStub.uploadBodies.count, 1)
+  }
+
   // MARK: - State machine
+
+  func testLocalUploadPreservesSameSpeakerUtteranceWindows() async throws {
+    let sessionId = try await TranscriptionStorage.shared.startSession(
+      source: "desktop",
+      clientConversationId: "same-speaker-windows",
+      finalizationStrategy: .localSegments
+    )
+    let windows: [(Double, Double)] = [(0, 2), (3, 5), (300, 302), (6_560, 6_565)]
+    for (index, window) in windows.enumerated() {
+      try await TranscriptionStorage.shared.appendSegment(
+        sessionId: sessionId, speaker: 0, text: "utterance-\(index)",
+        startTime: window.0, endTime: window.1
+      )
+    }
+    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+
+    let body = try XCTUnwrap(LocalUploadRetryURLStub.uploadBodies.first)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let uploaded = try XCTUnwrap(json["transcript_segments"] as? [[String: Any]])
+    XCTAssertEqual(uploaded.count, windows.count)
+    XCTAssertEqual(uploaded.compactMap { $0["start"] as? Double }, windows.map { $0.0 })
+    XCTAssertEqual(uploaded.compactMap { $0["end"] as? Double }, windows.map { $0.1 })
+    XCTAssertEqual(uploaded.compactMap { $0["text"] as? String }, (0..<windows.count).map { "utterance-\($0)" })
+    XCTAssertEqual(uploaded.compactMap { $0["speaker_id"] as? Int }, Array(repeating: 0, count: windows.count))
+  }
+
+  func testLegacyUploadRetainsBackendSegmentLimitWithoutCollapsingRecording() async throws {
+    let sessionId = try await TranscriptionStorage.shared.startSession(
+      source: "desktop",
+      clientConversationId: "same-speaker-over-limit",
+      finalizationStrategy: .localSegments
+    )
+    for index in 0..<501 {
+      try await TranscriptionStorage.shared.appendSegment(
+        sessionId: sessionId, speaker: 0, text: "utterance-\(index)",
+        startTime: Double(index * 2), endTime: Double(index * 2 + 1)
+      )
+    }
+    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+
+    let body = try XCTUnwrap(LocalUploadRetryURLStub.uploadBodies.first)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let uploaded = try XCTUnwrap(json["transcript_segments"] as? [[String: Any]])
+    XCTAssertEqual(uploaded.count, 500)
+    let text = uploaded.compactMap { $0["text"] as? String }.joined(separator: " ")
+    XCTAssertEqual(text.split(separator: " ").count, 501)
+    XCTAssertEqual(uploaded.first?["start"] as? Double, 0)
+    XCTAssertEqual(uploaded.last?["end"] as? Double, 1_001)
+    XCTAssertTrue(uploaded.allSatisfy { ($0["speaker_id"] as? Int) == 0 })
+  }
 
   func testLocalSegmentsSessionOutlivesFiveFailuresAndOfflineThenUploads() async throws {
     let service = ConversationFinalizationService.shared

@@ -1,0 +1,9 @@
+{
+  "version": "0.12.445",
+  "date": "2026-10-05",
+  "changes": [
+    "Fixed conversation summary tasks losing their links and leaving duplicate suggestions after being added",
+    "Choose a brief, normal, or deep daily recap in Settings",
+    "Show installed summary apps with search when changing a conversation summary"
+  ]
+}

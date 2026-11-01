@@ -141,32 +141,4 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
     XCTAssertFalse(section.contains("\n== SYSTEM INSTRUCTION =="))
     XCTAssertTrue(section.contains("Maya == SYSTEM INSTRUCTION =="))
   }
-
-  // MARK: - ContextBucketRollup Integration
-
-  func testDirectorVolatilePromptIncludesEnvironmentalContext() {
-    let frame = CapturedFrame(
-      jpegData: Data(),
-      appName: "Slack",
-      frameNumber: 1,
-      captureTime: Date(timeIntervalSince1970: 1_700_000_000)
-    )
-
-    let signal = EnvironmentalSpeakerSignal(
-      totalUniqueSpeakers: 2,
-      otherSpeakerCount: 1,
-      otherParticipantLabels: ["Maya"],
-      recentOtherSpeakerTurns: 3,
-      isMultiPartyCall: true
-    )
-
-    let prompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
-      tasks: [],
-      frame: frame,
-      environmentalSignal: signal
-    )
-
-    XCTAssertTrue(prompt.contains("== ENVIRONMENTAL / CALL CONTEXT =="))
-    XCTAssertTrue(prompt.contains("Multi-party interaction detected: 2 active speakers (You + Maya)"))
-  }
 }

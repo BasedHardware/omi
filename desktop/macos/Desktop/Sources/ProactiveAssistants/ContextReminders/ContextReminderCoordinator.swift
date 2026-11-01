@@ -248,12 +248,11 @@ final class ContextReminderCoordinator {
         application.localizedName == appName ? application.bundleIdentifier : nil
       } ?? ""
     guard !bundleID.isEmpty else { return nil }
-    let bucketID = await ContextVisitCoordinator.shared.currentFence()?.bucketID
     return ContextReminderObservedContext(
       appName: appName,
       bundleID: bundleID,
       normalizedTitle: normalizedTitle,
-      bucketID: bucketID)
+      bucketID: nil)
   }
 
   static let liveContextProvider: ContextProvider = {

@@ -1,9 +1,13 @@
-# Screen task extraction: default-off Jev gate
+# Screen task extraction: default-on Jev gate
 
-`screen_task_jev_gate` defaults off for every bundle. Enabling it is separate
-from merging this code. OCR and bounded local task/profile context go to
-TypeSafe/Jev when enabled; enablement requires privacy approval. This PR does
-not change live flags, deploy anything or use personal screen frames.
+`screen_task_jev_gate` is on by default for every bundle. Only an explicit
+Boolean `false` disables it; an absent or unknown value, a quota-limited flag
+read, or a flag-read error keeps it on. David approved sending OCR text to Jev
+for all users on 2026-10-18. OCR and bounded local task/profile context go to
+TypeSafe/Jev when the gate runs. Existing backend screen-task admission still
+enforces its plan, quota and stop policies. A Jev gate failure continues to
+fail open to screenshot extraction. This change does not alter live flags,
+deploy anything or use personal screen frames.
 
 Capture binds the original owner and authorization generation plus the app's
 exclusion generation before capture suspends. The immutable frame carries that
@@ -56,13 +60,24 @@ terminal. Rejection uploads no screenshot unless audited.
 
 A fresh admission read every 30 seconds grants a 55-second lease measured from
 request start and bound to the owner/session that fetched it. An account or
-same-UID session transition revokes the lease immediately. SDK cached reload
-notifications cannot renew that lease. The
-client reads the public flag-evaluation endpoint and authenticated
-`GET /v1/screen-task/admission`; a failed refresh leaves existing leases to expire.
+same-UID session transition revokes the lease immediately. The client reads
+authenticated `GET /v1/screen-task/admission`; a failed refresh leaves existing
+leases to expire. The same tick renews the flag lease from the PostHog SDK's
+cached `screen_task_jev_gate` value without a network call; the SDK reloads
+flags every 30 minutes, because every PostHog flag request is billed. An explicit
+`false` therefore reaches running clients within about 30 minutes; the fast stop
+is `SCREEN_TASK_STOP`.
 `SCREEN_TASK_STOP=true` is a backend ops stop read at each gate and flagged
 screenshot dispatch. The admission endpoint reports it; gate/proxy return typed
-409 `screen_task_stopped`, never an ordinary provider error. The running client
+409 `screen_task_stopped`, never an ordinary provider error. Identified macOS
+builds below `SCREEN_TASK_MIN_MACOS_BUILD` (default 12435; invalid values keep
+that default) get a separate typed 409 `screen_task_build_below_floor` with
+`X-Omi-Retryable: false` on the gate, admission, and flagged screenshot proxy.
+Unidentified, conflicting, Windows, and other callers are unchanged, and an
+unflagged proxy request stays on its existing lane. Builds 12433 and 12434
+fail open on that gate error into flagged extraction, then take one legacy
+extraction when the proxy refuses; they do not retry the 409 or show it as a
+user error. The running client
 stops new feature gate/extraction dispatches and feature-result mutations within
 55 seconds of its last admission request (within the 60-second requirement),
 even if refresh hangs. It rechecks before every dispatch and mutation. Queued
@@ -134,6 +149,8 @@ an account swap cannot attribute a prior owner’s delivery to the incoming user
 `omi_fallback_total{component="screen_task_gate",reason="gate_unavailable"}`.
 `omi_screen_task_gate_frames_total{outcome}` counts backend gate admissions,
 including terminal plan/quota/stop states;
+`omi_screen_task_build_floor_refusals_total{surface}` counts build-floor refusals
+on `gate`, `admission`, and `proxy` with no build number or user agent;
 `omi_screen_task_client_bypass_total` counts flagged screenshot requests carrying
 client-bypass metadata. Client terminal events are the authoritative eligible
 frame denominator, since rejected and pre-upload-failed frames send no screenshot.

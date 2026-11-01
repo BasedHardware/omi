@@ -1,0 +1,21 @@
+{
+  "update_id": 100,
+  "message": {
+    "message_id": 10,
+    "date": 1791588000,
+    "from": {
+      "id": 101,
+      "is_bot": false
+    },
+    "chat": {
+      "id": 101,
+      "type": "private"
+    },
+    "photo": [
+      {
+        "file_id": "fixture-file",
+        "file_size": 9
+      }
+    ]
+  }
+}

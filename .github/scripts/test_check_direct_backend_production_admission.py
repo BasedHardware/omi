@@ -21,6 +21,24 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
     def test_inventory_is_admitted_and_uses_checked_out_source_identity(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
 
+    def test_listen_exporter_job_checks_out_exact_admitted_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in CHECKER.WORKFLOWS:
+                source = ROOT / relative
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+            target = root / CHECKER.LISTEN_WORKFLOW
+            text = target.read_text(encoding="utf-8")
+            text = text.replace(CHECKER.LISTEN_EXPORTER_CHECKOUT, "ref: main", 1)
+            target.write_text(text, encoding="utf-8")
+
+            self.assertIn(
+                f"{CHECKER.LISTEN_WORKFLOW} exporter job must check out the exact source admitted by helm-upgrade",
+                CHECKER.validate(root),
+            )
+
     def test_each_direct_writer_rejects_each_source_admission_mutation_in_a_fresh_fixture(self) -> None:
         mutations = {
             "caller_ref": (CHECKER.CHECKOUT, "ref: ${{ github.event.inputs.branch }}"),

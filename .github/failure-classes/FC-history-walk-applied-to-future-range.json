@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-history-walk-applied-to-future-range",
+  "violated_contract": "A capped read that walks backwards from a range's end (most recent first) may only serve a range that has already ended. get_calendar_events_tool walked every range over 30 days back from its end in 30-day windows and stopped at max_results, so 'what's on my calendar for the next two months' returned events 30 to 60 days out and skipped the next 30 days.",
+  "canonical_prevention": "Choose the read direction from where the range sits relative to now: walk back from the end only when the range has ended, and read a range that reaches into the future chronologically from its start. A hermetic test with a fake provider covers both directions.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_calendar_long_range_upcoming.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/retrieval/tools/calendar_tools.py"
+  ],
+  "status": "open"
+}

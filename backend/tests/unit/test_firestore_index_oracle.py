@@ -11,9 +11,7 @@ from urllib.parse import quote
 
 import pytest
 from google.api_core.exceptions import FailedPrecondition, InvalidArgument, PermissionDenied
-from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore_admin_v1
-from google.cloud.firestore_v1 import Client
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from scripts import firestore_index_oracle as oracle
@@ -21,10 +19,11 @@ from tests.support import firestore_index_rules as rules
 from tests.support.firestore_query_driver_registry import DRIVERS
 from tests.support.firestore_query_drivers import run_driver
 from tests.support.firestore_shape_recorder import QueryFilter, QueryShape, _encode_value
+from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
 
 NAMESPACE = "index-oracle-fixture"
 PROJECT = "based-hardware-dev"
-DATABASE = "jit-qa"
+DATABASE = "(default)"
 PARENT = f"projects/{PROJECT}/databases/{DATABASE}/collectionGroups/-"
 
 PROD_DECODED_TOKEN = "ClRwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS9kYXRhYmFzZXMvKGRlZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvY29udmVyc2F0aW9ucy9pbmRleGVzL18QARoNCglkaXNjYXJkZWQQARoOCgpjcmVhdGVkX2F0EAEaDAoIX19uYW1lX18QAQ"
@@ -78,10 +77,7 @@ def _field_index(fields, collection="conversations", scope="COLLECTION", state="
 
 
 def _field(name, config=None):
-    kwargs = {"name": name}
-    if config is not None:
-        kwargs["index_config"] = config
-    return firestore_admin_v1.Field(**kwargs)
+    return firestore_admin_v1.Field(name=name, **({"index_config": config} if config is not None else {}))
 
 
 def _index_config(indexes, uses_ancestor=False, ancestor=None, reverting=False):
@@ -505,7 +501,7 @@ def test_registry_cursor_driver_exports_snapshot_cursor(sdk_client, monkeypatch)
 
 
 def test_execute_query_real_sdk_query_propagates_iterator_failure_once(monkeypatch):
-    client = Client(project=PROJECT, database=DATABASE, credentials=AnonymousCredentials())
+    client = OfflineFirestoreClient(project=PROJECT, database=DATABASE)
     query = (
         client.collection("users/u/conversations")
         .where(filter=FieldFilter("discarded", "==", False))
@@ -770,7 +766,7 @@ def test_uncertain_error_or_mismatch_gives_no_resolution(observed):
 
 @pytest.fixture()
 def sdk_client():
-    return Client(project=PROJECT, database=DATABASE, credentials=AnonymousCredentials())
+    return OfflineFirestoreClient(project=PROJECT, database=DATABASE)
 
 
 def test_hydration_uses_synthetic_collection_path_and_group_keeps_id(sdk_client):
@@ -1377,6 +1373,8 @@ def _argv(tmp_path, export_path, extra=()):
 
 
 def _install_factories(monkeypatch, tracked, admin, query_outcome):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+
     def client_factory(**kwargs):
         tracked["client_project"] = kwargs.get("project")
         tracked["client_database"] = kwargs.get("database")
@@ -1447,9 +1445,9 @@ def test_main_uses_default_dev_target_when_flags_omitted(tmp_path, monkeypatch):
     code = oracle.main(["--export", str(export_path), "--output-dir", str(tmp_path / "out")])
     assert code == 0
     assert tracked["client_project"] == "based-hardware-dev"
-    assert tracked["client_database"] == "jit-qa"
+    assert tracked["client_database"] == "(default)"
     report = json.loads((tmp_path / "out" / "report.json").read_text())
-    assert report["project"] == "based-hardware-dev" and report["database"] == "jit-qa"
+    assert report["project"] == "based-hardware-dev" and report["database"] == "(default)"
 
 
 def test_main_count_aggregation_uses_live_manifest_not_export_flag(tmp_path, monkeypatch):
@@ -1675,13 +1673,14 @@ def test_main_refuses_numeric_alias_and_emulator_before_clients(tmp_path, monkey
 
 
 def test_main_allows_explicit_prod_flag_with_fake_factories(tmp_path, monkeypatch):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
     tracked = {}
-    default_name = "projects/based-hardware/databases/jit-qa/collectionGroups/__default__/fields/*"
+    default_name = "projects/based-hardware/databases/(default)/collectionGroups/__default__/fields/*"
 
     admin = FakeAdmin(
         indexes=[
             firestore_admin_v1.Index(
-                name="projects/based-hardware/databases/jit-qa/collectionGroups/conversations/indexes/i",
+                name="projects/based-hardware/databases/(default)/collectionGroups/conversations/indexes/i",
                 query_scope="COLLECTION",
                 state="READY",
                 fields=[_asc("discarded"), _asc("created_at"), _asc("__name__")],
@@ -1693,7 +1692,7 @@ def test_main_allows_explicit_prod_flag_with_fake_factories(tmp_path, monkeypatc
                 _index_config(
                     [
                         firestore_admin_v1.Index(
-                            name="projects/based-hardware/databases/jit-qa/collectionGroups/__default__/indexes/_",
+                            name="projects/based-hardware/databases/(default)/collectionGroups/__default__/indexes/_",
                             query_scope="COLLECTION",
                             fields=[_asc("x"), _asc("__name__")],
                         )
@@ -1812,7 +1811,7 @@ def test_main_refuses_root_probe_on_other_dev_databases(tmp_path, monkeypatch):
     assert built == []
 
 
-def test_main_root_probe_allowed_on_dev_jit_qa(tmp_path, monkeypatch):
+def test_main_root_probe_allowed_on_dev(tmp_path, monkeypatch):
     tracked = {}
     export_path, _admin = _matching_main_setup(tmp_path, monkeypatch, tracked, [])
     export = json.loads(export_path.read_text())

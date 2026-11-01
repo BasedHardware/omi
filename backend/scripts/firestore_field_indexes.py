@@ -553,6 +553,8 @@ def _launch_field_patch(
     operation = request('PATCH', f'{url}?updateMask=indexConfig', patch)
     if not isinstance(operation, Mapping):
         raise FieldIndexError('Firestore field index update returned a non-object')
+    if operation.get('error'):
+        raise FieldIndexError('Firestore field index update failed on submission')
     operation_name = operation.get('name')
     return _operation_resource_name(operation_name, project=project, database=database)
 
@@ -590,6 +592,7 @@ def apply_field_requirement(
 def provision_field_requirements(
     *,
     requirements: tuple[FieldIndexRequirement, ...],
+    wait_for_ready: bool = True,
     project: str,
     database: str,
     request: Callable[..., Mapping[str, Any]],
@@ -659,6 +662,11 @@ def provision_field_requirements(
             )
             patched.add(key)
             survivors.append(requirement)
+        if not wait_for_ready:
+            # PR prebuilds release the schema lock once all async writes have
+            # started. A later writer sees CREATING and preserves that config;
+            # deployment readiness remains the authority for serving safety.
+            return patched
         for operation_name, _requirement in operations:
             wait_field_operation(
                 operation_name,

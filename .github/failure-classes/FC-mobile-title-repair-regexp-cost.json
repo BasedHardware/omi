@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-mobile-title-repair-regexp-cost",
+  "violated_contract": "Rendering a short conversation title on the UI isolate must not compile a Unicode boundary regexp for every transcript segment or repeatedly compile fixed Unicode speaker patterns.",
+  "canonical_prevention": "Reuse fixed Unicode patterns and reject absent literal IDs before constructing per-ID boundary patterns. Keep citation parity and Unicode boundary fixtures alongside a long-transcript Home-title workload with a coarse watchdog-class budget.",
+  "canonical_prevention_artifact": ["app/test/unit/note_citation_contract_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/utils/note_citations.dart"],
+  "status": "open"
+}

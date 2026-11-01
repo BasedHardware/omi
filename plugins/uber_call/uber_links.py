@@ -32,6 +32,8 @@ class UberDeepLinks:
 def _clean_text(value: str | None) -> str | None:
     if value is None:
         return None
+    if not isinstance(value, str):
+        raise ValueError(f"Text values must be strings, got {type(value).__name__}.")
     cleaned = " ".join(value.split())
     return cleaned or None
 
@@ -39,13 +41,15 @@ def _clean_text(value: str | None) -> str | None:
 def _normalize_float(value: float | int | str | None) -> float | None:
     if value in (None, ""):
         return None
+    # The Omi backend forwards ``geolocation`` as free-form JSON, so a coordinate
+    # can be any JSON type. bool is an int subclass (float(True) is 1.0), and
+    # float() raises TypeError, ValueError or OverflowError for the rest; all
+    # become the ValueError that call_uber maps to a 400.
+    if isinstance(value, bool):
+        raise ValueError("Coordinates must be a number or a numeric string, got bool.")
     try:
         return float(value)
-    except TypeError as exc:
-        # The Omi backend forwards ``geolocation`` as free-form JSON, so a
-        # coordinate can arrive as a list or object. float() raises TypeError
-        # for those, which is not part of this module's contract and would
-        # escape the caller's ValueError handling.
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(
             "Coordinates must be a number or a numeric string, got "
             f"{type(value).__name__}."

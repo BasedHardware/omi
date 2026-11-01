@@ -548,7 +548,8 @@ extension RealtimeHubController {
       prepareVoiceOutputForDeterministicSlowToolAcknowledgement()
       FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(
         acknowledgement,
-        provider: acknowledgementProvider)
+        provider: acknowledgementProvider,
+        voiceName: Self.acknowledgementVoiceName(acknowledgementProvider, session?.assistantVoiceID))
     }
     switch tool {
     case .getTasks:
@@ -678,7 +679,6 @@ extension RealtimeHubController {
     guard isCurrentSession(source) else { return }
     AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
     NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
-    InterjectClassificationDelivery.shared.voiceSessionDidOpenInputWindow()
   }
 
   func hubDidConnect(source: RealtimeHubSession) {
@@ -687,7 +687,6 @@ extension RealtimeHubController {
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     AgentCompletionVoiceDelivery.shared.voiceSessionDidConnect()
     NotchCardVoiceDelivery.shared.voiceSessionDidConnect()
-    InterjectClassificationDelivery.shared.voiceSessionDidConnect()
     let replayedReconnectTurn = reconnectAudioBuffer != nil
     let replayedReplacementTurn = replacementAudioBuffer != nil
     if replayedReplacementTurn {
@@ -731,7 +730,7 @@ extension RealtimeHubController {
     let automationSelection = RealtimeAutomationTranscriptOverridePolicy.select(
       providerText: text,
       providerIsFinal: isFinal,
-      forcedText: testProviderTranscriptOverride)
+      forcedText: testProviderTranscriptOverride ?? wakeWordInputTranscript)
     if automationSelection.usedOverride {
       turnTranscript = automationSelection.text
       providerTranscriptFinalized = automationSelection.isFinal
@@ -831,6 +830,11 @@ extension RealtimeHubController {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
+    // The session speaks this text itself, so the microphone hears it and ambient capture
+    // returns it as the user. Recording it here is what lets `VoicePlaybackEchoPolicy`
+    // recognise the model's own answer coming back — the service that normally owns that
+    // history never sees realtime audio, because the hub plays it natively.
+    FloatingBarVoicePlaybackService.shared.recordExternallySpokenText(text)
     guard
       RealtimeProviderOutputPresentationPolicy.decide(
         screenGroundingState: screenGroundingState,
@@ -854,7 +858,7 @@ extension RealtimeHubController {
       }
     }
     if isFinal {
-      let reply = InterjectVoiceFeedbackRouting.spokenText(from: assistantText)
+      let reply = LegacyReplyTokenSanitizer.spokenText(from: assistantText)
         .trimmingCharacters(in: .whitespacesAndNewlines)
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it through the selected app voice. Normally both providers stream
@@ -943,14 +947,6 @@ extension RealtimeHubController {
         turnID: turnID,
         callId: callId,
         reportIdentity: toolIdentity,
-        arguments: arguments,
-        expectedTurnEpoch: toolTurnEpoch)
-      return
-    }
-    if name == HubTool.recordInterjectFeedback.rawValue {
-      handleInterjectFeedbackReport(
-        source: source,
-        callId: callId,
         arguments: arguments,
         expectedTurnEpoch: toolTurnEpoch)
       return
@@ -1111,6 +1107,13 @@ extension RealtimeHubController {
       testProviderTranscriptOverride = nil
       heard = forced
       log("RealtimeHub: TEST override provider transcript → \"\(forced.prefix(60))\"")
+    }
+    let completedInputTranscript = Self.journalInputTranscript(
+      providerText: heard,
+      wakeWordInputTranscript: wakeWordInputTranscript)
+    if heard.isEmpty, !completedInputTranscript.isEmpty {
+      heard = completedInputTranscript
+      log("RealtimeHub: using wake-word text for the journal input transcript")
     }
     let providerReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.ownerID
@@ -1382,7 +1385,7 @@ extension RealtimeHubController {
     // Most "session error" closes are expected lifecycle events, not bugs: a socket
     // that lived past the idle window is a normal provider idle-close (Gemini ~2.5min,
     // 1008), and a client "operation was aborted"/cancellation is a teardown. Reporting
-    // these to Sentry as errors created the high-volume OMI-DESKTOP-27C cluster. Keep
+    // these as error-level events created the high-volume OMI-DESKTOP-27C cluster. Keep
     // them as local logs; only capture genuine fast-fail provider errors, without raw
     // provider close text for known fast policy/auth/config rejects.
     let closeCategory = RealtimeHubCloseClassifier.category(
@@ -1415,7 +1418,7 @@ extension RealtimeHubController {
       provider: providerTag,
       aliveFor: aliveFor,
       activeTurn: hasActiveTurn)
-    let shouldCaptureProviderCloseToSentry = RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory)
+    let isActionableProviderClose = RealtimeHubCloseClassifier.isActionableClose(closeCategory)
     let closeAttemptID = DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
       provider: providerTag,
       category: closeCategory?.rawValue,
@@ -1435,16 +1438,16 @@ extension RealtimeHubController {
         turnOutcome: turnOutcome,
         recoveryAction: recoveryAction,
         recoveryResult: recoveryResult)
-      // `logError` synchronously builds the Sentry attachment. Capture only after
-      // this paired decision exists so the incident carries its bounded recovery
-      // outcome as well as the raw provider-close classification.
-      if shouldCaptureProviderCloseToSentry {
-        logError(reportingPlan.sentryMessage)
+      // Actionable closes get an error-level log (local log + beta trail) only
+      // after this paired decision exists, so the record carries its bounded
+      // recovery outcome as well as the raw provider-close classification.
+      if isActionableProviderClose {
+        logError(reportingPlan.boundedErrorMessage)
       }
     }
-    // Keep the provider/system payload in the private local log. The Sentry
+    // Keep the provider/system payload in the private local log. The error
     // message is constructed only from bounded enums and scalars, after the
-    // recovery decision is available for its synchronous attachment.
+    // recovery decision is available.
     log(reportingPlan.localMessage)
     log(
       "RealtimeHub: provider close terminal state tool=\(terminalToolName) "

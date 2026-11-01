@@ -1,0 +1,11 @@
+{
+  "description": "HELD preparation: project-level emitted LB log entries only; 4xx storm. No URL/ID labels; resource labels inherited. Sampling/coverage calibration required.",
+  "filter": "(((resource.type = \"http_load_balancer\" AND resource.labels.project_id = \"based-hardware\" AND logName = \"projects/based-hardware/logs/requests\") AND httpRequest.status >= 400 AND httpRequest.status < 500) AND (httpRequest.requestMethod =~ \"^GET$\" AND httpRequest.status = 429 AND httpRequest.requestUrl =~ \"^https://api[.]omi[.]me/v2/sync-local-files/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:[?][^#]*)?$\"))",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": []
+  },
+  "labelExtractors": {}
+}

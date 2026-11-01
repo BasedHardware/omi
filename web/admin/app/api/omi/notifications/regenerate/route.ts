@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { ADMIN_LLM_LANES, invokeAdminLlmGateway } from "@/lib/llm-gateway";
 
 export const dynamic = "force-dynamic";
@@ -227,7 +227,7 @@ async function runGate(
   userName: string,
   userFacts: string,
   goalsText: string,
-  item: RegenerateItem,
+  item: RegenerateItem
 ): Promise<{
   is_relevant: boolean;
   relevance_score: number;
@@ -264,7 +264,7 @@ async function runGenerate(
   userFacts: string,
   goalsText: string,
   frequency: number,
-  item: RegenerateItem,
+  item: RegenerateItem
 ): Promise<any> {
   const frequencyGuidance =
     FREQUENCY_GUIDANCE[frequency] || FREQUENCY_GUIDANCE[3];
@@ -309,7 +309,7 @@ async function runCritic(
   goalsText: string,
   notificationText: string,
   draftReasoning: string,
-  currentConversation: string,
+  currentConversation: string
 ): Promise<{ approved: boolean; reasoning: string }> {
   const prompt = CRITIC_PROMPT.replace(/{user_name}/g, userName)
     .replace(/{notification_text}/g, notificationText)
@@ -345,7 +345,7 @@ async function processItem(
   userFacts: string,
   goalsText: string,
   frequency: number,
-  item: RegenerateItem,
+  item: RegenerateItem
 ): Promise<any> {
   // Step 1: Gate
   const gate = await runGate(userName, userFacts, goalsText, item);
@@ -357,7 +357,7 @@ async function processItem(
     userFacts,
     goalsText,
     frequency,
-    item,
+    item
   );
 
   // Step 3: Critic (only if there's advice to critique)
@@ -368,7 +368,7 @@ async function processItem(
       goalsText,
       generated.advice.notification_text,
       generated.advice.reasoning || "",
-      item.current_conversation,
+      item.current_conversation
     );
   }
 
@@ -385,7 +385,7 @@ async function processItem(
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "users:write");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -400,9 +400,9 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!prompt_template || !items || items.length === 0) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "prompt_template and items are required" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -418,9 +418,9 @@ export async function POST(request: NextRequest) {
             user_facts,
             goals_text,
             frequency,
-            item,
-          ),
-        ),
+            item
+          )
+        )
       );
       for (const result of batchResults) {
         if (result.status === "fulfilled") {
@@ -435,12 +435,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ results });
+    return authResult.json({ results });
   } catch (error: any) {
     console.error("Error regenerating notifications:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: `Failed to regenerate: ${error.message}` },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

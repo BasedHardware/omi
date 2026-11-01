@@ -15,6 +15,7 @@ class ImportJobStatus(str, Enum):
 
 class ImportSourceType(str, Enum):
     limitless = 'limitless'
+    transcript_files = 'transcript_files'
 
 
 class ImportJob(BaseModel):
@@ -45,6 +46,7 @@ class ImportJob(BaseModel):
 class ImportJobResponse(BaseModel):
     job_id: str
     status: ImportJobStatus
+    source_type: Optional[ImportSourceType] = Field(default=None, description="Which importer created the job")
     total_files: Optional[int] = None
     processed_files: Optional[int] = None
     conversations_created: Optional[int] = None

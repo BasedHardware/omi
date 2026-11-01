@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-delete-suppression-retired-before-acknowledgement",
+  "violated_contract": "An optimistic deletion must remain suppressed until its mutation is acknowledged and a later authoritative read confirms absence. Treating a list omission during the pending mutation as acknowledgement lets a later stale read resurrect deleted rows; unconditional bulk rollback then inserts those rows a second time.",
+  "canonical_prevention": "At the shared list owner, record the read ordinal when each deletion is acknowledged. Retire suppression only from a complete unfiltered read started afterwards, with no older projection reads outstanding. Restore failed mutations through one ID-aware restore primitive. Exercise delayed delete receipts, out-of-order reads and full/partial bulk failures through the production provider.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/action_items_delete_refresh_race_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/action_items_provider.dart",
+    "app/test/providers/action_items_delete_refresh_race_test.dart"
+  ],
+  "status": "open"
+}

@@ -12,8 +12,8 @@ final class ScreenTaskPipelineTests: XCTestCase {
       }, processedAt: Date(timeIntervalSince1970: 0))
   }
 
-  @MainActor func testFlagDefaultsOffWithoutPostHogAdmission() {
-    XCTAssertFalse(ScreenTaskFeature.isEnabled)
+  func testMissingFlagValueDoesNotTurnTheGateOff() {
+    XCTAssertFalse(ScreenTaskFeature.isKillSwitchOff(flagValue: nil))
   }
 
   func testMainPaneDedupeIgnoresSidebarAndLayoutJitterButPassesNovelTask() {
@@ -191,7 +191,7 @@ final class ScreenTaskPipelineTests: XCTestCase {
   func testLegacyFallbackRejectsRevokedFrameBeforeNetworkOrQuotaWork() async throws {
     let authority = RuntimeOwnerAuthorizationAuthority()
     let stale = try XCTUnwrap(authority.capture(ownerID: "synthetic-user", expectedOwnerID: "synthetic-user"))
-    let client = try GeminiClient(model: "gemini-2.5-flash", workload: .extraction)
+    let client = try GeminiClient(model: "gemini-2.5-flash", lane: .taskExtraction, workload: .extraction)
     do {
       _ = try await client.sendImageToolLoop(contents: [], systemPrompt: "synthetic", tools: [], authorization: stale)
       XCTFail("Foreign/revoked frame authorization must not dispatch")

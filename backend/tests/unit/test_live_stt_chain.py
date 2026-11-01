@@ -9,17 +9,26 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.stt_provider_policy import STTServingSurface, model_is_enabled, provider_for_service
+from utils.observability import demand_cohort as telemetry, fallback
 from utils.stt import (
+    connect_backoff as connect_backoff_module,
     live_failure,
     connect_metrics,
     live_chain,
     live_health,
+    live_router,
     provider_resilience as resilience,
+    recovery_state,
     streaming as st,
 )
 from utils.stt.live_rollout import managed_chain_enabled, window_allocation
-from utils.stt.soniox import soniox_death_reason
+from utils.stt.soniox import SonioxRateLimitError, soniox_death_reason
 from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 @pytest.fixture(autouse=True)
@@ -37,6 +46,13 @@ def configured(monkeypatch):
         monkeypatch.setattr(
             st, f'_{name}_circuit', resilience.ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30)
         )
+    monkeypatch.setattr(live_router, '_target_circuits', {})
+    monkeypatch.setattr(live_router, '_capacity_until', {})
+    monkeypatch.setattr(
+        connect_backoff_module,
+        '_shared',
+        connect_backoff_module.ConnectRefusalBackoff(on_event=live_chain._connect_backoff_event),
+    )
 
 
 def socket(**kwargs):
@@ -79,8 +95,6 @@ def test_allocation_is_stable_bounded_and_default_dark(monkeypatch):
     assert first == [window_allocation(str(i)) for i in range(1000)]
     assert 200 < sum(first) < 300
     assert not window_allocation(None)
-    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'false')
-    assert not window_allocation('user')
 
 
 def test_one_percent_canary_leads_without_reordering_vendor_control(monkeypatch):
@@ -503,14 +517,14 @@ def test_parallel_half_open_and_late_success_cannot_erase_a_failure():
 
 
 @pytest.mark.asyncio
-async def test_default_darkness_preserves_fixed_order_and_ignores_fallback_breaker(monkeypatch):
-    monkeypatch.delenv('STT_CONNECT_ORDER_FROM_CONFIG')
+async def test_explicit_custom_session_keeps_fixed_order_and_ignores_fallback_breaker(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'])
     assert st.get_stt_service_for_language('en', window_uid='user') == (st.STTService.modulate, 'multi', 'velma-2')
     st._deepgram_circuit.record_serve_failure()
     soniox = AsyncMock(return_value=socket())
     dg = AsyncMock(return_value=socket())
     _, actual = await st.connect_stt_socket_with_fallback(
+        use_config=False,
         primary_service=st.STTService.modulate,
         connect_primary=AsyncMock(side_effect=RuntimeError()),
         connect_soniox=soniox,
@@ -523,7 +537,9 @@ async def test_default_darkness_preserves_fixed_order_and_ignores_fallback_break
     st._modulate_circuit.record_serve_failure()
     primary = AsyncMock(return_value=socket())
     with pytest.raises(RuntimeError):
-        await st.connect_stt_socket_with_fallback(primary_service=st.STTService.modulate, connect_primary=primary)
+        await st.connect_stt_socket_with_fallback(
+            use_config=False, primary_service=st.STTService.modulate, connect_primary=primary
+        )
     primary.assert_not_called()
 
 
@@ -546,8 +562,6 @@ def test_preflight_does_not_strand_a_start_with_an_open_primary(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     st._modulate_circuit.record_serve_failure()
     assert st.is_stt_available()
-    monkeypatch.delenv('STT_CONNECT_ORDER_FROM_CONFIG')
-    assert not st.is_stt_available()
 
 
 @pytest.mark.asyncio
@@ -608,18 +622,11 @@ def test_mid_session_metrics_retain_their_bounded_vocabulary():
     assert bucket_reason('connection_lost') == 'connection_lost'
 
 
-def test_soniox_circuit_owns_its_env_only_after_enablement(monkeypatch):
+def test_soniox_circuit_uses_its_configured_threshold(monkeypatch):
     monkeypatch.setenv('SONIOX_CIRCUIT_FAILURE_THRESHOLD', '1')
-    monkeypatch.setenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '2')
     enabled = resilience.soniox_circuit_from_env()
     enabled.record_failure()
     assert enabled.state == 'open'
-    monkeypatch.delenv('STT_CONNECT_ORDER_FROM_CONFIG')
-    legacy = resilience.soniox_circuit_from_env()
-    legacy.record_failure()
-    assert legacy.state == 'closed'
-    legacy.record_failure()
-    assert legacy.state == 'open'
 
 
 def test_late_probe_callbacks_cannot_consume_a_new_generation_probe():
@@ -657,9 +664,399 @@ def test_shared_typed_account_death_uses_long_cooldown_and_one_probe(monkeypatch
 
 
 @pytest.mark.parametrize('code', [401, 403])
-def test_soniox_auth_uses_shared_type_only_when_enabled(monkeypatch, code):
+def test_soniox_auth_uses_shared_type(code):
     assert soniox_death_reason(code, 'unknown') == PROVIDER_AUTH_REJECTED
-    monkeypatch.delenv('STT_CONNECT_ORDER_FROM_CONFIG')
-    assert soniox_death_reason(code, 'unknown') == 'connection_lost'
     # The upstream budget fix is unconditional, including project budgets.
     assert soniox_death_reason(402, 'project_monthly_budget_exhausted') == PROVIDER_BUDGET_EXHAUSTED
+
+
+@pytest.fixture
+def connect_backoff(monkeypatch):
+    now = [0.0]
+    instance = connect_backoff_module.ConnectRefusalBackoff(clock=lambda: now[0])
+    monkeypatch.setattr(live_chain, 'connect_backoff', lambda: instance)
+    instance.now = now
+    return instance
+
+
+def _soniox_then_modulate(**overrides):
+    return dict(
+        primary_service=st.STTService.soniox,
+        connect_primary=overrides.get('soniox'),
+        callbacks={st.STTService.modulate: overrides.get('modulate', AsyncMock(return_value=socket()))},
+        failed=overrides.get('failed', set()),
+        models=['soniox', 'modulate-velma-2'],
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+@pytest.mark.parametrize('exhausted', [False, True])
+async def test_metric_failure_cannot_abort_selection_or_replace_typed_exhaustion(monkeypatch, failure, exhausted):
+    class RaisingMetric:
+        attempts = 0
+
+        def labels(self, **_labels):
+            if failure == 'labels':
+                self.attempts += 1
+                raise ValueError('synthetic label failure')
+            return self
+
+        def inc(self, *_args):
+            self.attempts += 1
+            raise ValueError('synthetic counter failure')
+
+    broken = RaisingMetric()
+    monkeypatch.setattr(fallback, 'FAILURE_DETAIL', broken)
+    monkeypatch.setattr(live_chain, 'CHAIN_EXHAUSTED', broken)
+    cohort = telemetry.DemandTelemetry('admitted')
+    token = telemetry.current_demand.set(cohort)
+    st._soniox_circuit.record_account_failure(600)
+    primary = AsyncMock(return_value=socket())
+    tail = AsyncMock(return_value=socket())
+    if exhausted:
+        tail.side_effect = RuntimeError('synthetic vendor dial failure')
+    try:
+        kwargs = _soniox_then_modulate(soniox=primary, modulate=tail)
+        if exhausted:
+            with pytest.raises(live_chain.LiveChainExhausted):
+                await live_chain.connect_configured_chain(**kwargs)
+        else:
+            _, selected = await live_chain.connect_configured_chain(**kwargs)
+            assert selected == st.STTService.modulate
+        primary.assert_not_awaited()
+        tail.assert_awaited_once()
+        assert broken.attempts > 0
+        assert cohort.exhausted == exhausted
+    finally:
+        telemetry.current_demand.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_isolated_429_leaves_fresh_sessions_dialing_soniox(connect_backoff):
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+    assert service == st.STTService.modulate
+    serving = AsyncMock(return_value=socket())
+    _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=serving))
+    assert service == st.STTService.soniox
+    serving.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_three_429s_skip_fresh_soniox_dials_without_a_bench(connect_backoff, monkeypatch):
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    modulate = AsyncMock(return_value=socket())
+    for _ in range(3):
+        _, service = await live_chain.connect_configured_chain(
+            **_soniox_then_modulate(soniox=soniox, modulate=modulate)
+        )
+        assert service == st.STTService.modulate
+    assert soniox.await_count == 3
+    events = []
+    monkeypatch.setattr(live_chain, 'record_fallback', lambda **kw: events.append(kw))
+    _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox, modulate=modulate))
+    assert service == st.STTService.modulate
+    assert soniox.await_count == 3
+    assert modulate.await_count == 4
+    assert any(
+        event['reason'] == 'circuit_open' and event['to_mode'] == 'soniox' and event['outcome'] == 'degraded'
+        for event in events
+    )
+    assert st._soniox_circuit.state == 'closed'
+
+
+@pytest.mark.asyncio
+async def test_refusals_older_than_the_window_do_not_open(connect_backoff):
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    for _ in range(3):
+        await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+        connect_backoff.now[0] += 10.5
+    serving = AsyncMock(return_value=socket())
+    _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=serving))
+    assert service == st.STTService.soniox
+    serving.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_probe_is_exclusive_and_sessions_do_not_wait(connect_backoff):
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    for _ in range(3):
+        await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+    connect_backoff.now[0] += 2.0
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def probe():
+        started.set()
+        await release.wait()
+        return socket()
+
+    task = asyncio.create_task(live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=probe)))
+    await started.wait()
+    blocked = AsyncMock(side_effect=AssertionError('held probe must gate every other session'))
+    for _ in range(39):
+        _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=blocked))
+        assert service == st.STTService.modulate
+    blocked.assert_not_called()
+    release.set()
+    _, service = await task
+    assert service == st.STTService.soniox
+
+
+@pytest.mark.asyncio
+async def test_refused_probe_escalates_and_successful_probe_resets(connect_backoff):
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    for _ in range(3):
+        await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+    for cooldown in (2.0, 4.0):
+        connect_backoff.now[0] += cooldown - 0.1
+        await live_chain.connect_configured_chain(
+            **_soniox_then_modulate(soniox=AsyncMock(side_effect=AssertionError('still cooling')))
+        )
+        connect_backoff.now[0] += 0.1
+        await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+    connect_backoff.now[0] += 8.0
+    serving = AsyncMock(return_value=socket())
+    _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=serving))
+    assert service == st.STTService.soniox
+    _, service = await live_chain.connect_configured_chain(
+        **_soniox_then_modulate(soniox=AsyncMock(side_effect=SonioxRateLimitError('transient')))
+    )
+    assert service == st.STTService.modulate
+    retry = AsyncMock(return_value=socket())
+    _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=retry))
+    assert service == st.STTService.soniox
+    retry.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_probe_releases_without_immediate_second_probe(connect_backoff):
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    for _ in range(3):
+        await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+    connect_backoff.now[0] += 2.0
+    started = asyncio.Event()
+
+    async def probe():
+        started.set()
+        await asyncio.Future()
+
+    task = asyncio.create_task(live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=probe)))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    blocked = AsyncMock(side_effect=AssertionError('cancel re-cools the probe slot'))
+    _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=blocked))
+    assert service == st.STTService.modulate
+    blocked.assert_not_called()
+    connect_backoff.now[0] += 2.0
+    serving = AsyncMock(return_value=socket())
+    _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=serving))
+    assert service == st.STTService.soniox
+
+
+@pytest.mark.asyncio
+async def test_connect_refused_errors_count_toward_the_gate(connect_backoff, monkeypatch):
+    monkeypatch.setattr(
+        st, '_soniox_circuit', resilience.ProviderCircuitBreaker(failure_threshold=10, cooldown_seconds=30)
+    )
+    soniox = AsyncMock(side_effect=ConnectionRefusedError())
+    for _ in range(3):
+        _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+        assert service == st.STTService.modulate
+    await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+    assert soniox.await_count == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'reason,expected_dials',
+    [
+        ('auth', 1),
+        ('provider_budget_exhausted', 1),
+        ('provider_auth_rejected', 1),
+        ('capacity_full', 3),
+        ('config_incomplete', 3),
+        ('vad_failed', 3),
+    ],
+)
+async def test_non_refusal_outcomes_do_not_count_toward_the_gate(connect_backoff, monkeypatch, reason, expected_dials):
+    monkeypatch.setattr(live_chain, 'note_capacity_full', lambda *args: None)
+    soniox = AsyncMock(side_effect=live_chain.RejectedStream(reason))
+    for _ in range(3):
+        monkeypatch.setattr(
+            st, '_soniox_circuit', resilience.ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+        )
+        _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
+        assert service == st.STTService.modulate
+    assert soniox.await_count == expected_dials
+    state = connect_backoff._states.get('soniox')
+    assert state is None or not state.refusals
+
+
+@pytest.mark.asyncio
+async def test_all_cooled_targets_get_one_bounded_escape_and_can_recover(connect_backoff):
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    modulate = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    for _ in range(3):
+        with pytest.raises(RuntimeError, match='exhausted'):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.soniox,
+                connect_primary=soniox,
+                callbacks={st.STTService.modulate: modulate},
+                failed=set(),
+                models=['soniox', 'modulate-velma-2'],
+            )
+    soniox.reset_mock()
+    modulate.reset_mock()
+    with pytest.raises(RuntimeError, match='exhausted'):
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.soniox,
+            connect_primary=soniox,
+            callbacks={st.STTService.modulate: modulate},
+            failed=set(),
+            models=['soniox', 'modulate-velma-2'],
+        )
+    assert soniox.await_count == 1
+    modulate.assert_not_called()
+    recovered = AsyncMock(return_value=socket())
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=recovered,
+        callbacks={st.STTService.modulate: modulate},
+        failed=set(),
+        models=['soniox', 'modulate-velma-2'],
+    )
+    assert service == st.STTService.soniox
+    recovered.assert_awaited_once()
+    modulate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_all_cooling_escape_dials_only_the_earliest_expiry_once(connect_backoff):
+    for _ in range(3):
+        connect_backoff.acquire('modulate-velma-2', provider='modulate').finish(refused=True)
+    connect_backoff.now[0] += 0.5
+    for _ in range(3):
+        connect_backoff.acquire('soniox', provider='soniox').finish(refused=True)
+    host = SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
+    controller = recovery_state.LiveRecoveryController(host)
+    token = recovery_state.current_recovery.set(controller)
+    soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    modulate = AsyncMock(side_effect=SonioxRateLimitError('transient'))
+    try:
+        with pytest.raises(live_chain.LiveChainExhausted):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.soniox,
+                connect_primary=soniox,
+                callbacks={st.STTService.modulate: modulate},
+                failed=set(),
+                models=['soniox', 'modulate-velma-2'],
+            )
+    finally:
+        recovery_state.current_recovery.reset(token)
+    modulate.assert_awaited_once()
+    soniox.assert_not_called()
+    assert connect_backoff.cooldown_until('modulate-velma-2') == 2.0
+    assert connect_backoff.cooldown_until('soniox') == 2.5
+    assert connect_backoff._states['modulate-velma-2'].cooldown_seconds == 2.0
+    assert connect_backoff._states['soniox'].cooldown_seconds == 2.0
+    assert controller.attempted_targets == {'modulate-velma-2'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['exhausted', 'departed', 'deadline_expired'])
+async def test_cooling_escape_cannot_dial_a_terminal_episode(connect_backoff, terminal):
+    for identity, provider in (('soniox', 'soniox'), ('modulate-velma-2', 'modulate')):
+        for _ in range(3):
+            connect_backoff.acquire(identity, provider=provider).finish(refused=True)
+    host = SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
+    ticks = [0.0]
+    controller = recovery_state.LiveRecoveryController(host, clock=lambda: ticks[0])
+    if terminal == 'departed':
+        controller.mark_client_leaving()
+    elif terminal == 'deadline_expired':
+        controller.begin(family='soniox')
+        ticks[0] = recovery_state.RECOVERY_EPISODE_SECONDS + 1
+    else:
+        controller.state = recovery_state.RecoveryState.exhausted
+    token = recovery_state.current_recovery.set(controller)
+    soniox = AsyncMock(side_effect=AssertionError('a terminal episode has no escape dial'))
+    modulate = AsyncMock(side_effect=AssertionError('a terminal episode has no escape dial'))
+    try:
+        with pytest.raises(live_chain.LiveChainExhausted):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.soniox,
+                connect_primary=soniox,
+                callbacks={st.STTService.modulate: modulate},
+                failed=set(),
+                models=['soniox', 'modulate-velma-2'],
+            )
+    finally:
+        recovery_state.current_recovery.reset(token)
+    soniox.assert_not_called()
+    modulate.assert_not_called()
+    assert not controller.attempted_targets
+
+
+@pytest.mark.asyncio
+async def test_rescue_probe_auth_records_on_the_probed_circuit(connect_backoff, monkeypatch):
+    """The rescue force-probe must charge its own breaker, not the route loop's
+    last-bound circuit: Modulate's serve bench is force-probed while Soniox
+    stays account-blocked; the probe's auth rejection arms Modulate's account
+    bench and leaves Soniox's existing bench untouched."""
+    monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
+    st._modulate_circuit.record_serve_failure()
+    st._soniox_circuit.record_account_failure(600)
+    soniox_bench = st._soniox_circuit._account_cooldown
+    soniox_opened = st._soniox_circuit._opened_at
+    modulate = AsyncMock(side_effect=live_chain.RejectedStream('auth'))
+    soniox = AsyncMock(side_effect=AssertionError('account bench must not be dialed'))
+    with pytest.raises(RuntimeError, match='exhausted'):
+        await st.connect_stt_socket_with_fallback(
+            primary_service=st.STTService.modulate,
+            connect_primary=modulate,
+            connect_soniox=soniox,
+        )
+    modulate.assert_awaited_once()
+    soniox.assert_not_called()
+    assert st._modulate_circuit._account_cooldown == 1800
+    assert st._soniox_circuit._account_cooldown == soniox_bench
+    assert st._soniox_circuit._opened_at == soniox_opened
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cheap_fails', [False, True])
+async def test_batch_preview_preference_keeps_managed_vendor_failover(monkeypatch, cheap_fails):
+    """The retirement preference still dials through policy and the ordinary chain."""
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'parakeet-window'])
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
+    primary, language, model = st.get_stt_service_for_language(
+        'en', multi_lang_enabled=False, prefer_window=True, window_uid='synthetic-batch-preview'
+    )
+    assert primary == st.STTService.parakeet and model == 'parakeet-window'
+    calls = []
+
+    async def cheap():
+        calls.append('parakeet')
+        if cheap_fails:
+            raise st.ParakeetConnectionError('capacity_full')
+        return socket()
+
+    async def vendor():
+        calls.append('soniox')
+        return socket()
+
+    _, actual = await st.connect_stt_socket_with_fallback(
+        primary_service=primary,
+        connect_primary=cheap,
+        connect_parakeet=cheap,
+        connect_soniox=vendor,
+        routing_uid='synthetic-batch-preview',
+        routing_language=language,
+        routing_models={'parakeet': model, 'soniox': 'soniox'},
+    )
+    assert actual.value == ('soniox' if cheap_fails else 'parakeet')
+    assert calls == (['parakeet', 'soniox'] if cheap_fails else ['parakeet'])

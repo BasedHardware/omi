@@ -7,30 +7,6 @@ import Foundation
 extension FloatingControlBarManager {
   private static let maxPendingAdviceNotifications = 20
 
-  static func recordInsightDeliveryOutcome(
-    for notification: FloatingBarNotification,
-    outcome: InsightAssistantTelemetry.Outcome,
-    reason: InsightAssistantTelemetry.Reason,
-    surface: InsightAssistantTelemetry.Surface? = nil
-  ) {
-    guard let deliveryID = notification.insightDeliveryID else { return }
-    AnalyticsManager.shared.insightAssistantDeliveryOutcome(
-      outcome,
-      reason: reason,
-      deliveryID: deliveryID,
-      surface: surface
-    )
-  }
-
-  static func recordQueuedInsightOutcomes(
-    _ notifications: [FloatingBarNotification],
-    reason: InsightAssistantTelemetry.Reason
-  ) {
-    for notification in notifications {
-      recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: reason)
-    }
-  }
-
   @discardableResult
   static func appendAdviceNotification(
     _ notification: FloatingBarNotification,
@@ -40,7 +16,6 @@ extension FloatingControlBarManager {
     if queue.count >= Self.maxPendingAdviceNotifications {
       let removed = queue.removeFirst()
       evicted = removed
-      recordQueuedInsightOutcomes([removed], reason: .queueOverflow)
     }
     queue.append(notification)
     return evicted
@@ -54,7 +29,6 @@ extension FloatingControlBarManager {
       let nextNotification = queue.removeFirst()
       guard let currentOwnerID, nextNotification.ownerID == currentOwnerID else {
         log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-        recordInsightDeliveryOutcome(for: nextNotification, outcome: .suppressed, reason: .staleOwner)
         continue
       }
       return nextNotification
@@ -62,12 +36,4 @@ extension FloatingControlBarManager {
     return nil
   }
 
-  static func recordAdvicePresentation(_ notification: FloatingBarNotification) {
-    recordInsightDeliveryOutcome(
-      for: notification,
-      outcome: .delivered,
-      reason: .floatingBarPresented,
-      surface: .floatingBar
-    )
-  }
 }

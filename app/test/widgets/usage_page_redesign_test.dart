@@ -169,6 +169,126 @@ void main() {
     expect(tooltip!.text, contains('30 seconds'));
   });
 
+  for (final plan in [PlanType.plus, PlanType.unlimited]) {
+    testWidgets('finite transcription allowance is visible for ${plan.wireName}', (tester) async {
+      final provider = UsageProvider();
+      provider.debugSetSubscription(UserSubscriptionResponse(
+        subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+        transcriptionSecondsUsed: 1200,
+        transcriptionSecondsLimit: 90000,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+      ));
+      provider.debugSetUsage('today', stats(), []);
+      await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+      await tester.pump();
+      await tester.drag(find.byKey(const Key('usage_scroll_today')), const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 300));
+      final text = lookupAppLocalizations(const Locale('en')).minsUsedThisMonth('20', 1500);
+      expect(find.text(text), findsOneWidget);
+      await tester.ensureVisible(find.text(text));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('unlimited transcription does not invent a finite meter', (tester) async {
+    final provider = UsageProvider();
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.unlimitedV2, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 1200,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    ));
+    provider.debugSetUsage('today', stats(), []);
+    await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+    await tester.pump();
+    await tester.drag(find.byKey(const Key('usage_scroll_today')), const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  for (final scenario in [(name: 'Plus', cap: 90000), (name: 'Unlimited-v2', cap: 0)]) {
+    testWidgets('LLM-only BYOK ${scenario.name} meter follows enforcement despite Neo identity', (tester) async {
+      final provider = UsageProvider();
+      provider.debugSetSubscription(UserSubscriptionResponse(
+        subscription: Subscription(plan: PlanType.unlimited, status: SubscriptionStatus.active, features: ['byok']),
+        showSubscriptionUi: false,
+        transcriptionSecondsUsed: 1200,
+        transcriptionSecondsLimit: scenario.cap,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 8000,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+      ));
+      provider.debugSetUsage('today', stats(), []);
+      await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+      await tester.pump();
+      await tester.drag(find.byKey(const Key('usage_scroll_today')), const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 300));
+      if (scenario.cap > 0) {
+        final text = lookupAppLocalizations(const Locale('en')).minsUsedThisMonth('20', 1500);
+        expect(find.text(text), findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      } else {
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+      }
+      expect(provider.subscription!.subscription.plan, PlanType.unlimited);
+      expect(provider.subscription!.subscription.plan.hasUnlimitedTranscription, isTrue);
+      expect(provider.subscription!.subscription.features, ['byok']);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final unlimited in [true, false]) {
+    testWidgets('pre-21315 BYOK snapshot respects unlimited=$unlimited enforcement', (tester) async {
+      final provider = UsageProvider();
+      provider.debugSetSubscription(UserSubscriptionResponse.fromJson({
+        'subscription': {
+          'plan': 'unlimited',
+          'status': 'active',
+          'features': ['byok'],
+          'limits': {'transcription_seconds': 18000, 'words_transcribed': 8000, 'insights_gained': null},
+        },
+        'show_subscription_ui': false,
+        'transcription_seconds_used': unlimited ? 17000 : 1200,
+        'transcription_seconds_limit': 18000,
+        'words_transcribed_used': 0,
+        'words_transcribed_limit': 8000,
+        'insights_gained_used': 0,
+        'insights_gained_limit': 0,
+        'transcription_allowance': {
+          'mode': 'managed',
+          'remaining_seconds': unlimited ? null : 88800,
+          'reason': unlimited ? 'plan_unlimited' : 'plan_within_allowance',
+        },
+      }));
+      provider.debugSetUsage('today', stats(), []);
+      await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+      await tester.pump();
+      await tester.drag(find.byKey(const Key('usage_scroll_today')), const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 300));
+      if (unlimited) {
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.textContaining('300 min'), findsNothing);
+      } else {
+        // Remaining is not a total. Plus-BYOK's 300-min snapshot stays incorrect
+        // until #21315 deploys; this is why the backend must precede mobile release.
+        final text = lookupAppLocalizations(const Locale('en')).minsUsedThisMonth('20', 300);
+        expect(find.text(text), findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      }
+      expect(provider.subscription!.subscription.plan, PlanType.unlimited);
+      expect(provider.subscription!.subscription.features, ['byok']);
+      expect(provider.subscription!.showSubscriptionUi, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('plan card is a child of the period scroll view', (tester) async {
     final provider = UsageProvider();
     final now = DateTime.now().toUtc();
@@ -377,5 +497,45 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(requests, ['today', 'all_time', 'all_time']);
+  });
+
+  testWidgets('a usage load failure still shows plan management when subscription loaded', (tester) async {
+    final provider = UsageProvider(
+      deviceTimeZone: () async => 'UTC',
+      usageRequest: ({required String period, required String? timeZone}) async => null,
+    );
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.architect, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    ));
+    await provider.fetchUsageStats(period: 'today');
+
+    await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // The error state is showing (no usage data loaded)...
+    expect(find.text('Failed to load usage data. Please try again later.'), findsOneWidget);
+    // ...but the plan card, and its path to management/cancellation, stays reachable (#20621).
+    expect(find.text('Architect'), findsOneWidget);
+    expect(find.text('Manage Plan'), findsOneWidget);
+  });
+
+  testWidgets('a usage load failure with no subscription loaded shows only the error', (tester) async {
+    final provider = UsageProvider(
+      deviceTimeZone: () async => 'UTC',
+      usageRequest: ({required String period, required String? timeZone}) async => null,
+    );
+    await provider.fetchUsageStats(period: 'today');
+
+    await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Failed to load usage data. Please try again later.'), findsOneWidget);
+    expect(find.text('Manage Plan'), findsNothing);
   });
 }

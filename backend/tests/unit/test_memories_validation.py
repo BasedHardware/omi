@@ -249,7 +249,7 @@ class TestExtractedMemoryValidation:
 
         database = sys.modules.setdefault('database', ModuleType('database'))
         if not hasattr(database, '__path__'):
-            database.__path__ = []
+            database.__path__ = [str(BACKEND_DIR / 'database')]
 
         client = sys.modules.get('database._client')
         if client is None:

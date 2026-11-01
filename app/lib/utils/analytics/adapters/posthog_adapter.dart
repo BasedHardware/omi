@@ -1,20 +1,89 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/session_replay.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
+/// One flag answered by Omi's own flag store (`GET /v1/flags`).
+typedef OmiFlag = ({bool enabled, String? variant, String? payloadJson});
+
 class PostHogAnalyticsAdapter
-    implements AnalyticsAdapter, AnalyticsDeliveryAdapter, AnalyticsIdentityAdapter, AnalyticsFeatureFlagAdapter {
+    implements
+        AnalyticsResolvedFlagAdapter,
+        AnalyticsAdapter,
+        AnalyticsDeliveryAdapter,
+        AnalyticsIdentityAdapter,
+        AnalyticsFeatureFlagAdapter,
+        AnalyticsBooleanFlagAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
     this.host = 'https://us.i.posthog.com',
     // SDK default is `true`; we track lifecycle ourselves at meaningful boundaries.
     this.captureLifecycleEvents = false,
     this.debug = false,
-  });
+    http.Client? client,
+    Future<String?> Function()? distinctIdReader,
+    this.personPropertiesForFlags,
+    this.omiFlags,
+    DateTime Function()? clock,
+  })  : _client = client,
+        _distinctIdReader = distinctIdReader,
+        _clock = clock ?? DateTime.now;
+
+  final http.Client? _client;
+  final Future<String?> Function()? _distinctIdReader;
+
+  /// Person properties sent with a verified fetch so property-targeted flags match a just-created
+  /// identity before PostHog has ingested its `\$set` (a fresh account's email, for one).
+  final Map<String, Object?> Function()? personPropertiesForFlags;
+
+  /// Fetches the keys Omi's flag store owns for the signed-in account (null on failure). Those keys answer
+  /// ahead of PostHog; every other key keeps PostHog's answer, so flags move off PostHog one at a time.
+  final Future<Map<String, OmiFlag>?> Function()? omiFlags;
+
+  /// The last Omi answer for the identity in force; cleared on identity change and replaced on reload.
+  Map<String, OmiFlag> _omi = const {};
+  final DateTime Function() _clock;
+
+  /// How long a verified fetch outranks the SDK cache. Long enough for the read that asked for it
+  /// (the onboarding gate reads within milliseconds), short enough that the SDK's own refreshes
+  /// decide every other flag for the rest of the session.
+  static const verifiedFlagsTtl = Duration(seconds: 10);
+
+  /// Flags confirmed by a successful fetch for the identity in force at the time; cleared whenever
+  /// the identity changes. Reads prefer this over the SDK cache, which the SDK keeps (stale, and
+  /// possibly another person's) when its own refresh fails.
+  ({String distinctId, Map<String, Object?> flags, Map<String, Object?> payloads, DateTime at})? _verified;
+
+  /// The verified snapshot while it is still fresh; expired ones are dropped so the SDK cache rules.
+  ({String distinctId, Map<String, Object?> flags, Map<String, Object?> payloads, DateTime at})? get _fresh {
+    final verified = _verified;
+    if (verified == null) return null;
+    if (_clock().difference(verified.at) > verifiedFlagsTtl) {
+      _verified = null;
+      return null;
+    }
+    return verified;
+  }
+
+  /// Bumped on every identity change; a reload commits its answer only if the generation it started
+  /// in is still current, so a slow response for account A cannot land after B took over.
+  int _identityGeneration = 0;
+
+  @visibleForTesting
+  bool get hasVerifiedFlags => _fresh != null;
+
+  void _identityChanged() {
+    _identityGeneration++;
+    _verified = null;
+    _omi = const {};
+  }
 
   final String apiKey;
   final String host;
@@ -49,12 +118,14 @@ class PostHogAnalyticsAdapter
     config.debug = debug;
     config.sendFeatureFlagEvents = false;
     config.preloadFeatureFlags = false;
+    SessionReplay.configure(config);
     await Posthog().setup(config);
     _initialized = true;
   }
 
   @override
   void identify({required String userId, Map<String, Object>? userProperties}) {
+    _identityChanged();
     if (!_initialized) return;
     if (userProperties == null) {
       _background(() => Posthog().identify(userId: userId));
@@ -127,16 +198,156 @@ class PostHogAnalyticsAdapter
   Map<String, Object> _captureProperties(Map<String, Object>? properties) => {...?properties};
 
   @override
-  Future<bool> isFeatureEnabled(String key) => Posthog().isFeatureEnabled(key);
+  bool isBooleanFeatureEnabledCached(String key) {
+    final omi = _omi[key];
+    if (omi != null) return omi.enabled && omi.variant == null;
+    return _fresh?.flags[key] == true;
+  }
+
+  @override
+  Future<bool> isBooleanFeatureEnabled(String key) async {
+    final omi = _omi[key];
+    if (omi != null) return omi.enabled && omi.variant == null;
+    final verified = _fresh;
+    if (verified != null) return verified.flags[key] == true;
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled == true && result?.variant == null;
+  }
+
+  @override
+  Future<bool?> resolvedFeatureEnabled(String key) async {
+    final omi = _omi[key];
+    if (omi != null) return omi.enabled;
+    final verified = _fresh;
+    if (verified != null) {
+      final value = verified.flags[key];
+      return value is bool ? value : null;
+    }
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled;
+  }
+
+  @override
+  Future<bool> isFeatureEnabled(String key) {
+    final omi = _omi[key];
+    if (omi != null) return Future.value(omi.enabled);
+    final verified = _fresh;
+    if (verified != null) {
+      final value = verified.flags[key];
+      return Future.value(value == true || (value is String && value.isNotEmpty));
+    }
+    return Posthog().isFeatureEnabled(key);
+  }
+
+  @override
+  Future<String?> getFeatureFlagVariant(String key) async {
+    final omi = _omi[key];
+    if (omi != null) return omi.enabled ? omi.variant : null;
+    final verified = _fresh;
+    if (verified != null) {
+      final value = verified.flags[key];
+      return value is String && value.isNotEmpty ? value : null;
+    }
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled == true ? result?.variant : null;
+  }
+
+  /// Fetches the flags for the current distinct id straight from PostHog and keeps them as the
+  /// verified snapshot. True only when the fetch succeeded for that identity: the SDK's own reload
+  /// cannot say whether it refreshed (the plugin swallows failures and the native callback fires
+  /// either way), so its cache is never taken as fresh here.
+  @override
+  Future<bool> reloadFeatureFlags() async {
+    final results = await Future.wait([_reloadPostHogFlags(), _reloadOmiFlags()]);
+    return results.first;
+  }
+
+  /// A failed or superseded fetch keeps the previous Omi answer for this identity.
+  Future<bool> _reloadOmiFlags() async {
+    final fetch = omiFlags;
+    if (fetch == null) return false;
+    final generation = _identityGeneration;
+    try {
+      final flags = await fetch();
+      if (flags == null || generation != _identityGeneration) return false;
+      _omi = Map.unmodifiable(flags);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _reloadPostHogFlags() async {
+    final generation = _identityGeneration;
+    final owned = _client == null ? http.Client() : null; // injected clients stay caller-owned
+    final client = _client ?? owned!;
+    try {
+      final distinctId = await (_distinctIdReader ?? Posthog().getDistinctId)();
+      if (distinctId == null || distinctId.isEmpty) return false;
+      final personProperties = {...?personPropertiesForFlags?.call()}..removeWhere((_, v) => v == null || v == '');
+      final response = await client
+          .post(
+            Uri.parse('$host/decide/?v=3'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'api_key': apiKey,
+              'distinct_id': distinctId,
+              if (personProperties.isNotEmpty) 'person_properties': personProperties,
+            }),
+          )
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode != 200) return false;
+      final decoded = jsonDecode(response.body);
+      final flags = decoded is Map ? decoded['featureFlags'] : null;
+      if (flags is! Map) return false;
+      final payloads = decoded['featureFlagPayloads'];
+      if (generation != _identityGeneration) return false; // another identity took over mid-flight
+      _verified = (
+        distinctId: distinctId,
+        flags: Map<String, Object?>.from(flags),
+        payloads: payloads is Map ? Map<String, Object?>.from(payloads) : const {},
+        at: _clock(),
+      );
+      // Keep the SDK's cache moving too; its outcome is not what the answer depends on.
+      if (_initialized) _background(Posthog().reloadFeatureFlags);
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      owned?.close();
+    }
+  }
 
   @override
   Future<Object?> getFeatureFlagPayload(String key) async {
+    final omi = _omi[key];
+    if (omi != null) {
+      final raw = omi.payloadJson;
+      if (!omi.enabled || raw == null) return null;
+      try {
+        return jsonDecode(raw);
+      } on FormatException {
+        return raw;
+      }
+    }
+    final verified = _fresh;
+    if (verified != null) {
+      if (!await isFeatureEnabled(key)) return null;
+      final raw = verified.payloads[key];
+      if (raw is! String) return raw;
+      try {
+        return jsonDecode(raw);
+      } on FormatException {
+        return raw;
+      }
+    }
     final result = await Posthog().getFeatureFlagResult(key);
     return result?.enabled == true ? result?.payload : null;
   }
 
   @override
   Future<String> settleIdentity(String? identity, {required bool reset}) async {
+    _identityChanged();
     String? distinctId;
     await _serialize(() async {
       if (reset) await Posthog().reset();
@@ -187,6 +398,7 @@ class PostHogAnalyticsAdapter
 
   @override
   void reset() {
+    _identityChanged();
     if (!_initialized) return;
     _targetExpiry?.cancel();
     _targetExpiry = null;

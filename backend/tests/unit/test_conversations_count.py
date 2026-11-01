@@ -110,7 +110,7 @@ class TestConversationsCount:
         assert "FieldFilter('created_at', '>=', start_date)" in source
         assert "FieldFilter('created_at', '<=', end_date)" in source
         assert "order_by('created_at', direction=firestore.Query.DESCENDING)" in source
-        assert "FieldFilter('deleted', '==', True)" in source
+        assert "conversation_visibility_counts.count_hidden(" in source
         assert '.count().get()' in source
         assert 'result[0][0].value' in source
 
@@ -404,6 +404,7 @@ class TestAppsV2LimitBoundary:
 class _CountDoc:
     def __init__(self, data):
         self._data = dict(data)
+        self.id = self._data.get('id')
 
     def to_dict(self):
         return dict(self._data)
@@ -421,6 +422,8 @@ def _count_filter_match(data, filt):
         return actual == value
     if op == 'in':
         return actual in value
+    if op == '>':
+        return actual > value
     if op == '>=':
         return actual >= value
     if op == '<=':
@@ -438,14 +441,15 @@ class _CountQuery:
     changes membership when a ``created_at`` bound already requires the field.
     """
 
-    def __init__(self, docs, record, filters=(), orders=()):
+    def __init__(self, docs, record, filters=(), orders=(), limit_count=None):
         self._docs = docs
         self._record = record
         self._filters = filters
         self._orders = orders
+        self._limit_count = limit_count
 
     def _copy(self, **overrides):
-        params = {'filters': self._filters, 'orders': self._orders}
+        params = {'filters': self._filters, 'orders': self._orders, 'limit_count': self._limit_count}
         params.update(overrides)
         return _CountQuery(self._docs, self._record, **params)
 
@@ -457,12 +461,15 @@ class _CountQuery:
         name = getattr(direction, 'name', None) or str(direction)
         return self._copy(orders=(*self._orders, (field_path, name)))
 
+    def limit(self, value):
+        return self._copy(limit_count=value)
+
     def _matched(self):
         docs = [doc for doc in self._docs if all(_count_filter_match(doc, f) for f in self._filters)]
         matched_unordered = len(docs)
         for field, _direction in self._orders:
             docs = [doc for doc in docs if field in doc]
-        return matched_unordered, docs
+        return matched_unordered, docs[: self._limit_count]
 
     def stream(self):
         return iter(_CountDoc(doc) for doc in self._matched()[1])
@@ -665,6 +672,36 @@ class TestConversationsCountRealHelper:
 
         assert record[0]['count'] == 7
         assert result == 6
+
+    def test_dream_duplicates_subtract_from_product_counts_but_not_export_counts(self, monkeypatch):
+        docs = [
+            {'id': 'plain', 'created_at': _T1, 'discarded': False, 'status': 'completed', 'source': 'omi'},
+            {
+                'id': 'dup',
+                'created_at': _T2,
+                'discarded': False,
+                'status': 'completed',
+                'source': 'omi',
+                'dream_duplicate_of': 'plain',
+                'dream_duplicate': True,
+            },
+            {
+                'id': 'tomb-and-dup',
+                'created_at': _T2,
+                'discarded': False,
+                'status': 'completed',
+                'source': 'omi',
+                'dream_duplicate_of': 'plain',
+                'dream_duplicate': True,
+                'deleted': True,
+            },
+        ]
+        product, _ = _real_count(monkeypatch, docs=docs)
+        assert product == 1, 'duplicate captures and tombstones must both subtract, a row with both once'
+        export, _ = _real_count(monkeypatch, docs=docs, include_discarded=True)
+        assert export == 2, 'export counts keep duplicate captures and subtract only tombstones'
+        dated, _ = _real_count(monkeypatch, docs=docs, start_date=_T1, end_date=_T1)
+        assert dated == 1, 'duplicates outside the range never subtract from bounded counts'
 
     @pytest.mark.parametrize(
         ('kwargs', 'raw', 'expected'),

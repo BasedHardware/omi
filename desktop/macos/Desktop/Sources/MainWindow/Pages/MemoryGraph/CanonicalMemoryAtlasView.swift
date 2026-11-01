@@ -63,7 +63,7 @@ private struct CanonicalMemoryAtlasLoadGate<Content: View>: View {
         Image(systemName: "brain")
           .scaledFont(size: OmiType.heading)
           .foregroundColor(Ink.secondary)
-        Text("Brain map will appear once enough linked memories are available.")
+        Text("Your brain map appears once Omi has enough related memories to connect.")
           .scaledFont(size: 12.5)
           .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)

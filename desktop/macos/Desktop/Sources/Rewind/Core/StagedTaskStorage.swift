@@ -38,39 +38,19 @@ enum CanonicalReceiptInvalidationError: Error, Equatable, LocalizedError {
 /// Mirrors a subset of ActionItemStorage methods but operates on the staged_tasks table.
 actor StagedTaskStorage {
   static let shared = StagedTaskStorage()
-
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-  private var isInitialized = false
+  private let repository = RewindRepository(owner: "StagedTaskStorage")
 
   private init() {}
 
-  func invalidateCache() {
-    _dbQueue = nil
-    isInitialized = false
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   private func ensureInitialized() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
-      return db
-    }
-
-    do {
-      try await RewindDatabase.shared.initialize()
-    } catch {
-      log("StagedTaskStorage: Database initialization failed: \(error.localizedDescription)")
-      throw error
-    }
-
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw ActionItemStorageError.databaseNotInitialized
     }
-
-    _dbQueue = db
-    _dbGeneration = generation
-    isInitialized = true
-    return db
+    return databasePool
   }
 
   private nonisolated static func authorizedWrite<T: Sendable>(
@@ -150,7 +130,7 @@ actor StagedTaskStorage {
         throw ActionItemStorageError.recordNotFound
       }
 
-      // Sentry has seen UNIQUE constraint failures here when the same backend
+      // Production has seen UNIQUE constraint failures here when the same backend
       // task already exists locally (for example, from an API refresh racing a
       // local sync retry). Treat that as an idempotent sync completion: keep the
       // canonical backend row and remove the duplicate local row instead of
@@ -553,7 +533,7 @@ actor StagedTaskStorage {
     }
   }
 
-  func discardCanonicalOutbox(id: Int64, authorization: LocalMutationAuthorization = .unrestricted) async throws {
+  func discardCanonicalOutbox(id: Int64, authorization: LocalMutationAuthorization) async throws {
     try authorization.require()
     let db = try await ensureInitialized()
     try await Self.authorizedWrite(db, authorization: authorization) { database in
@@ -832,14 +812,19 @@ actor StagedTaskStorage {
 
   // MARK: - Embedding
 
-  func updateEmbedding(id: Int64, embedding: Data) async throws {
+  func updateEmbedding(id: Int64, embedding: Data, authorization: LocalMutationAuthorization)
+    async throws
+  {
+    try authorization.require()
     let db = try await ensureInitialized()
-
-    try await db.write { database in
-      try database.execute(
-        sql: "UPDATE staged_tasks SET embedding = ? WHERE id = ?",
-        arguments: [embedding, id]
-      )
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        try database.execute(
+          sql: "UPDATE staged_tasks SET embedding = ? WHERE id = ?",
+          arguments: [embedding, id]
+        )
+      }
     }
   }
 

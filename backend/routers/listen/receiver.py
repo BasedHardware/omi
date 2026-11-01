@@ -9,18 +9,35 @@ import logging
 import time
 import uuid
 
+from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_configured as stt_cap_dispatch_configured
+from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
+from utils.other.live_audio_archive import LiveAudioArchive
+from utils.sync.live_cap_hold import LiveHeldAudio
+from utils.sync.cap_hold_lifecycle import SHUTDOWN_DELIVERY_SECONDS
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
+from config import audio_timeline as audio_flags
+from config.server_batch import suppress_live as server_batch_suppresses_live
+from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, suppresses_provider_stream
 from config.translation import resolve_ondemand_config
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
+from routers.listen.batch_preview import capture_batch_preview
+from routers.listen.local_preview import admit_local_preview
+from routers.listen.demand_routing import attach_live_demand
+from routers.listen.demand_switch import switch_live_demand
+from routers.listen.lane_meter import LiveLaneMeter
+from utils.observability.demand_cohort import host_cohort, telemetry_call
+from utils.observability.demand_cohort import current_transport_origin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+from utils.stt.replay_capture_accounting import record_replay_sends
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
+from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
+from utils.executors import db_executor, run_blocking, start_background_task
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -44,39 +61,75 @@ from fastapi.websockets import WebSocketDisconnect
 
 from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
-from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
+from models.message_event import (
+    PhotoDescribedEvent,
+    PhotoProcessingEvent,
+    MessageServiceStatusEvent,
+)
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
 from utils.stt.live_failure import (
-    MAX_STT_FAILOVERS,
+    MAX_STT_FAILOVERS as MAX_STT_FAILOVERS,
     PendingLiveFailover,
     flush_live_stt_buffer,
     live_stt_initialization_failure,
     live_stt_socket_is_dead,
     live_stt_terminal_reason,
     live_stt_upstream_failure,
+    local_tail_terminal_reason,
     send_live_stt_audio,
     settle_terminal_socket,
     terminate_live_stt_session,
     terminate_live_stt_backoff,
 )
-from utils.stt.live_chain import ProviderChainUnavailable
-from utils.stt.live_recovery import select_live_replacement
+from utils.stt.live_chain import LiveChainExhausted, ProviderChainUnavailable
+from utils.stt.live_recovery import release_session_local_exclusions, select_live_replacement
+from config.live_stt_recovery import current_recovery_enabled, session_recovery_enabled
+from utils.stt.soniox_capture_axis import validation_detail
+from utils.stt.soniox_idle import SonioxIdleBudget
+from routers.listen import legacy_recovery
+from utils.stt import legacy_replay
+from utils.stt.recovery_state import (
+    LiveRecoveryController,
+    MAX_RECOVERY_TARGETS,
+    RecoveryState,
+    current_recovery,
+)
+from config.live_stt_registry import DEFAULT_IDS
+import utils.stt.replay_delivery as replay_delivery
+from utils.stt.live_metrics import REPLAY_SKIPPED, provider_family
+from utils.stt.replay_delivery import (
+    BirthLedger,
+    ReplayPacer,
+    ReplayTailSocket,
+    TailPacket,
+    bounded_snapshot,
+    socket_replay_limits,
+    family as socket_family,
+    abort_replay_socket,
+    enable_recovery_writer_pace,
+)
 from config.stt_provider_policy import provider_for_service
-from utils.stt.live_rollout import managed_chain_enabled
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.brand_terms import normalize_brand_segments
-from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
+from utils.stt.resilient_stream import (
+    ReplayFilterMixin,
+    ResilientAudio,
+    replay_chunks,
+    socket_is_finishing,
+    retire_window_replay_socket,
+)
 from utils.stt.resilient_stream import (
     enabled as resilient_reconnect_enabled,
     reconnect_live_stt_socket,
-    retry_failed_replacement,
     trim_window_replay_to_anchor,
     window_replay_action,
 )
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import fallback_socket_is_serving
+from utils.stt.provider_stream_end import US_FAILOVER, US_TIMEOUT, note_stream_close_intent, session_teardown_closer
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
@@ -90,11 +143,13 @@ from utils.stt.streaming import (
     process_audio_soniox,
     process_audio_parakeet,
 )
-from routers.listen.stt_callbacks import build_stt_callbacks
+from routers.listen.stt_callbacks import attach_legacy_capture_window, build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
+from utils.stt import edge_shadow
 from utils.transcribe_decisions import (
     TARGET_SAMPLE_RATE,
+    custom_stt_clock_origin,
     decide_multi_channel_mix,
     decide_multi_channel_stt_send,
     decide_stt_buffer_flush,
@@ -106,7 +161,10 @@ from utils.transcribe_decisions import (
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
+from utils.observability.listen_close import note_ws_close
+from utils.observability.listen_loop import FrameTimer
 from utils.observability.transcription import (
+    bounded_client_platform as _bounded_client_platform,
     emit_listen_vad_gate_metrics,
     record_listen_audio_outcome,
     record_listen_realtime_demand,
@@ -119,6 +177,9 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL,
     OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
+    OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL,
+    OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL,
+    OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL,
     OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL,
     audio_timeline_provider_label,
 )
@@ -126,9 +187,22 @@ from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
+
+def mark_listen_internal_error(state: Any) -> None:
+    """Close the listen socket when a turn raised after audio was not staged.
+
+    Published fragments and encrypted journals keep custody with redrive.
+    Retained PCM stays live through transient failures. This path remains for
+    failures where the receiver cannot retain or durably hand off more audio.
+    """
+    state.close_code = 1011
+
+
 # Cadence for the frame-independent provider-death monitor (#10028). Short enough
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
 STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
+
+SHUTDOWN_CLEANUP_SECONDS = 2.0
 
 # Longest frame the Opus format can carry, in milliseconds.
 OPUS_MAX_FRAME_MS = 120
@@ -158,6 +232,8 @@ class _RecordingSTTSocket:
         return getattr(self._conn, name)
 
     def send(self, data: bytes, start_sample: Optional[int] = None) -> bool:
+        if suppress_socket_audio(self._conn, data, start_sample=start_sample):
+            return True
         try:
             accepted = (
                 self._conn.send(data, start_sample=start_sample) if start_sample is not None else self._conn.send(data)
@@ -197,9 +273,34 @@ def _get_lc3() -> Any:
     return lc3
 
 
+def _strip_capture_word_ranges(segments: List[Dict[str, Any]]) -> None:
+    for segment in segments:
+        segment.pop(CAPTURE_WORD_RANGES_KEY, None)
+
+
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
+        self.soniox_idle_budget = SonioxIdleBudget(uid_provider=lambda: host.request.uid)
         self.host = host
+        self.cap_admission: LiveAdmission | None = None
+        if stt_cap_dispatch_configured() and not host.use_custom_stt:
+            if stt_cap_dispatch_enabled(host.request.uid, 'live'):
+                self.cap_admission = LiveAdmission(host.request.uid, host.request.source)
+        self.live_hold = LiveHeldAudio(host) if self.cap_admission is not None else None
+        self._cap_init_lock = asyncio.Lock()
+        self._cap_hold_stop = asyncio.Event()
+        self.cap_paused = False
+        if self.cap_admission is not None:
+            host.state.stt_cap_admission = self.cap_admission
+            self.cap_admission.capture_observer = self._observe_cap_capture
+        self._cap_decided_spans = []
+        self.raw_archive = LiveAudioArchive(host)
+        try:
+            self.lane_meter = LiveLaneMeter()
+            self.lane_meter.demand_cohort = host_cohort(host)
+        except Exception:
+            self.lane_meter = None
+        self.live_demand = None
         self.translation_demand = TranslationDemand()
         self._translation_expiry_task: asyncio.Task[Any] | None = None
         self.channel_configs = channel_configs
@@ -212,11 +313,24 @@ class ListenReceiver(ReplayFilterMixin):
         # (callback factory, sample rate): each rebuild mints fresh epoch callbacks.
         self._stt_rebuild: Optional[Tuple[Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
+        self.recovery_enabled = session_recovery_enabled(host)
+        self.recovery: Any = LiveRecoveryController(host) if self.recovery_enabled else None
         self._stt_recovery_exhausted = False
+        self._candidate_token: Any = None
+        self._replay_delivery: ReplayTailSocket | None = None
+        self._replay_live_tail: deque[TailPacket] = deque()
+        self._replay_tail_bytes = 0
+        self._live_birth = BirthLedger()
+        self._replay_ingesting = False
+        self._replay_recovery_task: asyncio.Task[Any] | None = None
         self._stt_rebuild_attempts = 0
         self._stt_failed_reasons: dict[str, str] = {}
         self._stt_rescue_retries: set[str] = set()
         self._pending_live_failover: Optional[PendingLiveFailover] = None
+        self.client_closing = False
+        self._receiving = False
+        self.stt_drain_complete = asyncio.Event()
+        self.shutdown_deadline: float | None = None
         self._resilient_audio: ResilientAudio | None = None
         self._window_replay_audio: ResilientAudio | None = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
@@ -226,6 +340,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.aac_decoder: Any = None
         self.lc3_decoder: Any = None
         self.vad_gate: Any = None
+        self.edge_shadow: Optional[edge_shadow.EdgeShadowMirror] = None  # D2; edge_shadow.session_mirror
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
         self.decode_failure_streak = 0
@@ -244,7 +359,7 @@ class ListenReceiver(ReplayFilterMixin):
         # client clock; both stay without the clock entirely.
         self.capture_timeline: Any = None
         self._pending_source_frame: dict | None = None
-        self.capture_timeline_v2 = False
+        self.capture_timeline_v2 = self.capture_timeline_spans = False
         if (
             not host.is_multi_channel
             and not host.use_custom_stt
@@ -253,22 +368,28 @@ class ListenReceiver(ReplayFilterMixin):
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
             # One 90s ring per session matches the maximum window buffer (30/15).
             self._window_replay_audio = ResilientAudio(
-                int(host.request.sample_rate), ring_seconds=90, strict_replay=True
+                int(host.request.sample_rate),
+                ring_seconds=90,
+                strict_replay=True,
+                recovery_enabled=self.recovery_enabled,
             )
+            if self.recovery_enabled:
+                self._window_replay_audio.on_cut = self._live_birth.prune_before
             if resilient_reconnect_enabled():
-                self._resilient_audio = ResilientAudio(int(host.request.sample_rate))
+                self._resilient_audio = ResilientAudio(
+                    int(host.request.sample_rate), recovery_enabled=self.recovery_enabled
+                )
             # Pin the persistence mode for the recording's life; the flag is
             # never re-read per message or per callback.
-            self.capture_timeline_v2 = audio_timeline_v2_enabled()
+            self.capture_timeline_v2 = host.state.capture_timeline_v2 = audio_flags.audio_timeline_v2_enabled()
+            self.capture_timeline_spans = host.state.capture_timeline_spans = True
             host.state.capture_timeline = self.capture_timeline
-            host.state.capture_timeline_v2 = self.capture_timeline_v2
             # Conversation ownership of recent capture ranges. Entries are
             # *runs* (contiguous samples under one conversation), coalesced by
             # `_note_accepted_frame`, so retention is time-based (120 s) and a
             # hard entry cap counts conversation switches, not frames.
             host.state.conversation_sample_ranges = deque(maxlen=CAPTURE_RANGE_MAX_RUNS)
-            if capture_evidence_dark_write_enabled():
-                host.state.source_position_map = SourcePositionMap()
+            host.state.source_position_map = SourcePositionMap(committed=True)
         # The loop this receiver serves. Deepgram's SDK delivers transcripts on
         # its own thread; those callbacks hop back onto this loop (see
         # `_run_on_listen_loop`) so timeline/send-map state is only ever
@@ -364,7 +485,7 @@ class ListenReceiver(ReplayFilterMixin):
         ring = self.host.state.audio_ring_buffer
         if ring is None:
             return
-        if self.capture_timeline_v2 or live_speaker_capture_clock_enabled():
+        if self.capture_timeline_v2 or audio_flags.live_speaker_capture_clock_enabled():
             ring.write_positioned(decoded, self.capture_timeline.wall(start_sample))
         else:
             ring.write(decoded, now)
@@ -385,6 +506,10 @@ class ListenReceiver(ReplayFilterMixin):
         assigning its audio window to one conversation would guess. Its text
         is retained as explicitly unplaced under its provider SEND owner.
         """
+        source_map = getattr(self.host.state, 'source_position_map', None)
+        if source_map is not None:
+            source_map.remember_transcripts(segments)
+        _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
         kept: List[Dict[str, Any]] = []
         for segment in segments:
@@ -452,25 +577,21 @@ class ListenReceiver(ReplayFilterMixin):
         Transcript times stay provider-native; the window survives failover.
         LIVE_SPEAKER_CAPTURE_CLOCK=false restores legacy speaker-ID timing.
         """
+        source_map = getattr(self.host.state, 'source_position_map', None)
+        if source_map is not None:
+            source_map.remember_transcripts(segments)
+        _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
-        if not live_speaker_capture_clock_enabled():
+        if not audio_flags.live_speaker_capture_clock_enabled():
             for segment in segments:
                 segment.pop('_capture_start_sample', None)
                 segment.pop('_capture_end_sample', None)
                 segment['_capture_window_unavailable'] = True
+                segment['_capture_window_reason'] = 'kill_switch'
             self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
             return
         for segment in segments:
-            start_sample = segment.pop('_capture_start_sample', None)
-            end_sample = segment.pop('_capture_end_sample', None)
-            if start_sample is not None and end_sample is not None and end_sample >= start_sample:
-                abs_start = self.capture_timeline.wall_strict(start_sample)
-                abs_end = self.capture_timeline.wall_strict(end_sample)
-                if abs_start is not None and abs_end is not None:
-                    segment['_capture_abs_start'] = abs_start
-                    segment['_capture_abs_end'] = abs_end
-                    continue
-            segment['_capture_window_unavailable'] = True
+            attach_legacy_capture_window(segment, self.capture_timeline)
         self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
 
     def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
@@ -596,6 +717,7 @@ class ListenReceiver(ReplayFilterMixin):
     @staticmethod
     def _record_elapsed_validation(provider: str, interval: Optional[Tuple[int, int]], gate: Any) -> None:
         outcome = gate.classify_capture_speech(*interval) if gate is not None and interval is not None else 'unknown'
+        validation_detail(audio_timeline_provider_label(provider), interval, gate, outcome)
         OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL.labels(
             provider=audio_timeline_provider_label(provider), outcome=outcome
         ).inc()
@@ -698,7 +820,19 @@ class ListenReceiver(ReplayFilterMixin):
             pending.note_transcript(segments)
             if pending.settled:
                 self._pending_live_failover = None
-        self._capture('capture_inbound_stt', segments)
+        if self.recovery is not None:
+            self.recovery.note_transcript(
+                any(bool(str(segment.get('text') or '').strip()) for segment in segments)
+                and (pending is None or provider is None or provider == pending.to_mode),
+                candidate=speaker_epoch if speaker_epoch is not None else self._candidate_token,
+            )
+        # Accepted-send proof belongs only to live transport. Diagnostic cassettes
+        # serialize raw dictionaries (including dataclasses), so omit it from their
+        # copy while retaining the original for transcript merging.
+        self._capture(
+            'capture_inbound_stt',
+            [{key: value for key, value in segment.items() if key != '_capture_merge_proof'} for segment in segments],
+        )
         (speaker_epoch or self.speaker_provider_epoch).stamp(segments, provider or self._serving_provider())
         self.host.transcripts.enqueue(segments)
 
@@ -709,7 +843,35 @@ class ListenReceiver(ReplayFilterMixin):
         self._pending_live_failover = None
         target = socket if socket is not None else self.stt_socket
         typed = getattr(target, 'typed_death_reason', None) if target is not None else None
-        pending.note_failure(typed if isinstance(typed, str) else None, continuing=continuing)
+        if self.recovery is None:
+            pending.note_failure(typed if isinstance(typed, str) else None, continuing=continuing)
+            return
+        departing = (
+            not self.host.state.active or getattr(self, '_resilient_closing', False) or self.recovery.client_has_left()
+        )
+        pending.note_failure(typed if isinstance(typed, str) else None, continuing=continuing or departing)
+
+    def _record_cloud_live_saved_seconds(self, request: Any, decoded_audio_bytes: int) -> None:
+        """Provider stream seconds this session's policy mode would not have spent. Telemetry only."""
+
+        try:
+            mode = getattr(self, '_cloud_live_mode', None) or STREAM
+            if mode == STREAM:
+                return
+            sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+            if mode == OFF:
+                if not getattr(self, 'cloud_live_suppressed', False):
+                    return  # The deferred stream opened; this audio went to a provider.
+                OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(decoded_audio_bytes / (sample_rate * 2))
+                return
+            # when_watched: hidden seconds (background + foreground-not-visible)
+            # would leave the paid vendor lane for the Parakeet window leg.
+            totals = self.host.state.realtime_demand.totals()
+            OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(
+                totals.get('background', 0.0) + totals.get('foreground', 0.0)
+            )
+        except Exception as error:
+            logger.warning('Cloud live mode telemetry failed type=%s', type(error).__name__)
 
     def _emit_realtime_demand(self, request: Any, decoded_audio_bytes: int) -> None:
         """Report who could have watched this session live. Telemetry only; never raises."""
@@ -779,6 +941,11 @@ class ListenReceiver(ReplayFilterMixin):
         if callable(start_transcription):
             start_transcription()
 
+    def edge_shadow_tap(self) -> Any:
+        """A tap for a newly built VAD gate when the session is mirrored (D2), else None."""
+        mirror = edge_shadow.session_mirror(self)
+        return mirror.tap() if mirror is not None else None
+
     def initialize_decoders(self) -> None:
         request = self.host.request
         if self.host.is_multi_channel:
@@ -808,6 +975,40 @@ class ListenReceiver(ReplayFilterMixin):
         same_provider: bool = False,
         replay_start_sample: int = 0,
     ) -> Any:
+        if not isinstance(getattr(self, 'recovery_enabled', None), bool):
+            self.recovery_enabled = session_recovery_enabled(self)
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and admission.reason == 'allowance_unavailable':
+            await admission.refresh()
+        cap_token = current_live_admission.set(admission)
+        enabled_token = current_recovery_enabled.set(self.recovery_enabled)
+        token = current_recovery.set(getattr(self, 'recovery', None) if self.recovery_enabled else None)
+        try:
+            return await ListenReceiver._connect_stt_socket(
+                self,
+                callback,
+                sample_rate,
+                modulate_callback=modulate_callback,
+                epoch=epoch,
+                same_provider=same_provider,
+                replay_start_sample=replay_start_sample,
+            )
+        finally:
+            current_recovery.reset(token)
+            current_recovery_enabled.reset(enabled_token)
+            current_live_admission.reset(cap_token)
+
+    async def _connect_stt_socket(
+        self,
+        callback: Any,
+        sample_rate: int,
+        modulate_callback: Any = None,
+        epoch: Optional[ProviderEpochTranslator] = None,
+        same_provider: bool = False,
+        replay_start_sample: int = 0,
+    ) -> Any:
+        if getattr(self.host, 'server_batch_only', False) is True:
+            return None  # Includes failover, reconnect and idle-reopen callers.
         if managed_chain_enabled(self.host):
             from utils.stt.live_session import LiveChainSession
 
@@ -844,12 +1045,17 @@ class ListenReceiver(ReplayFilterMixin):
             return socket
         if self.host.stt_service == STTService.soniox:
             if same_provider:
+                if self.recovery is not None and not self.recovery.reserve(
+                    self._attempted_identity(self.stt_socket, STTService.soniox), 'soniox'
+                ):
+                    raise RuntimeError('soniox reconnect already attempted')
                 return await process_audio_soniox(
                     modulate_callback or callback,
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
-                    keywords=keywords,
+                    idle_budget=self.soniox_idle_budget,
+                    uid=self.host.request.uid,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
@@ -874,7 +1080,8 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
-                    keywords=keywords,
+                    idle_budget=self.soniox_idle_budget,
+                    uid=self.host.request.uid,
                 ),
                 connect_modulate=(
                     (
@@ -995,12 +1202,20 @@ class ListenReceiver(ReplayFilterMixin):
 
     async def _drain_stt_sockets(self) -> None:
         self._resilient_closing = True
-        if self._resilient_audio is not None:
-            self._resilient_audio.close()
+        if (recovery := getattr(self, 'recovery', None)) is not None:
+            recovery.mark_client_leaving()
+        if (task := getattr(self, '_replay_recovery_task', None)) is not None:
+            task.cancel()
+        delivery = getattr(self, '_replay_delivery', None)
+        if delivery is not None and delivery is not self.stt_socket:
+            delivery.finish()
+        if (audio := getattr(self, '_resilient_audio', None)) is not None:
+            audio.close()
         if (ring := getattr(self, '_window_replay_audio', None)) is not None:
             ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
+            note_stream_close_intent(socket, session_teardown_closer(self.host))
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
             if target is None:
                 release_live_stt_socket(socket)
@@ -1008,7 +1223,23 @@ class ListenReceiver(ReplayFilterMixin):
             try:
                 drain = getattr(target, 'drain_and_close', None)
                 if callable(drain):
-                    await cast(Any, drain)()
+                    if self.shutdown_deadline is not None:
+                        drain_task = self.host.spawn(cast(Any, drain)(), name='stt_shutdown_provider')
+                        bound = self.shutdown_deadline + SHUTDOWN_CLEANUP_SECONDS
+                        cleanup = lambda: max(0.0, bound - replay_delivery.clock())
+                        done, _ = await asyncio.wait(
+                            {drain_task}, timeout=max(0.0, self.shutdown_deadline - replay_delivery.clock())
+                        )
+                        if not done:
+                            drain_task.cancel()
+                            _, _ = await asyncio.wait({drain_task}, timeout=cleanup())
+                            await abort_replay_socket(target, timeout=cleanup())
+                        elif drain_task.cancelled():
+                            await abort_replay_socket(target, timeout=cleanup())
+                        elif (drain_error := drain_task.exception()) is not None:
+                            raise drain_error
+                    else:
+                        await cast(Any, drain)()
                 else:
                     target.finish()
             except Exception as error:
@@ -1019,6 +1250,9 @@ class ListenReceiver(ReplayFilterMixin):
                     pass
             finally:
                 release_live_stt_socket(socket)
+        self._release_drained_sockets()
+
+    def _release_drained_sockets(self) -> None:
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
         self._settle_pending_live_failover_failure()
@@ -1039,6 +1273,14 @@ class ListenReceiver(ReplayFilterMixin):
         return track_live_stt_socket(wrapped, self.host.stt_service.value)
 
     def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], socket: Any) -> None:
+        demand = getattr(self, 'live_demand', None)
+        telemetry_call(
+            self,
+            'lane_meter',
+            'transition',
+            self._serving_provider(),
+            reason=demand.policy.reason if demand and demand.eligible else 'baseline',
+        )
         if epoch is None:
             return
         if getattr(socket, 'manages_vad', False):
@@ -1061,6 +1303,61 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     async def initialize_stt(self) -> bool:
+        lock = getattr(self, '_cap_init_lock', None)
+        if getattr(self, 'cap_admission', None) is None or lock is None:
+            return await ListenReceiver._initialize_stt(self)
+        async with lock:
+            if not self.cap_paused and (self.stt_socket is not None or any(self.stt_sockets_multi)):
+                return True
+            return await ListenReceiver._initialize_stt(self)
+
+    async def _initialize_stt(self) -> bool:
+        self.host.server_batch_only = server_batch_suppresses_live(self.host)
+        self.host.server_batch_initialized = True
+        if self.host.server_batch_only:
+            self.cloud_live_suppressed = True
+            if not getattr(self, '_server_batch_logged', False):
+                logger.info('event=server_batch_only_admission mode=enabled')
+                self._server_batch_logged = True
+            return True
+        capture_batch_preview(self.host, select_provider=False)
+        mode = resolve_cloud_live_stt_mode()
+        if getattr(self, '_cloud_live_mode', None) is None:
+            self._cloud_live_mode = mode
+            try:
+                OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL.labels(
+                    mode=mode,
+                    local_preview='true' if getattr(self.host.request, 'local_preview', False) else 'false',
+                    client_platform=_bounded_client_platform(self._telemetry_platform()),
+                ).inc()
+            except Exception:
+                pass  # Session telemetry must never interrupt initialization.
+        if not getattr(self, '_cloud_live_opening', False):
+            local_preview = admit_local_preview(self.host)
+            off = suppresses_provider_stream(mode, use_custom_stt=bool(getattr(self.host, 'use_custom_stt', False)))
+            # Multi-channel audio never reaches the deferred-open seam in _flush_stt_buffer.
+            self.cloud_live_suppressed = (local_preview or off) and not getattr(self.host, 'is_multi_channel', False)
+            if self.cloud_live_suppressed:
+                # Deferred, never dropped: no cloud streaming STT session opens yet
+                # (neither vendor nor the Parakeet window leg). Live segments are what
+                # keep a listen conversation alive and register it for batch, so the
+                # first audio that reaches the socket opens the stream as usual. A
+                # local-preview phone journals pendant audio for batch and sends none.
+                self._cloud_live_deferred_by = 'local_preview' if local_preview else 'off'
+                return True
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None:
+            await admission.refresh(force=False)
+            if not admission.allowed(self.host.stt_service):
+                admission.omi_selected = True
+                self.cap_paused = True
+                return True  # Receive/persist without consulting provider routing.
+        capture_batch_preview(self.host)
+        self.live_demand = attach_live_demand(self)
+        if self.live_demand is not None:
+            await self.live_demand.publish()
+            if self.live_demand.eligible:
+                self._window_replay_started = True
         request = self.host.request
         if self.host.use_custom_stt:
             return True
@@ -1091,7 +1388,9 @@ class ListenReceiver(ReplayFilterMixin):
                         )
                         return False
                     self.stt_sockets_multi[index] = track_live_stt_socket(socket, self.host.stt_service.value)
+                    telemetry_call(self, 'lane_meter', 'transition', self._serving_provider())
                     record_live_connection(self.host, self._serving_provider())
+                self.cap_paused = False
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
                 override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()
@@ -1106,6 +1405,7 @@ class ListenReceiver(ReplayFilterMixin):
                     )
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
+                edge_shadow.attach_tap(self.vad_gate, self)
 
             parakeet_callback, modulate_callback, epoch = self._build_stt_callbacks()
             raw = await self._create_stt_socket(
@@ -1124,6 +1424,8 @@ class ListenReceiver(ReplayFilterMixin):
                     platform=self.host.client_device_context.platform,
                 )
                 return False
+            if self.recovery is not None:
+                self.recovery.mark_attempted(self._attempted_identity(raw, self.host.stt_service))
             if epoch is not None:
                 epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
             self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
@@ -1133,8 +1435,13 @@ class ListenReceiver(ReplayFilterMixin):
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
+            self.cap_paused = False
+
             return True
         except ProviderChainUnavailable as error:
+            if admission is not None and admission.funded_paused is True:
+                self.cap_paused = True
+                return True
             await self._drain_stt_sockets()
             await terminate_live_stt_backoff(
                 request.websocket,
@@ -1144,6 +1451,9 @@ class ListenReceiver(ReplayFilterMixin):
             )
             return False
         except Exception as error:
+            if admission is not None and admission.funded_paused is True:
+                self.cap_paused = True
+                return True
             await self._drain_stt_sockets()
             await terminate_live_stt_session(
                 request.websocket,
@@ -1154,126 +1464,492 @@ class ListenReceiver(ReplayFilterMixin):
             )
             return False
 
+    async def _switch_live_demand(self, lane: str) -> bool:
+        if getattr(self, 'cloud_live_suppressed', False):
+            return False
+        return await switch_live_demand(self, lane)
+
+    def ensure_live_demand_routing(self) -> Any:
+        """Start demand routing once a stream exists; idempotent for deferred and cap-paused starts."""
+
+        demand = getattr(self, 'live_demand', None)
+        supervisor = getattr(self.host, 'task_supervisor', None)
+        if demand is None or supervisor is None or getattr(self, '_live_demand_routing_started', False):
+            return None
+        self._live_demand_routing_started = True
+        # A task started after supervise() snapshots its monitored set is still
+        # tracked (drained and cancelled at teardown, exceptions logged) but cannot
+        # end the session: a routing failure only leaves it on its current lane.
+        return supervisor.create_lifetime_task(demand.run(), name='live_demand_routing')
+
+    def note_deferred_stream_opened(self) -> None:
+        """Count a deferred session's stream once, whether it opened on audio or on cap recovery."""
+
+        if not getattr(self, '_cloud_live_opening', False) or getattr(self, '_deferred_open_counted', False):
+            return
+        self._deferred_open_counted = True
+        try:
+            OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
+                deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
+            ).inc()
+        except Exception:
+            pass  # Telemetry never blocks the stream.
+
+    async def _open_deferred_stream(self) -> bool:
+        """Audio reached a deferred session: open the provider stream it would have had."""
+
+        if getattr(self.host, 'server_batch_only', False) is True:
+            return True
+        self._cloud_live_opening = True
+        self.cloud_live_suppressed = False
+        if not await self.initialize_stt():
+            return False
+        if self.stt_socket is not None or any(self.stt_sockets_multi):
+            self.note_deferred_stream_opened()
+            self.ensure_live_demand_routing()
+        # Otherwise cap admission paused it (audio goes to LiveHeldAudio); credit
+        # refresh re-initializes and starts demand routing when the cap recovers.
+        return True
+
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
+        if getattr(self, 'recovery', None) is None:
+            origin_token = current_transport_origin.set('replacement')
+            try:
+                return await legacy_recovery.failover_stt_socket(self)
+            finally:
+                current_transport_origin.reset(origin_token)
         async with self._stt_failover_lock:
-            if self._stt_recovery_exhausted:
+            if self.recovery.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
                 return False
-            # Soniox drain_and_close() sets this before its final flush.  Treat a
-            # finishing socket as receiver teardown even if its dead latch was
-            # already set; opening a replacement here races the zero-audio close.
-            if socket_is_finishing(self.stt_socket):
+            # Owner teardown blocks recovery. Managed transport cleanup also
+            # calls raw.finish() after failure; its raw finishing flag alone
+            # must never suppress the next eligible provider.
+            if self.recovery.client_has_left() or socket_is_finishing(self.stt_socket):
                 return False
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
-            if await self._reconnect_stt_socket_locked():
-                return True
-            recovered = await self._rebuild_stt_socket_locked()
-            self._stt_recovery_exhausted = not recovered
-            return recovered
+            idle_reopen = getattr(self.stt_socket, 'idle_cost_reselect_requested', False) is True
+            idle_transport = replay_delivery.raw_transport(self.stt_socket) if idle_reopen else None
+            if idle_reopen:
+                # Planned idle retirement is a fresh selection, not a failed
+                # provider or a spent failure episode. Fleet/account benches
+                # and cap admission still apply to every candidate dial.
+                episodes = self.recovery.episode_count
+                self.recovery = LiveRecoveryController(self.host)
+                self.recovery.begin(family=provider_for_service(self.host.stt_service))
+                self.recovery.episode_count = episodes
+            else:
+                self.recovery.begin(self.stt_socket, provider_for_service(self.host.stt_service))
+            if self.recovery.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
+                return False
+            origin_token = current_transport_origin.set('idle_reopened' if idle_reopen else 'replacement')
+            try:
+                if not idle_reopen and await self._reconnect_stt_socket_locked():
+                    return True
+                rebuilt = await self._rebuild_stt_socket_locked(idle_reopen=idle_reopen)
+                if rebuilt and idle_transport is not None:
+                    idle_transport.note_cost_reopened()
+                return rebuilt
+            except asyncio.CancelledError:
+                self._settle_pending_live_failover_failure(continuing=True)
+                if self._replay_delivery is not None:
+                    retire_window_replay_socket(self, self._replay_delivery)
+                    self._replay_delivery.finish()
+                raise
+            finally:
+                current_transport_origin.reset(origin_token)
+                self._replay_delivery = None
+                self._replay_ingesting = False
+
+    def _attempted_identity(self, socket: Any, service: Any) -> str:
+        """Remember the identity a real dial carried, for harness fakes that
+        bypass the chain's attempt seam."""
+        target_id = getattr(socket, 'routing_target', None)
+        if isinstance(target_id, str) and target_id:
+            return target_id
+        value = getattr(service, 'value', service)
+        identity = DEFAULT_IDS.get(value, value)
+        return identity if isinstance(identity, str) else 'unknown'
 
     async def _reconnect_stt_socket_locked(self) -> bool:
+        if getattr(self, 'recovery', None) is None:
+            return await legacy_replay.reconnect_live_stt_socket(self)
         return await reconnect_live_stt_socket(self)
 
-    async def _rebuild_stt_socket_locked(self) -> bool:
+    def _shutdown_budget(self) -> float | None:
+        if self.shutdown_deadline is None:
+            return None
+        return max(0.0, self.shutdown_deadline - replay_delivery.clock())
+
+    def delivery_active(self) -> bool:
+        if self.host.state.stt_terminal_failure:
+            return False
+        if self.recovery is not None and self.recovery.client_has_left():
+            blocked = getattr(getattr(self.host.request, 'owner_persistence_blocked', None), 'is_set', None)
+            if callable(blocked) and blocked():
+                return False
+            budget = self._shutdown_budget()
+            if self.client_closing and budget is not None:
+                return budget > 0
+            return bool(self._receiving and self.host.state.close_code in (1000, 1001))
+        return self.host.state.active
+
+    def _recovery_write_budget(self) -> float | None:
+        """Single-write bound inputs: remaining episode, and remaining live
+        residence of the oldest queued tail packet when one is held."""
+        remaining = self.recovery.remaining()
+        delivery = self._replay_delivery
+        if delivery is not None and delivery.tail:
+            born = self._live_birth.lookup(delivery.tail[0].start)
+            received = delivery.tail[0].received if born is None else born
+            residence = replay_delivery.TAIL_RESIDENCE_SECONDS - (replay_delivery.clock() - received)
+            remaining = residence if remaining is None else min(remaining, residence)
+        shutdown = self._shutdown_budget()
+        if shutdown is not None:
+            remaining = shutdown if remaining is None else min(remaining, shutdown)
+        return remaining
+
+    async def _pump_replacement(
+        self,
+        raw: Any,
+        epoch: Any,
+        hop: Any,
+        replay: tuple[tuple[int, bytes], ...],
+        ring: Any,
+        previous: Any,
+        *,
+        sample_rate: int,
+        limits: Any,
+        dead_provider: str,
+        soniox: Any = None,
+        meter_source: Any = None,
+    ) -> bool:
+        """The single owner-side replay/adoption pump shared by cross-provider
+        failover and same-provider Soniox re-entry: candidate binding, opt-in
+        writer pacing, the paced prefix under the 20s wall (enqueues and frozen
+        writes share it), tail transfer, then adoption."""
+        self.recovery.replaying()
+        self._candidate_token = (
+            getattr(raw, 'speaker_provider_epoch', None) or self.speaker_provider_epoch or epoch or raw
+        )
+        self.recovery.set_candidate(self._candidate_token)
+        self._pending_live_failover = hop
+        enable_recovery_writer_pace(raw, sample_rate, limits, self._recovery_write_budget)
+        # The ordered delivery accepts live capture while the prefix awaits pacing.
+        delivery = ReplayTailSocket(
+            raw,
+            ReplayPacer(sample_rate, self.host.stt_service.value, raw, limits=limits),
+            self._replay_live_tail,
+            self.host,
+            source=dead_provider,
+            birth=self._live_birth,
+            retire_interval=(lambda end: ring.finalize_through(end) if ring is not None else 0),
+        )
+        self._replay_delivery = delivery
+        replay_remaining = self.recovery.remaining()
+        prefix_wall = replay_delivery.REPLAY_PREFIX_SECONDS
+        prefix_deadline = replay_delivery.clock() + (
+            min(prefix_wall, replay_remaining) if replay_remaining is not None else prefix_wall
+        )
+        if self.shutdown_deadline is not None:
+            prefix_deadline = min(prefix_deadline, self.shutdown_deadline)
+        try:
+            rejected_sample = await replay_chunks(
+                record_replay_sends(raw, epoch),
+                replay,
+                source=meter_source if meter_source is not None else ring,
+                provider=dead_provider or 'parakeet',
+                soniox=soniox,
+                is_active=self.delivery_active,
+                pacer=delivery.pacer,
+                deadline=prefix_deadline,
+                await_writes=True,
+            )
+        except asyncio.CancelledError:
+            hop.note_failure(None, continuing=True)
+            retire_window_replay_socket(self, raw)
+            await abort_replay_socket(raw)
+            raise
+        if not self.delivery_active():
+            hop.note_failure(None)
+            retire_window_replay_socket(self, raw)
+            await abort_replay_socket(raw)
+            return False
+        if rejected_sample is not None:
+            # Accepted bytes have not necessarily produced text. The next
+            # candidate needs the entire remaining span, including that prefix.
+            await self._reject_candidate(raw, epoch, hop, previous)
+            return False
+        delivery.connection = self._wrap_legacy_stt_socket(raw, epoch)
+        # Empty prefixes still need the independent paced tail for subsequent
+        # capture; exposing the raw paced writer stalls receive/disconnect
+        # observation behind a buffered client burst.
+        self.stt_socket = delivery
+        # Transfer this bounded tail to the adopted socket. A later failover
+        # uses the capture ring, or takes the unwritten tail when no ring exists.
+        self._replay_live_tail = deque()
+        self._replay_tail_bytes = 0
+        delivery.start_tail(draining=self.client_closing)
+        if ring is not None:
+            ring.reserve_replacement_headroom()
+        self._record_selected_epoch(epoch, self.stt_socket)
+        record_live_connection(self.host, self._serving_provider())
+        self._pending_live_failover = None if hop.settled else hop
+        record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
+        # Bind the identity this adoption now serves BEFORE any proof can
+        # release the episode: the dial-ledger rebase and the receiver-side
+        # session-failure sets both need to know who is holding the session.
+        self.recovery.note_serving_identity(self._attempted_identity(raw, self.host.stt_service))
+        self._release_stt_session_failures(self._serving_provider())
+        self.recovery.adopted(self._candidate_token)
+        logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
+        return True
+
+    def _release_stt_session_failures(self, serving_provider: str) -> None:
+        """Drop the current provider from this session's recovery exclusions.
+
+        A hop the receiver actually adopted is new evidence that the provider
+        serves: its family dialled, connected, and passed the serving gate
+        after this session condemned it. Keeping it failed would pair the
+        controller ledger with a receiver-side veto and exhaust the walk on
+        the next ordinary death. Other providers keep their session exclusion
+        unless replay overflow alone excluded them; the provider-level circuit
+        breaker still owns cross-session health.
+        """
+        family = provider_for_service(serving_provider) or serving_provider
+        release_session_local_exclusions(self, family)
+        released = family in self._stt_failed_providers
+        self._stt_failed_providers.discard(family)
+        identity = self.recovery._serving_identity if self.recovery is not None else None
+        if isinstance(identity, str):
+            self._stt_failed_targets.discard(identity)
+        if released:
+            self._stt_rebuild_attempts = 0
+            self._stt_failed_reasons.pop(family, None)
+
+    async def _reject_candidate(self, raw: Any, epoch: Any, hop: Any, previous: Any) -> None:
+        """Release an unadopted replacement and keep walking the episode."""
+        self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
+        self._pending_live_failover = hop
+        self._candidate_token = None
+        retire_window_replay_socket(self, raw)
+        outcome = getattr(raw, 'leg_outcome', None)
+        if outcome is not None:
+            outcome.claim(live_stt_terminal_reason(raw, 'connection_lost'))
+        note_stream_close_intent(raw, US_FAILOVER)
+        try:
+            await abort_replay_socket(raw)
+        except asyncio.CancelledError:
+            if outcome is not None:
+                outcome.settle()
+            raise
+        if previous is not None:
+            note_stream_close_intent(previous, US_FAILOVER)
+            try:
+                await abort_replay_socket(previous)
+            finally:
+                release_live_stt_socket(previous)
+
+    async def _rebuild_stt_socket_locked(self, *, idle_reopen: bool = False) -> bool:
+        if getattr(self, 'recovery', None) is None:
+            return await legacy_recovery.rebuild_stt_socket_locked(self)
         rebuild = getattr(self, '_stt_rebuild', None)
         if rebuild is None or self.host.is_multi_channel or self.host.use_custom_stt:
             return False
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
-        dead_provider = provider_for_service(self.host.stt_service)
-        service, language, model = select_live_replacement(
-            self, dead_provider, get_stt_service_for_language, managed=managed_chain_enabled(self.host)
-        )
-        if service is None:
-            return False
-        # A failed hop is degraded while the chain continues; exhausted means no replacement path.
-        self._settle_pending_live_failover_failure(continuing=True)
-        parakeet_callback, modulate_callback, epoch = rebuild[0]()
+        demand = getattr(self, 'live_demand', None)
+        if demand is not None and demand.eligible and self.host.stt_model == 'parakeet-window':
+            demand.policy.fallback = True
+            demand.policy.window_permitted = False
+            demand.policy.reason = 'fallback'
+            demand.meter()
         sample_rate = rebuild[1]
-        previous = self.stt_socket
-        previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
-        window_ring = self._window_ring()
-        trim_window_replay_to_anchor(window_ring, previous)
-        replay = window_ring.snapshot() if window_ring is not None else ()
-        if window_ring is not None:
-            self._window_replay_cutoff_sample = window_ring.finalized_sample
-        retire = getattr(previous, 'retire_for_replay', None)
-        if window_ring is not None and callable(retire):
-            retire()
-        if replay and epoch is not None:
-            epoch.replay_origin_sample = replay[0][0]
-        self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
-        hop = PendingLiveFailover.from_socket(previous, dead_provider or 'unknown', service.value)
-        hop.capture_window_failure_details(previous)
-        try:
-            raw = await self._create_stt_socket(
-                parakeet_callback,
-                sample_rate,
-                modulate_callback=modulate_callback,
-                epoch=epoch,
-            )
-        except asyncio.CancelledError:
-            hop.note_failure(None)
-            raise
-        except ProviderChainUnavailable as error:
-            if managed_chain_enabled(self.host):
-                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
-            hop.note_failure(None)
-            await terminate_live_stt_backoff(
-                self.host.request.websocket,
-                self.host.state,
-                reason='provider_unavailable',
-                retry_after=error.retry_after,
-            )
-            return False
-        except Exception:
-            if managed_chain_enabled(self.host):
-                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
-            logger.exception('STT failover connect raised')
-            hop.note_failure(None)
-            return False
-        if raw is None:
-            hop.note_failure(None)
-            if managed_chain_enabled(self.host):
-                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
-            return False
-        if epoch is not None:
-            epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
-        hop.to_mode = self.host.stt_service.value
-        # A provider can reject shortly after upgrade; never adopt a dead leg.
-        if not await fallback_socket_is_serving(raw):
-            return await retry_failed_replacement(self, raw, epoch, hop, previous)
-        self._pending_live_failover = hop
-        # Replay capture positions after the last emitted segment.
-        rejected_sample = replay_chunks(
-            raw,
-            replay,
-            source=window_ring,
-            provider=dead_provider or 'parakeet',
-            soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
-        )
-        if rejected_sample is not None and window_ring is not None:
-            # Accepted bytes have not necessarily produced text. The next
-            # candidate needs the entire remaining span, including that prefix.
-            return await retry_failed_replacement(self, raw, epoch, hop, previous)
-        self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
-        if window_ring is not None:
-            window_ring.reserve_replacement_headroom()
-        self._record_selected_epoch(epoch, self.stt_socket)
-        record_live_connection(self.host, self._serving_provider())
-        self._pending_live_failover = None if hop.settled else hop
-        record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
-        logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
-        if previous is not None:
+        planned_idle = idle_reopen
+        while True:
+            if self.recovery.episode_expired():
+                self._settle_pending_live_failover_failure()
+                settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
+                self.recovery.exhaust()
+                return False
+            if self.recovery.client_has_left() or self.host.state.stt_terminal_failure:
+                return False
+            dead_provider = provider_for_service(self.host.stt_service)
+            if idle_reopen:
+                # Stale session-local failures must not pin a recovered cheap
+                # provider out forever. The configured chain rechecks current
+                # stages, capability, account health and per-user permission.
+                self._stt_failed_providers.clear()
+                self._stt_failed_targets.clear()
+                self._stt_failed_reasons.clear()
+                service, language, model = get_stt_service_for_language(
+                    self.host.language,
+                    multi_lang_enabled=self.host.multi_lang_enabled,
+                    language_profile=self.host.language_profile,
+                    **window_selection_kwargs(self.host, self.host.request.uid),
+                )
+                idle_reopen = False
+            else:
+                service, language, model = select_live_replacement(
+                    self, dead_provider, get_stt_service_for_language, managed=managed_chain_enabled(self.host)
+                )
+            if service is None:
+                self._settle_pending_live_failover_failure()
+                settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
+                self.recovery.exhaust()
+                return False
+            self._settle_pending_live_failover_failure(continuing=True)
+            parakeet_callback, modulate_callback, epoch = rebuild[0]()
+            previous = self.stt_socket
+            previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
+            window_ring = self._window_ring()
+            trim_window_replay_to_anchor(window_ring, previous)
+            self._replay_ingesting = window_ring is not None
+            self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
+            hop = PendingLiveFailover.from_socket(previous, dead_provider or 'unknown', service.value)
+            hop.capture_window_failure_details(previous)
+            if self.recovery.client_has_left():
+                return False
+            raw = None
             try:
-                previous.finish()
-            except Exception:
-                logger.warning('Failed to close the STT socket that died before failover')
-            finally:
-                release_live_stt_socket(previous)
-        return True
+                episode_left = self.recovery.remaining()
+                if episode_left is not None:
+                    async with asyncio.timeout(max(0.001, episode_left)):
+                        raw = await self._create_stt_socket(
+                            parakeet_callback,
+                            sample_rate,
+                            modulate_callback=modulate_callback,
+                            epoch=epoch,
+                        )
+                        serving = raw is not None and await fallback_socket_is_serving(raw)
+                else:
+                    raw = await self._create_stt_socket(
+                        parakeet_callback,
+                        sample_rate,
+                        modulate_callback=modulate_callback,
+                        epoch=epoch,
+                    )
+                    serving = raw is not None and await fallback_socket_is_serving(raw)
+            except TimeoutError:
+                timed_out = self.host.stt_service if raw is not None else service
+                self._stt_failed_providers.add(provider_for_service(timed_out) or timed_out.value)
+                if raw is not None:
+                    retire_window_replay_socket(self, raw)
+                    note_stream_close_intent(raw, US_TIMEOUT)
+                    await abort_replay_socket(raw)
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+                hop.note_failure(None, continuing=True)
+                continue
+            except asyncio.CancelledError:
+                hop.note_failure(None)
+                if raw is not None:
+                    retire_window_replay_socket(self, raw)
+                    await abort_replay_socket(raw)
+                raise
+            except ProviderChainUnavailable as error:
+                if managed_chain_enabled(self.host):
+                    self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+                hop.note_failure(None)
+                await terminate_live_stt_backoff(
+                    self.host.request.websocket,
+                    self.host.state,
+                    reason='provider_unavailable',
+                    retry_after=error.retry_after,
+                )
+                return False
+            except LiveChainExhausted as error:
+                # Typed exhaustion is the chain's normal terminal answer, not
+                # an unexpected crash: the dial already emitted its
+                # `omi_fallback_event ... outcome=exhausted` WARNING and the
+                # death monitor converts the exhaustion latch below into the
+                # typed `stt_failed` terminal status. `logger.exception` here
+                # re-printed the chain's own frames once per session
+                # (2026-10-09: the `STT failover connect raised` traceback
+                # mirrored the `LiveChainExhausted` fallback events 1:1,
+                # ~100/30m); one classified line keeps the fault signal.
+                # Untyped dial failures keep the traceback.
+                if managed_chain_enabled(self.host):
+                    self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+                logger.error('STT failover chain exhausted (%s)', error)
+                hop.note_failure(None)
+                settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
+                self.recovery.exhaust()
+                return False
+            except Exception as error:
+                if managed_chain_enabled(self.host):
+                    self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+                logger.exception('STT failover connect raised')
+                self._stt_failed_providers.add(provider_for_service(service) or service.value)
+                hop.note_failure(None, continuing=True)
+                continue
+            if raw is None:
+                self._stt_failed_providers.add(provider_for_service(service) or service.value)
+                hop.note_failure(None, continuing=True)
+                if managed_chain_enabled(self.host):
+                    self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+                continue
+            if self.recovery is not None:
+                self.recovery.mark_attempted(self._attempted_identity(raw, self.host.stt_service))
+            if epoch is not None:
+                epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
+            hop.to_mode = self.host.stt_service.value
+            limits = socket_replay_limits(raw)
+            remaining = self.recovery.remaining()
+            replay = (
+                bounded_snapshot(
+                    window_ring,
+                    dead_provider or 'unknown',
+                    socket_family(raw),
+                    rate=limits.rate,
+                    wall_seconds=(
+                        min(replay_delivery.REPLAY_PREFIX_SECONDS, remaining) if remaining is not None else None
+                    ),
+                    birth=self._live_birth,
+                )
+                if window_ring is not None
+                else ()
+            )
+            for packet in self._replay_live_tail:
+                self._live_birth.note(packet.start, packet.start + len(packet.data) // 2, packet.received)
+            if window_ring is not None:
+                self._replay_live_tail.clear()
+                self._replay_tail_bytes = 0
+                self._window_replay_cutoff_sample = window_ring.finalized_sample
+            elif isinstance(previous, ReplayTailSocket):
+                self._replay_live_tail.extendleft(reversed(previous.take_tail()))
+                self._replay_tail_bytes = sum(len(packet.data) for packet in self._replay_live_tail)
+            retire = getattr(previous, 'retire_for_replay', None)
+            if (window_ring is not None or planned_idle) and callable(retire):
+                retire()
+            if previous is not None:
+                note_stream_close_intent(previous, US_FAILOVER)
+                try:
+                    await abort_replay_socket(previous)
+                except Exception:
+                    logger.warning('Failed to close the STT socket that died before failover')
+                finally:
+                    release_live_stt_socket(previous)
+                previous = None
+            if replay and epoch is not None:
+                epoch.replay_origin_sample = replay[0][0]
+            if not serving or self.recovery.episode_expired():
+                await self._reject_candidate(raw, epoch, hop, previous)
+                continue
+            if await self._pump_replacement(
+                raw,
+                epoch,
+                hop,
+                replay,
+                window_ring,
+                previous,
+                sample_rate=sample_rate,
+                limits=limits,
+                dead_provider=dead_provider or 'unknown',
+                soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
+            ):
+                return True
 
     async def _monitor_stt_death(self) -> None:
         """Terminate the client session promptly when the provider STT socket dies.
@@ -1285,7 +1961,14 @@ class ListenReceiver(ReplayFilterMixin):
         This frame-independent poll drives the same idempotent terminal path
         (``stt_failed`` + WebSocket 1011) as soon as the death latch flips (#10028).
         """
+        if getattr(self, 'recovery', None) is None:
+            return await legacy_recovery.monitor_stt_death(self)
         while self.host.state.active and not self.host.state.stt_terminal_failure:
+            admission = getattr(self, 'cap_admission', None)
+            if admission is not None and admission.funded_paused is True:
+                if await self.host.wait(STT_DEATH_POLL_INTERVAL_SECONDS):
+                    return
+                continue
             socket = self.stt_socket
             outcome = getattr(socket, 'leg_outcome', None)
             if outcome is not None and outcome.owner_closing:
@@ -1293,18 +1976,26 @@ class ListenReceiver(ReplayFilterMixin):
             if socket is not None and live_stt_socket_is_dead(socket):
                 if await self._failover_stt_socket():
                     continue
-                if outcome is not None and outcome.owner_closing:
-                    return
+                if admission is not None and admission.funded_paused is True:
+                    continue
+                recovery = getattr(self, 'recovery', None)
+                if recovery is not None:
+                    if recovery.client_has_left() or (outcome is not None and outcome.owner_closing):
+                        return
+                    if not recovery.exhausted:
+                        return
                 if self.host.state.active and not self.host.state.stt_terminal_failure:
-                    settle_terminal_socket(socket, self._serving_provider(), 'connection_lost')
+                    settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
                 await terminate_live_stt_session(
                     self.host.request.websocket,
                     self.host.state,
                     failure=live_stt_upstream_failure(self._serving_provider()),
-                    reason=live_stt_terminal_reason(socket, 'connection_lost'),
+                    reason=live_stt_terminal_reason(self.stt_socket or socket, 'connection_lost'),
                     platform=self.host.client_device_context.platform,
                 )
                 return
+            if socket is not None and not socket_is_finishing(socket):
+                self.recovery.note_healthy_connection(self._candidate_token)
             # Shutdown-aware sleep: wakes immediately on session shutdown, in
             # which case normal teardown owns termination and we simply exit.
             if await self.host.wait(STT_DEATH_POLL_INTERVAL_SECONDS):
@@ -1355,14 +2046,132 @@ class ListenReceiver(ReplayFilterMixin):
             del self.image_chunks[chunk.id]
             self.host.spawn(self._process_photo(image, chunk.id), name='photo_process')
 
+    def _observe_cap_capture(self, data, rate, start, admitted):
+        if self.live_hold is not None:
+            self.live_hold.observe(self, data, rate, start, admitted)
+
+    async def _cap_hold_updates(self):
+        if self.live_hold is not None:
+            await self.live_hold.run_updates(self)
+
+    async def _emit_stt_cap_live_held(self) -> None:
+        hold = getattr(self, 'live_hold', None)
+        if hold is not None:
+            await hold.flush()
+            await hold.notice()
+
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
+        if getattr(getattr(self, 'host', None), 'server_batch_only', False) is True:
+            buffer.clear()  # PCM forwarding and raw custody run independently below.
+            self._stt_buffer_start_sample = None
+            return
+        if buffer and getattr(self, 'cloud_live_suppressed', False):
+            if not await self._open_deferred_stream():
+                return
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and getattr(self, 'cap_paused', False) and admission.allowed(self.host.stt_service):
+            if not await self.initialize_stt():
+                return
+        if admission is not None and not admission.packet_allowed(
+            buffer, self.host.stt_service, self.host.request.sample_rate
+        ):
+            held_seconds = len(buffer) / (2 * self.host.request.sample_rate)
+            # Stamp the receipt span before awaiting custody, so a concurrent usage
+            # flush already sees this audio as held rather than billing it.
+            admission.note_held(self.host.state.last_audio_received_time or time.time(), held_seconds)
+            hold = getattr(self, 'live_hold', None)
+            if hold is not None and buffer:
+                start = self._stt_buffer_start_sample
+                timeline = getattr(self, 'capture_timeline', None)
+                timestamp = (
+                    timeline.wall(start)
+                    if timeline is not None and start is not None
+                    else time.time() - len(buffer) / (2 * self.host.request.sample_rate)
+                )
+                if start is not None:
+                    await hold.observe_async(self, bytes(buffer), self.host.request.sample_rate, start, False)
+                else:
+                    await hold.append_async(
+                        bytes(buffer), self.host.request.sample_rate, timestamp, self.host.state.current_conversation_id
+                    )
+            admission.record_suppressed(self.host.stt_service, held_seconds)
+            buffer.clear()
+            self._stt_buffer_start_sample = None
+            await self._emit_stt_cap_live_held()
+            return
+        hold = getattr(self, 'live_hold', None)
+        if hold is not None and hold.paused:
+            await hold.flush(force=True)
+            await hold.notice(paused=False)
+        if getattr(self, 'recovery', None) is None:
+            return await legacy_recovery.flush_stt_buffer(self, buffer, force=force)
         request = self.host.request
+        ring = self._window_ring()
+        if (
+            ring is not None
+            and (self._replay_ingesting or self.stt_socket is not None and live_stt_socket_is_dead(self.stt_socket))
+            and not socket_is_finishing(self.stt_socket)
+        ):
+            if not self._replay_ingesting:
+                self._replay_ingesting = True
+                if not self.client_closing:
+                    self._replay_recovery_task = self.host.spawn(
+                        self._recover_ingested_audio(), name='stt_replay_recovery'
+                    )
+            if not force and len(buffer) < stt_buffer_flush_size(request.sample_rate):
+                return
+            # No await or failover lock here: receive_data keeps reading audio
+            # and sees disconnect immediately while the prefix is being paced.
+            data = bytes(buffer)
+            start = self._stt_buffer_start_sample
+            if data and start is not None:
+                self._live_birth.note(start, start + len(data) // 2)
+                delivery = self._replay_delivery
+                if delivery is not None:
+                    accepted = delivery.send(data, start)
+                else:
+                    accepted = (
+                        self._replay_tail_bytes + len(data)
+                        <= replay_delivery.LIVE_TAIL_SECONDS * request.sample_rate * 2
+                    )
+                    if accepted:
+                        self._replay_live_tail.append(
+                            TailPacket(start, data, self._live_birth.note(start, start + len(data) // 2))
+                        )
+                        self._replay_tail_bytes += len(data)
+                dropped = ring.append_bounded(data, start)
+                if dropped:
+                    REPLAY_SKIPPED.labels(source=provider_family(self._serving_provider()), successor='unknown').inc(
+                        dropped / (2 * ring.sample_rate)
+                    )
+                buffer.clear()
+                self._stt_buffer_start_sample = None
+                self._capture('capture_outbound_stt', data)
+                if not accepted:
+                    if not self.client_closing and (
+                        self._replay_recovery_task is None or self._replay_recovery_task.done()
+                    ):
+                        self._replay_recovery_task = self.host.spawn(
+                            self._recover_ingested_audio(), name='stt_replay_recovery'
+                        )
+                    if self.recovery.exhausted and not self.recovery.client_has_left():
+                        # Not accepted means the live tail hit one of its own
+                        # bounds; this site never votes on the provider circuit.
+                        await terminate_live_stt_session(
+                            request.websocket,
+                            self.host.state,
+                            failure=live_stt_upstream_failure(self._serving_provider()),
+                            reason=local_tail_terminal_reason(delivery),
+                            platform=self._telemetry_platform(),
+                        )
+                    return
+            return
         # Bounded retry, not a single attempt: when the send path fails over to
         # the next provider the chunk is reported unsent with the buffer intact,
         # and it must reach the replacement socket now — the next client chunk
         # may be a VAD-gated silence away. `_failover_stt_socket` enforces
-        # MAX_STT_FAILOVERS, so the bound here is a backstop, not the limit.
-        for _ in range(MAX_STT_FAILOVERS + 2):
+        # MAX_RECOVERY_TARGETS, so the bound here is a backstop, not the limit.
+        for _ in range(MAX_RECOVERY_TARGETS + 2):
             socket_dead = self.stt_socket is not None and live_stt_socket_is_dead(self.stt_socket)
             decision = decide_stt_buffer_flush(
                 buffer_len=len(buffer),
@@ -1383,15 +2192,33 @@ class ListenReceiver(ReplayFilterMixin):
                 # cursor and those samples simply have no provider mapping.
                 self._stt_buffer_start_sample = None
                 return
+            socket = self.stt_socket
+            if socket is not None and not isinstance(socket, ReplayTailSocket) and not socket_is_finishing(socket):
+                # Reuse the bounded tail on initial paid legs too. Capacity
+                # waits belong to its supervised pump, so receive_data can
+                # keep reading audio and observe disconnect immediately.
+                wait_capacity = getattr(replay_delivery.raw_transport(socket), 'wait_send_capacity', None)
+                if callable(wait_capacity) and self._serving_provider() in {'soniox', 'modulate', 'deepgram'}:
+                    self.stt_socket = ReplayTailSocket(
+                        socket,
+                        ReplayPacer(request.sample_rate, self.host.stt_service.value, socket),
+                        deque(),
+                        self.host,
+                        source=self._serving_provider(),
+                        birth=self._live_birth,
+                        retire_interval=(lambda end: ring.finalize_through(end) if ring is not None else 0),
+                        write_wait_seconds=socket_replay_limits(socket).queue_wait_seconds,
+                    )
+                    self.stt_socket.start_tail(draining=self.client_closing)
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
             window_ring = self._window_ring()
             ring_action = window_replay_action(window_ring, self.stt_socket, outbound_audio, outbound_start_sample)
             if ring_action == 'failover':
-                if await self._failover_stt_socket():
-                    continue
-                # Fall through to the idempotent terminal send path. The
-                # recovery latch prevents it from rebuilding the same chain.
+                # The pressure decision published death. Move this packet to
+                # the bounded recovery tail and let receive_data keep reading.
+                await self._flush_stt_buffer(buffer, force=force)
+                return
             sent = await flush_live_stt_buffer(
                 request.websocket,
                 self.host.state,
@@ -1402,6 +2229,7 @@ class ListenReceiver(ReplayFilterMixin):
                 attempt_failover=self._failover_stt_socket,
                 start_sample=self._stt_buffer_start_sample,
             )
+            await self._emit_stt_cap_live_held()
             if sent:
                 if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
                     self._resilient_audio.append(outbound_audio, outbound_start_sample)
@@ -1414,12 +2242,35 @@ class ListenReceiver(ReplayFilterMixin):
             if self.host.state.stt_terminal_failure:
                 return
 
-    async def _handle_multi_channel_audio(self, data: bytes, now: float | None = None) -> int:
+    async def _recover_ingested_audio(self) -> None:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and admission.funded_paused is True:
+            return
+        if (
+            not await self._failover_stt_socket()
+            and self.host.state.active
+            and self.recovery.exhausted
+            and not self.recovery.client_has_left()
+            and not socket_is_finishing(self.stt_socket)
+        ):
+            settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
+            await terminate_live_stt_session(
+                self.host.request.websocket,
+                self.host.state,
+                failure=live_stt_upstream_failure(self._serving_provider()),
+                reason=live_stt_terminal_reason(self.stt_socket, 'connection_lost'),
+                platform=self._telemetry_platform(),
+            )
+
+    async def _handle_multi_channel_audio(
+        self, data: bytes, now: float | None = None, source_claim: dict | None = None
+    ) -> int:
         if now is None:
             now = time.time()
         request = self.host.request
         channel_index = self.channel_id_to_index.get(data[0])
         if channel_index is None:
+            await self.raw_archive.append(bytes(data), self.host.state.current_conversation_id, now, 0, -1)
             # A whole call's worth of frames can land here if a client prefixes
             # its channels differently than build_channel_config expects; that
             # used to be indistinguishable from silence, so count and log it.
@@ -1437,17 +2288,38 @@ class ListenReceiver(ReplayFilterMixin):
             return 0
         self._unknown_prefix_streak = 0
         audio = data[1:]
+        captured_audio = bytes(audio)
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
                 audio = self.multi_opus_decoders[channel_index].decode(
                     bytes(audio), opus_decode_capacity(request.sample_rate)
                 )
             except Exception as error:
+                await self.raw_archive.append(
+                    captured_audio,
+                    self.host.state.current_conversation_id,
+                    now,
+                    0,
+                    channel_index,
+                    source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
+                )
                 self._record_decode_failure('opus', error, len(audio), channel=channel_index)
                 return 0
             self.decode_failure_streak = 0
             if not audio:
+                await self.raw_archive.append(
+                    captured_audio, self.host.state.current_conversation_id, now, 0, channel_index
+                )
                 return 0
+        await self.raw_archive.append(
+            captured_audio,
+            self.host.state.current_conversation_id,
+            now,
+            len(audio) // 2,
+            channel_index,
+            decoded=bytes(audio),
+            source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
+        )
         # Audio activity only counts once the channel prefix resolved and an
         # opus frame decoded; rejected frames above cannot renew the lease.
         self._note_audio_activity()
@@ -1463,7 +2335,44 @@ class ListenReceiver(ReplayFilterMixin):
                 pcm_len=len(pcm),
                 fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
             )
-            if should_send:
+            admission = getattr(self, 'cap_admission', None)
+            if (
+                admission is not None
+                and getattr(self, 'cap_paused', False)
+                and admission.allowed(self.host.stt_service)
+            ):
+                if not await self.initialize_stt():
+                    return len(audio)
+                should_send, dg_usage_ms = decide_multi_channel_stt_send(
+                    socket_available=bool(self.stt_sockets_multi[channel_index]),
+                    fair_use_dg_budget_exhausted=self.host.state.fair_use_dg_budget_exhausted,
+                    pcm_len=len(pcm),
+                    fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
+                )
+            denied = admission is not None and not admission.packet_allowed(
+                pcm, self.host.stt_service, TARGET_SAMPLE_RATE
+            )
+            suppressed = denied or should_send and suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm)
+            if denied and admission is not None:
+                admission.record_suppressed(self.host.stt_service, len(pcm) / (2 * TARGET_SAMPLE_RATE))
+            if suppressed and admission is not None:
+                # Both denials happen at receipt, so this frame's wall span is held.
+                admission.note_held(now, len(pcm) / (2 * TARGET_SAMPLE_RATE))
+            if suppressed:
+                hold = getattr(self, 'live_hold', None)
+                if hold is not None:
+                    await hold.append_async(
+                        pcm,
+                        TARGET_SAMPLE_RATE,
+                        now - len(pcm) / (2 * TARGET_SAMPLE_RATE),
+                        self.host.state.current_conversation_id,
+                        channel_index,
+                    )
+                await self._emit_stt_cap_live_held()
+            elif self.live_hold is not None and self.live_hold.paused:
+                await self.live_hold.flush(force=True)
+                await self.live_hold.notice(paused=False)
+            if should_send and not suppressed:
                 sent = await send_live_stt_audio(
                     request.websocket,
                     self.host.state,
@@ -1518,21 +2427,53 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'suggested_transcript' and self.host.use_custom_stt:
             segments = payload.get('segments', [])
             provider = payload.get('stt_provider')
+            state = getattr(self.host, 'state', None)
+            if state is not None and getattr(state, 'first_audio_byte_timestamp', None) is None:
+                # Custom STT may run without forwarding raw audio: set the clock origin, not the first-audio funnel.
+                state.first_audio_byte_timestamp = custom_stt_clock_origin(segments, time.time())
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
+            from config.demand_processing import enabled as demand_enabled, surface_reporting_enabled
+
+            if (
+                demand_enabled()
+                and surface_reporting_enabled()
+                and demand_enabled(self.host.request.uid)
+                and isinstance(payload.get('surface_open'), bool)
+            ):
+                from utils.conversations.demand_processing import observe_surface
+
+                await run_blocking(
+                    db_executor, observe_surface, self.host.request.uid, str(self.host.session_id), payload
+                )
+            telemetry_call(self.host, 'demand_telemetry', 'observe_visibility', payload)
+            demand = getattr(self, 'live_demand', None)
+            if demand is not None:
+                demand.observe(payload)
+            if payload.get('mobile_batch_capability_v1') is True:
+                # Client renews its bounded authorization lease. No audio is
+                # consumed here; legacy state reports keep their current shape.
+                await self.host.refresh_mobile_batch_admission()
+                await self.host.asend_event(
+                    MessageServiceStatusEvent(
+                        status='mobile_batch_admission',
+                        mobile_standard_batch=self.host.mobile_standard_batch,
+                        local_preview=True if getattr(self.host, 'local_preview_batch', False) else None,
+                    )
+                )
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
             config = resolve_ondemand_config()
-            if config.shadow_enabled or config.gate_enabled:
-                if self.translation_demand.observe(payload, lease_v1_enabled=config.lease_v1_enabled):
+            if config.gate_enabled:
+                if self.translation_demand.observe(payload):
                     if self._translation_expiry_task is not None:
                         self._translation_expiry_task.cancel()
-                    snapshot = self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+                    snapshot = self.translation_demand.snapshot()
                     get_translation_metrics().demand(
                         snapshot.policy.value,
-                        'enforced' if config.gate_enabled else 'shadow',
+                        'enforced',
                         self._telemetry_platform(),
                     )
                     if snapshot.expires_at is not None:
@@ -1546,7 +2487,7 @@ class ListenReceiver(ReplayFilterMixin):
                         self.host.spawn(
                             self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile'
                         )
-        elif kind == 'capture_evidence_frame' and capture_evidence_dark_write_enabled():
+        elif kind == 'capture_evidence_frame':
             # The next binary message alone may consume this claim. A new
             # control message supersedes an unpaired one, never a later frame.
             self._pending_source_frame = payload
@@ -1566,10 +2507,9 @@ class ListenReceiver(ReplayFilterMixin):
     async def _expire_translation_demand(self, expires_at: float) -> None:
         interrupted = await self.host.wait(max(0.0, expires_at - time.monotonic()))
         if not interrupted and self.host.transcripts is not None:
-            config = resolve_ondemand_config()
             get_translation_metrics().demand(
-                self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy.value,
-                'enforced' if config.gate_enabled else 'shadow',
+                self.translation_demand.snapshot().policy.value,
+                'enforced',
                 self._telemetry_platform(),
             )
             coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
@@ -1628,8 +2568,17 @@ class ListenReceiver(ReplayFilterMixin):
         decoded_audio_bytes = 0
         self.host.state.last_audio_received_time = time.time()
         self.host.state.last_activity_time = self.host.state.last_audio_received_time
+        self._receiving = True
+        cap_updates = (
+            self.host.spawn(self._cap_hold_updates(), name='cap_held_updates')
+            if getattr(self, 'live_hold', None) is not None
+            else None
+        )
+        frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
+        shadow = None if getattr(self.host, 'server_batch_only', False) is True else edge_shadow.session_mirror(self)
         try:
             while self.host.state.active:
+                frame_timer.stop()
                 try:
                     message = await asyncio.wait_for(
                         request.websocket.receive(), timeout=self.host.limits.ws_receive_timeout
@@ -1639,13 +2588,23 @@ class ListenReceiver(ReplayFilterMixin):
                 self.host.state.last_activity_time = time.time()
                 if message.get('type') == 'websocket.disconnect':
                     self.host.state.close_code = message.get('code', 1000)
+                    note_ws_close(self.host.state, 'client', self.host.state.close_code)
+                    if self.recovery is not None:
+                        self.client_closing = True
+                        if self.shutdown_deadline is None:
+                            self.shutdown_deadline = replay_delivery.clock() + SHUTDOWN_DELIVERY_SECONDS
                     break
                 data = message.get('bytes')
                 if data is not None:
                     source_claim = self._pending_source_frame
                     self._pending_source_frame = None
                     if len(data) <= 2:
+                        if data:
+                            await self.raw_archive.append(
+                                bytes(data), self.host.state.current_conversation_id, time.time(), 0
+                            )
                         continue
+                    frame_timer.start()
                     now = time.time()
                     prev_audio_received = self.host.state.last_audio_received_time
                     self.host.state.last_audio_received_time = now
@@ -1661,7 +2620,7 @@ class ListenReceiver(ReplayFilterMixin):
                         # after the channel prefix is known-good (and an opus
                         # frame decoded), so unknown-prefix frames leave the
                         # session eligible for a no_audio teardown.
-                        decoded_audio_bytes += await self._handle_multi_channel_audio(data, now)
+                        decoded_audio_bytes += await self._handle_multi_channel_audio(data, now, source_claim)
                         continue
                     try:
                         decoded: bytes = data
@@ -1676,14 +2635,17 @@ class ListenReceiver(ReplayFilterMixin):
                         elif request.codec == 'pcm8':
                             decoded = audioop.lin2lin(audioop.bias(data, 1, -128), 1, 2)
                     except Exception as error:
+                        await self.raw_archive.append(bytes(data), self.host.state.current_conversation_id, now, 0)
                         self._record_decode_failure(request.codec, error, len(data))
                         continue
                     self.decode_failure_streak = 0
                     if not decoded:
+                        await self.raw_archive.append(bytes(data), self.host.state.current_conversation_id, now, 0)
                         continue
                     self._note_audio_activity()
                     self._mark_first_audio(now)
                     decoded_audio_bytes += len(decoded)
+                    telemetry_call(self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate))
                     self._capture('capture_client_audio', decoded)
                     if self.capture_timeline is not None:
                         # The decoded frame occupies an exact capture sample
@@ -1692,6 +2654,10 @@ class ListenReceiver(ReplayFilterMixin):
                         # (opcode-101 start) is v2-only: with the flag off the
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                        if shadow is not None:  # D2 edge shadow copy, fire-and-forget
+                            shadow.frame(start_sample, end_sample - start_sample, data)
+                        if not self.host.use_custom_stt and self.recovery_enabled:
+                            self._live_birth.note(start_sample, end_sample)
                         source_map = self.host.state.source_position_map
                         if source_map is not None:
                             source_map.accept(
@@ -1700,7 +2666,16 @@ class ListenReceiver(ReplayFilterMixin):
                                 sample_count=end_sample - start_sample,
                                 rate_hz=request.sample_rate,
                                 payload=bytes(data),
+                                receipt_wall_time=now,
                             )
+                        await self.raw_archive.append(
+                            bytes(data),
+                            self.host.state.current_conversation_id,
+                            self.capture_timeline.wall(start_sample),
+                            len(decoded) // 2,
+                            decoded=decoded,
+                            source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
+                        )
                         self._note_accepted_frame(start_sample, end_sample)
                         self._write_ring_buffer_frame(decoded, now, start_sample)
                         if not self.host.use_custom_stt:
@@ -1709,7 +2684,7 @@ class ListenReceiver(ReplayFilterMixin):
                             buffer.extend(decoded)
                             await self._flush_stt_buffer(buffer)
                         if self.host.audio_bytes_send is not None:
-                            if self.capture_timeline_v2:
+                            if self.capture_timeline_v2 or self.capture_timeline_spans:
                                 self.host.audio_bytes_send(
                                     decoded,
                                     now,
@@ -1719,6 +2694,9 @@ class ListenReceiver(ReplayFilterMixin):
                             else:
                                 self.host.audio_bytes_send(decoded, now)
                         continue
+                    await self.raw_archive.append(
+                        bytes(data), self.host.state.current_conversation_id, now, len(decoded) // 2, decoded=decoded
+                    )
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
                     if not self.host.use_custom_stt:
@@ -1728,80 +2706,202 @@ class ListenReceiver(ReplayFilterMixin):
                         self.host.audio_bytes_send(decoded, now)
                 elif message.get('text') is not None:
                     await self._handle_text(message['text'])
-        except WebSocketDisconnect:
-            pass
+        except WebSocketDisconnect as error:
+            note_ws_close(self.host.state, 'client', error.code)
         except Exception as error:
             logger.error('Listen receive failure type=%s', type(error).__name__)
-            self.host.state.close_code = 1011
+            mark_listen_internal_error(self.host.state)
         finally:
-            # Teardown owns subsequent tail-send/transport symptoms. Mark the
-            # outcome before any await; drain may still deliver valid text.
+            frame_timer.stop()
+            if shadow is not None:
+                shadow.close()
+            self.client_closing = True
+            self._receiving = False
             for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
-                mark_teardown = getattr(socket, 'mark_owner_teardown', None)
-                if callable(mark_teardown):
-                    mark_teardown()
-            if decoded_audio_bytes:
-                self._emit_realtime_demand(request, decoded_audio_bytes)
-                sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
-                emit_product_event(
-                    uid=str(getattr(request, 'uid', '') or ''),
-                    event='Encoded Audio Duration Measured',
-                    properties={
-                        'recording_id': getattr(self.host, 'recording_session_id', None),
-                        'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
-                        'codec': request.codec,
-                        'decoded_audio_bytes': decoded_audio_bytes,
-                        'duration_seconds': decoded_audio_bytes / (sample_rate * 2),
-                    },
-                )
-            if self.vad_gate is not None:
-                vad_metrics = self.vad_gate.get_metrics()
-                vad_payload = self.vad_gate.to_json_log()
-                onboarding_session_id = getattr(self.host, 'onboarding_session_id', None)
-                if onboarding_session_id:
-                    vad_payload['onboarding_session_id'] = onboarding_session_id
-                if self.host.is_multi_channel:
-                    vad_payload['multi_channel'] = True
-                vad_log = emit_listen_vad_gate_metrics(
-                    vad_payload,
+                if isinstance(socket, ReplayTailSocket):
+                    setattr(socket, '_draining', True)
+            try:
+                if self.recovery is not None:
+                    now = replay_delivery.clock()
+                    if self.shutdown_deadline is None:
+                        self.shutdown_deadline = now + SHUTDOWN_DELIVERY_SECONDS
+                    current = asyncio.current_task()
+                    if (
+                        (current is not None and current.cancelling() > 0)
+                        or self.host.state.stt_terminal_failure
+                        or self.host.request.owner_persistence_blocked.is_set()
+                    ):
+                        self.shutdown_deadline = min(self.shutdown_deadline, now)
+                    self.recovery.mark_client_leaving()
+                    await self._bounded_teardown(buffer, decoded_audio_bytes)
+                else:
+                    await self._teardown_body(buffer, decoded_audio_bytes)
+            finally:
+                if self.live_hold is not None:
+                    custody = start_background_task(
+                        self.live_hold.finish_updates(cap_updates, self._cap_hold_stop), name='stt_cap_live_final_flush'
+                    )
+                    try:
+                        await asyncio.shield(custody)
+                    except asyncio.CancelledError:
+                        self.stt_drain_complete.set()
+                        self.host.state.active = False
+                        raise  # Custody remains supervised and keeps the PCM alive.
+                    except Exception as error:
+                        mark_listen_internal_error(self.host.state)
+                        logger.error(
+                            'event=stt_cap_live_held outcome=persist_failed exception_type=%s', type(error).__name__
+                        )
+                self.stt_drain_complete.set()
+                self.host.state.active = False
+                # Archive I/O runs only after transcript drain, outside the STT
+                # shutdown deadline. Its bounded wait cannot cancel STT tails.
+                try:
+                    await self.raw_archive.close()
+                except Exception as error:
+                    logger.warning('archive tail flush failed: %s', type(error).__name__)
+
+    async def _bounded_teardown(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
+        bound = (self.shutdown_deadline or replay_delivery.clock()) + SHUTDOWN_CLEANUP_SECONDS
+        remaining = lambda: max(0.0, bound - replay_delivery.clock())
+        teardown = self.host.spawn(self._teardown_body(buffer, decoded_audio_bytes), name='stt_shutdown')
+        try:
+            _, pending = await asyncio.wait({teardown}, timeout=remaining())
+            if pending:
+                teardown.cancel()
+                _, _ = await asyncio.wait({teardown}, timeout=remaining())
+                await self._abort_shutdown_transports(bound)
+            elif teardown.cancelled():
+                await self._abort_shutdown_transports(bound)
+            elif (error := teardown.exception()) is not None:
+                raise error
+        finally:
+            if not teardown.done():
+                teardown.cancel()
+                _, _ = await asyncio.wait({teardown}, timeout=remaining())
+            if not teardown.done() or teardown.cancelled():
+                await self._abort_shutdown_transports(bound)
+
+    async def _abort_shutdown_transports(self, bound: float) -> None:
+        sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
+        candidates = [socket for socket in sockets if socket is not None]
+        delivery = getattr(self, '_replay_delivery', None)
+        connection = getattr(delivery, 'connection', None)
+        if connection is not None:
+            candidates.append(connection)
+        seen: set[int] = set()
+        for socket in candidates:
+            if id(socket) in seen:
+                continue
+            seen.add(id(socket))
+            try:
+                await abort_replay_socket(socket, timeout=max(0.0, bound - replay_delivery.clock()))
+            except Exception as error:
+                logger.warning('shutdown transport abort failed: %s', type(error).__name__)
+        self._release_drained_sockets()
+
+    async def _teardown_body(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
+        request = self.host.request
+        if self.recovery is not None:
+            self.recovery.mark_client_leaving()
+        # Teardown owns subsequent tail-send/transport symptoms. Mark the
+        # outcome before any await; drain may still deliver valid text.
+        for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
+            mark_teardown = getattr(socket, 'mark_owner_teardown', None)
+            if callable(mark_teardown):
+                mark_teardown()
+            if isinstance(socket, ReplayTailSocket):
+                setattr(socket, '_draining', True)
+        task = self._replay_recovery_task
+        if self.recovery is not None:
+            lock = self._stt_failover_lock
+            if lock.locked():
+                acquire = self.host.spawn(lock.acquire(), name='stt_shutdown_lock')
+                done, _ = await asyncio.wait({acquire}, timeout=self._shutdown_budget() or 0.0)
+                if not done:
+                    acquire.cancel()
+                    await asyncio.wait({acquire}, timeout=self._shutdown_budget() or 0.0)
+                else:
+                    lock.release()
+            if task is not None and not task.done():
+                done, _ = await asyncio.wait({task}, timeout=self._shutdown_budget() or 0.0)
+                if not done:
+                    task.cancel()
+                    await asyncio.wait({task}, timeout=self._shutdown_budget() or 0.0)
+        elif task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        if self._replay_delivery is not None and self._replay_delivery is not self.stt_socket:
+            self._replay_delivery.finish()
+        if decoded_audio_bytes:
+            self._emit_realtime_demand(request, decoded_audio_bytes)
+            self._record_cloud_live_saved_seconds(request, decoded_audio_bytes)
+            sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+            emit_product_event(
+                uid=str(getattr(request, 'uid', '') or ''),
+                event='Encoded Audio Duration Measured',
+                properties={
+                    'recording_id': getattr(self.host, 'recording_session_id', None),
+                    'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                    'codec': request.codec,
+                    'decoded_audio_bytes': decoded_audio_bytes,
+                    'duration_seconds': decoded_audio_bytes / (sample_rate * 2),
+                },
+            )
+        if self.vad_gate is not None:
+            vad_metrics = self.vad_gate.get_metrics()
+            vad_payload = self.vad_gate.to_json_log()
+            onboarding_session_id = getattr(self.host, 'onboarding_session_id', None)
+            if onboarding_session_id:
+                vad_payload['onboarding_session_id'] = onboarding_session_id
+            if self.host.is_multi_channel:
+                vad_payload['multi_channel'] = True
+            vad_log = emit_listen_vad_gate_metrics(
+                vad_payload,
+                source=getattr(request, 'source', None),
+                platform=self._telemetry_platform(),
+            )
+            if (
+                vad_metrics.get('bytes_received') == 0
+                and vad_metrics.get('chunks_total') == 0
+                and vad_log.get('session_duration_sec') == 0.0
+            ):
+                record_listen_zero_byte_session(
                     source=getattr(request, 'source', None),
                     platform=self._telemetry_platform(),
                 )
-                if (
-                    vad_metrics.get('bytes_received') == 0
-                    and vad_metrics.get('chunks_total') == 0
-                    and vad_log.get('session_duration_sec') == 0.0
-                ):
-                    record_listen_zero_byte_session(
-                        source=getattr(request, 'source', None),
-                        platform=self._telemetry_platform(),
-                    )
-                speech_ms = max(0, int(vad_metrics.get('speech_ms_total') or 0))
-                if speech_ms:
-                    emit_product_event(
-                        uid=str(getattr(request, 'uid', '') or ''),
-                        event='Speech Positive Duration Measured',
-                        properties={
-                            'recording_id': getattr(self.host, 'recording_session_id', None),
-                            'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
-                            'duration_seconds': speech_ms / 1000,
-                            'measurement': 'server_vad',
-                            'vad_mode': vad_metrics.get('mode') or 'unknown',
-                        },
-                    )
-            if not self.host.use_custom_stt:
-                await self._flush_stt_buffer(buffer, force=True)
-            await self._drain_stt_sockets()
-            self.host.state.active = False
-            demand = getattr(self, 'translation_demand', None)
-            if demand is not None:
-                demand.close()
-            expiry_task = getattr(self, '_translation_expiry_task', None)
-            if expiry_task is not None:
-                expiry_task.cancel()
-            coordinator = getattr(getattr(self.host, 'transcripts', None), 'translation_coordinator', None)
-            if coordinator is not None:
-                coordinator.demand_changed()
+            speech_ms = max(0, int(vad_metrics.get('speech_ms_total') or 0))
+            if speech_ms:
+                emit_product_event(
+                    uid=str(getattr(request, 'uid', '') or ''),
+                    event='Speech Positive Duration Measured',
+                    properties={
+                        'recording_id': getattr(self.host, 'recording_session_id', None),
+                        'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                        'duration_seconds': speech_ms / 1000,
+                        'measurement': 'server_vad',
+                        'vad_mode': vad_metrics.get('mode') or 'unknown',
+                    },
+                )
+        if not self.host.use_custom_stt:
+            await self._flush_stt_buffer(buffer, force=True)
+        await self._drain_stt_sockets()
+        if self.recovery is not None and self._replay_tail_bytes:
+            REPLAY_SKIPPED.labels(source=provider_family(self._serving_provider()), successor='unknown').inc(
+                self._replay_tail_bytes / (2 * request.sample_rate)
+            )
+            self._replay_live_tail.clear()
+            self._replay_tail_bytes = 0
+        self.host.state.active = False
+        demand = getattr(self, 'translation_demand', None)
+        if demand is not None:
+            demand.close()
+        expiry_task = getattr(self, '_translation_expiry_task', None)
+        if expiry_task is not None:
+            expiry_task.cancel()
+        coordinator = getattr(getattr(self.host, 'transcripts', None), 'translation_coordinator', None)
+        if coordinator is not None:
+            coordinator.demand_changed()
 
     async def flush_multi_channel_tail(self) -> None:
         if not should_flush_final_multi_channel_mix(
@@ -1817,6 +2917,8 @@ class ListenReceiver(ReplayFilterMixin):
             buffer.clear()
 
     def finish(self) -> None:
+        if self.recovery is not None:
+            self.recovery.mark_client_leaving()
         demand = getattr(self, 'translation_demand', None)
         if demand is not None:
             demand.close()
@@ -1824,12 +2926,17 @@ class ListenReceiver(ReplayFilterMixin):
         if expiry_task is not None:
             expiry_task.cancel()
         self._resilient_closing = True
+        if self._replay_recovery_task is not None:
+            self._replay_recovery_task.cancel()
+        if self._replay_delivery is not None and self._replay_delivery is not self.stt_socket:
+            self._replay_delivery.finish()
         if self._resilient_audio is not None:
             self._resilient_audio.close()
         if (ring := getattr(self, '_window_replay_audio', None)) is not None:
             ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
+                note_stream_close_intent(socket, session_teardown_closer(self.host))
                 try:
                     socket.finish()
                 except Exception:

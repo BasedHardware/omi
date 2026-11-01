@@ -131,6 +131,7 @@ def service_mod(monkeypatch):
         yield "test-gate-token"
 
     monkeypatch.setattr(module, "destructive_operation_gate", permitted_gate)
+    monkeypatch.setattr(module, "assert_destructive_gate_still_ours", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(module, "purge_canonical_memory_projections", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(module, "purge_source_replacement_receipts_for_memories", lambda *_args, **_kwargs: [])
     try:
@@ -170,6 +171,7 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
         reason="explicit_memory_delete",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
 
 
@@ -396,6 +398,43 @@ def test_ledger_history_page_sentinel_row_is_not_skipped_by_continuation(service
     assert second.truncated is False
 
 
+def test_ledger_history_small_pages_walk_every_history_row_once(service_mod, monkeypatch):
+    """A page smaller than the 500-row provider window must resume after its
+    last returned row. Resuming after the scanned window skipped the window's
+    remaining history rows, and a page cut inside the last, complete window
+    ended the walk with no continuation."""
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    # Every third provider row is current (not history), so provider keys and
+    # history positions differ.
+    rows = [
+        _ledger_item(service_mod, f"row-{index:04d}", updated_at=now, user_review=None if index % 3 == 0 else False)
+        for index in range(1200)
+    ]
+
+    def provider(uid, *, limit, **kwargs):
+        start_after = kwargs.get("start_after")
+        start = 0
+        if start_after is not None:
+            start = int(start_after[1].split("-")[1]) + 1
+        return iter(rows[start : start + limit])
+
+    monkeypatch.setattr(service_mod, "iter_authoritative_product_memory_items_newest_first", provider)
+    service = service_mod.MemoryService(db_client=_Db())
+
+    # Walk like a client of GET /v3/memories/ledger-history at its default
+    # limit: the router signs ``next_start_after`` only for truncated pages.
+    pages = [service.read_ledger_history_page("uid-test", limit=100)]
+    while pages[-1].truncated and len(pages) < 20:
+        pages.append(service.read_ledger_history_page("uid-test", limit=100, start_after=pages[-1].next_start_after))
+
+    walked = [memory.id for page in pages for memory in page.memories]
+    assert len(walked) == len(set(walked)), "a history row was returned twice"
+    assert walked == [f"row-{index:04d}" for index in range(1200) if index % 3 != 0]
+    assert all(len(page.memories) <= 100 for page in pages)
+    assert pages[0].next_start_after == (now, "row-0149")
+    assert pages[-1].truncated is False
+
+
 def test_ledger_history_excludes_locked_rows(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     locked = _ledger_item(service_mod, "locked", updated_at=now, user_review=False)
@@ -601,10 +640,16 @@ def test_mixed_read_does_not_hydrate_canonical_identity_from_historical_stub(ser
 def test_canonical_read_preserves_lock_and_returns_only_a_preview(service_mod, monkeypatch):
     backend = service_mod.CanonicalMemoryBackend(db_client=_Db())
     secret = "LOCKED_SECRET_CONTENT_" * 10
+    locked = _locked_memory(service_mod, content=secret)
+
+    def _forbid_full_fetch(*_args, **_kwargs):
+        raise AssertionError("offset read must not full-fetch canonical memories")
+
+    monkeypatch.setattr(service_mod, "read_canonical_memories", _forbid_full_fetch)
     monkeypatch.setattr(
         service_mod,
-        "read_canonical_memories",
-        lambda *args, **kwargs: [_locked_memory(service_mod, content=secret)],
+        "read_canonical_scan_page",
+        lambda *args, **kwargs: ([(locked, (locked.updated_at, locked.id))], True),
     )
 
     result = backend.read("uid-test")
@@ -777,6 +822,39 @@ def test_canonical_statuses_skips_override_when_item_has_valid_status(service_mo
     assert db.get_all_calls == [["users/uid-test/memory_items/live"]]
 
 
+def test_canonical_statuses_reads_override_only_for_missing_items(service_mod):
+    """Live and tombstoned item docs suppress without a historical_overrides read.
+
+    A missing canonical row still consults the override once. That single
+    lookup is the suppression triad; it is not repeated for rows that already
+    have a status.
+    """
+
+    db = _BatchStatusDb(
+        {
+            "users/uid-test/memory_items/live": {"status": "active"},
+            "users/uid-test/memory_items/dead": {"status": "tombstoned"},
+            "users/uid-test/memory_historical_overrides/live": {"status": "tombstoned"},
+            "users/uid-test/memory_historical_overrides/dead": {"status": "active"},
+        }
+    )
+    service = service_mod.MemoryService(db_client=db)
+
+    statuses = service.canonical_statuses("uid-test", ["live", "dead", "ghost"])
+
+    assert statuses["live"] == service_mod.MemoryItemStatus.active
+    assert statuses["dead"] == service_mod.MemoryItemStatus.tombstoned
+    assert "ghost" not in statuses
+    assert db.get_all_calls == [
+        [
+            "users/uid-test/memory_items/live",
+            "users/uid-test/memory_items/dead",
+            "users/uid-test/memory_items/ghost",
+        ],
+        ["users/uid-test/memory_historical_overrides/ghost"],
+    ]
+
+
 def test_canonical_statuses_override_only_tombstone_is_suppressed_not_503(service_mod):
     db = _BatchStatusDb({"users/uid-test/memory_historical_overrides/gone": {"status": "tombstoned"}})
     service = service_mod.MemoryService(db_client=db)
@@ -863,6 +941,7 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
     assert result["total_count"] == 2
     service.read.assert_called_once_with(
         "uid-test",
+        authoritative=True,
         limit=service_mod.HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
         offset=0,
         include_pending_processing=False,
@@ -871,39 +950,34 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
     service._canonical.write.assert_not_called()
 
 
-def test_temporal_product_search_uses_bounded_pages_and_retains_history(service_mod, monkeypatch):
-    """Beta product search reaches dated/superseded rows without full ``read``."""
-    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
-    current = _memory(service_mod, 'current', content='coffee current').model_copy(
-        update={'belief_class': 'stable', 'half_life_days': 365.0}
-    )
-    dated = _memory(service_mod, 'dated', content='coffee dated').model_copy(
-        update={'invalid_at': now - timedelta(days=1), 'belief_class': 'stable', 'half_life_days': 365.0}
-    )
-    superseded = _memory(service_mod, 'superseded', content='coffee superseded').model_copy(
-        update={
-            'ledger_status': MemoryItemStatus.superseded,
-            'superseded_by': 'current',
-            'invalid_at': now - timedelta(days=2),
-            'belief_class': 'stable',
-            'half_life_days': 365.0,
-        }
-    )
-    page = service_mod.UniversalMemoryListPage(memories=[current, dated, superseded], next_cursor=None, truncated=False)
+@pytest.mark.parametrize(
+    ("query", "expected_ids"),
+    [
+        ("AI", ["ai"]),
+        ("ux", ["ux"]),
+        ("中文", ["chinese"]),
+        ("...", []),
+        ("", ["ai", "ux", "chinese"]),
+    ],
+)
+def test_default_product_search_filters_queries_made_only_of_short_words(service_mod, query, expected_ids):
+    from models.product_memory import MemoryAccessPolicy
+
     service = service_mod.MemoryService(db_client=_Db())
-    service.read = MagicMock()
-    service.read_page = MagicMock(return_value=page)
-    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
-
-    result = service.default_product_search(
-        'uid-test', 'coffee', policy=service_mod.MemoryAccessPolicy.for_omi_chat(), now=now, view='history'
+    service.read = MagicMock(
+        return_value=[
+            _memory(service_mod, "ai", content="Works on AI agents"),
+            _memory(service_mod, "ux", content="Reviews UX copy every Friday"),
+            _memory(service_mod, "chinese", content="正在学习中文"),
+        ]
     )
 
-    assert [item['memory_id'] for item in result['items']] == ['dated', 'superseded']
-    assert result['truncated'] is False
-    assert result['has_more'] is False
-    service.read.assert_not_called()
-    service.read_page.assert_called_once()
+    result = service.default_product_search("uid-test", query, policy=MemoryAccessPolicy.for_omi_chat())
+
+    # Only a blank query lists every memory; short words still filter and a query
+    # with no searchable word matches nothing.
+    assert [item["memory_id"] for item in result["items"]] == expected_ids
+    assert result["total_count"] == len(expected_ids)
 
 
 def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):
@@ -1983,6 +2057,7 @@ def test_delete_all_commits_historical_fence_before_cleanup_then_purges_it(servi
         reason="canonical_memory_delete_all_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
 
 
@@ -2009,6 +2084,7 @@ def test_delete_default_retries_required_review_scrub_for_canonical_and_historic
         reason="canonical_memory_delete_default_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
     service._canonical.delete_default.assert_called_once_with("uid-test")
     service.history.cleanup_all.assert_called_once_with(
@@ -2337,6 +2413,7 @@ def test_delete_batch_tombstones_historical_without_materializing_then_cleans(se
         reason="canonical_memory_delete_batch_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
 
 
@@ -2369,6 +2446,7 @@ def test_delete_batch_retries_already_tombstoned_historical_identity(service_mod
         reason="canonical_memory_delete_batch_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
     assert cleanup.call_args_list == [
         (("uid-test", "legacy"), {"db_client": service.db_client, "required": True}),
@@ -2461,6 +2539,7 @@ def test_single_delete_retries_cleanup_after_canonical_tombstone(service_mod, mo
         reason="canonical_memory_delete_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
     cleanup.assert_called_once_with("uid-test", "legacy", db_client=service.db_client, required=True)
 
@@ -2495,6 +2574,7 @@ def test_retract_conversation_suppresses_and_cleans_historical_memories(service_
         reason="conversation_memory_retraction",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
         preserve_source_replacement_receipts=True,
     )
     cleanup.assert_called_once_with("uid-test", "legacy", db_client=service.db_client, required=True)
@@ -2574,3 +2654,34 @@ def test_retract_irreversible_callback_still_fires_when_later_suppression_fails(
 
     assert exc_info.value.status_code == 503
     assert events == ["callback", "suppress_failed"]
+
+
+def test_override_batches_abort_takeover_with_409_after_first_commit(service_mod, monkeypatch):
+    commits = []
+
+    class Batch:
+        def set(self, *args, **kwargs):
+            pass
+
+        def commit(self):
+            commits.append("committed")
+
+    db = MagicMock()
+    db.batch.side_effect = Batch
+    service = service_mod.MemoryService(db_client=db)
+
+    def check(*args, **kwargs):
+        if commits:
+            raise service_mod.DestructiveGateTakeover("peer finished")
+
+    monkeypatch.setattr(service_mod, "assert_destructive_gate_still_ours", check)
+
+    @service_mod._legal_hold_gated_deletion
+    def delete_chunks(self, uid):
+        self._write_historical_overrides(uid, ["a", "b"], service_mod.MemoryItemStatus.tombstoned, batch_size=1)
+
+    with pytest.raises(service_mod.HTTPException) as caught:
+        delete_chunks(service, "uid-test")
+    assert caught.value.status_code == 409
+    assert caught.value.headers["Retry-After"] == "2"
+    assert commits == ["committed"]

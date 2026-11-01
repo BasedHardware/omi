@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,6 +7,8 @@ from pydantic import BaseModel
 
 from database import csat
 from utils.other import endpoints as auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=['csat'])
 
@@ -59,14 +62,19 @@ def submit_csat_rating(
     app_version = payload.app_version.strip()[: csat.MAX_APP_VERSION_LENGTH]
     comment = (payload.comment or '').strip()[: csat.MAX_COMMENT_LENGTH]
     # The comment is never logged; only the clamped fields above travel on.
-    doc_id, created = csat.submit_rating(
-        uid=uid,
-        platform=payload.platform,
-        app_version=app_version,
-        score=payload.score,
-        comment=comment,
-        revision=payload.revision,
-    )
+    try:
+        doc_id, created = csat.submit_rating(
+            uid=uid,
+            platform=payload.platform,
+            app_version=app_version,
+            score=payload.score,
+            comment=comment,
+            revision=payload.revision,
+        )
+    except Exception as e:
+        logger.error(f"Failed to submit CSAT rating for uid {uid}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to record CSAT rating") from e
+
     if not created:
         # One rating per user per platform; the existing answer stands.
         return JSONResponse(status_code=409, content={'id': doc_id, 'created': False})

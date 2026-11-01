@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-concurrent-log-file-writes",
+  "violated_contract": "Each debug log record must be persisted as one complete JSON line. Concurrent asynchronous file appends, rotation truncations or clears must not interleave or overwrite an in-flight record.",
+  "canonical_prevention": "Route all log file writes through one in-order asynchronous queue that covers initialization, rotation and the complete append, and enqueue explicit clears on that same queue. Swallow each operation's file errors inside the queue so a failed write cannot prevent later records from being written.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/debug_log_manager_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/utils/debug_log_manager.dart",
+    "app/test/unit/debug_log_manager_test.dart"
+  ],
+  "status": "open"
+}

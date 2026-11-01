@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
@@ -89,7 +90,7 @@ void main() {
     SharedPreferencesUtil().cachedPeople = [person];
     final provider = PeopleProvider(
       deleteSample: (id, idx) async => true,
-      loadPeople: () async => [
+      loadPeople: () async => PeopleListResponse(people: [
         Person(
           id: 'voice',
           name: 'Alice',
@@ -99,7 +100,7 @@ void main() {
           speechSamplesVersion: 3,
           voiceReadiness: 'ready',
         ),
-      ],
+      ]),
     );
     provider.people = [
       Person(
@@ -133,7 +134,7 @@ void main() {
       deleteSample: (id, idx) async => true,
       loadPeople: () async {
         optimistic = SharedPreferencesUtil().cachedPeople.single;
-        return [
+        return PeopleListResponse(people: [
           Person(
             id: 'voice',
             name: 'Alice',
@@ -143,7 +144,7 @@ void main() {
             speechSamplesVersion: 3,
             voiceReadiness: 'not_learned',
           ),
-        ];
+        ]);
       },
     );
     provider.people = [

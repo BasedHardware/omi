@@ -1079,15 +1079,98 @@ def main(argv: Sequence[str] | None = None) -> int:
     raise AssertionError(f"unhandled command {args.command!r}")
 
 
-def _default_device_runner(command: Sequence[str]) -> tuple[int, str]:
+def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tuple[int, str]:
     # Default device-tooling seam (adb / xcrun devicectl): a missing binary is
     # exit 127 + message so doctor/run classify it as a remediable failure —
     # DeviceRunnerError from the tooling shims — instead of a raw traceback.
     try:
-        completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=180)
+        completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=timeout)
     except OSError as exc:
         return 127, f"{command[0]} not available: {exc}"
+    except subprocess.TimeoutExpired:
+        # A pending Xcode first launch (re-armed by Xcode updates; completion
+        # needs admin rights) makes every xcrun devicectl/simctl call spawn a
+        # hanging `xcodebuild -runFirstLaunch` child. Diagnose it instead of
+        # letting the timeout escape as a raw traceback.
+        tool = command[0] if command else ""
+        diagnosis = (
+            f"{tool or 'device tooling'} timed out after {timeout:g}s"
+            " with no diagnosis available. The command never returned; retry, and"
+            " if it persists check the tool's server/daemon state (e.g. for"
+            " Android: adb server, USB connection, SDK tooling)."
+        )
+        if tool == "adb":
+            # Shared marker: device_doctor swaps its default install remedy
+            # for this timeout-specific retry/server guidance.
+            from .device_runner import ADB_TIMEOUT_MARKER
+
+            diagnosis = (
+                f"{ADB_TIMEOUT_MARKER} after {timeout:g}s; adb is installed, so"
+                " retry and check the adb server/USB state"
+                " (`adb kill-server && adb start-server`, cable/port, device"
+                " authorization) instead of reinstalling platform-tools."
+            )
+        if tool == "xcrun":
+            from .device_runner import (
+                XCODE_FIRST_LAUNCH_COMPLETE_MARKER,
+                XCODE_FIRST_LAUNCH_PENDING_MARKER,
+                XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER,
+            )
+
+            first_launch = "pending"
+            try:
+                probe = subprocess.run(
+                    ["xcodebuild", "-checkFirstLaunchStatus"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                first_launch = "pending" if probe.returncode != 0 else "complete"
+            except subprocess.TimeoutExpired:
+                # The probe itself hung: xcodebuild ran, so this is Xcode
+                # tooling-stack evidence (shared marker; the doctor's remedy
+                # must be retry/restart, never a fresh install).
+                diagnosis += (
+                    f" {XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER} after 10s;"
+                    " xcodebuild ran and hung — the applicable step is the same"
+                    " tooling-stack retry/restart as below."
+                )
+                return 124, diagnosis
+            except OSError:
+                first_launch = "unknown"
+            if first_launch == "pending":
+                # Shared marker: device_runner.device_doctor classifies this
+                # diagnosis as operator-action-needed (admin-only work).
+                diagnosis += (
+                    f" {XCODE_FIRST_LAUNCH_PENDING_MARKER}; completing it requires"
+                    " admin rights (operator action):"
+                    " `sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept`"
+                    " (or open Xcode.app and finish the prompt)."
+                )
+            elif first_launch == "complete":
+                diagnosis += (
+                    f" {XCODE_FIRST_LAUNCH_COMPLETE_MARKER}; the hang is in the"
+                    " Xcode tooling stack (CoreDevice/devicectl) — retry, and if"
+                    " it persists restart the tooling daemons or the host."
+                )
+            else:
+                diagnosis += (
+                    " Xcode first-launch state could not be probed"
+                    " (`xcodebuild -checkFirstLaunchStatus` failed); run it once"
+                    " manually to check: if it exits non-zero, first launch is"
+                    " pending and completing it requires admin rights (operator"
+                    " action):"
+                    " `sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept`."
+                )
+        return 124, diagnosis
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+
+
+def _device_discovery_runner(command: Sequence[str]) -> tuple[int, str]:
+    # Doctor discovery (adb devices / devicectl list) must answer in seconds;
+    # a wedged toolchain should classify fast, not hold the doctor for minutes.
+    return _default_device_runner(command, timeout=25.0)
 
 
 def _dispatch_device(args: argparse.Namespace, repo_root: Path) -> int:
@@ -1102,8 +1185,8 @@ def _dispatch_device(args: argparse.Namespace, repo_root: Path) -> int:
             platforms = args.platform or ["android", "ios"]
             report = device_runner.device_doctor(
                 repo_root,
-                android=device_runner.AndroidTooling(_default_device_runner) if "android" in platforms else None,
-                ios=device_runner.IosTooling(_default_device_runner) if "ios" in platforms else None,
+                android=device_runner.AndroidTooling(_device_discovery_runner) if "android" in platforms else None,
+                ios=device_runner.IosTooling(_device_discovery_runner) if "ios" in platforms else None,
             )
             _emit(report, as_json=args.json)
             statuses = {check["status"] for check in report["checks"]}

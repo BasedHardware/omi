@@ -54,7 +54,7 @@ def test_get_conversations_negative_offset_is_clamped(mcp, conversations_db):
     ):
         result = mcp.execute_tool("test-uid", "get_conversations", {"offset": -1})
 
-    assert result == {"conversations": []}
+    assert result["conversations"] == []
     page.assert_called_once()
     assert page.call_args.kwargs["after"] is None
     legacy.assert_not_called()
@@ -73,8 +73,9 @@ def test_get_conversations_oversized_limit_is_clamped_to_card_budget(mcp, conver
     with patch.object(conversations_db, "get_mcp_conversation_cards_page", MagicMock(return_value=([], None))) as fake:
         result = mcp.execute_tool("test-uid", "get_conversations", {"limit": 10_000})
 
-    assert result == {"conversations": []}
+    assert result["conversations"] == []
     assert fake.call_args.args[1] == 100
+    assert result["effective_limit"] == 100 and result["has_more"] is False
 
 
 def test_get_conversations_explicit_offset_uses_legacy_offset_path(mcp, conversations_db):
@@ -87,9 +88,9 @@ def test_get_conversations_explicit_offset_uses_legacy_offset_path(mcp, conversa
     ):
         result = mcp.execute_tool("test-uid", "get_conversations", {"offset": 40, "limit": 10})
 
-    assert result == {"conversations": []}
+    assert result["conversations"] == []
     legacy.assert_called_once()
-    assert legacy.call_args.args[1] == 10
+    assert legacy.call_args.args[1] == 11  # one lookahead row
     assert legacy.call_args.args[2] == 40
     page.assert_not_called()
 
@@ -104,10 +105,13 @@ def test_search_conversations_negative_limit_is_clamped(mcp):
 
     from utils.mcp_server.handlers import conversations as mcp_conversations
 
-    with patch.object(mcp_conversations, "resolve_mcp_conversation_search_ids", side_effect=_resolve):
+    with (
+        patch.object(mcp_conversations, "resolve_mcp_conversation_search_ids", side_effect=_resolve),
+        patch.object(mcp_conversations, "keyword_search_conversation_ids", return_value=[]),
+    ):
         result = mcp.execute_tool("test-uid", "search_conversations", {"query": "hi", "limit": -5})
 
-    assert result == {"conversations": []}
+    assert result["conversations"] == []
     assert captured["limit"] == 1  # clamped up to the minimum
 
 

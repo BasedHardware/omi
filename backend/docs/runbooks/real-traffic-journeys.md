@@ -17,7 +17,8 @@ traffic it scrapes, with no cross-environment comparison or labels.
 | `omi_live_stt_terminal_failures_total` | `provider`, `outcome`, `client_platform`, `deployment_environment`, `phase` | Provider failure detail correlated with a live-STT terminal. |
 | `omi_capture_finalization_reconciliations_total` | `outcome` | A stale durable capture job was requeued, or its requeue handoff failed. |
 | `omi_capture_finalization_failures_total` | `reason` | A persisted finalizer failed with one privacy-safe reason: `memory_fence`, `memory_config`, `provider`, `stale`, or `processing`. |
-| `listen_finalization_oldest_nonterminal_age_seconds` | none | Age of the oldest queued, leased, or BYOK-blocked capture finalization job. |
+| `listen_finalization_oldest_nonterminal_age_seconds` | none | Age of the oldest queued or leased system-owned capture finalization job; excludes BYOK-blocked waits. |
+| `listen_finalization_oldest_blocked_byok_age_seconds` | none | Age of the oldest job waiting for user BYOK credentials; informational, separate from system-owned age. |
 | `listen_finalization_durable_jobs` | `state` | Authoritative Firestore job projection: `accepted`, `success`, `failure`, `stale`, `nonterminal`, `blocked_byok`, or `terminal_unknown`. |
 
 `journey` is exactly `chat_response`, `pusher_session`, or
@@ -41,7 +42,7 @@ rewrite that contract:
 | Metric | Labels | Meaning |
 | --- | --- | --- |
 | `omi_client_journey_accepted_total` | `journey`, `client_kind`, `app_build` | A semantic journey was accepted. |
-| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `app_build`, `outcome` | Its one-shot coarse terminal result. |
+| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `app_build`, `outcome`, `reason` | Its one-shot terminal result with a closed issue reason. |
 | `omi_client_journey_issues_total` | `journey`, `client_kind`, `app_build`, `issue_class` | One bounded detail for a failed, degraded, or unknown terminal. |
 | `omi_client_journey_duration_seconds` | `journey`, `outcome` | Acceptance-to-terminal duration. |
 
@@ -49,8 +50,12 @@ rewrite that contract:
 sentinel `unknown`. `degraded` means the request completed but did not deliver
 the requested primary product result. `canned_fallback` and `quota_capped` stay
 separate `issue_class` values; they must not be inferred from the coarse
-outcome. Failure/degradation detail is a separate counter, and `client_kind` is
-omitted from the histogram, to avoid multiplying every histogram bucket.
+outcome. Terminal `reason` reuses the closed `CLIENT_JOURNEY_ISSUE_CLASSES`
+vocabulary for failure, degraded and unknown outcomes; unrecognized inputs
+become `unknown`, and success/cancelled always use `none`. The issue counter
+retains the same detail separately. Historical terminal series without `reason`
+are shown as `legacy_unlabeled` in Core Features. Neither `client_kind` nor
+`reason` is added to the histogram, to avoid multiplying every histogram bucket.
 
 `client_kind` prefers the bounded `X-App-Platform` value, then recognizes only
 known User-Agent families. Headerless CFNetwork and Electron clients resolve to
@@ -95,12 +100,11 @@ Desktop call sites use these boundaries:
   response succeeds only with nonempty assistant content or a tool call. In-band
   `error` frames, empty answers, provider errors, and incomplete streams are not
   successes.
-- `desktop_proactivity` covers the strict `/v1/desktop/proactivity/completions`
-  facade and generative calls through the legacy desktop Gemini proxy. The strict
-  facade succeeds only after its requested JSON schema validates. A legacy Gemini
-  stream needs nonempty candidate text plus a terminal `finishReason`; a normal
-  response needs nonempty candidate text. Per-user Redis caps are `degraded` with
-  `quota_capped`, while provider and invalid-response shapes are failures.
+- `desktop_proactivity` continues to cover generative calls through the desktop
+  Gemini proxy, including retained assistants and lane attribution. A stream
+  needs nonempty candidate text plus a terminal `finishReason`; a normal response
+  needs nonempty candidate text. The retired strict completion facade returns a
+  static 429 without telemetry, quota, or provider work.
 
 Client journey metric writes are fail-open. Collector or registry exceptions are
 swallowed at the observability boundary and cannot change the product response.
@@ -195,7 +199,7 @@ deployment health, not read as zero traffic.
 Both Pusher release workflows verify the live Grafana provisioning contract
 before any image publication or promotion. This requires the protected
 `MONITOR_GRAFANA_TOKEN` secret (dest repo secret for `monitor.omiapi.com`,
-prod environment secret for `monitor.omi.me`; never the TV `GRAFANA_TOKEN`)
+prod environment secret for `monitor.omi.me`; never the retired TV-instance credential)
 and proves the exact memory-admission and capture-outcome
 rule identities and expressions, unpaused state, healthy Prometheus datasource,
 current healthy Pusher/backend-listen scrape targets, and Telegram contact-point
@@ -267,3 +271,25 @@ Known blind spots: a server can only observe the SSE/WS boundary it controls,
 not client rendering; process restarts may defer a terminal metric until the
 durable worker/reconciler resumes; and a durable job still within its bounded
 reconcile delay is deliberately nonterminal rather than an immediate failure.
+
+## Durable queue age sampling
+
+The periodic sampler reads metadata only, at most five pages of 200 documents
+(1,000 rows) per declared ready status, in implicit document-name order. Other
+event types and future retries/live leases are skipped in process. Reaching
+the cap makes the sample unknown, including when skipped rows could hide due
+work beyond the cap. An empty result proves zero only after all statuses are
+exhausted without metadata failures. A positive uncapped sample can still be
+a lower bound when another document could not be inspected.
+
+Unknown samples remove that queue's previous age series and set
+`omi_queue_oldest_ready_sample_unknown{queue}` to 1; known samples reset it to
+0. The companion has one zero-initialized series per declared queue.
+`omi-queue-oldest-ready` alerts after five minutes of age over six hours,
+missing age telemetry, or an unknown sample.
+
+Memory outbox rows prefer `created_at`, then `queued_at` (vector repair),
+`lease_expires_at`, `claimed_at`, and `available_at`. Canonical memory events
+lack `created_at`; lease expiry, claim time, or current availability therefore
+provide a conservative lower bound on their original age. Live leases and
+future availability are still excluded before age selection.

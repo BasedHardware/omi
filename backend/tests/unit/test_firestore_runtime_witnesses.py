@@ -13,6 +13,7 @@ named serving driver exists.
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,6 +22,7 @@ import pytest
 import database.memories as memories_db
 import database.task_recommendations as recommendation_db
 import routers.candidates as candidates_router
+import routers.conversations as conversations_router
 import utils.memory.memory_service as memory_service
 from database.candidates import CandidateStatus
 from database.firestore_index_registry import firebase_index_manifest
@@ -53,6 +55,7 @@ REPO_ROOT = BACKEND_ROOT.parent
 QUERY_TARGETS = frozenset(
     {
         'database.candidates.list_candidates',
+        'database.hidden_noise_counts.count_hidden_noise_by_day',
         'database.memories.get_memories',
         'database.memories.list_memory_updated_or_created_index',
     }
@@ -148,9 +151,56 @@ def _profiles(target: str):
     return DRIVERS[target].profiles
 
 
+def _run_hidden_noise_counts(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    trial(
+        capture,
+        conversations_router.get_hidden_noise_counts,
+        start_date=datetime(2026, 10, 27, tzinfo=timezone.utc),
+        end_date=datetime(2026, 10, 28, tzinfo=timezone.utc),
+        tz='America/Los_Angeles',
+        uid='u1',
+    )
+
+
+def _run_review_sources(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    from database import task_intelligence_control
+    from utils import review
+    from utils.task_intelligence import chat_first_eligibility
+
+    monkeypatch.setattr(review.speakers, 'get_prompts', lambda *a: SimpleNamespace(prompts=[]))
+    monkeypatch.setattr(
+        chat_first_eligibility,
+        'resolve_task_intelligence_for_user',
+        lambda **k: SimpleNamespace(intelligence_product_enabled=True),
+    )
+    for generation in _CANDIDATE_GENERATIONS:
+        monkeypatch.setattr(
+            task_intelligence_control,
+            'get_task_workflow_control',
+            lambda *a: SimpleNamespace(account_generation=generation, workflow_mode='read'),
+        )
+        trial(capture, review._sources, 'u1')
+
+
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
+        CallerWitness(
+            'routers/conversations.py:get_hidden_noise_counts:database.hidden_noise_counts.count_hidden_noise_by_day',
+            'database.hidden_noise_counts.count_hidden_noise_by_day',
+            'database.hidden_noise_counts.count_hidden_noise_by_day',
+            ('home-hidden-noise-counts',),
+            1,
+            _run_hidden_noise_counts,
+        ),
+        CallerWitness(
+            'utils/review.py:_sources:database.candidates.list_candidates',
+            'database.candidates.list_candidates',
+            'database.candidates.list_candidates',
+            ('candidate-list',),
+            1,
+            _run_review_sources,
+        ),
         CallerWitness(
             'routers/candidates.py:list_candidates:database.candidates.list_candidates',
             'database.candidates.list_candidates',

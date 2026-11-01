@@ -32,6 +32,9 @@ import json
 import pathlib
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from gcp_cost_reconciliation import company_stt_rows  # noqa: E402
+
 STT_VENDOR_RATE_PER_MIN = 0.0043  # PLACEHOLDER (Deepgram Nova list). Modulate/Soniox contract rates pending.
 STT_VENDOR_HIGH_MULTIPLIER = 1.8
 
@@ -707,6 +710,9 @@ def assemble(
                     "usd_per_user_day": None,
                 }
             )
+    vendor_longs, vendor_recon = company_stt_rows(raw, days, settled_through)
+    longs.extend(vendor_longs)
+    recon_rows.extend(vendor_recon)
     write_csv(out / "unit_cost_long.csv", longs)
     write_csv(out / "unit_cost_reconciliation.csv", recon_rows)
 
@@ -806,9 +812,10 @@ def report(res: dict, start: str, end: str) -> None:
     print("| date | pool | pool_usd | allocated_usd | delta_pct | source |")
     print("|---|---|---:|---:|---:|---|")
     for r in res["recon"]:
+        delta = "n/a" if r["delta_pct"] is None else f"{r['delta_pct']:.4f}"
         print(
             f"| {r['date']} | {r['pool']} | {r['pool_usd']:.2f} | {r['allocated_usd']:.2f} |"
-            f" {r['delta_pct']:.4f} | {r['invoice_source']} |"
+            f" {delta} | {r['invoice_source']} |"
         )
     C1 = [
         "segment",

@@ -45,6 +45,11 @@ let abortController: AbortController | null = null
 // token refresh (main can't distinguish that from a user switch, and sign-out is
 // always wipe-then-signout, so null is the safe, sufficient reset trigger).
 type SessionResetListener = () => void
+const sessionChangeListeners = new Set<() => void>()
+export function onSessionChange(fn: () => void): void {
+  sessionChangeListeners.add(fn)
+}
+
 const sessionResetListeners = new Set<SessionResetListener>()
 
 /** Register a reset run when the session is cleared (sign-out). */
@@ -64,6 +69,13 @@ export function setBackendSession(session: BackendSession | null): void {
   abortController?.abort()
   abortController = session ? new AbortController() : null
 
+  for (const fn of sessionChangeListeners) {
+    try {
+      fn()
+    } catch {
+      console.warn('[session] change listener failed')
+    }
+  }
   if (!session) {
     for (const fn of sessionResetListeners) {
       try {
@@ -146,7 +158,7 @@ function tokenExpMs(token: string): number | null {
   return typeof exp === 'number' ? exp * 1000 : null
 }
 
-function tokenUid(token: string): string | null {
+export function tokenUid(token: string): string | null {
   const payload = decodeJwt(token)
   const uid = payload?.user_id ?? payload?.sub
   return typeof uid === 'string' && uid.length > 0 ? uid : null

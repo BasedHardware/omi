@@ -1,0 +1,7 @@
+{
+  "version": "0.12.458",
+  "date": "2026-10-09",
+  "changes": [
+    "Fixed deleted recordings reappearing when your Mac retries older uploads"
+  ]
+}

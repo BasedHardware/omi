@@ -32,13 +32,14 @@ import routers.developer as developer_router
 import routers.google_calendar as google_calendar_router
 import routers.integration as integration_router
 import routers.search as search_router
+import routers.support as support_router
 import routers.users as users_router
-import utils.app_integrations as app_integrations
 import utils.apps as apps_utils
 import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
 import utils.llm.fair_use_classifier as fair_use_classifier
 import utils.llm.goals as llm_goals
+import utils.open_loops.daily as open_loops_daily
 import utils.other.notifications as notifications_utils
 import utils.retrieval.tool_services.conversations as tool_conversations
 import utils.retrieval.tools.conversation_tools as conversation_tools
@@ -226,6 +227,7 @@ def _run_main_count(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> 
 
 def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, users_db, 'get_person', lambda uid, person_id: {'id': person_id, 'name': 'Speaker'})
+    _stub(monkeypatch, conversations_router, 'run_blocking', _inline_run_blocking)
     for discarded in _DISCARDED:
         for start, end in _DATE_PAIRS:
             request = SearchRequest(
@@ -235,11 +237,17 @@ def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
                 start_date=start.isoformat() if start else None,
                 end_date=end.isoformat() if end else None,
             )
-            trial(capture, conversations_router.search_conversations_endpoint, request, uid='u1')
+            trial(
+                capture,
+                lambda request=request: asyncio.run(
+                    conversations_router.search_conversations_endpoint(request, uid='u1')
+                ),
+            )
 
 
 def _run_developer_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     auth = SimpleNamespace(uid='u1')
+    _stub(monkeypatch, developer_router, 'check_conversation_transcript_read_limit', lambda *args, **kwargs: None)
     for categories in (None, 'personal', 'personal,technology'):
         for folder in _FOLDER:
             for starred in _STARRED:
@@ -252,7 +260,7 @@ def _run_developer_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
                         categories=categories,
                         limit=25,
                         offset=0,
-                        include_transcript=False,
+                        include_transcript=True,
                         folder_id=folder,
                         starred=starred,
                         uid=auth,
@@ -340,25 +348,6 @@ def _run_daily_summary_test_route(monkeypatch: pytest.MonkeyPatch, capture: Help
     trial(capture, users_router.test_daily_summary, request=None, uid='u1', x_app_platform=None)
 
 
-def _run_mentor_notification(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
-    frequency = next(key for key, value in app_integrations.FREQUENCY_TO_BASE_THRESHOLD.items() if value is not None)
-    _stub(monkeypatch, app_integrations, 'get_mentor_notification_frequency', lambda uid: frequency)
-    _stub(monkeypatch, app_integrations.mem_db, 'get_proactive_noti_sent_at', lambda uid, kind: None)
-    _stub(monkeypatch, app_integrations.redis_db, 'get_proactive_noti_sent_at', lambda uid, kind: None)
-    _stub(monkeypatch, app_integrations, '_proactive_daily_cap_reached', lambda uid: False)
-    _stub(monkeypatch, app_integrations, '_mentor_gate_debounce_enabled', lambda: False)
-    _stub(monkeypatch, app_integrations, 'get_prompt_memories', lambda uid: ('User', []))
-    _stub(monkeypatch, app_integrations, 'get_user_goals', lambda uid, limit=3: [])
-    _stub(monkeypatch, app_integrations, 'current_date_for_uid', lambda uid: '2026-01-15')
-    _stub(monkeypatch, app_integrations, 'get_app_messages', lambda uid, kind, limit=20: [])
-    _stub(monkeypatch, app_integrations, 'track_usage', lambda *a, **k: contextlib.nullcontext())
-    relevance = SimpleNamespace(is_relevant=True, relevance_score=999.0, context_summary='', reasoning='')
-    _stub(monkeypatch, app_integrations, 'evaluate_relevance', lambda **kwargs: relevance)
-    _stub(monkeypatch, app_integrations, 'generate_embedding', lambda text: [])
-    _stub(monkeypatch, app_integrations, 'query_vectors_by_metadata', lambda *a, **k: [])
-    trial(capture, app_integrations._process_mentor_proactive_notification, 'u1', [{'text': 'hi'}])
-
-
 def _stub_persona(monkeypatch: pytest.MonkeyPatch) -> None:
     _stub(monkeypatch, apps_utils, 'run_blocking', _inline_run_blocking)
     _stub(
@@ -421,11 +410,38 @@ def _run_daily_summary_generation(monkeypatch: pytest.MonkeyPatch, capture: Help
     )
     trial(
         capture,
-        notifications_utils._generate_and_store_daily_summary,
+        notifications_utils._legacy_generate_and_store_daily_summary,
         'u1',
         '2026-01-15',
         FROZEN_NOW,
         FROZEN_LATER,
+    )
+
+
+def _run_completed_day_generation(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    from utils.other import daily_recap
+
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    _stub(monkeypatch, daily_recap, 'account_deletion_blocks_user_work', lambda _uid: False)
+    _stub(monkeypatch, notifications_utils, 'generated_compute_allowed', lambda *_: True)
+    _stub(monkeypatch, notifications_utils, 'try_acquire_daily_summary_lock', lambda *_: True)
+    _stub(monkeypatch, notifications_utils, 'release_daily_summary_lock', lambda *_: None)
+    _stub(monkeypatch, notifications_utils.daily_summaries_db, 'get_daily_summary_by_date', lambda *_: None)
+    _stub(monkeypatch, notifications_utils.daily_summaries_db, 'create_daily_summary', lambda _uid, row: row['id'])
+    trial(capture, daily_recap.generate, 'u1', '2026-01-15', FROZEN_NOW, FROZEN_LATER, legacy=lambda *_: None)
+
+
+def _run_open_loops_daily_pass(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    monkeypatch.setenv('OPEN_LOOPS_ENABLED', 'on')
+    _stub(monkeypatch, open_loops_daily.open_loops_db, 'get_cards_doc', lambda *a, **k: None)
+    trial(
+        capture,
+        open_loops_daily.run_daily_pass,
+        'u1',
+        date_str='2026-01-15',
+        start_utc=FROZEN_NOW,
+        end_utc=FROZEN_LATER,
+        tz='UTC',
     )
 
 
@@ -476,6 +492,11 @@ def _run_speaker_prompts(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture
     trial(capture, speaker_tag_service.get_prompts, 'u1', now=FROZEN_NOW)
 
 
+def _run_speaker_prompts_shown(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    _stub(monkeypatch, speaker_tag_service.voice_profiles_db, 'record_tag_prompts_shown', lambda *a: False)
+    trial(capture, speaker_tag_service.mark_shown, 'u1', ['synthetic-card'], now=FROZEN_NOW)
+
+
 def _run_speaker_voice_matches(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     trial(capture, speaker_voice_matches._recent_conversations, 'u1', FROZEN_LATER)
     call = capture.calls[-1]
@@ -502,6 +523,19 @@ def _run_calendar_gaps(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) 
     trial(capture, call)
 
 
+def _run_support_trace(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    _stub(monkeypatch, support_router, 'resolve_support_target', lambda email: 'u1')
+    trial(
+        capture,
+        support_router.trace_support_recordings,
+        email='customer@example.com',
+        input_from=FROZEN_NOW.isoformat(),
+        input_to=FROZEN_LATER.isoformat(),
+        caller_uid='support-caller',
+    )
+    assert capture.calls[-1]['limit'] == 51 and capture.calls[-1]['metadata_only'] is True
+
+
 def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, wrapped_2025, '_update_progress', lambda *a, **k: None)
     trial(capture, wrapped_2025.generate_wrapped_2025, 'u1')
@@ -510,6 +544,14 @@ def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> Non
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
+        CallerWitness(
+            'routers/support.py:trace_support_recordings:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('support-trace',),
+            1,
+            _run_support_trace,
+        ),
         CallerWitness(
             'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
@@ -527,7 +569,7 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_main_count,
         ),
         CallerWitness(
-            'routers/conversations.py:search_conversations_endpoint:database.conversation_scan.speaker_browse_scan',
+            'routers/conversations.py:_browse_speaker_conversations:database.conversation_scan.speaker_browse_scan',
             'database.conversation_scan.speaker_browse_scan',
             'database.conversation_scan.speaker_browse_scan',
             ('speaker-search-fallback-recipe',),
@@ -543,9 +585,9 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_speaker_browse_recipe,
         ),
         CallerWitness(
-            'routers/developer.py:get_conversations:database.conversations.get_conversations',
-            'database.conversations.get_conversations',
-            'database.conversations.get_conversations',
+            'routers/developer.py:get_conversations:database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
             ('developer-list',),
             1,
             _run_developer_list,
@@ -608,14 +650,6 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_daily_summary_test_route,
         ),
         CallerWitness(
-            'utils/app_integrations.py:_process_mentor_proactive_notification:database.conversations.get_conversations',
-            'database.conversations.get_conversations',
-            'database.conversations.get_conversations',
-            ('mentor-notification',),
-            1,
-            _run_mentor_notification,
-        ),
-        CallerWitness(
             'utils/apps.py:generate_persona_prompt:database.conversations.get_conversations',
             'database.conversations.get_conversations',
             'utils.apps.get_conversations',
@@ -664,12 +698,28 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_goal_context,
         ),
         CallerWitness(
-            'utils/other/notifications.py:_generate_and_store_daily_summary:database.conversations.get_conversations',
+            'utils/other/daily_recap.py:generate:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('daily-summary-generation',),
+            1,
+            _run_completed_day_generation,
+        ),
+        CallerWitness(
+            'utils/other/notifications.py:_legacy_generate_and_store_daily_summary:database.conversations.get_conversations',
             'database.conversations.get_conversations',
             'database.conversations.get_conversations',
             ('daily-summary-generation',),
             1,
             _run_daily_summary_generation,
+        ),
+        CallerWitness(
+            'utils/open_loops/daily.py:run_daily_pass:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('open-loops-daily-pass',),
+            1,
+            _run_open_loops_daily_pass,
         ),
         CallerWitness(
             'utils/retrieval/tool_services/conversations.py:get_conversations_text:database.conversations.get_conversations',
@@ -694,6 +744,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('speaker-prompts',),
             1,
             _run_speaker_prompts,
+        ),
+        CallerWitness(
+            'utils/speaker_tag_prompts/service.py:mark_shown:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('speaker-prompts',),
+            1,
+            _run_speaker_prompts_shown,
         ),
         CallerWitness(
             'utils/speaker_voice_matches.py:_recent_conversations:database.conversations.get_conversations',

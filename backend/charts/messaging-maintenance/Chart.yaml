@@ -1,0 +1,5 @@
+apiVersion: v2
+name: messaging-maintenance
+description: Bounded messaging retention job using the deployed backend image
+version: 0.1.0
+type: application

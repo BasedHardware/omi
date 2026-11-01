@@ -1,0 +1,133 @@
+{
+  "assumed": {
+    "burst_owners": {
+      "audio_age_days": [
+        8,
+        10
+      ],
+      "basis": "plan F \u00a73.4: 4-6 heavy owners with 8-10-day-old audio",
+      "count_range": [
+        4,
+        6
+      ]
+    },
+    "file_seconds": {
+      "basis": "unmeasured; device WAL flush windows",
+      "range": [
+        30,
+        600
+      ]
+    },
+    "files_per_upload": {
+      "basis": "unmeasured; replace with the mirror inventory files-per-job aggregate when available",
+      "weights": {
+        "1": 0.55,
+        "10": 0.02,
+        "2": 0.2,
+        "3": 0.1,
+        "4": 0.08,
+        "6": 0.05
+      }
+    },
+    "near_silence_empty_asr_rate": {
+      "basis": "plan F \u00a73.4 (~29% empty-ASR on near-silence)",
+      "value": 0.29
+    },
+    "reverse_upload_share": {
+      "basis": "unmeasured; 10-19 02:45Z ordered-head incident showed reverse-uploaded heads exist (plan F \u00a79)",
+      "value": 0.1
+    }
+  },
+  "generated_at": "2026-10-19T06:11:51Z",
+  "k_floor": 20,
+  "lane_decisions": {
+    "backfill/legacy/legacy_fresh_budget_exceeded": 0.049926,
+    "backfill/legacy/legacy_fresh_budget_unavailable": 0.003229,
+    "backfill/legacy/legacy_fresh_hard_restricted": 0.006288,
+    "backfill/legacy/lookback_exceeded": 0.000697,
+    "backfill/legacy/unbound_capture_time": 0.330078,
+    "backfill/untrusted/invalid_capture_time": 0.003307,
+    "fresh/device_bound/recent_capture": 0.005691,
+    "fresh/legacy/recent_legacy_capture": 0.600783
+  },
+  "platform_mix": {
+    "android": 0.240361,
+    "ios": 0.759639
+  },
+  "recording_age_seconds": {
+    "backfill": {
+      "cdf": [
+        0.249838,
+        0.279373,
+        0.300078,
+        0.350919,
+        0.478813,
+        0.75606,
+        0.94824,
+        0.992596,
+        1.0
+      ],
+      "le": [
+        300.0,
+        1800.0,
+        3600.0,
+        21600.0,
+        86400.0,
+        259200.0,
+        604800.0,
+        1209600.0,
+        2592000.0
+      ]
+    },
+    "fresh": {
+      "cdf": [
+        0.666495,
+        0.797845,
+        0.877961,
+        1.0
+      ],
+      "le": [
+        300.0,
+        1800.0,
+        3600.0,
+        21600.0
+      ]
+    }
+  },
+  "schema_version": 1,
+  "source": "ro-prod Prometheus aggregates (omi_sync_upload_total, omi_sync_lane_admissions_total, omi_sync_recording_age_seconds, omi_vad_gate_audio_seconds_total); no uids",
+  "speech_share": 0.405866,
+  "uploads": {
+    "accepted_per_min_by_utc_hour": [
+      286.235,
+      273.29,
+      267.756,
+      257.526,
+      224.542,
+      194.163,
+      188.772,
+      175.521,
+      149.775,
+      152.449,
+      143.661,
+      133.098,
+      126.539,
+      174.36,
+      172.712,
+      251.701,
+      249.763,
+      245.651,
+      244.857,
+      287.294,
+      285.834,
+      259.022,
+      243.93,
+      261.022
+    ],
+    "accepted_per_min_mean": 218.728,
+    "failed_share": 0.005449,
+    "observed_hours": 65,
+    "rate_basis": "level: 24h increase / 1440; hourly shape: 1h increases, rescaled to that level"
+  },
+  "window_days": 7
+}

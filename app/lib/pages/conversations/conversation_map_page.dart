@@ -117,8 +117,12 @@ class ConversationMapPage extends StatelessWidget {
             ListTile(
               key: ValueKey('conversation_map_cluster_row_${conversation.id}'),
               title: Text(
-                conversationDisplayTitle(conversation, context.l10n,
-                    surface: ConversationUntitledRenderedSurface.map, dates: OmiDateFormat.of(context)),
+                conversationDisplayTitle(
+                  conversation,
+                  context.l10n,
+                  surface: ConversationUntitledRenderedSurface.map,
+                  dates: OmiDateFormat.of(context),
+                ),
               ),
               subtitle: Text(
                 dates.dateTime(conversation.startedAt ?? conversation.createdAt),
@@ -138,8 +142,12 @@ class ConversationMapPage extends StatelessWidget {
   String _groupLabel(BuildContext context, ConversationMapGroup group) {
     if (group.conversations.length == 1) {
       final conversation = group.conversations.single;
-      return conversationDisplayTitle(conversation, context.l10n,
-          surface: ConversationUntitledRenderedSurface.map, dates: OmiDateFormat.of(context));
+      return conversationDisplayTitle(
+        conversation,
+        context.l10n,
+        surface: ConversationUntitledRenderedSurface.map,
+        dates: OmiDateFormat.of(context),
+      );
     }
     return context.l10n.conversationCount(group.conversations.length);
   }
@@ -194,10 +202,7 @@ class ConversationMapPage extends StatelessWidget {
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: OmiColors.surface1,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
                         child: Row(
                           children: [
                             Container(
@@ -209,10 +214,7 @@ class ConversationMapPage extends StatelessWidget {
                                     ? Icon(Icons.location_on, color: OmiColors.onAccent, size: 20)
                                     : Text(
                                         '${group.conversations.length}',
-                                        style: TextStyle(
-                                          color: OmiColors.onAccent,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                        style: TextStyle(color: OmiColors.onAccent, fontWeight: FontWeight.w700),
                                       ),
                               ),
                             ),
@@ -222,8 +224,11 @@ class ConversationMapPage extends StatelessWidget {
                                 _groupLabel(context, group),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style:
-                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                  color: OmiColors.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                             Icon(Icons.chevron_right, color: OmiColors.textSecondary),

@@ -179,7 +179,7 @@ struct QueryResultsPanel<Content: View, TopAccessory: View, Accessory: View, Foo
 
   private var filterHelp: String {
     if case .none = chipBehavior {
-      return "Choose a time range. The timeline rail below navigates within that range."
+      return "Choose a time range, then use the timeline below to move within it."
     }
     return "Narrow the panel to a time window"
   }

@@ -1,0 +1,8 @@
+{
+  "dataThrough": "2026-10-14",
+  "sourceRefreshedAt": "2026-10-15T10:00:00Z",
+  "subscriptions": [
+    {"status":"active","metadata":{},"items":{"data":[{"quantity":1,"price":{"currency":"usd","product":"prod_Uu6nrHIKWnnTWL","unit_amount":2999,"recurring":{"interval":"month","interval_count":1}}}]}},
+    {"status":"past_due","metadata":{},"items":{"data":[{"quantity":1,"price":{"currency":"usd","product":"prod_Uu5HDt3sygCK8N","unit_amount":999,"recurring":{"interval":"month","interval_count":1}}}]}}
+  ]
+}

@@ -1,4 +1,4 @@
-"""Wire models for speaker tag prompts ("Is this you?" / "Who is this?")."""
+"""Wire models for speaker tag prompts ("Was this you?" / "Who is this?")."""
 
 from datetime import datetime
 from enum import Enum
@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SpeakerTagPromptKind(str, Enum):
-    # "Is this you?" — free for everyone; confirms or corrects the owner's voice.
+    # "Was this you?" — free for everyone; confirms or corrects the owner's voice.
     owner_check = 'owner_check'
     # "Is this <name>?" — an automatic match the user has not reviewed yet.
     confirm_person = 'confirm_person'
@@ -74,6 +74,10 @@ class SpeakerTagPrompt(BaseModel):
     segment_ids: List[str]
     clip_start: float = Field(description='Clip start, seconds from conversation start')
     clip_end: float = Field(description='Clip end, seconds from conversation start')
+    evidence_id: Optional[str] = None
+    receipt_generation: Optional[int] = None
+    speaker_id_scope: Optional[str] = None
+    audio_capture_run: Optional[int] = None
     excerpt: str = ''
     suggested_person_id: Optional[str] = None
     suggested_person_name: Optional[str] = None
@@ -96,6 +100,7 @@ class SpeakerTagPromptsResponse(BaseModel):
 class SpeakerTagPromptsShownRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     prompt_ids: List[str] = Field(default_factory=list, max_length=10)
+    set_shown: bool = True
 
 
 class SpeakerTagPromptsShownResponse(BaseModel):
@@ -115,6 +120,13 @@ class SpeakerTagPromptAnswerRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=40)
     suggested_person_id: Optional[str] = Field(default=None, max_length=128)
     first_time: bool = False
+    evidence_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class SpeakerTagPromptSegmentIdentity(BaseModel):
+    id: str
+    is_user: bool
+    person_id: Optional[str] = None
 
 
 class SpeakerTagPromptAnswerResponse(BaseModel):
@@ -122,6 +134,8 @@ class SpeakerTagPromptAnswerResponse(BaseModel):
     person_id: Optional[str] = None
     quality_outcome: SpeakerTagPromptQualityOutcome
     voice_sample_queued: bool = False
+    conversation_id: Optional[str] = None
+    segment_identities: List[SpeakerTagPromptSegmentIdentity] = Field(default_factory=list)
 
 
 class IgnoredVoice(BaseModel):

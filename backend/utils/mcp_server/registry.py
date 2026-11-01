@@ -64,6 +64,49 @@ _CONVERSATION_TIMESTAMPS: Dict[str, Any] = {
     "finished_at": _DATETIME_OR_NULL,
 }
 
+_TIMEZONE_INPUT = {
+    'type': 'string',
+    'description': 'IANA timezone (e.g. Asia/Ho_Chi_Minh), or profile to use the user profile. Omitted preserves the released UTC-day contract.',
+}
+_FIELDS_INPUT = {
+    'oneOf': [{'type': 'array', 'items': {'type': 'string'}}, {'type': 'string'}],
+    'description': 'Return only selected card fields; id is always included. Array or comma-separated names.',
+}
+_SUMMARY_ONLY_INPUT = {
+    'type': 'boolean',
+    'default': False,
+    'description': 'Return the conversation card without transcript segments.',
+}
+
+_CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
+    'source': {'type': ['string', 'null']},
+    'is_call': {'type': ['boolean', 'null']},
+    'call_platform': {'type': ['string', 'null']},
+    'calendar_event_id': {'type': ['string', 'null']},
+    **_CONVERSATION_TIMESTAMPS,
+    "participants_included": {
+        "type": "boolean",
+        "description": "Whether stored transcript speaker mappings were loaded; false also for locked content",
+    },
+    "participants": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "speaker_id": {
+                    "type": ["integer", "string", "null"],
+                    "description": "Legacy nullable field; display voice identity is speaker_key",
+                },
+                "speaker_key": {"type": "string"},
+                "speaker_label": {"type": "string"},
+                "person_id": {"type": ["string", "null"]},
+                "is_user": {"type": "boolean"},
+            },
+        },
+    },
+    "person_ids": {"type": "array", "items": {"type": "string"}},
+}
+
 _ACTION_ITEM_TIMESTAMPS: Dict[str, Any] = {
     "created_at": _DATETIME_OR_NULL,
     "due_at": _DATETIME_OR_NULL,
@@ -92,6 +135,18 @@ def _edit_annotations(title: str) -> Dict[str, Any]:
         "title": title,
         "readOnlyHint": False,
         "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+
+
+def _destructive_annotations(title: str) -> Dict[str, Any]:
+    # Idempotent but destructive: dismissal is reversible in storage yet removes the
+    # record from normal People reads, so clients must see the destructive hint.
+    return {
+        "title": title,
+        "readOnlyHint": False,
+        "destructiveHint": True,
         "idempotentHint": True,
         "openWorldHint": False,
     }
@@ -126,6 +181,8 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+PEOPLE_RENAME_SECURITY = [{"type": "oauth2", "scopes": ["people.rename"]}]
+PEOPLE_CLEANUP_SECURITY = [{"type": "oauth2", "scopes": ["people.cleanup"]}]
 
 _SECURITY_BY_SCOPE = {
     entry["scopes"][0]: [{"type": "oauth2", "scopes": list(entry["scopes"])}]
@@ -139,6 +196,8 @@ _SECURITY_BY_SCOPE = {
         CHAT_READ_SECURITY,
         SCREEN_ACTIVITY_READ_SECURITY,
         PEOPLE_READ_SECURITY,
+        PEOPLE_RENAME_SECURITY,
+        PEOPLE_CLEANUP_SECURITY,
     )
     for entry in security
 }
@@ -193,6 +252,8 @@ _ACTION_ITEM_CREATE = "action_item_create"
 _ACTION_ITEM_COMPLETE = "action_item_complete"
 _ACTION_ITEM_UPDATE = "action_item_update"
 _ACTION_ITEM_DELETE = "action_item_delete"
+_PEOPLE_RENAME = "people_rename"
+_PEOPLE_DISMISS = "people_dismiss"
 
 TOOL_SPECS: Tuple[ToolSpec, ...] = (
     ToolSpec(
@@ -294,11 +355,21 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             _object_schema(
                 ["memories"],
                 memories=_ARRAY_OF_OBJECTS,
+                effective_limit={"type": "integer"},
                 filters={"type": "object"},
                 next_cursor=_NEXT_CURSOR_OUTPUT,
                 has_more={"type": "boolean"},
                 more_in_window={"type": "boolean"},
-                scanned_count={"type": "integer"},
+                returned_count={"type": "integer"},
+                matched_count={
+                    "type": "integer",
+                    "description": "Eligible matches in the complete filtered candidate window",
+                },
+                more_in_window_known={"type": "boolean"},
+                scanned_count={
+                    "type": "integer",
+                    "description": "Candidate documents examined before policy filtering",
+                },
                 scan_truncated={"type": "boolean"},
             )
         ),
@@ -443,8 +514,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
-                "start_date": {"type": "string", "description": "Filter after this date (yyyy-mm-dd)"},
-                "end_date": {"type": "string", "description": "Filter before this date (yyyy-mm-dd)"},
+                "fields": _FIELDS_INPUT,
+                "timezone": _TIMEZONE_INPUT,
+                "start_date": {
+                    "type": "string",
+                    "description": "created_at on/after midnight in timezone (YYYY-MM-DD), inclusive",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "created_at through the entire day in timezone (YYYY-MM-DD), inclusive",
+                },
                 "categories": {
                     "type": "array",
                     "items": {"type": "string", "enum": _CONVERSATION_CATEGORY_ENUM},
@@ -471,7 +550,9 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["conversations"],
-                conversations=_object_array_with(**_CONVERSATION_TIMESTAMPS),
+                conversations=_object_array_with(**_CONVERSATION_CARD_FIELDS),
+                has_more={"type": "boolean"},
+                effective_limit={"type": "integer"},
                 next_cursor=_NEXT_CURSOR_OUTPUT,
             )
         ),
@@ -486,12 +567,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         title="Get conversation by ID",
         description=(
             "Deep-read one conversation card and a bounded transcript. Use only for a few ids selected from "
-            "get_conversations or search_conversations; the response reports truncated=true when clipped."
+            "get_conversations or search_conversations; the response reports truncated=true when clipped. "
+            "Transcript offsets are nonnegative: text before the conversation origin is clamped at zero; "
+            "a zero-duration interval is unplaced text, not a playback window."
         ),
         annotations=_read_annotations("Get conversation by ID"),
         input_schema={
             "type": "object",
             "properties": {
+                "summary_only": _SUMMARY_ONLY_INPUT,
+                "fields": _FIELDS_INPUT,
                 "conversation_id": {"type": "string", "description": "The ID of the conversation to retrieve"},
                 "max_segments": {
                     "type": "integer",
@@ -513,7 +598,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["conversation"],
-                conversation={"type": "object", "properties": dict(_CONVERSATION_TIMESTAMPS)},
+                conversation={"type": "object", "properties": dict(_CONVERSATION_CARD_FIELDS)},
                 truncated={"type": "boolean"},
             )
         ),
@@ -531,12 +616,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "get_conversations or search_conversations returns several relevant ids. Each item returns the "
             "same bounded card and transcript as get_conversation_by_id with its own truncated flag; ids "
             "that resolve to nothing are listed in not_found. When the response budget is hit, later items "
-            "are omitted and truncated=true — retry them with smaller max_segments/max_chars."
+            "are listed in omitted_ids/next_ids with next_cursor. Budgets shrink evenly before omissions. "
+            "Items also expose the flat list card alongside the released nested conversation."
         ),
         annotations=_read_annotations("Get conversations by IDs"),
         input_schema={
             "type": "object",
             "properties": {
+                "summary_only": _SUMMARY_ONLY_INPUT,
+                "fields": _FIELDS_INPUT,
+                "cursor": _CURSOR_INPUT,
                 "conversation_ids": {
                     "type": "array",
                     "description": "Conversation IDs to retrieve (1-20; duplicates are fetched once)",
@@ -569,11 +658,14 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     "items": {
                         "type": "object",
                         "properties": {
-                            "conversation": {"type": "object", "properties": dict(_CONVERSATION_TIMESTAMPS)},
+                            "conversation": {"type": "object", "properties": dict(_CONVERSATION_CARD_FIELDS)},
                         },
                     },
                 },
                 not_found={"type": "array", "items": {"type": "string"}},
+                omitted_ids={"type": "array", "items": {"type": "string"}},
+                next_ids={"type": "array", "items": {"type": "string"}},
+                next_cursor=_NEXT_CURSOR_OUTPUT,
                 truncated={"type": "boolean"},
             )
         ),
@@ -605,7 +697,15 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             },
             "required": ["query"],
         },
-        output_schema=_output_schema(_object_schema(["memories"], memories=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(
+                ["memories"],
+                memories=_ARRAY_OF_OBJECTS,
+                search_coverage={"type": "string"},
+                message={"type": "string"},
+                effective_limit={"type": "integer"},
+            )
+        ),
         scope="memories.read",
         operation="memory_search",
         write_operation=_READ,
@@ -618,15 +718,23 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         description=(
             "Search for a topic inside the user's conversations, preferably with start_date and end_date. "
             "Returns small cards plus short match snippets; deep-read only a few relevant ids with "
-            "get_conversation_by_id."
+            "get_conversation_by_id. Empty results do not establish absence: use date-window listing for unindexed content."
         ),
         annotations=_read_annotations("Search conversations"),
         input_schema={
             "type": "object",
             "properties": {
+                "fields": _FIELDS_INPUT,
+                "timezone": _TIMEZONE_INPUT,
                 "query": {"type": "string", "description": "Natural language search query"},
-                "start_date": {"type": "string", "description": "Filter after this date (yyyy-mm-dd)"},
-                "end_date": {"type": "string", "description": "Filter before this date (yyyy-mm-dd)"},
+                "start_date": {
+                    "type": "string",
+                    "description": "created_at on/after midnight in timezone (YYYY-MM-DD), inclusive",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "created_at through the entire day in timezone (YYYY-MM-DD), inclusive",
+                },
                 "limit": {
                     "type": "integer",
                     "description": "Maximum number of results to return",
@@ -638,7 +746,34 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "required": ["query"],
         },
         output_schema=_output_schema(
-            _object_schema(["conversations"], conversations=_object_array_with(**_CONVERSATION_TIMESTAMPS))
+            _object_schema(
+                ["conversations"],
+                conversations=_object_array_with(
+                    **_CONVERSATION_CARD_FIELDS,
+                    match_snippets={
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "segment_id": {"type": ["string", "null"]},
+                                "start": {"type": ["number", "null"]},
+                                "end": {"type": ["number", "null"]},
+                                "start_ms": {"type": ["integer", "null"]},
+                                "end_ms": {"type": ["integer", "null"]},
+                                "speaker_id": {
+                                    "type": ["integer", "string", "null"],
+                                    "description": "Legacy nullable field; display voice identity is speaker_key",
+                                },
+                                "speaker_key": {"type": "string"},
+                                "speaker_label": {"type": "string"},
+                            },
+                        },
+                    },
+                ),
+                search_coverage={"type": "string"},
+                message={"type": "string"},
+            )
         ),
         scope="conversations.read",
         operation="conversation_search",
@@ -996,6 +1131,62 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         handler=other.get_people,
     ),
     ToolSpec(
+        name="rename_person",
+        title="Rename person",
+        description=(
+            "Correct the display name of a person Omi has recognized. The previous name is retained "
+            "as an alias so earlier references still resolve. Returns only the person id and the "
+            "corrected name -- no transcript samples."
+        ),
+        annotations=_edit_annotations("Rename person"),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "person_id": {"type": "string", "description": "Id of the person to rename."},
+                "name": {"type": "string", "description": "Corrected display name, 1 to 128 characters."},
+            },
+            "required": ["person_id", "name"],
+        },
+        output_schema=_output_schema(
+            _object_schema(["success", "person"], success={"type": "boolean"}, person={"type": "object"})
+        ),
+        scope="people.rename",
+        operation="people_rename",
+        write_operation=_PEOPLE_RENAME,
+        rate_bucket=None,
+        handler=other.rename_person,
+    ),
+    ToolSpec(
+        name="dismiss_person",
+        title="Dismiss person",
+        description=(
+            "Dismiss a false-positive person so it stops appearing in People. This is a soft cleanup: "
+            "the record, its aliases, history and speech data are preserved and still included in data "
+            "exports. Requires the opt-in people.cleanup scope."
+        ),
+        annotations=_destructive_annotations("Dismiss person"),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "person_id": {"type": "string", "description": "Id of the person to dismiss."},
+            },
+            "required": ["person_id"],
+        },
+        output_schema=_output_schema(
+            _object_schema(
+                ["success", "person_id", "dismissed"],
+                success={"type": "boolean"},
+                person_id={"type": "string"},
+                dismissed={"type": "boolean"},
+            )
+        ),
+        scope="people.cleanup",
+        operation="people_dismiss",
+        write_operation=_PEOPLE_DISMISS,
+        rate_bucket=None,
+        handler=other.dismiss_person,
+    ),
+    ToolSpec(
         name="get_screen_activity",
         title="Get screen activity",
         description=(
@@ -1009,13 +1200,19 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
+                "timezone": _TIMEZONE_INPUT,
+                "timestamp_format": {
+                    "type": "string",
+                    "enum": ["legacy", "iso_offset"],
+                    "description": "Omitted preserves stored timestamp/hour strings; iso_offset opts into ISO offsets without a timezone.",
+                },
                 "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
                 "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
                 "app": {"type": "string", "description": "Filter to a single app name"},
                 "group_by": {
                     "type": "string",
                     "enum": ["none", "app", "hour", "day"],
-                    "description": "Aggregate rows into buckets by app, hour, or day instead of returning raw rows",
+                    "description": "Aggregate the whole window; any cursor is ignored with a note",
                     "default": "none",
                 },
                 "summary": {
@@ -1025,7 +1222,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Max rows scanned per page (ignored when summary=true)",
+                    "description": "Raw rows per page (ignored for summary and groups; groups scan up to 5000 observations with explicit coverage)",
                     "default": 200,
                     "minimum": 1,
                     "maximum": 1000,
@@ -1045,6 +1242,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     _object_schema(
                         ["buckets"],
                         group_by={"type": "string"},
+                        note={"type": "string"},
                         buckets=_ARRAY_OF_OBJECTS,
                         next_cursor=_NEXT_CURSOR_OUTPUT,
                     ),
@@ -1074,6 +1272,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
+                "timezone": _TIMEZONE_INPUT,
                 "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
                 "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
                 "limit": {
@@ -1105,6 +1304,38 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_READ,
         rate_bucket=None,
         handler=other.get_daily_summaries,
+    ),
+    ToolSpec(
+        name="process_recent_conversations",
+        title="Process recent conversations",
+        description="Process your own pending conversations from the last six hours. Returns progress; ready=false is not completion.",
+        annotations=_create_annotations("Process recent conversations", idempotent=True),
+        input_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "hours": {"type": "integer", "minimum": 1, "maximum": 6, "default": 6},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 20},
+            },
+        },
+        output_schema=_output_schema(
+            {
+                "type": "object",
+                "required": ["status", "ready"],
+                "properties": {
+                    "status": {"type": "string"},
+                    "ready": {"type": "boolean"},
+                    "promoted": {"type": "integer"},
+                    "has_more": {"type": "boolean"},
+                    "retry_after_seconds": {"type": "integer"},
+                },
+            }
+        ),
+        scope="conversations.read",
+        operation="conversation_process_recent",
+        write_operation=_READ,
+        rate_bucket=None,
+        handler=other.process_recent_conversations,
     ),
 )
 

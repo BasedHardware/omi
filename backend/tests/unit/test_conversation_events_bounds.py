@@ -133,6 +133,15 @@ def router():
     setattr(request_validation, "NonNegativeOffset", int)
     setattr(request_validation, "PositiveLimit", int)
 
+    # utils.cloud_tasks imports the Google SDK at module scope, which cannot load
+    # under the faked "google" package below. The router only binds the durable
+    # dispatch flag from it; keep the env-unset inline default.
+    cloud_tasks = _pkg("utils.cloud_tasks")
+    cloud_tasks.is_listen_finalization_dispatch_enabled = MagicMock(return_value=False)
+
+    deletion_marker = ModuleType("database.account_deletion_marker")
+    deletion_marker.account_deletion_blocks_user_work = lambda _uid: False
+
     fakes = {
         # top-level third-party
         "ulid": _pkg("ulid"),
@@ -141,8 +150,11 @@ def router():
         # database (parent package faked; _client is the rich stub)
         "database": _pkg("database"),
         "database._client": client_mod,
+        "database.account_deletion_marker": deletion_marker,
+        "database.legal_holds": _pkg("database.legal_holds"),
         "database.conversations": _pkg("database.conversations"),
         "database.conversation_scan": _pkg("database.conversation_scan"),
+        "database.hidden_noise_counts": _pkg("database.hidden_noise_counts"),
         "database.screen_frames": _pkg("database.screen_frames"),
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
@@ -185,7 +197,12 @@ def router():
         # utils.* -- intermediate packages faked; ``utils`` itself stays real.
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": endpoints,
+        "utils.other.account_gate_http": _pkg("utils.other.account_gate_http"),
         "utils.other.list_budget": list_budget_real,
+        # These tests exercise event/speaker handlers, not list serving. Keep
+        # the new router collaborator inside this fixture's existing isolation.
+        "utils.list_version_check": _pkg("utils.list_version_check"),
+        "utils.cloud_tasks": cloud_tasks,
         "utils.other.storage": _pkg("utils.other.storage"),
         # utils.conversations.* is DERIVED, not listed: a new module in that package
         # must not break this suite at collection. See package_submodule_stubs.
@@ -590,9 +607,13 @@ def _set_action_item_status(router, mirrored, values):
     ), patch.object(router.conv.conversations_db, "update_conversation_action_items"), patch.object(
         router.conv.action_items_db, "get_action_items_by_conversation", return_value=mirrored
     ), patch.object(
-        router.conv.action_items_db, "mark_action_item_completed"
+        router.conv.action_items_db, "mark_action_item_completed", return_value=True
     ) as mark, patch.dict(
         "sys.modules", {"utils.notifications": notifications}
+    ), patch.object(
+        router.conv.action_items_db,
+        "get_action_item",
+        return_value={**mirrored[0], 'completed': values[0], 'status': 'completed' if values[0] else 'active'},
     ):
         router.conv.set_action_item_status(data, "c1", uid="u1")
     return mark, notifications.sync_action_item_reminder
@@ -606,7 +627,13 @@ def test_checking_off_a_conversation_task_cancels_its_reminder(router):
 
     mark.assert_called_once_with("u1", "task-1", True)
     reminder.assert_called_once_with(
-        user_id="u1", action_item_id="task-1", description="Send the budget", completed=True, due_at=due
+        user_id="u1",
+        action_item_id="task-1",
+        description="Send the budget",
+        completed=True,
+        due_at=due,
+        status='completed',
+        deleted=False,
     )
 
 
@@ -618,7 +645,13 @@ def test_unchecking_a_conversation_task_rearms_its_reminder(router):
 
     mark.assert_called_once_with("u1", "task-1", False)
     reminder.assert_called_once_with(
-        user_id="u1", action_item_id="task-1", description="Send the budget", completed=False, due_at=due
+        user_id="u1",
+        action_item_id="task-1",
+        description="Send the budget",
+        completed=False,
+        due_at=due,
+        status='active',
+        deleted=False,
     )
 
 

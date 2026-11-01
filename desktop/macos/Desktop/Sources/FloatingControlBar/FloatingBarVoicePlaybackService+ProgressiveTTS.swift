@@ -4,25 +4,13 @@ extension FloatingBarVoicePlaybackService {
   /// Progressive counterpart to buffered one-shot/sample synthesis. Credential
   /// admission and terminal failure recording remain identical; only successful
   /// response delivery changes from one `Data` value to bounded chunks.
-  nonisolated static func synthesizeOpenAISpeechStream(
+  nonisolated static func synthesizeCloudSpeechStream(
     text: String,
     voiceID: String,
     instructions: String
   ) async throws -> AsyncThrowingStream<Data, Error> {
     let byokKey = APIKeyService.selectedBYOKLLMProvider == .openai ? APIKeyService.byokKey(.openai) : nil
     let fingerprint = byokKey.map(APIKeyService.byokFingerprint)
-    if let fingerprint {
-      let canUseKey = await MainActor.run {
-        CredentialHealthManager.shared.canUseBYOK(provider: .openai, fingerprint: fingerprint)
-      }
-      guard canUseKey else {
-        throw CredentialHealthError.providerAuth(
-          provider: .openai,
-          mode: .byok,
-          message: "Your OpenAI key was rejected. Update it in Settings."
-        )
-      }
-    }
 
     let upstream = try await APIClient.shared.synthesizeSpeechStream(
       request: APIClient.TtsSynthesizeRequest(

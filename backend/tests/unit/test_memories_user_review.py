@@ -242,3 +242,47 @@ def test_merge_memory_list_index_docs_applies_same_visibility_helper():
     ]
     merged = memories_db._merge_memory_list_index_docs(docs, include_invalidated=False)
     assert [row['id'] for row in merged] == ['b']
+
+
+def _at_hour(hour: int) -> datetime:
+    return datetime(2026, 1, 1, hour, tzinfo=timezone.utc)
+
+
+def test_updated_or_created_index_fills_the_page_past_hidden_rows(monkeypatch):
+    """Rejected or invalidated rows inside a candidate window must not shorten the page.
+
+    MemoryService and HistoricalMemoryAdapter read a short index page as end-of-data,
+    so the visible rows behind the hidden ones were never returned.
+    """
+    rows = [
+        _memory_row('m1', created_at=_at_hour(6), updated_at=_at_hour(6)),
+        _memory_row('m2', created_at=_at_hour(5), updated_at=_at_hour(5), user_review=False),
+        _memory_row('m3', created_at=_at_hour(4), updated_at=_at_hour(4), invalid_at=_at_hour(7)),
+        _memory_row('m4', created_at=_at_hour(3), updated_at=_at_hour(3)),
+        # Legacy row without updated_at: only the created_at window can return it.
+        _memory_row('m5', created_at=_at_hour(2), updated_at=None),
+        _memory_row('m6', created_at=_at_hour(1), updated_at=_at_hour(1)),
+    ]
+
+    def fake_window(_memories_ref, order_field, candidate_limit, *, budget=None, cursor_snapshot=None):
+        # Firestore order_by: newest first, rows missing the field excluded.
+        ordered = sorted(
+            (row for row in rows if row.get(order_field) is not None),
+            key=lambda row: (row[order_field], row['id']),
+            reverse=True,
+        )
+        if cursor_snapshot is not None:
+            index = next(i for i, row in enumerate(ordered) if row['id'] == cursor_snapshot.id)
+            ordered = ordered[index + 1 :]
+        return [_FakeDoc(row) for row in ordered[:candidate_limit]]
+
+    monkeypatch.setattr(memories_db, '_stream_memory_list_index_window', fake_window)
+
+    def page_ids(limit: int, offset: int) -> List[str]:
+        page = memories_db.list_memory_updated_or_created_index(
+            'uid-review', limit=limit, offset=offset, firestore_client=_FakeDB([])
+        )
+        return [row['id'] for row in page]
+
+    assert page_ids(3, 0) == ['m1', 'm4', 'm5']
+    assert page_ids(2, 0) + page_ids(2, 2) == ['m1', 'm4', 'm5', 'm6']

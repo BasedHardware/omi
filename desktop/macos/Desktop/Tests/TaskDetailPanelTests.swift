@@ -71,6 +71,27 @@ final class TaskDetailPanelTests: XCTestCase {
     XCTAssertFalse(links.contains { $0.id.contains("artifact-1") })
   }
 
+  func testConversationEvidenceKeepsItsOwnDestinationAfterTaskCoalescing() {
+    let task = makeTask(
+      id: "task-shared",
+      description: "Send the revised budget",
+      source: "transcription:omi",
+      conversationID: "capture-original",
+      provenance: [
+        OmiAPI.EvidenceRef(id: "capture-original", kind: .conversation, scope: .canonical),
+        OmiAPI.EvidenceRef(id: "capture-follow-up", kind: .conversation, scope: .canonical),
+      ]
+    )
+
+    let links = TaskDetailSourceLinkPolicy.links(for: task)
+    XCTAssertEqual(
+      links.map(\.route),
+      [
+        .capture(id: "capture-original"),
+        .capture(id: "capture-follow-up"),
+      ])
+  }
+
   @MainActor
   func testRewindFrameNavigationRequiresTheValidatedPresentationLease() {
     let focusRequests = NotificationCountRecorder()

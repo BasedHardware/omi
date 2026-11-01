@@ -2,11 +2,15 @@ import Foundation
 
 enum ScreenTaskFeature {
   static let flagName = "screen_task_jev_gate"
-  /// All bundles default off; Beta/dev must also have explicit consent and enablement.
-  @MainActor static var isConfigured: Bool { PostHogManager.shared.isFeatureEnabled(flagName) }
+  /// Missing or unknown flag values keep the gate enabled; only an explicit false is a kill switch.
+  static func isKillSwitchOff(flagValue: Any?) -> Bool { (flagValue as? Bool) == false }
+
+  @MainActor static var isConfigured: Bool {
+    !isKillSwitchOff(flagValue: PostHogManager.shared.getFeatureFlag(flagName))
+  }
   @MainActor static var isEnabled: Bool {
     ScreenTaskFlagRefresh.start()
-    if !PostHogManager.shared.isFeatureEnabled(flagName) { authority.disable() }
+    if isKillSwitchOff(flagValue: PostHogManager.shared.getFeatureFlag(flagName)) { authority.disable() }
     return lease() != nil
   }
   static let authority = ScreenTaskAdmissionAuthority()

@@ -94,6 +94,8 @@ class _CannedHttpClient implements HttpClient {
 
   @override
   Duration idleTimeout = const Duration(seconds: 15);
+  @override
+  Duration? connectionTimeout;
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -342,6 +344,41 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('support bundle recent counters exclude expired retained events', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const dayMs = 24 * 3600 * 1000;
+    final since = now - 14 * dayMs;
+    mockBleHostApi(
+      'getExtendedDeviceDiagnostics',
+      jsonEncode({
+        'counters_since': since,
+        'disconnect_history_v2': [
+          for (final daysAgo in [8, 1]) ...[
+            {'timestamp': now - daysAgo * dayMs, 'eventType': 'disconnect', 'timeToReconnectMs': 5000},
+            {'timestamp': now - daysAgo * dayMs, 'eventType': 'fail_to_connect', 'timeToReconnectMs': 0},
+          ],
+        ],
+      }),
+    );
+    await pumpPage(tester);
+    await openSupportDialog(tester);
+
+    final json = tester.widget<SelectableText>(find.byType(SelectableText)).data!;
+    final bundle = jsonDecode(json) as Map<String, dynamic>;
+    expect(bundle['reconnection_count_window'], 1);
+    expect(bundle['fail_to_connect_count_window'], 1);
+    expect(bundle['reconnection_count'], 3);
+    expect(bundle['counters_since'], {'reconnection_count': since, 'fail_to_connect_count': since});
+    final retainedHistory = (bundle['disconnect_history'] as List).cast<Map<String, dynamic>>();
+    expect(retainedHistory, hasLength(4));
+    expect(retainedHistory.map((event) => event['ts']), [now - 8 * dayMs, now - 8 * dayMs, now - dayMs, now - dayMs]);
+    expect(retainedHistory.map((event) => event['event_type']),
+        ['disconnect', 'fail_to_connect', 'disconnect', 'fail_to_connect']);
+    expect(_CannedUpload.requests, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('cancelling the review dialog tracks dialog_cancelled', (tester) async {
     await pumpPage(tester);
     await openSupportDialog(tester);
@@ -354,7 +391,7 @@ void main() {
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'dialog_cancelled',
       'status_code': 0,
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
     expect(analytics.propertiesOf('Diagnostics Send Failed').single['bundle_bytes'] as int, greaterThan(0));
@@ -376,7 +413,7 @@ void main() {
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'upload',
       'status_code': 503,
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
     expect(analytics.propertiesOf('Diagnostics Send Failed').single['bundle_bytes'] as int, greaterThan(0));
@@ -397,7 +434,7 @@ void main() {
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'ticket_parse',
       'status_code': 0,
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
   });
@@ -417,7 +454,7 @@ void main() {
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'upload',
       'status_code': 0,
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
     expect(analytics.propertiesOf('Diagnostics Send Failed').single['bundle_bytes'] as int, greaterThan(0));
@@ -436,7 +473,7 @@ void main() {
 
     expect(find.text('OMI-TKT-42'), findsOneWidget);
     analytics.expectSingle('Diagnostics Sent', {
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
     expect(analytics.propertiesOf('Diagnostics Sent').single['bundle_bytes'] as int, greaterThan(0));
@@ -458,8 +495,10 @@ void main() {
       'status_code': 0,
       'bundle_bytes': 0,
       'disconnect_count': 0,
-      'schema_version': 0,
     });
+    // No bundle exists. The invalid emitter version is omitted on this
+    // track-only adapter path; wire delivery supplies schema 1.
+    expect(analytics.propertiesOf('Diagnostics Send Failed').single, isNot(contains('schema_version')));
     expect(_CannedUpload.requests, 0);
   });
 }

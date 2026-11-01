@@ -5,11 +5,11 @@ import XCTest
 
 #if DEBUG
   final class LocalProjectionFinalizationTests: XCTestCase {
-    func testFlagDefaultsOffOutsideBeta() throws {
+    func testFlagDefaultsOnInStable() throws {
       let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
       let enabled = FreeTierLocalProcessingFlag.isEnabled(
         environment: [:], defaults: defaults, isBetaProductionBundle: false)
-      XCTAssertFalse(enabled)
+      XCTAssertTrue(enabled)
     }
 
     /// Beta serves through the development plane. If the backend cohort is lit there and the

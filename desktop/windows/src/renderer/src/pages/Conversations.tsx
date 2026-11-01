@@ -484,7 +484,6 @@ export function Conversations(): React.JSX.Element {
           await deleteCloudConversation(row.id)
           anyCloud = true
         }
-        await window.omi.deleteJitConversationKeyframe(row.id)
       } catch (e) {
         console.error('Delete failed:', row.id, e)
       }

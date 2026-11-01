@@ -12,12 +12,17 @@ DEFAULT_GENERATED_XCCONFIG_BACKUP="$STATE_DIR/default_Generated.xcconfig"
 DEFAULT_GENERATED_XCCONFIG_ABSENT="$STATE_DIR/default_Generated.xcconfig.absent"
 DEFAULT_EXPORT_ENVIRONMENT_BACKUP="$STATE_DIR/default_flutter_export_environment.sh"
 DEFAULT_EXPORT_ENVIRONMENT_ABSENT="$STATE_DIR/default_flutter_export_environment.sh.absent"
+# CocoaPods rewrites the tracked Xcode project on every install (target integration,
+# Pods references); the default reinstall does not reproduce it byte-for-byte.
+DEFAULT_PROJECT_BACKUP="$STATE_DIR/default_project.pbxproj"
+DEFAULT_PROJECT_ABSENT="$STATE_DIR/default_project.pbxproj.absent"
 PODFILE_LOCK="$IOS_DIR/Podfile.lock"
 PODS_MANIFEST="$IOS_DIR/Pods/Manifest.lock"
 PLUGIN_METADATA="$APP_DIR/.flutter-plugins-dependencies"
 PLUGIN_REGISTRANT="$IOS_DIR/Runner/GeneratedPluginRegistrant.m"
 GENERATED_XCCONFIG="$IOS_DIR/Flutter/Generated.xcconfig"
 FLUTTER_EXPORT_ENVIRONMENT="$IOS_DIR/Flutter/flutter_export_environment.sh"
+XCODE_PROJECT="$IOS_DIR/Runner.xcodeproj/project.pbxproj"
 
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 POD_BIN="${POD_BIN:-pod}"
@@ -197,6 +202,10 @@ snapshot_flutter_environment() {
     "$FLUTTER_EXPORT_ENVIRONMENT" \
     "$DEFAULT_EXPORT_ENVIRONMENT_BACKUP" \
     "$DEFAULT_EXPORT_ENVIRONMENT_ABSENT"
+  snapshot_generated_file \
+    "$XCODE_PROJECT" \
+    "$DEFAULT_PROJECT_BACKUP" \
+    "$DEFAULT_PROJECT_ABSENT"
 }
 
 restore_generated_file() {
@@ -232,6 +241,10 @@ restore_flutter_environment() {
     "$FLUTTER_EXPORT_ENVIRONMENT" \
     "$DEFAULT_EXPORT_ENVIRONMENT_BACKUP" \
     "$DEFAULT_EXPORT_ENVIRONMENT_ABSENT" || restore_failed=1
+  restore_generated_file \
+    "$XCODE_PROJECT" \
+    "$DEFAULT_PROJECT_BACKUP" \
+    "$DEFAULT_PROJECT_ABSENT" || restore_failed=1
 
   return "$restore_failed"
 }
@@ -242,7 +255,9 @@ clear_wrapper_state() {
     "$DEFAULT_GENERATED_XCCONFIG_BACKUP" \
     "$DEFAULT_GENERATED_XCCONFIG_ABSENT" \
     "$DEFAULT_EXPORT_ENVIRONMENT_BACKUP" \
-    "$DEFAULT_EXPORT_ENVIRONMENT_ABSENT"
+    "$DEFAULT_EXPORT_ENVIRONMENT_ABSENT" \
+    "$DEFAULT_PROJECT_BACKUP" \
+    "$DEFAULT_PROJECT_ABSENT"
   if [[ -d "$STATE_DIR" ]] && ! rmdir "$STATE_DIR"; then
     echo "rayban-dat: recovery state contains unexpected files: $STATE_DIR" >&2
     return 1

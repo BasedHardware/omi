@@ -58,7 +58,7 @@ steps:
         min: 4
     evidence:
       - screenshot: step-S4.webp
-    note: "Input split by comma: input.split(',').map((w) => w.trim()). Duplicates filtered. addVocabularyWords() adds to local list, then calls API: PATCH /v1/users/transcription-preferences with vocabulary array. Optimistic update: text field clears immediately. CaptureProvider.onTranscriptionSettingsChanged() notified."
+    note: "Input split by comma: input.split(',').map((w) => w.trim()). Duplicates filtered. addVocabularyWords() adds to local list, then calls API: PATCH /v1/users/transcription-preferences with vocabulary array. The text field clears once the words are saved; a failed save keeps them in the field and shows an error toast. CaptureProvider.onTranscriptionSettingsChanged() notified."
 
   - id: S5
     name: Verify word chips appear

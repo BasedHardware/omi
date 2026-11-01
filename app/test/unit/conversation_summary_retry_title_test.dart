@@ -93,10 +93,7 @@ void main() {
     test('discarded, locked and in-flight rows stay quiet', () {
       expect(_conversation(summaryRetryable: true, discarded: true).showsSummaryRetry, isFalse);
       expect(_conversation(summaryRetryable: true, isLocked: true).showsSummaryRetry, isFalse);
-      expect(
-        _conversation(summaryRetryable: true, status: ConversationStatus.processing).showsSummaryRetry,
-        isFalse,
-      );
+      expect(_conversation(summaryRetryable: true, status: ConversationStatus.processing).showsSummaryRetry, isFalse);
     });
   });
 
@@ -135,9 +132,12 @@ void main() {
 
     test('date fallback respects the supplied 24-hour formatter without changing the model', () {
       final conversation = _conversation(createdAt: DateTime(2026, 10, 1, 15, 12));
-      final title = conversationDisplayTitle(conversation, l10n,
-          surface: ConversationUntitledRenderedSurface.list,
-          dates: OmiDateFormat(locale: const Locale('en'), use24HourFormat: true, l10n: l10n));
+      final title = conversationDisplayTitle(
+        conversation,
+        l10n,
+        surface: ConversationUntitledRenderedSurface.list,
+        dates: OmiDateFormat(locale: const Locale('en'), use24HourFormat: true, l10n: l10n),
+      );
       expect(title, 'Oct 1, 2026 15:12');
       expect(conversation.structured.title, isEmpty);
       expect(conversation.showsSummaryRetry, isFalse);
@@ -158,8 +158,11 @@ void main() {
       for (var i = 0; i < 3; i++) {
         expect(
           conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.list),
-          OmiDateFormat(locale: const Locale('en'), use24HourFormat: false, l10n: l10n)
-              .dateTime(conversation.createdAt.toLocal()),
+          OmiDateFormat(
+            locale: const Locale('en'),
+            use24HourFormat: false,
+            l10n: l10n,
+          ).dateTime(conversation.createdAt.toLocal()),
         );
       }
       conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.map);
@@ -200,5 +203,37 @@ void main() {
     expect(bucket(const Duration(days: 2)), ConversationUntitledRenderedAgeBucket.under7d);
     expect(bucket(const Duration(days: 20)), ConversationUntitledRenderedAgeBucket.under30d);
     expect(bucket(const Duration(days: 400)), ConversationUntitledRenderedAgeBucket.over30d);
+  });
+
+  group('display title citation repair', () {
+    TranscriptSegment segment(String id) => TranscriptSegment(
+        id: id, text: 'Hi', speaker: null, isUser: false, personId: null, start: 0, end: 1, translations: []);
+
+    test('repairs debris against the transcript and keeps the stored title', () {
+      final conversation = _conversation(title: 'Kickoff [s01234]', segments: [segment('s01234')]);
+      expect(conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.values.first),
+          'Kickoff');
+      expect(conversation.structured.title, 'Kickoff [s01234]');
+    });
+
+    test('strips speaker labels and ID-like brackets without a transcript', () {
+      expect(presentableConversationTitle(_conversation(title: 'Speaker_00 recap [s01234]')), 'recap');
+      expect(presentableConversationTitle(_conversation(title: 'Q3 planning (draft)')), 'Q3 planning (draft)');
+    });
+
+    test('secondary surfaces fall back when the stored title was only debris', () {
+      expect(presentableConversationTitleOrFallback(_conversation(title: 'Project [Q3]'), l10n), 'Project [Q3]');
+      expect(
+          presentableConversationTitleOrFallback(
+              _conversation(title: '[s01234]', segments: [_segment('Ship the beta on Friday.')]), l10n),
+          'Ship the beta on Friday.');
+      expect(presentableConversationTitleOrFallback(_conversation(), l10n), isEmpty);
+    });
+
+    test('a title that is only debris falls back like an untitled one', () {
+      final conversation = _conversation(title: '[s01234]', segments: [_segment('Ship the beta on Friday.')]);
+      expect(conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.values.first),
+          'Ship the beta on Friday.');
+    });
   });
 }

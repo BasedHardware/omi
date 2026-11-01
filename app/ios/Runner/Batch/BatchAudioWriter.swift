@@ -141,7 +141,8 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
             // recordings apart from offline-sync WAL flushes, which share this directory
             // and the same audio_*.bin naming. The backend ignores this segment; keep it
             // in sync with Dart's `batchRecordingDevice`.
-            let name = "audio_omibatch_\(config.codec)_\(config.sampleRate)_1_fs\(frameSize)_\(startSec).bin.\(partSuffix)"
+            let marker = defaults.bool(forKey: "flutter.onDeviceOverflowActive") ? "omibatchoverflow" : "omibatch"
+            let name = "audio_\(marker)_\(config.codec)_\(config.sampleRate)_1_fs\(frameSize)_\(startSec).bin.\(partSuffix)"
             guard openLocked(dirPath: config.dir, fileName: name, startSec: startSec, nowMs: nowMs) else {
                 return // storage full or open failed — drop packet
             }
@@ -197,7 +198,7 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
 
     private func loadConfig() -> Config? {
         let d = defaults
-        guard d.bool(forKey: "flutter.batchModeEnabled") else { return nil }
+        guard d.bool(forKey: "flutter.batchModeEnabled") || d.bool(forKey: "flutter.onDeviceOverflowActive") else { return nil }
         guard let dir = d.string(forKey: "flutter.batchAudioDir"), !dir.isEmpty else { return nil }
         guard let raw = d.string(forKey: "flutter.nativeBleStreamConfig") else { return nil }
         if raw == cachedRawConfig, dir == cachedDirectory { return cachedConfig }

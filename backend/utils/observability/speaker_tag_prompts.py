@@ -50,3 +50,9 @@ VOICE_PROFILE_SETTING_CHANGES = Counter(
     'Voice-profile preference changes by setting, new value and surface.',
     ['setting', 'enabled', 'source'],
 )
+
+OWNER_CONFIRMATION_EVENTS = Counter(
+    'omi_owner_confirmation_events_total',
+    'Excerpt-bound owner questions: shown, yes, no, skip, stale_rejected. Counts only.',
+    ['event'],
+)

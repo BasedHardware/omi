@@ -3,8 +3,10 @@ package stt
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"sync"
 	"testing"
@@ -156,4 +158,47 @@ func testTranscriberReadiness(t *testing.T, parakeet bool) {
 		}
 	}
 	t.Fatal("PCM never reached the ready transcriber")
+}
+
+// The Parakeet server accepts the WebSocket and then closes it before ready
+// when it is at capacity or still loading (backend/parakeet/main.py).
+func TestParakeetReportsStreamClosedBeforeReady(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		_ = c.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "capacity_full"),
+			time.Now().Add(time.Second))
+		// Read until the client's close reply, like a real server.
+		_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		for {
+			if _, _, err := c.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	transcriber, err := NewParakeet(srv.URL, 16000, nil)
+	if err != nil {
+		t.Fatalf("NewParakeet: %v", err)
+	}
+	select {
+	case <-transcriber.(*wsTranscriber).done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("read loop never saw the server close the stream")
+	}
+
+	var closeErr *websocket.CloseError
+	err = transcriber.AppendPCM([]byte{1, 0, 2, 0})
+	if !errors.As(err, &closeErr) || closeErr.Code != websocket.CloseTryAgainLater {
+		t.Fatalf("AppendPCM after the server refused the stream = %v, want its 1013 close", err)
+	}
+	err = transcriber.Stop()
+	if !errors.As(err, &closeErr) || closeErr.Code != websocket.CloseTryAgainLater {
+		t.Fatalf("Stop after the server refused the stream = %v, want its 1013 close", err)
+	}
 }

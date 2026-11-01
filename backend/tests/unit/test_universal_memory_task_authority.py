@@ -84,10 +84,10 @@ def test_released_memory_surfaces_have_one_service_authority():
 
 def test_canonical_apply_boundary_owns_global_intake_fence():
     source = (BACKEND / "database/memory_apply_store.py").read_text(encoding="utf-8")
-    assert "def _require_canonical_intake_enabled()" in source
+    assert "def require_canonical_intake_enabled()" in source
     assert "MemoryRolloutMode.write" in source
     assert "MemoryRolloutMode.read" in source
-    assert source.count("_require_canonical_intake_enabled()") >= 3
+    assert source.count("require_canonical_intake_enabled()") >= 3
 
 
 def test_runtime_contract_rejects_retired_uid_inventory():

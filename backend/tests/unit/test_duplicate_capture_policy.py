@@ -77,9 +77,9 @@ def harness(monkeypatch):
     monkeypatch.setattr(finalizer, 'process_conversation', process)
     monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(finalizer, 'save_structured_vector', MagicMock())
     monkeypatch.setattr(finalizer, 'trigger_external_integrations', AsyncMock())
-    monkeypatch.setattr(finalizer, 'record_and_persist_finalized_meeting_receipt', MagicMock())
-    monkeypatch.setattr(finalizer, 'persist_capture_arrival_intent', MagicMock())
+    monkeypatch.setattr(finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(
         finalizer, 'resolve_frame_request_authority', AsyncMock(return_value=SimpleNamespace(enabled=False))
     )
@@ -184,6 +184,42 @@ async def test_equal_durations_have_one_stable_primary(harness):
     assert harness.rows[path('b')]['external_data']['duplicate_capture_of'] == 'a'
 
 
+@pytest.mark.parametrize('skew', [-600, 600])
+@pytest.mark.parametrize('arrival_delay', [0, 6 * 60 * 60])
+def test_discovery_links_recorded_overlap_despite_skew_and_delayed_ingest(harness, monkeypatch, skew, arrival_delay):
+    primary = row(
+        'pendant',
+        'omi',
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(seconds=600),
+        clock='live_capture',
+        arrival_at=T0,
+    )
+    primary['finished_at'] = T0 + timedelta(seconds=600 + skew)
+    secondary = row(
+        'desktop',
+        'desktop',
+        100,
+        590 + arrival_delay,
+        recorded_start=T0 + timedelta(seconds=100),
+        recorded_end=T0 + timedelta(seconds=590),
+        clock='device',
+        arrival_at=T0 + timedelta(seconds=590 + arrival_delay),
+    )
+    decoy = dict(primary, id='far', recorded_start=T0 - timedelta(hours=3), recorded_end=T0 - timedelta(hours=2))
+    harness.rows.update({path('pendant'): primary, path('desktop'): secondary, path('far'): decoy})
+    monkeypatch.setattr(policy, 'reconcile_cross_device', lambda *a: False)
+    monkeypatch.setattr(policy, 'shared_speech_mode', lambda uid: 'off')
+    monkeypatch.setattr(policy, '_group_confirmed_captures', lambda *a: None)
+
+    policy.link_duplicate_captures(UID, SimpleNamespace(**secondary))
+
+    linked = harness.rows[path('desktop')]['external_data']
+    assert linked['duplicate_capture_of'] == 'pendant'
+    assert linked['cross_device_duplicate']['overlap_seconds'] == 490
+    assert 'duplicate_capture_of' not in harness.rows[path('far')]['external_data']
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('side', ['pendant', 'desktop'])
 @pytest.mark.parametrize('change', ['discard', 'delete', 'window', 'status'])
@@ -257,9 +293,13 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
     monkeypatch.setattr(processor, '_enrich_meeting_context', MagicMock())
     monkeypatch.setattr(processor, '_get_structured', lambda *a, **kw: (conversation.structured, False))
     monkeypatch.setattr(processor, '_get_conversation_obj', lambda *a, **kw: conversation)
-    monkeypatch.setattr(processor, 'conversation_apps_opt_in_only', lambda: False)
     monkeypatch.setattr(processor, 'trigger_conversation_apps', MagicMock())
     monkeypatch.setattr(processor, 'submit_with_context', MagicMock())
+
+    def update_conversation(uid, conversation_id, updates):
+        harness.rows[path(conversation_id, uid)].update(updates)
+
+    monkeypatch.setattr(processor.conversations_db, 'update_conversation', update_conversation)
 
     def persist(uid, payload):
         if persisted:
@@ -271,3 +311,89 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
         UID, 'en', conversation, trigger=processor.ProcessingTrigger.USER_REPROCESS, defer_memory_extraction=True
     )
     assert ('duplicate_capture_of' in harness.rows[path('desktop')]['external_data']) is persisted
+
+
+@pytest.mark.asyncio
+async def test_finalization_evaluates_capture_group_primary_notes_refresh(harness, monkeypatch):
+    """The durable finalizer offers the finalized row to the notes refresh step.
+
+    The refresh itself is fenced, once-per-revision and never raises (its own
+    test file); the finalizer contract is that the evaluation runs after the
+    duplicate-capture step and the finalization outcome is unchanged.
+    """
+    harness.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(finalizer, 'refresh_primary_notes', lambda uid, cid: calls.append((uid, cid)) or False)
+    assert await finalize('desktop') == finalizer.ConversationFinalizationDisposition.completed
+    assert calls == [(UID, 'desktop')]
+
+
+def test_group_notes_refresh_persists_notes_without_derived_fanout(harness, monkeypatch):
+    original = row('pendant', 'omi')
+    original['transcript_segments'] = [
+        {'text': 'We reviewed the launch plan.', 'start': 0, 'end': 60, 'speaker_id': 0, 'is_user': False}
+    ]
+    harness.rows[path('pendant')] = deepcopy(original)
+    conversation = finalizer.deserialize_conversation(original)
+    original_segments = deepcopy(conversation.transcript_segments)
+    conversation.external_data['capture_group_notes_revision'] = {'group_id': 'g', 'revision': 3}
+    monkeypatch.setattr(processor, '_enrich_meeting_context', MagicMock())
+    summarize = MagicMock(return_value=(conversation.structured, False))
+    monkeypatch.setattr(processor, '_get_structured', summarize)
+    monkeypatch.setattr(processor, '_get_conversation_obj', lambda *a, **kw: conversation)
+    apps = MagicMock(side_effect=AssertionError('app fanout must not run'))
+    memories = MagicMock(side_effect=AssertionError('memory extraction must not run'))
+    tasks = MagicMock(side_effect=AssertionError('task writes must not run'))
+    monkeypatch.setattr(processor, 'trigger_conversation_apps', apps)
+    monkeypatch.setattr(processor, '_extract_memories', memories)
+    monkeypatch.setattr(processor, '_save_action_items', tasks)
+
+    def persist(uid, payload):
+        harness.rows[path(payload['id'], uid)].update(payload)
+        return True
+
+    monkeypatch.setattr(processor.lifecycle_service, 'persist_processed_conversation', persist)
+    processor.process_conversation(
+        UID, 'en', conversation, trigger=processor.ProcessingTrigger.CAPTURE_GROUP, defer_derived_effects=True
+    )
+    stored = harness.rows[path('pendant')]
+    assert stored['external_data']['capture_group_notes_revision'] == {'group_id': 'g', 'revision': 3}
+    assert finalizer.deserialize_conversation(stored).transcript_segments == original_segments
+    summarize.assert_called_once()
+    apps.assert_not_called()
+    memories.assert_not_called()
+    tasks.assert_not_called()
+
+
+def test_confirmed_group_notifies_episode_attachment_for_both_sources(harness, monkeypatch):
+    own, other = row('pendant', 'omi'), row('desktop', 'desktop', 100, 590)
+    harness.rows.update({path('pendant'): own, path('desktop'): other})
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation_for_capture_check', lambda uid, cid: (harness.rows[path(cid)], cid)
+    )
+    monkeypatch.setattr(
+        policy,
+        'measure_shared_speech',
+        lambda *a: SimpleNamespace(confirms=lambda: True, evidence=lambda: {}, containment=1.0, shared_trigrams=20),
+    )
+    monkeypatch.setattr(policy.capture_groups_db, 'join_capture_group', lambda *a, **kw: 'confirmed-group')
+    notified = []
+    monkeypatch.setattr(policy, 'schedule_group_attachments', lambda uid, ids: notified.append((uid, ids)))
+    policy._group_confirmed_captures(UID, own, policy.capture_record(own, UID), [policy.capture_record(other, UID)])
+    assert notified == [(UID, ['pendant', 'desktop'])]
+
+
+@pytest.mark.asyncio
+async def test_completed_fanout_replay_still_delivers_grouped_row_to_episode_hook(harness, monkeypatch):
+    capture = row('desktop', 'desktop', capture_group={'id': 'g', 'primary_id': 'pendant'})
+    harness.rows[path('desktop')] = capture
+    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *a: {'status': 'completed'})
+    seen = []
+
+    async def after(uid, cid, latest, trigger):
+        seen.append((uid, cid, latest))
+
+    monkeypatch.setattr(finalizer, '_episode_after_finalization', after)
+    assert await finalize('desktop') == finalizer.ConversationFinalizationDisposition.completed
+    assert seen and seen[0][:2] == (UID, 'desktop')
+    assert seen[0][2]['capture_group'] == capture['capture_group']

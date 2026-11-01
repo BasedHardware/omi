@@ -7,7 +7,10 @@
     "desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityDestinationChip.swift",
     "desktop/macos/Desktop/Tests/ConversationSummarySectionsDecodeTests.swift",
     "desktop/macos/Desktop/Tests/ChatFirstDestinationParityTests.swift",
-    "app/test/backend/structured_sections_test.dart"
+    "app/test/backend/structured_sections_test.dart",
+    "desktop/macos/Desktop/Tests/UnsyncedTaskCreateProjectionTests.swift",
+    "desktop/macos/Desktop/Tests/UnsyncedTaskCreateHTTPTests.swift",
+    "desktop/macos/Desktop/Tests/TasksStoreUnsyncedSyncTests.swift"
   ],
   "evidence_prs": [11372, 11834],
   "scope_hints": [

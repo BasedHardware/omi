@@ -199,7 +199,9 @@ class TestReleaseProbeSkipsTheDiscardVerdict:
         """631d6ced's fixture loop could not make the keep line deterministic:
         the durable word count depends on STT yield and late flushes, so the
         gate itself must not run for the probe uid."""
-        conversation = _conversation([_segment('he began a confused complaint against the wizard', 0.0, 4.0)])
+        conversation = _conversation(
+            [_segment('he began a confused complaint against the wizard while everyone listened in silence', 0.0, 8.0)]
+        )
         gate = MagicMock(return_value=True)
 
         with (
@@ -207,9 +209,7 @@ class TestReleaseProbeSkipsTheDiscardVerdict:
             patch.object(pc.users_db, 'get_user_language_preference', MagicMock(return_value=None)),
             patch.object(pc, 'track_usage', lambda *args, **kwargs: nullcontext()),
             patch.object(pc, 'should_discard_conversation', gate),
-            patch.object(pc, '_conversation_notes_v2_enabled', MagicMock(return_value=False)),
-            patch.object(pc, 'get_transcript_structure', MagicMock(return_value=_structured('Release probe reading'))),
-            patch.object(pc, 'extract_action_items', MagicMock(return_value=[])),
+            patch.object(pc, 'get_conversation_notes', MagicMock(return_value=_structured('Release probe reading'))),
             patch.object(pc.calendar_db, 'get_meetings_in_time_range', MagicMock(return_value=[])),
             patch.object(pc, 'get_overlapping_calendar_event', AsyncMock(return_value=None)),
         ):
@@ -221,7 +221,9 @@ class TestReleaseProbeSkipsTheDiscardVerdict:
 
     def test_regular_uid_still_receives_the_discard_verdict(self):
         # Speech the deterministic rules leave to the model.
-        conversation = _conversation([_segment('coming over there in a second', 0.0, 3.0)])
+        conversation = _conversation(
+            [_segment('coming over there in a second after we finish talking about the weather', 0.0, 8.0)]
+        )
         gate = MagicMock(return_value=True)
 
         with (
@@ -272,3 +274,9 @@ class TestReleaseProbeSkipsTheEmptyTitleFallback:
 
         assert result.discarded is True
         assert result.structured.title == ''
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

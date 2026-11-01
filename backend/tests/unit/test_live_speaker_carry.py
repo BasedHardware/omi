@@ -251,6 +251,10 @@ class _CarryHarness:
 
     async def call(self, fn, *args, **kwargs):
         name = fn.__name__
+        if name == 'arm':
+            return fn(*args, firestore_client=self.store, **kwargs)
+        if name == 'authority_snapshot':
+            return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'open_live_recording_session':
             _uid, _sid, proposed = args
             return dict(
@@ -408,7 +412,10 @@ def _matcher_host(receipt, emitted):
     async def _call(fn, *args):
         if fn.__name__ == 'get_manual_speaker_receipt':
             return receipt
-        return fn(*args)
+        if fn.__name__ == 'get_person':
+            assert args == (UID, 'p1')
+            return {'id': 'p1', 'name': 'Rei'}
+        raise AssertionError(f'Unexpected matcher persistence call: {fn.__name__}')
 
     return SimpleNamespace(
         request=SimpleNamespace(uid=UID, sample_rate=16000),
@@ -455,7 +462,9 @@ def test_matcher_does_not_emit_an_automatic_alternative_for_a_carried_person(mon
     monkeypatch.setattr(listen_speakers, 'extract_embedding_from_bytes', lambda *a, **k: np.array([[1.0, 0.0]]))
     _match(matcher)
     assert emitted == []
-    assert matcher.speaker_to_person == {}
+    # The carried manual identity wins even without its embedding; the other
+    # person's matching vector must not replace it or emit an alternative.
+    assert matcher.speaker_to_person == {0: ('p1', 'Rei')}
 
 
 def test_matcher_binds_a_known_carried_person_without_emitting(monkeypatch):
@@ -524,7 +533,7 @@ def _managed_receiver():
 
 
 @pytest.mark.anyio
-async def test_managed_chain_reconnect_mints_a_fresh_speaker_scope(monkeypatch):
+async def test_managed_chain_reconnect_preserves_same_provider_speaker_scope(monkeypatch):
     callbacks = []
     raw_socket = SimpleNamespace(is_connection_dead=False, finish=lambda: None, send=lambda data: True)
 
@@ -549,10 +558,10 @@ async def test_managed_chain_reconnect_mints_a_fresh_speaker_scope(monkeypatch):
     scope_one = first_epoch.current_scope
     await session.connect(16000, same_provider=True)
     second_epoch = receiver.speaker_provider_epoch
-    assert second_epoch is not first_epoch
+    assert second_epoch is first_epoch
     callbacks[1]([{'speaker': 'SPEAKER_0', 'start': 1.0, 'end': 2.0, 'text': 'b'}])
-    assert stamped[-1][0]['speaker_id_scope'] == second_epoch.current_scope != scope_one
-    assert receiver.speaker_provider_epoch is second_epoch
+    assert stamped[-1][0]['speaker_id_scope'] == scope_one
+    assert receiver.speaker_provider_epoch is first_epoch
 
 
 class _FakeSendTracker:
@@ -567,7 +576,7 @@ class _FakeSendTracker:
 
 
 @pytest.mark.anyio
-async def test_managed_chain_late_v2_callback_stamps_its_own_stream_scope(monkeypatch):
+async def test_managed_chain_late_v2_callback_preserves_same_provider_scope(monkeypatch):
     callbacks = []
     raw_socket = SimpleNamespace(is_connection_dead=False, finish=lambda: None, send=lambda data: True)
 
@@ -591,14 +600,12 @@ async def test_managed_chain_late_v2_callback_stamps_its_own_stream_scope(monkey
     scope_one = first_epoch.current_scope
     await session.connect(16000, _FakeSendTracker(), same_provider=True)
     second_epoch = receiver.speaker_provider_epoch
-    assert second_epoch is not first_epoch
+    assert second_epoch is first_epoch
     callbacks[1]([{'speaker': 'SPEAKER_0', 'start': 1.0, 'end': 2.0, 'text': 'b'}])
-    scope_two = second_epoch.current_scope
-    assert scope_two != scope_one and receiver.speaker_provider_epoch is second_epoch
+    assert stamped[-1][0]['speaker_id_scope'] == scope_one
     callbacks[0]([{'speaker': 'SPEAKER_0', 'start': 2.0, 'end': 3.0, 'text': 'late'}])
     assert stamped[-1][0]['speaker_id_scope'] == scope_one
-    assert receiver.speaker_provider_epoch is second_epoch
-    assert receiver.speaker_provider_epoch.current_scope == scope_two
+    assert receiver.speaker_provider_epoch is first_epoch
 
 
 @pytest.mark.anyio
@@ -648,3 +655,23 @@ async def test_rollover_never_carries_from_a_torn_previous_row(monkeypatch, flag
     controller = harness.connect(_stamped_epoch())
     await controller.create_new_in_progress_conversation(rollover=True)
     assert 'manual_speaker_assignments' not in harness.rows[harness.pointer]
+
+
+def test_range_assignment_never_promotes_to_rollover_voice():
+    receipt = {
+        'generation': 4,
+        'segments': {
+            's0': {'generation': 4, 'person_id': 'p1', 'is_user': False, 'speaker_id': 0, 'segment_only': True},
+        },
+    }
+    assert carried_receipt(_conversation(receipt), SCOPE) == {}
+
+
+def test_carried_receipt_tolerates_wrong_typed_sections():
+    """A stored receipt whose sections are lists/strings must not crash the rollover
+    carry — the regression behind #20334 was _active_entries calling .items() on a
+    truthy non-Mapping. Wrong-typed sections coerce to {} and yield no carries."""
+    receipt = {'generation': 3, 'speakers': ['x'], 'segments': ['y']}
+    assert carried_receipt(_conversation(receipt), SCOPE) == {}
+    assert carried_receipt(_conversation({'speakers': 'not-a-mapping'}), SCOPE) == {}
+    assert carried_receipt(_conversation({'segments': 42}), SCOPE) == {}

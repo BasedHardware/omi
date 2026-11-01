@@ -7,10 +7,16 @@ module replaces only the cloud client leaf before those helpers import it.
 from __future__ import annotations
 
 import os
+import base64
+import hashlib
+import json
 import shutil
+from io import BytesIO
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
+from urllib.parse import urlsplit
 
+from google.api_core.exceptions import PreconditionFailed
 from google.cloud.exceptions import NotFound as BlobNotFound
 
 from .events import write_event
@@ -44,14 +50,63 @@ def _safe_blob_path(bucket: str, name: str) -> Path:
 
 
 class LocalBlob:
-    """Subset of the Google Cloud Storage blob API exercised by Sync v2."""
+    """Subset of the Google Cloud Storage blob API exercised by Sync v2 and batch.
 
-    def __init__(self, bucket: 'LocalBucket', name: str):
+    Object generations are the file's nanosecond mtime: positive, immutable for
+    create-only objects, and shared by every process reading the same root.
+    Generation preconditions follow GCS semantics (0 means "must not exist").
+    """
+
+    def __init__(self, bucket: 'LocalBucket', name: str, generation: int | None = None):
         self.bucket = bucket
         self.name = name
         self.metadata: Any = None
         self.cache_control: str | None = None
         self.content_type: str | None = None
+        self.chunk_size: int | None = None
+        self._pinned_generation = generation
+        self.metageneration = 1
+
+    @property
+    def generation(self) -> int | None:
+        try:
+            return self.path.stat().st_mtime_ns
+        except FileNotFoundError:
+            return None
+
+    @property
+    def size(self) -> int | None:
+        return self.path.stat().st_size if self.path.is_file() else None
+
+    @property
+    def md5_hash(self) -> str:
+        return base64.b64encode(hashlib.md5(self.path.read_bytes()).digest()).decode()
+
+    @property
+    def metadata_path(self) -> Path:
+        key = hashlib.sha256(f'{self.bucket.name}/{self.name}'.encode()).hexdigest()
+        return storage_dir().parent / 'storage-metadata' / f'{key}.json'
+
+    def _save_metadata(self) -> None:
+        self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        pending = self.metadata_path.with_suffix(f'.{os.getpid()}.tmp')
+        pending.write_text(json.dumps(self.metadata or {}))
+        pending.replace(self.metadata_path)
+
+    def _check_generation(self, if_generation_match: int | None) -> None:
+        current = self.generation
+        if self._pinned_generation is not None and current != self._pinned_generation:
+            raise BlobNotFound(self.name)
+        if if_generation_match is None:
+            return
+        if if_generation_match == 0:
+            if current is not None:
+                raise PreconditionFailed(f'{self.name} already exists')
+            return
+        if current is None:
+            raise BlobNotFound(self.name)
+        if current != if_generation_match:
+            raise PreconditionFailed(f'{self.name} generation mismatch')
 
     @property
     def path(self) -> Path:
@@ -64,9 +119,43 @@ class LocalBlob:
     def exists(self, *_args: Any, **_kwargs: Any) -> bool:
         return self.path.exists()
 
-    def reload(self, *_args: Any, **_kwargs: Any) -> None:
+    def reload(self, *_args: Any, if_generation_match: int | None = None, **_kwargs: Any) -> None:
         if not self.exists():
             raise BlobNotFound(self.name)
+        self._check_generation(if_generation_match)
+        if self.metadata_path.exists():
+            self.metadata = json.loads(self.metadata_path.read_text())
+
+    def upload_from_file(
+        self,
+        stream: Any,
+        *_args: Any,
+        content_type: str | None = None,
+        if_generation_match: int | None = None,
+        **_kwargs: Any,
+    ) -> None:
+        payload = stream.read()
+        if isinstance(payload, str):
+            payload = payload.encode()
+        destination = self.path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        self._check_generation(if_generation_match)
+        staged = destination.with_name(destination.name + f'.upload-{os.getpid()}')
+        staged.write_bytes(payload)
+        try:
+            if if_generation_match == 0:
+                # Create-only: link fails atomically if another writer won.
+                try:
+                    os.link(staged, destination)
+                except FileExistsError as error:
+                    raise PreconditionFailed(f'{self.name} already exists') from error
+            else:
+                os.replace(staged, destination)
+        finally:
+            staged.unlink(missing_ok=True)
+        self.content_type = content_type
+        self._save_metadata()
+        write_event('storage', {'event': 'blob_uploaded', 'bucket': self.bucket.name, 'bytes': len(payload)})
 
     def upload_from_filename(self, filename: str, *_args: Any, **_kwargs: Any) -> None:
         destination = self.path
@@ -89,35 +178,36 @@ class LocalBlob:
     def upload_from_string(
         self, data: bytes | str, content_type: str | None = None, *_args: Any, **_kwargs: Any
     ) -> None:
-        destination = self.path
-        destination.parent.mkdir(parents=True, exist_ok=True)
         payload = data.encode() if isinstance(data, str) else data
-        destination.write_bytes(payload)
-        self.content_type = content_type
-        write_event('storage', {'event': 'blob_uploaded', 'bucket': self.bucket.name, 'bytes': len(payload)})
+        self.upload_from_file(BytesIO(payload), content_type=content_type, **_kwargs)
 
-    def download_as_bytes(self, *_args: Any, **_kwargs: Any) -> bytes:
+    def download_as_bytes(self, *_args: Any, if_generation_match: int | None = None, **_kwargs: Any) -> bytes:
         if not self.exists():
             raise BlobNotFound(self.name)
+        self._check_generation(if_generation_match)
         payload = self.path.read_bytes()
         write_event('storage', {'event': 'blob_downloaded', 'bucket': self.bucket.name, 'bytes': len(payload)})
         return payload
 
-    def delete(self, *_args: Any, **_kwargs: Any) -> None:
+    def delete(self, *_args: Any, if_generation_match: int | None = None, **_kwargs: Any) -> None:
+        if if_generation_match is not None and self.path.exists():
+            self._check_generation(if_generation_match)
         if self.path.exists():
             self.path.unlink()
+        self.metadata_path.unlink(missing_ok=True)
         write_event('storage', {'event': 'blob_deleted', 'bucket': self.bucket.name})
 
     def generate_signed_url(self, *_args: Any, **_kwargs: Any) -> str:
         # The deterministic STT leaf consumes this opaque local-only value.
         job_id = PurePosixPath(self.name).parent.name
-        return f'sync-stack://staged/{job_id}' if job_id else 'sync-stack://staged'
+        token = base64.urlsafe_b64encode(json.dumps([self.bucket.name, self.name]).encode()).decode()
+        return f'sync-stack://staged/{token}/{job_id}'
 
     def make_public(self, *_args: Any, **_kwargs: Any) -> None:
         return None
 
     def patch(self, *_args: Any, **_kwargs: Any) -> None:
-        return None
+        self._save_metadata()
 
 
 class LocalBucket:
@@ -125,8 +215,8 @@ class LocalBucket:
         self.name = name
         (storage_dir() / name).mkdir(parents=True, exist_ok=True)
 
-    def blob(self, name: str) -> LocalBlob:
-        return LocalBlob(self, name)
+    def blob(self, name: str, generation: int | None = None, **_kwargs: Any) -> LocalBlob:
+        return LocalBlob(self, name, generation)
 
     def list_blobs(self, prefix: str = '', *_args: Any, **_kwargs: Any) -> Iterable[LocalBlob]:
         root = storage_dir() / self.name
@@ -134,7 +224,7 @@ class LocalBucket:
             return []
         blobs: list[LocalBlob] = []
         for path in root.rglob('*'):
-            if path.is_file():
+            if path.is_file() and '.upload-' not in path.name:
                 name = path.relative_to(root).as_posix()
                 if name.startswith(prefix):
                     blobs.append(LocalBlob(self, name))
@@ -152,6 +242,18 @@ class LocalStorageClient:
 
     def get_bucket(self, name: str) -> LocalBucket:
         return self.bucket(name)
+
+
+def read_signed_url(url: str) -> bytes:
+    """Replace the external signed-URL HTTP download with the same local blob."""
+    parsed = urlsplit(url)
+    parts = parsed.path.strip('/').split('/')
+    if parsed.scheme != 'sync-stack' or parsed.netloc != 'staged' or len(parts) != 2:
+        raise ValueError('unknown local signed URL')
+    bucket, name = json.loads(base64.urlsafe_b64decode(parts[0]).decode())
+    if not bucket or PurePosixPath(bucket).name != bucket or bucket in {'.', '..'}:
+        raise ValueError('unsafe local bucket')
+    return LocalStorageClient().bucket(bucket).blob(name).download_as_bytes()
 
 
 def patch_google_storage() -> None:

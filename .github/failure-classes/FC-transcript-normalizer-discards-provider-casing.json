@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-transcript-normalizer-discards-provider-casing",
+  "violated_contract": "Transcript post-processing may add what a provider left out, but it must not discard what the provider returned. Pre-recorded segment text was built with str.capitalize(), added in 2024 when fal WhisperX was the only pre-recorded provider. Parakeet, Modulate and Deepgram return cased, punctuated text, and capitalize() lowercased every name, acronym, \"I\" and later sentence start in each merged segment. That degraded offline-sync, voice-note and batch transcripts, and broke case-sensitive consumers such as sync's text-based speaker naming.",
+  "canonical_prevention": "Normalize provider text only with transforms that leave already-cased input unchanged (capitalize the first character and keep the rest as returned). Pin cased, multi-sentence provider output through the real postprocess_words path together with a case-sensitive downstream consumer.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_pre_recorded_casing.py"],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/stt/pre_recorded.py", "backend/utils/stt/brand_terms.py"],
+  "status": "open"
+}

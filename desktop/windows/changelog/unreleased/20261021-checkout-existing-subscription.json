@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Starting a new checkout while you already have a subscription now says so, instead of telling you to resubscribe"
+  ]
+}

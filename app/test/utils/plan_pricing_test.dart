@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/utils/plan_pricing.dart';
+import 'package:omi/backend/schema/gen/payments_wire.g.dart';
 
 List<Map<String, dynamic>> _tier({num? monthly, num? yearly}) {
   return [
@@ -10,6 +11,53 @@ List<Map<String, dynamic>> _tier({num? monthly, num? yearly}) {
 }
 
 void main() {
+  test('billing total survives generated wire decoding with whole yen', () {
+    final decoded = GeneratedPaymentPricingOption.fromJson({
+      'id': 'price_jpy',
+      'title': 'Unlimited Annual',
+      'interval': 'year',
+      'unit_amount': 43200,
+      'currency': 'jpy',
+      'billing_total': '43,200 JPY',
+      'price_string': '3,600 JPY/mo',
+    }).toJson();
+    expect(planBillingTotal(decoded), '¥43,200');
+    expect(planBillingTotal({'unit_amount': 26991}), 'US\$269.91');
+  });
+
+  test('discounts never compare amounts in different currencies', () {
+    expect(
+        annualDiscountPercent([
+          {'interval': 'month', 'unit_amount': 4800, 'currency': 'jpy'},
+          {'interval': 'year', 'unit_amount': 26991, 'currency': 'usd'},
+        ]),
+        isNull);
+  });
+  group('planForCheckout', () {
+    final plans = <Map<String, dynamic>>[
+      {'id': 'plus-month', 'plan_id': 'plus', 'interval': 'month'},
+      {'id': 'unlimited-year', 'plan_id': 'unlimited_v2', 'interval': 'year'},
+    ];
+
+    test('never substitutes Plus when the selected Unlimited interval is missing', () {
+      expect(planForCheckout(plans, interval: 'month', selectedTierId: 'unlimited_v2'), isNull);
+      expect(planForCheckout(plans, interval: 'year', selectedTierId: 'unlimited_v2')?['id'], 'unlimited-year');
+    });
+
+    test('a multi-tier catalog without a selected tier matches nothing', () {
+      expect(planForCheckout(plans, interval: 'month'), isNull);
+    });
+
+    test('single-tier legacy catalogs can still match by interval', () {
+      final legacy = <Map<String, dynamic>>[
+        {'id': 'neo-month', 'plan_id': 'unlimited', 'interval': 'month'},
+        {'id': 'neo-year', 'plan_id': 'unlimited', 'interval': 'year'},
+      ];
+      expect(planForCheckout(legacy, interval: 'month')?['id'], 'neo-month');
+      expect(planForCheckout(legacy, interval: 'year')?['id'], 'neo-year');
+    });
+  });
+
   // Returns a count rather than a label: the English 'N Months Free' string it
   // used to build could not be translated. The rendered badge is covered in
   // test/unit/plans_sheet_l10n_test.dart.
@@ -151,6 +199,32 @@ void main() {
       );
     });
 
+    test('hides for monthly users on the selected monthly price, shows for its annual price', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'unlimited_v2',
+          currentTierId: 'unlimited_v2',
+          selectedPriceIsCurrent: true,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'unlimited_v2',
+          currentTierId: 'unlimited_v2',
+        ),
+        isTrue,
+      );
+    });
+
     test('shows for annual Plus selecting Unlimited — do not restore !isOnAnnualPlan', () {
       expect(
         shouldShowPlanContinueButton(
@@ -178,6 +252,24 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test('shows desktop-plan Continue onto Omi Pro, which also grants desktop', () {
+      for (final current in ['operator', 'architect']) {
+        expect(
+          shouldShowPlanContinueButton(
+            isOnAnnualPlan: true,
+            hasScheduledUpgrade: false,
+            isCancelled: false,
+            plansLoaded: true,
+            selectedTierId: 'unlimited_v2',
+            currentTierId: current,
+            currentGrantsDesktop: true,
+          ),
+          isTrue,
+          reason: current,
+        );
+      }
     });
 
     test('still shows monthly→annual Continue on a desktop plan', () {

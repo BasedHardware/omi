@@ -219,13 +219,13 @@ class TestWebhookBuilderPopulatesPeriodStart:
     Verified by reading the source so we don't have to wire the full Stripe SDK."""
 
     def test_builder_reads_current_period_start_active_path(self):
-        with open('routers/payment.py', encoding='utf-8') as f:
+        with open('utils/subscription_state_machine.py', encoding='utf-8') as f:
             src = f.read()
-        # Both the inactive-downgrade Subscription(...) and the active
-        # Subscription(...) constructors must pass current_period_start.
-        assert (
-            src.count("current_period_start=stripe_sub.get('current_period_start')") >= 2
-        ), "_build_subscription_from_stripe_object must set current_period_start on both branches"
+        # One shared projector assignment covers both active and inactive snapshots.
+        assert "current_period_start=obj.get('current_period_start')" in src
+        with open('routers/payment.py', encoding='utf-8') as f:
+            adapter = f.read()
+        assert adapter.count('project_subscription(stripe_sub,') >= 2
 
     def test_reconcile_paths_set_current_period_start(self):
         with open('utils/subscription.py', encoding='utf-8') as f:

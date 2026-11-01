@@ -123,7 +123,7 @@ class _Client:
 
 
 def test_settings_default_on_and_reject_unknown_keys():
-    client = _Client()
+    client = StrictFirestore()
     assert voice_profiles.get_voice_profile_settings('u', firestore_client=client) == {
         'speaker_tag_prompts_enabled': True,
         'save_other_voice_profiles': True,

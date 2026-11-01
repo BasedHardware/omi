@@ -1,0 +1,12 @@
+{
+  "version": "1.0.573",
+  "date": "2026-10-23",
+  "changes": [
+    "Smoother scrolling on Home, the Device page and long live transcripts",
+    "A calmer Home: the live conversation shows its topic, and background chatter moves into your daily recap",
+    "Ending a conversation with Wrap up or a double-tap now starts a fresh session right away",
+    "The device page shows what Omi heard today and what is still syncing",
+    "Saved recordings retry after an upload refusal, and offline recordings no longer merge different days",
+    "Stop Omi mid-reply, or send a new message to replace an answer in progress"
+  ]
+}

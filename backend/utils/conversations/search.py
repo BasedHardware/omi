@@ -3,7 +3,7 @@ import os
 import re
 from datetime import datetime, timezone
 from itertools import islice
-from typing import Any, Dict, Iterable, List, Optional, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -97,6 +97,23 @@ def clamp_conversation_search_pagination(page: Optional[int], per_page: Optional
     return max(1, page or 1), max(1, min(per_page or 10, 250))
 
 
+def parse_search_date_range(start_date: Optional[str], end_date: Optional[str]) -> tuple[Optional[int], Optional[int]]:
+    # Convert ISO datetime strings to Unix timestamps if provided
+    start_timestamp = None
+    end_timestamp = None
+    if start_date:
+        try:
+            start_timestamp = int(datetime.fromisoformat(start_date).timestamp())
+        except ValueError:
+            raise ValueError("Invalid start_date; expected an ISO 8601 datetime string")
+    if end_date:
+        try:
+            end_timestamp = int(datetime.fromisoformat(end_date).timestamp())
+        except ValueError:
+            raise ValueError("Invalid end_date; expected an ISO 8601 datetime string")
+    return start_timestamp, end_timestamp
+
+
 def conversation_matches_date_range(
     conversation: Dict[str, Any], start_date: Optional[float] = None, end_date: Optional[float] = None
 ) -> bool:
@@ -155,6 +172,15 @@ def _is_typesense_transient_error(exc: BaseException) -> bool:
 _typesense_client: Any | None = None
 
 
+def _typesense_connection_timeout_seconds() -> int:
+    # Lazy env resolution, like CONVERSATION_INDEX_WRITES_ENV. Bound request wait to 1–30s.
+    try:
+        value = int(os.getenv('TYPESENSE_CONNECTION_TIMEOUT_SECONDS', '5'))
+    except (TypeError, ValueError):
+        return 5
+    return value if 1 <= value <= 30 else 5
+
+
 def _get_typesense_client() -> Any:
     global _typesense_client
     if _typesense_client is None:
@@ -168,7 +194,8 @@ def _get_typesense_client() -> Any:
                     }
                 ],
                 'api_key': os.getenv('TYPESENSE_API_KEY'),
-                'connection_timeout_seconds': 2,
+                # TYPESENSE_CONNECTION_TIMEOUT_SECONDS defaults to 5; invalid/out-of-bounds values use 5.
+                'connection_timeout_seconds': _typesense_connection_timeout_seconds(),
             }
         )
     return _typesense_client
@@ -250,6 +277,7 @@ def browse_conversations_by_speaker(
     batch: int = SPEAKER_BROWSE_BATCH,
     include_discarded: bool = False,
     budget: Optional[ListReadBudget] = None,
+    can_recover_locked: Optional[Callable[[Dict[str, Any]], bool]] = None,
 ) -> Dict[str, Any]:
     """Return one page of the newest conversations that contain ``speaker_id``.
 
@@ -263,8 +291,9 @@ def browse_conversations_by_speaker(
     budget truncates the stream.
 
     The iterator ends the scan when it runs out — a short pull is real
-    exhaustion. Locked and discarded rows the reader still yields are dropped
-    here unless the caller asked for them.
+    exhaustion. Locked matches are dropped unless a caller-owned recovery
+    policy admits them. That caller must persist recovery on the selected page
+    before returning content; skipped pages and lookahead need no writes.
     """
     wanted = page * per_page
     matches: List[Dict[str, Any]] = []
@@ -277,12 +306,13 @@ def browse_conversations_by_speaker(
             rows = list(islice(iterator, request_size))
             scanned += len(rows)
             for row in rows:
-                if row.get('is_locked'):
-                    continue
                 if row.get('discarded') and not include_discarded:
                     continue
-                if conversation_matches_speaker(row, speaker_id):
-                    matches.append(row)
+                if not conversation_matches_speaker(row, speaker_id):
+                    continue
+                if row.get('is_locked') and not (can_recover_locked and can_recover_locked(row)):
+                    continue
+                matches.append(row)
             if len(rows) < request_size:
                 exhausted = True
                 break
@@ -318,6 +348,8 @@ def search_conversations(
     start_date: Optional[int] = None,
     end_date: Optional[int] = None,
     speaker_id: Optional[str] = None,
+    *,
+    include_locked: bool = False,
 ) -> Dict[str, Any]:
     # page/per_page arrive from SearchRequest where both are Optional and unbounded, so None, 0,
     # negative, or a huge value would otherwise TypeError here (len(...) >= per_page / page + 1) or trip
@@ -371,7 +403,7 @@ def search_conversations(
         for item in results.get('hits', []):
             doc: Dict[str, Any] = item.get('document', {})
             # Exclude locked conversations entirely to prevent inference leaks
-            if doc.get('is_locked', False):
+            if doc.get('is_locked', False) and not include_locked:
                 continue
             try:
                 # Convert all three into locals first, then assign, so a hit that fails partway is
@@ -422,10 +454,13 @@ def keyword_search_conversation_ids(
     limit: int = 5,
     start_date: Optional[int] = None,
     end_date: Optional[int] = None,
+    *,
+    page: int = 1,
+    raise_on_error: bool = False,
 ) -> List[str]:
     """Typesense keyword search returning only conversation ids, for hybrid (keyword + vector) retrieval.
 
-    Fail-open: any search error returns [] so callers can fall back to vector-only results.
+    Fail-open by default; raise_on_error lets chat disclose keyword degradation.
     """
     if not query.strip():
         return []
@@ -435,6 +470,7 @@ def keyword_search_conversation_ids(
             uid=uid,
             query=query,
             per_page=limit,
+            page=page,
             include_discarded=False,
             start_date=start_date,
             end_date=end_date,
@@ -443,6 +479,8 @@ def keyword_search_conversation_ids(
         return [str(item['id']) for item in items if item.get('id')]
     except Exception as e:
         logger.warning("keyword_search_conversation_ids failed for uid=%s, falling back to vector-only: %s", uid, e)
+        if raise_on_error:
+            raise ConversationSearchUnavailableError("Keyword index unavailable") from e
         return []
 
 

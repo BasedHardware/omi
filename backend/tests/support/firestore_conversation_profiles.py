@@ -33,6 +33,8 @@ def _profile(name: str, *, photo: bool = False, **domains) -> CallerProfile:
         'starred': [None],
     }
     fixed['date_field' if photo else 'sources'] = ['created_at'] if photo else [None]
+    if photo:
+        fixed['metadata_only'] = [False]
     return CallerProfile(name, {**fixed, **domains})
 
 
@@ -58,6 +60,14 @@ COUNT_PROFILES = (
 )
 
 WITHOUT_PHOTOS_PROFILES = (
+    _profile(
+        'developer-list',
+        statuses=[['completed']],
+        categories=[[], ['personal'], ['personal', 'technology']],
+        folder_id=[None, 'folder-1'],
+        starred=[None, False, True],
+        **_DATES,
+    ),
     _profile('main-list-single-status', statuses=[['completed']], sources=_ROUTE_SOURCES, **_DATES, **_SELECTORS),
     _profile(
         'main-list-default-or-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS
@@ -97,13 +107,13 @@ RECIPE_PROFILES = (
 
 PHOTO_PROFILES = (
     _profile(
-        'developer-list',
+        'support-trace',
         photo=True,
-        statuses=[['completed']],
-        categories=[[], ['personal'], ['personal', 'technology']],
-        folder_id=[None, 'folder-1'],
-        starred=[None, False, True],
-        **_DATES,
+        metadata_only=[True],
+        date_field=['started_at'],
+        include_discarded=[True],
+        start_date=[FROZEN_NOW],
+        end_date=[FROZEN_LATER],
     ),
     _profile(
         'integration-list',
@@ -144,6 +154,13 @@ PHOTO_PROFILES = (
         end_date=[FROZEN_LATER],
     ),
     _profile(
+        'open-loops-daily-pass',
+        photo=True,
+        date_field=['started_at'],
+        start_date=[FROZEN_NOW],
+        end_date=[FROZEN_LATER],
+    ),
+    _profile(
         'calendar-capture-gaps',
         photo=True,
         date_field=['started_at'],
@@ -161,7 +178,6 @@ PHOTO_PROFILES = (
     ),
     _profile('persona-create', photo=True),
     _profile('persona-update', photo=True),
-    _profile('mentor-notification', photo=True),
     _profile('goal-context', photo=True, statuses=[['completed']]),
     _profile('fair-use-classification', photo=True, start_date=[FROZEN_NOW]),
     _profile('speaker-prompts', photo=True, start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),

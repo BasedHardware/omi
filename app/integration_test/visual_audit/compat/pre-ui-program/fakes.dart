@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -108,6 +109,8 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   BtDevice? get pairedDevice => device;
   @override
+  bool get hasRememberedDevice => device?.id.isNotEmpty ?? false;
+  @override
   int get batteryLevel => battery;
   @override
   bool get isCharging => charging;
@@ -137,7 +140,7 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class InertSyncProvider extends ChangeNotifier implements SyncProvider {
+class InertSyncProvider extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   SyncState get syncState => const SyncState();
   @override
@@ -167,6 +170,11 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   bool get isRateLimited => false;
   @override
+  @override
+  ({int processed, int total}) get offlineServerProcessingCounts => (processed: 0, total: 0);
+  @override
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
+      (doneSeconds: 0, totalSeconds: 0, tracked: false);
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

@@ -112,14 +112,14 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     for _ in 0..<1000 where coordinator.assistant(withIdentifier: spy.spyIdentifier) == nil { await Task.yield() }
     XCTAssertNotNil(coordinator.assistant(withIdentifier: spy.spyIdentifier))
     _ = await coordinator.checkContextSwitch(
-      newApp: "Messages", newWindowTitle: "synthetic chat", bucketsEnabled: false)
+      newApp: "Messages", newWindowTitle: "synthetic chat")
     let captured = CapturedFrame(
       jpegData: Data([42]), appName: "Messages", windowTitle: "synthetic chat",
       frameNumber: 2, taskBinding: binding)
     coordinator.trackFrame(captured)
     // Distribution is suppressed: analyze(frame:) is never called for this capture.
     _ = await coordinator.checkContextSwitch(
-      newApp: "Synthetic editor", newWindowTitle: "document", bucketsEnabled: false)
+      newApp: "Synthetic editor", newWindowTitle: "document")
     let received = await spy.received
     XCTAssertEqual(received?.taskBinding?.authorization, original)
     XCTAssertEqual(received?.jpegData, Data([42]))
@@ -219,19 +219,16 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     }
   }
 
-  func testFlagTransportErrorsAndDelayedResponsesCannotRenewCachedTrueLease() throws {
+  func testKillSwitchDefaultsOnAndOnlyExplicitFalseDisablesIt() throws {
+    XCTAssertFalse(ScreenTaskFeature.isKillSwitchOff(flagValue: nil))
+    XCTAssertFalse(ScreenTaskFeature.isKillSwitchOff(flagValue: "unknown"))
+    XCTAssertFalse(ScreenTaskFeature.isKillSwitchOff(flagValue: true))
+    XCTAssertTrue(ScreenTaskFeature.isKillSwitchOff(flagValue: false))
+
     let state = RampState()
     let authority = ScreenTaskAdmissionAuthority(now: { state.now })
     authority.refresh(enabled: true, requestedAt: state.time)
     let old = try XCTUnwrap(authority.snapshot())
-    XCTAssertThrowsError(
-      try ScreenTaskFreshFlagResponse.enabled(
-        Data(#"{"featureFlags":{"screen_task_jev_gate":true},"quotaLimited":["feature_flags"]}"#.utf8)))
-    XCTAssertThrowsError(
-      try ScreenTaskFreshFlagResponse.enabled(
-        Data(#"{"featureFlags":{"screen_task_jev_gate":true},"errorsWhileComputingFlags":true}"#.utf8)))
-    XCTAssertFalse(
-      try ScreenTaskFreshFlagResponse.enabled(Data(#"{"featureFlags":{"screen_task_jev_gate":false}}"#.utf8)))
     state.time += 60
     authority.refresh(enabled: true, requestedAt: 100)
     XCTAssertNil(authority.snapshot())
@@ -474,7 +471,8 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
                   .utf8), response
             )
           })
-        let client = try GeminiClient(workload: .extraction, toolLoopTransport: transport)
+        let client = try GeminiClient(
+          lane: .taskExtraction, workload: .extraction, toolLoopTransport: transport)
         do {
           _ = try await ScreenTaskWorkAuthority.$validate.withValue({ try state.frameValid() }) {
             try await client.sendImageToolLoop(contents: [], systemPrompt: "synthetic", tools: [])
@@ -494,6 +492,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     let authority = RuntimeOwnerAuthorizationAuthority()
     let original = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
     let service = EmbeddingService(
+      cloudEmbeddingAllowed: { _ in true },
       acquireAuth: { snapshot in
         XCTAssertEqual(snapshot, original)
         state.append("auth")
@@ -524,6 +523,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
         let authority = RuntimeOwnerAuthorizationAuthority()
         let original = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
         let service = EmbeddingService(
+          cloudEmbeddingAllowed: { _ in true },
           acquireAuth: { snapshot in
             XCTAssertEqual(snapshot, original)
             state.append("auth")

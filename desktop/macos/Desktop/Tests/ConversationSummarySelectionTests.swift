@@ -10,7 +10,8 @@ final class ConversationSummarySelectionTests: XCTestCase {
   private func conversation(
     appResults: [AppResponse],
     overview: String = "First-party overview",
-    sections: [SummarySection] = []
+    sections: [SummarySection] = [],
+    segments: [TranscriptSegment] = []
   ) -> ServerConversation {
     ServerConversation(
       id: "conversation-1",
@@ -27,7 +28,7 @@ final class ConversationSummarySelectionTests: XCTestCase {
         events: [],
         sections: sections
       ),
-      transcriptSegments: [],
+      transcriptSegments: segments,
       transcriptSegmentsIncluded: false,
       geolocation: nil,
       photos: [],
@@ -113,6 +114,29 @@ final class ConversationSummarySelectionTests: XCTestCase {
     XCTAssertEqual(primary.resultIndex, 1)
   }
 
+  func testOverviewAndAppMarkdownAreRepairedWithoutChangingStoredTextOrIdentity() throws {
+    let segments = [
+      TranscriptSegment(
+        id: "s01234", backendId: nil, text: "Evidence", speaker: nil,
+        isUser: false, personId: nil, start: 0, end: 1)
+    ]
+    let overview = "Overview ([s01234]). []"
+    let note = conversation(appResults: [], overview: overview, segments: segments)
+    let selected = ConversationSummarySelection.primarySummary(for: note)
+    XCTAssertEqual(selected.content, "Overview .")
+    XCTAssertEqual(selected.kind, .overview)
+    XCTAssertEqual(note.overview, overview)
+
+    let content = "App ([s01234]). `[]`"
+    let appNote = conversation(appResults: [try appResponse(appId: "app-a", content: content)], segments: segments)
+    let appSelection = ConversationSummarySelection.primarySummary(for: appNote)
+    XCTAssertEqual(appSelection.content, "App . `[]`")
+    XCTAssertEqual(appSelection.kind, .app)
+    XCTAssertEqual(appSelection.appId, "app-a")
+    XCTAssertEqual(appSelection.resultIndex, 0)
+    XCTAssertEqual(appNote.appsResults[0].content, content)
+  }
+
   // MARK: - Secondary (App Insights) rows
 
   func testSecondaryResultsExcludeThePromotedPrimary() throws {
@@ -180,6 +204,20 @@ final class ConversationSummarySelectionTests: XCTestCase {
         + "- Keep aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.")
     XCTAssertEqual(presented.sourceSegmentIDs, ["443191dc-8b75-4451-9d72-27c449b9ea45", "local"])
     XCTAssertEqual(section.sourceSegmentIDs, [])
+  }
+
+  func testPresentableTextRepairsLegacyActionItemDebris() {
+    let segment = TranscriptSegment(
+      id: "local", backendId: "s01234", text: "Evidence.", speaker: nil, isUser: false, personId: nil,
+      start: 0, end: 1)
+    XCTAssertEqual(
+      ConversationSummarySelection.presentableText("Send the recap [s01234]", segments: [segment]),
+      "Send the recap")
+    XCTAssertEqual(
+      ConversationSummarySelection.presentableText("Speaker_00 owns the deck", segments: [segment]),
+      "owns the deck")
+    XCTAssertEqual(
+      ConversationSummarySelection.presentableText("Plain item", segments: []), "Plain item")
   }
 
   func testPresentableSectionPreservesMarkdownExactlyWhenThereIsNoInlineCitation() {

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-deleted-device-file-stays-addressable",
+  "violated_contract": "A device file addressed by its position in the device's file list must stop being addressable by that position once a delete may have removed it. Omi firmware 3.0.17 to 3.0.19 (multi-file storage) re-indexes its files after every delete, so the next file takes the deleted file's index. StorageSyncImpl.syncAll deleted each transferred file and shifted the recordings still pending, but kept the transferred recording listed as synced with its old index. Clearing synced recordings (deleteAllSyncedWals) then sent CMD_DELETE_FILE for that index and deleted whichever recording held it by then, such as one an interrupted sync left pending.",
+  "canonical_prevention": "Drop a recording from the device list as soon as the operation that may delete its file is done with it, whatever the delete reported, because a delete that timed out on the phone can still finish on the device. Let the next device listing re-add a file the device kept. Test it through the action that deletes by position: transfer one file, leave the next one pending, clear synced recordings, and assert no delete reaches the device for the index the pending file now holds, next to a control showing the pending file's own delete still does.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/legacy_storage_limitless_seam_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/storage_sync.dart"
+  ],
+  "status": "open"
+}

@@ -29,3 +29,21 @@ class TtsSynthesizeRequest(BaseModel):
     model_id: str = DEFAULT_MODEL_ID
     output_format: str = DEFAULT_OUTPUT_FORMAT
     voice_settings: Optional[TtsVoiceSettings] = None
+
+
+class TtsVoice(BaseModel):
+    id: str
+    name: str
+
+
+class TtsVoiceCatalog(BaseModel):
+    voices: list[TtsVoice]
+    default_voice_id: str
+
+
+class AssistantVoicePreference(BaseModel):
+    voice_id: str
+
+
+class AssistantVoicePreferenceUpdate(BaseModel):
+    voice_id: str

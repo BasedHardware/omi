@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-account-deletion-billing-fences-living-account",
+  "violated_contract": "Account deletion must finish when Stripe already has nothing left to cancel, and a billing failure must not fence an account whose Firebase Auth user and user document still exist.",
+  "canonical_prevention": "Treat a missing or already-terminal subscription as billing success and continue the wipe, including billable app subscriptions. Park only a transient pre-Auth billing failure as billing_failed so access stays allowed, and have reconciliation finish historical already-gone billing_failed markers. Heartbeat a live wipe and reclaim a dead running worker after the run-lock TTL plus grace.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stripe.py",
+    "backend/services/users/account_deletion.py",
+    "backend/tests/services/users/test_account_deletion.py",
+    "backend/tests/unit/test_stripe_subscription_terminal_status.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/services/users/account_deletion.py",
+    "backend/utils/stripe.py",
+    "backend/database/users.py",
+    "backend/database/account_deletion_policy.py"
+  ],
+  "status": "open"
+}

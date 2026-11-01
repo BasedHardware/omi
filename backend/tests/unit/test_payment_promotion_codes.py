@@ -228,6 +228,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     for mod_name in [
         "database._client",
         "database.redis_db",
+        "database.locked_content",
         "database.users",
         "database.conversations",
         "database.memories",
@@ -250,6 +251,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
 
     # Provide required names in mocked modules
     db_mod = sys.modules["database"]
+    db_mod.__path__ = [str(PAYMENT_SOURCE.parents[1] / "database")]
     db_mod.users = MagicMock()
     db_mod.conversations = MagicMock()
     db_mod.memories = MagicMock()
@@ -257,6 +259,9 @@ def _setup_payment_module(include_client: bool = True) -> Any:
 
     redis_mod = sys.modules["database.redis_db"]
     redis_mod.set_credits_invalidation_signal = MagicMock()
+
+    locked_content_mod = sys.modules["database.locked_content"]
+    locked_content_mod.has_recoverable_locked_content = MagicMock(return_value=False)
 
     fair_use_mod = sys.modules["utils.fair_use"]
     fair_use_mod.clear_fair_use_on_upgrade = MagicMock()
@@ -267,6 +272,9 @@ def _setup_payment_module(include_client: bool = True) -> Any:
 
     sub_mod = sys.modules["utils.subscription"]
     sub_mod.can_user_make_payment = MagicMock(return_value=(True, None))
+    # Checkout's new-buyer single-plan guard is a no-op here: these tests are
+    # about promotion codes, and `price_123` is not a real plan price.
+    sub_mod.new_buyer_single_plan_violation = MagicMock(return_value=None)
     sub_mod.get_basic_plan_limits = MagicMock()
     sub_mod.get_paid_plan_definitions = MagicMock()
     sub_mod.get_plan_type_from_price_id = MagicMock()
@@ -280,10 +288,17 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     sub_mod.find_active_paid_subscription_for_user = MagicMock()
     sub_mod.price_ids_match_plan_and_interval = MagicMock(return_value=True)
     sub_mod.desktop_to_consumer_plan_change_error = MagicMock(return_value=None)
+    sub_mod.retired_plan_change_error = MagicMock(return_value=None)
 
     fallback_mod = types.ModuleType("utils.observability.fallback")
     fallback_mod.record_fallback = MagicMock()
     sys.modules["utils.observability.fallback"] = fallback_mod
+
+    # Preload the sibling so importing the ledger does not execute
+    # utils.observability against the incomplete fallback stub.
+    billing_ledger_mod = types.ModuleType("utils.observability.billing_ledger")
+    billing_ledger_mod.record_outcome = MagicMock()
+    sys.modules["utils.observability.billing_ledger"] = billing_ledger_mod
 
     subscription_events_mod = types.ModuleType("utils.observability.subscription_events")
     subscription_events_mod.record_subscription_event = MagicMock()
@@ -291,6 +306,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"
+    stripe_utils_mod.TERMINAL_SUBSCRIPTION_STATUSES = frozenset({'canceled', 'incomplete_expired'})
     stripe_utils_mod.create_subscription_checkout_session = MagicMock()
     stripe_utils_mod.create_connect_account = MagicMock()
     stripe_utils_mod.refresh_connect_account_link = MagicMock()

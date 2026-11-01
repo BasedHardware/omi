@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/transcript_hash.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,6 +56,37 @@ void main() {
     expect(loaded, hasLength(2));
     expect(transcriptSha256(loaded), '6698e08ad93c92100b75e3ab279d15bfa3a70288b1693377841759a26e588d40');
     expect(await killed.loadDigest(sessionId), transcriptSha256(loaded));
+  });
+
+  test('the background-encoded digest matches the inline digest for messy segments', () async {
+    final messy = [
+      for (var i = 0; i < 40; i++)
+        TranscriptSegment(
+          id: 'm$i',
+          text: i.isEven ? '  padded text $i  ' : '',
+          speaker: i % 3 == 0 ? '  SPEAKER_0${i % 4}  ' : 'SPEAKER_01',
+          speakerId: i % 5 == 0 ? 7 : null,
+          isUser: i.isOdd,
+          personId: i % 4 == 0 ? '   ' : 'person-$i',
+          start: i.toDouble(),
+          end: i + 0.5,
+          translations: const [],
+        ),
+    ];
+    final previous = LocalSegmentStore.backgroundEncodeThreshold;
+    addTearDown(() => LocalSegmentStore.backgroundEncodeThreshold = previous);
+    final store = LocalSegmentStore.at(dir);
+
+    LocalSegmentStore.backgroundEncodeThreshold = 1 << 30;
+    await store.replaceSession('inline', messy);
+    LocalSegmentStore.backgroundEncodeThreshold = 1;
+    offUiIsolateFallbacks = 0;
+    await store.replaceSession('isolate', messy);
+    expect(offUiIsolateFallbacks, 0);
+
+    expect(await store.loadDigest('inline'), transcriptSha256(messy));
+    expect(await store.loadDigest('isolate'), transcriptSha256(messy));
+    expect(transcriptSha256(await store.loadSession('isolate')), transcriptSha256(messy));
   });
 
   test('reload preserves an explicit speaker_id that the label does not name', () async {

@@ -3,8 +3,8 @@ import Foundation
 /// The notch card shown once a detected meeting has actually started
 /// recording: a statement, not a prompt.
 ///
-/// It is posted from the meeting boundary *after* the session rotated into the
-/// meeting role, so "taking notes" is true when the card says it rather than a
+/// A successful meeting-boundary rotation arms it; the detector posts it only
+/// after the short-meeting delay, so "taking notes" is true rather than a
 /// prediction that a rotation might succeed. It carries no action — nothing is
 /// being asked of the owner — and it is not persistent, so it behaves like the
 /// other ambient proactive cards and clears itself.

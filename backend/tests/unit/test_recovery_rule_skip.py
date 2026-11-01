@@ -43,6 +43,8 @@ def isolated_processing_module():
 def test_recovery_rule_discard_records_explicit_discard_without_paid_structuring(
     monkeypatch, isolated_processing_module
 ):
+    # Exercise the pre-existing recovery rule with the independent floor rolled back.
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
     pc = isolated_processing_module
     conversation = Conversation(
@@ -145,8 +147,7 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
         patch.object(pc, 'is_release_probe_uid', return_value=False),
         patch.object(pc, '_calendar_overlap_retains_conversation', return_value=True),
         patch.object(pc, 'get_conversation_notes', return_value=Structured()),
-        patch.object(pc, 'get_reprocess_transcript_structure', return_value=Structured()),
-        patch.object(pc, 'get_transcript_structure', return_value=Structured(), create=True),
+        patch.object(pc, 'get_conversation_notes', return_value=Structured(), create=True),
     ):
         _structured, discarded = pc._get_structured(
             'uid-recovery',
@@ -158,3 +159,75 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
 
     assert not discarded
     assert all(d.trigger is not ProcessingTrigger.SERVER_RECOVERY or not d.discard for d in decisions)
+
+
+@pytest.mark.parametrize(
+    'decided_by,reason',
+    [
+        ('deterministic', 'jev_fallback_deterministic'),
+        ('deterministic', 'filler_only'),
+        ('rule', 'future_rule'),
+    ],
+)
+def test_recovery_does_not_skip_paid_notes_for_other_decisions(
+    monkeypatch, isolated_processing_module, decided_by, reason
+):
+    from utils.conversations.relevance import RelevanceDecision
+
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    pc = isolated_processing_module
+    ordinary = RelevanceDecision('discard', decided_by, reason, ProcessingTrigger.CAPTURE_END)
+    recovery = RelevanceDecision('keep', 'policy', 'server_recovery', ProcessingTrigger.SERVER_RECOVERY)
+    with (
+        patch.object(pc, 'conversation_transcripts_for_llm', return_value=('', '', {})),
+        patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
+        patch.object(pc, 'is_release_probe_uid', return_value=False),
+        patch.object(pc, 'decide_relevance', side_effect=[ordinary, recovery]) as decide,
+        patch.object(pc, 'get_conversation_notes', return_value=Structured()) as paid_notes,
+    ):
+        _, discarded = pc._get_structured(
+            'uid-recovery', 'en', _empty_recovery_conversation(), trigger=ProcessingTrigger.SERVER_RECOVERY
+        )
+    assert not discarded
+    assert decide.call_count == 2
+    paid_notes.assert_called_once()
+
+
+@pytest.mark.parametrize('reason', ['empty_transcript', 'filler_only', 'mic_check', 'no_content_words'])
+def test_recovery_skip_accepts_only_original_rule_reasons(reason):
+    from utils.conversations.recovery import recovery_rule_discard
+    from utils.conversations.relevance import RelevanceDecision
+
+    decision = RelevanceDecision('discard', 'rule', reason, ProcessingTrigger.CAPTURE_END)
+    assert recovery_rule_discard(decision)
+    assert not recovery_rule_discard(RelevanceDecision('keep', 'rule', reason, ProcessingTrigger.CAPTURE_END))
+
+
+def test_silent_backfill_never_uses_rule_discard_or_quiet_minimum(monkeypatch, isolated_processing_module):
+    # Notes-v2 and the independent floor are off; the recovery-only policy stays unchanged.
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
+    """A plan-approved keep must request real notes even when recovery's minimum switch is on."""
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    pc = isolated_processing_module
+    conversation = _empty_recovery_conversation()
+    conversation.transcript_segments = [
+        TranscriptSegment(text='hmm', start=0, end=30, speaker='SPEAKER_00', is_user=False)
+    ]
+    expected = Structured(title='Synthetic preserved keep', overview='Synthetic full summary')
+    with (
+        patch.object(pc, 'conversation_transcripts_for_llm', return_value=('hmm', 'hmm', {})),
+        patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
+        patch.object(pc, 'is_release_probe_uid', return_value=False),
+        patch.object(pc, 'get_conversation_notes', return_value=expected) as notes,
+    ):
+        structured, discarded = pc._get_structured(
+            'uid-recovery', 'en', conversation, trigger=ProcessingTrigger.SILENT_BACKFILL
+        )
+    assert not discarded and structured.overview == expected.overview
+    notes.assert_called_once()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

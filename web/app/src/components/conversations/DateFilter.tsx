@@ -4,43 +4,51 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { dayKeyOf } from '@/lib/localDay';
+
+/** Inclusive local calendar days. A single day has the same start and end. */
+export interface DateRange {
+  start: Date;
+  end: Date;
+}
 
 interface DateFilterProps {
-  selectedDate: Date | null;
-  onDateChange: (date: Date | null) => void;
+  selectedRange: DateRange | null;
+  onRangeChange: (range: DateRange | null) => void;
   className?: string;
 }
 
 type QuickFilter = {
   label: string;
-  getDate: () => Date;
+  getRange: () => DateRange;
 };
 
 const quickFilters: QuickFilter[] = [
-  { label: 'Today', getDate: () => new Date() },
+  { label: 'Today', getRange: () => ({ start: new Date(), end: new Date() }) },
   {
     label: 'Yesterday',
-    getDate: () => {
+    getRange: () => {
       const d = new Date();
       d.setDate(d.getDate() - 1);
-      return d;
+      return { start: d, end: d };
     },
   },
   {
     label: 'Last 7 days',
-    getDate: () => {
+    getRange: () => {
+      // Today and the six days before it.
       const d = new Date();
-      d.setDate(d.getDate() - 7);
-      return d;
+      d.setDate(d.getDate() - 6);
+      return { start: d, end: new Date() };
     },
   },
   {
     label: 'This week',
-    getDate: () => {
+    getRange: () => {
       const d = new Date();
       const day = d.getDay();
       d.setDate(d.getDate() - day);
-      return d;
+      return { start: d, end: new Date() };
     },
   },
 ];
@@ -73,9 +81,26 @@ function isToday(date: Date): boolean {
   return isSameDay(date, new Date());
 }
 
-function formatButtonLabel(date: Date | null): string {
-  if (!date) return 'All dates';
+function isSameRange(a: DateRange, b: DateRange): boolean {
+  return isSameDay(a.start, b.start) && isSameDay(a.end, b.end);
+}
 
+function isInRange(date: Date, range: DateRange): boolean {
+  const day = dayKeyOf(date);
+  return day >= dayKeyOf(range.start) && day <= dayKeyOf(range.end);
+}
+
+function formatShortDate(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatButtonLabel(range: DateRange | null): string {
+  if (!range) return 'All dates';
+  if (!isSameDay(range.start, range.end)) {
+    return `${formatShortDate(range.start)} – ${formatShortDate(range.end)}`;
+  }
+
+  const date = range.start;
   const today = new Date();
   if (isSameDay(date, today)) return 'Today';
 
@@ -83,7 +108,7 @@ function formatButtonLabel(date: Date | null): string {
   yesterday.setDate(yesterday.getDate() - 1);
   if (isSameDay(date, yesterday)) return 'Yesterday';
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatShortDate(date);
 }
 
 function getDaysInMonth(year: number, month: number): Date[] {
@@ -112,9 +137,9 @@ function getDaysInMonth(year: number, month: number): Date[] {
   return days;
 }
 
-export function DateFilter({ selectedDate, onDateChange, className }: DateFilterProps) {
+export function DateFilter({ selectedRange, onRangeChange, className }: DateFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(() => selectedDate || new Date());
+  const [viewDate, setViewDate] = useState(() => selectedRange?.start || new Date());
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Close on click outside
@@ -154,19 +179,19 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
   };
 
   const handleDateSelect = (date: Date) => {
-    onDateChange(date);
+    onRangeChange({ start: date, end: date });
     setIsOpen(false);
   };
 
   const handleQuickFilter = (filter: QuickFilter) => {
-    const date = filter.getDate();
-    onDateChange(date);
-    setViewDate(date);
+    const range = filter.getRange();
+    onRangeChange(range);
+    setViewDate(range.start);
     setIsOpen(false);
   };
 
   const handleClear = () => {
-    onDateChange(null);
+    onRangeChange(null);
     setIsOpen(false);
   };
 
@@ -184,14 +209,14 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
           'border',
           isOpen
             ? 'bg-bg-tertiary border-white/25 text-text-primary'
-            : selectedDate
+            : selectedRange
               ? 'bg-white/[0.08] border-white/25 text-text-primary'
               : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
         )}
       >
         <Calendar className="w-4 h-4" />
-        <span>{formatButtonLabel(selectedDate)}</span>
-        {selectedDate && (
+        <span>{formatButtonLabel(selectedRange)}</span>
+        {selectedRange && (
           <span
             role="button"
             tabIndex={0}
@@ -240,7 +265,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                     className={cn(
                       'px-2.5 py-1 rounded-md text-xs font-medium',
                       'transition-colors',
-                      selectedDate && isSameDay(selectedDate, filter.getDate())
+                      selectedRange && isSameRange(selectedRange, filter.getRange())
                         ? 'bg-text-primary text-bg-primary'
                         : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
                     )}
@@ -285,7 +310,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
             <div className="grid grid-cols-7 gap-1">
               {days.map((date, index) => {
                 const isCurrentMonth = date.getMonth() === currentMonth;
-                const isSelected = selectedDate && isSameDay(date, selectedDate);
+                const isSelected = selectedRange && isInRange(date, selectedRange);
                 const isTodayDate = isToday(date);
                 const isFuture = date > new Date();
 
@@ -313,7 +338,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
             </div>
 
             {/* Clear button */}
-            {selectedDate && (
+            {selectedRange && (
               <button
                 onClick={handleClear}
                 className={cn(

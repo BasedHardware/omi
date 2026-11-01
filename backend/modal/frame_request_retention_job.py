@@ -8,6 +8,7 @@ import os
 
 import firebase_admin
 
+from database.firestore_read_origin import read_origin
 from services.frame_request_retention import run_frame_request_retention_maintenance
 from utils.env_loader import firebase_admin_options
 
@@ -24,6 +25,7 @@ def _init_firebase() -> None:
         firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]
 
 
+@read_origin('job:frame_request_retention')
 def main() -> None:
     _init_firebase()
     logger.info("Starting frame-request-retention-job...")

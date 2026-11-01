@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application' version '8.11.1'
+    id 'org.jetbrains.kotlin.android' version '2.2.20'
+}
+
+android {
+    namespace 'com.omi.fgsprobe'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.omi.fgsprobe'
+        minSdk 29
+        targetSdk 36
+        versionCode 1
+        versionName '1'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    kotlinOptions { jvmTarget = '21' }
+    sourceSets.main.java.srcDir layout.buildDirectory.dir('production-service')
+
+}
+
+dependencies { implementation 'androidx.core:core:1.15.0' }
+
+// Copy only the service's production sources into generated build inputs.
+// Kotlin does not honor Android Java source-set include filters.
+def serviceSources = tasks.register('stageProductionService', Copy) {
+    from '../../android/app/src/main/kotlin'
+    include 'com/friend/ios/sync/SyncTransferForegroundService.kt',
+        'com/friend/ios/sync/SyncTransferKeepAlivePolicy.kt',
+        'com/friend/ios/fgs/ForegroundStartContract.kt'
+    into layout.buildDirectory.dir('production-service')
+}
+tasks.configureEach {
+    if (name.startsWith('compile') && name.endsWith('Kotlin')) dependsOn serviceSources
+}

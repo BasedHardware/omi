@@ -52,3 +52,35 @@ def test_from_records_tolerates_missing_on_error():
 
 def test_from_records_empty():
     assert CalendarMeetingContext.from_records([]) == []
+
+
+def test_to_storage_dict_round_trips_through_the_reader():
+    """The stored external_data shape must parse back to the same context.
+
+    `stores_meeting_context` reads this dict with `CalendarMeetingContext(**raw)`
+    and the continuity boundary reads `start_time` / `duration_minutes` off it, so
+    a hand-built serializer has to stay complete.
+    """
+    from models.calendar_context import MeetingParticipant, MeetingParticipantSources
+
+    context = CalendarMeetingContext(
+        calendar_event_id='event-1',
+        title='Standup',
+        participants=[MeetingParticipant(name='Ada', email='ada@example.com')],
+        platform='zoom',
+        meeting_link='https://example.com/j',
+        start_time=datetime(2026, 1, 1, 9, 0, tzinfo=timezone.utc),
+        duration_minutes=30,
+        notes='agenda',
+        calendar_source='developer_api',
+        participant_sources=MeetingParticipantSources(
+            expected_calendar=[MeetingParticipant(name='Ada', email='ada@example.com')],
+            observed_screen_listing=None,
+        ),
+    )
+
+    stored = context.to_storage_dict()
+
+    assert CalendarMeetingContext(**stored) == context
+    assert set(stored) == set(CalendarMeetingContext.model_fields)
+    assert stored['start_time'] == '2026-01-01T09:00:00+00:00'

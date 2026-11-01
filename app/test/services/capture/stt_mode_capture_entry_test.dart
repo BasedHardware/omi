@@ -27,6 +27,7 @@ class _RecordingSocketCapture extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     openCalls++;
     lastConfig = customSttConfig;
@@ -56,7 +57,7 @@ void main() {
       flagReader: () => true,
       allowanceReader: () =>
           const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'plan_allowance_exhausted'),
-      readinessReader: () async => FreemiumReadiness.ready,
+      readinessReader: ({String? language}) async => FreemiumReadiness.ready,
       onDeviceConfigBuilder: () =>
           const CustomSttConfig(provider: SttProvider.onDeviceWhisper, identity: SttModeResolver.freemiumOnDeviceId),
     );
@@ -73,7 +74,7 @@ void main() {
     SttModeResolver.instance = SttModeResolver(
       flagReader: () => true,
       allowanceReader: () => const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'subscription_inactive'),
-      readinessReader: () async => FreemiumReadiness.requiresSetup,
+      readinessReader: ({String? language}) async => FreemiumReadiness.requiresSetup,
       onDeviceConfigBuilder: () => const CustomSttConfig(provider: SttProvider.onDeviceWhisper),
     );
     final capture = _RecordingSocketCapture();
@@ -87,7 +88,7 @@ void main() {
       flagReader: () => true,
       allowanceReader: () =>
           const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'plan_allowance_exhausted'),
-      readinessReader: () async => FreemiumReadiness.ready,
+      readinessReader: ({String? language}) async => FreemiumReadiness.ready,
       onDeviceConfigBuilder: () =>
           const CustomSttConfig(provider: SttProvider.onDeviceWhisper, identity: SttModeResolver.freemiumOnDeviceId),
     );
@@ -102,7 +103,7 @@ void main() {
       flagReader: () => false,
       allowanceReader: () =>
           const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'plan_allowance_exhausted'),
-      readinessReader: () async => FreemiumReadiness.ready,
+      readinessReader: ({String? language}) async => FreemiumReadiness.ready,
       onDeviceConfigBuilder: () => const CustomSttConfig(provider: SttProvider.onDeviceWhisper),
     );
     final capture = _RecordingSocketCapture();

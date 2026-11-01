@@ -12,14 +12,21 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
         self.flutterWatchAPI = flutterWatchAPI
     }
 
+    func refreshWatchAccountContext(method: String? = nil) {
+        var context: [String: Any] = ["omiOwnerUID": UserDefaults.standard.string(forKey: "flutter.uid") ?? ""]
+        if let method { context["method"] = method }
+        try? session.updateApplicationContext(context)
+    }
+
     func startRecording() {
+        refreshWatchAccountContext()
 
         if session.isReachable {
-            session.sendMessage(["method": "startRecording"], replyHandler: nil, errorHandler: { error in
-                try? self.session.updateApplicationContext(["method": "startRecording"])
+            session.sendMessage(["method": "startRecording", "omiOwnerUID": UserDefaults.standard.string(forKey: "flutter.uid") ?? ""], replyHandler: nil, errorHandler: { error in
+                self.refreshWatchAccountContext(method: "startRecording")
             })
         } else {
-            try? session.updateApplicationContext(["method": "startRecording"])
+            refreshWatchAccountContext(method: "startRecording")
         }
     }
 
@@ -27,10 +34,10 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
 
         if session.isReachable {
             session.sendMessage(["method": "stopRecording"], replyHandler: nil, errorHandler: { error in
-                try? self.session.updateApplicationContext(["method": "stopRecording"])
+                self.refreshWatchAccountContext(method: "stopRecording")
             })
         } else {
-            try? session.updateApplicationContext(["method": "stopRecording"])
+            refreshWatchAccountContext(method: "stopRecording")
         }
     }
 
@@ -112,6 +119,7 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
     }
     
     func requestWatchBatteryUpdate() {
+        refreshWatchAccountContext()
         
         if session.isReachable {
             session.sendMessage(["method": "requestBattery"], replyHandler: nil, errorHandler: { error in
@@ -124,6 +132,7 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
     }
     
     func getWatchInfo() -> [String: String] {
+        refreshWatchAccountContext()
         
         // Get cached watch info from UserDefaults (updated by watch messages)
         let name = UserDefaults.standard.string(forKey: "watch_device_name") ?? "Apple Watch"

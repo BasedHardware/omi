@@ -626,7 +626,7 @@ enum SystemCommand {
 /// user secrets, so this bounds noise rather than scrubbing PII.
 func sanitizedCommandOutput(_ raw: String, maxLength: Int = 200) -> String {
   // Replace every control character (not just \r\n\t) with a space so a tool's
-  // stderr can't inject terminal/log escape sequences into our logs or Sentry.
+  // stderr can't inject terminal/log escape sequences into our logs.
   let collapsed =
     raw.unicodeScalars
     .map { CharacterSet.controlCharacters.contains($0) ? " " : String($0) }

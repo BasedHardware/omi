@@ -1,0 +1,652 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "canary",
+      "records": {
+        "conversations/canary": {
+          "structured": {
+            "title": "Synthetic dream check",
+            "overview": "Robot Qorbi was incorrectly written as Qorby in the transcript."
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "Robot Qorbi is spelled Qorbi. Correct Qorby to Qorbi. Qorby is a misspelling of Qorbi."
+            }
+          ]
+        }
+      },
+      "expected_problem": "spelling",
+      "expected_refs": [
+        "conversations/canary"
+      ],
+      "canary": true
+    },
+    {
+      "id": "proper_noun",
+      "records": {
+        "conversations/name": {
+          "structured": {
+            "title": "Workshop",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "The badge says Tavi Merel. Our notes incorrectly spell the name Tavy Merrel."
+            }
+          ]
+        }
+      },
+      "expected_problem": "spelling",
+      "expected_refs": [
+        "conversations/name"
+      ],
+      "canary": false
+    },
+    {
+      "id": "vietnamese_brand",
+      "records": {
+        "conversations/vi-brand": {
+          "structured": {
+            "title": "Buổi thử sản phẩm",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "Tên thương hiệu đúng là Zenvio, nhưng bản chép lời ghi sai thành Zenveo. Ngày mai chúng tôi thử lại sản phẩm Zenvio."
+            }
+          ]
+        }
+      },
+      "expected_problem": "spelling",
+      "expected_refs": [
+        "conversations/vi-brand"
+      ],
+      "canary": false
+    },
+    {
+      "id": "duplicate_people",
+      "records": {
+        "people/p1": {
+          "name": "Oren Vell",
+          "aliases": [
+            "Dr. Oren Vell"
+          ]
+        },
+        "people/p2": {
+          "name": "Dr. Oren Vell",
+          "aliases": [
+            "Oren Vell"
+          ]
+        }
+      },
+      "expected_problem": "duplicates",
+      "expected_refs": [
+        "people/p1",
+        "people/p2"
+      ],
+      "canary": false
+    },
+    {
+      "id": "duplicate_memory",
+      "records": {
+        "memory_items/m1": {
+          "content": "Mira Doval prefers oat milk in coffee."
+        },
+        "memory_items/m2": {
+          "content": "Mira Doval prefers oat milk in coffee."
+        }
+      },
+      "expected_problem": "duplicates",
+      "expected_refs": [
+        "memory_items/m1",
+        "memory_items/m2"
+      ],
+      "canary": false
+    },
+    {
+      "id": "duplicate_tasks",
+      "records": {
+        "action_items/a1": {
+          "description": "Send the Vell lab invoice for the April delivery.",
+          "completed": false
+        },
+        "action_items/a2": {
+          "description": "Send the Vell lab invoice for the April delivery.",
+          "completed": false
+        }
+      },
+      "expected_problem": "duplicates",
+      "expected_refs": [
+        "action_items/a1",
+        "action_items/a2"
+      ],
+      "canary": false
+    },
+    {
+      "id": "entity_profession",
+      "records": {
+        "entity/person:e1": {
+          "name": "Rina Tol",
+          "summary": "Rina lives in Port Vale."
+        },
+        "conversations/job": {
+          "structured": {
+            "title": "Career update",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "Rina Tol lives in Port Vale and works as a marine engineer."
+            }
+          ]
+        }
+      },
+      "expected_problem": "entity",
+      "expected_refs": [
+        "entity/person:e1"
+      ],
+      "canary": false
+    },
+    {
+      "id": "entity_project",
+      "records": {
+        "entity/project:e2": {
+          "name": "Mavon",
+          "summary": "A garden sensor project."
+        },
+        "conversations/project": {
+          "structured": {
+            "title": "Mavon update",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "Mavon is our garden sensor project. We completed the solar prototype and chose the Velo chipset."
+            }
+          ]
+        }
+      },
+      "expected_problem": "entity",
+      "expected_refs": [
+        "entity/project:e2"
+      ],
+      "canary": false
+    },
+    {
+      "id": "entity_fact",
+      "records": {
+        "knowledge_nodes/e3": {
+          "name": "Teral Workshop",
+          "summary": "A pottery workshop.",
+          "facts": [
+            {
+              "text": "Teral Workshop runs free classes every Saturday."
+            }
+          ]
+        }
+      },
+      "expected_problem": "entity",
+      "expected_refs": [
+        "knowledge_nodes/e3"
+      ],
+      "canary": false
+    },
+    {
+      "id": "task_done",
+      "records": {
+        "action_items/a3": {
+          "description": "Email Sorel the signed lease.",
+          "status": "active"
+        },
+        "conversations/done": {
+          "structured": {
+            "title": "Lease update",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "I emailed Sorel the signed lease this morning and received confirmation."
+            }
+          ]
+        }
+      },
+      "expected_problem": "tasks",
+      "expected_refs": [
+        "action_items/a3"
+      ],
+      "canary": false
+    },
+    {
+      "id": "task_obsolete",
+      "records": {
+        "action_items/a4": {
+          "description": "Book the Davel studio for Friday.",
+          "completed": false
+        },
+        "conversations/cancelled": {
+          "structured": {
+            "title": "Friday plans",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "The Friday Davel studio session was cancelled permanently. We no longer need to book it."
+            }
+          ]
+        }
+      },
+      "expected_problem": "tasks",
+      "expected_refs": [
+        "action_items/a4"
+      ],
+      "canary": false
+    },
+    {
+      "id": "task_delivered",
+      "records": {
+        "action_items/a5": {
+          "description": "Deliver the Arvo prototype to Nila.",
+          "status": "active"
+        },
+        "conversations/delivery": {
+          "structured": {
+            "title": "Delivery receipt",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "Nila confirmed she received the Arvo prototype. The delivery is complete."
+            }
+          ]
+        }
+      },
+      "expected_problem": "tasks",
+      "expected_refs": [
+        "action_items/a5"
+      ],
+      "canary": false
+    },
+    {
+      "id": "quality_empty",
+      "records": {
+        "conversations/empty": {
+          "structured": {
+            "title": "Recorded planning discussion",
+            "overview": "The recording contains a full spoken planning discussion, but the transcript is missing."
+          },
+          "transcript_segments": []
+        }
+      },
+      "expected_problem": "quality",
+      "expected_refs": [
+        "conversations/empty"
+      ],
+      "canary": false
+    },
+    {
+      "id": "quality_garbled",
+      "records": {
+        "conversations/garbled": {
+          "structured": {
+            "title": "Unusable transcript",
+            "overview": "Clear recorded speech was recognized as gibberish."
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "zzzk rrttt [unintelligible] blorp 0000 ??? [unintelligible]"
+            }
+          ]
+        }
+      },
+      "expected_problem": "quality",
+      "expected_refs": [
+        "conversations/garbled"
+      ],
+      "canary": false
+    },
+    {
+      "id": "quality_speaker",
+      "records": {
+        "conversations/speaker": {
+          "structured": {
+            "title": "Two-person interview",
+            "overview": "The interviewer and guest are distinct speakers but all their turns are mislabeled SPEAKER_00."
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "I asked the question. I answered my own question."
+            }
+          ]
+        }
+      },
+      "expected_problem": "quality",
+      "expected_refs": [
+        "conversations/speaker"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_english",
+      "records": {
+        "conversations/clean-en": {
+          "structured": {
+            "title": "Garden plan",
+            "overview": "Saturday planting plan."
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "We will plant beans in the west bed on Saturday. The soil is ready."
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "conversations/clean-en"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_vietnamese",
+      "records": {
+        "conversations/clean-vi": {
+          "structured": {
+            "title": "Kế hoạch cuối tuần",
+            "overview": "Chuẩn bị trồng rau vào thứ bảy."
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "Chiều thứ bảy chúng tôi sẽ trồng rau trong vườn. Đất đã được chuẩn bị xong."
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "conversations/clean-vi"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_brand",
+      "records": {
+        "conversations/clean-brand": {
+          "structured": {
+            "title": "Product check",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "The fictional brand is Zenvio. Its label and our notes both say Zenvio."
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "conversations/clean-brand"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_people",
+      "records": {
+        "people/clean-p1": {
+          "name": "Ilan Vero"
+        },
+        "people/clean-p2": {
+          "name": "Ilan Varo"
+        },
+        "conversations/distinct": {
+          "structured": {
+            "title": "Team",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "Ilan Vero and Ilan Varo are two different colleagues."
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "people/clean-p1"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_memories",
+      "records": {
+        "memory_items/clean-m1": {
+          "content": "Dara Kelm enjoys sailing."
+        },
+        "memory_items/clean-m2": {
+          "content": "Dara Kelm enjoys baking."
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "memory_items/clean-m1"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_tasks",
+      "records": {
+        "action_items/clean-a1": {
+          "description": "Buy paint for the kitchen.",
+          "status": "active"
+        },
+        "action_items/clean-a2": {
+          "description": "Buy paint for the shed.",
+          "status": "active"
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "action_items/clean-a1"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_entity",
+      "records": {
+        "entity/person:clean-e1": {
+          "name": "Nemi Sol",
+          "summary": "Nemi Sol is a botanist in Velin.",
+          "facts": [
+            "Nemi Sol is a botanist in Velin."
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "entity/person:clean-e1"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_completed",
+      "records": {
+        "action_items/clean-a3": {
+          "description": "Send Lavi the sketch.",
+          "completed": true
+        },
+        "conversations/clean-done": {
+          "structured": {
+            "title": "Sketch update",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "I sent Lavi the sketch today."
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "action_items/clean-a3"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_pending",
+      "records": {
+        "action_items/clean-a4": {
+          "description": "Call the Rovel supplier.",
+          "status": "active"
+        },
+        "conversations/clean-pending": {
+          "structured": {
+            "title": "Supplier update",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "I have not called the Rovel supplier yet. I still need to make that call."
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "action_items/clean-a4"
+      ],
+      "canary": false
+    },
+    {
+      "id": "clean_speakers",
+      "records": {
+        "conversations/clean-speakers": {
+          "structured": {
+            "title": "Interview"
+          },
+          "transcript_segments": [
+            {
+              "speaker": "SPEAKER_00",
+              "text": "Which clay do you use?"
+            },
+            {
+              "speaker": "SPEAKER_01",
+              "text": "I use the red clay from Velin."
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [
+        "conversations/clean-speakers"
+      ],
+      "canary": false
+    },
+    {
+      "id": "untitled_en",
+      "canary": false,
+      "records": {
+        "conversations/untitled_en": {
+          "id": "untitled_en",
+          "structured": {
+            "title": "",
+            "overview": "The group agreed to build a small solar-powered toy boat."
+          },
+          "transcript_segments": [
+            {
+              "text": "We are building a solar-powered toy boat. The hull is ready and we will test it in a basin tomorrow.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "expected_problem": "quality",
+      "expected_refs": [
+        "conversations/untitled_en"
+      ]
+    },
+    {
+      "id": "untitled_vi",
+      "canary": false,
+      "records": {
+        "conversations/untitled_vi": {
+          "id": "untitled_vi",
+          "structured": {
+            "title": "",
+            "overview": "Cả nhóm chuẩn bị trồng rau trên ban công."
+          },
+          "transcript_segments": [
+            {
+              "text": "Chúng ta sẽ trồng rau trên ban công. Tôi đã mua hạt giống và chúng ta sẽ đặt chậu cạnh cửa sổ vào cuối tuần.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "expected_problem": "quality",
+      "expected_refs": [
+        "conversations/untitled_vi"
+      ]
+    },
+    {
+      "id": "clean_bilingual",
+      "canary": false,
+      "records": {
+        "conversations/clean_bilingual": {
+          "id": "clean_bilingual",
+          "structured": {
+            "title": "Chuẩn bị buổi thử thuyền",
+            "overview": "Cả nhóm sẽ thử thuyền đồ chơi chạy bằng năng lượng mặt trời vào ngày mai."
+          },
+          "transcript_segments": [
+            {
+              "text": "Ngày mai chúng ta thử thuyền đồ chơi chạy bằng năng lượng mặt trời. The small boat is ready for testing. Tôi sẽ mang chậu nước đến.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": []
+    },
+    {
+      "id": "brand_vi",
+      "canary": false,
+      "records": {
+        "conversations/brand_vi": {
+          "id": "brand_vi",
+          "structured": {
+            "title": "Thử nghiệm rô bốt Qorbi",
+            "overview": "Nhóm thử nghiệm rô bốt Qorbi."
+          },
+          "transcript_segments": [
+            {
+              "text": "Rô bốt này tên Qorbi, viết là Qorbi. Bản chép ghi Qorby là sai chính tả, cần sửa Qorby thành Qorbi.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "expected_problem": "spelling",
+      "expected_refs": [
+        "conversations/brand_vi"
+      ]
+    }
+  ]
+}

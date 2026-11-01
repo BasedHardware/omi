@@ -159,7 +159,7 @@ def test_completed_created_range_composite_is_declared_descending(monkeypatch):
     The registry used to declare (completed ASC, created_at ASC, __name__ ASC) for this
     read, which serves only the reverse ordering. Databases that happened to carry an
     undeclared descending composite masked it; a database provisioned from the manifest
-    alone (the isolated jit-qa database, 2026-09-10) failed every such read with
+    alone (an isolated development database, 2026-09-10) failed every such read with
     ``FailedPrecondition: 400 The query requires an index``.
     """
     declared = _declared_action_item_signatures()
@@ -173,7 +173,7 @@ def test_scores_weekly_count_composite_is_declared_ascending():
     """``get_scores`` counts completed tasks created in the last week through
     ``ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY.build`` with no ordering; Firestore serves that
     aggregation only from the ascending composite, which must stay declared alongside the
-    newest-first list composite (both were missing on the isolated jit-qa database, 2026-09-10).
+    newest-first list composite (both were missing on an isolated development database, 2026-09-10).
     """
     from database.firestore_index_registry import ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY
 

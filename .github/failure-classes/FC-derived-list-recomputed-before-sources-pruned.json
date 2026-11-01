@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-derived-list-recomputed-before-sources-pruned",
+  "violated_contract": "When one mutation updates several source arrays that feed a derived list, the derived list must be rebuilt after the last source changes. If the rebuild only happens in the first source's observer (a didSet) and the other sources are pruned afterwards, the derived list is built from stale sources. A deleted row then stays visible in the views that read those other sources, such as a search or category filter.",
+  "canonical_prevention": "Update every source first, then recompute the derived list once, explicitly. Prove it with a hermetic test that puts the view in the mode that reads a secondary source (an active filter), deletes a visible row, and asserts the derived list no longer contains it.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/MemoriesFilteredDeleteTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift"
+  ],
+  "status": "open"
+}

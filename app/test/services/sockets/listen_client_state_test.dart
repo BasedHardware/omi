@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
@@ -45,5 +46,57 @@ void main() {
     state.onLifecycle(AppLifecycleState.hidden);
     state.removeListener(listener);
     expect(calls, 2);
+  });
+
+  test('a lifecycle close queued behind an open request is delivered immediately', () async {
+    final release = Completer<bool>();
+    final sent = <bool>[];
+    final reporter = ListenClientState.forTest(surfaceTransport: (payload) async {
+      sent.add(payload['surface_open'] as bool);
+      return sent.length == 1 ? await release.future : true;
+    });
+    final draining = reporter.reportSurfaceForTest();
+    reporter.onLifecycle(AppLifecycleState.paused);
+    expect(sent, [true]);
+    release.complete(true);
+    await draining;
+    expect(sent, [true, false]);
+    reporter.dispose();
+  });
+
+  test('a queued close is sent even when the in-flight open fails', () async {
+    final release = Completer<bool>();
+    final sent = <bool>[];
+    final reporter = ListenClientState.forTest(surfaceTransport: (payload) async {
+      sent.add(payload['surface_open'] as bool);
+      return sent.length == 1 ? await release.future : true;
+    });
+    final draining = reporter.reportSurfaceForTest();
+    reporter.onLifecycle(AppLifecycleState.paused);
+    release.complete(false);
+    await draining;
+    expect(sent, [true, false]);
+    reporter.dispose();
+  });
+
+  test('closed heartbeat retries a failed close and then stops renewing', () async {
+    var failClose = true;
+    final sent = <bool>[];
+    final reporter = ListenClientState.forTest(surfaceTransport: (payload) async {
+      final open = payload['surface_open'] as bool;
+      sent.add(open);
+      if (!open && failClose) throw TimeoutException('synthetic timeout');
+      return true;
+    });
+    await reporter.reportSurfaceForTest();
+    reporter.onLifecycle(AppLifecycleState.paused);
+    await reporter.waitForSurfaceReportsForTest();
+    expect(sent, [true, false]);
+    failClose = false;
+    await reporter.reportSurfaceForTest(heartbeat: true);
+    expect(sent, [true, false, false]);
+    await reporter.reportSurfaceForTest(heartbeat: true);
+    expect(sent, [true, false, false]);
+    reporter.dispose();
   });
 }

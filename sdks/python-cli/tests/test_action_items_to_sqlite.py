@@ -9,7 +9,15 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from action_items_to_sqlite import load, SCHEMA, boolean_to_int, utc_stamp, validate_db_path
+from action_items_to_sqlite import (
+    SCHEMA,
+    boolean_to_int,
+    load,
+    strip_surrogates,
+    text,
+    utc_stamp,
+    validate_db_path,
+)
 
 
 class TestActionItemsToSqlite(unittest.TestCase):
@@ -196,6 +204,56 @@ class TestActionItemsToSqlite(unittest.TestCase):
         rows = cursor.fetchall()
         conn.close()
         self.assertEqual(rows, [("task_1", "Keep me")])
+
+    def test_strip_surrogates(self):
+        self.assertEqual(strip_surrogates("clean string"), "clean string")
+        self.assertEqual(strip_surrogates("bad \ud800 surrogate"), "bad  surrogate")
+
+    def test_surrogate_in_id_and_fields_sanitized(self):
+        surrogate_data = [
+            {
+                "id": "task_\ud800_1",
+                "description": "Clean \ud800 task description",
+                "completed": False,
+                "conversation_id": "conv_\ud800_123",
+            }
+        ]
+        s_file = self.dir_path / "surrogate.json"
+        s_file.write_text(json.dumps(surrogate_data), encoding="utf-8")
+
+        loaded, added, total = load(str(self.db_path), [str(s_file)])
+        self.assertEqual((loaded, added, total), (1, 1, 1))
+
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, description, conversation_id FROM action_items")
+        row = cursor.fetchone()
+        conn.close()
+        self.assertEqual(row, ("task__1", "Clean  task description", "conv__123"))
+
+    def test_loosely_typed_description_and_fields(self):
+        loose_data = [
+            {
+                "id": 1001,
+                "description": {"text": "structured description", "priority": "high"},
+                "completed": 1,
+                "conversation_id": 9999,
+            }
+        ]
+        l_file = self.dir_path / "loose.json"
+        l_file.write_text(json.dumps(loose_data), encoding="utf-8")
+
+        loaded, added, total = load(str(self.db_path), [str(l_file)])
+        self.assertEqual((loaded, added, total), (1, 1, 1))
+
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, description, conversation_id FROM action_items WHERE id = '1001'")
+        row = cursor.fetchone()
+        conn.close()
+        self.assertEqual(row[0], "1001")
+        self.assertIn('"priority": "high"', row[1])
+        self.assertEqual(row[2], "9999")
 
 
 if __name__ == "__main__":

@@ -11,6 +11,16 @@ import 'package:omi/l10n/app_localizations.dart';
 /// A list row and the detail page of the same thing use the same style ([compact]), so they
 /// always agree.
 abstract final class OmiDuration {
+  /// A live length retains seconds even after ten minutes or an hour.
+  static String live(int seconds, AppLocalizations l10n) {
+    final total = seconds < 0 ? 0 : seconds;
+    if (total < 600) return compact(total, l10n);
+    if (total < 3600) return l10n.timeCompactMinsAndSecs(total ~/ 60, total % 60);
+    final hours = total ~/ 3600;
+    final minutes = (total % 3600) ~/ 60;
+    return '${l10n.timeCompactHoursAndMins(hours, minutes)} ${l10n.timeCompactSecs(total % 60)}';
+  }
+
   /// A clock-style position: `m:ss` under an hour, `h:mm:ss` from an hour. Never drops the hours.
   static String offset(num seconds) {
     final total = seconds.isFinite && seconds > 0 ? seconds.floor() : 0;

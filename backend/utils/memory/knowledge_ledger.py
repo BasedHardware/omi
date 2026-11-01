@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.knowledge_ledger_policy import (
     PLAYBOOK_HANDLE_CHARACTER_LIMIT,
-    PLAYBOOK_INDEX_CHARACTER_BUDGET,
     PROFILE_CHARACTER_BUDGET,
     canonicalize_ledger_slot,
     normalize_playbook_handle,
@@ -490,61 +489,6 @@ def close_fact(
     return close_canonical_ledger_item(uid, memory_id, valid_to=valid_to, db_client=db_client)
 
 
-def write_playbook(
-    uid: str,
-    description: str,
-    body: str,
-    *,
-    provenance: LedgerProvenance,
-    prior_memory_id: Optional[str] = None,
-    db_client: Any = None,
-) -> str:
-    return save_ledger_write(
-        uid,
-        LedgerWrite(
-            kind=MemoryKind.document,
-            content=description,
-            body=body,
-            provenance=provenance,
-            write_reason=LedgerWriteReason.recurring_workflow,
-            supersedes=[prior_memory_id] if prior_memory_id else [],
-        ),
-        db_client=db_client,
-    )
-
-
-def read_playbook(uid: str, memory_id: str, *, db_client: Any = None) -> str:
-    item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
-    if item is None or item.kind != MemoryKind.document:
-        raise ValueError(f"active playbook not found: {memory_id}")
-    return item.body or ""
-
-
-def create_trigger(
-    uid: str,
-    description: str,
-    condition: Dict[str, Any],
-    *,
-    provenance: LedgerProvenance,
-    prior_memory_id: Optional[str] = None,
-    arguments: Optional[Dict[str, Any]] = None,
-    db_client: Any = None,
-) -> str:
-    return save_ledger_write(
-        uid,
-        LedgerWrite(
-            kind=MemoryKind.trigger,
-            content=description,
-            trigger_condition=condition,
-            provenance=provenance,
-            write_reason=LedgerWriteReason.standing_trigger,
-            supersedes=[prior_memory_id] if prior_memory_id else [],
-            arguments=arguments or {},
-        ),
-        db_client=db_client,
-    )
-
-
 def render_profile(
     items: Iterable[MemoryItem],
     *,
@@ -569,38 +513,6 @@ def render_profile(
     return render_bounded_profile(eligible, character_budget=character_budget)
 
 
-def render_playbook_index(
-    items: Iterable[MemoryItem],
-    *,
-    character_budget: int = PLAYBOOK_INDEX_CHARACTER_BUDGET,
-) -> str:
-    """Render one-line progressive-disclosure handles, never playbook bodies."""
-    active = [
-        item
-        for item in items
-        if item.ledger_schema_version == LEDGER_SCHEMA_VERSION
-        and item.kind == MemoryKind.document
-        and item.subject_scope == MemorySubjectScope.primary_user
-        and item.status == MemoryItemStatus.active
-        and _is_review_visible(item)
-        and item.valid_to is None
-    ]
-    active.sort(key=lambda item: (-(item.curation_weight), item.content or "", item.memory_id))
-    lines: List[str] = []
-    used = 0
-    for item in active:
-        description = normalize_playbook_handle(item.content)[:PLAYBOOK_HANDLE_CHARACTER_LIMIT]
-        if not description:
-            continue
-        line = f"{item.memory_id}: {description}"
-        separator = 1 if lines else 0
-        if used + separator + len(line) > character_budget:
-            continue
-        lines.append(line)
-        used += separator + len(line)
-    return "\n".join(lines)
-
-
 __all__ = [
     "DEFAULT_PROFILE_CHARACTER_BUDGET",
     "LEDGER_SCHEMA_VERSION",
@@ -609,13 +521,9 @@ __all__ = [
     "amend_fact",
     "amend_user_fact",
     "close_fact",
-    "create_trigger",
     "evidence_id_for_ledger_provenance",
-    "read_playbook",
-    "render_playbook_index",
     "render_profile",
     "reopen_standalone_fact",
     "save_fact",
     "save_ledger_write",
-    "write_playbook",
 ]

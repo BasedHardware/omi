@@ -27,7 +27,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import utils.pusher_finalization as pusher_finalization
-from utils.conversations.finalizer import ConversationFinalizationError
+from utils.conversations.finalizer import ConversationFinalizationDisposition, ConversationFinalizationError
 from database import conversation_finalization_jobs as jobs_db
 
 
@@ -49,6 +49,37 @@ def inline_run_blocking(monkeypatch):
 
 def _claim(attempt_count):
     return MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': attempt_count})
+
+
+@pytest.mark.anyio
+async def test_owner_contention_stays_queued_without_completion_or_failure_budget(monkeypatch, inline_run_blocking):
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', _claim(attempt_count=4))
+    monkeypatch.setattr(
+        pusher_finalization,
+        'finalize_persisted_conversation',
+        AsyncMock(
+            return_value=ConversationFinalizationDisposition.deferred,
+        ),
+    )
+    retry, complete, dead_letter = MagicMock(), MagicMock(), MagicMock()
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retry)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', complete)
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', dead_letter)
+    websocket = _PusherWebSocket()
+    await pusher_finalization.process_conversation_task(
+        'uid-1',
+        'conversation-1',
+        'en',
+        websocket,
+        finalization_job_id='job-1',
+        dispatch_generation=1,
+    )
+    retry.assert_not_called()
+    complete.assert_not_called()
+    dead_letter.assert_not_called()
+    assert any(
+        b'job_queued' in payload and b'"terminal":false' in payload.replace(b' ', b'') for payload in websocket.sent
+    )
 
 
 @pytest.mark.anyio

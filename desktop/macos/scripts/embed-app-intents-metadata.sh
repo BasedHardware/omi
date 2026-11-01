@@ -66,8 +66,11 @@ find "$package_dir/Sources" \
 
 xcode_build="$(xcodebuild -version | awk '/Build version/ {print $3}')"
 [[ -n "$xcode_build" ]] || { echo "Could not resolve Xcode build number" >&2; exit 1; }
-if [[ "$mode" = --require-siri ]] && [[ "$(xcodebuild -version | sed -n '1p')" != 'Xcode 27.0' ]]; then
-  echo "Siri release metadata requires Xcode 27.0; refusing to package a Siri-less app" >&2
+# Package.swift compiles the Siri sources under `compiler(>=6.4)`, i.e. every Xcode 27.x.
+# The release toolchain itself is pinned by codemagic.yaml and the CI Siri lane, not here.
+xcode_major="$(xcodebuild -version | sed -n '1s/^Xcode \([0-9]*\).*/\1/p')"
+if [[ "$mode" = --require-siri ]] && ! [[ "$xcode_major" =~ ^[0-9]+$ && "$xcode_major" -ge 27 ]]; then
+  echo "Siri release metadata requires Xcode 27 or newer; refusing to package a Siri-less app" >&2
   exit 1
 fi
 xcrun appintentsmetadataprocessor \

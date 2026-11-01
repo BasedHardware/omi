@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-model-time-outside-captured-samples",
+  "violated_contract": "Model intervals projected onto captured audio must use the exact sample slice origin and physical capture extent. Frame-centered VAD support beyond EOF is not additional captured audio, and an unrounded float origin must not shift valid ASR word clocks beyond the capture validator.",
+  "canonical_prevention": "Crop only the model VAD end to the physical input extent while rejecting nonfinite, reversed or wholly out-of-buffer spans. Derive ASR rebase origins from the same integer sample index used to slice audio. Preserve word validation and fail empty speech hypotheses visibly rather than publishing silence. Pin both boundaries with synthetic in-memory sample tests and emit only closed reason codes and numeric failure shapes.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_pipeline_worker.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/diarizer/batch_pipeline.py",
+    "backend/diarizer/batch_pipeline_models.py"
+  ],
+  "status": "open"
+}

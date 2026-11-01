@@ -1,19 +1,14 @@
 import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { X, Trash2, Pencil, ArrowUpRight, Loader2, ThumbsUp } from 'lucide-react'
-import type { Memory, MemoryUseAction } from '../../hooks/useMemories'
+import { X, Trash2, Pencil, ArrowUpRight, Loader2 } from 'lucide-react'
+import type { Memory } from '../../hooks/useMemories'
 import {
   CATEGORY_LABEL,
-  canUseMemory,
   categoryOf,
-  currencyBandLabel,
   displayTags,
-  formatMemoryAssessmentDate,
   formatMemoryDate,
-  formatMemoryEvidenceDate,
   isProtectedContent,
-  layerLabel,
-  memoryUseSuppressed
+  layerLabel
 } from '../../lib/memoryFilters'
 import { memorySourceLabel } from '../../lib/memoryProvenance'
 import { Badge } from '../ui/Badge'
@@ -28,8 +23,6 @@ type MemoryDetailSheetProps = {
   onDelete: (m: Memory) => void
   onOpenConversation: (conversationId: string) => void
   togglingVisibility: boolean
-  onUseAction?: (id: string, action: MemoryUseAction) => void
-  useActionBusy?: boolean
 }
 
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }): React.JSX.Element {
@@ -53,8 +46,6 @@ export function MemoryDetailSheet({
   onDelete,
   onOpenConversation,
   togglingVisibility,
-  onUseAction,
-  useActionBusy
 }: MemoryDetailSheetProps): React.JSX.Element {
   // State initializes from the memory; the sheet is mounted with a `key` of the
   // memory id at the call site, so switching memories remounts it fresh rather
@@ -70,15 +61,6 @@ export function MemoryDetailSheet({
   const isPublic = memory.visibility === 'public'
   const tags = displayTags(memory)
   const source = memorySourceLabel(memory)
-  const assessmentDate = formatMemoryAssessmentDate(memory)
-  const evidenceDate = formatMemoryEvidenceDate(memory)
-  const useFeedbackAllowed = canUseMemory(memory)
-  const hasAssessment =
-    memory.currency_band !== undefined ||
-    memory.currency !== undefined ||
-    memory.belief_computed_at !== undefined ||
-    memory.belief_class !== undefined
-  const suppressed = memoryUseSuppressed(memory)
 
   const saveEdit = async (): Promise<void> => {
     const text = draft.trim()
@@ -116,11 +98,6 @@ export function MemoryDetailSheet({
                   {layer}
                 </span>
               )}
-              {hasAssessment && (
-                <span className="rounded-full bg-[var(--bg-tertiary)] px-2 py-0.5 text-[11px] text-white/60">
-                  {currencyBandLabel(memory)}
-                </span>
-              )}
               <div className="ml-auto flex items-center gap-3">
                 <label className="flex items-center gap-2 text-xs text-white/60">
                   <span>{isPublic ? 'Public' : 'Private'}</span>
@@ -131,28 +108,6 @@ export function MemoryDetailSheet({
                     ariaLabel="Toggle public visibility"
                   />
                 </label>
-                {onUseAction && useFeedbackAllowed && (
-                  <>
-                    <button
-                      type="button"
-                      disabled={useActionBusy}
-                      onClick={() => onUseAction(memory.id, suppressed ? 'allow' : 'suppress')}
-                      className="rounded-md px-1.5 py-1 text-[11px] text-white/50 transition-colors hover:bg-white/5 hover:text-white/80 disabled:opacity-40"
-                    >
-                      {suppressed ? 'Allow use' : "Don't use"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={useActionBusy}
-                      onClick={() => onUseAction(memory.id, 'useful')}
-                      className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/5 hover:text-white/80 disabled:opacity-40"
-                      aria-label="Mark this memory useful"
-                      title="Mark useful"
-                    >
-                      <ThumbsUp className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
                 <button
                   type="button"
                   onClick={() => onDelete(memory)}
@@ -243,14 +198,6 @@ export function MemoryDetailSheet({
                   <MetaRow label="Device" value={memory.primary_capture_device} />
                 )}
                 <MetaRow label="Created" value={formatMemoryDate(memory.created_at)} />
-                {evidenceDate && <MetaRow label="Evidence from" value={evidenceDate} />}
-                {assessmentDate && <MetaRow label="Assessed" value={assessmentDate} />}
-                {memory.belief_class && (
-                  <MetaRow label="Belief class" value={memory.belief_class} />
-                )}
-                {typeof memory.half_life_days === 'number' && (
-                  <MetaRow label="Half-life" value={`${memory.half_life_days} days`} />
-                )}
                 {tags.length > 0 && (
                   <MetaRow
                     label="Tags"

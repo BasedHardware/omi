@@ -6,6 +6,7 @@ The backend imports ``google.cloud.storage.Client`` at module import time in
 real app is imported, while this module keeps bucket/blob bytes under a temp dir.
 """
 
+import atexit
 import os
 import shutil
 import tempfile
@@ -41,6 +42,8 @@ def setup_fake_storage() -> str:
     """Create a fresh temp directory for fake GCS storage."""
     global _storage_dir
     _storage_dir = tempfile.mkdtemp(prefix="omi_e2e_gcs_")
+    # Callers outside the e2e fixture (OpenAPI export, gauntlet) never call teardown_fake_storage().
+    atexit.register(shutil.rmtree, _storage_dir, ignore_errors=True)
     for bucket_name in DEFAULT_BUCKETS:
         os.makedirs(os.path.join(_storage_dir, bucket_name), exist_ok=True)
     return _storage_dir

@@ -39,6 +39,17 @@ enum SuggestionAssistantTelemetry {
       case .skippedNoGrounding: self = .noGrounding
       }
     }
+
+    /// Dwell and cooldown fire on every capture tick while a context is still pending.
+    /// Those repeated analytics frames are suppressed. The gate decision, screenshot
+    /// cadence, and evaluation pacing are unchanged, and eligible plus consumed-context
+    /// outcomes still emit.
+    var emitsAnalytics: Bool {
+      switch self {
+      case .dwell, .cooldown: return false
+      case .eligible, .disabled, .excludedApp, .dailyBudget, .noGrounding: return true
+      }
+    }
   }
 
   enum Model: String, CaseIterable, Sendable {
@@ -161,6 +172,14 @@ enum SuggestionAssistantTelemetry {
     /// A commitment nudge that named work absent from the grounding it was given.
     case filteredUngroundedCommitment = "filtered_ungrounded_commitment"
     case rejectedOwner = "rejected_owner"
+    /// Withheld because the user is presenting. Distinct from the `filtered_*` outcomes:
+    /// those retire a suggestion on its merits, this one defers an otherwise-deliverable
+    /// suggestion on audience, and deliberately leaves it eligible to deliver later.
+    case suppressedPresenting = "suppressed_presenting"
+    /// Withheld because the user silenced notifications for a period. Like
+    /// `suppressed_presenting` this defers rather than retires: the suggestion is not
+    /// written to the dedup window, so it can still be delivered once the snooze lapses.
+    case suppressedSnoozed = "suppressed_snoozed"
   }
 
   /// One evaluation produces at most one suggestion. Separate UUIDs preserve

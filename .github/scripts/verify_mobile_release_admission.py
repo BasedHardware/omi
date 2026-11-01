@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless a mobile source has both canonical release proofs.
+"""Fail closed unless a mobile source has its canonical release proofs.
 
 This verifier is intentionally offline.  A caller (Codemagic or a future tag
 admission workflow) supplies a bounded JSON evidence file assembled from its
@@ -44,6 +44,18 @@ The proof document has this normalized shape (additional fields are ignored):
       }
     }
 
+Android callers pass ``--platform android`` and additionally supply:
+
+    "android_acceptance": {
+      "check_name": "Android Emulator Acceptance",
+      "workflow_name": "Mobile App Checks",
+      "workflow_path": ".github/workflows/mobile-app-checks.yml",
+      "event": "push or workflow_dispatch",
+      "status": "completed", "conclusion": "success", "run_attempt": 1,
+      "head_branch": "main", "head_sha": "<source_sha>",
+      "repository": "BasedHardware/omi"
+    }
+
 The source may be behind current main, but only when the caller provides
 positive ancestry evidence.  This prevents a tag-admission caller from
 silently accepting an unrelated or stale branch while allowing main to move
@@ -65,6 +77,7 @@ MAIN_BRANCH = "main"
 RELEASE_WORKFLOW_NAME = "Release Eligibility"
 RELEASE_WORKFLOW_PATH = ".github/workflows/release-eligibility.yml"
 MOBILE_CHECK_NAME = "Mobile Release Eligibility"
+ANDROID_CHECK_NAME = "Android Emulator Acceptance"
 MOBILE_WORKFLOW_NAME = "Mobile App Checks"
 MOBILE_WORKFLOW_PATH = ".github/workflows/mobile-app-checks.yml"
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
@@ -118,6 +131,7 @@ def validate_mobile_job_results(job_results: object) -> None:
         "journeys-hermetic",
         "android-compile-smoke",
         "android-unit-tests",
+        "android-emulator-checks",
         "ios-compile-check",
         "dart-tests-kiritimati",
     }
@@ -138,9 +152,7 @@ def _validate_current_main(current_main: object) -> None:
     _require_string(proof, "branch", MAIN_BRANCH, label="current_main")
     require_full_sha(proof.get("sha"), label="current_main.sha")
     if proof.get("source_sha_is_ancestor_of_current_main") is not True:
-        raise MobileReleaseAdmissionError(
-            "current_main.source_sha_is_ancestor_of_current_main must be true"
-        )
+        raise MobileReleaseAdmissionError("current_main.source_sha_is_ancestor_of_current_main must be true")
     # Equality is valid, and a newer main tip is valid only with the explicit
     # ancestry assertion above.  The input is intentionally normalized so the
     # caller, not this verifier, owns the read-only git/API collection step.
@@ -179,14 +191,34 @@ def _validate_mobile_aggregate(aggregate: object, *, sha: str) -> None:
         validate_mobile_job_results(proof["job_results"])
 
 
-def validate_admission(payload: object, *, sha: str, repository: str) -> None:
+def _validate_android_acceptance(acceptance: object, *, sha: str) -> None:
+    proof = _require_object(acceptance, label="android_acceptance")
+    label = "android_acceptance"
+    for key, expected in (
+        ("check_name", ANDROID_CHECK_NAME),
+        ("workflow_name", MOBILE_WORKFLOW_NAME),
+        ("workflow_path", MOBILE_WORKFLOW_PATH),
+        ("status", "completed"),
+        ("conclusion", "success"),
+        ("head_branch", MAIN_BRANCH),
+    ):
+        _require_string(proof, key, expected, label=label)
+    if proof.get("event") not in {"push", "workflow_dispatch"}:
+        raise MobileReleaseAdmissionError("android_acceptance must be a main push or manual run")
+    if type(proof.get("run_attempt")) is not int or proof["run_attempt"] != 1:
+        raise MobileReleaseAdmissionError("android_acceptance.run_attempt must be the first attempt (1)")
+    _require_repository(proof, label=label)
+    _require_sha(proof, "head_sha", sha, label=label)
+
+
+def validate_admission(payload: object, *, sha: str, repository: str, platform: str = "ios") -> None:
     """Validate one exact source against both required main-branch proofs."""
 
+    if platform not in {"ios", "android"}:
+        raise MobileReleaseAdmissionError("platform must be ios or android")
     require_full_sha(sha, label="release SHA")
     if repository != EXPECTED_REPOSITORY:
-        raise MobileReleaseAdmissionError(
-            f"repository must be the canonical {EXPECTED_REPOSITORY!r} repository"
-        )
+        raise MobileReleaseAdmissionError(f"repository must be the canonical {EXPECTED_REPOSITORY!r} repository")
     proof = _require_object(payload, label="proof")
     if proof.get("schema_version") != 1:
         raise MobileReleaseAdmissionError("proof.schema_version must be 1")
@@ -195,6 +227,8 @@ def validate_admission(payload: object, *, sha: str, repository: str) -> None:
     _validate_current_main(proof.get("current_main"))
     _validate_release_proof(proof.get("release_eligibility"), sha=sha)
     _validate_mobile_aggregate(proof.get("mobile_aggregate"), sha=sha)
+    if platform == "android":
+        _validate_android_acceptance(proof.get("android_acceptance"), sha=sha)
 
 
 def _read_proof(path: Path) -> object:
@@ -211,6 +245,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sha", required=True, help="Exact mobile source SHA to admit.")
     parser.add_argument("--repository", required=True, help="Must be BasedHardware/omi.")
+    parser.add_argument("--platform", choices=("ios", "android"), default="ios")
     parser.add_argument("--proof", type=Path, required=True, help="Offline normalized JSON evidence file.")
     return parser.parse_args()
 
@@ -218,7 +253,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        validate_admission(_read_proof(args.proof), sha=args.sha, repository=args.repository)
+        validate_admission(_read_proof(args.proof), sha=args.sha, repository=args.repository, platform=args.platform)
     except (OSError, MobileReleaseAdmissionError) as exc:
         print(f"mobile release admission failed: {exc}", file=sys.stderr)
         return 1

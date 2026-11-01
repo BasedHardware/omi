@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-wal-lookup-by-object-misses-rebuilt-list",
+  "violated_contract": "A per-recording action on a device recording (Transfer to Phone, a row's Sync) must find the recording the caller names by its stable identity, the Wal id and storage kind, in the owning sync's current list. Device syncs rebuild that list with new Wal objects whenever the device connects, while a recording page keeps the Wal it was opened with, so a lookup by object (Wal has no value equality) finds nothing after a reconnect. SDCardWalSyncImpl.syncWal then returned null, and SyncProvider.transferWalToPhone treats any normal return as success, so the page reported a finished transfer while the audio stayed on the SD card.",
+  "canonical_prevention": "Look the target up by id and storage kind, as SDCardWalSyncImpl.deleteWal already does, run the action and its state changes on the listed entry, which is the one the sync pages read, and throw when the recording is no longer listed instead of returning a value the caller reads as success. Cover it with a test that relists the recording as a new object before the action and asserts the listed entry is transferred, next to one asserting that an unlisted recording or a same-id phone copy fails without touching the device.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/sdcard_custody_sync_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/**"
+  ],
+  "status": "open"
+}

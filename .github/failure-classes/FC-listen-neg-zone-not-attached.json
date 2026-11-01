@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-listen-neg-zone-not-attached",
+  "violated_contract": "Every zonal standalone NEG created by the production listen Service must be attached to the global listen load-balancer backend before a deployment is considered ready. GKE can create a NEG in a new pod zone without adding it to the manually managed backend service, leaving Ready listen pods in that zone with no traffic.",
+  "canonical_prevention": "After a successful production listen rollout and readiness check, derive the NEG name from the Service's cloud.google.com/neg-status annotation, list exact-name NEGs across zones, compare them with the backend service's attached groups, and attach missing zones using the settings read from existing backends. Fail closed on incomplete NEG inventory, inconsistent settings, permission errors, or attachment failures. Keep the behavior covered by a fake-gcloud unit test.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/ops/reconcile_listen_neg_zones.py",
+    "backend/tests/unit/test_reconcile_listen_neg_zones.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/workflows/gcp_backend_listen_helm.yml",
+    "backend/scripts/ops/reconcile_listen_neg_zones.py",
+    "backend/tests/unit/test_reconcile_listen_neg_zones.py"
+  ],
+  "status": "open"
+}

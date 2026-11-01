@@ -3,9 +3,11 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from threading import RLock
 
+import fakeredis
 import pytest
 
 import database.action_items as action_items_db
+import database.action_items_cache as action_items_cache
 import database.goals as goals_db
 import database.recurrence_inbox as recurrence_inbox_db
 import database.workstreams as workstreams_db
@@ -566,6 +568,127 @@ def test_workstream_candidate_acceptance_is_atomic_and_idempotent(fake_db):
     assert anchor_task['priority'] == 'high'
     assert anchor_task['recurrence_rule'] == 'FREQ=WEEKLY'
     assert anchor_task['recurrence_parent_id'] == 'task-parent'
+
+
+class CachedTaskListPage:
+    """A cached GET /v1/action-items page, addressed by the current list version like the route."""
+
+    params = {'limit': 100, 'offset': 0, 'completed': False}
+
+    def _key(self):
+        version = action_items_cache.get_action_items_list_version('u1')
+        return action_items_cache.list_cache_key('u1', version, self.params)
+
+    def cache(self):
+        action_items_cache.write_cached_list(self._key(), body={'action_items': []}, etag='W/"old"', ttl=30)
+
+    def is_served(self):
+        return action_items_cache.read_cached_list(self._key()) is not None
+
+
+@pytest.fixture
+def task_list_page(monkeypatch):
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(action_items_cache, '_redis', lambda: redis)
+    return CachedTaskListPage()
+
+
+def test_workstream_candidate_acceptance_invalidates_cached_task_list(fake_db, task_list_page):
+    seed_control(fake_db)
+    proposal = CandidateCreate.model_validate(
+        {
+            'subject_kind': 'workstream',
+            'proposed_action': 'create',
+            'workstream_proposal': {
+                'title': 'Investor outreach',
+                'objective': 'Prepare Sarah outreach',
+                'anchor_task': {'description': 'Draft Sarah email', 'owner': 'user'},
+            },
+            'capture_confidence': 0.9,
+            'ownership_confidence': 1,
+            'evidence_refs': [{'kind': 'conversation', 'id': 'c1', 'scope': 'canonical'}],
+            'source_surface': 'conversation',
+        }
+    )
+    candidate = CandidateRecord(
+        **proposal.model_dump(mode='python'),
+        candidate_id='cand-1',
+        account_generation=3,
+        idempotency_key='idem-1',
+        created_at=datetime.now(timezone.utc),
+    )
+    fake_db.rows[('users', 'u1', 'candidates', 'cand-1')] = candidate.model_dump(mode='python')
+
+    task_list_page.cache()
+    accepted = workstreams_db.resolve_workstream_candidate('u1', candidate, 3, firestore_client=fake_db)
+    assert ('users', 'u1', 'action_items', accepted.task_id) in fake_db.rows
+    assert not task_list_page.is_served()
+
+    # A repeated accept writes nothing, so the page cached after the first one stays valid.
+    task_list_page.cache()
+    replay = workstreams_db.resolve_workstream_candidate('u1', candidate, 3, firestore_client=fake_db)
+    assert replay.newly_resolved is False
+    assert task_list_page.is_served()
+
+
+def test_work_intents_invalidate_cached_task_list_only_when_writing_a_task(fake_db, task_list_page):
+    seed_control(fake_db)
+    create_goal(fake_db, 'g1')
+    seed_task(fake_db)
+    request = TaskOriginWorkIntent(task_id='t1')
+
+    task_list_page.cache()
+    linked = workstreams_db.resolve_work_intent(
+        'u1', request, idempotency_key='first-click', account_generation=3, firestore_client=fake_db
+    )
+    assert fake_db.rows[('users', 'u1', 'action_items', 't1')]['workstream_id'] == linked.workstream_id
+    assert not task_list_page.is_served()
+
+    # A replay and a new click on the already linked task leave every task unchanged.
+    task_list_page.cache()
+    for idempotency_key in ('first-click', 'second-click'):
+        workstreams_db.resolve_work_intent(
+            'u1', request, idempotency_key=idempotency_key, account_generation=3, firestore_client=fake_db
+        )
+    assert task_list_page.is_served()
+
+    anchored = workstreams_db.resolve_work_intent(
+        'u1',
+        GoalOriginWorkIntent(
+            goal_id='g1',
+            title='Investor outreach',
+            objective='Prepare Sarah outreach',
+            anchor_task_description='Draft Sarah email',
+        ),
+        idempotency_key='goal-click',
+        account_generation=3,
+        firestore_client=fake_db,
+    )
+    assert ('users', 'u1', 'action_items', anchored.task_id) in fake_db.rows
+    assert not task_list_page.is_served()
+
+
+def test_task_goal_link_import_invalidates_cached_task_list_only_when_writing_a_task(fake_db, task_list_page):
+    seed_control(fake_db)
+    create_goal(fake_db, 'g1')
+    seed_task(fake_db)
+    request = TaskGoalLinkImportRequest(links=[{'task_id': 't1', 'goal_id': 'g1'}])
+
+    task_list_page.cache()
+    first = workstreams_db.import_task_goal_links(
+        'u1', request, idempotency_key='import-1', account_generation=3, firestore_client=fake_db
+    )
+    assert first.imported == 1
+    assert fake_db.rows[('users', 'u1', 'action_items', 't1')]['goal_id'] == 'g1'
+    assert not task_list_page.is_served()
+
+    # Importing a link the task already has writes nothing.
+    task_list_page.cache()
+    second = workstreams_db.import_task_goal_links(
+        'u1', request, idempotency_key='import-2', account_generation=3, firestore_client=fake_db
+    )
+    assert second.unchanged == 1
+    assert task_list_page.is_served()
 
 
 def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0, generation=3):

@@ -1,6 +1,24 @@
 name: Deploy App to Cloud Run
 
 on:
+  push:
+    branches: ["main", "development"]
+    paths:
+      - 'web/app/**'
+      - 'web/packages/note-shared/**'
+      - 'config/public-build-*.json'
+      - '.dockerignore'
+      - '.github/workflows/gcp_app.yml'
+      - '.github/actions/deploy-public-build/**'
+      - '.github/actions/prepare-public-build/**'
+      - '.github/actions/public-build-candidate-promotion/**'
+      - '.github/scripts/preflight_public_build_config.py'
+      - '.github/scripts/preflight_public_build_runtime.py'
+      - '.github/scripts/check_public_build_contract.py'
+      - '.github/scripts/smoke_public_build_browser.py'
+      - '.github/scripts/public_build_acceptance_route.py'
+      - 'backend/scripts/wait_cloud_run_candidate_readiness.py'
+      - 'backend/scripts/resolve_cloud_run_tagged_url.py'
   workflow_dispatch:
     inputs:
       environment:
@@ -13,6 +31,12 @@ on:
 concurrency:
   group: deploy-cloud-run-omi-web-app-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   deploy:

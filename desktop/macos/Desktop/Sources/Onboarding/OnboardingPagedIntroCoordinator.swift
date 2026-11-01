@@ -308,7 +308,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       }
     }
 
-    return "Omi is still building a clearer picture from the sources connected so far."
+    return "Omi is still reading the sources you connected."
   }
 
   func importedMemoryCount(for source: OnboardingMemoryLogSource) -> Int {

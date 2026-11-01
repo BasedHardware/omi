@@ -31,6 +31,13 @@ from utils.stt.streaming import STTService, ProviderAccountRejection
 from utils.stt import streaming
 
 
+@pytest.fixture(autouse=True)
+def _byok_provider_route(monkeypatch):
+    # BYOK sessions still use the legacy connector; managed sessions always
+    # follow the configured chain after the connect-order graduation.
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
@@ -159,6 +166,7 @@ async def test_a_402_deepgram_leg_opens_the_account_cooldown_and_serves_from_par
     parakeet_socket = _live_socket()
 
     socket, service = await streaming.connect_stt_socket_with_fallback(
+        use_config=False,
         primary_service=STTService.modulate,
         connect_primary=AsyncMock(return_value=_RejectedSocket()),
         connect_deepgram=AsyncMock(side_effect=ProviderAccountRejection('deepgram', 'HTTP 402 payment required')),
@@ -187,6 +195,7 @@ async def test_a_spent_402_leg_is_not_dialed_again_while_the_account_cooldown_ho
     modulate_socket = _live_socket()
 
     socket, service = await streaming.connect_stt_socket_with_fallback(
+        use_config=False,
         primary_service=STTService.soniox,
         connect_primary=AsyncMock(return_value=None),
         connect_deepgram=dg_leg,
@@ -270,7 +279,10 @@ async def test_soniox_primary_with_a_402_deepgram_hop_condemns_it_and_raises_whe
             new=AsyncMock(side_effect=ProviderAccountRejection('deepgram', 'HTTP 402 payment required')),
         ),
         patch.object(streaming, '_deepgram_is_available', return_value=True),
-        patch.object(streaming, 'deepgram_fallback_model', return_value='nova-3'),
+        # Deepgram is retired (2026-08-27): the policy gate answers None now, so
+        # this regression pins the receiver-level seam directly — the exact
+        # wiring a still-listed dg deployment would produce.
+        patch.object(receiver_mod, 'deepgram_fallback_model', lambda language: 'nova-3'),
         patch.object(streaming, 'record_fallback'),
     ):
         # The mocked dg leg raises what the real connect path produces once it

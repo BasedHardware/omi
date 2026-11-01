@@ -1,0 +1,410 @@
+{
+  "blocks": [
+    {
+      "type": "editReceipt",
+      "id": "00000000000000000000000000000001",
+      "receiptId": "00000000000000000000000000000001",
+      "targetKind": "task",
+      "action": "completed",
+      "targetId": "item-1",
+      "summary": "Completed task: Book flights to Lisbon",
+      "undoable": true,
+      "undoneAt": null
+    },
+    {
+      "type": "editReceipt",
+      "id": "00000000000000000000000000000002",
+      "receiptId": "00000000000000000000000000000002",
+      "targetKind": "task",
+      "action": "updated",
+      "targetId": "item-2",
+      "summary": "Updated task: Send the Q4 deck to Priya",
+      "undoable": true,
+      "undoneAt": null
+    },
+    {
+      "type": "editReceipt",
+      "id": "00000000000000000000000000000003",
+      "receiptId": "00000000000000000000000000000003",
+      "targetKind": "memory",
+      "action": "deleted",
+      "targetId": "item-3",
+      "summary": "Removed from current knowledge: Prefers window seats",
+      "undoable": false,
+      "undoneAt": "2026-10-11T10:00:00Z"
+    },
+    {
+      "type": "editReceipt",
+      "id": "00000000000000000000000000000004",
+      "receiptId": "00000000000000000000000000000004",
+      "targetKind": "conversation",
+      "action": "updated",
+      "targetId": "item-4",
+      "summary": "Title \u2192 Pricing sync",
+      "undoable": true,
+      "undoneAt": null
+    },
+    {
+      "type": "editReceipt",
+      "id": "00000000000000000000000000000005",
+      "receiptId": "00000000000000000000000000000005",
+      "targetKind": "person",
+      "action": "renamed",
+      "targetId": "item-5",
+      "summary": "Name \u2192 Priya",
+      "undoable": true,
+      "undoneAt": null
+    },
+    {
+      "type": "editReceipt",
+      "id": "00000000000000000000000000000006",
+      "receiptId": "00000000000000000000000000000006",
+      "targetKind": "memory",
+      "action": "updated",
+      "targetId": "item-6",
+      "summary": "Updated memory: Confirmed fact",
+      "undoable": false,
+      "undoneAt": null
+    }
+  ],
+  "messages": [
+    {
+      "id": "message-1",
+      "text": "Completed task: Book flights to Lisbon",
+      "created_at": "2026-10-11T10:00:00Z",
+      "sender": "ai",
+      "app_id": null,
+      "plugin_id": null,
+      "from_external_integration": false,
+      "type": "text",
+      "memories_id": [],
+      "memories": [],
+      "reported": false,
+      "report_reason": null,
+      "files_id": [],
+      "files": [],
+      "chat_session_id": null,
+      "session_id": null,
+      "data_protection_level": null,
+      "langsmith_run_id": null,
+      "prompt_name": null,
+      "prompt_commit": null,
+      "rating": null,
+      "metadata": null,
+      "content_blocks": [
+        {
+          "type": "editReceipt",
+          "id": "00000000000000000000000000000001",
+          "receiptId": "00000000000000000000000000000001",
+          "targetKind": "task",
+          "action": "completed",
+          "targetId": "item-1",
+          "summary": "Completed task: Book flights to Lisbon",
+          "undoable": true,
+          "undoneAt": null
+        }
+      ],
+      "evidence": null,
+      "client_message_id": null,
+      "message_source": null,
+      "journal_revision": null,
+      "chart_data": null
+    },
+    {
+      "id": "message-2",
+      "text": "Updated task: Send the Q4 deck to Priya",
+      "created_at": "2026-10-11T10:00:00Z",
+      "sender": "ai",
+      "app_id": null,
+      "plugin_id": null,
+      "from_external_integration": false,
+      "type": "text",
+      "memories_id": [],
+      "memories": [],
+      "reported": false,
+      "report_reason": null,
+      "files_id": [],
+      "files": [],
+      "chat_session_id": null,
+      "session_id": null,
+      "data_protection_level": null,
+      "langsmith_run_id": null,
+      "prompt_name": null,
+      "prompt_commit": null,
+      "rating": null,
+      "metadata": null,
+      "content_blocks": [
+        {
+          "type": "editReceipt",
+          "id": "00000000000000000000000000000002",
+          "receiptId": "00000000000000000000000000000002",
+          "targetKind": "task",
+          "action": "updated",
+          "targetId": "item-2",
+          "summary": "Updated task: Send the Q4 deck to Priya",
+          "undoable": true,
+          "undoneAt": null
+        }
+      ],
+      "evidence": null,
+      "client_message_id": null,
+      "message_source": null,
+      "journal_revision": null,
+      "chart_data": null
+    },
+    {
+      "id": "message-3",
+      "text": "Removed from current knowledge: Prefers window seats",
+      "created_at": "2026-10-11T10:00:00Z",
+      "sender": "ai",
+      "app_id": null,
+      "plugin_id": null,
+      "from_external_integration": false,
+      "type": "text",
+      "memories_id": [],
+      "memories": [],
+      "reported": false,
+      "report_reason": null,
+      "files_id": [],
+      "files": [],
+      "chat_session_id": null,
+      "session_id": null,
+      "data_protection_level": null,
+      "langsmith_run_id": null,
+      "prompt_name": null,
+      "prompt_commit": null,
+      "rating": null,
+      "metadata": null,
+      "content_blocks": [
+        {
+          "type": "editReceipt",
+          "id": "00000000000000000000000000000003",
+          "receiptId": "00000000000000000000000000000003",
+          "targetKind": "memory",
+          "action": "deleted",
+          "targetId": "item-3",
+          "summary": "Removed from current knowledge: Prefers window seats",
+          "undoable": false,
+          "undoneAt": "2026-10-11T10:00:00Z"
+        }
+      ],
+      "evidence": null,
+      "client_message_id": null,
+      "message_source": null,
+      "journal_revision": null,
+      "chart_data": null
+    },
+    {
+      "id": "message-4",
+      "text": "Title \u2192 Pricing sync",
+      "created_at": "2026-10-11T10:00:00Z",
+      "sender": "ai",
+      "app_id": null,
+      "plugin_id": null,
+      "from_external_integration": false,
+      "type": "text",
+      "memories_id": [],
+      "memories": [],
+      "reported": false,
+      "report_reason": null,
+      "files_id": [],
+      "files": [],
+      "chat_session_id": null,
+      "session_id": null,
+      "data_protection_level": null,
+      "langsmith_run_id": null,
+      "prompt_name": null,
+      "prompt_commit": null,
+      "rating": null,
+      "metadata": null,
+      "content_blocks": [
+        {
+          "type": "editReceipt",
+          "id": "00000000000000000000000000000004",
+          "receiptId": "00000000000000000000000000000004",
+          "targetKind": "conversation",
+          "action": "updated",
+          "targetId": "item-4",
+          "summary": "Title \u2192 Pricing sync",
+          "undoable": true,
+          "undoneAt": null
+        }
+      ],
+      "evidence": null,
+      "client_message_id": null,
+      "message_source": null,
+      "journal_revision": null,
+      "chart_data": null
+    },
+    {
+      "id": "message-5",
+      "text": "Name \u2192 Priya",
+      "created_at": "2026-10-11T10:00:00Z",
+      "sender": "ai",
+      "app_id": null,
+      "plugin_id": null,
+      "from_external_integration": false,
+      "type": "text",
+      "memories_id": [],
+      "memories": [],
+      "reported": false,
+      "report_reason": null,
+      "files_id": [],
+      "files": [],
+      "chat_session_id": null,
+      "session_id": null,
+      "data_protection_level": null,
+      "langsmith_run_id": null,
+      "prompt_name": null,
+      "prompt_commit": null,
+      "rating": null,
+      "metadata": null,
+      "content_blocks": [
+        {
+          "type": "editReceipt",
+          "id": "00000000000000000000000000000005",
+          "receiptId": "00000000000000000000000000000005",
+          "targetKind": "person",
+          "action": "renamed",
+          "targetId": "item-5",
+          "summary": "Name \u2192 Priya",
+          "undoable": true,
+          "undoneAt": null
+        }
+      ],
+      "evidence": null,
+      "client_message_id": null,
+      "message_source": null,
+      "journal_revision": null,
+      "chart_data": null
+    },
+    {
+      "id": "message-6",
+      "text": "Updated memory: Confirmed fact",
+      "created_at": "2026-10-11T10:00:00Z",
+      "sender": "ai",
+      "app_id": null,
+      "plugin_id": null,
+      "from_external_integration": false,
+      "type": "text",
+      "memories_id": [],
+      "memories": [],
+      "reported": false,
+      "report_reason": null,
+      "files_id": [],
+      "files": [],
+      "chat_session_id": null,
+      "session_id": null,
+      "data_protection_level": null,
+      "langsmith_run_id": null,
+      "prompt_name": null,
+      "prompt_commit": null,
+      "rating": null,
+      "metadata": null,
+      "content_blocks": [
+        {
+          "type": "editReceipt",
+          "id": "00000000000000000000000000000006",
+          "receiptId": "00000000000000000000000000000006",
+          "targetKind": "memory",
+          "action": "updated",
+          "targetId": "item-6",
+          "summary": "Updated memory: Confirmed fact",
+          "undoable": false,
+          "undoneAt": null
+        }
+      ],
+      "evidence": null,
+      "client_message_id": null,
+      "message_source": null,
+      "journal_revision": null,
+      "chart_data": null
+    }
+  ],
+  "undo_responses": {
+    "00000000000000000000000000000001": {
+      "status": "undone",
+      "block": {
+        "type": "editReceipt",
+        "id": "00000000000000000000000000000001",
+        "receiptId": "00000000000000000000000000000001",
+        "targetKind": "task",
+        "action": "completed",
+        "targetId": "item-1",
+        "summary": "Completed task: Book flights to Lisbon",
+        "undoable": false,
+        "undoneAt": "2026-10-11T10:00:00Z"
+      }
+    },
+    "00000000000000000000000000000002": {
+      "status": "undone",
+      "block": {
+        "type": "editReceipt",
+        "id": "00000000000000000000000000000002",
+        "receiptId": "00000000000000000000000000000002",
+        "targetKind": "task",
+        "action": "updated",
+        "targetId": "item-2",
+        "summary": "Updated task: Send the Q4 deck to Priya",
+        "undoable": false,
+        "undoneAt": "2026-10-11T10:00:00Z"
+      }
+    },
+    "00000000000000000000000000000003": {
+      "status": "undone",
+      "block": {
+        "type": "editReceipt",
+        "id": "00000000000000000000000000000003",
+        "receiptId": "00000000000000000000000000000003",
+        "targetKind": "memory",
+        "action": "deleted",
+        "targetId": "item-3",
+        "summary": "Removed from current knowledge: Prefers window seats",
+        "undoable": false,
+        "undoneAt": "2026-10-11T10:00:00Z"
+      }
+    },
+    "00000000000000000000000000000004": {
+      "status": "undone",
+      "block": {
+        "type": "editReceipt",
+        "id": "00000000000000000000000000000004",
+        "receiptId": "00000000000000000000000000000004",
+        "targetKind": "conversation",
+        "action": "updated",
+        "targetId": "item-4",
+        "summary": "Title \u2192 Pricing sync",
+        "undoable": false,
+        "undoneAt": "2026-10-11T10:00:00Z"
+      }
+    },
+    "00000000000000000000000000000005": {
+      "status": "undone",
+      "block": {
+        "type": "editReceipt",
+        "id": "00000000000000000000000000000005",
+        "receiptId": "00000000000000000000000000000005",
+        "targetKind": "person",
+        "action": "renamed",
+        "targetId": "item-5",
+        "summary": "Name \u2192 Priya",
+        "undoable": false,
+        "undoneAt": "2026-10-11T10:00:00Z"
+      }
+    },
+    "00000000000000000000000000000006": {
+      "status": "undone",
+      "block": {
+        "type": "editReceipt",
+        "id": "00000000000000000000000000000006",
+        "receiptId": "00000000000000000000000000000006",
+        "targetKind": "memory",
+        "action": "updated",
+        "targetId": "item-6",
+        "summary": "Updated memory: Confirmed fact",
+        "undoable": false,
+        "undoneAt": "2026-10-11T10:00:00Z"
+      }
+    }
+  }
+}

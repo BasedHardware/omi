@@ -1,0 +1,13 @@
+{
+  "release": "20261015-v1",
+  "newBucketOnly": true,
+  "location": "us-central1",
+  "storageClass": "STANDARD",
+  "versioning": {"enabled": false},
+  "softDeletePolicy": {"retentionDurationSeconds": "0"},
+  "lifecycle": {"rule": [
+    {"action": {"type": "Delete"}, "condition": {"age": 1, "matchesPrefix": ["staging-20261015-v1/"]}},
+    {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged-20261015-v1/"]}},
+    {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback-20261015-v1/"]}}
+  ]}
+}

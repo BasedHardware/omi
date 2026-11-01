@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomePage } from '@/components/home/HomePage';
 import type { MessageFile } from '@/types/conversation';
@@ -7,6 +7,7 @@ const sendMessage = vi.fn(async () => undefined);
 const loadHistory = vi.fn(async () => undefined);
 const appendRealtimeExchange = vi.fn(async () => undefined);
 const startLive = vi.fn(async () => undefined);
+let tasksCompleteError: string | null = null;
 
 vi.mock('@tschk/moonshine-next/image', () => ({
   default: ({ alt }: React.ComponentProps<'img'>) => <img alt={alt} />,
@@ -76,6 +77,7 @@ vi.mock('@/hooks/useHomeTasks', () => ({
     items: [{ id: 'task-1', description: 'Review the launch plan' }],
     loading: false,
     error: null,
+    completeError: tasksCompleteError,
     complete: vi.fn(),
   }),
 }));
@@ -118,6 +120,7 @@ vi.mock('@/components/chat/RecordingStage', () => ({ RecordingStage: () => null 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  tasksCompleteError = null;
   loadHistory.mockReset();
   loadHistory.mockResolvedValue(undefined);
   Element.prototype.scrollIntoView = vi.fn();
@@ -189,5 +192,26 @@ describe('Home Currents ordering', () => {
 
     await waitFor(() => expect(loadHistory).toHaveBeenCalledTimes(1));
     expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('Home Currents tasks', () => {
+  it('says why a ticked task came back when completing it failed', () => {
+    tasksCompleteError = 'API error: 500 Internal Server Error';
+
+    render(<HomePage />);
+
+    const currents = screen.getByRole('region', { name: 'Currents' });
+    expect(within(currents).getByRole('alert')).toHaveTextContent(
+      'API error: 500 Internal Server Error',
+    );
+    expect(within(currents).getByText('Review the launch plan')).toBeInTheDocument();
+  });
+
+  it('shows no failure while every tick has saved', () => {
+    render(<HomePage />);
+
+    const currents = screen.getByRole('region', { name: 'Currents' });
+    expect(within(currents).queryByRole('alert')).not.toBeInTheDocument();
   });
 });

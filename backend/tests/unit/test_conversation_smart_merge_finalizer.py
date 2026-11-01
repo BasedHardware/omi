@@ -6,7 +6,11 @@ here applies that production admission rule; it must never answer ``claimed``
 for a row production would fence, or the donor retry path is hidden again.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
+
+from utils import rollout_cohorts
 
 from database import conversation_finalization_jobs as jobs_db
 from models.conversation_enums import ConversationStatus
@@ -42,16 +46,30 @@ class _Conversation:
         self.geolocation = None
         self.client_device_id = None
 
+    def model_dump(self):
+        return {'id': self.id, 'status': self.status}
+
 
 @pytest.fixture
 def harness(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     calls = []
     row = {'id': 'n', 'status': 'completed', 'source': 'omi', 'discarded': False, **_BOUND}
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    # The live-episode hook runs after fanout completion; its own tests cover it.
+    monkeypatch.setenv('EPISODES_ENABLED', 'off')
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
 
     async def fake_run_blocking(_executor, function, *args, **kwargs):
-        calls.append(function)
         if function is finalizer.conversations_db.get_conversation:
+            calls.append(function)
             return row
+        if function is finalizer.reserve_recording:
+            # Exercise the real default-off gate; it must not claim a route or touch Firestore.
+            return function(*args, **kwargs)
+        if function is finalizer.apply_call_metadata:
+            return function(*args, **kwargs)
+        calls.append(function)
         if function is finalizer.finalization_jobs_db.get_finalization_job:
             return _JOB
         if function is finalizer.get_cached_user_geolocation:
@@ -93,6 +111,118 @@ async def _finalize(trigger=ProcessingTrigger.CAPTURE_END):
     return await finalizer.finalize_persisted_conversation(
         'u', 'n', finalization_job_id='job', dispatch_generation=1, lease_epoch=1, trigger=trigger
     )
+
+
+@pytest.mark.parametrize('registered', [True, False])
+async def test_generic_batch_registration_refusal_is_visible_and_blocks_fanout(
+    harness, monkeypatch, caplog, registered
+):
+    calls, row = harness
+    row['record_lane_owner'] = 'batch_live_v1'
+    original = finalizer.run_blocking
+    before = finalizer.RECORD_REGISTER_REFUSED._value.get()
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    with caplog.at_level('WARNING', logger=finalizer.logger.name):
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await _finalize()
+    assert (finalizer.lifecycle_service.claim_finalization_fanout in calls) is registered
+    assert finalizer.RECORD_REGISTER_REFUSED._value.get() == before + int(not registered)
+    messages = [r.getMessage() for r in caplog.records if 'register_refused' in r.getMessage()]
+    assert messages == ([] if registered else ['event=register_refused owner=batch_live_v1'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('trigger', [ProcessingTrigger.CAPTURE_END, ProcessingTrigger.SILENT_BACKFILL])
+@pytest.mark.parametrize('registered', [True, False])
+async def test_record_registration_precedes_terminal_fanout_even_for_silent_backfill(
+    harness, monkeypatch, trigger, registered
+):
+    calls, row = harness
+    row['record_lane_owner'] = 'batch_live_v1'
+    conversation = _Conversation()
+    conversation.model_dump = lambda: {'id': 'n', 'status': 'completed'}
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _: conversation)
+    original = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            assert args[1]['record_lane_owner'] == 'batch_live_v1'
+            calls.append(function)
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    async def absorbed(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    monkeypatch.setattr(finalizer, 'smart_merge_step', absorbed)
+    if registered:
+        if trigger is ProcessingTrigger.SILENT_BACKFILL:
+            assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.fenced
+            assert finalizer.register_recording in calls
+            assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+        else:
+            assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.completed
+            assert calls.index(finalizer.register_recording) < calls.index(
+                finalizer.lifecycle_service.claim_finalization_fanout
+            )
+    else:
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await _finalize(trigger)
+        assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+        assert finalizer.lifecycle_service.complete_finalization_fanout not in calls
+
+
+@pytest.mark.asyncio
+async def test_completed_minimum_reaches_processing_under_its_existing_job(harness, monkeypatch):
+    calls, row = harness
+    row.update(summary_title_provenance='server_minimum', summary_output_present=False)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    original = finalizer.run_blocking
+    processed = []
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.process_with_episode_budget:
+            processed.append(args)
+            # A failed summary must fail this delivery before terminal fanout,
+            # retaining the existing durable job's retry rather than skipping it.
+            raise RuntimeError('synthetic provider unavailable')
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    with pytest.raises(finalizer.ConversationFinalizationError):
+        await _finalize()
+    assert len(processed) == 1
+    assert processed[0][0] is finalizer.process_conversation
+    assert finalizer.lifecycle_service.complete_finalization_fanout not in calls
+
+
+def test_default_off_reservation_does_not_claim_record_owner(monkeypatch):
+    from utils.batch_pipeline import live as batch_live
+
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+
+    def unexpected_claim(*_args, **_kwargs):
+        raise AssertionError('dark-path reservation attempted a Firestore owner claim')
+
+    monkeypatch.setattr(batch_live, 'claim_record_lane_owner', unexpected_claim)
+    conversation = {
+        'id': 'n',
+        'status': 'processing',
+        'private_cloud_sync_enabled': True,
+        'language': 'en',
+        'data_protection_level': 'standard',
+    }
+
+    assert finalizer.reserve_recording('u', conversation) is None
+    assert 'record_lane_owner' not in conversation
 
 
 @pytest.mark.asyncio
@@ -189,3 +319,37 @@ async def test_donor_resume_failure_stays_retryable_and_never_claims(harness, re
     assert str(raised.value) == 'processing_failed'
     assert calls == [finalizer.conversations_db.get_conversation, finalizer.finalization_jobs_db.get_finalization_job]
     assert any('stage=smart_merge exception_type=SmartMergeIncomplete' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_pusher_finalizer_refreshes_expired_shadow_cohort_before_admission(harness, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    conversation = _Conversation()
+    conversation.status = ConversationStatus.processing
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _data: conversation)
+    membership = [True]
+    reads = []
+    seen = []
+
+    def read(uid):
+        reads.append(uid)
+        return {'prod': {'transcription-shadow': membership[0]}}
+
+    def admit(uid, _conversation):
+        seen.append(rollout_cohorts.in_rollout_cohort(uid, 'transcription-shadow'))
+        raise RuntimeError('stop after real shadow admission boundary')
+
+    monkeypatch.setattr(finalizer, '_maybe_start_shadow', admit)
+    rollout_cohorts.configure_rollout_runtime()
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for value in (True, False):
+            membership[0] = value
+            if 'u' in cache.entries:
+                cache.entries['u'].expires = 0
+            with pytest.raises(finalizer.ConversationFinalizationError):
+                await _finalize()
+    assert seen == [True, False]
+    assert reads == ['u', 'u']

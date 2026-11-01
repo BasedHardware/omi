@@ -227,6 +227,15 @@ class _PeopleListState extends State<PeopleList> {
         children: [
           ...widget.leading,
           _filters(provider),
+          if (provider.statsTruncated && people.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+              child: Text(
+                l10n.peopleStatsIncomplete,
+                key: const Key('people_stats_incomplete'),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
+            ),
           if (showBanner) _CleanUpBanner(count: unsure, onReview: widget.onCleanUp!),
           const SizedBox(height: OmiSpacing.xs),
           if (people.isEmpty)

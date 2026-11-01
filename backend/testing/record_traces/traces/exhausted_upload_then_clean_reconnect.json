@@ -1,0 +1,35 @@
+{
+  "schema": "record-trace/1",
+  "name": "exhausted_upload_then_clean_reconnect",
+  "source": "#24084: an earlier session's lost upload is sticky; a later clean session must not certify it; the failed session's producer token stays on the row (main a05342f), harmless because the failure is sticky",
+  "row": {
+    "record_lane_owner": "batch_live_v1"
+  },
+  "durable": [
+    false
+  ],
+  "sessions": [
+    {
+      "frames": [
+        "conversation",
+        {
+          "audio_seconds": 1
+        }
+      ],
+      "upload": "fail"
+    },
+    {
+      "frames": [
+        "conversation",
+        "finalize"
+      ],
+      "upload": "ok"
+    }
+  ],
+  "expect": {
+    "sealed": false,
+    "upload_failed": true,
+    "open_tokens": 1,
+    "admissible": false
+  }
+}

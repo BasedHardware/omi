@@ -1,0 +1,124 @@
+[
+  {
+    "op": "test",
+    "path": "/spec",
+    "value": {
+      "behavior": {
+        "scaleDown": {
+          "policies": [
+            {
+              "periodSeconds": 900,
+              "type": "Pods",
+              "value": 1
+            }
+          ],
+          "selectPolicy": "Max",
+          "stabilizationWindowSeconds": 900
+        },
+        "scaleUp": {
+          "policies": [
+            {
+              "periodSeconds": 60,
+              "type": "Pods",
+              "value": 1
+            }
+          ],
+          "selectPolicy": "Max",
+          "stabilizationWindowSeconds": 0
+        }
+      },
+      "maxReplicas": 12,
+      "metrics": [
+        {
+          "pods": {
+            "metric": {
+              "name": "parakeet_active_requests_total"
+            },
+            "target": {
+              "averageValue": "2",
+              "type": "AverageValue"
+            }
+          },
+          "type": "Pods"
+        },
+        {
+          "external": {
+            "metric": {
+              "name": "parakeet_gpu_utilization"
+            },
+            "target": {
+              "type": "Value",
+              "value": "35"
+            }
+          },
+          "type": "External"
+        },
+        {
+          "external": {
+            "metric": {
+              "name": "parakeet_request_latency_p99"
+            },
+            "target": {
+              "type": "Value",
+              "value": "3"
+            }
+          },
+          "type": "External"
+        }
+      ],
+      "minReplicas": 3,
+      "scaleTargetRef": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "name": "prod-omi-parakeet"
+      }
+    }
+  },
+  {
+    "op": "replace",
+    "path": "/spec/minReplicas",
+    "value": 12
+  },
+  {
+    "op": "replace",
+    "path": "/spec/metrics",
+    "value": [
+      {
+        "pods": {
+          "metric": {
+            "name": "parakeet_active_requests_total"
+          },
+          "target": {
+            "averageValue": "2",
+            "type": "AverageValue"
+          }
+        },
+        "type": "Pods"
+      },
+      {
+        "external": {
+          "metric": {
+            "name": "parakeet_gpu_utilization"
+          },
+          "target": {
+            "type": "Value",
+            "value": "35"
+          }
+        },
+        "type": "External"
+      },
+      {
+        "type": "External",
+        "external": {
+          "metric": {
+            "name": "parakeet_request_latency_p99"
+          },
+          "target": {
+            "type": "Value",
+            "value": "3"
+          }
+        }
+      }
+    ]
+  }
+]

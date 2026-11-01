@@ -122,3 +122,41 @@ def test_omi_paid_policy_keeps_non_byok_fallbacks_visible():
     assert is_fallback_eligible_by_default(FailureClass.PROVIDER_429_OMI_PAID, policy)
     assert is_fallback_eligible_by_default(FailureClass.PROVIDER_5XX_OMI_PAID, policy)
     assert not is_fallback_eligible_by_default(FailureClass.INVALID_CONFIG, policy)
+
+
+def test_forwarded_key_for_missing():
+    context = build_byok_credential_context(
+        ServiceCaller(name='backend', user_uid='user-123'),
+        {'openai': 'sk-123'},
+    )
+    assert context.forwarded_key_for('anthropic') is None
+
+
+def test_forwarded_key_for_empty():
+    context = build_byok_credential_context(
+        ServiceCaller(name='backend', user_uid='user-123'),
+        {'openai': '  '},
+    )
+    assert context.forwarded_key_for('openai') is None
+
+
+def test_omi_managed_safe_model_dump():
+    context = build_omi_managed_credential_context(ServiceCaller(name='backend'))
+    dump = context.safe_model_dump()
+    assert 'forwarded_provider_keys' not in dump
+    assert dump['mode'] == CredentialMode.OMI_PAID.value
+    assert dump['source'] == 'omi_managed'
+
+
+def test_normalize_optional_mapping_with_values():
+    context = build_byok_credential_context(
+        ServiceCaller(name='backend', user_uid='user-123'), {'openai': 'sk-123'}, key_refs={' OPENAI ': 'ref-1'}
+    )
+    assert context.provider_keys['openai'].key_ref == 'ref-1'
+
+
+def test_normalize_optional_mapping_none():
+    context = build_byok_credential_context(
+        ServiceCaller(name='backend', user_uid='user-123'), {'openai': 'sk-123'}, key_refs=None
+    )
+    assert context.provider_keys['openai'].key_ref is None

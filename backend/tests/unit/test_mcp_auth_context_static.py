@@ -99,7 +99,7 @@ def test_mcp_routes_advertise_memories_read_and_wire_memory_context_only_on_memo
     auth_source = (ROOT / 'utils' / 'mcp_server' / 'auth.py').read_text()
     memory_handlers_source = (ROOT / 'utils' / 'mcp_server' / 'handlers' / 'memories.py').read_text()
 
-    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in rest_source
+    assert 'uid: str = Depends(get_uid_with_mcp_memories_read)' in rest_source
     assert 'MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]' in registry_source
     assert 'auth_context: Optional[ProductAuthorizationContext] = None' in memory_handlers_source
     assert 'authenticate_api_key_auth_context' in auth_source

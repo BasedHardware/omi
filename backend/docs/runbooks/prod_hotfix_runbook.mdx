@@ -17,6 +17,7 @@ Dispatch [Deploy Backend to Cloud RUN](https://github.com/BasedHardware/omi/acti
 | Input | Values | When to use |
 |---|---|---|
 | `mode` | `deploy` (default) | Normal image build + rollout |
+| `mode` | `build-only` | Build and push `backend:<sha7>` for an admitted SHA without deploying, so `gcp_backend_listen_helm.yml` can roll it ([below](#listen-only-fixes-mode-build-only)) |
 | `mode` | `repair-traffic-only` | Restore `spec.traffic` to the currently serving revision without deploying |
 | `deploy_targets` | `cloud-run-only` (default) | The only production deploy target; promotes the four validated Cloud Run revisions |
 | `deploy_targets` | `all` | Development only; production dispatch rejects it before credentials or mutations |
@@ -99,6 +100,29 @@ or known-audio smoke restores and verifies the saved Cloud Run snapshot.
 `deploy_targets=all` remains available for development only. Production
 `backend-listen`, GKE, and backend-secret changes use their dedicated approved
 workflows rather than this rollback-scoped Cloud Run deploy.
+
+## Listen-only fixes (mode: build-only)
+
+`gcp_backend_listen_helm.yml` deploys an explicit `image_tag` only when
+`gcr.io/<project>/backend:<sha7>` already exists. To ship a listen-only fix
+without a full backend train, publish that image first with `mode=build-only`
+and the same exact admitted 40-character `release_sha`:
+
+```bash
+gh workflow run gcp_backend.yml --ref main \
+  -f environment=prod -f mode=build-only \
+  -f release_sha=<40-char main SHA> \
+  -f deploy_targets=cloud-run-only -f deploy_gateway=false
+```
+
+`build-only` runs the same production-boundary validation, Release Eligibility
+admission, and break-glass audit as `deploy`, in the same GitHub Environment
+(prod approval and prod WIF). It then builds, smokes, and pushes only the
+`<sha7>` tag and records its digest in the run summary. It changes no Cloud
+Run service, traffic, runtime env, GKE workload, or the `:latest` tag. If the
+`<sha7>` tag already exists, it records that digest and does not rebuild or
+re-push it. The run summary prints the follow-up
+`gcp_backend_listen_helm.yml ... image_tag=<sha7>` dispatch.
 
 ## Runtime env source of truth
 

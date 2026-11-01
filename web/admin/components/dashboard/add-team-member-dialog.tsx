@@ -16,18 +16,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthFetch } from "@/hooks/useAuthToken";
+import { ROLES, ROLE_IDS, type RoleId } from "@/lib/admin-access";
 
 interface AddTeamMemberDialogProps {
   children: ReactNode;
+  /** Only an owner may appoint deputies. */
+  isOwner?: boolean;
   onMemberAdded: () => void | Promise<void>;
 }
 
 export function AddTeamMemberDialog({
   children,
+  isOwner = false,
   onMemberAdded,
 }: AddTeamMemberDialogProps) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
+  const [accessRole, setAccessRole] = useState<RoleId>("viewer");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const { fetchWithAuth } = useAuthFetch();
@@ -35,6 +40,7 @@ export function AddTeamMemberDialog({
   const close = () => {
     setOpen(false);
     setEmail("");
+    setAccessRole("viewer");
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -46,7 +52,7 @@ export function AddTeamMemberDialog({
     try {
       const response = await fetchWithAuth("/api/omi/team-members", {
         method: "POST",
-        body: JSON.stringify({ email: normalizedEmail }),
+        body: JSON.stringify({ email: normalizedEmail, accessRole }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -86,7 +92,10 @@ export function AddTeamMemberDialog({
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
-        if (!nextOpen) setEmail("");
+        if (!nextOpen) {
+          setEmail("");
+          setAccessRole("viewer");
+        }
       }}
     >
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -112,6 +121,25 @@ export function AddTeamMemberDialog({
               autoFocus
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="team-member-role">Role</Label>
+            <select
+              id="team-member-role"
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={accessRole}
+              onChange={(event) => setAccessRole(event.target.value as RoleId)}
+            >
+              {ROLE_IDS.filter((id) => id !== "deputy" || isOwner).map((id) => (
+                <option key={id} value={id}>
+                  {ROLES[id].label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              You can grant a role no broader than your own.
+            </p>
           </div>
 
           <DialogFooter>

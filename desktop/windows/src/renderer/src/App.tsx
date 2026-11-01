@@ -51,6 +51,7 @@ import { refreshIfStale } from './lib/voice/autoModelSelector'
 import { refreshAboutUserCard, resetAboutUserCard } from './lib/voice/aboutUser'
 import { refreshUserVocabulary, resetUserVocabulary } from './lib/ptt/userVocabulary'
 import { trackEvent } from './lib/analytics'
+import { SignLanguageOverlayGate } from './components/signLanguage/SignOverlay'
 
 // The overlay, insight-toast, and hidden capture windows load this same bundle at
 // their own hash routes. Window-singleton hosts (tray state, auth-change fan-out)
@@ -70,16 +71,6 @@ function AppShellInner(): React.JSX.Element {
   useEffect(() => {
     window.omi?.setTitleBarSurface?.(isHome)
   }, [isHome])
-
-  // JIT evidence navigation is routed by the main process so the insight toast
-  // cannot manufacture or dereference an href in its secondary window.
-  useEffect(() => {
-    if (IS_SECONDARY_WINDOW) return
-    return window.omi.onRewindFocusFrame((frameId) => {
-      if (!Number.isInteger(frameId) || frameId < 0) return
-      navigate(`/rewind?frame_id=${encodeURIComponent(String(frameId))}`)
-    })
-  }, [navigate])
 
   // Honor the one-shot destination requested when onboarding completes. The
   // shell mounts at /home after the
@@ -138,6 +129,8 @@ function AppShellInner(): React.JSX.Element {
       <AppChrome>
         <MainViews />
       </AppChrome>
+      {/* Only renders while Settings → General → Sign-language translation is on. */}
+      <SignLanguageOverlayGate />
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}

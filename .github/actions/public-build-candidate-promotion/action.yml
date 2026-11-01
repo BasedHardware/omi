@@ -133,3 +133,29 @@ runs:
           sleep 10
         done
         echo "promoted candidate ${{ inputs.revision }} accepted at ${public_url}"
+
+    - name: Prune superseded candidate tags
+      shell: bash
+      run: |
+        set -uo pipefail
+        # Each promotion adds a tag; keep the newest three for rollback URLs and
+        # drop the rest so tagged traffic entries do not grow without bound.
+        # Never fails the deploy: the candidate is already live and accepted.
+        stale="$(gcloud run services describe "${{ inputs.service }}" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --format=json | python3 .github/scripts/public_build_acceptance_route.py stale-tags \
+          --target "${{ inputs.target }}" \
+          --keep-latest 3 \
+          --keep-tag "${{ inputs.tag }}")" || { echo "::warning::could not list candidate tags"; exit 0; }
+        if [[ -z "$stale" ]]; then
+          echo "no superseded candidate tags"
+          exit 0
+        fi
+        echo "removing $(tr ',' '\n' <<<"$stale" | wc -l | tr -d ' ') superseded candidate tag(s)"
+        gcloud run services update-traffic "${{ inputs.service }}" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --remove-tags="$stale" \
+          --quiet \
+          || echo "::warning::could not remove superseded candidate tags"

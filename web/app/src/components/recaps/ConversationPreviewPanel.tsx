@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { getConversation } from '@/lib/api';
 import type { Conversation } from '@/types/conversation';
 import { selectConversationSummary } from '@/lib/conversationSummarySelection';
+import { conversationDisplayTitle } from '@/lib/conversationTitle';
 
 interface ConversationPreviewPanelProps {
   conversationIds: string[];
@@ -156,7 +157,7 @@ export function ConversationPreviewPanel({
                           {/* Title */}
                           <div className="flex items-start justify-between gap-2">
                             <h4 className="line-clamp-1 text-sm font-medium text-text-primary transition-colors group-hover:text-text-primary">
-                              {conversation.structured.title || 'Untitled'}
+                              {conversationDisplayTitle(conversation) || 'Untitled'}
                             </h4>
                             <ExternalLink className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-text-quaternary transition-colors group-hover:text-text-primary" />
                           </div>

@@ -45,7 +45,7 @@ def test_forwards_prompt_cache_key():
 
 @pytest.mark.parametrize(
     'lane_id',
-    ['omi:auto:memory-conflict-flex', 'omi:auto:memory-l2-flex', 'omi:auto:x-memory-extraction-flex'],
+    ['omi:auto:memory-l2-flex', 'omi:auto:x-memory-extraction-flex'],
 )
 def test_forwards_flex_only_for_scheduled_background_lanes(lane_id):
     lane = load_gateway_config(prod_mode=True).lanes[lane_id]
@@ -65,7 +65,7 @@ def test_rejects_flex_for_other_lanes():
 
 
 def test_rejects_unbounded_service_tier_values():
-    lane = load_gateway_config(prod_mode=True).lanes['omi:auto:memory-conflict-flex']
+    lane = load_gateway_config(prod_mode=True).lanes['omi:auto:memory-l2-flex']
     request = valid_request(service_tier='auto')
     request.pop('response_format')
 

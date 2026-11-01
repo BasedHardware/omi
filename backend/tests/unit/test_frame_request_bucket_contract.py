@@ -7,6 +7,7 @@ from scripts.validate_frame_request_bucket_contract import (
     validate_contract_document,
     validate_runtime_binding,
     validate_temporary_bucket_contract,
+    _load_yaml_document,
 )
 
 
@@ -64,9 +65,8 @@ def test_live_bucket_contract_rejects_wrong_or_public_bucket():
 
 def test_runtime_manifest_and_contract_bind_permanent_bucket():
     root = Path(__file__).resolve().parents[2]
-    import yaml
 
-    runtime = yaml.safe_load((root / "deploy/runtime_env.yaml").read_text())
+    runtime = _load_yaml_document((root / "deploy/runtime_env.yaml").read_text())
     contract = json.loads((root / "deploy/frame-request-bucket-contract.json").read_text())
     assert validate_runtime_binding(runtime) == []
     assert validate_contract_document(contract) == []

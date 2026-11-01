@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/auth/clear_deleted_account_session.dart';
+import 'package:omi/services/wals/deleted_account_uids.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -152,6 +153,68 @@ void main() {
     expect(SharedPreferencesUtil().authToken, isEmpty);
     expect(await service.refreshIdToken(), isA<AuthTokenMissingUser>());
     expect(gateway.refreshCalls, 0, reason: 'failed platform sign-out must still leave the old user locally terminal');
+  });
+
+  test('account deletion purges that account audio before providers and remembers the uid after the wipe', () async {
+    SharedPreferences.setMockInitialValues({
+      'uid': 'user-1',
+      deletedAccountUidsKey: ['older-account'],
+    });
+    await SharedPreferencesUtil.init();
+    final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>());
+    final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+    final order = <String>[];
+    final previous = await readDeletedAccountUids();
+
+    await clearDeletedAccountSession(
+      authService: service,
+      purgeAccountAudio: () async => order.add('purge'),
+      clearUserState: () => order.add('providers'),
+      clearWal: () async => order.add('wal'),
+      clearPreferences: () async {
+        order.add('preferences');
+        await SharedPreferencesUtil().clear();
+      },
+      rememberDeletedAccount: () async {
+        order.add('remember');
+        await saveDeletedAccountUids(
+          withDeletedAccountUid(previous, 'user-1'),
+        );
+      },
+    );
+
+    expect(order, ['purge', 'providers', 'wal', 'preferences', 'remember']);
+    expect(SharedPreferencesUtil().uid, isEmpty);
+    expect(await readDeletedAccountUids(), ['older-account', 'user-1']);
+  });
+
+  test('a failing audio purge does not block deletion cleanup or the remembered uid', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'user-1'});
+    await SharedPreferencesUtil.init();
+    final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>());
+    final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+    final order = <String>[];
+
+    await clearDeletedAccountSession(
+      authService: service,
+      purgeAccountAudio: () async => throw StateError('disk gone'),
+      clearUserState: () => order.add('providers'),
+      clearWal: () async => order.add('wal'),
+      clearPreferences: () async => order.add('preferences'),
+      rememberDeletedAccount: () async => order.add('remember'),
+    );
+
+    expect(order, ['providers', 'wal', 'preferences', 'remember']);
+    expect(gateway.signOutCalls, 1);
+  });
+
+  test('remembered deleted accounts are deduplicated, newest last and bounded', () {
+    final many = List.generate(maxDeletedAccountUids, (i) => 'u$i');
+    expect(withDeletedAccountUid(['a', 'b'], 'a'), ['b', 'a']);
+    final bounded = withDeletedAccountUid(many, 'new');
+    expect(bounded, hasLength(maxDeletedAccountUids));
+    expect(bounded.first, 'u1');
+    expect(bounded.last, 'new');
   });
 }
 

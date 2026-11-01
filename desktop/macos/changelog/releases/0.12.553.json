@@ -1,0 +1,7 @@
+{
+  "version": "0.12.553",
+  "date": "2026-10-28",
+  "changes": [
+    "Fixed recordings failing to upload forever when their stored session id was blank: uploads now always carry a real session id"
+  ]
+}

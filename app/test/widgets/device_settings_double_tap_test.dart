@@ -1,3 +1,5 @@
+import 'package:omi/services/pending_work/pending_work_store.dart';
+import '../support/typed_conversation_screen.dart' show inertPendingWorkStore;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -22,6 +24,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
 
   @override
   bool get isConnected => true;
+
+  @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
 
   @override
   BtDevice? get connectedDevice => device;
@@ -74,6 +79,13 @@ Widget _app(DeviceProvider provider) {
 
 void main() {
   setUp(() async {
+    final previousStore = PendingWorkStore.instance;
+    final store = inertPendingWorkStore();
+    PendingWorkStore.instance = store;
+    addTearDown(() {
+      PendingWorkStore.instance = previousStore;
+      store.dispose();
+    });
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({'doubleTapAction': 1});
     await SharedPreferencesUtil.init();

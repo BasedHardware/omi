@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
@@ -10,6 +9,9 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, STTServingSurface, parakeet_supports_language
+from config.live_stt_replay import ReplayLimits, parse_replay_limits
+
+MAX_REGISTRY_TARGETS = 16
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,7 @@ class Target:
     features: tuple[str, ...] = ('streaming',)
     endpoint: str | None = None
     capacity_env: str | None = None
+    replay: ReplayLimits | None = None
 
     def capable(self, language: str | None, features: frozenset[str] = frozenset({'streaming'})) -> bool:
         lang = (language or 'multi').lower().split('-', 1)[0]
@@ -34,30 +37,31 @@ class Target:
         return self.family == 'soniox'
 
     def ramp(self) -> float:
-        return percent('PARAKEET_WINDOW_ALLOCATION_PERCENT', 0) if self.id == 'parakeet-window' else self.ramp_percent
+        if self.id == 'parakeet-window':
+            from config.policy.listen import window_percent
+
+            return min(self.ramp_percent, window_percent(strict=True))
+        return self.ramp_percent
 
     def at_capacity(self) -> bool:
-        return bool(self.capacity_env and os.getenv(self.capacity_env, 'false').lower() == 'true')
+        from config.refactor_switches import default_off
 
-
-def percent(name: str, default: float) -> float:
-    value = float(os.getenv(name, str(default)))
-    if not math.isfinite(value) or not 0 <= value <= 100:
-        raise ValueError(f'invalid {name}')
-    return value
+        return bool(
+            self.capacity_env
+            and default_off(self.capacity_env, os.getenv(self.capacity_env, 'false').lower() == 'true')
+        )
 
 
 def assigned(uid: str | None, salt: str, share: float) -> bool:
-    if not uid:
-        return False
-    bucket = int.from_bytes(hashlib.sha256(f'{salt}:{uid}'.encode()).digest()[:8], 'big')
-    return bucket / 2**64 * 100 < share
+    from config.policy.batch import cohort_bucket
+
+    return bool(uid) and cohort_bucket(uid, salt, bits=64) < share
 
 
 def routing_on(uid: str | None) -> bool:
-    return os.getenv('STT_ROUTING_MODE', 'off').lower() == 'on' and assigned(
-        uid, 'stt-routing-on', percent('STT_ROUTING_ON_PERCENT', 0)
-    )
+    from config.policy.listen import routing_enabled
+
+    return routing_enabled(uid)
 
 
 DEFAULT_TARGETS = (
@@ -69,11 +73,18 @@ DEFAULT_IDS = {target.family: target.id for target in DEFAULT_TARGETS}
 
 
 def registry() -> tuple[Target, ...]:
-    raw = os.getenv('STT_ROUTING_TARGETS_JSON', '').strip()
+    from config.policy.listen import current_listen_policy, routing_targets_json
+
+    policy = current_listen_policy.get()
+    return policy.targets if policy is not None else parse_registry(routing_targets_json())
+
+
+def parse_registry(raw: str) -> tuple[Target, ...]:
+    raw = raw.strip()
     targets: tuple[Target, ...] = DEFAULT_TARGETS
     if raw:
         entries = json.loads(raw)
-        if not isinstance(entries, list) or not 1 <= len(entries) <= 16:
+        if not isinstance(entries, list) or not 1 <= len(entries) <= MAX_REGISTRY_TARGETS:
             raise ValueError('live STT registry must be a list of 1-16 targets')
         parsed: list[Target] = []
         for entry in entries:
@@ -103,12 +114,14 @@ def registry() -> tuple[Target, ...]:
             capacity = entry.get('capacity_env')
             if capacity is not None and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}', capacity):
                 raise ValueError('invalid live STT capacity environment name')
+            if 'replay' in entry:
+                entry['replay'] = parse_replay_limits(entry['replay'])
             try:
                 parsed.append(Target(**entry))
             except TypeError as error:
                 raise ValueError('invalid live STT target fields') from error
         targets = tuple(parsed)
-    if not 1 <= len(targets) <= 16 or len({target.id for target in targets}) != len(targets):
+    if not 1 <= len(targets) <= MAX_REGISTRY_TARGETS or len({target.id for target in targets}) != len(targets):
         raise ValueError('live STT registry must have 1-16 unique targets')
     for target in targets:
         if not re.fullmatch(r'[a-z][a-z0-9-]{0,47}', target.id):

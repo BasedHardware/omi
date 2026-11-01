@@ -1,0 +1,40 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: {{ printf "%s-gw" (include "parakeet.fullname" . | trunc 60 | trimSuffix "-") }}
+  labels:
+    {{- include "parakeet.labels" . | nindent 4 }}
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_FIXED_PORT
+        port: {{ .Values.service.port }}
+        requestPath: {{ .Values.gateway.healthCheckPath | quote }}
+  targetRef:
+    group: ""
+    kind: Service
+    name: {{ printf "%s-gw" (include "parakeet.fullname" . | trunc 60 | trimSuffix "-") }}
+---
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: {{ printf "%s-gw" (include "parakeet.fullname" . | trunc 60 | trimSuffix "-") }}
+  labels:
+    {{- include "parakeet.labels" . | nindent 4 }}
+spec:
+  default:
+    timeoutSec: {{ .Values.gateway.timeoutSeconds }}
+    {{- if .Values.gateway.connectionDrainingSeconds }}
+    connectionDraining:
+      drainingTimeoutSec: {{ .Values.gateway.connectionDrainingSeconds }}
+    {{- end }}
+  targetRef:
+    group: ""
+    kind: Service
+    name: {{ printf "%s-gw" (include "parakeet.fullname" . | trunc 60 | trimSuffix "-") }}
+{{- end }}

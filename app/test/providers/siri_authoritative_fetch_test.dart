@@ -8,6 +8,7 @@ import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -87,9 +88,11 @@ class _SnapshotHost extends SiriIndexApi {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
+    Env.overrideApiBaseUrl('http://127.0.0.1:1/');
     SharedPreferences.setMockInitialValues({'uid': 'siri-fetch-owner'});
     await SharedPreferencesUtil.init();
   });
+  tearDown(Env.clearApiBaseUrlOverrideForTesting);
 
   _SnapshotHost hostForTest() {
     final host = _SnapshotHost();
@@ -227,13 +230,15 @@ void main() {
     expect(host.conversations, contains(row.id));
   });
 
-  test('complete unfiltered memory fetch removes remotely deleted ids', () async {
+  test('complete current and history fetch removes remotely deleted ids', () async {
     final host = hostForTest();
     host.memories['remote-deleted'] =
         SiriMemory(id: 'remote-deleted', content: 'private', createdAtMs: DateTime.now().millisecondsSinceEpoch);
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
     );
     addTearDown(provider.dispose);
 
@@ -259,19 +264,15 @@ void main() {
         updatedAt: now,
         visibility: MemoryVisibility.private);
     await SiriIntegration.current.upsertMemories([row('outside-useful-now')]);
-    final requestedViews = <MemoryReadView?>[];
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest: ({limit = 100, offset = 0, thisDeviceOnly = false, cursor, view}) async {
-        requestedViews.add(view);
-        return GetMemoriesResult([row('useful-now')], true, beliefEnabled: true);
-      },
+      fetchMemoriesCursorRequest: ({limit = 100, offset = 0, thisDeviceOnly = false, cursor}) async =>
+          GetMemoriesResult([row('useful-now')], true),
       fetchLedgerHistoryRequest: ({limit = 500, offset = 0}) async =>
           const GetLedgerHistoryResult([], supported: false),
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
     await SiriIntegration.current.drainIndexForTest();
-    expect(requestedViews, contains(MemoryReadView.usefulNow));
     expect(host.memories.keys, contains('outside-useful-now'));
   });
 

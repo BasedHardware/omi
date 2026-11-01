@@ -28,8 +28,7 @@ fi
   fi
 )
 
-# The reserved JIT QA wrapper pins both sibling loops off; run.sh must carry
-# those explicit values across launchd's environment boundary.
+# Multiple local rollout overrides must all cross launchd's environment boundary.
 (
   unset OMI_FORCE_CANONICAL_MEMORY_ATLAS
   export OMI_FORCE_BUCKET_CANDIDATES=0
@@ -92,7 +91,7 @@ if ! grep -q "OMI_FORCE_CANONICAL_MEMORY_ATLAS=1  Non-production-only local QA o
 fi
 
 if ! grep -q "OMI_FORCE_BUCKET_CANDIDATES" "$RUN" || ! grep -q "OMI_FORCE_BUCKET_WORKSTREAMS" "$RUN"; then
-  echo "FAIL: JIT sibling-loop overrides are not present in the launch forwarding contract" >&2
+  echo "FAIL: bucket rollout overrides are not present in the launch forwarding contract" >&2
   exit 1
 fi
 

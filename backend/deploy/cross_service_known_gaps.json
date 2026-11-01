@@ -1,0 +1,141 @@
+{
+  "about": "Accepted cross-service contract violations (backend/scripts/cross_service_contract.py). New violations fail CI; delete an entry once it stops occurring. Never put values here, only keys (a non-sensitive count/fingerprint segment in a key is part of its identity).",
+  "gaps": [
+    {
+      "key": "edge-declared|dev|account-deletion/ACCOUNT_DELETION_DISPATCH_MODE",
+      "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "edge-declared|dev|enrichment/ENRICHMENT_ROUTE",
+      "why": "ENRICHMENT_ROUTE (default sync_handler) is the enrichment queue switch (feature-flags.yaml, lane 9 ramp); it is set per deployment at the C3 ramp, not declared in the base manifest yet. M1 Grok L01-2 moved the edge onto it."
+    },
+    {
+      "key": "edge-declared|dev|listen-finalization/LISTEN_FINALIZATION_DISPATCH_MODE",
+      "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "edge-declared|dev|sync-backfill/SYNC_BACKFILL_ROUTING_ENABLED",
+      "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "edge-declared|dev|sync-backfill/SYNC_DISPATCH_MODE",
+      "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "edge-declared|dev|sync-jobs/SYNC_DISPATCH_MODE",
+      "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "edge-declared|prod|enrichment/ENRICHMENT_ROUTE",
+      "why": "ENRICHMENT_ROUTE (default sync_handler) is the enrichment queue switch (feature-flags.yaml, lane 9 ramp); it is set per deployment at the C3 ramp, not declared in the base manifest yet. M1 Grok L01-2 moved the edge onto it."
+    },
+    {
+      "key": "edge-declared|prod|sync-backfill/SYNC_DISPATCH_MODE",
+      "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "edge-declared|prod|sync-jobs/SYNC_DISPATCH_MODE",
+      "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "no-uid-literals|dev|gke/backend-listen/AUDIO_ARCHIVE_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|dev|gke/pusher/AUDIO_ARCHIVE_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/backend-listen/DREAM_AGENT_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/backend-listen/MOBILE_STANDARD_BATCH_UIDS|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/backend-listen/SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/backend-listen/STT_LIVE_DEMAND_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/backend-listen/SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/pusher/DREAM_AGENT_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/pusher/SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/pusher/TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "no-uid-literals|prod|gke/pusher/TRANSCRIPTION_SHADOW_UID_ALLOWLIST|uids=1",
+      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
+      "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
+    },
+    {
+      "key": "task-target-retry-semantics|code|account-deletion/routers/users.py:run_account_deletion_wipe/500",
+      "why": "Contract (d) audit-only target (account-deletion wipe). Ratchet: no new keys; fix by answering 409 retry_response for expected retries."
+    },
+    {
+      "key": "task-target-retry-semantics|code|listen-finalization/routers/conversation_finalization.py:run_listen_finalization_job/500",
+      "why": "Contract (d) audit-only target (listen slot). Ratchet: no new keys."
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_attempt/500",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_attempt/503",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_body/500",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:run_sync_job/500",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:run_sync_job/503",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:_run_sync_job_attempt/500",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:_run_sync_job_attempt/503",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:_run_sync_job_body/500",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:run_sync_job/500",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:run_sync_job/503",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE",
+      "why": "Reviewed 2026-10-19: only QuarantineRecovery.sweep reads it, and only the integration serving loop (utils/batch_pipeline/serving.py) runs that sweep; the worker imports config transitively and never sweeps."
+    }
+  ]
+}

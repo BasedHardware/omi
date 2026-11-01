@@ -163,8 +163,13 @@ def refresh(root: Path, sample_paths: tuple[Path, Path] | None = None, reseed: b
         job["budget_p50_minutes"] = seeded if reseed else old.get("budget_p50_minutes", seeded)
         pr = bool(PR_EVENTS.intersection(data["workflows"][workflow]["triggers"]))
         expected = math.ceil(executions / max(1, job["matrix_size"])) if executions else (1 if pr else 0)
-        job["expected_runs_per_day"] = expected if reseed else old.get("expected_runs_per_day", expected)
+        # The sample is a PR day; explicit nightly calls remain additional when
+        # re-seeding rather than subtracting from the new PR sample below.
+        nightly = old.get("expected_nightly_runs_per_day", 0)
+        job["expected_runs_per_day"] = expected + nightly if reseed else old.get("expected_runs_per_day", expected)
         job["expected_runs_class"] = old.get("expected_runs_class", "sampled-pr-day" if executions else ("unsampled-pr-sentinel" if pr else "non-pr"))
+        if "expected_nightly_runs_per_day" in old:
+            job["expected_nightly_runs_per_day"] = old["expected_nightly_runs_per_day"]
         job["owner"] = old.get("owner", "CI maintainers")
         job["rationale"] = old.get("rationale", "2026-09-26 PR sample p50 x 1.25, rounded up" if minutes else "Unobserved in one-day PR sample; conservative 5-minute placeholder")
     data["schema"] = 1
@@ -220,7 +225,10 @@ def totals(data: dict) -> tuple[dict, float]:
         if PR_EVENTS.intersection(triggers):
             for runner, count in job["runner_counts"].items():
                 if runner in daily:
-                    daily[runner] += job["budget_p50_minutes"] * count * job["expected_runs_per_day"]
+                    # Reusable nightly calls increase total frequency without
+                    # consuming the separately reviewed PR-only daily cap.
+                    pr_runs = job["expected_runs_per_day"] - job.get("expected_nightly_runs_per_day", 0)
+                    daily[runner] += job["budget_p50_minutes"] * count * pr_runs
 
     def path_minutes(key: str, visiting: set[str]) -> float:
         if key in signal:
@@ -263,6 +271,9 @@ def validate(root: Path, base: dict | None = None) -> list[str]:
             errors.append(f"{key}: positive p50 budget required")
         if not isinstance(job.get("expected_runs_per_day"), (int, float)) or job["expected_runs_per_day"] < 0:
             errors.append(f"{key}: nonnegative expected runs/day required")
+        nightly = job.get("expected_nightly_runs_per_day", 0)
+        if not isinstance(nightly, (int, float)) or nightly < 0 or nightly > job.get("expected_runs_per_day", 0):
+            errors.append(f"{key}: nightly frequency must be nonnegative and within total expected runs/day")
         if not job.get("expected_runs_class"):
             errors.append(f"{key}: expected runs/day class required")
         workflow = key.split("/", 1)[0]
@@ -294,6 +305,12 @@ def validate(root: Path, base: dict | None = None) -> list[str]:
                 generated = actual[section][key]
                 changed = any(previous.get(field) != row.get(field) for field in generated)
                 raised = section == "jobs" and (row["budget_p50_minutes"] > previous["budget_p50_minutes"] or row["expected_runs_per_day"] > previous["expected_runs_per_day"])
+                if section == "jobs":
+                    nightly_added = row.get("expected_nightly_runs_per_day", 0) - previous.get("expected_nightly_runs_per_day", 0)
+                    total_added = row["expected_runs_per_day"] - previous["expected_runs_per_day"]
+                    if nightly_added > 0 and nightly_added > total_added:
+                        errors.append(f"{key}: nightly attribution cannot reduce the PR forecast; add it to total expected runs/day")
+                    raised = raised or nightly_added > 0
                 if changed or raised:
                     if row["rationale"] == previous.get("rationale"):
                         errors.append(f"{key}: structural or budget change needs rationale change")

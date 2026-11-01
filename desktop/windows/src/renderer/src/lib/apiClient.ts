@@ -104,6 +104,7 @@ export function setAppVersion(version: string | undefined): void {
  */
 export function applyPlatformHeaders<T extends InternalAxiosRequestConfig>(config: T): T {
   config.headers['X-App-Platform'] = 'windows'
+  config.headers['X-Omi-Plan-Identity'] = '1'
   if (appVersion) config.headers['X-App-Version'] = appVersion
   return config
 }

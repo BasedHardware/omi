@@ -50,6 +50,7 @@ class SystemAudioCaptureService: @unchecked Sendable {
   private var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
   private var ioProcID: AudioDeviceIOProcID?
   private var isCapturing = false
+  private let streamActivity = CaptureStreamActivity()
   private var onAudioChunk: AudioChunkHandler?
   private var onAudioLevel: AudioLevelHandler?
 
@@ -209,6 +210,7 @@ class SystemAudioCaptureService: @unchecked Sendable {
       log("SystemAudioCapture: Already capturing")
       return
     }
+    streamActivity.reset()
 
     // All CoreAudio HAL calls (CreateTap, CreateAggregateDevice, AudioDeviceStart) are
     // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
@@ -237,6 +239,9 @@ class SystemAudioCaptureService: @unchecked Sendable {
 
   /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
   private func startCaptureOnQueue() throws {
+    // A stopped IOProc can finish after startCapture's caller-side reset.
+    // Clear its evidence again after the serial queue has drained that stop.
+    streamActivity.reset()
     // 1. Create tap description for all system audio
     let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
     tapDescription.uuid = tapUUID
@@ -343,6 +348,7 @@ class SystemAudioCaptureService: @unchecked Sendable {
 
   /// Stop capturing system audio
   func stopCapture() {
+    streamActivity.reset()
     guard isCapturing else { return }
     isCapturing = false
 
@@ -391,6 +397,9 @@ class SystemAudioCaptureService: @unchecked Sendable {
   var capturing: Bool {
     return isCapturing
   }
+
+  /// A started tap alone is not proof that system audio survived a route failure.
+  var hasRecentAudioFrames: Bool { capturing && streamActivity.hasRecentFrames }
 
   // MARK: - Private Methods
 
@@ -557,6 +566,7 @@ class SystemAudioCaptureService: @unchecked Sendable {
     }
 
     // Send to callback
+    streamActivity.notePCM(byteCount: byteData.count)
     onAudioChunk?(byteData)
   }
 

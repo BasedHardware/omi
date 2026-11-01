@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-drain-rate-equals-arrival-rate",
+  "violated_contract": "A bounded buffer fed at a fixed rate and drained at exactly that rate, with every missed drain slot discarded, has no restoring force: its occupancy can only grow, so every scheduler slip and every arrival burst becomes permanent lag and a healthy consumer eventually hits the bound and is rejected as a local capacity failure. A drain that must hold a latency bound needs a bounded catch-up rate above the arrival rate while the buffer holds more than its target.",
+  "canonical_prevention": "Give the drain a bounded catch-up rate that engages only while the held backlog exceeds an explicit floor and returns to the sustained rate below it (`ReplayTailSocket._pump_tail` passes `catchup=` to `ReplayPacer.send`; `LISTEN_LIVE_TAIL_CATCHUP_RATE` scaled by the endpoint's sustained rate and capped per family), keep the bound itself unchanged, and pin it with a virtual-clock simulation that feeds real-time input through a held backlog, a client burst and a pump slip and asserts the backlog returns to the floor with no leg death, no reordering and no duplication while the exact-rate switch reproduces the permanent lag and the death.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/replay_delivery.py",
+    "backend/tests/unit/test_live_tail_catchup.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/replay_delivery.py",
+    "backend/config/live_stt_replay.py",
+    "backend/routers/listen/receiver.py"
+  ],
+  "status": "open"
+}

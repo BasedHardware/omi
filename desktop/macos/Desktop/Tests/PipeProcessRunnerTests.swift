@@ -73,4 +73,30 @@ final class PipeProcessRunnerTests: XCTestCase {
     XCTAssertEqual(result.terminationStatus, 0)
     XCTAssertEqual(String(data: result.stdout, encoding: .utf8), "custom-env")
   }
+
+  func testStopsWhenOutputExceedsTheCaptureLimit() {
+    XCTAssertThrowsError(
+      try PipeProcessRunner.run(
+        executableURL: URL(fileURLWithPath: "/usr/bin/python3"),
+        arguments: ["-c", "print('x' * 1000)"],
+        timeoutSeconds: 5,
+        maxOutputBytes: 32
+      )
+    ) { error in
+      XCTAssertEqual(error.localizedDescription, "Helper process output exceeded the capture limit.")
+    }
+  }
+
+  func testTerminatesWhenCancellationIsRequested() {
+    XCTAssertThrowsError(
+      try PipeProcessRunner.run(
+        executableURL: URL(fileURLWithPath: "/bin/sh"),
+        arguments: ["-c", "sleep 5"],
+        timeoutSeconds: 5,
+        cancellationCheck: { true }
+      )
+    ) { error in
+      XCTAssertEqual(error.localizedDescription, "Helper process was cancelled.")
+    }
+  }
 }

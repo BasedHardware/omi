@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-local-day-stepped-by-fixed-24h",
+  "violated_contract": "Moving to the previous or next local calendar day must use calendar-day arithmetic, never a fixed 24 hours. A day with a daylight-saving change lasts 23 or 25 hours, so on the day after one, today's local midnight minus 24 h is an hour away from yesterday's midnight: an exact match against that boundary never succeeds and the Yesterday bucket stays empty for the whole day, and a window built the same way gains or loses an hour.",
+  "canonical_prevention": "Step between days with the shared local-day helper (Windows/Linux desktop: startOfDayOffset in desktop/windows/src/renderer/src/lib/localDay.ts; Swift: Calendar.isDateInYesterday or Calendar.date(byAdding: .day)) and compare day starts that come from that helper on both sides. Regression tests pin a zone that observes DST (for example vi.stubEnv('TZ', 'America/New_York')) and assert the 23 h and 25 h days first, because hosted CI runs in UTC, where a fixed 24 h step is always right.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/windows/src/renderer/src/lib/localDay.ts",
+    "desktop/windows/src/renderer/src/lib/chatSessionsView.ts",
+    "desktop/windows/src/main/agentKernel/productToolExecutors.ts"
+  ],
+  "status": "open"
+}

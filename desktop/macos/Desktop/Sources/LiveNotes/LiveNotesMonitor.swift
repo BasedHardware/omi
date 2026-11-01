@@ -98,7 +98,9 @@ class LiveNotesMonitor: ObservableObject {
 
   private convenience init() {
     self.init(
-      noteGeneratorFactory: { try GeminiClient(model: ModelQoS.Gemini.lightweight, workload: .extraction) },
+      noteGeneratorFactory: {
+        try GeminiClient(model: ModelQoS.Gemini.lightweight, lane: .liveNotes, workload: .extraction)
+      },
       noteStorage: NoteStorage.shared,
       subscribeToTranscript: true,
       entitlementDecision: {
@@ -418,9 +420,6 @@ class LiveNotesMonitor: ObservableObject {
 
   private static func isPlanGatedGenerationError(_ error: Error) -> Bool {
     if case GeminiClient.GeminiClientError.planGated = error {
-      return true
-    }
-    if case ProactiveLaneClientError.planGated = error {
       return true
     }
     return false
