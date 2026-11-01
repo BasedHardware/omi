@@ -83,10 +83,9 @@ submission after build 1504): `mobile_store_promote.py`'s
 `changesNotSentForReview=true`, the train parks the ladder, and the brake
 joins the held queue) and both Play publishing blocks in `codemagic.yaml`
 set `changes_not_sent_for_review: true`. `ANDROID_HELD_CHANGES_MODE` in
-`.github/scripts/mobile_distribution.py` was not flipped back with them and
-is still `False` — the dispatcher prints no
-`android_distribution=held-changes-mode` line until it is. While the mode is
-on, the consequences below apply:
+`.github/scripts/mobile_distribution.py` is `True` with them (it lagged as
+`False` until 2026-11-01; `test_play_held_changes_flags_agree` now pins all
+four together). While the mode is on, the consequences below apply:
 
 - Distribution evidence: a settled Codemagic publishing action only proves
   the edit committed — testers cannot install a held change. The internal
@@ -95,8 +94,7 @@ on, the consequences below apply:
   the same source would not unhold it — it would drift back to a build per
   scheduled run); while `ANDROID_HELD_CHANGES_MODE` is set, every scheduled
   dispatcher run also prints an `android_distribution=held-changes-mode`
-  line so a held distribution cannot stall silently (that flag is currently
-  `False`, so the line is absent even though held mode is on). The press
+  line so a held distribution cannot stall silently. The press
   itself is operator
   evidence: the release gate treats Android internal distribution as done
   only after it.
@@ -131,14 +129,19 @@ on, the consequences below apply:
   set pin that mismatches the store refuses like every other pin check. On
   2026-10-28 this wedge held production on 1.0.578/1522 while the fixed
   1.0.579/1527 sat on internal, and the operator had to rebuild the release
-  by hand in Play Console. For a halted (not held) release the operator
+  by hand in Play Console. A hand-built release carries no gate receipt, so
+  the train parks on it from then on: building it by hand is only half the
+  fix, and the Send for review press must follow in the same sitting
+  (2026-10-30 -> 11-01 the hand-built 1.0.579/1527 @1% sat held and unsent,
+  and every daily train parked behind it while 1.0.583/1546 waited on
+  internal). For a halted (not held) release the operator
   tool is still the path: `BRAKE_ACTION=stage` in
   `app/scripts/mobile_rollout_brake.md`.
 
 To flip held mode back off when Play again accepts automated review
 submission (one line plus its pinned tests): set `mobile_store_promote.py`'s
 `CHANGES_NOT_SENT_FOR_REVIEW = False`, set `ANDROID_HELD_CHANGES_MODE = False`
-in `.github/scripts/mobile_distribution.py` (it is already `False`), drop
+in `.github/scripts/mobile_distribution.py`, drop
 `changes_not_sent_for_review` from both Play publishing blocks in
 `codemagic.yaml` (and regenerate the workflow-contract fixture digests), and
 update the tests that pin the mode (`test_check_release_process_guards.py`,

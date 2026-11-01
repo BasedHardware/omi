@@ -14,6 +14,7 @@ from scripts.diff_prod_adapter import (
     DIARIZER_BATCH_RULE,
     BATCH_PIPELINE_RULE,
     BATCH_PIPELINE_CAPACITY_RULE,
+    BATCH_PIPELINE_CHAIN_RULE,
     PARAKEET_QUEUE_RULES,
     compare,
     expected_config,
@@ -113,13 +114,24 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     assert actual == [BATCH_PIPELINE_RULE]
     supplied = yaml.safe_load((CHARTS / 'batch-pipeline-worker/prometheus-adapter-rules.yaml').read_text())
     capacity = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CAPACITY_RULE['name']['as']]
-    assert actual + capacity == supplied['external']
+    chain = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CHAIN_RULE['name']['as']]
+    assert actual + capacity + chain == supplied['external']
     assert capacity == [BATCH_PIPELINE_CAPACITY_RULE]
     query = capacity[0]['metricsQuery']
     assert 'max by (namespace, worker_release, priority)' in query
     assert 'count by (namespace, worker_release)' in query and '== 3' in query
     assert 'capacity_refreshed_at_seconds < 60' in query
     assert 'or vector(0)' not in query
+    assert chain == [BATCH_PIPELINE_CHAIN_RULE]
+    chain_query = chain[0]['metricsQuery']
+    assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[2m])' in chain_query
+    assert 'metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
+    assert 'or vector(0)' not in chain_query
+    # Stage timers export only the stage label; requiring worker_release here
+    # (or in the HPA selector) would match zero series and pin the floor.
+    assert 'worker_release' not in chain_query
+    assert 'worker_release' not in BATCH_PIPELINE_CHAIN_RULE['seriesQuery']
+    assert 'and on (namespace, pod)' in chain_query
 
 
 def test_diff_accepts_missing_batch_rule_but_rejects_false_zero_or_duplicate():
@@ -155,6 +167,24 @@ def test_diff_capacity_rule_is_a_closed_reviewed_addition():
                 'metricsQuery'
             ] = 'vector(0)'
         with pytest.raises(ValueError, match='Unexpected live batch pipeline capacity'):
+            expected_config(broken)
+
+
+def test_diff_chain_rule_is_a_closed_reviewed_addition():
+    rules = yaml.safe_load(ADAPTER.read_text())['rules']
+    live = {'rules': rules['custom'], 'externalRules': rules['external']}
+    missing = copy.deepcopy(live)
+    missing['externalRules'].remove(BATCH_PIPELINE_CHAIN_RULE)
+    assert expected_config(missing) == expected_config(live)
+    for mutation in ('false_zero', 'duplicate'):
+        broken = copy.deepcopy(live)
+        if mutation == 'duplicate':
+            broken['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_CHAIN_RULE))
+        else:
+            next(r for r in broken['externalRules'] if r['name']['as'] == BATCH_PIPELINE_CHAIN_RULE['name']['as'])[
+                'metricsQuery'
+            ] = 'vector(0)'
+        with pytest.raises(ValueError, match='Unexpected live batch pipeline chain'):
             expected_config(broken)
 
 
