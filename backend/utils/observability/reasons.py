@@ -191,6 +191,23 @@ class SyncCaptureTimeReason(StrEnum):
     REJECTED_MALFORMED = 'rejected_malformed'
 
 
+class BatchIntakeOutcome(StrEnum):
+    """`omi_batch_intake_outcome_total{outcome}`: where one v2 sync upload's batch routing landed.
+
+    Owner: `utils/batch_pipeline/intake_outcome.py`. `batch` is an upload batch
+    intake admitted fresh work; `heavy_excluded`/`language_excluded` are this
+    request's fresh exclusions that landed it on legacy; `not_cohort` is the
+    ramp cohort decision. An upload following a prior durable owner carries no
+    fresh decision and is not counted.
+    """
+
+    UNKNOWN = 'unknown'
+    BATCH = 'batch'
+    HEAVY_EXCLUDED = 'heavy_excluded'
+    LANGUAGE_EXCLUDED = 'language_excluded'
+    NOT_COHORT = 'not_cohort'
+
+
 class AdmissionHoldReason(StrEnum):
     """Closed reasons a compute-admission lease was held at defer time.
 

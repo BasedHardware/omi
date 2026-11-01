@@ -1,0 +1,481 @@
+"""The per-upload batch intake outcome counter: one closed label per fresh routing decision.
+
+``batch`` is an upload batch intake accepted; ``heavy_excluded`` /
+``language_excluded`` are fresh exclusions that landed the upload on legacy;
+``not_cohort`` is the ramp cohort decision. An upload following a prior durable
+owner carries no fresh decision and must not be counted.
+"""
+
+from unittest.mock import AsyncMock, Mock, patch
+from types import SimpleNamespace
+
+import pytest
+from starlette.datastructures import UploadFile
+
+from config.policy import BatchUnitPolicy, ramp
+from database import batch_ramp
+from services import summary_debt_repair  # noqa: F401 - initialize the router harness dependency at collection
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from tests.unit.test_legacy_dark_router import _restore
+from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
+from utils.batch_pipeline import intake, live_upload
+from utils.batch_pipeline.artifacts import ProtectionContext
+from utils.batch_pipeline.intake_outcome import (
+    INTAKE_OUTCOMES,
+    OUTCOMES,
+    IntakeRouteEvidence,
+    legacy_landing_outcome,
+    record_upload_outcome,
+)
+from utils.batch_pipeline.live_upload import RecordUploadRoute
+from utils.sync import final_pass_rehome, legacy_dark
+from utils.sync.final_pass_rehome import RehomeOutcome
+from utils.sync.legacy_dark import LegacySyncMode
+
+UID, CID = 'test-uid', 'synthetic-conversation'
+RSID = 'synthetic-session'
+USER = ('users', UID)
+CONVERSATION = (*USER, 'conversations', CID)
+RECORDING_SESSION = (*USER, 'recording_sessions', RSID)
+ON = LegacySyncMode.ON
+
+
+@pytest.fixture(autouse=True)
+def defaults(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(ramp.SWITCH, raising=False)
+    monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', raising=False)
+    monkeypatch.setattr(
+        StrictFirestoreSnapshot,
+        'update_time',
+        property(lambda self: (self._data or {}).get('_test_revision')),
+        raising=False,
+    )
+
+
+def enabled_policy():
+    return BatchUnitPolicy(batch_enabled=True, batch_percent=5, live_admission_enabled=True, live_record_enabled=True)
+
+
+def _counts():
+    return {outcome: INTAKE_OUTCOMES.labels(outcome=outcome)._value.get() for outcome in sorted(OUTCOMES)}
+
+
+def _router():
+    module, saved, jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    return module, saved, BytesIO
+
+
+async def _upload(module, BytesIO, *, conversation_id=None):
+    return await module.sync_local_files_v2(
+        files=[UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))],
+        uid=UID,
+        conversation_id=conversation_id,
+    )
+
+
+def _no_durable_owner_client():
+    client = Mock()
+    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
+    ref.get.return_value = SimpleNamespace(exists=False, to_dict=lambda: {})
+    return client
+
+
+def _language_world(monkeypatch, *, owner=None):
+    row = {'status': 'completed', 'language': 'auto', '_test_revision': 1}
+    if owner:
+        row['record_lane_owner'] = owner
+    user = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
+    client = StrictFirestore({USER: user, CONVERSATION: row})
+    store = MemoryStore()
+    store.client, store.namespace = client, 'batch_pipeline_dev'
+    claims = []
+
+    def claim(uid, cid, selected, expected, *, firestore_client):
+        assert (uid, cid, expected) == (UID, CID, 1) and firestore_client is client
+        claims.append(selected)
+        client.rows[CONVERSATION]['record_lane_owner'] = selected
+        return 2
+
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
+    monkeypatch.setattr(live_upload, 'claim_record_lane_owner', claim)
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *_: store)
+    return SimpleNamespace(client=client, store=store, claims=claims, policy=enabled_policy())
+
+
+# --- closed label set and priority ---------------------------------------------------------------
+
+
+def test_closed_outcome_set_folds_unknown_labels():
+    assert OUTCOMES == frozenset({'batch', 'heavy_excluded', 'language_excluded', 'not_cohort'})
+    before = INTAKE_OUTCOMES.labels(outcome='unknown')._value.get()
+    record_upload_outcome('legacy_owner')  # A durable owner is not a fresh decision.
+    assert INTAKE_OUTCOMES.labels(outcome='unknown')._value.get() == before + 1
+
+
+def test_legacy_landing_priority_and_residual():
+    both = IntakeRouteEvidence(heavy_owner_excluded=True, language_excluded=True)
+    assert legacy_landing_outcome(both, candidate_batch_enabled=True) == 'heavy_excluded'
+    language = IntakeRouteEvidence(language_excluded=True)
+    assert legacy_landing_outcome(language, candidate_batch_enabled=False) == 'language_excluded'
+    assert legacy_landing_outcome(IntakeRouteEvidence(), candidate_batch_enabled=False) == 'not_cohort'
+    assert legacy_landing_outcome(IntakeRouteEvidence(), candidate_batch_enabled=True) is None
+    # Luna r2 P1: a final-pass owner follow is not a fresh decision on either landing,
+    # even when the ramp marked a heavy exclusion before the session resolved.
+    followed = IntakeRouteEvidence(heavy_owner_excluded=True, final_pass_owner_followed=True)
+    assert legacy_landing_outcome(followed, candidate_batch_enabled=True) is None
+
+
+# --- evidence provenance -------------------------------------------------------------------------
+
+
+def test_owner_load_exclusion_marks_evidence_but_durable_owners_do_not(monkeypatch):
+    monkeypatch.setattr(batch_ramp, 'current_stage', lambda: 'dev')
+    client = _no_durable_owner_client()
+    monkeypatch.setattr(batch_ramp, 'get_data_plane_firestore_client', lambda: client)
+    excluded = IntakeRouteEvidence()
+    with patch.object(
+        batch_ramp,
+        'read_owner_load',
+        return_value={'open_backlog': 42, 'recording_seconds': 0, 'complete': True},
+    ):
+        filtered = batch_ramp.ramp_admission_policy(UID, enabled_policy(), content_id='content', evidence=excluded)
+    assert not filtered.batch_enabled
+    assert excluded.heavy_owner_excluded and not excluded.language_excluded
+
+    durable = IntakeRouteEvidence()
+    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
+    ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'dispatch_protocol': 'legacy_v1'})
+    with patch.object(batch_ramp, 'read_owner_load', side_effect=AssertionError('prior custody must not rescan')):
+        filtered = batch_ramp.ramp_admission_policy(UID, enabled_policy(), content_id='content', evidence=durable)
+    assert not filtered.batch_enabled
+    assert not durable.heavy_owner_excluded and not durable.language_excluded
+
+
+async def test_intake_language_exclusion_decline_marks_evidence(monkeypatch):
+    world = _language_world(monkeypatch)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+
+    def authorize(_store, _work, snapshots):
+        snapshots['user'] = dict(world.client.rows[USER])
+        snapshots['conversations'] = {CID: dict(world.client.rows[CONVERSATION])}
+        return ProtectionContext('standard', 0)
+
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(
+        intake, 'artifacts_for', Mock(side_effect=AssertionError('excluded upload must not stage batch artifacts'))
+    )
+    evidence = IntakeRouteEvidence()
+    arguments = dict(
+        uid=UID,
+        job_id='job',
+        content_id='content',
+        paths=['retained.bin'],
+        lane='fresh',
+        recording_age_seconds=60,
+        source='omi',
+        should_lock=False,
+        conversation_id=CID,
+        client_device_id=None,
+        client_platform='ios',
+        policy=enabled_policy(),
+        evidence=evidence,
+    )
+    assert await intake.accept_upload(**arguments) is None
+    assert evidence.language_excluded and not evidence.heavy_owner_excluded
+    assert not world.store.rows  # No batch ledger, jobs, intakes or queue writes.
+
+
+async def test_accept_upload_marks_evidence_only_on_a_fresh_admission(monkeypatch):
+    """Luna r1 P1: the batch flag belongs to the admission itself, never to the
+    non-None responses that re-ack prior batch custody."""
+
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_dev'
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+    monkeypatch.setattr(intake, 'serving_for', lambda *a, **k: False)
+    monkeypatch.setattr(intake, 'admission_language_exclusion_enabled', lambda: False)
+    monkeypatch.setattr(intake, 'language_guard_enabled', lambda: False)
+    monkeypatch.setattr(
+        intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
+    )
+    monkeypatch.setattr(intake, 'with_context', lambda wav, ctx: wav)
+    artifacts = Mock()
+    artifacts.stage_audio = Mock(return_value='gs://synthetic/audio.bin')
+    monkeypatch.setattr(intake, 'artifacts_for', Mock(return_value=artifacts))
+
+    def authorize(_store, _work, snapshots):
+        snapshots['user'] = {}
+        snapshots['conversations'] = {}
+        return ProtectionContext('standard', 0)
+
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(intake, 'admit', lambda *a, **k: {'outcome': 'batch', 'job_id': 'bp_job'})
+    monkeypatch.setattr(
+        intake,
+        'durable_status',
+        lambda *a, **k: {
+            'job_id': 'bp_job',
+            'status': 'queued',
+            'total_files': 1,
+            'total_segments': 0,
+            'poll_after_ms': 0,
+            'lane': 'fresh',
+        },
+    )
+    from utils.stt import batch_language
+
+    monkeypatch.setattr(
+        batch_language,
+        'resolve_language',
+        lambda *a, **k: SimpleNamespace(
+            language='en', parakeet_safe=True, evidence=None, confidence=1.0, probe_seconds=0.0
+        ),
+    )
+
+    def decode(_max_seconds):
+        yield SimpleNamespace(capture_at=0.0, duration_seconds=1.0, wav=b'x', coverage_runs=())
+
+    arguments = dict(
+        uid=UID,
+        job_id='job',
+        content_id='content',
+        paths=[],
+        lane='fresh',
+        recording_age_seconds=60,
+        source='omi',
+        should_lock=False,
+        conversation_id=None,
+        client_device_id=None,
+        client_platform='ios',
+        policy=BatchUnitPolicy(batch_enabled=True, batch_percent=5),
+        decode=decode,
+    )
+    evidence = IntakeRouteEvidence()
+    response = await intake.accept_upload(**arguments, evidence=evidence)
+    assert response.status_code == 202
+    assert evidence.batch_accepted
+
+    # A prior batch receipt re-ACKs custody with the same 202 shape: no fresh admission.
+    store.rows['content', f'{UID}/content'] = {'dispatch_protocol': 'batch_v1', 'job_id': 'bp_prior'}
+    reupload = IntakeRouteEvidence()
+    response = await intake.accept_upload(**arguments, evidence=reupload)
+    assert response.status_code == 202
+    assert not reupload.batch_accepted
+
+    # Luna r2 P2: a concurrent winner already committed this content; admit
+    # returns its existing job, which is a re-ACK, not this request's admission.
+    monkeypatch.setattr(intake, 'admit', lambda *a, **k: {'outcome': 'batch', 'job_id': 'bp_other'})
+    raced = IntakeRouteEvidence()
+    store.rows = {}
+    response = await intake.accept_upload(**arguments, evidence=raced)
+    assert response.status_code == 202
+    assert not raced.batch_accepted
+
+
+async def test_session_resolved_final_pass_owner_marks_the_follow(monkeypatch):
+    """Luna r2 P1: a recording session can resolve to a final-pass conversation
+    only after the ramp already marked a heavy exclusion; the follow flag must
+    still suppress the outcome at the legacy landing."""
+
+    row = {'status': 'completed', 'record_lane_owner': 'legacy_final_pass_v1', '_test_revision': 1}
+    client = StrictFirestore({USER: {'language': 'en'}, RECORDING_SESSION: {'conversation_id': CID}, CONVERSATION: row})
+    store = MemoryStore()
+    store.client, store.namespace = client, 'batch_pipeline_dev'
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
+    monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: RehomeOutcome.NOT_APPLICABLE)
+    evidence = IntakeRouteEvidence(heavy_owner_excluded=True)  # The ramp ran first.
+    response = await live_upload.registered_record_response(
+        uid=UID,
+        conversation_id=None,
+        recording_session_id=RSID,
+        content_id='content',
+        paths=[],
+        source='omi',
+        client_device_id=None,
+        policy=enabled_policy(),
+        legacy_mode=ON,
+        evidence=evidence,
+    )
+    assert response is RecordUploadRoute.LEGACY
+    assert evidence.final_pass_owner_followed
+    assert legacy_landing_outcome(evidence, candidate_batch_enabled=True) is None
+
+
+# --- one counter branch per upload outcome, through the real router ------------------------------
+
+
+async def test_upload_accepted_by_batch_counts_batch(monkeypatch):
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+        module.resolve_batch_policy = lambda uid: enabled_policy()
+        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+
+        async def admit_fresh(**kwargs):
+            kwargs['evidence'].batch_accepted = True
+            return module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
+
+        module.accept_batch_upload = admit_fresh
+        module.create_sync_job = Mock()
+        before = _counts()
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 202
+        after = _counts()
+        assert after['batch'] == before['batch'] + 1
+        assert {k: v for k, v in after.items() if k != 'batch'} == {k: v for k, v in before.items() if k != 'batch'}
+        module.create_sync_job.assert_not_called()
+    finally:
+        _restore(saved)
+
+
+async def test_batch_response_without_fresh_admission_is_not_counted(monkeypatch):
+    """Luna r1 P1: a non-None batch response is not a landing — only an admission is."""
+
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+        module.resolve_batch_policy = lambda uid: enabled_policy()
+        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+        # A re-ACK of prior batch custody or an unavailable 503 returns non-None
+        # without admitting fresh work; neither may count as a batch landing.
+        module.accept_batch_upload = AsyncMock(
+            return_value=module.JSONResponse(
+                status_code=503, content={'code': 'sync_batch_unavailable', 'detail': 'retain local audio'}
+            )
+        )
+        module.create_sync_job = Mock()
+        before = _counts()
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 503
+        assert _counts() == before
+        module.create_sync_job.assert_not_called()
+    finally:
+        _restore(saved)
+
+
+async def test_rehomed_final_pass_owner_batch_landing_is_not_counted(monkeypatch):
+    """Luna r1 P1: a rehomed legacy_final_pass_v1 owner follows a durable owner,
+    so its batch landing is an owner transition, not a fresh ramp admission."""
+
+    world = _language_world(monkeypatch, owner='legacy_final_pass_v1')
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.DRAINING)
+        monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: RehomeOutcome.REHOMED)
+        module.resolve_batch_policy = lambda uid: world.policy
+        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+        module.compute_sync_content_id = lambda *a: 'new'
+        module.registered_record_response = live_upload.registered_record_response
+
+        async def admit_fresh(**kwargs):
+            kwargs['evidence'].batch_accepted = True  # Fresh content admission...
+            return module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
+
+        module.accept_batch_upload = admit_fresh
+        module.create_sync_job = Mock()
+        before = _counts()
+        response = await _upload(module, BytesIO, conversation_id=CID)
+        assert response.status_code == 202
+        assert _counts() == before  # ...behind a final-pass owner: still not counted.
+        module.create_sync_job.assert_not_called()
+    finally:
+        _restore(saved)
+
+
+async def test_heavy_owner_excluded_upload_counts_heavy_excluded(monkeypatch):
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+        module.resolve_batch_policy = lambda uid: enabled_policy()
+        module.registered_record_response = AsyncMock(return_value=None)
+        # The narrowed policy declines the upload back to legacy inside intake.
+        module.accept_batch_upload = AsyncMock(return_value=None)
+        module.create_sync_job = Mock()
+        # Real ramp: no durable owner, the owner-load read excludes this uid.
+        monkeypatch.setattr(batch_ramp, 'current_stage', lambda: 'dev')
+        monkeypatch.setattr(batch_ramp, 'get_data_plane_firestore_client', _no_durable_owner_client)
+        monkeypatch.setattr(
+            batch_ramp,
+            'read_owner_load',
+            lambda *a, **k: {'open_backlog': 42, 'recording_seconds': 0, 'complete': True},
+        )
+        before = _counts()
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 202
+        after = _counts()
+        assert after['heavy_excluded'] == before['heavy_excluded'] + 1
+        assert {k: v for k, v in after.items() if k != 'heavy_excluded'} == {
+            k: v for k, v in before.items() if k != 'heavy_excluded'
+        }
+        module.create_sync_job.assert_called_once()
+    finally:
+        _restore(saved)
+
+
+async def test_language_excluded_upload_counts_language_excluded(monkeypatch):
+    world = _language_world(monkeypatch)
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+        monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda *a: None)
+        module.resolve_batch_policy = lambda uid: world.policy
+        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+        module.compute_sync_content_id = lambda *a: 'new'
+        module.registered_record_response = live_upload.registered_record_response
+        module.accept_batch_upload = Mock(side_effect=AssertionError('excluded upload must not enter batch intake'))
+        module.archive_mobile_batch_raw_files = lambda *a, **k: []
+        before = _counts()
+        response = await _upload(module, BytesIO, conversation_id=CID)
+        assert response.status_code == 202
+        assert world.claims == ['legacy_final_pass_v1']
+        after = _counts()
+        assert after['language_excluded'] == before['language_excluded'] + 1
+        assert {k: v for k, v in after.items() if k != 'language_excluded'} == {
+            k: v for k, v in before.items() if k != 'language_excluded'
+        }
+    finally:
+        _restore(saved)
+
+
+async def test_not_cohort_upload_counts_not_cohort(monkeypatch):
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+        module.resolve_batch_policy = lambda uid: BatchUnitPolicy(batch_enabled=False)
+        module.registered_record_response = AsyncMock(return_value=None)
+        module.accept_batch_upload = AsyncMock(side_effect=AssertionError('batch is not enabled for this uid'))
+        module.create_sync_job = Mock()
+        before = _counts()
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 202
+        after = _counts()
+        assert after['not_cohort'] == before['not_cohort'] + 1
+        assert {k: v for k, v in after.items() if k != 'not_cohort'} == {
+            k: v for k, v in before.items() if k != 'not_cohort'
+        }
+        module.create_sync_job.assert_called_once()
+    finally:
+        _restore(saved)
+
+
+async def test_durable_legacy_owner_landing_is_not_counted(monkeypatch):
+    module, saved, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
+        module.resolve_batch_policy = lambda uid: enabled_policy()
+        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+        module.registered_record_response = AsyncMock(return_value=RecordUploadRoute.LEGACY)
+        module.accept_batch_upload = AsyncMock(side_effect=AssertionError('a legacy owner must not enter batch intake'))
+        module.create_sync_job = Mock()
+        before = _counts()
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 202
+        assert _counts() == before  # Prior owner: no fresh decision, no outcome.
+        module.create_sync_job.assert_called_once()
+    finally:
+        _restore(saved)

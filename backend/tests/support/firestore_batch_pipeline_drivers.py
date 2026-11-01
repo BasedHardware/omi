@@ -83,9 +83,10 @@ def entries():
         CoveredByEntry(
             'database.batch_ramp.ramp_admission_policy',
             covered_by=('database.batch_ramp.read_owner_load',),
-            reason='admission wrapper delegates both metadata queries to the owner-load reader',
+            reason='admission wrapper delegates both metadata queries to the owner-load reader; '
+            'the intake-outcome evidence kwarg adds no query',
             expect_observed=False,
-            body_digest='af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
+            body_digest='2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
         ),
         DriverEntry(
             'database.batch_ramp.read_owner_load',

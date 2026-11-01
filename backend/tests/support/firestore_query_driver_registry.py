@@ -147,7 +147,8 @@ BODY_DIGEST = {
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
     'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
-    'database.batch_ramp.ramp_admission_policy': 'af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
+    # Re-reviewed 2026-11-01: intake-outcome evidence kwarg only; no query or read added.
+    'database.batch_ramp.ramp_admission_policy': '2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
     'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',

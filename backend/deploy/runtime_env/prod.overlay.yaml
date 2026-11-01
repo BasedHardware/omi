@@ -124,11 +124,11 @@ overlay:
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://172.16.160.20/diarizer
+          value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: 'off'
         HOSTED_TRANSLATION_API_URL:
-          value: http://172.16.160.20/nllb
+          value: http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080
         REFERRAL_PUBLIC_BASE_URL:
           value: https://omi.me
         DREAM_AGENT_ENABLED:
@@ -284,7 +284,7 @@ overlay:
         SONIOX_WIRE_LEDGER:
           value: 'true'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://172.16.160.20/diarizer
+          value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
         HOSTED_DIARIZATION_API_URL:
           value: http://172.16.160.20/diarizer-batch
           category: service_discovery
@@ -521,7 +521,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -876,7 +876,7 @@ overlay:
           # Restore monthly usage reads only for compute admission on backend-sync (admitscope 2026-11-01).
           # Writers maintain totals and cache invalidation while reader levers are off.
           # Preserve the existing epoch and every other service/lever (#24194 guard).
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1002,6 +1002,9 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
+            category: rollout
+          DREAM_STATE_PASS_MODE:
+            value: shadow
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -1257,7 +1260,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1372,6 +1375,9 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
+            category: rollout
+          DREAM_STATE_PASS_MODE:
+            value: shadow
             category: rollout
           MENTOR_PIPELINE:
             value: cohort
@@ -1615,7 +1621,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);

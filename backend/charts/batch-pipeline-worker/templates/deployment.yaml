@@ -28,7 +28,7 @@ spec:
   # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
   # before new ones start, so the deadline covers drain plus startup.
   progressDeadlineSeconds: 2400
-  {{- $replicas := .Values.replicaCount }}
+  {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
   {{- if .Values.autoscaling.enabled }}
   {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
   {{- if $current }}
@@ -54,7 +54,22 @@ spec:
         app.kubernetes.io/instance: {{ .instance.name }}
     spec:
       serviceAccountName: {{ required "dedicated Workload Identity serviceAccountName required" .Values.serviceAccountName }}
+      {{- if .instance.borrowedPools }}
+      # Borrowed nodes must come back to their owner fast: a preempted borrower
+      # stops within this bound and its leases retry elsewhere.
+      terminationGracePeriodSeconds: {{ .instance.terminationGracePeriodSeconds }}
+      priorityClassName: {{ printf "%s-borrower" .Release.Name }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: cloud.google.com/gke-nodepool
+                    operator: In
+                    values: {{ .instance.borrowedPools | toJson }}
+      {{- else }}
       terminationGracePeriodSeconds: 1500
+      {{- end }}
       {{- with .instance.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -105,6 +120,10 @@ spec:
             - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR, value: {{ .Values.worker.shadowPaidRecoveryPerHour | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_RECOVERY_API_URL, value: {{ .Values.worker.shadowRecoveryApiUrl | quote }}}
+            # Sampled strict-VAD shadow; 100 restores full, 0 turns the shadow off.
+            # No `default` here: Helm's default treats 0 as empty, which would
+            # silently turn the documented 0-disable into 10.
+            - {name: BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT, value: {{ .Values.worker.strictVadShadowPercent | quote }}}
             - {name: BATCH_PIPELINE_UID_ALLOWLIST, value: ""}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}
@@ -114,6 +133,8 @@ spec:
             - {name: OMI_ENV_STAGE, value: {{ .Values.stage | quote }}}
             - {name: BATCH_PIPELINE_NAMESPACE, value: {{ .Values.namespace | quote }}}
             - {name: BUCKET_BATCH_PIPELINE, value: {{ required "dedicated staging bucket required" .Values.bucket | quote }}}
+            # Retained-audio references may name the regional chunk bucket; empty admits only the private bucket.
+            - {name: BUCKET_AUDIO_DERIVED, value: {{ .Values.audioDerivedBucket | default "" | quote }}}
             # Shared by Parakeet windows and pyannote segmentation, embedding and VAD inference.
             - {name: BATCH_PIPELINE_MODEL_BATCH_SIZE, value: {{ .Values.worker.batchSize | quote }}}
             - {name: BATCH_PIPELINE_UNIT_SECONDS, value: {{ .Values.worker.unitSeconds | quote }}}

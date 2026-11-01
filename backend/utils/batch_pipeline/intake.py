@@ -30,6 +30,7 @@ from utils.batch_pipeline.capture_decode import decode_units
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
+from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline.provider_stt import provider_enqueue
 from utils.batch_pipeline.route_selection import select_route
@@ -289,11 +290,14 @@ async def accept_upload(
     decode=None,
     policy: BatchUnitPolicy | None = None,
     usage_period: str | None = None,
+    evidence: IntakeRouteEvidence | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
     ``decode(max_seconds)`` replaces WAL decoding of ``paths`` for server-held audio
-    (the cap-hold adapter); it must yield the same ``AudioUnit`` shape.
+    (the cap-hold adapter); it must yield the same ``AudioUnit`` shape. ``evidence``
+    records this request's language-exclusion declines for the caller's intake
+    outcome counter; declines that follow a prior owner carry no fresh decision.
     """
     policy = policy or resolve_batch_policy(uid)
     public_job_id = JOB_PREFIX + job_id
@@ -401,6 +405,7 @@ async def accept_upload(
                 byok_enabled=byok_enabled,
                 loaded_conversation=target,
                 policy=policy,
+                evidence=evidence,
             )
         admission_language = None
         if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
@@ -415,6 +420,8 @@ async def accept_upload(
                     exclusion_reason,
                     legacy_available=True,
                 )
+                if evidence is not None:
+                    evidence.language_excluded = True
                 return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
@@ -462,6 +469,8 @@ async def accept_upload(
             record_fallback(
                 component='stt_selection', from_mode='batch', to_mode='modulate', reason='other', outcome='recovered'
             )
+            if evidence is not None:
+                evidence.language_excluded = True
             return None
         if (
             mode is LegacySyncMode.ON
@@ -476,6 +485,8 @@ async def accept_upload(
             # with a durable batch-sync owner never falls through to legacy here.
             record_route('intake', language, 'multilingual')
             logger.info('event=batch_language_eligibility outcome=legacy reason=known_unsupported_language')
+            if evidence is not None:
+                evidence.language_excluded = True
             return None
         if inherited:
             input_language = inherited
@@ -659,6 +670,11 @@ async def accept_upload(
         if adopt is not None and outcome['outcome'] == 'batch' and outcome.get('job_id') == public_job_id:
             legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.LEGACY_STRANDED_ADOPTED)
         if outcome['outcome'] == 'batch':
+            # Only this request's own admission is fresh work: a concurrent
+            # winner commits the same content and admit returns its existing
+            # job (Luna r2), which is a re-ACK, not a new admission.
+            if evidence is not None and outcome.get('job_id') == public_job_id:
+                evidence.batch_accepted = True
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
