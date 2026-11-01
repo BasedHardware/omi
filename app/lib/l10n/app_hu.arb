@@ -4550,12 +4550,11 @@
     "episodeNotesStartWithTranscript": "A jegyzetek a végleges átirat megérkezésekor indulnak.",
     "episodeOnDeviceNotesFootnote": "A telefonodon készülnek, miközben beszélsz. A teljes jegyzetek a végleges átirattal együtt érkeznek.",
     "episodeOnThisPhone": "Ezen a telefonon",
-    "liveCardTitle": "Élő",
     "livePreviewBehind": "A végleges átirat kb. {duration} késésben van",
     "livePreviewCatchingUp": "A végleges átirat felzárkózik",
     "livePreviewNoEngineBody": "A szavaid egy-két perccel azután jelennek meg itt, hogy kimondtad őket.",
     "livePreviewNoEngineTitle": "Biztonságosan rögzít",
-    "livePreviewOnPhoneDivider": "Élő ezen a telefonon",
+    "livePreviewOnPhoneDivider": "Épp most, ezen a telefonon",
     "livePreviewTurnOnLiveText": "Élő szöveg bekapcsolása",
     "deviceCatchUpOnItsWay": "úton van",
     "deviceCatchUpWhenOnline": "ha van internet",
@@ -4612,7 +4611,12 @@
     "yearlySwitchUnavailable": "Az éves fizetés jelenleg nem érhető el az Ön csomagjához.",
     "yearlySwitchDoneTitle": "Mostantól évente fizet",
     "yearlySwitchDoneBody": "Ma terhelve: {amount}. Megújul: {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} rész} one{{count} rész} two{{count} rész} few{{count} rész} many{{count} rész} other{{count} rész}}",
     "chatAppsWaitingMessageIn": "Küldd el az üzenetet az {app} alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.",
-    "chatAppsCodeExpiredMessageIn": "Kérj új kódot, és küldd el az {app} alkalmazásból."
+    "chatAppsCodeExpiredMessageIn": "Kérj új kódot, és küldd el az {app} alkalmazásból.",
+    "episodeWritingNotes": "Jegyzetek írása…",
+    "episodeWritingNotesDetail": "Először befejezzük az átiratot. Elhagyhatod ezt az oldalt.",
+    "episodeCoversUpTo": "{time}-ig · teljes jegyzetek a végén",
+    "liveTranscribedUpTo": "Átírva eddig: {time}",
+    "liveAudioSaved": "{duration} mentve",
+    "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg."
 }

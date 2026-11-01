@@ -14701,9 +14701,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get episodeOnThisPhone => 'Neste telefone';
 
   @override
-  String get liveCardTitle => 'Ao vivo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Transcrição final com cerca de $duration de atraso';
   }
@@ -14718,7 +14715,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Gravando com segurança';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Ao vivo neste telefone';
+  String get livePreviewOnPhoneDivider => 'Agora mesmo, neste telefone';
 
   @override
   String get livePreviewTurnOnLiveText => 'Ativar texto ao vivo';
@@ -14963,21 +14960,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count partes',
-      many: '$count partes',
-      few: '$count partes',
-      two: '$count partes',
-      one: '$count parte',
-      zero: '$count partes',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Envie a mensagem no app $app. Esta tela é atualizada assim que a Omi a receber.';
   }
@@ -14986,4 +14968,28 @@ class AppLocalizationsPt extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Gere um novo código e envie pelo app $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Escrevendo notas…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Primeiro terminamos a transcrição. Você pode sair desta página.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Cobre até $time · notas completas ao terminar';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transcrito até $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration salvos';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Os falantes e a transcrição final aparecerão aqui durante o envio.';
 }

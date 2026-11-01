@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "最终转写到达后即开始生成笔记。",
     "episodeOnDeviceNotesFootnote": "在你说话时于本机起草。完整笔记将随最终转写一同生成。",
     "episodeOnThisPhone": "在本机",
-    "liveCardTitle": "实时",
     "livePreviewBehind": "最终转写滞后约{duration}",
     "livePreviewCatchingUp": "最终转写正在补齐",
     "livePreviewNoEngineBody": "你说的话会在一到两分钟后显示在这里。",
     "livePreviewNoEngineTitle": "正在安全录制",
-    "livePreviewOnPhoneDivider": "在本机实时显示",
+    "livePreviewOnPhoneDivider": "刚刚，在此手机上",
     "livePreviewTurnOnLiveText": "打开实况文本",
     "deviceCatchUpOnItsWay": "在路上",
     "deviceCatchUpWhenOnline": "联网后",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "你的计划目前不支持按年付费。",
     "yearlySwitchDoneTitle": "已改为按年付费",
     "yearlySwitchDoneBody": "今日已扣款 {amount}。续订日期：{date}。",
-    "episodePartsCount": "{count, plural, zero{{count} 个部分} one{{count} 个部分} two{{count} 个部分} few{{count} 个部分} many{{count} 个部分} other{{count} 个部分}}",
     "chatAppsWaitingMessageIn": "在“{app}”中发送这条消息。Omi 一收到，此屏幕就会更新。",
-    "chatAppsCodeExpiredMessageIn": "获取新验证码，并从“{app}”中发送。"
+    "chatAppsCodeExpiredMessageIn": "获取新验证码，并从“{app}”中发送。",
+    "episodeWritingNotes": "正在撰写笔记…",
+    "episodeWritingNotesDetail": "正在先完成转录。你可以离开此页面。",
+    "episodeCoversUpTo": "涵盖至 {time} · 结束后提供完整笔记",
+    "liveTranscribedUpTo": "已转录至 {time}",
+    "liveAudioSaved": "已保存 {duration}",
+    "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。"
 }

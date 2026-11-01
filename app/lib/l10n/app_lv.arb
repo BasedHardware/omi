@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Piezīmes sāksies, kad ieradīsies galīgā transkripcija.",
     "episodeOnDeviceNotesFootnote": "Tapat jūsu tālrunī, kamēr runājat. Pilnās piezīmes ieradīsies kopā ar galīgo transkripciju.",
     "episodeOnThisPhone": "Šajā tālrunī",
-    "liveCardTitle": "Tiešraide",
     "livePreviewBehind": "Galīgā transkripcija atpaliek aptuveni {duration}",
     "livePreviewCatchingUp": "Galīgā transkripcija panāks",
     "livePreviewNoEngineBody": "Tavi vārdi šeit parādās vienu līdz divas minūtes pēc to izteikšanas.",
     "livePreviewNoEngineTitle": "Droši ieraksta",
-    "livePreviewOnPhoneDivider": "Tiešraide šajā tālrunī",
+    "livePreviewOnPhoneDivider": "Tikko, šajā tālrunī",
     "livePreviewTurnOnLiveText": "Ieslēgt tiešraides tekstu",
     "deviceCatchUpOnItsWay": "ceļā",
     "deviceCatchUpWhenOnline": "kad būsiet tiešsaistē",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Gada maksa jūsu plānam pašlaik nav pieejama.",
     "yearlySwitchDoneTitle": "Tagad jūs maksājat par gadu",
     "yearlySwitchDoneBody": "Šodien iekasēti {amount}. Atjaunojas {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} daļu} one{{count} daļa} two{{count} daļas} few{{count} daļas} many{{count} daļas} other{{count} daļas}}",
     "chatAppsWaitingMessageIn": "Nosūtiet ziņu lietotnē {app}. Šis ekrāns atjaunosies, tiklīdz Omi to saņems.",
-    "chatAppsCodeExpiredMessageIn": "Iegūstiet jaunu kodu un nosūtiet to no lietotnes {app}."
+    "chatAppsCodeExpiredMessageIn": "Iegūstiet jaunu kodu un nosūtiet to no lietotnes {app}.",
+    "episodeWritingNotes": "Rakstām piezīmes…",
+    "episodeWritingNotesDetail": "Vispirms pabeidzam transkripciju. Varat pamest šo lapu.",
+    "episodeCoversUpTo": "Līdz {time} · pilnas piezīmes beigās",
+    "liveTranscribedUpTo": "Transkribēts līdz {time}",
+    "liveAudioSaved": "Saglabāts {duration}",
+    "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā."
 }
