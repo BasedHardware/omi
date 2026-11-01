@@ -1,9 +1,9 @@
 from models.storefront import ChatAtCap
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, Literal
+from typing import Annotated, Optional, List, Literal
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, BeforeValidator, Field, model_serializer
 
 from config.plan_catalog import PlanType
 
@@ -300,3 +300,15 @@ class AvailableLanguage(BaseModel):
 
 class AvailableLanguagesResponse(BaseModel):
     languages: List[AvailableLanguage]
+
+
+def _timestamp_as_iso(value: object) -> object:
+    """Serve a stored Firestore Timestamp as the ISO-8601 string the field promises.
+
+    The Python routes store ``ai_user_profile.generated_at`` as the client's ISO-8601
+    string; profiles last written by the retired Rust desktop backend hold a Timestamp.
+    """
+    return value.isoformat() if isinstance(value, datetime) else value
+
+
+IsoTimestampStr = Annotated[str, BeforeValidator(_timestamp_as_iso)]
