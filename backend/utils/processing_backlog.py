@@ -10,6 +10,8 @@ from config.stt_cap_dispatch import recovery_cohort_admits
 from datetime import datetime, timezone
 from models.users import ProcessingBacklog
 from utils import funded_processing
+from utils.observability.held_content import record_backlog_choice
+from utils.observability.reasons import BacklogChoiceOutcome
 
 
 def whole_percent(value: float) -> int:
@@ -70,8 +72,19 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> Processin
 
 
 def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: Any = None) -> dict | None:
+    source = 'upgrade' if automatic else 'manual'
+    try:
+        chosen, outcome = _choose(uid, request_key=request_key, automatic=automatic, intent_at=intent_at)
+    except Exception:
+        record_backlog_choice(source, BacklogChoiceOutcome.ERROR)
+        raise
+    record_backlog_choice(source, outcome)
+    return chosen
+
+
+def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> tuple[dict | None, BacklogChoiceOutcome]:
     if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
-        return None
+        return None, BacklogChoiceOutcome.OUT_OF_SCOPE
     from database import processing_backlog as store
 
     # Pin the grant's month before reads: rollover between validation and the
@@ -80,7 +93,7 @@ def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: An
     allowance = funded_processing.allowance(uid)
     result = snapshot(uid, allowance=allowance)
     if result is None:
-        return None
+        return None, BacklogChoiceOutcome.OUT_OF_SCOPE
     # The first delivery of an old payment event is not fresh upgrade consent.
     # Record declined intent too, so retries cannot reinterpret it after reset.
     intent_period = None
@@ -95,8 +108,18 @@ def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: An
     begin = result.state not in {'none', 'capped'} and (
         not automatic or intent_period == period and not result.exceeds_remaining
     )
+    if begin:
+        outcome = BacklogChoiceOutcome.ACCEPTED
+    elif result.state == 'capped':
+        outcome = BacklogChoiceOutcome.CAPPED
+    elif result.state == 'none':
+        outcome = BacklogChoiceOutcome.NOTHING_WAITING
+    elif intent_period != period:
+        outcome = BacklogChoiceOutcome.STALE_INTENT
+    else:
+        outcome = BacklogChoiceOutcome.EXCEEDS_REMAINING
     if not begin and not automatic:
-        return None
+        return None, outcome
     chosen = store.start(
         uid,
         period=period,
@@ -106,7 +129,7 @@ def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: An
         automatic=automatic,
         begin=begin,
     )
-    return chosen if begin else None
+    return (chosen if begin else None), outcome
 
 
 def is_active(row: dict) -> bool:

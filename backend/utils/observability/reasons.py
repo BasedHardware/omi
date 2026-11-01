@@ -162,6 +162,19 @@ class HeldRecoverySkipOutcome(StrEnum):
     TEXT_OUT_OF_SCOPE = 'text_out_of_scope'
 
 
+class BacklogChoiceOutcome(StrEnum):
+    """Result of a "Process waiting recordings" tap or an upgrade's backlog intent."""
+
+    UNKNOWN = 'unknown'
+    ACCEPTED = 'accepted'
+    OUT_OF_SCOPE = 'out_of_scope'
+    CAPPED = 'capped'
+    NOTHING_WAITING = 'nothing_waiting'
+    STALE_INTENT = 'stale_intent'
+    EXCEEDS_REMAINING = 'exceeds_remaining'
+    ERROR = 'error'
+
+
 class StagingRetryOutcome(StrEnum):
     """Disposition of a held-audio staging attempt, including volatile custody."""
 

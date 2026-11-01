@@ -118,6 +118,12 @@ Do not `sum()` these gauges, and do not `max()` the gauge itself.
 | Spend and reconciliation | Zero unexplained duplicate usage keys or repeat provider dispatch, no increase in `omi_stt_cap_recovery_reconciliation_total{outcome="redispatched"}` / `failed`; any lost or doubly funded probe audio stops immediately. Preserve receipts/audio for investigation. Compare vendor usage with internal accepted seconds; internal counters alone are not invoice proof. |
 | Custody maintenance and deletion | `omi_held_content_erasure_total{outcome="failure"}` stays at zero new events after the retry budget. `{outcome="post_delete_publication"}` stays at zero: it increments only when a publish observes a `purged` receipt and returns before any manifest commit or upload. `event=cap_hold_redrive` progresses with no repeated `worker_deferred`, `seal_deferred`, `cleanup_deferred`, or `fleet_snapshot_deferred`. No launch-config errors; stable live STT and sync/client 5xx. |
 
+`omi_processing_backlog_choice_total{source,outcome}` counts owner choices:
+`source="manual"` is each `POST /v1/users/processing-backlog/process` (including
+out-of-scope 404s), `source="upgrade"` is each payment upgrade intent; `outcome`
+is `accepted`, `out_of_scope`, `capped`, `nothing_waiting`, `stale_intent`,
+`exceeds_remaining` or `error`. A retried idempotency key counts again.
+
 Existing signals include `omi_stt_cap_provider_audio_seconds_total`,
 `omi_stt_cap_recovery_reconciliation_total`,
 `omi_stt_cap_launch_config_errors_total`, and structured `event=cap_hold_redrive`

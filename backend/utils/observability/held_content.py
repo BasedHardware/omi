@@ -16,6 +16,7 @@ import time
 from prometheus_client import Counter, Gauge, Histogram
 
 from utils.observability.reasons import (
+    BacklogChoiceOutcome,
     HeldRecoverySkipOutcome,
     ReasonFamily,
     StagingRetryOutcome,
@@ -100,6 +101,13 @@ RECOVERY_SKIPPED = Counter(
     'out_of_scope owner or lane, unknown_origin hold metadata, or text_out_of_scope',
     ['outcome'],
 )
+BACKLOG_CHOICE_SOURCES = ('manual', 'upgrade')
+BACKLOG_CHOICE = Counter(
+    'omi_processing_backlog_choice',
+    'Processing-backlog choices by source: manual is POST /v1/users/processing-backlog/process, upgrade is '
+    'payment intent. A retried idempotency key counts again. Labels never identify a person',
+    ['source', 'outcome'],
+)
 PACING_OUTCOMES = ('granted', 'deferred', 'refused')
 PACING = Counter('omi_held_recovery_pacing_intents', 'Recovery intent budget decisions', ['outcome'])
 PACING_AUDIO = Counter('omi_held_recovery_pacing_audio_seconds', 'Audio tokens requested by decision', ['outcome'])
@@ -149,6 +157,11 @@ for _method in CHOICE_METHODS:
     CHOICE_LATENCY.labels(method=_method)
 for _result in RECOVERY_RESULTS:
     RECOVERY.labels(result=_result)
+for _source in BACKLOG_CHOICE_SOURCES:
+    for _outcome in BacklogChoiceOutcome:
+        BACKLOG_CHOICE.labels(
+            source=_source, outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, BacklogChoiceOutcome)
+        )
 for _outcome in HeldRecoverySkipOutcome:
     RECOVERY_SKIPPED.labels(outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, HeldRecoverySkipOutcome))
 for _outcome in PACING_OUTCOMES:
@@ -208,6 +221,15 @@ def record_recovery(result: str) -> None:
 
 def record_recovery_skipped(outcome: str) -> None:
     _inc(RECOVERY_SKIPPED, outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, HeldRecoverySkipOutcome))
+
+
+def record_backlog_choice(source: str, outcome: str) -> None:
+    if source in BACKLOG_CHOICE_SOURCES:
+        _inc(
+            BACKLOG_CHOICE,
+            source=source,
+            outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, BacklogChoiceOutcome),
+        )
 
 
 def record_pacing(outcome: str, seconds: float, deferred_age: float = 0) -> None:

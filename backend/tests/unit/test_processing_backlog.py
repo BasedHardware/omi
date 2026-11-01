@@ -657,3 +657,77 @@ def test_budget_waiting_vector_writer_never_calls_provider_after_reset(monkeypat
     monkeypatch.setattr(funded, 'processing_allowed', lambda uid: True)
     assert pipeline.save_structured_vector('synthetic', waiting, update_only=update_only) is False
     forbidden.assert_not_called()
+
+
+def _choices(source, outcome):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value('omi_processing_backlog_choice_total', {'source': source, 'outcome': outcome})
+
+
+@pytest.mark.parametrize(
+    'automatic,state,intent_month,exceeds,outcome',
+    [
+        (False, 'waiting_choice', None, True, 'accepted'),
+        (False, 'capped', None, False, 'capped'),
+        (False, 'none', None, False, 'nothing_waiting'),
+        (True, 'waiting_choice', '2026-02', False, 'accepted'),
+        (True, 'waiting_choice', '2026-01', False, 'stale_intent'),
+        (True, 'waiting_choice', '2026-02', True, 'exceeds_remaining'),
+        (True, 'capped', '2026-02', False, 'capped'),
+    ],
+)
+def test_backlog_choices_are_counted_by_source_and_outcome(
+    monkeypatch, automatic, state, intent_month, exceeds, outcome
+):
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
+    monkeypatch.setattr(funded, 'period_id', lambda: '2026-02')
+    monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
+    monkeypatch.setattr(
+        backlog,
+        'snapshot',
+        lambda *a, **k: ProcessingBacklog(
+            state=state, remaining_units=130, estimated_units=10, exceeds_remaining=exceeds
+        ),
+    )
+    monkeypatch.setattr(worker.store, 'start', Mock(return_value={'token': 'run'}))
+    intent_at = (
+        datetime.strptime(f'{intent_month}-15', '%Y-%m-%d').replace(tzinfo=timezone.utc) if intent_month else None
+    )
+    source = 'upgrade' if automatic else 'manual'
+    before = _choices(source, outcome)
+    backlog.choose('synthetic', request_key='synthetic-choice', automatic=automatic, intent_at=intent_at)
+    assert _choices(source, outcome) == before + 1
+
+
+def test_backlog_choice_errors_and_out_of_scope_404s_are_counted(monkeypatch):
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
+    monkeypatch.setattr(funded, 'allowance', Mock(side_effect=OSError('synthetic allowance outage')))
+    before = _choices('upgrade', 'error')
+    with pytest.raises(OSError):
+        backlog.choose('synthetic', request_key='synthetic-choice', automatic=True, intent_at=None)
+    assert _choices('upgrade', 'error') == before + 1
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    monkeypatch.setattr(backlog, 'choose', Mock(side_effect=AssertionError('chose out of scope')))
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.auth.get_current_user_uid] = lambda: 'synthetic'
+    before = _choices('manual', 'out_of_scope')
+    with TestClient(app) as client:
+        response = client.post('/v1/users/processing-backlog/process', headers={'Idempotency-Key': 'synthetic-choice'})
+    assert response.status_code == 404
+    assert _choices('manual', 'out_of_scope') == before + 1
+
+
+def test_backlog_choice_counter_is_armed_and_never_carries_free_text():
+    from utils.observability import held_content
+
+    for source in ('manual', 'upgrade'):
+        for outcome in ('accepted', 'out_of_scope', 'capped', 'nothing_waiting', 'stale_intent', 'error', 'unknown'):
+            assert _choices(source, outcome) is not None
+    held_content.record_backlog_choice('synthetic-owner', 'accepted')
+    held_content.record_backlog_choice('manual', 'synthetic-owner')
+    assert _choices('synthetic-owner', 'accepted') is None
+    assert _choices('manual', 'synthetic-owner') is None
