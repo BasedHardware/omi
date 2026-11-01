@@ -58,7 +58,6 @@ from config.episodes import (
     CONTINUE_GAP_SECONDS,
     LAST_CLOSED_CACHE_SECONDS,
     MAX_EPISODE_SECONDS,
-    MAX_MOMENTS,
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
     episode_hard_cap_across_conversations_enabled,
