@@ -16,6 +16,7 @@ from utils import stt_cap_dispatch as dispatch
 from utils.batch_pipeline import cap_hold_admission as adapter
 from utils.sync import cap_hold, cap_hold_recovery
 from utils.subscription import TranscriptionAllowance
+from tests.unit.test_sync_cap_hold_recovery import state  # noqa: F401 (legacy recovery harness)
 
 UID = 'owner'
 
@@ -187,3 +188,60 @@ async def test_funded_owner_sync_hold_reaches_admission_after_allowance_check(he
     monkeypatch.setattr(adapter, 'admit_held', admit)
     assert await cap_hold_recovery.recover_selected(UID, held_sync.snapshot) is False
     assert admitted == [UID] and held_sync.lanes == ['sync']
+
+
+@pytest.fixture
+def legacy_sync_hold(prod_scope, state, monkeypatch):  # noqa: F811 (imported pytest fixture)
+    """The legacy (non-batch) recovery path for a sync-origin hold under live-only lanes."""
+    monkeypatch.setattr(
+        cap_hold_recovery.cap_hold,
+        'metadata',
+        Mock(return_value={'timestamp': 1792152000, 'source': 'omi', 'origin': 'sync'}),
+    )
+    return state
+
+
+async def test_legacy_sync_recovery_checks_allowance_on_lane_sync_then_dispatches(legacy_sync_hold):
+    assert await cap_hold_recovery._recover_row(UID, legacy_sync_hold.snapshot, legacy_sync_hold.row)
+    cap_hold_recovery.sync_allowed.assert_called_with(UID, lane='sync')
+    cap_hold_recovery.cap_recovery_pacing.reserve.assert_called_once()
+    kwargs = cap_hold_recovery.process_segment.call_args.kwargs
+    assert kwargs['cap_recovery'] is True and kwargs['cap_dispatch_lane'] == 'sync'
+
+
+async def test_legacy_sync_recovery_without_allowance_spends_nothing(legacy_sync_hold):
+    cap_hold_recovery.sync_allowed.return_value = False
+    assert not await cap_hold_recovery._recover_row(UID, legacy_sync_hold.snapshot, legacy_sync_hold.row)
+    cap_hold_recovery.cap_recovery_pacing.reserve.assert_not_called()
+    cap_hold_recovery.process_segment.assert_not_called()
+    cap_hold_recovery.record_usage.assert_not_called()
+
+
+@pytest.mark.parametrize('outcome', ['deferred', 'refused'])
+async def test_legacy_sync_recovery_stays_inside_shared_pacing(legacy_sync_hold, monkeypatch, outcome):
+    decision = cap_hold_recovery.cap_recovery_pacing.Decision(outcome, 30)
+    monkeypatch.setattr(cap_hold_recovery.cap_recovery_pacing, 'reserve', Mock(return_value=decision))
+    legacy_sync_hold.row['piece_plan'] = {'p.wav': {'seconds': 20}}
+    assert not await cap_hold_recovery._recover_row(UID, legacy_sync_hold.snapshot, legacy_sync_hold.row)
+    cap_hold_recovery.process_segment.assert_not_called()
+    cap_hold_recovery.record_usage.assert_not_called()
+
+
+async def test_sync_hold_is_out_of_scope_when_offline_switch_is_off(legacy_sync_hold, monkeypatch):
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false')
+    assert not await cap_hold_recovery._recover_row(UID, legacy_sync_hold.snapshot, legacy_sync_hold.row)
+    cap_hold_recovery.sync_allowed.assert_not_called()
+    cap_hold_recovery.process_segment.assert_not_called()
+
+
+@pytest.mark.parametrize('grant,allowed', [('this-month', True), ('last-month', False)])
+def test_recovery_dispatch_requires_the_current_month_backlog_choice(prod_scope, monkeypatch, grant, allowed):
+    """Real sync_allowed: a stale consent grant cannot authorize sync-hold recovery."""
+    monkeypatch.setattr(funded_processing, 'period_id', lambda: 'this-month')
+    managed = TranscriptionAllowance('managed', None, 'plan_allowance_available', limit_seconds=None)
+    monkeypatch.setattr(dispatch, 'funded_allowance', lambda uid, lane=None, **kwargs: managed)
+    monkeypatch.setattr(dispatch, 'record_decision', lambda *args: None)
+    monkeypatch.setattr(cap_hold_recovery, 'get_hard_restriction_status', lambda uid: (False, None))
+    monkeypatch.setattr(cap_hold_recovery, 'is_daily_audio_ceiling_exceeded', lambda uid: False)
+    with funded_processing.backlog_consent(UID, grant):
+        assert cap_hold_recovery._new_dispatch_allowed(UID, 'sync') is allowed
