@@ -345,7 +345,10 @@ class TestNoConversationAsMemory:
         assert "structured" not in row
         assert row.get("id") != conversation.id
 
-    def test_extract_memories_inner_external_integration_uses_text_not_conversation(self):
+    def test_extract_memories_inner_external_integration_uses_text_not_conversation(self, monkeypatch):
+        # This asserts the eager extraction seam; the dedupe-on external path
+        # (prompt-memories resolution + l1 fingerprint) is covered separately.
+        monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
         pc = _ensure_process_conversation_importable()
 
         from models.conversation import Conversation
