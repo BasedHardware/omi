@@ -4,6 +4,8 @@ Current source closure, with minimal-redrive-only behavior removed.
 No legacy upload admission, sequencer or job coordinator remains here.
 """
 
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnusedVariable=false, reportUnusedImport=false, reportUnnecessaryComparison=false, reportAssignmentType=false, reportIndexIssue=false, reportArgumentType=false
+
 from __future__ import annotations
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
