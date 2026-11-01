@@ -71,13 +71,33 @@ class _TableCache:
 
 
 _tables = _TableCache()
-_health: contracts.VendorHealth = contracts.AlwaysHealthy()
+# Until serving binds slice C's service (serving_health) or a caller configures one.
+_UNBOUND: contracts.VendorHealth = contracts.AlwaysHealthy()
+_health: contracts.VendorHealth = _UNBOUND
+_bind_lock = Lock()
 
 
 def configure_health(health: contracts.VendorHealth) -> None:
-    """Slice C binds its cross-pod ``VendorHealth`` here; until then every vendor is healthy."""
+    """Bind an explicit ``VendorHealth`` (tests, tools); serving binds slice C's via ``serving_health``."""
     global _health
     _health = health
+
+
+def serving_health() -> contracts.VendorHealth:
+    """The process's vendor health: slice C's cross-pod service reading the served table's route
+    configs (daily caps, monthly budgets), bound once on first use unless one was configured.
+
+    Admission selection and the provider stage share it, so an outage steers new units to GPU
+    where it is capable and a configured cap is enforced at the mint.
+    """
+    global _health
+    if _health is _UNBOUND:
+        with _bind_lock:
+            if _health is _UNBOUND:
+                from utils.batch_pipeline.vendor_health import get_vendor_health
+
+                _health = get_vendor_health(routes=lambda: current_table()[0].routes)
+    return _health
 
 
 def current_table() -> tuple[contracts.RouteTable, VendorRouteTableOutcome]:
@@ -91,7 +111,10 @@ def route_allowed(service: str) -> bool:
     if service == contracts.GPU:
         return True
     try:
-        allowed, _reason = _health.allows(service)
+        # Selection only chooses where a unit starts, so it never takes slice C's half-open probe
+        # (``peek``): the stage's mint does, or the breaker could never close.
+        health = serving_health()
+        allowed, _reason = getattr(health, 'peek', health.allows)(service)
     except Exception:
         # The contract says allows() never raises; if it does, fail toward GPU or the hold.
         allowed, _reason = False, VendorHealthReason.STATE_UNAVAILABLE
@@ -137,7 +160,8 @@ def decide(table: contracts.RouteTable, language: str | None, *, byok: bool, uid
         and cohort_bucket(uid, contracts.GPU_FLOOR_COHORT_SALT) < table.gpu_floor_percent
     ):
         selected, reason = contracts.GPU, VendorRouteReason.GPU_FLOOR
-    elif not capable:
+    elif not capable or all(table.routes[route].failover_only for route in capable):
+        # No capable route, or only failover capacity (Soniox, admitted by slice D): today's routing.
         return None
     elif primaries:
         if len([route for route in capable if not table.routes[route].failover_only]) == 1:

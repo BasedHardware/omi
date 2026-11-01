@@ -14,6 +14,7 @@ from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline import provider_stt
 from unittest.mock import Mock
 
+from config.batch_pipeline import allowance_hold_retry_seconds
 from config.policy import BatchUnitPolicy
 from testing.pipeline_sim.trace import GOLDEN_CONFIGS
 from utils.batch_pipeline import admission  # warm its fair-use/backfill imports outside the call budget
@@ -996,7 +997,8 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
     else:
         assert receipt == {
             'allowed': [],
-            'retry_after': {lease.item.segment_id: 60},
+            # #24271: an exhausted allowance parks for the allowance hold window, not the 60 s retry.
+            'retry_after': {lease.item.segment_id: allowance_hold_retry_seconds()},
             'held_reason': {lease.item.segment_id: 'allowance_exhausted'},
         }
 
