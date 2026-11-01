@@ -1,7 +1,9 @@
 # Desktop (macOS) — Developer Guide
 
 ## Project Overview
-OMI Desktop App for macOS (Swift)
+OMI Desktop App for macOS (Swift). This is the `desktop/macos/` subfolder of the
+**OMI monorepo** (`BasedHardware/omi`); the shared Python desktop backend lives
+under `../../backend`.
 
 ## Logs & Debugging
 
@@ -16,89 +18,49 @@ For difficult SwiftUI/AppKit runtime bugs—stale views, lost input, layout loop
 When debugging issues for a specific user, check PostHog events, the local log, and the
 diagnostics ring buffer. Desktop crash reporting was removed together with Sentry; the
 release lane retains the UUID-verified dSYM as a GitHub release artifact for offline
-symbolication.
+symbolication. Firebase quick-connect snippet (project `based-hardware`):
+[`docs/firebase-connection.md`](docs/firebase-connection.md).
 
 ### Product analytics integrity
 
-- A desktop chat query starts after local concurrency/quota preflight and must
-  emit exactly one terminal outcome: `completed`, `failed`, or `cancelled`.
-  Intentional Stop and supersession are cancellations, never errors.
-- A physical voice shortcut turn emits one start and one terminal outcome from
-  the coordinator. Full-answer duration ends at playback drain; a later journal
-  failure does not rewrite a delivered response as missing. Intentional and
-  too-short endings are excluded from response-failure rates.
-- Query latency ends when the final answer is visible. Persistence, title
-  generation, and other post-answer work have their own reliability signals and
-  must not inflate user-visible query duration.
-- Product authority is independent from telemetry. Revoked or timed-out turns
-  cannot apply late callbacks/results or persist a late response even if
-  analytics is disabled or refactored.
+The full measurement contract lives in [`docs/analytics-integrity.md`](docs/analytics-integrity.md). Hard rules that always apply:
+
 - PostHog receives bounded dimensions and shape metadata only. Never send raw
   prompts, responses, notification/window titles, filesystem paths, or exception
   messages. Keep diagnostic detail in the private local log.
 - Production `QueryTracer` output is shape-only and stored under a `0700`
   directory in `0600` files. Full prompt/response/tool content is a deliberate
   non-production debugging capability only.
+- Product authority is independent from telemetry. Revoked or timed-out turns
+  cannot apply late callbacks/results or persist a late response even if
+  analytics is disabled or refactored.
 
 ### Fallback / resilience telemetry
-Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.recordFallback(area:from:to:reason:outcome:)` (PostHog `desktop_health_event` / `fallback_triggered`) or Rust `fallback::record_fallback`. Same field contract as root `AGENTS.md` → Fallback / resilience telemetry. Do not invent new health-event enum cases or product “Recording Error” events for successful heals (`outcome=recovered`).
+Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.recordFallback(area:from:to:reason:outcome:)` (PostHog `desktop_health_event` / `fallback_triggered`) or Rust `fallback::record_fallback`. Field contract: [`.github/agent-docs/fallback-telemetry.md`](../../.github/agent-docs/fallback-telemetry.md). Do not invent new health-event enum cases or product “Recording Error” events for successful heals (`outcome=recovered`).
 
 Gemini Live has no safe mid-session system role. Background agent/card text stays on its canonical tool or visible UI surface and must never use Gemini's realtime user-input wire.
 
-## Repository
-- This is the `desktop/macos/` subfolder of the **OMI monorepo** (`BasedHardware/omi`)
-- macOS Swift app lives here; its shared Python desktop backend lives under `../../backend`
-
 ## Release Pipeline
 
-Beta candidates ship on the **hourly release train**: `desktop_auto_release.yml` runs on an hourly `schedule` (plus manual `workflow_dispatch` retries — there is no `push` trigger). Each run tags the newest releasable `desktop/macos/**`/`codemagic.yaml` change since the last tag, coalescing every merge in the window and binding the immutable tag to the Codemagic config that builds it. A candidate reaches Beta automatically after Codemagic finishes the signed release build:
+Beta candidates ship on the **hourly release train**: `desktop_auto_release.yml` tags the newest releasable `desktop/macos/**`/`codemagic.yaml` change, Codemagic (`codemagic.yaml`, workflow `omi-desktop-swift-release`) builds, signs, notarizes, smokes, and publishes the immutable candidate, and the backend admission endpoint advances Beta automatically. Full train mechanics, signed-smoke scope, recovery, and the Codemagic CLI live in [`docs/release.md`](docs/release.md).
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — the planner auto-increments the version and pushes a timestamped annotated `v*-macos` tag. Every invocation passes `--min-tag-interval-seconds 3600`, so scheduled and manual retries create at most one candidate per hour, measured from the previous candidate's GitHub-release `createdAt` after publication or its annotated-tag creation time while still building. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. GitHub compile queues do not gate tagging: the tag stays on the exact newest source, or its mechanically verified changelog-only child, while later macOS merges remain queued for the next hourly candidate. The workflow immediately API-dispatches exactly one same-tag `omi-desktop-swift-release` build, verifies its immutable source identity, and retains JSON intake evidence; retries reuse an existing exact-tag build instead of duplicating it.
-2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — API-dispatched with the immutable tag, runs on Mac mini M4 and owns compile/release admission:
-   - Builds the universal app and dSYM, UUID-checks the dSYM against the executable, and always publishes the verified dSYM with the release so crashes stay symbolicable offline
-   - Signs with Developer ID, notarizes with Apple
-   - Creates DMG + Sparkle ZIP
-   - Runs `scripts/smoke-signed-desktop-artifact.sh` (signed app, Sparkle ZIP, DMG) before publishing, with a mandatory in-app Keychain write/read/delete canary
-   - Publishes an immutable GitHub candidate with stable and Beta signed-smoke evidence
-   - Calls the internal-only Beta admission endpoint with the exact tag; the backend independently verifies the merged tag, GitHub asset digests, and Beta signed-smoke evidence, then atomically registers the immutable manifest and advances the explicit Beta pointer
-
-The former self-hosted T2 qualification and post-qualification promotion workflows are not part of the release path. Local T2 and fault suites remain available as engineering QA tools, but they do not gate Beta visibility. If Codemagic exhausts its bounded promotion retries, the candidate remains non-live; recover with `desktop_recover_beta.yml` using the exact tag, `confirm=recover-beta`, and a reason.
-
-The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; `desktop_backend_auto_dev.yml` owns development Python desktop-backend delivery, while `desktop_backend_prod.yml` and `desktop_backend_recover_prod.yml` own protected production delivery and retained-revision recovery. Merging desktop code does not deploy either production backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
-
-Signed artifact smoke scope:
-- Always-on release audit covers bundle identity, version/tag alignment, signing/Keychain entitlements, Sparkle metadata, backend URL leakage, helper/runtime packaging, artifact readability, and local storage package surface.
-- Stable artifacts are fixed to production Python/Rust services. The separately-installable Beta artifact is fixed to development Python/Rust services, while desktop-login OAuth plus Firebase Auth/Firestore remain production; signed smoke proves the artifact routing. Exercise a real human OAuth sign-in separately before broad rollout.
-- Codemagic uploads stable and Beta smoke results with artifact digests and completed checks; the backend fetches both results concurrently and compares them to the exact immutable release assets before changing channels.
-- The synthetic `--auth-storage-canary` is mandatory before beta publication and runs inside the exact signed app without real credentials. Optional broader live probes (`--launch --network --auth --chat --permissions --storage`) require an isolated release runner and explicit canary env vars; production-bundle launch is fail-closed unless `OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1`, and `--auth` requires `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND` to prove app-level persistence rather than a raw bearer-token curl.
-- Artifact creation and user visibility are split: create/upload the immutable candidate first, then advance Beta visibility only after its digest-matched signed smoke passes.
-- Automatic Beta is fail-closed: any signed-smoke, reservation, digest, manifest, admission-generation, or pointer failure leaves the candidate non-live. Operators pause/resume only through the ADMIN_KEY-protected backend admission control; workflow variables are not pause authority. When a served Beta is concretely broken, `desktop_rollback_beta.yml` and `desktop_breakglass_rollout_beta.yml` retain their audited incident-only behavior. Rollback does not downgrade already-updated clients; follow it with a higher-build repair.
-
-Stable is manual:
-- Codemagic never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
-- Run it with the current Beta `release_tag` and `confirm=promote-stable`. It reads and compare-and-swaps the current Stable pointer itself, advances only that pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
-- The Python desktop-backend deployment workflows remain independent from desktop release promotion. Stable promotion checks live desktop chat-contract compatibility but does not deploy the backend. Do not manually edit release visibility or pointers outside the promotion workflow.
-
-**Codemagic CLI & API:**
-- Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)
-- App ID: `66c95e6ec76853c447b8bcbb`
-- List builds: `curl -s -H "x-auth-token: $CODEMAGIC_API_TOKEN" "https://api.codemagic.io/builds?appId=66c95e6ec76853c447b8bcbb" | python3 -c "import json,sys; [print(f\"{b.get('status','?'):12} tag={b.get('tag','-'):30} start={(b.get('startedAt') or '-')[:19]}\") for b in json.load(sys.stdin).get('builds',[])[:5]]"`
-
-## Firebase Connection
-Use the `/firebase` command if your agent provides it.
-
-Quick connect:
-```bash
-cd ../backend && source venv/bin/activate && python3 -c "
-import firebase_admin
-from firebase_admin import credentials, firestore, auth
-cred = credentials.Certificate('google-credentials.json')
-try: firebase_admin.initialize_app(cred)
-except ValueError: pass
-db = firestore.client()
-print('Connected to Firebase: based-hardware')
-"
-```
+- **Do not manually edit release visibility or pointers outside the promotion
+  workflow.** Automatic Beta is fail-closed: any smoke, digest, manifest, or
+  pointer failure leaves the candidate non-live. Operators pause/resume only
+  through the ADMIN_KEY-protected backend admission control; workflow variables
+  are not pause authority. Rollback (`desktop_rollback_beta.yml`,
+  `desktop_breakglass_rollout_beta.yml`) is audited incident-only and does not
+  downgrade already-updated clients; follow it with a higher-build repair.
+- Stable is manual: Codemagic never promotes Stable. `desktop_promote_prod.yml`
+  is `workflow_dispatch`-only and protected by the `prod` environment. Stable
+  promotion checks live desktop chat-contract compatibility but does not deploy
+  the backend.
+- Merging desktop code does not deploy either production backend. The shared
+  Python backend (needed before the first beta promotion) deploys separately via
+  `gcp_backend.yml`; `desktop_backend_auto_dev.yml` owns dev delivery;
+  `desktop_backend_prod.yml` / `desktop_backend_recover_prod.yml` own protected
+  production delivery and retained-revision recovery.
+- Release builds are handled entirely by Codemagic CI (no local release script needed).
 
 ## Module Layout (SwiftPM)
 
@@ -127,26 +89,19 @@ storage before UI) and wire `import` + `public` on the extracted target's API.
 It may flatten subdirectories — search both roots (`OmiSoundAssetLocator`), never
 `Bundle.module`. Cinematic audio is generated: `scripts/make-onboarding-sounds.py`.
 
-### Swift Formatting
+### Swift Formatting & SwiftLint
 
-Swift formatting uses a pinned `swift-format` binary (release 602.0.0 at commit
-`62eaad2`), bootstrapped from source via `scripts/swift-format-wrapper.sh`. The
-config lives at `Desktop/.swift-format` (2-space indent, 120-column limit).
-Generated sources under `Desktop/Sources/Generated/` are excluded from the
-formatter scope. Bootstrap once: `./scripts/swift-format-wrapper.sh bootstrap`.
-Lint the full scope: `./scripts/swift-format-wrapper.sh lint -r $(./scripts/swift-format-wrapper.sh scope)`.
-
-### SwiftLint
-
-SwiftLint safety rules run as an explicit macOS manifest check (not a SwiftPM
-build-tool plugin) through `scripts/swiftlint-wrapper.sh`. The wrapper pins the
-upstream 0.65.0 universal macOS release artifact by SHA-256 and caches the
-verified binary under `~/.cache/omi-swiftlint`; use
-`./scripts/swiftlint-wrapper.sh lint` to run the full configured scope.
-Generated sources and test fixtures remain excluded and the committed baseline
-is down-only. SwiftLint baseline locations are absolute, so the wrapper
-materializes a temporary baseline rooted at the current checkout before linting;
-do not hand-edit those paths to match a specific machine.
+Swift formatting uses a pinned `swift-format` and SwiftLint a SHA-256-verified
+0.65.0 release, each driven by its wrapper: `./scripts/swift-format-wrapper.sh
+bootstrap`, then `lint -r $(./scripts/swift-format-wrapper.sh scope)`; and
+`./scripts/swiftlint-wrapper.sh lint`. The wrappers own their pins, scope, and
+usage. Format config lives at `Desktop/.swift-format` (2-space indent, 120-column
+limit); generated sources under `Desktop/Sources/Generated/` and test fixtures
+are excluded from both. The committed SwiftLint baseline is down-only; the
+wrapper materializes a temporary baseline rooted at the current checkout before
+linting — do not hand-edit those paths to match a specific machine. Manual
+formatting commands:
+[`.github/agent-docs/formatting.md`](../../.github/agent-docs/formatting.md).
 
 ### Synchronous state-machine callbacks
 
@@ -181,17 +136,16 @@ do not hand-edit those paths to match a specific machine.
 
 - Behavior fixes require tests that call the production API and assert outcomes.
   Reading a production `.swift` file and asserting that it contains a function
-  name or implementation string is not behavioral coverage.
-- Source inspection is reserved for narrow forbidden-pattern or static wiring
-  tripwires. New tripwires must carry a local reason:
+  name or implementation string is not behavioral coverage. Source inspection is
+  reserved for narrow forbidden-pattern or static wiring tripwires that
+  supplement — never replace — behavioral coverage, each with a local reason:
   `// omi-test-quality: source-inspection -- static contract: <what cannot be expressed behaviorally>`.
-  The tripwire supplements rather than replaces behavioral coverage.
 - Do not add wall-clock sleeps to unit tests. Inject a `Clock`/sleeper, drive a
   callback/continuation, or await a deterministic state signal. An unavoidable
   real-scheduler integration wait needs
   `// omi-test-quality: wall-clock-wait -- <why injection cannot test this boundary>`.
-- The [test isolation guide](../../.github/agent-docs/desktop-test-isolation.md)
-  covers shared fixtures and the test-quality ratchet.
+- `python3 scripts/check_desktop_test_quality.py` ratchets both categories.
+  Shared fixtures and the ratchet: [test isolation guide](../../.github/agent-docs/desktop-test-isolation.md).
 
 ## Key Architecture Notes
 
@@ -216,10 +170,12 @@ do not hand-edit those paths to match a specific machine.
 ### On-device tool surface
 - Contacts/Messages/AppleScript actuation goes through kernel policy, never improvised shell; `desktop.messaging.read` is sensitive like `send` (a thread exposes the other party); `desktop.automation.act` never resolves without a dispatch or scoped grant; untrusted values reach `osascript` as `argv` only. `OMI_MESSAGES_DB` overrides the Messages store for tests. See `desktop/macos/docs/device-tool-surface.md`.
 
-### Database Structure
-- **Firestore** (`based-hardware`): User data, conversations, action items
-- **Redis**: Caching
-- **Typesense**: Search
+### Storage model
+- **Firestore** (`based-hardware`): user data, conversations, action items. **Redis**: caching. **Typesense**: search.
+- `users/{uid}/conversations` - Has `source` field (omi, desktop, phone, etc.)
+- `users/{uid}/action_items` - Tasks (no platform tracking)
+- `users/{uid}/fcm_tokens` - Token ID prefix = platform (ios_, android_, macos_)
+- `users/{uid}/memories` - Extracted memories
 
 ### Screen activity sync rollout
 
@@ -231,12 +187,6 @@ do not hand-edit those paths to match a specific machine.
 ### Feature-flag authority
 
 Bundle vs PostHog vs `runtime_env` is catalogued in [`backend/docs/feature-flag-registry.md`](../../backend/docs/feature-flag-registry.md). Editing that file does not turn a feature on. Do not target Beta vs stable via PostHog person `update_channel`.
-
-### User Subcollections (Firestore)
-- `users/{uid}/conversations` - Has `source` field (omi, desktop, phone, etc.)
-- `users/{uid}/action_items` - Tasks (no platform tracking)
-- `users/{uid}/fcm_tokens` - Token ID prefix = platform (ios_, android_, macos_)
-- `users/{uid}/memories` - Extracted memories
 
 ### User MCP Servers & Skills (Apps page)
 User-managed MCP servers (~/.omi/mcp.json, incl. native OAuth) and skills
@@ -252,14 +202,14 @@ runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/
 ### Building & Running
 - **No Xcode project** — this is a Swift Package Manager project
 - **Build command**: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK version)
-- `run.sh` prepends the native Homebrew prefix (`/opt/homebrew/bin` on Apple Silicon or `/usr/local/bin` on Intel), followed by the other prefix when present, because agent and launchd shells may not inherit Homebrew's PATH. This keeps `pkg-config` and other build tools discoverable without requiring a machine-wide shell profile change.
+- `run.sh` prepends the native Homebrew prefix (`/opt/homebrew/bin` on Apple Silicon or `/usr/local/bin` on Intel), because agent and launchd shells may not inherit Homebrew's PATH — this keeps `pkg-config` and other build tools discoverable without a machine-wide shell profile change.
 - **Full dev run**: `./run.sh` — builds Swift app, starts Python backend, starts Cloudflare tunnel, launches app
-- **Fast default dev run**: after one successful full named-bundle launch, Swift-only `./run.sh` calls reuse the installed bundle: incremental SwiftPM, atomically replace the executable and current desktop API URL, re-sign, relaunch — no static asset copy/re-sign, no LaunchServices/auth reset. The curated settings allowlist re-syncs from the resolved settings authority before every named-bundle launch (`OMI_SKIP_SETTINGS_SEED=1` only when testing bundle-local settings). Named local profiles are eligible; their disposable `.env` refreshes each patch and is never cached in the bundle fingerprint. Package metadata, resources, agent/runtime inputs, entitlements, persistent launch config, or an incomplete installed agent payload (`incomplete_runtime_payload`) take the full path — force it with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; not for the normal loop.
-- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... python '<pytest path>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. A filter that matches no tests fails the iteration (`swift test --filter` exits 0 on zero matches), so a renamed or mistyped filter can never read as PASS. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
-- **Swift suite throughput**: Local suites default to four workers. CI uses two workers only because each gets a copy-on-write SwiftPM scratch directory and an isolated Foundation runtime home (preferences, Application Support, caches, and temporary files). Do not raise it without evidence that both build and runtime state remain isolated. Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` to diagnose concurrency failures.
+- Fast-lane behavior (incremental patch/re-sign/relaunch, when it falls back to a
+  full bundle, the focused `dev-feedback.py` loop, suite worker isolation, and
+  the agent-runtime preparation caches) is documented in [`README.md`](README.md)
+  — read it before assuming you need a full rebuild, and never launch the app
+  only to obtain compile evidence.
 - **Local Python backend**: direct `./run.sh` reuses a healthy worktree-owned backend when Python source/config are unchanged. Sync deps with `cd ../../backend && ./scripts/sync-python-deps.sh` before first launch.
-- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. Logs `Cache HIT`/`MISS`/`BYPASS`; hits preserve output mtimes but spend roughly a second hashing packaged outputs for integrity. CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`). Cached at `~/Library/Caches/OmiDesktop/node-runtime`; see README.
-- **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
 - **DO NOT** launch from `build/` or hand-copy binaries into a bundle — always `./run.sh`. It installs to `/Applications/`, signs, and registers with LaunchServices; `build/` binaries go stale after a permission restart.
@@ -270,7 +220,6 @@ runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/
 ### App Names & Build Artifacts
 - `./run.sh` builds **"Omi Dev"** → installs to `/Applications/Omi Dev.app` (bundle ID: `com.omi.desktop-dev`)
 - **"Omi"** stable (bundle ID: `com.omi.computer-macos`) and **"Omi Beta"** (bundle ID: `com.omi.computer-macos.beta`, isolated "Omi Beta" storage root, runs side-by-side with stable) are built by Codemagic CI only
-- To check which app is currently running: `ps aux | grep "Omi"`
 
 ### Testing with Named Bundles
 When the user asks to test a feature or bug fix, **always create a separate named bundle** so it can run side-by-side with the existing dev/prod apps:
@@ -292,8 +241,7 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - Named/dev bundles default to the development Python backends unless
   an explicit launch URL overrides them. Before QA, run
   `./scripts/omi-ctl health`; its unauthenticated identity payload reports the
-  resolved backend environment/URLs plus the agent-runtime handshake state,
-  negotiated protocol version, packaged runtime version, and expected protocol.
+  resolved backend environment/URLs plus the agent-runtime handshake state.
   A protocol-compatible runtime that omits a required capability is rejected at
   startup; health never reports the expected protocol as if it were negotiated.
 - Run `./scripts/agent-logic-harness.sh --cross-surface-smoke` before building a
@@ -302,8 +250,8 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 
 ### Run Variants & Parallel Worktrees
 - `./run.sh --yolo` — quick start against the dev backend, no local services. `OMI_SKIP_BACKEND=1` — app only, remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
-- **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (desktop 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped, and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
-- `Omi Dev` is the canonical shared development profile (reusable permissions, default auth seed source; settings authority only on machines without production "Omi" installed). To rebuild the real Omi Dev (`com.omi.desktop-dev`) from a linked worktree, pass the explicit override `OMI_APP_NAME="Omi Dev" ./run.sh` — auto-isolation would otherwise derive an `omi-<worktree>` named bundle, and the explicit name resolves back to the shared dev bundle id.
+- **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (desktop 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped, and a taken port fails loud instead of clobbering. Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
+- `Omi Dev` is the canonical shared development profile (reusable permissions, default auth seed source). To rebuild the real Omi Dev (`com.omi.desktop-dev`) from a linked worktree, pass the explicit override `OMI_APP_NAME="Omi Dev" ./run.sh` — auto-isolation would otherwise derive an `omi-<worktree>` named bundle, and the explicit name resolves back to the shared dev bundle id.
 - Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
 
 ### Self-Testing the App (agents)
@@ -366,132 +314,11 @@ cd desktop/macos && ./scripts/agent-logic-harness.sh
 ```
 It is self-driving for agents: it runs the risky Swift lifecycle/state tests, focused agent runtime tests, exact `pi-mono-extension` package tests, and prints per-step runtime. Use `--swift-only`, `--node-only`, or `--skip-install` only when narrowing a failure.
 
-### Chat Continuity Write-Path Contract (INV-6)
+### Chat Continuity Write-Path (INV-6)
 
-Invariant: Main Chat, Home chat, and floating/notch chat are one timeline over one
-`ChatProvider` (`historyChatProvider`). Kernel `main_chat` turns are the durable
-source of truth; journal acceptance publishes the immediate pending projection,
-and UI must never append a pre-journal turn.
+Main Chat, Home chat, and floating/notch chat are one timeline over one `ChatProvider` (`historyChatProvider`). Kernel `main_chat` turns are the durable source of truth; journal acceptance publishes the immediate pending projection, and **UI must never append a pre-journal turn**. No second durable transcript store, no `ChatProvider()` besides `mainInstance` for speculative warm, never dedupe turns by assistant/user text, and no new free-text agent identity formats.
 
-Rules (fail the PR if any break):
-1. **Single provider + floating viewport** — floating presentation is chrome + a
-   viewport cursor (`FloatingChatViewport` message ids / `clientTurnId`) over
-   `ChatProvider.messages`. It must not own a second durable transcript array
-   (`chatHistory` of `ChatMessage` copies is forbidden).
-2. **Single `turn_recorded` UI apply gate** — only `KernelTurnProjection` on
-   `ChatProvider.mainInstance` (`historyChatProvider`) may attach the runtime
-   turn handler (one replaceable slot). Speculative warm and other surfaces must
-   reuse `mainInstance`; never construct a second `ChatProvider()` that calls
-   `attachClient` / `setTurnRecordedHandler` on the shared runtime.
-3. **One idempotency key per logical turn** — call `recordJournalExchange` (or
-   the corresponding kernel control RPC) with one opaque continuity key and
-   await acceptance before binding a visible row. Direct-control spawn receipts
-   already materialize their exchange; refresh that journal instead of issuing a
-   second write. Never dedupe by assistant/user text.
-4. **Kernel apply is idempotent** — `KernelTurnProjection` upserts only by the
-   canonical turn ID published by ordered journal replay. Rejection must leave no
-   visible row, and replay/acknowledgement must replace rather than append.
-5. **Cross-surface agent identity is structured** — `agentSpawn` / `agentCompletion`
-   content blocks (plus tool-block `spawnedAgentID` / sessionId / runId lines) are
-   authoritative. Persist structured blocks through the kernel journal/outbox so
-   they survive reload; kernel apply still materializes `agentCompletion` from
-   bracket text for legacy rows. Legacy `[Background agent id=…]` bracket
-   text remains dual-read only. Do not invent new free-text formats; extend the
-   schema + tests together.
-   Proactive notifications never journal Chat turns. Owner-scoped, TTL-bounded
-   context may inform user follow-ups. The shared provider filters historical
-   automatic entries by provenance, preserving rich reply blocks.
-6. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
-   / `listAgentSessions` / `inspectAgentRun`) when the in-memory pill is missing;
-   refresh-on-miss is a fast path only. Success = resolvable agent after hydrate.
-   Do not keep a second durable pill store.
-7. **Snapshots are aliases** — `automationFloatingChatSnapshot` ==
-   `automationChatSnapshot` / `automationMainChatSnapshot` over the same messages;
-   no surface-specific transcript filter.
-8. **Resources live on the producing message** — artifacts attach to the
-   `ChatMessage` that produced them (stage/promote keeps `resources` on that id).
-   UI must not invent a standalone artifact-only turn. Floating/notch resource
-   strips bind `message.displayResources` on viewport-derived messages only
-   (never flatMap the whole provider timeline). Aggregate strips must filter
-   with `ChatContinuityInvariants.resourcesBelongingToMessages` /
-   `FloatingControlBarState.viewportDisplayResources`.
-9. **Agent card/list preview = prompt/objective** — collapsed header / list
-   subtitle uses `ChatContinuityInvariants.agentPreviewText(prompt:output:)`
-   (prompt wins; output is expanded-body only). Do not put raw completion output
-   in the one-line preview.
-10. **Forbidden dual-write patterns** — never: construct `ChatProvider()` for
-    speculative warm (use `ChatProvider.mainInstance`); add
-    `addTurnRecordedHandler` / multi-handler append APIs; introduce
-    `suppressNextRecordedTurn`; store `@Published var chatHistory` of
-    `ChatMessage` copies on `FloatingControlBarState`.
-11. **Tests** — continuity behavior changes require a hermetic behavioral test (call
-   projection/provider APIs, assert message counts/IDs). Source-string greps for
-   function names are not continuity coverage (forbidden-pattern tripwires are the
-   exception). Live gauntlet/stress are gates, not substitutes for hermetic tests.
-
-### Continuity PR Definition of Done (INV-6)
-
-A PR that touches chat write-path, kernel projection, floating viewport, agent
-timeline identity/open, or pill projection is incomplete until:
-
-1. **Contract still true** — INV-6 rules above hold after the change (or are
-   updated in the same PR with a matching behavioral test).
-2. **Hermetic behavioral test** for the invariant touched (stage/promote,
-   snapshot alias, structured identity, open-by-id hydrate, viewport derive /
-   restore, resources-on-message, agent preview text). Not a source grep
-   (except forbidden-pattern tripwires).
-3. **`./scripts/agent-logic-harness.sh` green** (includes
-   `KernelTurnRecordedProjectionTests`, `ChatTimelineContinuityTests`,
-   `FloatingControlBarStateTests`, `RuntimeOwnerIdentityTests` in the Swift
-   focus filter).
-4. **Write-path / cross-surface changes:** run a named-bundle continuity
-   gauntlet and note evidence in the PR:
-   ```bash
-   cd desktop/macos && OMI_APP_NAME=omi-gauntlet OMI_SKIP_TUNNEL=1 ./run.sh
-   # run.sh seeds auth after install (UD tokens → app Keychain migrate). Manual reseed:
-   # ./scripts/omi-auth-seed.sh com.omi.omi-gauntlet tmp/desktop-auth.json "/Applications/omi-gauntlet.app"
-   ./scripts/agent-continuity-gauntlet.sh --suite continuity --bundle-id com.omi.omi-gauntlet
-   ./scripts/check-gauntlet-evidence-at-head.sh
-   ```
-   CI only runs gauntlet `--self-check` (wiring). Live suite is a PR/RC gate,
-   not PR CI. Do not assert exact assistant wording.
-5. **Hermetic e2e** only if a bridge action/surface contract changed. Do not
-   expand flow `covers:` lists as fake continuity coverage.
-6. **No second message store** / no new free-text identity format / no
-   `suppressNextRecordedTurn`-style dual-write bandage.
-7. Changelog fragment only if user-visible.
-
-### Gauntlet / stress gate policy
-
-- **CI:** `agent-continuity-gauntlet.sh --self-check` only (via desktop-core /
-  agent-logic harness). Never require live LLM in PR CI.
-- **Prompt / gateway changes:** `--suite prompts` on a named `omi-*` bundle;
-  P4 requires a completed public-web lookup with a source URL and fails on
-  provider tool-choice incompatibilities. **Continuity PRs / RC:** `--suite
-  continuity` (typed + PTT + blind recall) after auth seed; `--suite all` for
-  RC. Evidence under `.harness/agent-continuity-gauntlet/*/manifest.json` with
-  matching git SHA.
-- **Anti-flake:** clear owner/kernel surface before probes; per-run nonces;
-  hard-fail on blind-recall / structural snapshot only; zero automatic retries
-  on model wrongness.
-- **Stress:** offline JSONL + forbidden terminal reasons remain the default
-  gate; live bridge probes stay optional until continuity `terminal_reason`s
-  exist in the taxonomy.
-
-### Live gauntlet vs hermetic INV-6 coverage
-
-Do not confuse these gates — a green live suite does **not** prove write-path
-contract rules, and hermetic unit tests do **not** prove bridge/LLM continuity.
-
-| Gate | What it covers | What it does **not** cover |
-| --- | --- | --- |
-| **Hermetic** (`agent-logic-harness.sh` Swift filter: `KernelTurnRecordedProjectionTests`, `ChatTimelineContinuityTests`, `FloatingControlBarStateTests`, `RuntimeOwnerIdentityTests`) | stage/promote same key → one message pair; floating snapshot aliases main; structured agent identity; open-by-id hydrate preference; floating viewport derive / SoT; resources on producing message; agent preview = prompt; owner-swap preserves Firebase tokens; forbidden dual-write tripwires | Live bridge auth, LLM tool use, PTT hub, race/busy policy under a real runtime |
-| **Gauntlet `--self-check`** | Bridge action registration (incl. R3 `ask_main_chat_no_wait` / `main_chat_busy_state`), resilience suite wiring, hermetic contract test presence in harness filter | Any live turn |
-| **Live `--suite continuity` / `agents` / `owner` / `prompts`** | Typed + PTT + blind recall, spawn/status, owner swap probe, prompt regressions on a named bundle | stage/promote single-writer, snapshot alias, hydrate preference, viewport SoT (those stay hermetic) |
-| **Live `--suite resilience` (R1–R4)** | Cold bridge launch, warm reuse, bridge busy/race rejection (R3; requires real `is_sending`/`is_streaming` once, latch only extends the race window), subagent launch+status (R4) | INV-6 write-path unit invariants above |
-
-`--self-check` fails if R3 race actions or the hermetic INV-6 test methods /
-harness filter classes drift away.
+The full contract (apply gate, idempotency keys, structured identity, derived pill cache, snapshot aliases, resources-on-message, preview text, forbidden dual-write patterns), the continuity PR definition of done, and the gauntlet gate policy live in [`docs/chat-continuity-write-path.md`](docs/chat-continuity-write-path.md). A PR touching chat write-path, kernel projection, floating viewport, agent timeline identity/open, or pill projection is incomplete without them: hermetic behavioral tests, `./scripts/agent-logic-harness.sh` green, and — for write-path/cross-surface changes — the named-bundle continuity gauntlet with evidence noted in the PR.
 
 ### Verifying UI Changes (agent-swift)
 
@@ -499,25 +326,11 @@ Verify Swift UI changes programmatically with [agent-swift](https://github.com/b
 
 ### Changelog Entries
 
-After completing a desktop task with user-visible impact, add one fragment file under `desktop/macos/changelog/unreleased/`:
+After completing a desktop task with user-visible impact, add one fragment file under `desktop/macos/changelog/unreleased/`. Format, automation, and guidelines: [`changelog/README.md`](changelog/README.md).
 
-Example `desktop/macos/changelog/unreleased/20260628-short-description.json`:
-
-```json
-{
-  "change": "Your user-facing change description"
-}
-```
-
-Guidelines:
-- Write from the user's perspective: "Fixed X", "Added Y", "Improved Z"
-- One sentence, no period at the end
-- Use a unique kebab-case filename so parallel PRs do not conflict
-- Tests, generated Swift, e2e harness files, and listed release-infra paths are already exempt
+- Write from the user's perspective ("Fixed X", "Added Y"), one sentence, no period, unique kebab-case filename; commit the fragment with your other changes (same commit is fine)
 - Internal-only **production** edits (dead-code deletion, refactors in `Sources/`) need an in-repo marker, not the `no-changelog-needed` PR label — that label is invisible after merge and reddens main. Add `{"kind": "none"}` under `desktop/macos/changelog/unreleased/` instead
-- HTML is allowed for links: `<a href='...'>text</a>`
 - Do not edit `CHANGELOG.json` by hand; release automation regenerates it
-- Commit the fragment with your other changes (same commit is fine)
 
 ## User Task Completion Reporting
 
