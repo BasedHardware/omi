@@ -26,6 +26,15 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+
+def projection_hold_recovery_enabled() -> bool:
+    """Ship-on hold age gate and automatic redrive; false restores old behavior."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED',
+        os.getenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 T = TypeVar('T')
 
 

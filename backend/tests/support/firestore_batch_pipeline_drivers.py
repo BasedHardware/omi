@@ -317,13 +317,13 @@ def entries():
         DriverEntry(
             'database.batch_pipeline_projection_release.held_page_ids',
             domains={'namespace': namespaces, 'after_id': [None, 'result-100']},
-            neutrals={'limit': (32, 'bounded page size only; equality is served by the automatic single-field index')},
+            neutrals={'limit': (128, 'bounded page size only; equality is served by the automatic single-field index')},
         ),
         CoveredByEntry(
             'database.batch_pipeline_projection_release.release_page',
             covered_by=('database.batch_pipeline_projection_release.held_page_ids',),
             reason='bounded release scan delegates its only query to held_page_ids; resets are document transactions',
             expect_observed=False,
-            body_digest='9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
+            body_digest='51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
         ),
     )
