@@ -201,6 +201,57 @@ playback, content accounting/limits, lineage, deletion and restart/replay. Keep
 VAD compaction and shared-live off until their independent quality gates pass.
 
 
+## All-vendor route selection (dormant)
+
+`utils/batch_pipeline/route_selection.py` picks each upload's STT route at intake. It ships
+dormant: until an owner is in the `batch-vendor-routing` cohort, it returns
+`provider_stt.resolve_route` exactly (GPU where deployed Parakeet serves the language, else
+Modulate through the C8 provider stage). Owners whose legacy sync is still on always keep
+today's routing, because the provider route only exists once legacy is draining or dark.
+
+Inside the cohort, selection reads `BATCH_VENDOR_ROUTE_TABLE` (schema in
+`vendor_route_contracts.RouteTable`), keeps the options code-owned capability admits
+(`config/stt_provider_policy.py`), skips unhealthy vendors, sends the GPU floor share
+(`gpu_floor_percent`, a stable owner bucket independent of the ramp) to GPU wherever GPU is
+capable, then takes the cheapest remaining route that is not failover-only. Soniox is
+failover-only. If no capable route is healthy, the unit still takes its first capable vendor
+route and the provider stage holds it with its audio. Selection never mints a vendor intent.
+
+| Lever | Effect |
+| --- | --- |
+| `BATCH_VENDOR_ROUTING_ENABLED=false` | Kill switch: every new admission takes today's routing. In-flight units finish on the route stamped at admission. |
+| `batch-vendor-routing` ramp percent (env fallback `BATCH_VENDOR_ROUTING_PERCENT`) | Owner share routed from the table. It uses the batch bucket and is clamped to the batch percent at read, and refused above it at write. |
+| `BATCH_VENDOR_ROUTING_UID_ALLOWLIST` | Explicit owners for a ramp step. |
+| `BATCH_VENDOR_ROUTING_SHADOW_PERCENT` | Decision computed and logged (`event=batch_vendor_route_shadow`), routing unchanged. |
+| `BATCH_VENDOR_ROUTE_TABLE` | The table. Invalid JSON or schema serves the last valid table in that process, else today's routing (`..._vendor_route_table_loads_total{outcome}`). |
+
+**Ramp-name caveat.** A `_ramp` reader older than the `batch-vendor-routing` name rejects the
+whole document and serves last-known-good (legacy mode `on` on a cold start). Write that ramp
+percent only after every `_ramp` reader (all backend, listen, pusher and worker roles) runs a
+build that knows the name. The env percent has no such constraint.
+
+Example table (prices are list estimates from `vendoroverflow-2026-11-01`; caps and the floor
+are operator values, not recommendations):
+
+```json
+{"schema_version": 1, "table_version": "v1", "selection": "cheapest", "gpu_floor_percent": 15,
+ "routes": {
+  "gpu": {"price_usd_per_audio_hour": 0.0657, "daily_audio_hours_cap": null, "monthly_budget_usd": null, "failover_only": false, "speaker_turns": "discard"},
+  "modulate": {"price_usd_per_audio_hour": 0.0429, "daily_audio_hours_cap": 3300, "monthly_budget_usd": null, "failover_only": false, "speaker_turns": "discard"},
+  "soniox": {"price_usd_per_audio_hour": 0.10, "daily_audio_hours_cap": null, "monthly_budget_usd": 500, "failover_only": true, "speaker_turns": "discard"}},
+ "rows": [
+  {"language_class": "gpu_supported", "options": [
+    {"route": "modulate", "quality_tier": "accepted", "quality_source": "legacy_parity"},
+    {"route": "gpu", "quality_tier": "accepted", "quality_source": "legacy_parity"},
+    {"route": "soniox", "quality_tier": "fallback", "quality_source": "held_recovery"}]},
+  {"language_class": "*", "options": [
+    {"route": "modulate", "quality_tier": "accepted", "quality_source": "legacy_parity"},
+    {"route": "soniox", "quality_tier": "fallback", "quality_source": "held_recovery"}]}]}
+```
+
+List `gpu` in every `gpu_supported` row: a vendor outage then falls back to GPU for those
+languages instead of holding the unit.
+
 ## Recovery and late captures
 
 Explicit compute failures retry with exponential backoff capped at 600s until
