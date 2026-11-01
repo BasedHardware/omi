@@ -29,6 +29,9 @@ INSTRUCTIONS = (
 )
 
 
+VOICE_FIELD_PREFIXES = ('speaker_embedding', 'speech_sample')
+
+
 def compact_json(value):
     return json.dumps(value, ensure_ascii=False, default=str, separators=(',', ':'))
 
@@ -43,6 +46,14 @@ def evidence(item):
     return {**payload, 'evidence': rows}
 
 
+def without_voice(row):
+    # Staging has already judged protection from the full row; a verifier needs only that voice exists.
+    kept = {key: value for key, value in row.items() if not key.startswith(VOICE_FIELD_PREFIXES)}
+    if len(kept) != len(row):
+        kept['has_voice_profile'] = True
+    return kept
+
+
 def minimal_context(ref, records):
     row = records.get(base_ref(ref))
     if row is None:
@@ -50,7 +61,8 @@ def minimal_context(ref, records):
     if not ref.startswith('conversations/'):
         # A memory/task/person is already a small cited record. Its provenance,
         # subject, dates and protection metadata are relevant to verification.
-        return cited_value(ref, records)
+        value = cited_value(ref, records)
+        return without_voice(value) if isinstance(value, dict) else value
     fields = ('id', 'status', 'created_at', 'started_at', 'finished_at', 'language', 'structured')
     context = {key: row[key] for key in fields if key in row}
     segments = row.get('transcript_segments') or []

@@ -4,7 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 from models.agent_tools import Verification, VerificationBatch
-from utils.dream_verify import verify, disposition, batches, minimal_context
+from utils.dream_verify import verify, disposition, batches, evidence, minimal_context
 from utils.llm.shaped_agent import Turn
 
 
@@ -15,6 +15,35 @@ def proposal():
         records={'people/junk': {'name': 'Canadian'}},
         payload=lambda: {'id': 'synthetic-proposal', 'kind': 'dismiss_person', 'operation': {'reason': 'Junk'}},
     )
+
+
+def test_person_voice_fields_never_reach_a_verifier():
+    person = {
+        'name': 'Sam',
+        'user_confirmed': True,
+        'speaker_embedding': [0.25] * 4,
+        'speaker_embedding_updated_at': 'synthetic-time',
+        'speech_samples': ['synthetic/path'],
+        'speech_sample_transcripts': ['synthetic words'],
+        'speech_samples_version': 3,
+        'speech_sample_source': {'conversation_id': 'one'},
+    }
+    item = SimpleNamespace(
+        refs=('people/sam',),
+        records={'people/sam': person},
+        payload=lambda: {'id': 'synthetic', 'kind': 'dismiss_person', 'operation': {}},
+    )
+
+    assert evidence(item)['evidence']['people/sam'] == {
+        'name': 'Sam',
+        'user_confirmed': True,
+        'has_voice_profile': True,
+    }
+    assert 'speaker_embedding' in person
+
+
+def test_a_person_without_voice_is_not_marked_as_having_it():
+    assert minimal_context('people/junk', {'people/junk': {'name': 'Canadian'}}) == {'name': 'Canadian'}
 
 
 def test_two_independent_batched_invocations_have_identical_evidence_without_history():
