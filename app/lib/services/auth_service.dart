@@ -23,18 +23,23 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
+final class _FirebaseAuthTokenGateway implements AuthTokenGateway, AuthStateSource {
   @override
-  AuthUserSnapshot? get currentUser {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
-    return AuthUserSnapshot(
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      isAnonymous: user.isAnonymous,
-    );
-  }
+  AuthUserSnapshot? get currentUser => snapshotOf(FirebaseAuth.instance.currentUser);
+
+  /// FirebaseAuth's `authStateChanges`, not its `userChanges`, which also fires on profile and
+  /// token updates.
+  @override
+  Stream<AuthUserSnapshot?> get authStateChanges => FirebaseAuth.instance.authStateChanges().map(snapshotOf);
+
+  static AuthUserSnapshot? snapshotOf(User? user) => user == null
+      ? null
+      : AuthUserSnapshot(
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          isAnonymous: user.isAnonymous,
+        );
 
   @override
   Future<RefreshedAuthToken?> forceRefresh() async {
@@ -223,6 +228,18 @@ class AuthService {
     final user = _tokenGateway.currentUser;
     return user != null && !user.isAnonymous;
   }
+
+  /// Who is signed in, through the same token gateway: FirebaseAuth in real builds, the
+  /// synthetic principal in the local hermetic harness. Read identity here rather than from
+  /// FirebaseAuth, so every identity read goes through the one seam.
+  AuthUserSnapshot? get currentUser => _tokenGateway.currentUser;
+
+  /// Sign-in and sign-out, as identity snapshots from the token gateway. Like [currentUser],
+  /// callers should listen here rather than to FirebaseAuth, so identity has one seam.
+  Stream<AuthUserSnapshot?> get authStateChanges => switch (_tokenGateway) {
+        AuthStateSource source => source.authStateChanges,
+        final gateway => Stream.value(gateway.currentUser),
+      };
 
   static const _pkceCodeVerifierLength = 64;
   static const _pkceCharset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';

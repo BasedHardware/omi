@@ -85,6 +85,12 @@ abstract interface class AuthTokenGateway {
   Future<void> signOut();
 }
 
+/// Optional for an [AuthTokenGateway]: sign-in and sign-out as they happen. A gateway without it
+/// reports its [AuthTokenGateway.currentUser] once, as FirebaseAuth does when listened to.
+abstract interface class AuthStateSource {
+  Stream<AuthUserSnapshot?> get authStateChanges;
+}
+
 typedef AuthRefreshDelay = Future<void> Function(Duration duration);
 typedef AuthTelemetryRecorder = void Function(String eventName, Map<String, dynamic> properties);
 typedef AuthTelemetryContextProvider = Map<String, dynamic> Function();

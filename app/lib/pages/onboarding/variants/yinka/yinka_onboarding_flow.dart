@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -24,6 +23,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/services/auth_service.dart';
 
 /// Yinka's first-run onboarding (PR #21445) as the `yinka` arm of `onboarding-variant`: Name →
 /// Permissions → Language → Connect Omi → the activation (a first real conversation, its summary
@@ -153,9 +153,9 @@ class _YinkaOnboardingFlowState extends State<YinkaOnboardingFlow> {
           goNext: () {
             _goNext();
             IntercomManager.instance.updateUser(
-              FirebaseAuth.instance.currentUser!.email,
-              FirebaseAuth.instance.currentUser!.displayName,
-              FirebaseAuth.instance.currentUser!.uid,
+              AuthService.instance.currentUser!.email,
+              AuthService.instance.currentUser!.displayName,
+              AuthService.instance.currentUser!.uid,
             );
             PlatformManager.instance.analytics.onboardingStepCompleted('Name');
           },
