@@ -162,15 +162,26 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(router, 'resolve_transcription_allowance', lambda _: Mock(reason='plan_allowance_exhausted'))
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', lambda *_a, **_k: [])
     monkeypatch.setattr(router, '_cleanup_files', Mock())
-    monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
     monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
     from config.policy import BatchUnitPolicy
+    from fastapi.responses import JSONResponse
 
     monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda *_a: 'content-1')
-    monkeypatch.setattr(router, 'create_sync_job', Mock())
-    monkeypatch.setattr(router, 'claim_sync_content', lambda *_a: {'outcome': 'held', 'result': {}})
-    monkeypatch.setattr(router, 'mark_job_completed', Mock())
+    # Legacy admission is retired (C9): batch is the only admission. Its seams are stubbed here; a test reads
+    # router.accept_batch_upload.calls to see what was admitted.
+    calls = Mock()
+
+    async def record_response(**_kwargs):
+        return router.RecordUploadRoute.BATCH
+
+    async def accept(**kwargs):
+        calls(**kwargs)
+        return JSONResponse(status_code=202, content={'job_id': 'j', 'status': 'queued'})
+
+    accept.calls = calls
+    monkeypatch.setattr(router, 'registered_record_response', record_response)
+    monkeypatch.setattr(router, 'accept_batch_upload', accept)
 
     app = FastAPI()
     app.include_router(router.router)
@@ -190,7 +201,8 @@ def test_v2_route_accepts_capture_time_ahead_of_server_within_tolerance(client):
     response = _post_sync(client, _filename(170))
 
     assert response.status_code == 202, response.text
-    assert response.json()['status'] == 'completed'
+    assert response.json()['status'] == 'queued'
+    router.accept_batch_upload.calls.assert_called_once()
 
 
 def test_v2_route_rejects_five_year_future_stamp_with_typed_400(client):
@@ -771,7 +783,7 @@ def test_v2_empty_or_torn_header_is_noop_even_with_invalid_clock(client, payload
     response = client.post('/v2/sync-local-files', files=[('files', (_filename(5 * 365 * 86400), payload))])
     assert response.status_code == 200
     assert response.json() == {'new_memories': [], 'updated_memories': []}
-    router.create_sync_job.assert_not_called()
+    router.accept_batch_upload.calls.assert_not_called()
 
 
 def test_v2_mixed_empty_invalid_clock_and_valid_audio_keeps_audio(client):
@@ -783,7 +795,7 @@ def test_v2_mixed_empty_invalid_clock_and_valid_audio_keeps_audio(client):
         ],
     )
     assert response.status_code == 202
-    router.create_sync_job.assert_called_once()
+    router.accept_batch_upload.calls.assert_called_once()
 
 
 def test_v2_invalid_filename_returns_closed_code_with_legacy_string_detail(client):

@@ -568,7 +568,7 @@ def _job_status(stack: Stack, uid: str, job_id: str) -> dict[str, Any]:
     return body
 
 
-def _upload_with_manifest(stack: Stack, uid: str) -> tuple[str, httpx.Response]:
+def _upload_with_manifest(stack: Stack, uid: str, *, archive: bool = False) -> tuple[str, httpx.Response]:
     stack.seed_user(uid)
     if archive:
         stack.firestore.collection('users').document(uid).update({'private_cloud_sync_enabled': True})
