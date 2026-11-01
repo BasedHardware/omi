@@ -11,7 +11,7 @@ Thresholds, and why they hold:
 - Python: the first statement must be a module docstring -- that is the only
   position a reader (and tooling) treats as the file's purpose.
 - Dart/Swift/TS: at least MIN_HEADER_COMMENT_LINES comment lines before the
-  first non-import code line. One line is a marker (``// MARK:``, ``// TODO:``,
+  first non-import code line. One line is a section or work-tracking marker (``// MARK:``,
   a stray ``///``), not an ownership statement; both repo conventions --
   a leading ``//`` block above the imports and a ``///``/``/* */`` block right
   after them -- satisfy this.
