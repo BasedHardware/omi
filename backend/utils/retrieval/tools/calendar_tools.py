@@ -44,7 +44,7 @@ from utils.retrieval.tools.google_utils import google_api_request, GoogleAPIErro
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
 
-from utils.log_sanitizer import sanitize, sanitize_pii
+from utils.log_sanitizer import sanitize, sanitize_pii, sanitize_provider_error
 import logging
 
 from utils.retrieval.tools.calendar_render import render_calendar_event
@@ -703,7 +703,7 @@ async def get_calendar_events_tool(
                 return "Google Calendar access denied. Please reconnect your Google Calendar from settings with proper permissions."
             else:
                 emit_sync_failed(telemetry_context, e)
-                return f"Error fetching calendar events: {e.message}"
+                return f"Error fetching calendar events (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error fetching calendar events: {e}")
             emit_sync_failed(telemetry_context, e)
@@ -831,16 +831,16 @@ async def create_calendar_event_tool(
             if start_dt.tzinfo is None:
                 return f"Error: start_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:00:00-08:00'): {start_time}"
             logger.info("Parsed calendar start_time")
-        except ValueError as e:
-            return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time}"
 
         try:
             end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T15:00:00-08:00'): {end_time}"
             logger.info("Parsed calendar end_time")
-        except ValueError as e:
-            return f"Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_time} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_time}"
 
         # Validate that end_time is after start_time
         if end_dt <= start_dt:
@@ -941,7 +941,7 @@ async def create_calendar_event_tool(
             elif e.is_permission_error:
                 return "Google Calendar write access is not available. Please reconnect your Google Calendar from settings with proper permissions."
             else:
-                return f"Error creating calendar event: {e.message}"
+                return f"Error creating calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error creating calendar event: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
@@ -1032,7 +1032,7 @@ async def delete_calendar_event_tool(
                 elif e.is_permission_error:
                     return "Google Calendar write access is not available. Please reconnect your Google Calendar from settings with proper permissions."
                 else:
-                    return f"Error deleting calendar event: {e.message}"
+                    return f"Error deleting calendar event (Google Calendar status {e.status_code}). Please try again."
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 logger.error(f"❌ Network error deleting event by ID: {e}")
                 return "Unable to reach Google Calendar right now. Please try again in a moment."
@@ -1120,9 +1120,8 @@ async def delete_calendar_event_tool(
                     await delete_google_calendar_event(access_token, event_id_val)
                     mutation_result.succeeded.append(event)
                 except Exception as e:
-                    error_msg = str(e)
-                    logger.error(f"❌ Failed to delete {event_title_found}: {error_msg}")
-                    mutation_result.failed.append((event_title_found, error_msg))
+                    logger.error("Failed to delete calendar event: %s", sanitize_provider_error(e))
+                    mutation_result.failed.append((event_title_found, "could not delete this event"))
 
             return format_deleted_calendar_events(mutation_result)
 
@@ -1169,7 +1168,11 @@ async def delete_calendar_event_tool(
                                     await delete_google_calendar_event(new_token, event_id_val)
                                     mutation_result.succeeded.append(event)
                                 except Exception as delete_error:
-                                    mutation_result.failed.append((event_title_found, str(delete_error)))
+                                    logger.error(
+                                        "Failed to delete calendar event after token refresh: %s",
+                                        sanitize_provider_error(delete_error),
+                                    )
+                                    mutation_result.failed.append((event_title_found, "could not delete this event"))
 
                         return format_deleted_calendar_events(mutation_result)
                     except Exception as retry_error:
@@ -1182,7 +1185,9 @@ async def delete_calendar_event_tool(
             elif e.is_permission_error:
                 return "Google Calendar write access is not available. Please reconnect your Google Calendar from settings with proper permissions."
             else:
-                return f"Error searching for calendar events: {e.message}"
+                return (
+                    f"Error searching for calendar events (Google Calendar status {e.status_code}). Please try again."
+                )
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error searching events to delete: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
@@ -1314,9 +1319,8 @@ async def update_calendar_event_tool(
 
                 logger.info(f"📅 Found event ID: {target_event_id}")
             except Exception as e:
-                error_msg = str(e)
-                logger.error(f"❌ Error searching for event: {error_msg}")
-                return f"Error searching for calendar event: {error_msg}"
+                logger.error("Error searching for calendar event: %s", sanitize_provider_error(e))
+                return "Error searching for calendar event. Please try again."
 
         # Get current event to preserve existing data
         try:
@@ -1341,7 +1345,7 @@ async def update_calendar_event_tool(
             elif e.is_permission_error:
                 return "Google Calendar access denied. Please reconnect your Google Calendar from settings with proper permissions."
             else:
-                return f"Error getting calendar event: {e.message}"
+                return f"Error getting calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error getting event: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
@@ -1466,7 +1470,7 @@ async def update_calendar_event_tool(
             elif e.is_permission_error:
                 return "Google Calendar write access is not available. Please reconnect your Google Calendar from settings with proper permissions."
             else:
-                return f"Error updating calendar event: {e.message}"
+                return f"Error updating calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error updating calendar event: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
