@@ -6664,6 +6664,59 @@ async def test_only_real_sync_work_warms_cohorts(mode):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('expiry', ['read_timeout', 'handler_budget'])
+@pytest.mark.parametrize('sequenced', [False, True])
+@pytest.mark.parametrize('release_confirmed', [False, True])
+async def test_work_cohort_timeout_keeps_queue_owned_retry_before_paid_work(expiry, sequenced, release_confirmed):
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module, pipeline_error=RuntimeError('pipeline must not run'), latest_job={'status': 'queued'}
+    )
+    job = {'status': 'queued', 'lane': 'fresh', 'ledger_fence_mode': 'active'}
+    module.get_sync_job = MagicMock(return_value=job)
+    module.update_sync_job = MagicMock(return_value=job)
+    module.release_job_run_lock_strict = MagicMock(return_value=int(release_confirmed))
+    module.get_sync_tasks_max_attempts = MagicMock(return_value=5)
+    if sequenced:
+        request.json.return_value['sequencer_epoch'] = 3
+        module.sync_backfill_sequencer.begin_job = MagicMock(return_value={'job': job})
+        module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+        module.sync_backfill_sequencer.note_budget_deferral = MagicMock(return_value=True)
+        module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+
+    async def warm(_uid):
+        if expiry == 'read_timeout':
+            raise TimeoutError('membership read timed out')
+        await asyncio.sleep(30)
+
+    module.warm_rollout_cohorts = warm
+    module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+        module.release_job_run_lock_strict.assert_called_once()
+        if release_confirmed:
+            assert response.status_code == 409
+            assert json.loads(response.body) == {'status': 'locked'}
+            module.enqueue_sync_job_budget_replacement.assert_not_called()
+            module.update_sync_job.assert_not_called()
+            assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+        else:
+            assert response.status_code == 200
+            assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+            module.enqueue_sync_job_budget_replacement.assert_called_once()
+            assert module.update_sync_job.call_args.args[1].get('deferred_until')
+            assert fallback_calls == []
+        module._download_staged_files.assert_not_called()
+        module._run_full_pipeline_background_async.assert_not_awaited()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.release_job_run_lock.assert_not_called()
+        if sequenced:
+            module.sync_backfill_sequencer.finish_job.assert_not_called()
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
 async def test_terminal_cleanup_retry_returns_500_only_after_confirmed_release():
     """Thread (companion): with the strict release confirming (EVAL 1), the
     established behavior stands — the 500 redelivers into the terminal
