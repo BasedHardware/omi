@@ -163,7 +163,7 @@ def held_sync(prod_scope, monkeypatch):
     monkeypatch.setattr(cap_hold, 'metadata', lambda uid, current: {'origin': 'sync'})
     monkeypatch.setattr(cap_hold, 'claim', lambda uid, ref, now: dict(row))
     monkeypatch.setattr(cap_hold, 'release', lambda uid, ref, token: events.append(('release', token)))
-    monkeypatch.setattr(adapter, 'enabled_for', lambda current, mode=None: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda current, mode=None, uid=None: True)
     monkeypatch.setattr(cap_hold_recovery, 'get_hard_restriction_status', lambda uid: (False, None))
     monkeypatch.setattr(cap_hold_recovery, 'is_daily_audio_ceiling_exceeded', lambda uid: False)
     monkeypatch.setattr(dispatch, 'record_decision', lambda *args: None)
