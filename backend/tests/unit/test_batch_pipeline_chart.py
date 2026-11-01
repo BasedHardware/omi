@@ -131,10 +131,7 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert len(hpa['metrics']) == 1
     assert hpa['metrics'][0]['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
     assert hpa['metrics'][0]['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
-    assert all(
-        m['external']['metric']['selector']['matchLabels']['worker_release'] == 'synthetic-worker'
-        for m in hpa['metrics']
-    )
+    assert all(m['external']['metric']['selector']['matchLabels'] == {'namespace': 'synthetic'} for m in hpa['metrics'])
 
 
 def test_enabled_chart_refuses_unpinned_image_and_unsampled_scale_to_zero():
@@ -306,12 +303,12 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         assert h['behavior']['scaleDown']['stabilizationWindowSeconds'] == 1800
         for metric in h['metrics']:
             labels = metric['external']['metric']['selector']['matchLabels']
-            assert labels['worker_release'] == 'synthetic-worker' and labels['namespace'] == 'synthetic'
-            assert 'priority' not in labels
+            assert labels == {'namespace': 'synthetic'}
             assert metric['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
-            # Per-release chain busy is already scoped by worker_release; the
-            # shared-queue doubling does not apply to a rate metric.
-            assert metric['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
+            # Both pool deployments export the same worker_release, so both
+            # HPAs see the fleet total; the doubled target divides the demand
+            # between them instead of buying it twice.
+            assert metric['external']['target'] == {'type': 'AverageValue', 'averageValue': '1'}
     assert (
         deployments['synthetic-worker']['metadata']['annotations']['omi.ai/required-companion-deployment']
         == 'synthetic-worker-spot'

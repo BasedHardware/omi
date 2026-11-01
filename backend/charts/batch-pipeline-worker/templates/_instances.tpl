@@ -23,11 +23,13 @@ on Spot capacity. */}}
 {{- $od := required "balancedPools.onDemandNodePool required" .Values.autoscaling.balancedPools.onDemandNodePool -}}
 {{- $spot := required "balancedPools.spotNodePool required" .Values.autoscaling.balancedPools.spotNodePool -}}
 {{- if eq $od $spot -}}{{- fail "balancedPools requires distinct on-demand and Spot node pools" -}}{{- end -}}
-{{/* Per-release chain busy is already scoped by worker_release; unlike a
-     shared queue count it needs no division between pool HPAs. */}}
+{{/* Both pool deployments export the same worker_release and one namespace's
+     chain metric covers the whole fleet, so balanced mode doubles the
+     per-worker target: each pool HPA buys half the demand instead of buying
+     the same demand twice (same division the shared queue count needed). */}}
 {{- $instances = list
-    (dict "name" .Release.Name "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $od)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "chainTarget" $target "scaleDownStabilizationSeconds" $downStab)
-    (dict "name" (printf "%s-spot" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $spot)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "chainTarget" $target "scaleDownStabilizationSeconds" $downStab) -}}
+    (dict "name" .Release.Name "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $od)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "chainTarget" (mulf $target 2.0) "scaleDownStabilizationSeconds" $downStab)
+    (dict "name" (printf "%s-spot" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $spot)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "chainTarget" (mulf $target 2.0) "scaleDownStabilizationSeconds" $downStab) -}}
 {{- end -}}
 {{- toYaml $instances -}}
 {{- end -}}

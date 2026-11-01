@@ -127,6 +127,11 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[2m])' in chain_query
     assert 'metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
     assert 'or vector(0)' not in chain_query
+    # Stage timers export only the stage label; requiring worker_release here
+    # (or in the HPA selector) would match zero series and pin the floor.
+    assert 'worker_release' not in chain_query
+    assert 'worker_release' not in BATCH_PIPELINE_CHAIN_RULE['seriesQuery']
+    assert 'and on (namespace, pod)' in chain_query
 
 
 def test_diff_accepts_missing_batch_rule_but_rejects_false_zero_or_duplicate():

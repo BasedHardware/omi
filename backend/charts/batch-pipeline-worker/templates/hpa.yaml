@@ -32,8 +32,10 @@ spec:
         metric:
           name: omi_batch_pipeline_gpu_chain_busy_seconds
           selector:
+            # Stage timers carry only the stage label (no worker_release), so
+            # the rule scopes by namespace and gates freshness per pod; a
+            # release label here would match zero series and pin the floor.
             matchLabels:
-              worker_release: {{ .Release.Name }}
               namespace: {{ .Release.Namespace }}
         target:
           # Fleet worker_flight busy seconds per second, i.e. demand for the

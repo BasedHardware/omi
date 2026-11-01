@@ -40,16 +40,16 @@ BATCH_PIPELINE_CAPACITY_RULE: dict[str, Any] = {
     'metricsQuery': 'sum by (namespace, worker_release) (\n  max by (namespace, worker_release, priority) (\n    omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}\n    and on (namespace, worker_release, pod)\n    (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)\n  )\n)\nand on (namespace, worker_release) (\n  count by (namespace, worker_release) (\n    max by (namespace, worker_release, priority) (\n      omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}\n      and on (namespace, worker_release, pod)\n      (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)\n    )\n  ) == 3\n)',
 }
 BATCH_PIPELINE_CHAIN_RULE: dict[str, Any] = {
-    'seriesQuery': 'omi_batch_pipeline_stage_seconds_sum{namespace!="",worker_release!="",stage="worker_flight"}',
+    'seriesQuery': 'omi_batch_pipeline_stage_seconds_sum{namespace!="",stage="worker_flight"}',
     'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
     'name': {
         'matches': '^omi_batch_pipeline_stage_seconds_sum$',
         'as': 'omi_batch_pipeline_gpu_chain_busy_seconds',
     },
     'metricsQuery': (
-        'sum by (namespace, worker_release) (\n'
+        'sum by (namespace) (\n'
         '  rate(omi_batch_pipeline_stage_seconds_sum{<<.LabelMatchers>>,stage="worker_flight"}[2m])\n'
-        '  and on (namespace, worker_release, pod)\n'
+        '  and on (namespace, pod)\n'
         '  (time() - omi_batch_pipeline_metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60)\n'
         ')'
     ),
