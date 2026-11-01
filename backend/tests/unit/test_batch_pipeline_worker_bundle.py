@@ -796,3 +796,57 @@ def test_broken_shadow_clock_and_counter_cannot_change_result(monkeypatch):
     monkeypatch.setattr(worker_metrics, 'strict_vad', broken)
     assert worker.process_batch([item()])[0].outcome == 'success'
     assert saved['a']['words'][0]['word'] == 'hello' and not failures
+
+
+def test_strict_vad_shadow_percent_parses_and_clamps(monkeypatch):
+    from config.batch_pipeline import strict_vad_shadow_percent
+
+    for raw, expected in {
+        '0': 0.0,
+        '100': 100.0,
+        '250': 100.0,
+        '-3': 0.0,
+        '12.5': 12.5,
+        'junk': 10.0,
+        '': 10.0,
+    }.items():
+        monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', raw)
+        assert strict_vad_shadow_percent() == expected, raw
+    monkeypatch.delenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT')
+    assert strict_vad_shadow_percent() == 10.0
+
+
+def test_strict_vad_shadow_sampling_is_deterministic_by_segment_hash(monkeypatch):
+    from config.batch_pipeline import strict_vad_shadow_sampled
+
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '10')
+    first = [strict_vad_shadow_sampled(f'unit-{n}') for n in range(2000)]
+    again = [strict_vad_shadow_sampled(f'unit-{n}') for n in range(2000)]
+    assert first == again
+    assert 0.07 < sum(first) / len(first) < 0.13
+    assert not strict_vad_shadow_sampled('')
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '0')
+    assert not any(strict_vad_shadow_sampled(f'unit-{n}') for n in range(200))
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
+    assert all(strict_vad_shadow_sampled(f'unit-{n}') for n in range(200))
+
+
+def test_strict_vad_shadow_sampling_skips_inspect_and_counters_without_changing_result(monkeypatch):
+    worker, _, saved, _, _, failures = setup_worker(io_concurrency=1)
+    inspect_calls, recorded = [], []
+    monkeypatch.setattr(
+        worker_module,
+        'inspect_worker_vad',
+        lambda work, samples: (inspect_calls.append(work.segment_id) or (work.duration_seconds, [])),
+    )
+    monkeypatch.setattr(worker_metrics, 'strict_vad', lambda silent, nonempty: recorded.append((silent, nonempty)))
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '0')
+    baseline = worker.process_batch([item()])
+    assert inspect_calls == [] and recorded == []
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
+    sampled = worker.process_batch([item()])
+    assert inspect_calls == ['a']
+    # Sampled shadow observes strict silence against pyannote speech; the
+    # comparison fires only for the sampled unit and the payload is unchanged.
+    assert recorded == [(True, True)]
+    assert sampled == baseline and saved['a']['words'][0]['word'] == 'hello' and not failures

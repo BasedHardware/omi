@@ -9,7 +9,17 @@ batch:
   gcpServiceAccount: omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com
 floorSchedule:
   enabled: true
-  # Keep the hourly writer aligned with the benched-live HPA floor until
-  # pkwin2 (#23863) ships; the safety guard can still restore 12 on a trip.
+  # Day/night floor (2026-11-01, liveoptimal, lead ruling f66b37): live
+  # parakeet-window serves again (stage 100), so the all-hours 4 benched-live
+  # table no longer fits. 7 pods carried 165-194 streams at 10-21 req/s with
+  # queue p99 < 1 s on Sunday; a weekday peak (~33-39 req/s) needs 6-7, and
+  # in the us-central1 L4 stockout a fleet shed at night may not come back
+  # by the 13-22Z peak. 4 overnight (00-11Z) keeps the trough saving.
+  # The safety guard can still restore 12 on a trip.
   # Prior schedule and pool-min rollback: docs/operational/parakeet-benched-floor.md.
-  hours: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+  # COUPLING (Luna r1, #24276): while this schedule is deferred by a rollback
+  # marker, the fleet holds the parakeet chart's minReplicas (7 since
+  # 2026-11-01) — every hour here must stay <= that chart floor so resuming
+  # the schedule never raises the floor above the deferred state (pinned by
+  # test_audio_fleet_helm).
+  hours: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]

@@ -753,7 +753,7 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
     )
     # The production override must survive rendering: the hourly writer would
     # otherwise restore the inherited 8..12 floor after a floor-only HPA apply.
-    assert json.loads(prod['data']['floors.json']) == [4] * 24
+    assert json.loads(prod['data']['floors.json']) == [4] * 12 + [7] * 12
     default = next(
         obj
         for obj in render_docs('prod', overlay=False)
