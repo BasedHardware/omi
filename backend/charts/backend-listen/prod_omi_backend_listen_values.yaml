@@ -642,9 +642,9 @@ env:
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
-  # Soniox bills every connected second; 5% uid cohort tests tighter idle close (registry ramp 5→25→50→100, speaker bars).
+  # Cohort off 2026-11-01: at 5% the treatment arm fell well below control on words per capture second and transcribed share. Diagnose before re-ramping.
   - name: SONIOX_IDLE_COHORT_PERCENT
-    value: "5"
+    value: "0"
   - name: SONIOX_IDLE_COHORT_CLOSE_SECONDS
     value: "20"
   - name: SONIOX_IDLE_COHORT_REARM_SECONDS
