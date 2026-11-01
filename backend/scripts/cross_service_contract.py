@@ -214,7 +214,7 @@ GKE_ENTRYPOINTS = {'backend-listen': BACKEND_ENTRYPOINT, 'pusher': 'pusher.main'
 UID_KEY_PATTERN = re.compile(r'(UID|USER|OWNER)S?_?(ALLOW|DENY)?LIST|_UIDS$|COHORT_UIDS|TEST_UIDS')
 FIREBASE_UID_PATTERN = re.compile(r'(?<![A-Za-z0-9])[A-Za-z0-9]{28}(?![A-Za-z0-9])')
 
-TRUTHY = frozenset({'true', '1', 'yes', 'on'})
+TRUTHY = frozenset({'true', '1', 'yes', 'on', 'enabled'})
 FALSY = frozenset({'false', '0', 'no', 'off', ''})
 
 
@@ -450,7 +450,7 @@ def _render_config_map(
         if _mapping(entry).get('source') == 'environment' and _mapping(entry).get('default') is not None
     }
     legacy = set(renderer.LEGACY_GKE_CONFIG_KEYS.get(env, ()))
-    with tempfile.NamedTemporaryFile('w', suffix='.yaml', delete=False) as handle:
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.yaml', delete=False) as handle:
         handle.write(manifest_text)
         path = Path(handle.name)
     try:
@@ -656,7 +656,7 @@ def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
             and func.value.attr == 'environ'
         ):
             return key
-        if 'env' in name.lower() or name == '_default_on':
+        if 'env' in name.lower() or name in ('_default_on', 'default_on'):
             return key
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == 'environ':
         return _literal_key(node.slice, constants)
@@ -735,12 +735,46 @@ def _module_collections(tree: ast.AST) -> dict[str, tuple[str, ...]]:
     return collections
 
 
+def _extract_helpers(
+    tree: ast.AST, collections: dict[str, tuple[str, ...]]
+) -> dict[str, tuple[set[str], set[str]]]:
+    """Extract grammar (truthy, compared) for wrapper functions like _default_on/default_on."""
+    helpers: dict[str, tuple[set[str], set[str]]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in ('_default_on', 'default_on'):
+            truthy: set[str] = set()
+            compared: set[str] = set()
+            for child in ast.walk(node):
+                if isinstance(child, ast.Compare) and len(child.ops) == 1:
+                    op = child.ops[0]
+                    comparator = child.comparators[0]
+                    members = _collection_members(comparator)
+                    if members is None and isinstance(comparator, ast.Name):
+                        members = collections.get(comparator.id)
+                    if members is not None:
+                        toks = {t.lower() for t in members}
+                        if isinstance(op, ast.NotIn):
+                            truthy.add('true')
+                            compared |= {'true'} | toks
+                        elif isinstance(op, ast.In):
+                            if toks.issubset(FALSY):
+                                truthy |= {'true', '1', 'yes', 'on'}
+                                compared |= truthy | toks
+                            else:
+                                truthy |= toks
+                                compared |= toks | {'0', 'false', 'off', 'no'}
+            if truthy or compared:
+                helpers[node.name] = (truthy, compared)
+    return helpers
+
+
 @dataclass
 class _ModuleIndex:
     constants: dict[str, str]
     collections: dict[str, tuple[str, ...]]  # named string sets: _TRUTHY, _FALSY, mode enums
     candidates: list[ast.AST]  # the only node shapes the env-read scan inspects
     imports: list[ast.Import | ast.ImportFrom]
+    helpers: dict[str, tuple[set[str], set[str]]]
 
 
 _INDEX_CACHE: dict[str, _ModuleIndex | None] = {}
@@ -761,7 +795,9 @@ def _index(text: str) -> _ModuleIndex | None:
                 imports.append(node)
             elif isinstance(node, (ast.Call, ast.Subscript)) or (isinstance(node, ast.Compare) and len(node.ops) == 1):
                 candidates.append(node)
-        _INDEX_CACHE[text] = _ModuleIndex(_module_constants(tree), _module_collections(tree), candidates, imports)
+        collections = _module_collections(tree)
+        helpers = _extract_helpers(tree, collections)
+        _INDEX_CACHE[text] = _ModuleIndex(_module_constants(tree), collections, candidates, imports, helpers)
     return _INDEX_CACHE[text]
 
 
@@ -782,6 +818,10 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     for index in indexes.values():
         for name, members in index.collections.items():
             shared_collections.setdefault(name, members)  # named sets (_TRUTHY et al.) resolve by name too
+    shared_helpers: dict[str, tuple[set[str], set[str]]] = {}
+    for index in indexes.values():
+        for name, grammar in index.helpers.items():
+            shared_helpers.setdefault(name, grammar)
     reads: dict[str, EnvRead] = {}
     for rel, key, default, boolean in policy_env_reads(source, module_paths):
         read = reads.setdefault(key, EnvRead())
@@ -793,12 +833,36 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     for rel, index in indexes.items():
         constants = {**shared, **index.constants}
         collections = {**shared_collections, **index.collections}
+        helpers = {**shared_helpers, **index.helpers}
         for node in index.candidates:
             key = _is_env_call(node, constants)
             if key:
                 read = reads.setdefault(key, EnvRead())
                 read.modules.add(rel)
-                read.defaults.add(_default_of(node))
+                default = _default_of(node)
+                is_default_on = False
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    name = (
+                        func.attr
+                        if isinstance(func, ast.Attribute)
+                        else func.id
+                        if isinstance(func, ast.Name)
+                        else ''
+                    )
+                    if name in ('_default_on', 'default_on'):
+                        is_default_on = True
+                if is_default_on:
+                    read.defaults.add('true')
+                    if name in helpers:
+                        h_truthy, h_compared = helpers[name]
+                        read.truthy |= h_truthy
+                        read.compared |= h_compared
+                    else:
+                        read.truthy.add('true')
+                        read.compared |= {'true', 'false', '0', 'off'}
+                else:
+                    read.defaults.add(default)
             if isinstance(node, ast.Compare) and len(node.ops) == 1:
                 root = _env_root(node.left, constants)
                 if not root:

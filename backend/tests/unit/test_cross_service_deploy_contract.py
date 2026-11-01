@@ -426,7 +426,131 @@ def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
     )
     reads = contract.scan_env_reads(source, [rel])
     assert set(reads) == {'SYNTHETIC_WRAPPED_SWITCH_ENABLED'}
-    assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
+    read = reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED']
+    assert read.modules == {rel}
+    assert read.defaults == {'true'}
+    assert 'true' in read.truthy
+    assert {'false', '0', 'off'}.issubset(read.compared)
+
+
+def test_default_on_wrapper_boolean_tokens(tmp_path: Path) -> None:
+    rel = 'backend/config/synthetic_wrapped_switch.py'
+    key = 'SYNTHETIC_WRAPPED_SWITCH_ENABLED'
+
+    def make_context(val: str):
+        manifest_overrides = _manifest_mutation(
+            lambda m: _prod(m)['gke']['backend-listen']['env'].__setitem__(
+                key, {'value': val, 'category': 'ops_kill'}
+            )
+        )()
+        source = OverlaySource(
+            tmp_path,
+            {
+                rel: (
+                    "import os\n"
+                    f"SWITCH_ENV = {key!r}\n"
+                    "def _default_on(name):\n"
+                    "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
+                    "def enabled():\n"
+                    "    return _default_on(SWITCH_ENV)\n"
+                ),
+                **manifest_overrides,
+            },
+        )
+        reads = contract.scan_env_reads(source, [rel])
+        readers = contract.Readers(
+            by_entrypoint={'backend-listen': {key: reads[key]}},
+            all_reads=reads,
+        )
+        return contract.build_context(source, readers=readers)
+
+    # Valid literals must produce no boolean-token violation
+    for valid in ('false', '0', 'off', 'true'):
+        ctx = make_context(valid)
+        violations = contract.check_boolean_tokens(ctx)
+        assert not any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations), (
+            f"Expected no violation for valid token {valid!r}, got: {violations}"
+        )
+
+    # Invalid typos like 'flase' must produce a boolean-token violation
+    for invalid in ('flase', 'disabled', 'random'):
+        ctx = make_context(invalid)
+        violations = contract.check_boolean_tokens(ctx)
+        assert any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations), (
+            f"Expected boolean-token violation for typo/invalid token {invalid!r}"
+        )
+
+
+def test_default_on_wrapper_on_values_flavor(tmp_path: Path) -> None:
+    rel = 'backend/config/synthetic_action_item_switch.py'
+    key = 'SYNTHETIC_ACTION_ITEM_PRESERVE_ENABLED'
+
+    def make_context(val: str):
+        manifest_overrides = _manifest_mutation(
+            lambda m: _prod(m)['gke']['backend-listen']['env'].__setitem__(
+                key, {'value': val, 'category': 'ops_kill'}
+            )
+        )()
+        source = OverlaySource(
+            tmp_path,
+            {
+                rel: (
+                    "import os\n"
+                    f"SWITCH_ENV = {key!r}\n"
+                    "_ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})\n"
+                    "def _default_on(name):\n"
+                    "    raw = os.getenv(name, '').strip().lower()\n"
+                    "    return not raw or raw in _ON_VALUES\n"
+                    "def enabled():\n"
+                    "    return _default_on(SWITCH_ENV)\n"
+                ),
+                **manifest_overrides,
+            },
+        )
+        reads = contract.scan_env_reads(source, [rel])
+        readers = contract.Readers(
+            by_entrypoint={'backend-listen': {key: reads[key]}},
+            all_reads=reads,
+        )
+        return contract.build_context(source, readers=readers)
+
+    reads = contract.scan_env_reads(
+        OverlaySource(
+            tmp_path,
+            {
+                rel: (
+                    "import os\n"
+                    f"SWITCH_ENV = {key!r}\n"
+                    "_ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})\n"
+                    "def _default_on(name):\n"
+                    "    raw = os.getenv(name, '').strip().lower()\n"
+                    "    return not raw or raw in _ON_VALUES\n"
+                    "def enabled():\n"
+                    "    return _default_on(SWITCH_ENV)\n"
+                )
+            },
+        ),
+        [rel],
+    )
+    read = reads[key]
+    assert {'1', 'true', 'on', 'yes', 'enabled'}.issubset(read.truthy)
+    assert {'0', 'false', 'off', 'no'}.issubset(read.compared)
+
+    # All on-values and falsy values must produce no boolean-token violation
+    for valid in ('1', 'true', 'on', 'yes', 'enabled', '0', 'false', 'off', 'no'):
+        ctx = make_context(valid)
+        violations = contract.check_boolean_tokens(ctx)
+        assert not any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations), (
+            f"Expected no violation for valid token {valid!r}, got: {violations}"
+        )
+
+    # Invalid typos like 'flase' must produce a boolean-token violation
+    for invalid in ('flase', 'disabled', 'random'):
+        ctx = make_context(invalid)
+        violations = contract.check_boolean_tokens(ctx)
+        assert any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations), (
+            f"Expected boolean-token violation for typo/invalid token {invalid!r}"
+        )
 
 
 def test_ops_kill_without_reader_still_fails(results: Results) -> None:
@@ -442,7 +566,6 @@ def test_ops_kill_without_reader_still_fails(results: Results) -> None:
     context = replace(results.baseline, models={'prod': model})
     violations = contract.check_kill_switches(context)
     assert any(violation.key == f'kill-switch-reader|prod|gke/backend-listen/{key}' for violation in violations)
-
 
 # Real pre-fix commits from the 2026-10-18 rollout, each with the invariant that must catch it and its fix:
 # #22098 → #22138, #22121's first commit → its fix, #22149's FIX-FIRST head → its fix. Commit SHAs, not secrets.
