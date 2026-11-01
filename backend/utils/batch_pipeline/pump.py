@@ -377,8 +377,13 @@ class Pump:
                     if self.authorize_compute is not None:
                         try:
                             receipt = self.authorize_compute(selected) or {}
-                        except Exception:
+                        except Exception as error:
+                            worker_metrics.admission(failure_outcome(error))
                             receipt = {}
+                        else:
+                            worker_metrics.admission('received')
+                    else:
+                        worker_metrics.admission('unconfigured')
                     permitted = set(receipt.get('allowed') or [])
                     held = receipt.get('held_reason') or {}
                     retries = receipt.get('retry_after') or {}
@@ -447,7 +452,10 @@ class Pump:
                         # loss. Never let it become this or a replacement attempt.
                         if prepared.cancelled or prepared.item.segment_id in skipped:
                             skipped.add(prepared.item.segment_id)
-                            await run_blocking(sync_executor, prepared.close)
+                            # The fetch may already be running and cannot be
+                            # cancelled. Final cleanup drains it after GPU unlock,
+                            # with its reservation and lease renewal still held.
+                            prepared.cancel()
                         else:
                             dispatch_kwargs['prepared'] = prepared
                     process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)

@@ -634,19 +634,26 @@ class PipelineWorker:
         with self._lock, leaf_timings.active(self.timings):
             if self._unavailable:
                 raise FatalGpuError('GPU chain unavailable; restart required')
-            results, group, seconds = [], [], 0
+            pending, group, seconds = [], [], 0
             # Bound decoded host memory to two audio-hours (~460 MB float32).
-            for item in items:
-                if group and seconds + item.duration_seconds > 7200:
-                    results.extend(
-                        self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared).settle()
-                    )
-                    prepared = None
-                    group, seconds = [], 0
-                group.append(item)
-                seconds += item.duration_seconds
-            tail = self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared)
-            return PendingResults(lambda: [*results, *tail.settle()], tail.futures)
+            try:
+                for item in items:
+                    if group and seconds + item.duration_seconds > 7200:
+                        pending.append(self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared))
+                        prepared = None
+                        group, seconds = [], 0
+                    group.append(item)
+                    seconds += item.duration_seconds
+                pending.append(self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared))
+            except BaseException:
+                # A later group's fatal failure must drain earlier writes too.
+                for receipt in pending:
+                    receipt.close()
+                raise
+            return PendingResults(
+                lambda: [result for receipt in pending for result in receipt.settle()],
+                [future for receipt in pending for future in receipt.futures],
+            )
 
     def _process(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
         states: dict[str, dict[str, Any]] = {}
@@ -1273,6 +1280,12 @@ class PipelineWorker:
             # A fatal error abandons the flight; never leave writes running past it.
             if not handed_off:
                 wait_futures([entry[2] for entry in pending_persist])
+
+        # Deferred receipts retain failure evidence, never decoded waveforms.
+        # Otherwise earlier groups would defeat the two-hour host-memory bound.
+        for state in states.values():
+            for field in ('samples', 'asr_clips', 'flight_features'):
+                state.pop(field, None)
 
         def finish():
             while pending_persist:

@@ -22,7 +22,7 @@ from tests.unit.test_batch_pipeline_artifacts import setup as artifacts_setup, i
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline import pump as pump_module, worker_metrics
 from utils.batch_pipeline.audio import audio_unit, with_context
-from utils.batch_pipeline.contracts import FailedWork, WorkResult, WORK_OUTCOMES
+from utils.batch_pipeline.contracts import FailedWork, HeldWork, WorkResult, WORK_OUTCOMES
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.compute_client import InvalidReceipt
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -68,6 +68,81 @@ def test_pending_persist_releases_model_lock_but_never_returns_early():
             release.set()
         assert finishing.result(2) == [WorkResult('a', 'encrypted://result')]
     assert model_threads == [caller] and settled.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('units', [4, 8])
+async def test_grouped_persist_releases_both_gpu_locks_before_publication(units):
+    loop = asyncio.get_running_loop()
+    persisting, computed = asyncio.Event(), asyncio.Event()
+    release = threading.Event()
+    lock = threading.Lock()
+    store = MemoryStore()
+    queue = Scheduler(store)
+    works = [item(f'group-{index}', 3600) for index in range(units)]
+    for work in works:
+        queue.enqueue(work, time.time())
+
+    def persist(work, payload):
+        # Fair scheduling can reorder owners. Block the first decoded group's
+        # write, rather than accidentally testing only the final group's tail.
+        if work.segment_id == decoded[0]:
+            loop.call_soon_threadsafe(persisting.set)
+            assert release.wait(5)
+        return 'encrypted://result'
+
+    worker, _, _, decoded, _, _ = setup_worker(
+        persist=persist, gpu_lock=lock, vad=lambda samples: [(0, 2)], io_concurrency=5
+    )
+
+    def synchronize():
+        loop.call_soon_threadsafe(computed.set)
+
+    pump = Pump(queue, SynchronizedWorker(worker, synchronize), batch_size=units, flights=2)
+    running = asyncio.create_task(pump.run_once(maintain=False))
+    try:
+        await asyncio.wait_for(persisting.wait(), 2)
+        await asyncio.wait_for(computed.wait(), 2)
+        assert len(decoded) == units and not lock.locked()
+        await asyncio.wait_for(pump._gpu.acquire(), 1)
+        pump._gpu.release()
+        assert not running.done()
+        assert all(store.rows['jobs', work.segment_id]['state'] == 'leased' for work in works)
+        assert all(('results', work.segment_id) not in store.rows for work in works)
+    finally:
+        release.set()
+        await asyncio.wait_for(running, 3)
+    assert all(store.rows['jobs', work.segment_id]['state'] == 'committed' for work in works)
+
+
+def test_later_group_fatal_error_drains_earlier_group_writes():
+    started, later, release, finished = (threading.Event() for _ in range(4))
+    worker, _, _, _, _, _ = setup_worker(io_concurrency=5, vad=lambda samples: [(0, 2)])
+    decode = worker.decode
+
+    def failing_decode(work):
+        if work.segment_id == 'later':
+            later.set()
+            raise FatalGpuError('synthetic fatal GPU failure')
+        return decode(work)
+
+    def persist(work, payload):
+        if work.segment_id == 'earlier':
+            started.set()
+            assert release.wait(5)
+            finished.set()
+        return 'encrypted://result'
+
+    worker.decode, worker.persist = failing_decode, persist
+    with ThreadPoolExecutor(1) as executor:
+        running = executor.submit(worker.process_batch_deferred, [item('earlier', 7200), item('later', 2)])
+        try:
+            assert started.wait(2) and later.wait(2) and not running.done()
+        finally:
+            release.set()
+        with pytest.raises(FatalGpuError):
+            running.result(2)
+    assert finished.is_set()
 
 
 def test_persist_failure_is_per_unit_after_unlock(monkeypatch):
@@ -349,6 +424,68 @@ async def test_waiting_preparation_cancelled_on_stop_lease_loss_or_privacy(monke
         assert store.rows['jobs', 'a']['attempt'] == 0
 
 
+@pytest.mark.asyncio
+async def test_lost_preparation_running_fetch_drains_only_after_gpu_unlock(monkeypatch):
+    monkeypatch.setattr(pump_module, 'HEARTBEAT_SECONDS', 0.01)
+    loop = asyncio.get_running_loop()
+    fetching, discarded, computed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    release = threading.Event()
+    handles = []
+    worker, _, _, _, _, _ = setup_worker(io_concurrency=5)
+    decode, prepare = worker.decode, worker.prepare_first
+
+    def slow_decode(work):
+        if work.segment_id == 'first':
+            loop.call_soon_threadsafe(fetching.set)
+            assert release.wait(5)
+        return decode(work)
+
+    def observe_prepare(items):
+        handle = prepare(items)
+        handles.append(handle)
+        cancel = handle.cancel
+
+        def observe_cancel():
+            cancel()
+            loop.call_soon_threadsafe(discarded.set)
+
+        handle.cancel = observe_cancel
+        return handle
+
+    worker.decode, worker.prepare_first = slow_decode, observe_prepare
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('first'), time.time())
+    heartbeat = queue.heartbeat
+    monkeypatch.setattr(
+        queue, 'heartbeat', lambda segment, *args: False if segment == 'first' else heartbeat(segment, *args)
+    )
+    pump = Pump(queue, SynchronizedWorker(worker, lambda: loop.call_soon_threadsafe(computed.set)), flights=2)
+    await pump._gpu.acquire()
+    running = asyncio.create_task(pump.run_once(maintain=False))
+    gpu_held = True
+    try:
+        await asyncio.wait_for(fetching.wait(), 2)
+        await asyncio.wait_for(discarded.wait(), 2)
+        assert handles[0].future.running()
+        pump._gpu.release()
+        gpu_held = False
+        await asyncio.wait_for(computed.wait(), 2)
+        await asyncio.wait_for(pump._gpu.acquire(), 1)
+        pump._gpu.release()
+        assert not running.done() and worker._decode_budget.seconds == 2
+        queue.enqueue(item('second'), time.time())
+        assert await asyncio.wait_for(pump.run_once(maintain=False), 2) == 1
+        assert store.rows['jobs', 'second']['state'] == 'committed'
+        assert ('results', 'first') not in store.rows
+    finally:
+        if gpu_held:
+            pump._gpu.release()
+        release.set()
+        await asyncio.wait_for(running, 3)
+    assert worker._decode_budget.seconds == 0
+
+
 def test_released_attempt_cannot_overwrite_another_attempts_staged_context():
     first, second = item(duration=1), item(duration=1)
     blobs = [
@@ -539,6 +676,53 @@ async def test_admission_fault_counters_keep_every_unpermitted_unit_deferred(mon
     assert not saved and worker.counts['items'] == 0
     assert store.rows['jobs', 'a']['state'] == 'retry' and store.rows['jobs', 'a']['attempt'] == 0
     assert registry.get_sample_value('omi_batch_pipeline_admission_receipts_total', {'outcome': outcome}) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'error,outcome',
+    [
+        (TimeoutError(), 'timeout'),
+        (ConnectionError(), 'transport'),
+        (InvalidReceipt(), 'invalid_receipt'),
+        (None, 'received'),
+        (None, 'unconfigured'),
+    ],
+)
+async def test_dispatch_admission_outcome_is_counted_and_remains_fail_closed(monkeypatch, error, outcome):
+    registry = CollectorRegistry()
+    monkeypatch.setattr(
+        worker_metrics,
+        'ADMISSION',
+        Counter('omi_batch_pipeline_admission_receipts_total', '', ['outcome'], registry=registry),
+    )
+    monkeypatch.setattr(pump_module, 'cap_dispatch_enabled', lambda *args: True)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item(), time.time())
+    calls = []
+
+    def authorize(leases):
+        calls.append(1)
+        if len(calls) == 1:
+            return {'allowed': [lease.item.segment_id for lease in leases]}
+        if error is not None:
+            raise error
+        return {}
+
+    class RecheckingWorker:
+        def process_batch(self, items, *, authorize_dispatch):
+            if outcome == 'unconfigured':
+                pump.authorize_compute = None
+            assert authorize_dispatch({work.segment_id for work in items}) == {'a': ''}
+            return [HeldWork(work.segment_id) for work in items]
+
+    pump = Pump(queue, RecheckingWorker(), authorize_compute=authorize)
+    assert await pump.run_once(maintain=False) == 1
+    assert store.rows['jobs', 'a']['state'] == 'retry' and store.rows['jobs', 'a']['attempt'] == 0
+    assert ('results', 'a') not in store.rows
+    expected = 2 if outcome == 'received' else 1
+    assert registry.get_sample_value('omi_batch_pipeline_admission_receipts_total', {'outcome': outcome}) == expected
 
 
 def test_broken_shadow_clock_and_counter_cannot_change_result(monkeypatch):
