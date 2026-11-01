@@ -134,8 +134,10 @@ env:
     # Keep dispatch at the GPU batch boundary so backfill cannot queue ahead
     # of newly arrived live work in the worker's FIFO queue.
     value: "1"
+  # In-cluster callers reach diarizer by ClusterIP DNS; the internal-ALB
+  # route stays for Cloud Run callers (billed per GB inbound).
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://172.16.160.20/diarizer"
+    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
 
 terminationGracePeriodSeconds: 150
 

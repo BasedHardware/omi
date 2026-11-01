@@ -2927,7 +2927,10 @@ def test_speaker_embedding_cluster_local_url_rejected_on_cloud_run():
     errors = validator.validate_speaker_embedding_hosts('prod', env_config)
     messages = [error.message for error in errors]
     assert any('not cluster-local DNS' in message for message in messages)
-    assert any('must match gke/backend-listen' in message for message in messages)
+    # GKE and Cloud Run may route to the same service by different URLs
+    # (ClusterIP DNS in-cluster, internal ALB for Cloud Run); only a
+    # disagreement inside one topology is an error.
+    assert all('not cluster-local DNS' in message for message in messages)
 
 
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])

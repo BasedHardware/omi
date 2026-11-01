@@ -124,11 +124,11 @@ overlay:
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://172.16.160.20/diarizer
+          value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: 'off'
         HOSTED_TRANSLATION_API_URL:
-          value: http://172.16.160.20/nllb
+          value: http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080
         REFERRAL_PUBLIC_BASE_URL:
           value: https://omi.me
         DREAM_AGENT_ENABLED:
@@ -284,7 +284,7 @@ overlay:
         SONIOX_WIRE_LEDGER:
           value: 'true'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://172.16.160.20/diarizer
+          value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
         HOSTED_DIARIZATION_API_URL:
           value: http://172.16.160.20/diarizer-batch
           category: service_discovery
