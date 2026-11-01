@@ -77,6 +77,7 @@ CLOSED_HELPERS = frozenset(
         'utils.other.audio_outbox_metrics.bounded_custody_failure_reason',  # CUSTODY_FAILURE_REASONS else 'other'
         'utils.batch_pipeline.vendor_route_metrics._vendor',  # VENDOR_SERVICES else 'unknown'
         'utils.batch_pipeline.vendor_route_metrics._late_outcome',  # LATE_RESULT_OUTCOMES else 'unknown'
+        'utils.batch_pipeline.vendor_health._provider',  # VENDOR_SERVICES else 'unknown'
     }
 )
 
