@@ -247,6 +247,9 @@ def test_one_paid_call_then_result_ready_and_merge_in_capture_order(world, monke
     row = job(store, 'p1')
     assert row['state'] == 'result_ready' and row['result']['outcome'] == 'success'
     assert row['provider_intent']['service'] == 'modulate' and row['provider_intent']['settled_at'] == 200.0
+    # Route proof the rollout observer reads from the job doc (no worker route log on this path).
+    assert row['stt_route']['stt_route'] == 'provider' and row['stt_route']['provider_service'] == 'modulate'
+    assert row['provider_intent']['token'] and 'failure' not in row['provider_intent']
     provider_entry = merge.commit_next(OWNER, 201.0)
     # Vendor speaker labels are used directly, so projection needs the recovered-result marker.
     assert provider_entry['segment_id'] == 'p1' and provider_entry['recovery_version'] == 1
@@ -333,6 +336,8 @@ def test_vendor_failure_is_terminal_failed_held_and_never_re_enters_recovery(wor
     # Not 'held': quarantine recovery's candidate query (held/prepared/running) must not spend a second call.
     assert (row['state'], row['recovery_state'], row['merge_pending']) == ('quarantined', 'failed_held', False)
     assert row['provider_intent']['failure'] == expected
+    # Held VAD evidence from the CPU Silero inspection (SPEECH: 0.5s), as quarantine recovery records it.
+    assert row['measured_held_vad_speech_seconds'] == 0.5
     assert vendor.calls == 1
 
 
@@ -356,6 +361,8 @@ def test_invalid_audio_settles_failed_held_without_a_vendor_call(world, monkeypa
     stage(store, artifacts, vendor, inspect=broken).run('p1')
     assert vendor.calls == 0
     assert job(store, 'p1')['provider_intent']['failure'] == {'stage': 'audio_validation', 'reason': 'invalid_audio'}
+    # No inspection, no measurement: the held VAD census stays unknown rather than claiming silence.
+    assert 'measured_held_vad_speech_seconds' not in job(store, 'p1')
 
 
 def test_privacy_fence_discards_before_any_spend(world, monkeypatch):
