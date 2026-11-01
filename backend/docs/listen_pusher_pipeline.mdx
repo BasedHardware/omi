@@ -8364,6 +8364,15 @@ The [retention contract](batch-voice-evidence-retention.md) defines the 24h
 capture deadline, completion +1h shortening, privacy fences and physical erasure.
 Expired evidence stays anonymous; manual speaker receipts keep their authority.
 
+Vendor-route units (provider STT, `recovery_version: 1`) carry the vendor's own
+unit-local speaker turns in `diarization.turns`; the vendor's labelled utterances
+already name the words. With turns present, projection gives the unit the same
+`final:batch:<unit>` scope as a GPU unit (`speaker_match_source: batch_vendor`),
+so sync-off centroids and conversation-wide linking cover overflow traffic too.
+Default-on `BATCH_VENDOR_SPEAKER_TURNS_ENABLED` off restores words-only vendor
+units with unit-local `sync:` labels at every read, including committed results.
+Quarantine-recovered units still have no turns and keep their `sync:` labels.
+
 ## Live speaker epochs: bounded safe repair
 
 Soniox idle reopen continues to stamp a new socket epoch. Listen reconnect

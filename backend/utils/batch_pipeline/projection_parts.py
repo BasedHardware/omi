@@ -19,6 +19,17 @@ def bounded_projection_words(words, duration):
     return [{**word, 'timestamp': [min(value, duration) for value in word['timestamp']]} for word in words]
 
 
+def vendor_speaker_authority(payload) -> bool:
+    """A vendor-route result whose own unit-local speaker turns stand in for pyannote's."""
+    from config.batch_conversation_speakers import vendor_turns_enabled
+
+    return (
+        payload.get('recovery_version') == 1
+        and bool((payload.get('diarization') or {}).get('turns'))
+        and vendor_turns_enabled()
+    )
+
+
 def align_projection_words(words, payload, segment_id):
     """Preserve provider grouping while keeping point words out of voice evidence."""
     from utils.conversations.final_pass_assignment import assign_words

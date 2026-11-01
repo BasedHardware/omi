@@ -25,11 +25,13 @@ from dataclasses import asdict, dataclass, fields
 import asyncio
 import io
 import logging
+import re
 import time
 from typing import Any, Awaitable, Callable, ClassVar, Literal
 from uuid import uuid4
 import wave
 
+from config.batch_conversation_speakers import vendor_turns_enabled
 from config.batch_pipeline_vendor_failover import failover_enabled, held_redrive_enabled, held_redrive_seconds
 from config.policy import BatchUnitPolicy
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
@@ -607,6 +609,28 @@ async def _vendor_words(service: str, wav: bytes, duration: float, language: str
     raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.LOCAL_FAILURE)
 
 
+_VOICE_LABEL = re.compile(r'SPEAKER_[0-9]{2,3}')
+
+
+def vendor_turns(words: list[dict], duration: float) -> list[dict]:
+    """Pyannote-shaped turns from the vendor's labelled utterances.
+
+    Only positive-duration records with a valid label carry voice; touching
+    records of one label merge, so pauses never enter a voice clip.
+    """
+    turns: list[dict] = []
+    for word in words:
+        label = word.get('speaker')
+        start, end = float(word['timestamp'][0]), min(float(word['timestamp'][1]), duration)
+        if not isinstance(label, str) or not _VOICE_LABEL.fullmatch(label) or not 0 <= start < end:
+            continue
+        if turns and turns[-1]['speaker'] == label and start <= turns[-1]['end']:
+            turns[-1]['end'] = max(turns[-1]['end'], end)
+        else:
+            turns.append({'start': start, 'end': end, 'speaker': label})
+    return turns
+
+
 async def transcribe_async(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
@@ -639,8 +663,9 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
         'speech_seconds': sum(span['end'] - span['start'] for span in spans),
         'speech_spans': spans,
         'words': words,
-        # Vendor speaker turns stay discarded (words-only, as recovered units; RouteConfig.speaker_turns).
-        'diarization': {'turns': []},
+        # The vendor's own unit-local turns (diarization was requested); the kill
+        # switch restores words-only units at projection too.
+        'diarization': {'turns': vendor_turns(words, duration) if vendor_turns_enabled() else []},
         'words_provider': service,
         'language': detected,
         'recovery_version': 1,

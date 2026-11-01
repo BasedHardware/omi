@@ -452,6 +452,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_VENDOR_HELD_REDRIVE_SECONDS` | Default 300; seconds a vendor_held provider unit waits before its next redrive (30-3600, else default) | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
 | `BATCH_VENDOR_HELD_STALE_GRACE_SECONDS` | Default 900; grace past a vendor_held unit's redrive time during which T3, the uncommitted-age proxy and the 2h backstop exclude it (0-86400, else default) | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
 | `BATCH_VENDOR_ROUTING_ENABLED` | Default on; all-vendor batch route selection at intake. false serves today's routing (GPU where Parakeet serves, else Modulate) to every owner | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
+| `BATCH_VENDOR_SPEAKER_TURNS_ENABLED` | Default on: vendor-route batch units keep the vendor's own speaker turns and join the GPU unit scope, sync-off centroids and conversation linking | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` | Default on; regenerate a capture-group primary's notes once per group revision when confirmed same-event members carry meeting context the primary lacks | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `CAP_HOLD_DURABLE_REDRIVE_ENABLED` | Default on; awaited periodic recovery of persisted processing choices, staged live sources and fragment cleanup | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `CAP_HOLD_FLEET_SNAPSHOT_ENABLED` | Default on; refresh the held-content fleet gauge asynchronously with its own bounded RPC budget | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
@@ -945,6 +946,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_VENDOR_ROUTING_PERCENT` — Default zero; owner-hash share of batch admissions that select their STT route from the vendor route table (cheapest healthy capable route, GPU floor share) (fail: closed)
 - `BATCH_VENDOR_ROUTING_SHADOW_PERCENT` — Default zero; owners outside the routing cohort whose table decision is computed and logged (event=batch_vendor_route_shadow, no ids) while their routing stays unchanged (fail: closed)
 - `BATCH_VENDOR_ROUTING_UID_ALLOWLIST` — Comma-separated owners routed from the vendor route table regardless of percent; default empty; env only, no cohort-document membership (fail: closed)
+- `BATCH_VENDOR_SPEAKER_TURNS_ENABLED` — Default on: vendor-route batch units keep the vendor's own speaker turns and join the GPU unit scope, sync-off centroids and conversation linking (fail: open)
 - `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
 - `CALLS_RECAP_MODE` — Boundary call metadata and completed-local-day revision-aware recap states; default shadow (fail: closed)
 - `CALLS_RECAP_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)

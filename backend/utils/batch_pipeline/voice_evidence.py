@@ -52,8 +52,10 @@ def prepare(projector, item, binding, conversation_id):
         artifacts.verify_voice_retention()
         job_result = projector.store.ref('results', item.segment_id).get().to_dict() or {}
         payload = projector.load_result(item, job_result['result']['result_uri'])
-        if payload.get('recovery_version') == 1:
-            return  # Recovered provider words do not have pyannote authority.
+        from utils.batch_pipeline.projection_parts import vendor_speaker_authority
+
+        if payload.get('recovery_version') == 1 and not vendor_speaker_authority(payload):
+            return  # Recovered provider words without vendor turns have no voice authority.
         wav = projector.fetch_audio(item)
         stop = time.monotonic() + 8
 
