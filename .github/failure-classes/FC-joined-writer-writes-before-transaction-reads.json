@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-joined-writer-writes-before-transaction-reads",
+  "violated_contract": "A writer that joins a buffered Firestore transaction must not write before that transaction's reads are done. The batch admission view buffers its writes until flush, and flush reads privacy state; the provider-STT outbox row joined admission by setting its document on the raw transaction mid-body, so the next transactional read was a read after a write. Real Firestore refuses that, so every unsupported-language upload routed to the provider stage answered 503 at intake (staging 11-01, 20 of 20), while unit tests on in-memory stores passed.",
+  "canonical_prevention": "Give the transaction view the only write path: a joining writer reads through the transaction and hands its write to the view (FirestoreTransaction.defer_set), which sets it at flush after every read. Run any admission hook that touches a second collection through the real view on the strict transaction fixture, which enforces read-before-write.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_provider_stt_admission_transaction.py",
+    "backend/tests/unit/fixtures/strict_firestore_transaction.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/batch_pipeline_store.py",
+    "backend/database/outbox_provider_stt.py",
+    "backend/utils/batch_pipeline/provider_stt.py"
+  ],
+  "status": "open"
+}
