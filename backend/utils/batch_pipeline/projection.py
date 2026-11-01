@@ -11,6 +11,7 @@ from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from google.api_core.exceptions import NotFound
 import threading
 import time
 import math
@@ -40,6 +41,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyRea
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
+from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
@@ -1239,7 +1241,10 @@ class Projector:
                 )
         if not survivors:
             return
-        audio = self.fetch_audio(item)
+        try:
+            audio = self.fetch_audio(item)
+        except NotFound:  # Transcript is projected; close like a no-survivor input.
+            return artifact_missing.record('playback')
         audio_end = receipt.get('audio_end') or item.capture_at + item.duration_seconds
         if capture_at != item.capture_at or audio_end != item.capture_at + item.duration_seconds:
             import io

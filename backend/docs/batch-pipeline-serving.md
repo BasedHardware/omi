@@ -995,7 +995,10 @@ repeated failures at the front of the page from monopolizing those slots.
 A separate advisory segment claim coalesces replicas; it never owns the
 assignment watermark. Each bridge, playback and enrichment step is offloaded
 separately. After playback a second bridge check copies any late donor audio
-if a concurrent assignment redirected the target. Native records retain their
+if a concurrent assignment redirected the target. If the staged batch object
+is already gone (`NotFound`), playback closes like an input with no surviving
+segments and counts `omi_batch_artifact_missing_total{site=playback}`; a retry
+cannot restore deleted bytes. Native records retain their
 fixed target behavior. Privacy checks and the original retained-audio policy
 remain in effect. Enrichment and the ready receipt still commit together;
 usage/client/content completion still requires every sibling ready and commits
