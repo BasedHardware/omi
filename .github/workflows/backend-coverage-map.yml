@@ -1,0 +1,154 @@
+name: Backend Coverage Map
+
+# shipspeed W1 (2026-11-01). DO NOT MERGE until David names this workflow change.
+#
+# 75% of fleet backend PRs (459 of 610, 10-18..11-01) run the full 2,457-file unit
+# suite because the change-based selector has no map for the changed source file,
+# and a static import closure still selects ~70% of the suite (hub modules reach
+# every test). This workflow records, per isolated test file, which first-party
+# function bodies it executes (backend/test.sh BACKEND_COVERAGE_MAP_DIR) and
+# publishes `backend-coverage-map` (source file -> tests) for the selector to use.
+# It runs off the PR critical path and outside the 720 s shard budget: nightly on
+# main, on demand, and on a PR that edits this file (one measurement run).
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/backend-coverage-map.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-coverage-map-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+jobs:
+  shard:
+    name: Coverage shard ${{ matrix.shard }}/6
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+
+      - name: Install backend dependencies and coverage
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+          # Collection-only tool: not part of the runtime or test lock.
+          uv pip install --python .venv/bin/python coverage==7.6.12
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Identify native audio package cache
+        id: native-audio-image
+        run: echo "imageos=${ImageOS:?}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore native audio replay packages
+        id: native-audio-apt
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/native-audio-apt/*.deb
+          key: native-audio-apt-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-audio-image.outputs.imageos }}-ffmpeg-libopus0
+          restore-keys: |
+            native-audio-apt-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-audio-image.outputs.imageos }}-
+
+      - name: Install native audio replay dependencies
+        timeout-minutes: 7
+        run: |
+          cache_dir="$HOME/.cache/native-audio-apt"
+          if compgen -G "$cache_dir/*.deb" > /dev/null && sudo dpkg -i "$cache_dir"/*.deb; then
+            exit 0
+          fi
+          # Main's unit workflow seeds the cache; a cold miss here only costs a bounded download.
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends ffmpeg libopus0
+
+      - name: Collect per-test-file coverage
+        working-directory: backend
+        run: |
+          mkdir -p "$RUNNER_TEMP/coverage-map"
+          # Failing tests still record what they executed; the map stays advisory.
+          BACKEND_COVERAGE_MAP_DIR="$RUNNER_TEMP/coverage-map" \
+            bash scripts/run-unit-ci.sh --all --shard 6/${{ matrix.shard }} \
+            || echo "::warning::coverage shard ${{ matrix.shard }} had test failures; their coverage is still recorded"
+          ls "$RUNNER_TEMP/coverage-map" | grep -c '\.cov$' || true
+
+      - name: Upload shard coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/coverage-map
+          retention-days: 2
+          if-no-files-found: error
+
+  combine:
+    name: Build coverage map
+    runs-on: ubuntu-latest
+    needs: shard
+    if: ${{ !cancelled() }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Install coverage
+        run: python -m pip install coverage==7.6.12
+
+      - name: Download shard coverage
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-shard-*
+          path: ${{ runner.temp }}/coverage-map
+          merge-multiple: true
+
+      - name: Build map
+        working-directory: backend
+        run: |
+          # Shards ran in /home/runner/work/omi/omi/backend; this checkout is the same path, so measured
+          # file paths resolve against it.
+          python scripts/build_test_coverage_map.py --data-dir "$RUNNER_TEMP/coverage-map" \
+            --out "$RUNNER_TEMP/backend-coverage-map.json" --sha "${{ github.sha }}"
+
+      - name: Upload map
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-coverage-map
+          path: ${{ runner.temp }}/backend-coverage-map.json
+          retention-days: 14
+          if-no-files-found: error
